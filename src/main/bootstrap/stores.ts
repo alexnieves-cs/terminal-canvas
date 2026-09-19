@@ -267,7 +267,16 @@ export function createStores(state: MainState): Stores {
     // M52. The run ledger (an append stream beside layout.json) and the
     // shell-integration directory the rc files are written under. Declared
     // above this construction because they are values, not getters.
-    { ledger: runLedger, integrationDir: join(userData, 'shell-integration'), now: () => Date.now(), control: { socket: controlSocketPath, binDir: launcherDir } }
+    {
+      ledger: runLedger, integrationDir: join(userData, 'shell-integration'), now: () => Date.now(), control: { socket: controlSocketPath, binDir: launcherDir },
+      // M286. The stamp a ledger row carries: the panel's baseline, read at
+      // the moment of use (the store is the thing that knows it), through
+      // the engine's one identity computation.
+      identityOf: (panelId) => {
+        const b = layoutStore.baseline(panelId)
+        return b === undefined ? Promise.resolve(undefined) : reviewEngine.identityOf(b.root, b.sha)
+      }
+    }
   )
 
   /**

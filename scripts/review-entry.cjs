@@ -57,4 +57,7 @@ module.exports = {
      sha256 and the real policy, not a stand-in. */
   ...require('../src/shared/review-identity'),
   ...require('../src/main/review-identity'),
+  /* M286. Revision-bound check evidence: pure over ledger rows, watcher
+     outcomes and the M285 identity. */
+  ...require('../src/shared/check-evidence'),
 }

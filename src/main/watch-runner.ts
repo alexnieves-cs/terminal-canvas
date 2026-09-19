@@ -1,4 +1,5 @@
 import { WATCH_KILL_GRACE_MS, WATCH_TAIL_BYTES, type WatchTrigger } from '../shared/watch-trigger'
+import type { ReviewIdentity } from '../shared/review-identity'
 
 /**
  * M84. THE WATCHER'S RUNNER — one command per watcher, run when its trigger
@@ -47,6 +48,8 @@ export interface WatchState {
   endedAt?: number
   /** A run is waiting for the one in flight to finish. */
   pending: boolean
+  /** M286. The content identity of the tree at `cwd` (against its HEAD) as the last run ended — what it tested. Absent when unreadable or not a repository. */
+  tested?: ReviewIdentity
 }
 
 export interface WatchRecord {
@@ -58,7 +61,7 @@ export interface WatchRecord {
 }
 
 export interface WatchLedger {
-  append(row: { panelId: string; command: string; cwd: string; startedAt: number; endedAt: number; exitCode: number | null }): void
+  append(row: { panelId: string; command: string; cwd: string; startedAt: number; endedAt: number; exitCode: number | null; tested?: ReviewIdentity }): void
 }
 
 export interface WatchRunnerDeps {
@@ -68,6 +71,8 @@ export interface WatchRunnerDeps {
   setTimer?: (fn: () => void, ms: number) => { cancel: () => void }
   ledger: WatchLedger
   onState: (id: string, state: WatchState) => void
+  /** M286. See `RunsDeps.identityOf`: the tree at `cwd` against its HEAD, asked as the run ends. Optional; absent stamps nothing. */
+  identityOf?: (cwd: string) => Promise<ReviewIdentity | undefined>
 }
 
 export interface WatchRunner {
@@ -139,6 +144,15 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
           entry.proc = null
           entry.kill?.cancel()
           entry.kill = null
+          // M286. The stamp is asked for as the exit lands, and applied to the
+          // state and the ledger row when it answers — the exit itself is
+          // published at once, so a slow git never delays the state word.
+          const stampEpoch = entry.epoch
+          void deps.identityOf?.(entry.record.cwd).then((tested) => {
+            if (tested === undefined || stampEpoch !== entry.epoch || entry.state.status === 'running' || entry.state.endedAt !== endedAt) return
+            entry.state = { ...entry.state, tested }
+            publish(id, entry)
+          }, () => { /* an unreadable tree stamps nothing */ })
           // A SIGNAL is a failure. `code` is null for a signalled process, and
           // a truthiness test on it reads a kill as a pass — a green watcher
           // over a process somebody killed.
@@ -154,15 +168,19 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
             pending: false
           }
           // Metadata only, like every other ledger row: no output bytes ever
-          // reach a durable file from here.
-          deps.ledger.append({
+          // reach a durable file from here. The row waits for the stamp (a
+          // failed read writes it unstamped), so the ledger says what the
+          // run tested rather than only that it ran.
+          const row = {
             panelId: id,
             command: [entry.record.command, ...entry.record.args].join(' '),
             cwd: entry.record.cwd,
             startedAt: entry.state.startedAt ?? endedAt,
             endedAt,
             exitCode: code
-          })
+          }
+          if (deps.identityOf === undefined) deps.ledger.append(row)
+          else void deps.identityOf(entry.record.cwd).then((tested) => deps.ledger.append(tested === undefined ? row : { ...row, tested }), () => deps.ledger.append(row))
           publish(id, entry)
           // The coalesced run, once — however many triggers arrived.
           if (pending) start(id, entry)

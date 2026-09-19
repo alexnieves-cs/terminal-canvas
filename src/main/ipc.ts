@@ -553,6 +553,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_POOL_STOP, (_event, req: { templateId: string; key: string }) => agents.poolStop(req))
   ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
+  // M286. `undefined` does not survive an invoke as a distinct answer; null does.
+  ipcMain.handle(IPC.REVIEW_IDENTITY, async (_event, req: { root: string; base: string }) => (await reviewEngine.identityOf(req.root, req.base)) ?? null)
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))
   ipcMain.handle(IPC.SNAPSHOT_LIST, () => palette.snapshotList())
   ipcMain.handle(IPC.LEDGER_USAGE, (_event, since: number) => palette.ledgerUsage(typeof since === 'number' && Number.isFinite(since) ? since : 0))

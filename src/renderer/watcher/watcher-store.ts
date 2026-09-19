@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { WatchStateInput } from '@renderer/panels/panel-state'
+import type { ReviewIdentity } from '@shared/review-identity'
 
 /**
  * M84. The renderer's mirror of each watcher's runs — a module-level store
@@ -25,6 +26,8 @@ export interface WatchSnapshot {
   pending: boolean
   /** Main could not arm this watcher's trigger; the reason is the body's. */
   disarmed?: string
+  /** M286. What the last run tested (`WatcherStateEvent.tested`), for the Checks workbench. */
+  tested?: ReviewIdentity
 }
 
 const states = new Map<string, WatchSnapshot>()

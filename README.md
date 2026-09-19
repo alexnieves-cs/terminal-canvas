@@ -368,7 +368,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:merged / workspace:move-panels
                        review:panel / review:baseline / review:at
                        review:diff / review:commit / review:discard
-                       review:across / git:status
+                       review:across / review:identity / git:status
                        credential:list / credential:set / credential:delete
                        credential:verify
                        github:list / broker:audit

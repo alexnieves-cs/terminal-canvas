@@ -133,6 +133,12 @@ export interface ReviewEngine {
    * of its git calls failed: unknown, never a guess.
    */
   identityOf(root: string, base: string): Promise<ReviewIdentity | undefined>
+  /**
+   * M286. A watcher has no baseline: its tree's identity is measured against
+   * the tree's OWN HEAD, resolved here. Not a repository, or unreadable, is
+   * undefined — a watcher in a plain folder stamps nothing.
+   */
+  identityAtHead(cwd: string): Promise<ReviewIdentity | undefined>
 }
 
 /**
@@ -328,6 +334,15 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return reviewIdentityOf(base, [diff.stdout, listing])
   }
 
+  const identityAtHead = async (cwd: string): Promise<ReviewIdentity | undefined> => {
+    const repo = await resolveRepo(cwd)
+    if (repo.kind !== 'root') return undefined
+    const head = await run(buildHeadArgs(repo.root))
+    const sha = head.ok ? trimmed(head.stdout) : null
+    if (sha === null) return undefined
+    return identityOf(repo.root, sha)
+  }
+
   const identityOf = async (root: string, base: string): Promise<ReviewIdentity | undefined> => {
     if (gitMissing) return undefined
     const untracked = await run(buildUntrackedArgs(root))
@@ -490,5 +505,5 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return { kind: 'across', root, sections }
   }
 
-  return { resolveRepo, commonRootOf, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus, identityOf }
+  return { resolveRepo, commonRootOf, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus, identityOf, identityAtHead }
 }

@@ -112,7 +112,7 @@ template:delete vault:read snapshot:list snapshot:restore memory:list memory:add
 watcher:create watcher:run watcher:stop watcher:dispose watcher:list settings:list
 settings:set agent:acknowledge workspace:list workspace:activate workspace:create
 workspace:rename workspace:delete workspace:merged workspace:move-panels review:panel
-review:baseline review:at review:diff git:status review:across review:commit review:discard
+review:baseline review:at review:diff git:status review:across review:identity review:commit review:discard
 credential:list credential:set credential:delete credential:verify jira:list github:list
 broker:audit jira:transitions jira:comment jira:transition file:open file:read file:close
 fs:list toolbox:read toolbox:permissions file:write file:create diagnostics:sample

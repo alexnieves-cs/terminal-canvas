@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { ReviewIdentity } from '../shared/review-identity'
 import { agentArgs } from './agent-args'
 import { AGENT_CAPABILITIES } from '../shared/cost'
 import {
@@ -347,6 +348,15 @@ export interface RunsDeps {
    * never asks, or the losing instance of the single-instance lock.
    */
   control?: { socket: string; binDir: string } | null
+  /**
+   * M286. The panel's review subject's content identity NOW (its baseline's
+   * root and sha through `ReviewEngine.identityOf`), asked as a command's
+   * end mark lands so the ledger row can say what the command TESTED.
+   * Optional and defaulted to "no stamp": every harness that builds a
+   * manager without it keeps its rows exactly as they were, and a panel
+   * with no baseline answers undefined, which the row records as absence.
+   */
+  identityOf?: (panelId: PanelId) => Promise<ReviewIdentity | undefined>
 }
 
 export class PtyManager {
@@ -1402,10 +1412,18 @@ export class PtyManager {
         const run = session.run
         session.run = null
         if (run && this.runs.ledger) {
-          void this.runs.ledger.append({
-            panelId: session.panelId, command: run.command, cwd: session.cwd,
-            startedAt: run.startedAt, endedAt: this.runs.now(), exitCode: mark.exit
-          })
+          const ledger = this.runs.ledger
+          const endedAt = this.runs.now()
+          const row = { panelId: session.panelId, command: run.command, cwd: session.cwd, startedAt: run.startedAt, endedAt, exitCode: mark.exit }
+          // M286. The stamp is read as the end mark lands — the tree as the
+          // command left it — and the row waits for it; a failed read writes
+          // the row without a stamp rather than losing the row.
+          const stamp = this.runs.identityOf
+          if (stamp === undefined) void ledger.append(row)
+          else void stamp(session.panelId).then(
+            (tested) => ledger.append(tested === undefined ? row : { ...row, tested }),
+            () => ledger.append(row)
+          )
         }
       }
     }

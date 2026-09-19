@@ -1,4 +1,5 @@
 import type { TokenTotals } from './cost'
+import type { ReviewIdentity } from './review-identity'
 /**
  * M52. One row of the run ledger — what a panel ran and how it ended. Shared
  * so the contract can name it; the writer is main/run-ledger.ts. No output
@@ -11,6 +12,14 @@ export interface RunRow {
   startedAt: number
   endedAt: number
   exitCode: number | null
+  /**
+   * M286. The M285 content identity the panel's review subject had when the
+   * command ENDED — what this command tested. Absent for every row written
+   * before M286, for a panel with no baseline (not a repository, never
+   * captured) and when the read failed; a reader turns absence into
+   * `unknown`, never into "current".
+   */
+  tested?: ReviewIdentity
 }
 
 /**

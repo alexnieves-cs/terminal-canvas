@@ -2342,6 +2342,111 @@ if (GIT) {
   }
 }
 
+// M286 — REVISION-BOUND CHECK EVIDENCE. A check records what it tested, and
+// the outcome it shows is bound to whether that is still what stands.
+{
+  const LANE = '/w/lanes/tc-p1'
+  const ID = { base: 'b1', content: 'a'.repeat(32) }
+  const MOVED = { base: 'b1', content: 'b'.repeat(32) }
+  const row = (extra) => ({ panelId: 'n1', command: 'npm test', cwd: LANE, startedAt: 10, endedAt: 20, exitCode: 0, ...(extra || {}) })
+  {
+    const NAME = 'check-fresh.1 a changed revision makes passing evidence STALE: an exit-0 row stamped with the identity it tested stands while the subject still has that identity, becomes `stale` (its exit code kept, a note saying why) once the identity moved, and a failed row goes stale the same way; running, not-run and unknown records are never stale, because there is no result to be'
+    try {
+      const checks = R.checksFromLedger([row({ tested: ID }), row({ startedAt: 30, endedAt: 40, exitCode: 1, tested: ID }), row({ startedAt: 50, endedAt: 0, exitCode: null })], LANE)
+      const watchers = R.checksFromWatchers([
+        { id: 'w1', cwd: LANE, command: 'npm', args: ['test'], status: 'not-started' },
+        { id: 'w2', cwd: LANE, command: 'npm', args: ['test'], status: 'running', startedAt: 60 },
+        { id: 'w3', cwd: LANE, command: 'npm', args: ['test'], status: 'passed', exitCode: 0, startedAt: 70, endedAt: 80, tested: ID },
+        { id: 'w4', cwd: LANE, command: 'npm', args: ['test'], status: 'exited', exitCode: null, signal: 'SIGKILL', startedAt: 90, endedAt: 100, tested: ID }
+      ], LANE)
+      const all = [...checks, ...watchers]
+      const fresh = R.bindCheckFreshness(all, () => ID)
+      const stale = R.bindCheckFreshness(all, () => MOVED)
+      const by = (list, key) => list.find((c) => c.key === key)
+      ok(NAME,
+        by(fresh, 'ledger:n1:10').outcome === 'passed' && by(fresh, 'ledger:n1:30').outcome === 'failed' && by(fresh, 'watcher:w3:70').outcome === 'passed' && by(fresh, 'watcher:w4:90').outcome === 'failed' &&
+          by(stale, 'ledger:n1:10').outcome === 'stale' && by(stale, 'ledger:n1:10').exitCode === 0 && /earlier version/.test(by(stale, 'ledger:n1:10').note) && by(stale, 'ledger:n1:10').observed === 'passed' &&
+          by(stale, 'ledger:n1:30').outcome === 'stale' && by(stale, 'ledger:n1:30').exitCode === 1 &&
+          by(stale, 'watcher:w3:70').outcome === 'stale' &&
+          // No result, no staleness.
+          by(stale, 'ledger:n1:50').outcome === 'unknown' && by(stale, 'watcher:w1:0').outcome === 'not-run' && by(stale, 'watcher:w2:60').outcome === 'running' &&
+          // Bound by BASE: currentOf is asked with the record's own base, never a global one.
+          R.bindCheckFreshness([by(all, 'ledger:n1:10')], (base) => (base === 'b1' ? ID : MOVED))[0].outcome === 'passed',
+        JSON.stringify({ fresh, stale }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'check-fresh.2 exit 0 never produces "tests passed" wording: checkWords says `exit 0`, `exit 1`, `running`, `not run`, `no result`, `ended by signal` and `stale · exit N at an earlier revision`, and the module\'s source never spells "tests passed" or "all tests"; a command\'s TEXT decides nothing (npm test and make ci with the same code get the same word)'
+    try {
+      const mk = (extra) => R.bindCheckFreshness(R.checksFromLedger([row(extra)], LANE), () => ID)[0]
+      const words = {
+        pass: R.checkWords(mk({ tested: ID })),
+        fail: R.checkWords(mk({ exitCode: 1, tested: ID })),
+        stale: R.checkWords(R.bindCheckFreshness(R.checksFromLedger([row({ tested: ID })], LANE), () => MOVED)[0]),
+        lost: R.checkWords(mk({ exitCode: null })),
+        unstamped: R.checkWords(mk({})),
+        running: R.checkWords(R.checksFromWatchers([{ id: 'w', cwd: LANE, command: 'x', args: [], status: 'running', startedAt: 1 }], LANE)[0]),
+        notRun: R.checkWords(R.checksFromWatchers([{ id: 'w', cwd: LANE, command: 'x', args: [], status: 'not-started' }], LANE)[0]),
+        signalled: R.checkWords(R.bindCheckFreshness(R.checksFromWatchers([{ id: 'w', cwd: LANE, command: 'x', args: [], status: 'exited', exitCode: null, signal: 'SIGTERM', startedAt: 1, endedAt: 2, tested: ID }], LANE), () => ID)[0]),
+        make: R.checkWords(mk({ command: 'make ci', tested: ID }))
+      }
+      const src = readFileSync(join(__dirname, '..', 'src', 'shared', 'check-evidence.ts'), 'utf8')
+      ok(NAME,
+        words.pass === 'exit 0' && words.fail === 'exit 1' && words.stale === 'stale · exit 0 at an earlier revision' && words.lost === 'no result' &&
+          words.unstamped === 'exit 0 · revision unknown' && words.running === 'running' && words.notRun === 'not run' && words.signalled === 'ended by signal' &&
+          words.make === words.pass &&
+          !Object.values(words).some((w) => /passed|tests/i.test(w)) &&
+          !/tests passed|all tests/i.test(src),
+        JSON.stringify(words))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'check-fresh.3 a missing source reads UNKNOWN, never green: a row with no tested identity is `unknown` with a note even at exit 0; a subject whose identity cannot be re-read now makes every stamped result `unknown`; an unread freshness (null) keeps the outcome and SAYS it was not read; and the empty arm names which nothing it is — no ledger, nowhere to read, nothing ran, a closed conversation'
+    try {
+      const unstamped = R.bindCheckFreshness(R.checksFromLedger([row({})], LANE), () => ID)[0]
+      const unreadable = R.bindCheckFreshness(R.checksFromLedger([row({ tested: ID })], LANE), () => undefined)[0]
+      const unread = R.bindCheckFreshness(R.checksFromLedger([row({ tested: ID })], LANE), () => null)[0]
+      const noLedger = R.checkEvidence([], [], { ledgerRead: false, ledgerPanels: 2, transcriptRead: true })
+      const nowhere = R.checkEvidence([], [], { ledgerRead: true, ledgerPanels: 0, transcriptRead: true })
+      const nothing = R.checkEvidence([], [], { ledgerRead: true, ledgerPanels: 2, transcriptRead: false })
+      const some = R.checkEvidence(R.checksFromLedger([row({ tested: ID })], LANE), [], { ledgerRead: true, ledgerPanels: 1, transcriptRead: true })
+      ok(NAME,
+        unstamped.outcome === 'unknown' && unstamped.observed === 'passed' && /not recorded/.test(unstamped.note) &&
+          unreadable.outcome === 'unknown' && /could not be re-read/.test(unreadable.note) &&
+          unread.outcome === 'passed' && /not read yet/.test(unread.note) &&
+          noLedger.unavailable.length === 1 && /could not read its own record/.test(noLedger.unavailable[0]) &&
+          nowhere.unavailable.length === 1 && /nowhere to read/.test(nowhere.unavailable[0]) &&
+          nothing.unavailable.length === 2 && /no checks have run/.test(nothing.unavailable[0]) && /conversation is closed/.test(nothing.unavailable[1]) &&
+          some.unavailable === undefined && some.checks.length === 1,
+        JSON.stringify({ unstamped, unreadable, unread, noLedger, nowhere, nothing }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'check-fresh.4 an agent-authored claim is a CLAIM and never a result: transcript commands come out as CheckClaim rows in their own list, with the word claim in their source, and none of them is a CheckRecord; the lane filter keeps a neighbouring lane out; a worktree branch rides in the context when the cwd is inside one; and the list sorts failures first, then stale, newest first within'
+    try {
+      const turns = [
+        { id: 't1', role: 'assistant', at: 100, blocks: [{ type: 'tool_use', id: 'u1', name: 'Bash', input: { command: 'npm test' } }] },
+        { id: 't2', role: 'user', at: 101, blocks: [{ type: 'tool_result', toolUseId: 'u1', content: 'ok', isError: false }] },
+        { id: 't3', role: 'assistant', at: 102, blocks: [{ type: 'tool_use', id: 'u2', name: 'Bash', input: { command: 'npm run build' } }] }
+      ]
+      const claims = R.claimsFromTranscript(turns)
+      const checks = R.bindCheckFreshness(R.checksFromLedger([
+        row({ tested: ID }), row({ startedAt: 30, endedAt: 40, exitCode: 1, tested: ID }), row({ startedAt: 50, endedAt: 60, exitCode: 0, tested: MOVED }),
+        row({ startedAt: 70, endedAt: 80, cwd: `${LANE}-old`, tested: ID })
+      ], LANE, (cwd) => (cwd === LANE ? 'tc/p1' : undefined)), () => ID)
+      const ev = R.checkEvidence(checks, claims, { ledgerRead: true, ledgerPanels: 1, transcriptRead: true })
+      ok(NAME,
+        claims.length === 2 && claims.every((c) => /claim/.test(c.source) && c.claimed !== undefined && c.outcome === undefined && c.source !== undefined) &&
+          claims.find((c) => c.command === 'npm test').claimed === 'ok' && claims.find((c) => c.command === 'npm run build').claimed === 'unanswered' &&
+          ev.claims.length === 2 && ev.checks.every((c) => c.source === 'ledger') &&
+          // The neighbouring lane's row is out; three remain.
+          ev.checks.length === 3 && ev.checks.every((c) => c.context.worktree === 'tc/p1') &&
+          ev.checks.map((c) => c.outcome).join() === 'failed,stale,passed',
+        JSON.stringify({ claims, checks: ev.checks.map((c) => [c.key, c.outcome, c.context]) }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)
