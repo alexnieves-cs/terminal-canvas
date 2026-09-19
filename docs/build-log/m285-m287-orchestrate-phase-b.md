@@ -174,6 +174,19 @@ pre-existing (`m279-ui-evolution.md:176`). `verify:visual` (hand-run, warm): **6
 red and its golden is left alone. The second warm rerun tripped the 221 s watchdog under load
 (the same cold/loaded trap Phase A measured); the first warm run is the honest reading.
 
+**After the critic's round** (bde05a2f: the strip rests closed, the brief folds, a shared-directory
+task reads its chat, stale never claims unseen movement, raw-byte hash under a pinned config), rerun
+at load < 7: `verify:panels:agents` 92/93 (`detail.1` only; 101.6 s of 168 s, 60%) with all four
+`orch-bench` green and captures in `/tmp/tc-phase-b-demo2`; `verify:panels:shell` 105/105 (Phase
+A's `orch-page.*` unmoved, 77.6 s of 96 s); `verify:visual` 62/66 — `orchestration` 7.6%,
+`orchestration-dark` 6.8%, `orchestration-working` 9.1% (the closed bar, the two side tabs, the
+folded brief), `starter` 24.1% pre-existing. The full `npm run verify` on the closing commit is
+recorded below the critic.
+
+**Closing gate.** `npm run verify` on bde05a2f (2026-09-19, load < 7): **52/54 suites in 562 s**,
+the same nine pre-existing reds by id (`detail.1`; the seven `workflow.*` and `reach.1` in
+product), **no new red**; headroom agents 58%, product 73%, shell 80%, kinds 83%, core 76%.
+
 ### Goldens — NOT written
 
 Per the run prompt: no golden was written, `UPDATE_GOLDENS=1` never ran. The three accepted
@@ -186,10 +199,75 @@ re-baseline, and never `starter`):
 
 ### Critic (fresh context)
 
-_(the critic's sentence per scene and on the snapshot policy — filled below)_
+Two rounds, a fresh-context subagent each time, looking at golden, fresh and diff per scene.
+
+**Round 1 (on 2af5e621) REJECTED all three scenes** for one shared cause: the strip opened by
+default at 240 px, squeezing the stage to ~55% (callout labels at ~6 px mono, illegible), clipping
+the card row at y≈612 (Current task lost Open on canvas / Mark done, System's tiles truncated,
+Agent pool cut), and on `orchestration-working` the brief and criteria textareas pushed the
+Activity feed out of the column while the strip read "no lane yet" under an island reading
+`Task · working · 4 sessions`. The snapshot policy was ACCEPTED with three named gaps: (1) the
+runner's utf8 decode made two Latin-1 edits hash alike; (2) `--no-ext-diff --no-color` do not
+neutralise `diff.renames`/`algorithm`/`context`/prefix config, so the "same tree hashes alike on
+two machines" claim was false; (3) uncovered inputs were not stated (submodule dirty trees,
+untracked mode bits and symlink targets, the index, the 64 MB cap, ARG_MAX), and
+`reviewStanding`'s `stale` for an unreadable current read was worded as movement. Every finding
+was fixed in bde05a2f (see the Gate).
+
+**Round 2 (on bde05a2f), the critic's sentences, verbatim:**
+- **orchestration** — "ACCEPT: the only differences from the golden are the intended ones — a
+  closed one-line tab bar at y≈828–855 reading 'Changes · Checks · Output · Bound to the
+  selection · claude — api' with Pin/Refresh/Expand right-aligned and fully inside the frame, the
+  side column's tabs reduced to 'Activity · Files', and the stage shortened ~36px so the card row
+  now sits at y≈648–815 with every button unclipped; all nine cubes, the callouts, the expanded
+  claude — api card and the 'Task · working · 4 sessions' island remain in frame and legible."
+- **orchestration-dark** — "ACCEPT: identical structural diff to the light scene, no colour or
+  material change on the glass cubes, platforms, halos or mono labels, and no new overlap — the
+  ring, hub card and all callouts are whole."
+- **orchestration-working** — "ACCEPT: the tests cube's needs-you beacon is present above it at
+  (882,325) with the amber ring; the 'Needs input · tests · terminal' callout and the codex — api
+  thread card sit in the same positions relative to the ring as the golden and cover nothing they
+  did not already cover; the island still reads 'Task · working · 4 sessions' while the strip now
+  reads 'Bound to the selection · Watchdog fires under load' (the earlier contradiction is gone);
+  the collapsed '▸ BRIEF & ACCEPTANCE CRITERIA · NONE YET' summary is a single line, and the
+  Activity feed's four rows are all in frame."
+
+Critic's notes, kept: the brief summary is pinned by the working golden only (the other two
+scenes inspect a panel, not the task); the bottom callout now sits ~6 px above the stage's
+border (was ~12 px) — not clipped, but a further squeeze of that size would cut it; two label
+overlaps in the working scene are pre-existing in the golden.
 
 ## Found / deferred
 
-Out of scope for Phase B by the run prompt, logged here if the run is tempted: the Start task
-dialog, multiple islands, dependency lens, run limits, Artifacts/Timeline tabs, PR/CI adapters,
-hunk application, 3D platform work.
+Out of scope for Phase B by the run prompt, logged here because the run was tempted: the Start
+task dialog, multiple islands, dependency lens, run limits, Artifacts/Timeline tabs (not stubbed —
+`workbench.1` pins three tabs), PR/CI adapters, hunk application, 3D platform work.
+
+Deferred, found while building (not Phase B):
+- Commit and discard stay on the review node; the workbench's "Review on canvas" is the door.
+  Bringing them across through the same executor with the M285 `expect` re-check is a small,
+  bounded step for Phase C or later.
+- The workbench's Checks tab reads watchers off the CANVAS's watcher panels (`isWatcherPanel` +
+  the watcher store) and ledger rows off the subject's member panels; a watcher that exists only in
+  main (armed from a template with no panel) is not listed. Phase E's durable timeline is the
+  right owner of that.
+- The ledger keeps no output bytes, so a failed LEDGER check's "output" is the session's current
+  scrollback tail, said as such; a watcher's is its own tail. A per-command output capture is a
+  Phase F adapter question.
+- `reviewStanding` reads `stale` when the CURRENT read has no identity (the critic's nuance): the
+  workbench words it as "could not be re-read"; the review node's own sentence for that arm still
+  says "the lane has changed since" and is left as is (it predates M285; one sentence, one place).
+- Stamping ledger rows costs one `git diff --binary` per command end on a panel with a baseline
+  (`RunsDeps.identityOf`); measured invisible in the harness, not measured on a large repository
+  with a hot agent. A cap or a debounce is the fix if it ever shows.
+- The identity does not cover the index on its own, a submodule's dirty tree, untracked mode
+  bits or symlink targets (named on the type); a Phase F "combined revision" check would want
+  the first of those.
+- The harness composes its own engines (`panels-harness.cjs`): every optional dep `stores.ts`
+  gains must be mirrored there or the tier silently proves a different app (load-bearing entry
+  written). A `createStores`-shaped harness would remove the class.
+- Phase A's `orch-task.*` and this run's `orch-bench.*` share one 168 s watchdog; the part is now
+  the slowest Electron part after `product`. Splitting the Orchestrate checks into their own
+  part is the next headroom move.
+- `/tmp/tc-electron-lock` was a two-day-old empty file from another session; this run took it.
+  Nothing reads its contents.
