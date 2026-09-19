@@ -3839,9 +3839,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const benchRead = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-orch-workbench]'); if (!b) return null
         return { tabs: [...b.querySelectorAll('[role="tab"]')].map((t) => t.textContent.trim()), tab: b.getAttribute('data-orch-bench-tab'), subject: b.getAttribute('data-orch-bench-subject'),
           bound: b.querySelector('[data-orch-bench-bound]')?.textContent ?? null, boundKind: b.querySelector('[data-orch-bench-bound]')?.getAttribute('data-orch-bench-bound') ?? null,
-          height: b.getBoundingClientRect().height, benches: document.querySelectorAll('[data-orch-workbench]').length } })()`)
+          height: b.getBoundingClientRect().height, open: b.hasAttribute('data-orch-bench-open'), benches: document.querySelectorAll('[data-orch-workbench]').length } })()`)
       const island = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-island="${itemId}"]') !== null`), 6000)
-      const b0 = await waitUntil(async () => { const b = await benchRead(); return b && b.subject.startsWith('task:' + itemId) ? b : false }, 6000)
+      // Closed at rest: the tab bar alone. The inspector's Review changes opens it on Changes.
+      const closedRead = await waitUntil(async () => { const b = await benchRead(); return b && b.subject.startsWith('task:' + itemId) ? b : false }, 6000)
+      await click('[data-orch-inspector] [data-orch-review-open]')
+      const b0 = await waitUntil(async () => { const b = await benchRead(); return b && b.open === true ? b : false }, 6000)
       // Changes: the lane's fork diff, a tree with app.txt, and the diff's added line.
       const files = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-workbench] [data-orch-review]'); if (!r) return false; const k = r.querySelector('[data-orch-review-kind]')?.getAttribute('data-orch-review-kind'); const f = [...r.querySelectorAll('[data-orch-review-file]')].map((e) => e.getAttribute('data-orch-review-file')); return k === 'changes' && f.length > 0 ? { kind: k, files: f, fresh: r.querySelector('[data-orch-fresh]')?.getAttribute('data-orch-fresh') ?? null, freshWords: r.querySelector('[data-orch-fresh]')?.textContent ?? null } : false })()`), 8000)
       await click('[data-orch-workbench] [data-orch-review-file="app.txt"]')
@@ -3965,13 +3968,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const persisted = await waitUntil(() => { layoutStore.flushSync(); const ws = layoutStore.initial(); return ws.orchestrate && ws.orchestrate.workbench && Math.abs(ws.orchestrate.workbench.height - (heightBefore + 100)) < 3 ? ws.orchestrate : false }, 6000)
       await demo('m287-9-workbench-resized')
       ok(IDS[0],
-        b0 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
+        closedRead && closedRead.open === false && closedRead.height < 80 &&
+          b0 && b0.open === true && b0.height >= 200 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
           boundToChat && boundToChat.boundKind === 'selection' && boundToChat.subject === 'session:' + plainChatId &&
           pinnedRead && /^Pinned to /.test(pinnedRead.bound) && pinnedRead.subject === 'session:' + plainChatId &&
           stillPinned && stillPinned.boundKind === 'pinned' && stillPinned.subject === 'session:' + plainChatId &&
           unpinned && /Make two loud/.test(unpinned.bound) &&
-          dragged === true && resized && persisted && persisted.workbench.tab === 'checks' && persisted.lens === 'list',
-        JSON.stringify({ b0, boundToChat, pinnedRead, stillPinned, unpinned, heightBefore, dragged, resized: resized && resized.height, persisted }))
+          dragged === true && resized && persisted && persisted.workbench.tab === 'checks' && persisted.workbench.open === true && persisted.lens === 'list',
+        JSON.stringify({ closedRead, b0, boundToChat, pinnedRead, stillPinned, unpinned, heightBefore, dragged, resized: resized && resized.height, persisted }))
     } catch (bErr) {
       for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr) + ' | renderer: ' + (bLog.slice(-4).join(' || ') || '(none)'))
     } finally {

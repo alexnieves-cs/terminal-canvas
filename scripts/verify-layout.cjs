@@ -5110,6 +5110,8 @@ try {
     const badBench = []
     const halfBad = L.parseOrchestrate({ workbench: { height: 'tall', tab: 'checks' }, lens: 'list' }, badBench)
     const unknownTab = L.parseOrchestrate({ workbench: { height: 300, tab: 'artifacts' } }, [])
+    const opened = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: true } }, [])
+    const notOpened = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: 'yes' } }, [])
     const clamped = L.parseOrchestrate({ workbench: { height: 5, tab: 'output' } }, [])
     const clampedHigh = L.parseOrchestrate({ workbench: { height: 99999, tab: 'output' } }, [])
     const badCamera = L.parseOrchestrate({ lens: 'scene', camera: { x: 0, y: 0, k: 0 } }, [])
@@ -5121,6 +5123,8 @@ try {
         JSON.stringify(full) === JSON.stringify({ workbench: { height: 300, tab: 'checks' }, lens: 'list', mode: 'pipeline', sideTab: 'files', camera: { x: 1, y: 2, k: 1.5 } }) &&
         JSON.stringify(halfBad) === JSON.stringify({ lens: 'list' }) && badBench.some((t) => /workbench/.test(t)) &&
         unknownTab === undefined &&
+        // `open` is written only as true; anything else is absent — closed.
+        opened.workbench.open === true && !('open' in notOpened.workbench) && !('open' in full.workbench) &&
         clamped.workbench.height === L.WORKBENCH_MIN_HEIGHT && clampedHigh.workbench.height === L.WORKBENCH_MAX_HEIGHT &&
         JSON.stringify(badCamera) === JSON.stringify({ lens: 'scene' }) &&
         JSON.stringify(carried) === JSON.stringify(full) && carried !== full && carried.workbench !== full.workbench &&

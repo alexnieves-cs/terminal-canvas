@@ -27,7 +27,7 @@ export interface OrchPrefs {
   camera: { x: number; y: number; k: number }
   tab: OrchSideTab
   /** M287. The workbench's height and tab, the plan's "persist panel sizes per workspace". */
-  workbench: { height: number; tab: WorkbenchTab }
+  workbench: { height: number; tab: WorkbenchTab; open: boolean }
 }
 
 const DEFAULTS: OrchPrefs = {
@@ -35,7 +35,7 @@ const DEFAULTS: OrchPrefs = {
   lens: 'scene',
   camera: { x: 0, y: 0, k: 1 },
   tab: 'activity',
-  workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes' }
+  workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes', open: false }
 }
 
 /**
@@ -52,13 +52,13 @@ export function seedOrchPrefs(persisted: PersistedOrchestrate | undefined): void
     ...(persisted.mode === undefined ? {} : { mode: persisted.mode }),
     ...(persisted.sideTab === undefined ? {} : { tab: persisted.sideTab }),
     ...(persisted.camera === undefined ? {} : { camera: { ...persisted.camera } }),
-    ...(persisted.workbench === undefined ? {} : { workbench: { ...persisted.workbench } })
+    ...(persisted.workbench === undefined ? {} : { workbench: { height: persisted.workbench.height, tab: persisted.workbench.tab, open: persisted.workbench.open === true } })
   }
 }
 
 /** The record the workspace saves — every field, so a relaunch returns to the same view. */
 export function persistedOrchPrefs(p: OrchPrefs): PersistedOrchestrate {
-  return { workbench: { ...p.workbench }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera } }
+  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? { open: true as const } : {}) }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera } }
 }
 
 let prefs: OrchPrefs = DEFAULTS

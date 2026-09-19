@@ -2234,7 +2234,8 @@ if (GIT) {
 // old mark reads `unknown`, and a mutation re-reads the tree before writing.
 {
   const NUMSTAT = { '-C /r diff --numstat -z b1': { stdout: ['3\t1\ta.ts', ''].join('\0') } }
-  const DIFF_KEY = '-C /r diff --binary --full-index --no-ext-diff --no-color b1'
+  const CFG = R.CONTENT_DIFF_CONFIG.flatMap((c) => ['-c', c]).join(' ')
+  const DIFF_KEY = `-C /r ${CFG} diff --binary --full-index --no-ext-diff --no-color b1`
   const same = (a, b) => a !== undefined && b !== undefined && a.base === b.base && a.content === b.content
   {
     const NAME = 'review-id.1 a same-size edit moves the identity: two reads with IDENTICAL numstat rows and IDENTICAL signatures but different diff bytes are two identities; identical bytes are one; a different base is another; an untracked file is hashed by content, not by name; and the argv is the policy\'s (--binary --full-index --no-ext-diff --no-color; hash-object without -w)'
@@ -2249,7 +2250,7 @@ if (GIT) {
       const a2 = await eng('@@ -1 +1 @@\n-x\n+y\n').review('p1')
       const u1 = await eng('@@ -1 +1 @@\n-x\n+y\n', 'new.txt', 'blob1').review('p1')
       const u2 = await eng('@@ -1 +1 @@\n-x\n+y\n', 'new.txt', 'blob2').review('p1')
-      const otherBase = await R.createReviewEngine({ run: fakeRunner({ '-C /r cat-file -e b2': { stdout: '' }, '-C /r diff --numstat -z b2': NUMSTAT['-C /r diff --numstat -z b1'], ...NO_UNTRACKED, '-C /r diff --binary --full-index --no-ext-diff --no-color b2': { stdout: '@@ -1 +1 @@\n-x\n+y\n' } }), baselineOf: () => ({ root: '/r', sha: 'b2' }), peersInRepo: () => 0 }).review('p1')
+      const otherBase = await R.createReviewEngine({ run: fakeRunner({ '-C /r cat-file -e b2': { stdout: '' }, '-C /r diff --numstat -z b2': NUMSTAT['-C /r diff --numstat -z b1'], ...NO_UNTRACKED, [`-C /r ${CFG} diff --binary --full-index --no-ext-diff --no-color b2`]: { stdout: '@@ -1 +1 @@\n-x\n+y\n' } }), baselineOf: () => ({ root: '/r', sha: 'b2' }), peersInRepo: () => 0 }).review('p1')
       ok(NAME,
         a.kind === 'changes' && b.kind === 'changes' && a2.kind === 'changes' && u1.kind === 'changes' && u2.kind === 'changes' && otherBase.kind === 'changes' &&
           // The shape is identical — the very bound readiness.3 pins…
@@ -2262,7 +2263,11 @@ if (GIT) {
           !same(u1.identity, a.identity) && !same(u1.identity, u2.identity) &&
           // Same bytes, different base: a different subject.
           otherBase.identity !== undefined && otherBase.identity.content === a.identity.content && !same(otherBase.identity, a.identity) &&
-          calls.includes(DIFF_KEY) && calls.includes('-C /r hash-object -- new.txt') && !calls.some((c) => /hash-object.* -w/.test(c)),
+          calls.includes(DIFF_KEY) && calls.includes('-C /r hash-object -- new.txt') && !calls.some((c) => /hash-object.* -w/.test(c)) &&
+          // The critic's gap: two diffs differing only in a non-UTF-8 byte (é vs è in Latin-1) are two identities.
+          !same((await eng('-\xe9\n+x\n').review('p1')).identity, (await eng('-\xe8\n+x\n').review('p1')).identity) &&
+          // Every pin is on the argv, and the config keys are the ones the critic named.
+          /diff\.renames=true/.test(DIFF_KEY) && /diff\.algorithm=myers/.test(DIFF_KEY) && /diff\.noprefix=false/.test(DIFF_KEY) && /diff\.ignoreSubmodules=none/.test(DIFF_KEY),
         JSON.stringify({ a: a.identity, b: b.identity, a2: a2.identity, u1: u1.identity, u2: u2.identity, otherBase: otherBase.identity, calls: calls.slice(0, 8) }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }

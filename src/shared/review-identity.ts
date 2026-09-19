@@ -35,6 +35,21 @@
  *   change appears in the diff as a gitlink line and is covered as bytes.
  *   A clean tree hashes the empty string, with no extra git call.
  *
+ *   The diff bytes are read RAW (latin1, byte for byte — a utf8 decode turned
+ *   every invalid byte into U+FFFD and two Latin-1 edits hashed alike) and
+ *   the diff's config is pinned with `-c` (`CONTENT_DIFF_CONFIG`), so the same
+ *   tree hashes alike under two users' git configs.
+ *
+ *   NOT COVERED, and said here so nobody reads the identity as more than it
+ *   is: a submodule's own dirty working tree (only its pointer is hashed);
+ *   an untracked file's mode bit and an untracked symlink's target
+ *   (`hash-object` hashes content, and reads through a link); the index on
+ *   its own (staged-but-not-in-the-tree content); anything past the runner's
+ *   64 MB stdout cap; and an untracked set that will not fit ARG_MAX, a
+ *   dangling symlink or a nested repository listed as `dir/` — each of those
+ *   fails the call and leaves the identity ABSENT for as long as it lasts,
+ *   which reads as unknown, never fresh.
+ *
  * WHO COMPUTES IT: main, in `review-engine.ts`, and nowhere else. The
  * renderer receives it inside a `ReviewResult`, stores it beside the
  * acknowledgement it records (`PersistedWorkItem.reviewed.identity`) and
@@ -44,9 +59,13 @@
  * `useTaskHandoffs` already names for the signature.
  *
  * ABSENCE MEANS UNKNOWN, NEVER FRESH. If either git call fails the engine
- * sends no identity; a persisted mark written before M285 has none. Every
- * reader turns an absent identity into "freshness unknown" — the safe
- * direction, which points at "look again" rather than "already done".
+ * sends no identity; a persisted mark written before M285 has none. A mark
+ * with no identity reads `unknown`; a mark judged against a CURRENT read
+ * that has none reads `stale` — both are the safe direction, pointing at
+ * "look again" rather than "already done", and a surface must not word the
+ * second as movement it never saw. A mark's `base` is the fork or baseline
+ * sha: when the lane's HEAD advances (the agent committed) a later read has
+ * a new base and the mark reads stale by the two-part rule — expected.
  *
  * Pure: no DOM, no React, no electron, no node — the hashing lives in
  * `main/review-identity.ts` so this stays importable from every process.

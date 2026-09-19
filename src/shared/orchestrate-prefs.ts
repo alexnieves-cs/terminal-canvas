@@ -26,7 +26,8 @@ export const WORKBENCH_MAX_HEIGHT = 720
 export const WORKBENCH_DEFAULT_HEIGHT = 240
 
 export interface PersistedOrchestrate {
-  workbench?: { height: number; tab: WorkbenchTab }
+  /** `open` absent is CLOSED: the strip rests as its tab bar and opens on a tab, a Review changes, or a drag (the critic: an open default squeezed the scene). */
+  workbench?: { height: number; tab: WorkbenchTab; open?: true }
   lens?: 'scene' | 'list'
   mode?: 'dev' | 'pipeline'
   sideTab?: 'activity' | 'files'
@@ -56,7 +57,7 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
   const out: PersistedOrchestrate = {}
   const wb = raw.workbench
   if (isRecord(wb) && isNum(wb.height) && WORKBENCH_TABS.includes(wb.tab as WorkbenchTab)) {
-    out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab }
+    out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab, ...(wb.open === true ? { open: true as const } : {}) }
   } else if (wb !== undefined) warnings.push('dropped a malformed orchestrate workbench')
   if (raw.lens === 'scene' || raw.lens === 'list') out.lens = raw.lens
   if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode
@@ -69,7 +70,7 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
 /** A fresh object, field by field — a spread would write `lens: undefined` as a present key. */
 export function carryOrchestrate(p: PersistedOrchestrate): PersistedOrchestrate {
   return {
-    ...(p.workbench === undefined ? {} : { workbench: { height: p.workbench.height, tab: p.workbench.tab } }),
+    ...(p.workbench === undefined ? {} : { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open === true ? { open: true as const } : {}) } }),
     ...(p.lens === undefined ? {} : { lens: p.lens }),
     ...(p.mode === undefined ? {} : { mode: p.mode }),
     ...(p.sideTab === undefined ? {} : { sideTab: p.sideTab }),

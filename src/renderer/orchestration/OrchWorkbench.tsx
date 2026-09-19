@@ -67,6 +67,9 @@ export interface OrchWorkbenchProps {
   onTab: (t: WorkbenchTab) => void
   height: number
   onHeight: (h: number) => void
+  /** Closed = the tab bar alone; nothing is read while closed. */
+  open: boolean
+  onOpen: (open: boolean) => void
   panels: readonly Panel[]
   workItems: readonly PersistedWorkItem[]
   worktrees: readonly WorktreeListRow[]
@@ -117,12 +120,16 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
     const asked = key
     setRead({ kind: 'loading' })
     const land = (r: ChangesRead): void => { if (live && keyRef.current === asked) setRead(r) }
-    if (subject.kind === 'session') {
-      void Promise.all([window.canvas.review.panel(subject.id), window.canvas.review.baseline(subject.id)]).then(
+    // A task in a SHARED directory (a chat, no worktree) reads its chat's own baseline —
+    // Phase A's read — rather than claiming nothing was started (the critic caught the
+    // island saying `working · 4 sessions` over a strip saying `no lane yet`).
+    const sessionId = subject.kind === 'session' ? subject.id : subject.lane === undefined ? subject.chatId : undefined
+    if (sessionId !== undefined) {
+      void Promise.all([window.canvas.review.panel(sessionId), window.canvas.review.baseline(sessionId)]).then(
         ([result, baseline]) => land({ kind: 'result', result, repoRoot: result.kind === 'changes' || result.kind === 'shared' || result.kind === 'clean' ? result.root : '', base: baseline?.sha }),
         () => land({ kind: 'result', result: { kind: 'repo-unreadable', detail: 'the review could not be read' }, repoRoot: '', base: undefined })
       )
-    } else if (subject.lane === undefined) {
+    } else if (subject.kind === 'session' || subject.lane === undefined) {
       land({ kind: 'no-lane' })
     } else {
       const lane = subject.lane
@@ -160,7 +167,7 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
 
 /** Every arm named, none rendered as an error it is not (Phase A's words, kept). */
 function changesWords(result: ReviewResult, subject: BenchSubject): string {
-  const since = subject.kind === 'session' ? 'since this session started' : 'since the lane forked from the main tree'
+  const since = subject.kind === 'session' ? 'since this session started' : subject.lane === undefined ? 'since its conversation started (a shared directory, not its own worktree)' : 'since the lane forked from the main tree'
   if (result.kind === 'changes') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} · +${result.added} −${result.removed} ${since}`
   if (result.kind === 'shared') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} in a repository ${result.panelCount} sessions share — authorship is ambiguous, so none is attributed to this one`
   if (result.kind === 'clean') return `No changes ${since}`
@@ -279,10 +286,10 @@ function CheckOutput({ record }: { record: CheckRecord }): JSX.Element {
 /* ── The strip ───────────────────────────────────────────────────────────── */
 
 export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
-  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onJump, onShowCanvas, output, refresh } = props
+  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onJump, onShowCanvas, output, refresh } = props
   const [localRefresh, setLocalRefresh] = useState(0)
-  const changes = useChanges(subject, tab === 'changes', refresh + localRefresh)
-  const checks = useChecks(subject, tab === 'checks', panels, worktrees, refresh + localRefresh)
+  const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh)
+  const checks = useChecks(subject, open && tab === 'checks', panels, worktrees, refresh + localRefresh)
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null)
 
   // The top edge drags. Height is measured from the strip's bottom, so dragging
@@ -291,7 +298,8 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const drag = useRef<{ y: number; h: number } | null>(null)
   const onHandleDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return
-    drag.current = { y: e.clientY, h: height }
+    drag.current = { y: e.clientY, h: open ? height : 0 }
+    if (!open) onOpen(true)
     // A synthetic pointer (the harness's) has no active pointer to capture; the
     // gesture still works without capture, so the refusal is not an error.
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* no active pointer */ }
@@ -317,13 +325,15 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   /** M285's freshness, in words, from the canvas's own handoff. */
   const freshness = ((): { word: string; standing: string } | null => {
     if (subject === null || subject.kind !== 'task') return null
-    if (subject.lane === undefined) return { standing: 'no-lane', word: 'No review mark can be kept until the task has a lane' }
+    if (subject.lane === undefined) return { standing: 'no-lane', word: subject.chatId === undefined ? 'Not started — no conversation and no lane yet, so there is nothing to review' : 'No review mark is kept for a task in a shared directory — its changes are its conversation\'s, read since that started' }
     if (handoff === undefined) return { standing: 'unread', word: 'Freshness not read yet — the canvas has not judged this lane' }
     const files = item?.reviewed?.files
     switch (handoff.standing) {
       case 'none': return { standing: 'none', word: 'Not reviewed yet' }
       case 'current': return { standing: 'current', word: `Reviewed · current — you read ${files ?? 0} file${files === 1 ? '' : 's'} and the content has not moved since` }
-      case 'stale': return { standing: 'stale', word: `Reviewed · stale — the content has moved since you read ${files ?? 0} file${files === 1 ? '' : 's'}` }
+      // `stale` is also what a mark reads when the CURRENT read carries no identity —
+      // then nothing moved that this app saw, and the words must not say it did.
+      case 'stale': return { standing: 'stale', word: handoff.changes?.identity === undefined ? `Reviewed · stale — the changes could not be re-read, so the mark over ${files ?? 0} file${files === 1 ? '' : 's'} cannot be confirmed` : `Reviewed · stale — the content has moved since you read ${files ?? 0} file${files === 1 ? '' : 's'}` }
       default: return { standing: 'unknown', word: 'Reviewed once · freshness unknown — that mark predates content identity; mark again to make it checkable' }
     }
   })()
@@ -340,7 +350,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const dataSubject = subject === null ? '' : subject.kind === 'session' ? subject.id : subject.chatId ?? subject.itemId
 
   return (
-    <section className="orch__bench" data-orch-workbench data-orch-bench-tab={tab} data-orch-bench-subject={benchSubjectKey(subject)} style={{ height: `${height}px` }} aria-label="Workbench">
+    <section className="orch__bench" data-orch-workbench data-orch-bench-tab={tab} data-orch-bench-open={open || undefined} data-orch-bench-subject={benchSubjectKey(subject)} style={open ? { height: `${height}px` } : undefined} aria-label="Workbench">
       <div className="orch__bench-handle" role="separator" aria-orientation="horizontal" aria-label="Resize the workbench" data-orch-bench-handle
         onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
         onDoubleClick={() => onHeight(clampWorkbenchHeight(240))} />
@@ -348,7 +358,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
         <div className="orch__tabs orch__tabs--bench" role="tablist" aria-label="Workbench tabs">
           {WORKBENCH_TABS.map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} data-orch-bench-tab-button={t}
-              className={`orch__tab${tab === t ? ' orch__tab--on' : ''}`} {...shellControl(() => onTab(t))}>
+              className={`orch__tab${open && tab === t ? ' orch__tab--on' : ''}`} {...shellControl(() => { onTab(t); onOpen(true) })}>
               {t === 'changes' ? 'Changes' : t === 'checks' ? 'Checks' : 'Output'}
             </button>
           ))}
@@ -359,10 +369,11 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
             ? <button type="button" className="orch__mini" data-orch-bench-pin="off" {...shellControl(() => onPin(null))}>Unpin</button>
             : <button type="button" className="orch__mini" data-orch-bench-pin="on" disabled={current === null} title={current === null ? 'select a session or the task to pin' : `keep the workbench on ${current.title} while you look around`} {...shellControl(() => { if (current !== null) onPin(current) })}>Pin</button>}
           <button type="button" className="orch__mini" data-orch-bench-refresh {...shellControl(() => { setLocalRefresh((n) => n + 1); onRefreshTaskHandoffs?.() })}>Refresh</button>
+          <button type="button" className="orch__mini" data-orch-bench-toggle={open ? 'close' : 'open'} {...shellControl(() => onOpen(!open))}>{open ? 'Collapse' : 'Expand'}</button>
         </span>
       </div>
 
-      <div className="orch__bench-body" data-orch-density="detail">
+      {open && <div className="orch__bench-body" data-orch-density="detail">
         {subject === null ? (
           <p className="orch__caption">Select a chat or terminal session, or the task, to fill the workbench.</p>
         ) : tab === 'changes' ? (
@@ -372,7 +383,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                 <p className="orch__bench-fresh" data-orch-fresh={freshness.standing}>{freshness.word}</p>
               )}
               {changes.read.kind === 'loading' && <p className="orch__caption" role="status">Reading changes…</p>}
-              {changes.read.kind === 'no-lane' && <p className="orch__review-words" data-orch-review-kind="no-lane">This task has no lane yet — nothing has been started, so there is no diff to show.</p>}
+              {changes.read.kind === 'no-lane' && <p className="orch__review-words" data-orch-review-kind="no-lane">This task has not been started — no conversation and no lane, so there is no diff to show.</p>}
               {changes.read.kind === 'lane-missing' && <p className="orch__review-words" data-orch-review-kind="lane-missing">The task's worktree is not listed by git any more — it was removed outside this app.</p>}
               {changes.read.kind === 'result' && (
                 <>
@@ -499,7 +510,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
             )}
           </div>
         )}
-      </div>
+      </div>}
     </section>
   )
 }

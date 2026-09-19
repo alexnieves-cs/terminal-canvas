@@ -224,10 +224,20 @@ export function buildUntrackedArgs(root: string): string[] {
  * so a changed image is covered by content and not only by its path;
  * `--full-index` so two different blobs cannot share an abbreviated id in the
  * header; `--no-ext-diff` and `--no-color` so a user's diff tool or colour
- * config cannot make the same tree hash differently on two machines.
+ * config cannot change the bytes. The `-c` pins are the critic's finding:
+ * those two flags leave `diff.renames`, `diff.algorithm`, `diff.context`,
+ * `diff.noprefix`/`mnemonicPrefix`, `diff.indentHeuristic` and
+ * `diff.ignoreSubmodules` in play, and the SAME tree hashed differently under
+ * two configs (the safe direction — a mark went stale — but a false claim of
+ * machine-independence). Pinned to git's defaults, spelled out.
  */
+export const CONTENT_DIFF_CONFIG: readonly string[] = [
+  'diff.renames=true', 'diff.algorithm=myers', 'diff.context=3', 'diff.interHunkContext=0',
+  'diff.noprefix=false', 'diff.mnemonicPrefix=false', 'diff.indentHeuristic=true',
+  'diff.ignoreSubmodules=none', 'diff.suppressBlankEmpty=false', 'core.quotePath=true'
+]
 export function buildContentDiffArgs(root: string, baseline: string): string[] {
-  return ['-C', root, 'diff', '--binary', '--full-index', '--no-ext-diff', '--no-color', baseline]
+  return ['-C', root, ...CONTENT_DIFF_CONFIG.flatMap((c) => ['-c', c]), 'diff', '--binary', '--full-index', '--no-ext-diff', '--no-color', baseline]
 }
 
 /**

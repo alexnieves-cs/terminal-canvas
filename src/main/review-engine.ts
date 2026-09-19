@@ -55,6 +55,14 @@ export interface GitRunOptions {
    * a scratch index instead of the repository's own.
    */
   env?: Record<string, string>
+  /**
+   * M285 (the critic's gap). Decode stdout as latin1 — a 1:1 byte→char map —
+   * instead of utf8, so a diff of a non-UTF-8 file reaches the hasher byte
+   * for byte. Under utf8 every invalid byte became U+FFFD, and an edit that
+   * swapped one invalid byte for another hashed IDENTICAL. The one caller is
+   * the content identity; every other read stays utf8.
+   */
+  bytes?: true
 }
 
 export type GitRunner = (args: string[], opts?: GitRunOptions) => Promise<GitResult>
@@ -320,7 +328,8 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
    * covered half the tree would read as a confident answer about all of it.
    */
   const contentIdentity = async (root: string, base: string, untrackedPaths: readonly string[]): Promise<ReviewIdentity | undefined> => {
-    const diff = await run(buildContentDiffArgs(root, base))
+    const diff = await deps.run(buildContentDiffArgs(root, base), { bytes: true })
+    if (diff.notFound) gitMissing = true
     if (!diff.ok) return undefined
     let listing = ''
     if (untrackedPaths.length > 0) {
@@ -331,7 +340,8 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
       if (ids.length !== untrackedPaths.length) return undefined
       listing = untrackedPaths.map((p, i) => `${p}\0${ids[i] as string}`).join('\n')
     }
-    return reviewIdentityOf(base, [diff.stdout, listing])
+    // The diff arrived latin1-decoded: re-encode it to the bytes git wrote.
+    return reviewIdentityOf(base, [Buffer.from(diff.stdout, 'latin1'), listing])
   }
 
   const identityAtHead = async (cwd: string): Promise<ReviewIdentity | undefined> => {

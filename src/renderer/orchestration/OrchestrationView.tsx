@@ -927,10 +927,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // is NOT persisted — it names a live panel id, meaningless after a relaunch.
   const [benchTab, setBenchTab] = useState<WorkbenchTab>(() => getOrchPrefs().workbench.tab)
   const [benchHeight, setBenchHeight] = useState<number>(() => getOrchPrefs().workbench.height)
+  // Closed at rest (the critic: an open strip by default squeezed the scene to half and
+  // clipped the card row). A tab, Review changes, a terminal card or a drag opens it.
+  const [benchOpen, setBenchOpen] = useState<boolean>(() => getOrchPrefs().workbench.open)
+  const openBench = useCallback((t: WorkbenchTab): void => { setBenchTab(t); setBenchOpen(true) }, [])
   const [benchPinned, setBenchPinned] = useState<BenchSubject | null>(null)
   const [benchRefresh, setBenchRefresh] = useState(0)
   useEffect(() => onChatTurnEnd(() => setBenchRefresh((n) => n + 1)), [])
-  useEffect(() => { setOrchPrefs({ workbench: { tab: benchTab, height: benchHeight } }) }, [benchTab, benchHeight])
+  useEffect(() => { setOrchPrefs({ workbench: { tab: benchTab, height: benchHeight, open: benchOpen } }) }, [benchTab, benchHeight, benchOpen])
   // Foreground cards respond first, then settle at the edge of their readable area.
   const floatStyle = mode === 'dev' ? { translate: `${Math.tanh(graphCamera.x / 20) * 22}px ${Math.tanh(graphCamera.y / 14) * 16 - (graphCamera.k - 1) * 8}px` } : undefined
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
@@ -1125,7 +1129,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
       if (!sameOrchestrate(persistedRef.current, next)) onOrchestrateRef.current?.(next)
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [tab, mode, lens, graphCamera, benchTab, benchHeight])
+  }, [tab, mode, lens, graphCamera, benchTab, benchHeight, benchOpen])
 
   // M284. The one task island (orchestration-island.ts), from the persisted work item
   // and the worktree record it names — the same pick as the canvas's focused task.
@@ -1724,7 +1728,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 className="orch__float orch__float--term"
                 style={floatStyle}
                 title="Jump to terminal"
-                {...shellControl(() => { select(liveSnap.terminalSnippet!.panelId); setBenchTab('output') })}
+                {...shellControl(() => { select(liveSnap.terminalSnippet!.panelId); openBench('output') })}
                 onDoubleClick={() => jump(liveSnap.terminalSnippet!.panelId)}
               >
                 <span className="orch__float-title">{liveSnap.terminalSnippet.title}</span>
@@ -1826,7 +1830,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   type="button"
                   className="orch__jump-card"
                   title="Double-click to jump to the panel"
-                  {...shellControl(() => { select(outputPanelId); setBenchTab('output') })}
+                  {...shellControl(() => { select(outputPanelId); openBench('output') })}
                   onDoubleClick={() => jump(outputPanelId)}
                 >
                   <span className="orch__jump-head">
@@ -1952,7 +1956,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 {nextAction !== null && <p className="orch__inspector-next" data-orch-next={nextAction.verb}>Next: {nextAction.label}</p>}
                 <div className="orch__roster-actions">
                   <button type="button" className="orch__mini" data-orch-open {...shellControl(() => jump(selectedRow.id))}>Open on canvas</button>
-                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => setBenchTab('changes'))}>Review changes</button>}
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
                   {selectedCanStop && onInterrupt !== undefined && (
                     <button type="button" className="orch__mini orch__mini--stop" {...shellControl(() => onInterrupt(selectedRow.id))}><Stop size={12} /> Interrupt</button>
                   )}
@@ -1974,7 +1978,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     if (island.itemId !== undefined) onJumpWorkItem(island.itemId)
                     else if (island.subjectId !== null) jump(island.subjectId)
                   })}>Open on canvas</button>
-                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => setBenchTab('changes'))}>Review changes</button>}
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
                 </div>
                 {/* M287. The brief and the acceptance criteria — the task's own words,
                     persisted on the work item through the board's one patch door.
@@ -2085,6 +2089,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         onTab={setBenchTab}
         height={benchHeight}
         onHeight={setBenchHeight}
+        open={benchOpen}
+        onOpen={setBenchOpen}
         panels={panels}
         workItems={workItems}
         worktrees={worktrees}
@@ -2119,19 +2125,22 @@ function OrchBriefEditor({ itemId, brief, criteria, onPatchWorkItem }: {
     const next = criteriaDraft.split('\n').map((c) => c.trim()).filter((c) => c !== '')
     if (next.join('\n') !== criteria.join('\n')) onPatchWorkItem(itemId, { criteria: next })
   }
+  // A <details>, open only when something is written: two textareas at rest pushed the
+  // inspector's Activity feed out of frame (the critic).
   return (
-    <div className="orch__brief" data-orch-brief-editor={itemId}>
+    <details className="orch__brief" data-orch-brief-editor={itemId} open={brief !== '' || criteria.length > 0}>
+      <summary className="orch__brief-summary">Brief &amp; acceptance criteria{brief === '' && criteria.length === 0 ? ' · none yet' : ''}</summary>
       <label className="orch__brief-field">
         <span className="orch__section-title">Brief</span>
-        <textarea className="orch__brief-input" data-orch-brief rows={3} value={briefDraft} placeholder="What should be done, in your words. Editing this starts nothing."
+        <textarea className="orch__brief-input" data-orch-brief rows={2} value={briefDraft} placeholder="What should be done, in your words. Editing this starts nothing."
           onChange={(e) => setBriefDraft(e.target.value)} onBlur={commitBrief} />
       </label>
       <label className="orch__brief-field">
         <span className="orch__section-title">Acceptance criteria</span>
-        <textarea className="orch__brief-input" data-orch-criteria rows={3} value={criteriaDraft} placeholder="One per line."
+        <textarea className="orch__brief-input" data-orch-criteria rows={2} value={criteriaDraft} placeholder="One per line."
           onChange={(e) => setCriteriaDraft(e.target.value)} onBlur={commitCriteria} />
       </label>
-    </div>
+    </details>
   )
 }
 

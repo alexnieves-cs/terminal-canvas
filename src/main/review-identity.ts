@@ -12,11 +12,11 @@ import { REVIEW_IDENTITY_CONTENT_CHARS, type ReviewIdentity } from '../shared/re
  * text of an untracked line is a different byte sequence from the same text
  * arriving as an untracked line.
  */
-export function hashReviewContent(parts: readonly string[]): string {
+export function hashReviewContent(parts: ReadonlyArray<string | Buffer>): string {
   const h = createHash('sha256')
   for (let i = 0; i < parts.length; i += 1) {
     if (i > 0) h.update('\0')
-    h.update(parts[i] as string)
+    h.update(parts[i] as string | Buffer)
   }
   return h.digest('hex').slice(0, REVIEW_IDENTITY_CONTENT_CHARS)
 }
@@ -29,6 +29,6 @@ export function hashReviewContent(parts: readonly string[]): string {
  */
 export const EMPTY_REVIEW_CONTENT = hashReviewContent(['', ''])
 
-export function reviewIdentityOf(base: string, parts: readonly string[]): ReviewIdentity {
+export function reviewIdentityOf(base: string, parts: ReadonlyArray<string | Buffer>): ReviewIdentity {
   return { base, content: hashReviewContent(parts) }
 }
