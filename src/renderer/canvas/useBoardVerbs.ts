@@ -509,7 +509,9 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       ...(item.reviewed === undefined ? {} : { reviewed: item.reviewed }),
       ledgerPanelIds: terminalIdsRef.current,
       ...(chatAlive ? { chatPanelId: item.panelId as string } : {}),
-      onMarkReviewed: (id, signature, files) => patchWorkItem(id, { reviewed: { at: Date.now(), signature, files } }),
+      // M285. The identity rides into the mark when main sent one; absent
+      // stays absent, and the mark then reads `unknown` rather than current.
+      onMarkReviewed: (id, signature, files, identity) => patchWorkItem(id, { reviewed: { at: Date.now(), signature, files, ...(identity === undefined ? {} : { identity }) } }),
       // FOCUS and INSERT — never send. M80's rule for every message this app
       // puts in a composer: the person decides what their agent is told.
       onContinue: (id, paths) => {

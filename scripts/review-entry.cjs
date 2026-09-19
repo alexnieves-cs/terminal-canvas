@@ -52,4 +52,9 @@ module.exports = {
      warns about: a module that starts exporting a value where it exported
      only types breaks a bundle that never carried it. */
   ...require('../src/shared/review'),
+  /* M285. The review content identity: the pure type/compare/parse half and
+     main's hashing half, so the same-size-edit checks run against the real
+     sha256 and the real policy, not a stand-in. */
+  ...require('../src/shared/review-identity'),
+  ...require('../src/main/review-identity'),
 }

@@ -218,6 +218,28 @@ export function buildUntrackedArgs(root: string): string[] {
   return ['-C', root, 'ls-files', '-z', '--others', '--exclude-standard']
 }
 
+/**
+ * M285. The bytes the review content identity hashes — see
+ * `shared/review-identity.ts` for the policy this argv implements. `--binary`
+ * so a changed image is covered by content and not only by its path;
+ * `--full-index` so two different blobs cannot share an abbreviated id in the
+ * header; `--no-ext-diff` and `--no-color` so a user's diff tool or colour
+ * config cannot make the same tree hash differently on two machines.
+ */
+export function buildContentDiffArgs(root: string, baseline: string): string[] {
+  return ['-C', root, 'diff', '--binary', '--full-index', '--no-ext-diff', '--no-color', baseline]
+}
+
+/**
+ * M285. The blob id of each untracked file, one per line in argument order,
+ * READ without writing: `hash-object` without `-w` stores nothing, where the
+ * tempting `add -N` would mutate the index an agent may be mid-commit in
+ * (`buildUntrackedArgs`'s reason, one call later).
+ */
+export function buildHashObjectArgs(root: string, paths: readonly string[]): string[] {
+  return ['-C', root, 'hash-object', '--', ...paths]
+}
+
 /** Declared here, first called in M9b — the review node renders hunks. */
 export function buildFileDiffArgs(root: string, baseline: string, path: string): string[] {
   return ['-C', root, 'diff', baseline, '--', path]

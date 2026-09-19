@@ -24,6 +24,8 @@
  * Pure: no DOM, no React, no electron. `verify:layout work.1–.4`.
  */
 
+import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
+
 export type WorkItemState = 'todo' | 'working' | 'review' | 'done'
 export const WORK_ITEM_STATES: readonly WorkItemState[] = ['todo', 'working', 'review', 'done']
 /** The states a USER may set. The runtime sets the other two; a drop target exists for these only. */
@@ -76,7 +78,19 @@ export interface PersistedWorkItem {
    * when a provider re-adds the item, because re-reading an issue from GitHub
    * says nothing about whether somebody looked at the lane.
    */
-  reviewed?: { at: number; signature: string; files: number }
+  reviewed?: {
+    at: number
+    signature: string
+    files: number
+    /**
+     * M285. The CONTENT identity the review was recorded against
+     * (`review-identity.ts`), beside the shape signature. Absent on every
+     * mark written before M285, and absence reads as freshness UNKNOWN —
+     * never `current` — because the shape signature alone cannot see a
+     * same-size edit. A malformed identity costs this field, not the mark.
+     */
+    identity?: ReviewIdentity
+  }
   anchor?: WorkItemAnchor
   createdAt: number
   updatedAt: number
@@ -115,7 +129,7 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.worktreeId === undefined ? {} : { worktreeId: item.worktreeId }),
     ...(item.pr === undefined ? {} : { pr: { number: item.pr.number, url: item.pr.url } }),
     ...(item.note === undefined ? {} : { note: item.note }),
-    ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files } }),
+    ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files, ...(item.reviewed.identity === undefined ? {} : { identity: carryReviewIdentity(item.reviewed.identity) }) } }),
     ...(item.anchor === undefined ? {} : { anchor: { panelId: item.anchor.panelId, dx: item.anchor.dx, dy: item.anchor.dy } })
   }
 }
@@ -139,8 +153,12 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
   // The safe direction is also the honest one — no mark reads as `none`,
   // which offers a review rather than claiming one happened.
   const rv = raw.reviewed
+  // M285. The identity is parsed field-level inside the mark: an absent key
+  // (every pre-M285 file) and a malformed one both leave a mark WITHOUT an
+  // identity, which every reader turns into "freshness unknown".
+  const identity = isRecord(rv) ? parseReviewIdentity(rv.identity) : undefined
   const reviewed = isRecord(rv) && isNum(rv.at) && isStr(rv.signature) && isNum(rv.files)
-    ? { at: rv.at, signature: rv.signature, files: rv.files }
+    ? { at: rv.at, signature: rv.signature, files: rv.files, ...(identity === undefined ? {} : { identity }) }
     : undefined
   const a = raw.anchor
   const anchor = isRecord(a) && isStr(a.panelId) && isNum(a.dx) && isNum(a.dy) ? { panelId: a.panelId, dx: a.dx, dy: a.dy } : undefined

@@ -20,7 +20,9 @@ import {
   buildCommonDirArgs,
   parseCommonRoot,
   buildWorktreeListArgs,
-  parseWorktreeList, buildAheadOfArgs, parseAheadOf } from './git-args'
+  parseWorktreeList, buildAheadOfArgs, parseAheadOf, buildContentDiffArgs, buildHashObjectArgs } from './git-args'
+import { EMPTY_REVIEW_CONTENT, reviewIdentityOf } from './review-identity'
+import type { ReviewIdentity } from '../shared/review-identity'
 import type { RepoStatus, ReviewAcross, ReviewSection, ReviewBaseline, ReviewDiff, ReviewDiffRequest, ReviewFile, ReviewResult } from '@shared/review'
 
 export interface GitResult {
@@ -123,6 +125,14 @@ export interface ReviewEngine {
    */
   reviewAt(baseline: ReviewBaseline, subjectId: string): Promise<ReviewResult>
   fileDiff(req: ReviewDiffRequest): Promise<ReviewDiff>
+  /**
+   * M285. The subject's content identity NOW, against `base` — the same
+   * computation `reviewAt` folds into its answer, exposed alone so the commit
+   * and discard sequencers can re-check immediately before they write, and
+   * so a check's ledger row can record what it tested. `undefined` when any
+   * of its git calls failed: unknown, never a guess.
+   */
+  identityOf(root: string, base: string): Promise<ReviewIdentity | undefined>
 }
 
 /**
@@ -272,19 +282,57 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     // many panels share it — there is nothing to fail to attribute, so
     // reporting "shared, can't attribute" beside "0 files changed" would be a
     // manufactured ambiguity rather than a real one.
-    if (files.length === 0) return { kind: 'clean', root }
+    //
+    // M285. A clean tree's identity needs no further git call: the policy
+    // hashes nothing, and `EMPTY_REVIEW_CONTENT` is that hash computed once.
+    if (files.length === 0) return { kind: 'clean', root, identity: { base: sha, content: EMPTY_REVIEW_CONTENT } }
+
+    // M285. The content identity, from the same untracked list the rows
+    // above came from — so the identity and the file list describe ONE read
+    // of the tree, never two. Absent (not a guess) when git could not answer.
+    const identity = await contentIdentity(root, sha, files.filter((f) => f.untracked).map((f) => f.path))
 
     // `null` is a tree, not a panel: no peers to attribute among.
     const peers = subjectId === null ? 0 : deps.peersInRepo(root, subjectId)
-    if (peers > 0) return { kind: 'shared', root, panelCount: peers + 1, files }
+    if (peers > 0) return { kind: 'shared', root, panelCount: peers + 1, files, ...(identity === undefined ? {} : { identity }) }
 
     return {
       kind: 'changes',
       root,
       files,
       added: files.reduce((n, f) => n + f.added, 0),
-      removed: files.reduce((n, f) => n + f.removed, 0)
+      removed: files.reduce((n, f) => n + f.removed, 0),
+      ...(identity === undefined ? {} : { identity })
     }
+  }
+
+  /**
+   * M285. The policy in `shared/review-identity.ts`, as two git calls: the
+   * binary diff against `base`, then one `hash-object` over every untracked
+   * path (skipped when there are none — the empty listing hashes as the empty
+   * string either way). Either call failing is `undefined`: an identity that
+   * covered half the tree would read as a confident answer about all of it.
+   */
+  const contentIdentity = async (root: string, base: string, untrackedPaths: readonly string[]): Promise<ReviewIdentity | undefined> => {
+    const diff = await run(buildContentDiffArgs(root, base))
+    if (!diff.ok) return undefined
+    let listing = ''
+    if (untrackedPaths.length > 0) {
+      const hashed = await run(buildHashObjectArgs(root, untrackedPaths))
+      if (!hashed.ok) return undefined
+      const ids = hashed.stdout.split('\n').filter((l) => l !== '')
+      // One id per path, or the answer is not about these paths.
+      if (ids.length !== untrackedPaths.length) return undefined
+      listing = untrackedPaths.map((p, i) => `${p}\0${ids[i] as string}`).join('\n')
+    }
+    return reviewIdentityOf(base, [diff.stdout, listing])
+  }
+
+  const identityOf = async (root: string, base: string): Promise<ReviewIdentity | undefined> => {
+    if (gitMissing) return undefined
+    const untracked = await run(buildUntrackedArgs(root))
+    if (!untracked.ok) return undefined
+    return contentIdentity(root, base, parseNulList(untracked.stdout))
   }
 
   const review = async (panelId: string): Promise<ReviewResult> => {
@@ -442,5 +490,5 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return { kind: 'across', root, sections }
   }
 
-  return { resolveRepo, commonRootOf, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus }
+  return { resolveRepo, commonRootOf, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus, identityOf }
 }

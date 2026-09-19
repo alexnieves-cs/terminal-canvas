@@ -3,6 +3,7 @@ import type { ReviewFile, ReviewSection } from './review'
 import type { RunNodeSupervision } from './run-outcome'
 import type { RunRow } from './run-ledger'
 import type { TranscriptTurn } from './transcript'
+import { sameReviewIdentity, type ReviewIdentity } from './review-identity'
 
 /**
  * M201 (D07). LOCAL REVIEW READINESS — the answer to "what should I do with
@@ -39,11 +40,18 @@ import type { TranscriptTurn } from './transcript'
  * THE SIGNATURE'S RECORDED BOUND. `reviewSignature` fingerprints the diff's
  * SHAPE — sorted path, counts, binary/untracked/rename flags — and not its
  * content. A change that leaves every path and both counts identical (one
- * line edited and another reverted in the same file) is NOT detected as
- * stale. Hashing content would mean reading every hunk on every card render,
- * which is a cost paid on a surface that is drawn constantly; the bound is
- * written here and pinned by `readiness.3` so a later "fix" fails the check
- * that documents it first.
+ * line edited and another reverted in the same file) is NOT detected by the
+ * signature. Hashing content in the renderer would mean reading every hunk
+ * on every card render, which is a cost paid on a surface that is drawn
+ * constantly; the bound is written here and pinned by `readiness.3` so a
+ * later "fix" fails the check that documents it first.
+ *
+ * M285 closes that gap from the OTHER side: main computes a content identity
+ * (`review-identity.ts`) once per read and sends it inside the result, so
+ * `reviewStanding` compares identities and the signature is kept only as
+ * the shape the card and the mark describe. A mark with NO identity — every
+ * one written before M285 — is `unknown`, never `current`: the signature
+ * cannot vouch for what it was never able to see.
  *
  * Pure: no DOM, no React, no electron, nothing injected — it asks for
  * nothing. `verify:review readiness.1–.5`.
@@ -53,8 +61,13 @@ import type { TranscriptTurn } from './transcript'
 export type ReviewHandoffState =
   | 'no-lane' | 'lane-missing' | 'unreadable' | 'blocked' | 'working' | 'empty' | 'shared' | 'ready'
 
-/** What the person already did about it — a SECOND axis, never folded into the state. */
-export type ReviewStanding = 'none' | 'current' | 'stale'
+/**
+ * What the person already did about it — a SECOND axis, never folded into
+ * the state. `unknown` (M285) is a mark that exists but carries no content
+ * identity: somebody reviewed SOMETHING here, and this app cannot say
+ * whether it is what is there now.
+ */
+export type ReviewStanding = 'none' | 'current' | 'stale' | 'unknown'
 
 /**
  * The one action the card offers.
@@ -75,6 +88,8 @@ export interface ReviewChanges {
   added: number
   removed: number
   signature: string
+  /** M285. What these changes ARE, from main; absent when git could not say. The value `Mark reviewed` records. */
+  identity?: ReviewIdentity
   /** Only ever `true`. More than one panel has run in this repository, so the diff is not this task's alone. */
   shared?: true
 }
@@ -101,7 +116,7 @@ export interface ReviewHandoff {
 }
 
 /** The persisted mark's shape, mirrored from `PersistedWorkItem.reviewed`. */
-export interface ReviewMark { at: number; signature: string; files: number }
+export interface ReviewMark { at: number; signature: string; files: number; identity?: ReviewIdentity }
 
 export interface ReviewHandoffInput {
   item: { panelId?: string; worktreeId?: string; reviewed?: ReviewMark }
@@ -133,15 +148,21 @@ export function reviewSignature(files: readonly ReviewFile[]): string {
 }
 
 /**
- * Three arms. `signature` absent means the diff could not be read at all, and
- * a recorded review is then `stale` rather than `current`: "I cannot confirm
- * this still matches" points at the safe action (look again), where `current`
- * would point at the unsafe one.
+ * Four arms, in this order. No mark is `none`. A mark with no identity is
+ * `unknown` (M285): it was recorded by a build that could see only the
+ * diff's shape, and the shape cannot tell a same-size edit from no edit —
+ * so it is never `current`, whatever the signature says. `signature` absent
+ * means the diff could not be read at all, and a recorded review is then
+ * `stale` rather than `current`: "I cannot confirm this still matches"
+ * points at the safe action (look again), where `current` would point at
+ * the unsafe one. Then the identity decides — and when main could not send
+ * one for the CURRENT read, that is `stale` for the same reason.
  */
-export function reviewStanding(mark: ReviewMark | undefined, signature: string | undefined): ReviewStanding {
+export function reviewStanding(mark: ReviewMark | undefined, signature: string | undefined, identity?: ReviewIdentity): ReviewStanding {
   if (mark === undefined) return 'none'
+  if (mark.identity === undefined) return 'unknown'
   if (signature === undefined) return 'stale'
-  return mark.signature === signature ? 'current' : 'stale'
+  return sameReviewIdentity(mark.identity, identity) ? 'current' : 'stale'
 }
 
 /**
@@ -154,10 +175,10 @@ export function reviewStanding(mark: ReviewMark | undefined, signature: string |
  * confident single word over two different facts. It is the fourth claim D07
  * asks to keep distinguishable, beside observed, reported and unavailable.
  */
-function filesOf(result: ReviewSection['result']): { files: ReviewFile[]; shared: boolean } | undefined {
-  if (result.kind === 'changes') return { files: result.files, shared: false }
-  if (result.kind === 'shared') return { files: result.files, shared: true }
-  if (result.kind === 'clean') return { files: [], shared: false }
+function filesOf(result: ReviewSection['result']): { files: ReviewFile[]; shared: boolean; identity?: ReviewIdentity } | undefined {
+  if (result.kind === 'changes') return { files: result.files, shared: false, ...(result.identity === undefined ? {} : { identity: result.identity }) }
+  if (result.kind === 'shared') return { files: result.files, shared: true, ...(result.identity === undefined ? {} : { identity: result.identity }) }
+  if (result.kind === 'clean') return { files: [], shared: false, ...(result.identity === undefined ? {} : { identity: result.identity }) }
   return undefined
 }
 
@@ -202,7 +223,7 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   const read = section === undefined ? undefined : filesOf(section.result)
   const files = read?.files
   const signature = files === undefined ? undefined : reviewSignature(files)
-  const standing = reviewStanding(item.reviewed, signature)
+  const standing = reviewStanding(item.reviewed, signature, read?.identity)
   const changes: ReviewChanges | undefined =
     files === undefined || files.length === 0 || signature === undefined
       ? undefined
@@ -211,6 +232,7 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
           added: files.reduce((n, f) => n + f.added, 0),
           removed: files.reduce((n, f) => n + f.removed, 0),
           signature,
+          ...(read?.identity === undefined ? {} : { identity: read.identity }),
           ...(read?.shared === true ? { shared: true as const } : {})
         }
   const carry = (rest: Omit<ReviewHandoff, 'standing' | 'changes'>): ReviewHandoff => ({
@@ -271,19 +293,24 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   if (read?.shared === true) {
     return carry({
       state: 'shared',
-      word: standing === 'none' ? 'shared changes' : standing === 'stale' ? 'shared, and changed since you reviewed' : 'shared, reviewed',
+      word: standing === 'none' ? 'shared changes' : standing === 'stale' ? 'shared, and changed since you reviewed' : standing === 'unknown' ? 'shared, reviewed once' : 'shared, reviewed',
       tone: 'idle',
       action: 'review',
       actionLabel: standing === 'none' ? 'Review' : 'Review again',
       detail: `more than one panel has run in this repository, so these ${count} changed ${count === 1 ? 'file is' : 'files are'} not attributable to this task alone — read them, but do not read them as this agent's work`
     })
   }
-  const word = standing === 'current' ? 'reviewed' : standing === 'stale' ? 'changed since you reviewed' : 'ready to review'
+  // M285. `unknown` gets its own words: a review happened, and this app cannot
+  // say whether it was of these bytes — so it is neither "reviewed" nor
+  // "changed since", and the action is to look again.
+  const word = standing === 'current' ? 'reviewed' : standing === 'stale' ? 'changed since you reviewed' : standing === 'unknown' ? 'reviewed once, freshness unknown' : 'ready to review'
   const detail = standing === 'current'
     ? `you reviewed these ${count === 1 ? 'change' : 'changes'} and the lane has not moved since`
     : standing === 'stale'
       ? `the lane has changed since you reviewed it — ${count} ${count === 1 ? 'file' : 'files'} stand now`
-      : `the conversation stopped and its lane holds ${count} changed ${count === 1 ? 'file' : 'files'} — reviewing them is what decides the task, not the agent’s own account of them`
+      : standing === 'unknown'
+        ? `you reviewed this lane before this canvas recorded what it read, so it cannot say whether these ${count} ${count === 1 ? 'file' : 'files'} are what you saw — review again to make the mark checkable`
+        : `the conversation stopped and its lane holds ${count} changed ${count === 1 ? 'file' : 'files'} — reviewing them is what decides the task, not the agent’s own account of them`
   return carry({ state: 'ready', word, tone: 'idle', action: 'review', actionLabel: standing === 'none' ? 'Review' : 'Review again', detail })
 }
 

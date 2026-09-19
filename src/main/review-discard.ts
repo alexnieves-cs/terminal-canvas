@@ -21,6 +21,7 @@ import type { GitResult, GitRunner } from './review-engine'
 import { buildLsTreeArgs, buildObjectExistsArgs, buildRestoreArgs, parseNulList } from './git-args'
 import type { ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
 import type { PanelId } from '../shared/review'
+import { sameReviewIdentity, type ReviewIdentity } from '../shared/review-identity'
 
 export const DISCARD_DETAIL_MAX = 2000
 
@@ -31,6 +32,8 @@ export interface ReviewDiscardDeps {
   /** Removal of a FILE. Throws on failure; the throw becomes a per-path `failed`. */
   removeFile: (absolutePath: string) => void
   isDirectory: (absolutePath: string) => boolean
+  /** M285. See `ReviewCommitDeps.identityOf`: optional for the fixtures, and a request with `expect` is refused rather than run unchecked without it. */
+  identityOf?: (root: string, base: string) => Promise<ReviewIdentity | undefined>
 }
 
 const detailOf = (r: GitResult): string =>
@@ -73,6 +76,18 @@ export function createReviewDiscarder(
 
     const toRestore = candidates.filter((p) => held.has(p))
     const toRemove = candidates.filter((p) => !held.has(p))
+
+    // M285. The content re-check, after every refusal and BEFORE the first
+    // write: the person armed a discard over a diff with identity `expect`,
+    // and a tree that has moved since holds work they never saw. Refused by
+    // name, with nothing restored and nothing removed. The reasoning is the
+    // commit sequencer's, one door over.
+    if (req.expect !== undefined) {
+      if (deps.identityOf === undefined) return { kind: 'refused', detail: 'the changes could not be re-read before discarding — this build cannot compute a content identity' }
+      const now = await deps.identityOf(req.root, req.expect.base)
+      if (now === undefined) return { kind: 'refused', detail: 'the changes could not be re-read before discarding — look again and retry' }
+      if (!sameReviewIdentity(now, req.expect)) return { kind: 'subject-moved' }
+    }
 
     const restored: string[] = []
     if (toRestore.length > 0) {

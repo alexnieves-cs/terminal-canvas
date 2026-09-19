@@ -2020,11 +2020,16 @@ if (GIT) {
       const files = [file('a.ts', 3, 1), file('b.ts', 0, 2)]
       const sig = R.reviewSignature(files)
       const other = R.reviewSignature([file('a.ts', 4, 1)])
-      const readyCurrent = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: sig, files: 2 } }), section: section(changes(files)), supervision: ended })
-      const readyStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section(changes(files)), supervision: ended })
-      const workingStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section(changes(files)), supervision: running })
-      const none = R.reviewHandoff({ item: laned(), section: section(changes(files)), supervision: ended })
-      const cleanAfterReview = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+      // M285. The standing is decided by the CONTENT identity main sends with
+      // the section; the signature stays the shape the mark describes.
+      const ID = { base: 'b1', content: 'a'.repeat(32) }
+      const OTHER_ID = { base: 'b1', content: 'b'.repeat(32) }
+      const withId = (result, identity) => ({ ...result, identity })
+      const readyCurrent = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: sig, files: 2, identity: ID } }), section: section(withId(changes(files), ID)), supervision: ended })
+      const readyStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1, identity: OTHER_ID } }), section: section(withId(changes(files), ID)), supervision: ended })
+      const workingStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1, identity: OTHER_ID } }), section: section(withId(changes(files), ID)), supervision: running })
+      const none = R.reviewHandoff({ item: laned(), section: section(withId(changes(files), ID)), supervision: ended })
+      const cleanAfterReview = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1, identity: OTHER_ID } }), section: section(withId({ kind: 'clean', root: LANE }, { base: 'b1', content: 'c'.repeat(32) })), supervision: ended })
       ok(NAME,
         readyCurrent.standing === 'current' && readyCurrent.state === 'ready' &&
           readyStale.standing === 'stale' && readyStale.state === 'ready' &&
@@ -2033,9 +2038,11 @@ if (GIT) {
           none.standing === 'none' &&
           // A lane that went clean after a review is not "current": there is no diff to still be current about.
           cleanAfterReview.standing === 'stale' && cleanAfterReview.state === 'empty' &&
-          R.reviewStanding(undefined, sig) === 'none' &&
-          R.reviewStanding({ at: 1, signature: sig, files: 2 }, sig) === 'current' &&
-          R.reviewStanding({ at: 1, signature: other, files: 1 }, sig) === 'stale',
+          R.reviewStanding(undefined, sig, ID) === 'none' &&
+          R.reviewStanding({ at: 1, signature: sig, files: 2, identity: ID }, sig, ID) === 'current' &&
+          R.reviewStanding({ at: 1, signature: other, files: 1, identity: OTHER_ID }, sig, ID) === 'stale' &&
+          // The diff could not be read now: a recorded review is stale, not current.
+          R.reviewStanding({ at: 1, signature: sig, files: 2, identity: ID }, undefined, undefined) === 'stale',
         JSON.stringify({ sig, other, readyCurrent, readyStale, workingStale, none, cleanAfterReview }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
@@ -2219,6 +2226,121 @@ if (GIT) {
         JSON.stringify({ marker, looksLikeSha, decls, acrossMentionsBaseline: acrossFn.includes('baselineSha') }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
+
+// M285 — REVIEW CONTENT IDENTITY. The signature's recorded bound (readiness.3)
+// is that a same-size edit is invisible to it; these checks are the other
+// side of that bound: main hashes the diff's BYTES under the written policy
+// (shared/review-identity.ts), the persisted mark carries what it read, an
+// old mark reads `unknown`, and a mutation re-reads the tree before writing.
+{
+  const NUMSTAT = { '-C /r diff --numstat -z b1': { stdout: ['3\t1\ta.ts', ''].join('\0') } }
+  const DIFF_KEY = '-C /r diff --binary --full-index --no-ext-diff --no-color b1'
+  const same = (a, b) => a !== undefined && b !== undefined && a.base === b.base && a.content === b.content
+  {
+    const NAME = 'review-id.1 a same-size edit moves the identity: two reads with IDENTICAL numstat rows and IDENTICAL signatures but different diff bytes are two identities; identical bytes are one; a different base is another; an untracked file is hashed by content, not by name; and the argv is the policy\'s (--binary --full-index --no-ext-diff --no-color; hash-object without -w)'
+    try {
+      const calls = []
+      const eng = (diffBytes, untracked, blob) => R.createReviewEngine({
+        run: async (args) => { calls.push(args.join(' ')); return fakeRunner({ ...EXISTS, ...NUMSTAT, '-C /r ls-files -z --others --exclude-standard': { stdout: untracked === undefined ? '' : `${untracked}\0` }, [DIFF_KEY]: { stdout: diffBytes }, [`-C /r hash-object -- ${untracked}`]: { stdout: `${blob}\n` } })(args) },
+        baselineOf: () => ({ root: '/r', sha: 'b1' }), peersInRepo: () => 0
+      })
+      const a = await eng('@@ -1 +1 @@\n-x\n+y\n').review('p1')
+      const b = await eng('@@ -1 +1 @@\n-p\n+q\n').review('p1')
+      const a2 = await eng('@@ -1 +1 @@\n-x\n+y\n').review('p1')
+      const u1 = await eng('@@ -1 +1 @@\n-x\n+y\n', 'new.txt', 'blob1').review('p1')
+      const u2 = await eng('@@ -1 +1 @@\n-x\n+y\n', 'new.txt', 'blob2').review('p1')
+      const otherBase = await R.createReviewEngine({ run: fakeRunner({ '-C /r cat-file -e b2': { stdout: '' }, '-C /r diff --numstat -z b2': NUMSTAT['-C /r diff --numstat -z b1'], ...NO_UNTRACKED, '-C /r diff --binary --full-index --no-ext-diff --no-color b2': { stdout: '@@ -1 +1 @@\n-x\n+y\n' } }), baselineOf: () => ({ root: '/r', sha: 'b2' }), peersInRepo: () => 0 }).review('p1')
+      ok(NAME,
+        a.kind === 'changes' && b.kind === 'changes' && a2.kind === 'changes' && u1.kind === 'changes' && u2.kind === 'changes' && otherBase.kind === 'changes' &&
+          // The shape is identical — the very bound readiness.3 pins…
+          R.reviewSignature(a.files) === R.reviewSignature(b.files) &&
+          // …and the identity is not.
+          a.identity !== undefined && b.identity !== undefined && !same(a.identity, b.identity) &&
+          same(a.identity, a2.identity) &&
+          a.identity.base === 'b1' && /^[0-9a-f]{32}$/.test(a.identity.content) &&
+          // The untracked file's CONTENT moves it; its name alone does not carry it.
+          !same(u1.identity, a.identity) && !same(u1.identity, u2.identity) &&
+          // Same bytes, different base: a different subject.
+          otherBase.identity !== undefined && otherBase.identity.content === a.identity.content && !same(otherBase.identity, a.identity) &&
+          calls.includes(DIFF_KEY) && calls.includes('-C /r hash-object -- new.txt') && !calls.some((c) => /hash-object.* -w/.test(c)),
+        JSON.stringify({ a: a.identity, b: b.identity, a2: a2.identity, u1: u1.identity, u2: u2.identity, otherBase: otherBase.identity, calls: calls.slice(0, 8) }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'review-id.2 absence is unknown, never fresh: a mark written before M285 (no identity) is `unknown` even when its signature still matches; a failed diff or hash-object read sends NO identity and a mark judged against it is `stale`; a clean tree\'s shortcut identity equals a full identityOf read of the same tree; a malformed identity parses to nothing and costs only itself'
+    try {
+      const sig = R.reviewSignature([{ path: 'a.ts', added: 3, removed: 1, binary: false, untracked: false }])
+      const ID = { base: 'b1', content: 'a'.repeat(32) }
+      const oldMark = R.reviewStanding({ at: 1, signature: sig, files: 1 }, sig, ID)
+      const noDiff = await engineWith({ ...EXISTS, ...NUMSTAT, ...NO_UNTRACKED, [DIFF_KEY]: { ok: false, code: 128, stderr: 'fatal' } }).review('p1')
+      const noHash = await engineWith({ ...EXISTS, ...NUMSTAT, '-C /r ls-files -z --others --exclude-standard': { stdout: 'n.txt\0' }, [DIFF_KEY]: { stdout: 'd' }, '-C /r hash-object -- n.txt': { ok: false, code: 1 } }).review('p1')
+      const halfHash = await engineWith({ ...EXISTS, ...NUMSTAT, '-C /r ls-files -z --others --exclude-standard': { stdout: 'n.txt\0m.txt\0' }, [DIFF_KEY]: { stdout: 'd' }, '-C /r hash-object -- n.txt m.txt': { stdout: 'onlyone\n' } }).review('p1')
+      const judgedAgainstNone = R.reviewStanding({ at: 1, signature: sig, files: 1, identity: ID }, sig, noDiff.identity)
+      const cleanShortcut = await engineWith({ ...EXISTS, '-C /r diff --numstat -z b1': { stdout: '' }, ...NO_UNTRACKED }).review('p1')
+      const cleanFull = await engineWith({ ...EXISTS, ...NO_UNTRACKED, [DIFF_KEY]: { stdout: '' } }).identityOf('/r', 'b1')
+      ok(NAME,
+        oldMark === 'unknown' &&
+          noDiff.kind === 'changes' && noDiff.identity === undefined &&
+          noHash.kind === 'changes' && noHash.identity === undefined &&
+          halfHash.kind === 'changes' && halfHash.identity === undefined &&
+          judgedAgainstNone === 'stale' &&
+          cleanShortcut.kind === 'clean' && cleanShortcut.identity !== undefined && cleanFull !== undefined && same(cleanShortcut.identity, cleanFull) && cleanShortcut.identity.content === R.EMPTY_REVIEW_CONTENT &&
+          R.parseReviewIdentity({ base: 'b1', content: 'a'.repeat(32) }) !== undefined &&
+          R.parseReviewIdentity({ base: 'b1', content: 'a'.repeat(31) }) === undefined &&
+          R.parseReviewIdentity({ base: '', content: 'a'.repeat(32) }) === undefined &&
+          R.parseReviewIdentity({ base: 'b1', content: 'A'.repeat(32) }) === undefined &&
+          R.parseReviewIdentity('b1:aaaa') === undefined && R.parseReviewIdentity(undefined) === undefined,
+        JSON.stringify({ oldMark, noDiff: noDiff.identity, noHash: noHash.identity, halfHash: halfHash.identity, judgedAgainstNone, cleanShortcut: cleanShortcut.identity, cleanFull }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'review-id.3 a mutation re-reads the subject IMMEDIATELY before writing: a commit whose `expect` no longer matches is `subject-moved` with nothing staged, a discard likewise with nothing restored or removed; a matching identity proceeds; an unreadable identity is REFUSED by name rather than run unchecked; a build with no identityOf refuses a request that asked for the guard; and a request with no `expect` runs exactly as before, calling identityOf never'
+    try {
+      const ID = { base: 'b1', content: 'a'.repeat(32) }
+      const MOVED = { base: 'b1', content: 'b'.repeat(32) }
+      const mk = (now) => { const g = fakeGit({ 'rev-parse': { stdout: 'h1\n' }, 'ls-tree': { stdout: 'kept.ts\0' } }); const ids = []; const identityOf = async (root, base) => { ids.push(`${root}@${base}`); return now }
+        return { g, ids, commit: R.createReviewCommitter({ run: g.run, tempIndexPath: () => '/scratch/idx', removeTempIndex: () => {}, identityOf }), discard: R.createReviewDiscarder({ run: g.run, peersInRepo: () => 0, removeFile: (p) => g.calls.push({ args: ['fs', 'rm', p] }), isDirectory: () => false, identityOf }) } }
+      const REQ = { root: '/r', paths: ['kept.ts'], message: 'm' }
+      const DREQ = { root: '/r', baseline: 'b1', subjectId: 'p1', paths: ['kept.ts', 'new.ts'] }
+      const moved = mk(MOVED); const cMoved = await moved.commit({ ...REQ, expect: ID }); const dMoved = await moved.discard({ ...DREQ, expect: ID })
+      const still = mk(ID); const cStill = await still.commit({ ...REQ, expect: ID }); const dStill = await still.discard({ ...DREQ, expect: ID })
+      const unread = mk(undefined); const cUnread = await unread.commit({ ...REQ, expect: ID }); const dUnread = await unread.discard({ ...DREQ, expect: ID })
+      const noDep = fakeGit({ 'rev-parse': { stdout: 'h1\n' }, 'ls-tree': { stdout: 'kept.ts\0' } })
+      const cNoDep = await R.createReviewCommitter({ run: noDep.run, tempIndexPath: () => '/scratch/idx', removeTempIndex: () => {} })({ ...REQ, expect: ID })
+      const dNoDep = await R.createReviewDiscarder({ run: noDep.run, peersInRepo: () => 0, removeFile: () => {}, isDirectory: () => false })({ ...DREQ, expect: ID })
+      const plain = mk(MOVED); const cPlain = await plain.commit(REQ); const dPlain = await plain.discard(DREQ)
+      const subs = (g) => g.calls.map((c) => c.args[2] ?? c.args[1])
+      ok(NAME,
+        cMoved.kind === 'subject-moved' && !subs(moved.g).includes('update-index') && !subs(moved.g).includes('commit') &&
+          dMoved.kind === 'subject-moved' && !subs(moved.g).includes('restore') && !moved.g.calls.some((c) => c.args[0] === 'fs') &&
+          moved.ids.length === 2 && moved.ids.every((i) => i === '/r@b1') &&
+          cStill.kind === 'committed' && dStill.kind === 'discarded' && dStill.restored.join() === 'kept.ts' &&
+          // The re-check sits right before the stage, after read-tree.
+          subs(still.g).indexOf('read-tree') < subs(still.g).indexOf('update-index') &&
+          cUnread.kind === 'refused' && /re-read/.test(cUnread.detail) && dUnread.kind === 'refused' && /re-read/.test(dUnread.detail) &&
+          cNoDep.kind === 'refused' && /content identity/.test(cNoDep.detail) && dNoDep.kind === 'refused' && /content identity/.test(dNoDep.detail) &&
+          cPlain.kind === 'committed' && dPlain.kind === 'discarded' && plain.ids.length === 0,
+        JSON.stringify({ cMoved, dMoved, movedIds: moved.ids, cStill, dStill, cUnread, dUnread, cNoDep, dNoDep, cPlain, dPlain, plainIds: plain.ids }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'review-id.4 the policy is WRITTEN where the identity is defined and pinned as text: the shared header names --binary, untracked files by hash-object, ignored files excluded, and absence as unknown; main is the one hasher (no sha256 or hashReviewContent call under src/renderer); and the identity rides in every `clean`/`changes`/`shared` answer as an optional field'
+    try {
+      const shared = readFileSync(join(__dirname, '..', 'src', 'shared', 'review-identity.ts'), 'utf8')
+      const contract = readFileSync(join(__dirname, '..', 'src', 'shared', 'review.ts'), 'utf8')
+      const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.ts') || e.name.endsWith('.tsx') ? [join(dir, e.name)] : [])
+      const rendererHashes = walk(join(__dirname, '..', 'src', 'renderer')).filter((f) => /createHash\(|hashReviewContent|reviewIdentityOf\(/.test(readFileSync(f, 'utf8')))
+      ok(NAME,
+        /--binary/.test(shared) && /hash-object/.test(shared) && /Ignored files/.test(shared) && /ABSENCE MEANS UNKNOWN, NEVER FRESH/.test(shared) && /ls-files --others\s*\n?\s*\*?\s*--exclude-standard/.test(shared) &&
+          rendererHashes.length === 0 &&
+          /kind: 'clean'; root: string; identity\?: ReviewIdentity/.test(contract) &&
+          /kind: 'changes'; root: string; files: ReviewFile\[\]; added: number; removed: number; identity\?: ReviewIdentity/.test(contract) &&
+          /kind: 'shared'; root: string; panelCount: number; files: ReviewFile\[\]; identity\?: ReviewIdentity/.test(contract),
+        JSON.stringify({ rendererHashes }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+}
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)

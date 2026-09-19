@@ -4014,6 +4014,32 @@ console.log('\n' + '='.repeat(60))
         JSON.stringify(roundTrip.snapshot.workspaces[0].workItems[0].reviewed) === JSON.stringify(mark),
       JSON.stringify({ bareKeys: Object.keys(bare), carried: carried.reviewed, upserted: upserted[0] && upserted[0].reviewed, parsedIds: parsed.map((i) => i.id), badMark, roundTrip: roundTrip.snapshot.workspaces[0].workItems[0] }))
   } catch (e) { ok('work.readiness.1 (threw)', false, String(e)) }
+  // M285. The mark's CONTENT identity: a pre-M285 record parses exactly as
+  // before (no identity key, and none invented), a well-formed identity
+  // round-trips through the parser and carryWorkItem as a fresh object, and
+  // a malformed identity costs the IDENTITY and keeps the mark — the field
+  // rule applied one level down.
+  try {
+    const base = { id: 'r1', source: 'github', key: 'acme/canvas#9', title: 't', state: 'todo', createdAt: 1, updatedAt: 1 }
+    const identity = { base: 'abc123', content: 'f'.repeat(32) }
+    const withId = { at: 99, signature: 'deadbeef', files: 3, identity }
+    const parsed = W.parseWorkItems([
+      { ...base, id: 'old', reviewed: { at: 99, signature: 'deadbeef', files: 3 } },
+      { ...base, id: 'new', reviewed: withId },
+      { ...base, id: 'bad-id', reviewed: { at: 99, signature: 'deadbeef', files: 3, identity: { base: 'abc', content: 'short' } } }
+    ], [])
+    const byId = (id) => parsed.find((i) => i.id === id)
+    const carried = W.carryWorkItem({ ...base, reviewed: withId })
+    const roundTrip = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, workItems: [{ ...base, reviewed: withId }] }], activeWorkspaceId: 'w1' }))
+    ok('work.review-id.1 a pre-M285 mark parses without an identity and none is invented; a well-formed identity round-trips as a fresh object; a malformed identity costs the identity and keeps the mark',
+      parsed.length === 3 &&
+        byId('old').reviewed !== undefined && !('identity' in byId('old').reviewed) &&
+        JSON.stringify(byId('new').reviewed.identity) === JSON.stringify(identity) &&
+        byId('bad-id').reviewed !== undefined && byId('bad-id').reviewed.files === 3 && !('identity' in byId('bad-id').reviewed) &&
+        JSON.stringify(carried.reviewed.identity) === JSON.stringify(identity) && carried.reviewed.identity !== identity &&
+        JSON.stringify(roundTrip.snapshot.workspaces[0].workItems[0].reviewed.identity) === JSON.stringify(identity),
+      JSON.stringify({ old: byId('old'), neu: byId('new'), bad: byId('bad-id'), carried: carried.reviewed }))
+  } catch (e) { ok('work.review-id.1 (threw)', false, String(e)) }
 }
 
 // M209 (D11). Retained outcomes are task history, not a second run parser:

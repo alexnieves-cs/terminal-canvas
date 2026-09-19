@@ -335,9 +335,11 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
         if (!p || !isReviewPanel(p)) return { kind: 'refused', reason: `${a.panel} is not a review node — open one with \`review <panel>\` first` }
         const result = await window.canvas.review.at(p.subject)
         if (result.kind !== 'changes') return { kind: 'refused', reason: `nothing to discard — the review reads ${result.kind}` }
-        const done = await window.canvas.review.discard({ root: result.root, baseline: p.subject.baselineSha, subjectId: p.subject.subjectId, paths: result.files.map((f) => f.path) })
+        // M285. The identity this read carried rides along as `expect`, so main
+        // refuses by name if the tree moved between the read and the write.
+        const done = await window.canvas.review.discard({ root: result.root, baseline: p.subject.baselineSha, subjectId: p.subject.subjectId, paths: result.files.map((f) => f.path), ...(result.identity === undefined ? {} : { expect: result.identity }) })
         if (done.kind === 'discarded') return { kind: 'ran', note: `${result.files.length} files` }
-        return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.detail }
+        return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.kind === 'subject-moved' ? 'the changes moved since they were read — nothing was discarded' : done.detail }
       }
       case 'remove-worktree': {
         const done = await window.canvas.worktree.remove(a.worktree!)
