@@ -292,7 +292,9 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const onHandleDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return
     drag.current = { y: e.clientY, h: height }
-    e.currentTarget.setPointerCapture(e.pointerId)
+    // A synthetic pointer (the harness's) has no active pointer to capture; the
+    // gesture still works without capture, so the refusal is not an error.
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* no active pointer */ }
     e.preventDefault()
   }
   const onHandleMove = (e: ReactPointerEvent<HTMLDivElement>): void => {

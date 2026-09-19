@@ -4032,6 +4032,22 @@ export function Canvas({
       return result.kind === 'spawned'
     }
     w.__m81SupervisorOffered = (): boolean => !panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)
+    // M287. A watcher panel, minted the way the palette's `watch` verb mints
+    // one (makeWatcherPanel + commitHistory + selectOnly); the node registers
+    // itself with main on mount, so a check can then `watcher.run` it and read
+    // a REAL run's outcome and stamp in the workbench. The trigger is a timer
+    // an hour out — the check runs it by hand.
+    w.__m287Watcher = (cwd: string, command: string, args: string[]): string => {
+      const watcherId = `w${nextIdRef.current++}`
+      const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      setPanels((current) => {
+        const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), { cwd, command, args, trigger: { kind: 'timer', everyMs: 3600000 } })]
+        commitHistory(next)
+        return next
+      })
+      selectOnly(watcherId)
+      return watcherId
+    }
     // M74's two verbs, through the same functions the palette rows, the
     // action bar and the chrome buttons call.
     w.__m74OpenAsChat = (id: string): Promise<{ kind: string; reason?: string }> => openAsChatRef.current(id)

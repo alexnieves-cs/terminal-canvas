@@ -31,13 +31,13 @@ changed scene and on M285's snapshot policy. No goldens written, no merge, no pu
 
 ## M285 — Review content identity
 
-- [ ] `ReviewIdentity` — base revision + content hash — defined in `shared/review-identity.ts`
+- [x] `ReviewIdentity` — base revision + content hash — defined in `shared/review-identity.ts`
       with the snapshot policy in its header (and below).
-- [ ] Computed in MAIN (`review-engine.ts`); every `clean`/`changes`/`shared` answer carries it.
+- [x] Computed in MAIN (`review-engine.ts`); every `clean`/`changes`/`shared` answer carries it.
       The renderer stores and compares, never recomputes.
-- [ ] Persisted `reviewed` gains `identity`, compatibly: old records parse, and one without an
+- [x] Persisted `reviewed` gains `identity`, compatibly: old records parse, and one without an
       identity reads as freshness `unknown`, never `current`.
-- [ ] Commit and discard re-read the subject's identity immediately before writing and refuse by
+- [x] Commit and discard re-read the subject's identity immediately before writing and refuse by
       name (`subject-moved`) when it moved.
 - Checks: `verify:review review-id.1–.4`, `verify:layout work.review-id.1`.
 
@@ -62,27 +62,30 @@ never "fresh". A clean tree's identity is `{ base, hash('') }` with no extra git
 
 ## M286 — Revision-bound check evidence
 
-- [ ] One evidence record per check (`shared/check-evidence.ts`): command, execution context,
+- [x] One evidence record per check (`shared/check-evidence.ts`): command, execution context,
       outcome (`passed | failed | running | not-run | unknown | stale`), timestamp, tested identity.
-- [ ] Sourced from the run ledger and watcher outcomes; the ledger row now records the identity
+- [x] Sourced from the run ledger and watcher outcomes; the ledger row now records the identity
       the subject had when the command ended. Agent prose is never parsed; a transcript claim is a
       `CheckClaim`, shown as a claim, never a result.
-- [ ] `stale` when the subject's identity has moved past the one tested.
-- [ ] Generic commands: exit outcome plus raw output; no structured adapters (Phase F).
+- [x] `stale` when the subject's identity has moved past the one tested.
+- [x] Generic commands: exit outcome plus raw output; no structured adapters (Phase F).
 - Checks: `verify:review check-fresh.1–.4`.
 
 ## M287 — Workbench and brief
 
-- [ ] Resizable bottom workbench on Orchestrate: Changes · Checks · Output (no Artifacts/Timeline
+- [x] Resizable bottom workbench on Orchestrate: Changes · Checks · Output (no Artifacts/Timeline
       stubs). Bound to the selection; pinned, it names what it is pinned to. Height and tab saved
       PER WORKSPACE, which also persists Phase A's in-memory prefs.
-- [ ] Changes: changed-file tree + readable diff at usable width + M285 freshness.
-- [ ] Checks: M286 records; a failed check opens its command, context and output.
-- [ ] Brief and acceptance criteria on a task: persisted compatibly, editable in the inspector,
+- [x] Changes: changed-file tree + readable diff at usable width + M285 freshness.
+- [x] Checks: M286 records; a failed check opens its command, context and output.
+- [x] Brief and acceptance criteria on a task: persisted compatibly, editable in the inspector,
       shown beside Changes. Editing launches nothing.
-- [ ] Unavailable data explicit: non-Git folder, no baseline, no checks run, ledger unreadable.
-- Checks: `verify:orchestration workbench.1–.N`, `verify:layout work.brief.1`,
-  `verify:panels:agents orch-bench.1–.N`.
+- [x] Unavailable data explicit: non-Git folder, no baseline, no checks run, ledger unreadable.
+- Checks: `verify:orchestration workbench.1–.3`, `verify:layout orchestrate.1`, `work.brief.1`,
+  `verify:panels:agents orch-bench.1–.4` (the exit demo, read off the DOM and the layout on disk).
+- Commit/discard stay on the review node ("Review on canvas"); the workbench's one write is the
+  person's mark, through the board's `patchWorkItem`. Bringing commit/discard across through the
+  same executor with the M285 re-check is logged under Found / deferred.
 
 ## Exit demo (what was seen driving the real app)
 
