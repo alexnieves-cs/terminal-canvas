@@ -1,0 +1,83 @@
+/**
+ * M287. ORCHESTRATE'S LAYOUT, persisted PER WORKSPACE — what Phase A held in
+ * memory (`renderer/orchestration/orchestration-prefs.ts`), now a record on
+ * the workspace beside `annotations` and `starter`, with the record rules
+ * those two obey: ABSENT on every pre-M287 file and on a workspace whose
+ * Orchestrate page was never opened (nothing is written until something
+ * changes), a malformed record dropped BY NAME with the workspace kept, and
+ * every field optional so a later field costs nobody a rewrite.
+ *
+ * The workbench's height and tab are the plan's "persist panel sizes per
+ * workspace"; the lens, mode, side tab and camera ride along so a relaunch
+ * returns to the same view. The SELECTION is not here, for Phase A's reason:
+ * a selection that survived the page toggle re-aimed the pool and the feed
+ * at a session the user had left. Nothing the canvas owns — its camera, its
+ * pane preferences — is in this record, and nothing here reads them.
+ *
+ * Pure: no DOM, no React, no electron. `verify:layout orchestrate.1`.
+ */
+
+export type WorkbenchTab = 'changes' | 'checks' | 'output'
+export const WORKBENCH_TABS: readonly WorkbenchTab[] = ['changes', 'checks', 'output']
+
+/** The workbench cannot be dragged shut, and cannot swallow the scene. */
+export const WORKBENCH_MIN_HEIGHT = 120
+export const WORKBENCH_MAX_HEIGHT = 720
+export const WORKBENCH_DEFAULT_HEIGHT = 240
+
+export interface PersistedOrchestrate {
+  workbench?: { height: number; tab: WorkbenchTab }
+  lens?: 'scene' | 'list'
+  mode?: 'dev' | 'pipeline'
+  sideTab?: 'activity' | 'files'
+  camera?: { x: number; y: number; k: number }
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+export function clampWorkbenchHeight(h: number): number {
+  return Math.min(WORKBENCH_MAX_HEIGHT, Math.max(WORKBENCH_MIN_HEIGHT, Math.round(h)))
+}
+
+/**
+ * Absent → undefined (the caller writes no key). Not an object → dropped by
+ * name. Inside, each field is parsed on its own: a malformed height or an
+ * unknown tab costs the workbench field and keeps the lens beside it — the
+ * field rule, applied per field. An EMPTY record parses to undefined too,
+ * so a file cannot carry `"orchestrate": {}` as a claim about nothing.
+ */
+export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrchestrate | undefined {
+  if (raw === undefined) return undefined
+  if (!isRecord(raw)) {
+    warnings.push('dropped an orchestrate record that was not an object')
+    return undefined
+  }
+  const out: PersistedOrchestrate = {}
+  const wb = raw.workbench
+  if (isRecord(wb) && isNum(wb.height) && WORKBENCH_TABS.includes(wb.tab as WorkbenchTab)) {
+    out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab }
+  } else if (wb !== undefined) warnings.push('dropped a malformed orchestrate workbench')
+  if (raw.lens === 'scene' || raw.lens === 'list') out.lens = raw.lens
+  if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode
+  if (raw.sideTab === 'activity' || raw.sideTab === 'files') out.sideTab = raw.sideTab
+  const c = raw.camera
+  if (isRecord(c) && isNum(c.x) && isNum(c.y) && isNum(c.k) && c.k > 0) out.camera = { x: c.x, y: c.y, k: c.k }
+  return Object.keys(out).length === 0 ? undefined : out
+}
+
+/** A fresh object, field by field — a spread would write `lens: undefined` as a present key. */
+export function carryOrchestrate(p: PersistedOrchestrate): PersistedOrchestrate {
+  return {
+    ...(p.workbench === undefined ? {} : { workbench: { height: p.workbench.height, tab: p.workbench.tab } }),
+    ...(p.lens === undefined ? {} : { lens: p.lens }),
+    ...(p.mode === undefined ? {} : { mode: p.mode }),
+    ...(p.sideTab === undefined ? {} : { sideTab: p.sideTab }),
+    ...(p.camera === undefined ? {} : { camera: { x: p.camera.x, y: p.camera.y, k: p.camera.k } })
+  }
+}
+
+/** Same values, so a view can skip a write that would change nothing. */
+export function sameOrchestrate(a: PersistedOrchestrate | undefined, b: PersistedOrchestrate | undefined): boolean {
+  return JSON.stringify(a === undefined ? null : carryOrchestrate(a)) === JSON.stringify(b === undefined ? null : carryOrchestrate(b))
+}

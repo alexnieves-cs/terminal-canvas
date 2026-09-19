@@ -15,6 +15,7 @@
 
 import { parseAnnotations } from '../annotations'
 import { parseStarter } from '../starter'
+import { parseOrchestrate } from '../orchestrate-prefs'
 import { parseWorkItems } from '../work-items'
 import { parseRetainedOutcomes } from '../retained-outcomes'
 import { GROUP_COLOURS, type PersistedGroup } from '../groups'
@@ -342,7 +343,9 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })(),
     ...(() => { const o = parseRetainedOutcomes(raw.retainedOutcomes, warnings); return o === undefined ? {} : { retainedOutcomes: o } })(),
     // M181. The starter record: absent stays absent; malformed dropped by name.
-    ...(() => { const s = parseStarter(raw.starter, warnings); return s === undefined ? {} : { starter: s } })()
+    ...(() => { const s = parseStarter(raw.starter, warnings); return s === undefined ? {} : { starter: s } })(),
+    // M287. Orchestrate's per-workspace layout: the same rules.
+    ...(() => { const o = parseOrchestrate(raw.orchestrate, warnings); return o === undefined ? {} : { orchestrate: o } })()
   }
 }
 

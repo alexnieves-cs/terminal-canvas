@@ -19,6 +19,7 @@ import { type ArtifactReference } from '../artifact-reference'
 import { type NoteForm, type NoteTint } from '../notes'
 import { type Annotation } from '../annotations'
 import { type PersistedStarter } from '../starter'
+import type { PersistedOrchestrate } from '../orchestrate-prefs'
 import { type PersistedWorkItem } from '../work-items'
 import { type RetainedOutcome } from '../retained-outcomes'
 import { SettingValue } from '../settings-schema'
@@ -482,6 +483,8 @@ export interface CanvasState {
   retainedOutcomes?: RetainedOutcome[]
   /** M181. The starter's applied keys. ABSENT on every pre-M181 file and on a canvas the starter never touched. */
   starter?: PersistedStarter
+  /** M287. Orchestrate's workbench size and tab, lens, mode and camera for THIS workspace. ABSENT until the page changes something. */
+  orchestrate?: PersistedOrchestrate
 }
 
 /** M56. A place to come back to: three numbers and a name. */

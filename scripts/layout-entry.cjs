@@ -11,6 +11,8 @@ module.exports = {
   /* M120. The chat record's marks (dispatch, sandbox) and their carry. */
   ...require('../src/shared/chat-panel'),
   ...require('../src/shared/layout-schema'),
+  /* M287. Orchestrate's per-workspace record: pure parse, carry, compare. */
+  ...require('../src/shared/orchestrate-prefs'),
   /* M132. The three workflow node kinds: pure parse over a raw node object. */
   ...require('../src/shared/workflow-nodes'),
   /* M133. The workflow panel's DIAGRAM: pure over the template record — no

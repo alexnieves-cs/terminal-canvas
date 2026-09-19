@@ -1,5 +1,6 @@
 import type { Annotation } from '@shared/annotations'
 import type { PersistedStarter } from '@shared/starter'
+import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { seedAfter } from '@renderer/panels/recover'
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
@@ -62,6 +63,9 @@ export interface WorkspaceVerbsDeps {
   /** M181. The starter record travels with its workspace, like the notes. */
   starterRef: RefObject<PersistedStarter | undefined>
   setStarter: Dispatch<SetStateAction<PersistedStarter | undefined>>
+  /** M287. Orchestrate's layout record travels with its workspace, like the starter. */
+  orchestrateRef: RefObject<PersistedOrchestrate | undefined>
+  setOrchestrate: Dispatch<SetStateAction<PersistedOrchestrate | undefined>>
   /** M79. Forget every open run's component: the incoming workspace's panels are different ones. */
   forgetOpenRuns: () => void
   setDormantIds: Dispatch<SetStateAction<ReadonlySet<string>>>
@@ -119,7 +123,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
   const {
     registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, retainedOutcomesRef, workItemsRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, setRetainedOutcomes, setWorkItems, starterRef, setStarter, forgetOpenRuns,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, setRetainedOutcomes, setWorkItems, starterRef, setStarter, orchestrateRef, setOrchestrate, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData, setFlipped
   } = deps
@@ -237,6 +241,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
           ...(retainedOutcomesRef.current.length === 0 ? {} : { retainedOutcomes: retainedOutcomesRef.current }),
           ...(workItemsRef.current.length === 0 ? {} : { workItems: workItemsRef.current }),
           ...(starterRef.current === undefined ? {} : { starter: starterRef.current }),
+          ...(orchestrateRef.current === undefined ? {} : { orchestrate: orchestrateRef.current }),
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -323,6 +328,8 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         setAnnotations(result.state.annotations ?? [])
         // M181. The incoming workspace's starter record, or none.
         setStarter(result.state.starter)
+        // M287. The incoming workspace's Orchestrate record, or none.
+        setOrchestrate(result.state.orchestrate)
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)

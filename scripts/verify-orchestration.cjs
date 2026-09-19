@@ -1,6 +1,6 @@
 // verify:orchestration (M268) — pure Orchestration snapshot + activity ring.
 const { buildSync } = require('esbuild')
-const { existsSync, mkdirSync, readFileSync } = require('node:fs')
+const { existsSync, mkdirSync, readFileSync, readdirSync } = require('node:fs')
 const { join } = require('node:path')
 const { ok, results } = require('./lib/checks.cjs').createChecks()
 const root = join(__dirname, '..')
@@ -582,10 +582,13 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
 
 // M284. Every new text the page shows passes the gate the page's other readers do
 // (orch.gate.1), and review is read only through the review node's executors.
+// M287 moved the diff and the review reads into OrchWorkbench.tsx; the pin
+// reads the page as the pair, so the gate cannot be walked around by the split.
+const benchSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
 ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every diff line through outward(), and reads review only through window.canvas.review.*',
-  /outward\(p\.argument/.test(viewSrc) && /outward\(line\.text/.test(viewSrc) &&
-    /canvas\.review\.panel\(/.test(viewSrc) && /canvas\.review\.diff\(/.test(viewSrc) &&
-    !/review\.(commit|discard)\(/.test(viewSrc))
+  /outward\(p\.argument/.test(viewSrc) && /outward\(line\.text/.test(benchSrc) &&
+    /canvas\.review\.panel\(/.test(benchSrc) && /canvas\.review\.diff\(/.test(benchSrc) &&
+    !/review\.(commit|discard)\(/.test(viewSrc + benchSrc))
 
 // M283. The page boundary, read off Canvas.tsx: the covered host is inert, and the
 // predicate every edit:* chord and canvas shortcut gates on includes the cover. The
@@ -597,6 +600,38 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     /inert=\{chrome\.centerView === 'orchestration'\}/.test(canvasSrc) &&
       /\(\) => canvasCoveredRef\.current \|\| palette\.isOpen\(\)/.test(canvasSrc) &&
       /enabled: !palette\.open && chrome\.centerView !== 'orchestration'/.test(canvasSrc))
+}
+
+// M287 — workbench.1–.3. THE WORKBENCH, pinned as text where behaviour lives
+// in the Electron tier (verify:panels:agents orch-bench.*): three tabs and not
+// five, no write door, a brief editor that can launch nothing, and the record
+// that persists it wired through the canvas.
+{
+  const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
+  const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const prefs = readFileSync(join(root, 'src/shared/orchestrate-prefs.ts'), 'utf8')
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const orchDir = join(root, 'src/renderer/orchestration')
+  const orchSrc = readdirSync(orchDir).map((f) => readFileSync(join(orchDir, f), 'utf8')).join('\n')
+  ok('workbench.1 the workbench has exactly Changes · Checks · Output — WORKBENCH_TABS names those three, no artifacts or timeline tab is stubbed anywhere under orchestration/, and the strip reaches only READ doors (review.panel/across/diff/identity, ledger.list, scrollback.tail): no review.commit, review.discard, agentSession.send or spawn',
+    /WORKBENCH_TABS: readonly WorkbenchTab\[\] = \['changes', 'checks', 'output'\]/.test(prefs) &&
+      !/'artifacts'|'timeline'/.test(orchSrc) &&
+      /review\.panel\(|review\.across\(|review\.diff\(|review\.identity\(|ledger\.list\(|scrollback\.tail\(/.test(bench) &&
+      !/review\.commit|review\.discard|agentSession\.send|agentSession\.create|spawn\./.test(bench),
+    JSON.stringify({ commit: /review\.commit/.test(bench), discard: /review\.discard/.test(bench), send: /agentSession\.send/.test(bench) }))
+  const editorStart = view.indexOf('function OrchBriefEditor(')
+  const editor = editorStart === -1 ? '' : view.slice(editorStart, view.indexOf('\nexport const OrchestrationView', editorStart))
+  ok('workbench.2 editing a brief launches nothing: the brief editor calls onPatchWorkItem and NO dispatch, send, spawn, startWork or run, saves on blur rather than on every keystroke, and its inputs are named so a check can find them',
+    editor.length > 200 && /onPatchWorkItem\(itemId, \{ brief:/.test(editor) && /onPatchWorkItem\(itemId, \{ criteria:/.test(editor) &&
+      !/dispatch|\.send\(|spawn|startWork|runNode|agentSession/.test(editor) &&
+      /onBlur=\{commitBrief\}/.test(editor) && /onBlur=\{commitCriteria\}/.test(editor) &&
+      /data-orch-brief\b/.test(editor) && /data-orch-criteria\b/.test(editor),
+    JSON.stringify({ len: editor.length }))
+  ok('workbench.3 the side column keeps Activity and Files only (Output and Review moved down), the view seeds its prefs from the workspace record and writes every change back through onOrchestrate, and the canvas saves the record beside the starter and passes it in',
+    /\(\['activity', 'files'\] as const\)/.test(view) && !/\['activity', 'terminal', 'review', 'files'\]/.test(view) &&
+      /seedOrchPrefs\(orchestrate\)/.test(view) && /onOrchestrateRef\.current\?\.\(next\)/.test(view) && /sameOrchestrate\(persistedRef\.current, next\)/.test(view) &&
+      /\.\.\.\(orchestrate === undefined \? \{\} : \{ orchestrate \}\)/.test(canvasSrc) && /orchestrate=\{orchestrate\}/.test(canvasSrc) && /onOrchestrate=\{setOrchestrate\}/.test(canvasSrc) && /onPatchWorkItem=\{patchWorkItem\}/.test(canvasSrc) && /taskHandoffOf=\{taskHandoffOf\}/.test(canvasSrc),
+    '')
 }
 
 const failed = results.filter((x) => !x.pass)

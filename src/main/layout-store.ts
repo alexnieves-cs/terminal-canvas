@@ -1,5 +1,6 @@
 import { carryWorkItem } from '../shared/work-items'
 import { carryStarter } from '../shared/starter'
+import { carryOrchestrate } from '../shared/orchestrate-prefs'
 import type { TemplateSaveResult } from '../shared/templates'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import {
@@ -413,7 +414,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       ...(w.workItems !== undefined ? { workItems: w.workItems.map(carryWorkItem) } : {}),
       ...(w.retainedOutcomes !== undefined ? { retainedOutcomes: w.retainedOutcomes.map((o) => ({ ...o })) } : {}),
       // M181. The starter record: a record, kept whatever the restore settings say.
-      ...carryStarter(w)
+      ...carryStarter(w),
+      // M287. Orchestrate's layout for this workspace: a record, kept like the starter.
+      ...(w.orchestrate === undefined ? {} : { orchestrate: carryOrchestrate(w.orchestrate) })
     }
   }
 
@@ -459,6 +462,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // M181. Absent stays absent on disk: a canvas the starter never touched carries no record.
     if (incoming.starter !== undefined) w.starter = carryStarter(incoming).starter
     else delete w.starter
+    // M287. Absent stays absent: a workspace whose Orchestrate page never changed anything carries no record.
+    if (incoming.orchestrate !== undefined) w.orchestrate = carryOrchestrate(incoming.orchestrate)
+    else delete w.orchestrate
     scheduleWrite()
   }
 

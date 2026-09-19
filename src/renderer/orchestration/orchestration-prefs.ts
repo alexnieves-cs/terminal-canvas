@@ -15,14 +15,19 @@
  * through the layout file, which this must never share.
  */
 import type { OrchMode } from './orchestration-model'
+import { WORKBENCH_DEFAULT_HEIGHT, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
 
 export type OrchLens = 'scene' | 'list'
+/** M287. Output and Review left the side column for the workbench; the side keeps Activity and Files. */
+export type OrchSideTab = 'activity' | 'files'
 
 export interface OrchPrefs {
   mode: OrchMode
   lens: OrchLens
   camera: { x: number; y: number; k: number }
-  tab: 'activity' | 'terminal' | 'review' | 'files'
+  tab: OrchSideTab
+  /** M287. The workbench's height and tab, the plan's "persist panel sizes per workspace". */
+  workbench: { height: number; tab: WorkbenchTab }
 }
 
 const DEFAULTS: OrchPrefs = {
@@ -30,6 +35,30 @@ const DEFAULTS: OrchPrefs = {
   lens: 'scene',
   camera: { x: 0, y: 0, k: 1 },
   tab: 'activity',
+  workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes' }
+}
+
+/**
+ * M287. Seed the in-memory prefs from the workspace's persisted record when
+ * the page mounts — the record wins over whatever a previous workspace left
+ * here, and an absent record leaves the defaults. Field by field, so a
+ * record that carries only the workbench does not reset the lens.
+ */
+export function seedOrchPrefs(persisted: PersistedOrchestrate | undefined): void {
+  if (persisted === undefined) return
+  prefs = {
+    ...prefs,
+    ...(persisted.lens === undefined ? {} : { lens: persisted.lens }),
+    ...(persisted.mode === undefined ? {} : { mode: persisted.mode }),
+    ...(persisted.sideTab === undefined ? {} : { tab: persisted.sideTab }),
+    ...(persisted.camera === undefined ? {} : { camera: { ...persisted.camera } }),
+    ...(persisted.workbench === undefined ? {} : { workbench: { ...persisted.workbench } })
+  }
+}
+
+/** The record the workspace saves — every field, so a relaunch returns to the same view. */
+export function persistedOrchPrefs(p: OrchPrefs): PersistedOrchestrate {
+  return { workbench: { ...p.workbench }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera } }
 }
 
 let prefs: OrchPrefs = DEFAULTS

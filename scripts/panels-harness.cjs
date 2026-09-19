@@ -602,7 +602,13 @@ app.whenReady().then(async () => {
     // M52. A real ledger in a scratch file and a scratch shell-integration
     // directory, so a login-shell panel spawned by a check emits the marks and
     // its commands become rows the context pane can list.
-    { ledger: runLedger, integrationDir: join(mkdtempSync(join(tmpdir(), 'tc panels shell-integration ')), 'si'), now: () => Date.now() }
+    {
+      ledger: runLedger, integrationDir: join(mkdtempSync(join(tmpdir(), 'tc panels shell-integration ')), 'si'), now: () => Date.now(),
+      // M286. Mirrors stores.ts: a ledger row is stamped with the panel's
+      // subject identity as its end mark lands. reviewEngine is declared
+      // below and read at call time, the harness's usual forward closure.
+      identityOf: (panelId) => { const b = layoutStore.baseline(panelId); return b === undefined ? Promise.resolve(undefined) : reviewEngine.identityOf(b.root, b.sha) }
+    }
   )
 
   /**
@@ -902,7 +908,9 @@ app.whenReady().then(async () => {
     // Best effort, the same as main/index.ts's: a stray scratch index file is
     // a leftover in a directory nothing else reads, and throwing here would
     // turn a successful commit into a rejected invoke.
-    removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } }
+    removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } },
+    // M285. Mirrors stores.ts: the re-check before a write is the engine's own read.
+    identityOf: (root, base) => reviewEngine.identityOf(root, base)
   })
   // main/index.ts calls this at whenReady; without it the store would start
   // from defaultSnapshot() and the seeded presets above would never be read.
@@ -1110,7 +1118,9 @@ app.whenReady().then(async () => {
     },
     now: () => Date.now(),
     ledger: { append: (row) => runLedger.append(row) },
-    onState: (id, state) => { if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.WATCHER_STATE, { id, ...state }) }
+    onState: (id, state) => { if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.WATCHER_STATE, { id, ...state }) },
+    // M286. Mirrors watch-handlers.ts: what the run tested, against the tree's HEAD.
+    identityOf: (cwd) => reviewEngine.identityAtHead(cwd)
   })
   const watcherHandlers = {
     create: (req) => {
@@ -1436,7 +1446,8 @@ app.whenReady().then(async () => {
     run: fencedGitRunner,
     peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
     removeFile: (p) => unlinkSync(p),
-    isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
+    isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } },
+    identityOf: (root, base) => reviewEngine.identityOf(root, base)
   }),
   // M58. Main's own exporters over this harness's "dialog": whatever path
   // exportTarget names, or a cancel when it is null.

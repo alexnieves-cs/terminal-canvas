@@ -52,6 +52,16 @@ export interface PersistedWorkItem {
   url?: string
   /** The opening context a dispatch sends; absent when the provider gave none. */
   description?: string
+  /**
+   * M287. THE BRIEF — what the person wants done, in their words, edited on
+   * Orchestrate's inspector and shown beside the changes. The USER's field,
+   * like `state`: a provider re-add never touches it. Absent until typed;
+   * an empty string is not written. Editing it launches nothing — it is
+   * text a person reads before deciding, never a message sent anywhere.
+   */
+  brief?: string
+  /** M287. Acceptance criteria, one per entry, the brief's rule. A malformed list costs the field. */
+  criteria?: string[]
   state: WorkItemState
   /** The provider's own word, display only. */
   remoteState?: string
@@ -123,6 +133,8 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.key === undefined ? {} : { key: item.key }),
     ...(item.url === undefined ? {} : { url: item.url }),
     ...(item.description === undefined ? {} : { description: item.description }),
+    ...(item.brief === undefined || item.brief === '' ? {} : { brief: item.brief }),
+    ...(item.criteria === undefined || item.criteria.length === 0 ? {} : { criteria: item.criteria.filter((c) => c !== '') }),
     ...(item.remoteState === undefined ? {} : { remoteState: item.remoteState }),
     ...(item.teammateId === undefined ? {} : { teammateId: item.teammateId }),
     ...(item.panelId === undefined ? {} : { panelId: item.panelId }),
@@ -163,6 +175,9 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
   const a = raw.anchor
   const anchor = isRecord(a) && isStr(a.panelId) && isNum(a.dx) && isNum(a.dy) ? { panelId: a.panelId, dx: a.dx, dy: a.dy } : undefined
   const opt = (v: unknown): string | undefined => (isStr(v) ? v : undefined)
+  // M287. Field-level, like the anchor: a criteria list that is not a list
+  // of strings costs the list, never the card.
+  const criteria = Array.isArray(raw.criteria) && raw.criteria.every((c) => typeof c === 'string') ? (raw.criteria as string[]).filter((c) => c !== '') : undefined
   return {
     item: carryWorkItem({
       id: raw.id,
@@ -174,6 +189,8 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       key: opt(raw.key),
       url: opt(raw.url),
       description: typeof raw.description === 'string' ? raw.description : undefined,
+      brief: opt(raw.brief),
+      criteria,
       remoteState: opt(raw.remoteState),
       teammateId: opt(raw.teammateId),
       panelId: opt(raw.panelId),
