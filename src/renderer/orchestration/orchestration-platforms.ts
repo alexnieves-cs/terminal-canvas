@@ -84,6 +84,17 @@ export const ORCH_PLATFORM_HALF = ORCH_PLATFORM.side / Math.SQRT2
  * clearance between two interlocking diamonds' edges (pre-tilt units).
  */
 export const ORCH_CELL = { cols: 3, x0: 1, y0: 4, gap: 20, perBand: 6 } as const
+/**
+ * M298. Bands PAST the first widen by this many cells each, and each band
+ * starts one x-pitch further left per widening, so the fleet grows as a
+ * pyramid centred under band 0 rather than a strip of six: measured on the
+ * model stage, 25 platforms in fixed bands of six were 42% as wide as the
+ * stage and 106% as tall (Fit all clipped), 100 were 29% wide and could not
+ * fit at the zoom floor. Band 0 is exactly M294's, so the first six cells
+ * (the counts a person actually has) do not move; a returning user with more
+ * finds the seventh onward moved ONCE, by this change, and never again.
+ */
+export const ORCH_BAND_GROWTH = 2
 /** The lattice: half a diamond-plus-gap per index along x; the two rows a diamond-plus-gap apart. */
 export const ORCH_LATTICE = { xPitch: ORCH_PLATFORM_HALF + ORCH_CELL.gap / 2, rowPitch: ORCH_PLATFORM_HALF + ORCH_CELL.gap } as const
 /** Station pitch bounds on the deck (adaptive to the count, see orchStationPitch) and the object sizes (half-extents the meshes read). */
@@ -189,13 +200,26 @@ const urgency = (state: OrchRosterRow['state']): number => (state === 'wants-you
 export function orchCellCentre(index: number): { col: number; row: number; x: number; y: number } {
   const col = index % ORCH_CELL.cols
   const row = Math.floor(index / ORCH_CELL.cols)
-  const band = Math.floor(index / ORCH_CELL.perBand)
-  const r = index % ORCH_CELL.perBand
+  const { band, r } = orchBandOf(index)
   const half = ORCH_PLATFORM_HALF
   return {
     col, row,
-    x: ORCH_CELL.x0 + half + r * ORCH_LATTICE.xPitch,
+    // M298: band b holds perBand + b·growth cells and starts b·growth/2 pitches
+    // further left, so every band is centred under the first (the pyramid).
+    x: ORCH_CELL.x0 + half + (r - band * ORCH_BAND_GROWTH / 2) * ORCH_LATTICE.xPitch,
     y: ORCH_CELL.y0 + half + band * 2 * ORCH_LATTICE.rowPitch + (r % 2 === 0 ? ORCH_LATTICE.rowPitch : 0)
+  }
+}
+
+/** M298. Which band an index falls in and its position within it — bands widen by ORCH_BAND_GROWTH each (6, 8, 10 …). */
+export function orchBandOf(index: number): { band: number; r: number; width: number } {
+  let band = 0
+  let start = 0
+  for (;;) {
+    const width = ORCH_CELL.perBand + band * ORCH_BAND_GROWTH
+    if (index < start + width) return { band, r: index - start, width }
+    start += width
+    band += 1
   }
 }
 
@@ -369,21 +393,52 @@ export function orchSceneObjects(platforms: readonly OrchPlatform[]): OrchSceneO
   return platforms.flatMap((p) => [...p.stations, ...p.checkpoints, ...p.artifacts])
 }
 
-/** Model-space bounds of every platform (pre-tilt), for Fit all. */
+/**
+ * Model-space bounds of every platform's DIAMOND (pre-tilt), for Fit all.
+ * M298: the plates only. The first cut folded label room into these bounds
+ * in pre-tilt units (90), which scale with k — but the label plate is
+ * SCREEN-sized (ORCH_PLATE_LABEL, 44 px and an 8 px gap), so at k = 1.57 (one
+ * platform) the room was 79 px for a 52 px label and at k = 0.65 (eight) it
+ * was 33 px: the labels clipped, measured in the real panel. The label's
+ * room is `orchLabelMargins`, in pixels, and orchFitCamera takes it as such.
+ */
 export function orchPlatformBounds(platforms: readonly OrchPlatform[]): { x: number; y: number; w: number; h: number } {
   if (platforms.length === 0) return { x: 0, y: 0, w: ORCH_PLATFORM_HALF * 2, h: ORCH_PLATFORM_HALF * 2 }
   let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
   for (const p of platforms) {
     x0 = Math.min(x0, p.x - p.w / 2); x1 = Math.max(x1, p.x + p.w / 2)
-    // The label plate sits above the top tip or below the bottom one
-    // (labelSide); leave room on that side. Pre-tilt units, so it scales with k.
-    y0 = Math.min(y0, p.y - p.h / 2 - (p.labelSide === 'above' ? ORCH_LABEL_ROOM : 24))
-    y1 = Math.max(y1, p.y + p.h / 2 + (p.labelSide === 'below' ? ORCH_LABEL_ROOM : 16))
+    y0 = Math.min(y0, p.y - p.h / 2)
+    y1 = Math.max(y1, p.y + p.h / 2)
   }
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
-/** Pre-tilt room past a diamond's tip for its label plate. */
-export const ORCH_LABEL_ROOM = 90
+/** The label plate under/over a platform's tip: screen px, never scaled by the camera. */
+export const ORCH_PLATE_LABEL = { w: 210, h: 44, gap: 8 } as const
+/** The `+N more` chip on a label's far side (M298: there, not beside it — beside, it ran past the fit's width). */
+export const ORCH_PLATE_MORE = { h: 18, gap: 6 } as const
+/** The thickness band under a diamond's lower edges, in screen px at k = 1 (ORCH_PLATFORM.thickness · sin tilt). */
+const ORCH_BAND_PX = ORCH_PLATFORM.thickness * Math.sin((56 * Math.PI) / 180)
+/**
+ * M298. Screen-pixel room the fit must leave above and below the plates for
+ * their label plates: a side is reserved only when some platform hangs a
+ * label there. Fit selected on a lower-row plate reserves the bottom, an
+ * upper-row plate the top — the same number either way, so neither row's
+ * plate lands off-centre.
+ */
+export function orchLabelMargins(platforms: readonly OrchPlatform[]): { top: number; bottom: number; side: { px: number; at: number } } {
+  const room = ORCH_PLATE_LABEL.h + ORCH_PLATE_LABEL.gap
+  // The `+N more` chip stands on the label's far side; its row is reserved only when a plate has one.
+  const chip = (side: 'above' | 'below'): number => (platforms.some((p) => p.labelSide === side && p.hidden.ids.length > 0) ? ORCH_PLATE_MORE.h + ORCH_PLATE_MORE.gap : 0)
+  return {
+    top: platforms.some((p) => p.labelSide === 'above') ? room + chip('above') : 0,
+    bottom: platforms.some((p) => p.labelSide === 'below') ? room + chip('below') + ORCH_BAND_PX : ORCH_BAND_PX,
+    // Sideways: a label is half its width either side of its plate's centre,
+    // and that centre is `half` model units inside the bounds' edge — when the
+    // fit is width-bound and far out (25 platforms, wide window: 104% measured)
+    // the label, not the diamond, is the outermost thing.
+    side: { px: ORCH_PLATE_LABEL.w / 2, at: platforms.reduce((m, p) => Math.min(m, p.half), ORCH_PLATFORM_HALF) }
+  }
+}
 
 export interface OrchHitTarget {
   id: string; kind: 'platform' | OrchObjectKind; x: number; y: number; w: number; h: number; platformId?: string

@@ -9,7 +9,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 145000 // measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s, 109.2 s at load 20–26, then 102.8 s in the gate and 116.0 s with demo captures on at load 3; 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
+const WATCHDOG_MS = 180000 // measured 2026-09-20 with M298's orch-fit.app.1 in (five fixture reloads of 0/1/21/61/100 sessions, three window sizes each): 142.8 s with demo captures on at load ~3 against the 145 s pin, so 1.25x, to the next second. Before M298: 145000, measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s, 109.2 s at load 20–26, then 102.8 s in the gate and 116.0 s with demo captures on at load 3; 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
@@ -1282,6 +1282,92 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       try { win.setSize(w0, h0) } catch { /* closed */ }
       try { await wc.executeJavaScript(`(() => { if (window.__tcOrigGetContext) { HTMLCanvasElement.prototype.getContext = window.__tcOrigGetContext; delete window.__tcOrigGetContext } document.documentElement.setAttribute('data-theme', 'light'); return true })()`) } catch { /* reloaded */ }
       try { wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] }) } catch { /* detached */ }
+      for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* scratch */ } }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // M298 — the fit, measured in the REAL panel (orch-fit.app.*). The plain-node
+  // suite measures against the 860×420 model stage; the panel letterboxes that
+  // stage (xMidYMid meet), so the share of the PANEL the composition fills is a
+  // second number, and only a real layout has it. Five fixtures (0/1/21/61/100
+  // sessions → 1/2/4/7/11 platforms) at three window sizes (the app's default,
+  // a narrow window, a wide one); at each: Fit all, then the union of the
+  // plates' hit polygons, the union of the label plates, the scene tools.
+  // MEASURE lines go to the console for the ledger.
+  // ---------------------------------------------------------------------
+  {
+    const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+    const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+    const demo = async (name) => {
+      if (!process.env.TC_DEMO_SHOTS) return
+      mkdirSync(process.env.TC_DEMO_SHOTS, { recursive: true })
+      writeFileSync(join(process.env.TC_DEMO_SHOTS, `${name}.png`), (await wc.capturePage()).toPNG())
+    }
+    const IDS = [
+      'orch-fit.app.1 the composition fills the real panel at every count and window size: at Fit all on 1, 2, 4, 8 and 11 platforms in the default, a narrow and a wide window, every plate and every label plate is inside the scene panel (nothing clips), the composition spans at least 60% of the panel\'s height, no tool (breadcrumb, buttons, minimap — the rail beside the scene) covers a plate or a label, and a lone platform is fitted on the first paint (not left lower-left at k = 1)'
+    ]
+    const [w0, h0] = win.getSize()
+    const dirs = []
+    try {
+      state.backend = createDirectBackend('verify: direct (m298 fit)')
+      const seed = async (n) => {
+        const groups = Math.max(1, Math.ceil(n / 10))
+        while (dirs.length < groups) dirs.push(mkdtempSync(join(tmpdir(), `tc panels orch fit${dirs.length}-`)))
+        const panels = []
+        for (let i = 0; i < n; i++) panels.push({ kind: 'terminal', rect: { id: `ft${i}`, x: 6000 + i * 10, y: 6000, w: 320, h: 220 }, z: 1, spec: { panelId: `ft${i}`, cwd: dirs[i % groups], command: '/bin/sh', args: [], agent: 'claude-code' } })
+        layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await re
+        await settle()
+        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await waitUntil(orchShown, 3000)
+        await click('[data-orch-lens="scene"]')
+        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= 1`), 15000)
+        await settle()
+      }
+      const read = () => wc.executeJavaScript(`(() => {
+        const R = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height } }
+        const union = (rs) => { if (rs.length === 0) return null; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } }
+        const meets = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+        const wrap = R(document.querySelector('.orch__graph-wrap'))
+        const hits = [...document.querySelectorAll('.orch__graph-scene [data-orch-platform-hit]')].map(R)
+        const labels = [...document.querySelectorAll('.orch__graph-scene .orch__pplate')].map(R)
+        const tools = [...document.querySelectorAll('[data-orch-scene-tools] > *')].map(R)
+        const plates = union(hits), comp = union([...hits, ...labels])
+        const inside = (r) => r.x >= wrap.x - 0.5 && r.y >= wrap.y - 0.5 && r.x + r.w <= wrap.x + wrap.w + 0.5 && r.y + r.h <= wrap.y + wrap.h + 0.5
+        return { win: { w: innerWidth, h: innerHeight }, wrap: { w: Math.round(wrap.w), h: Math.round(wrap.h) }, platforms: hits.length,
+          plateH: plates ? +(plates.h / wrap.h).toFixed(3) : null, plateW: plates ? +(plates.w / wrap.w).toFixed(3) : null,
+          compH: comp ? +(comp.h / wrap.h).toFixed(3) : null, compW: comp ? +(comp.w / wrap.w).toFixed(3) : null,
+          clipped: [...hits, ...labels].filter((r) => !inside(r)).length, covered: tools.filter((t) => [...hits, ...labels].some((r) => meets(t, r))).length }
+      })()`)
+      const SIZES = [['default', 1200, 800], ['narrow', 1100, 720], ['wide', 1900, 1100]]
+      const rows = []
+      for (const n of [0, 1, 21, 61, 100]) {
+        await seed(n)
+        for (const [name, w, h] of SIZES) {
+          win.setSize(w, h); await settle()
+          // The first paint's camera at the default size — is it Fit all?
+          if (name === 'default') { const rest = await read(); rows.push({ n, size: 'default·first-paint', ...rest }) }
+          await click('[data-orch-fit="all"]'); await settle()
+          const r = await read()
+          rows.push({ n, size: name, ...r })
+          console.log(`MEASURE ${JSON.stringify(rows[rows.length - 1])}`)
+          await demo(`m298-fit-${r.platforms}-${name}`)
+        }
+        win.setSize(w0, h0); await settle()
+        await click('[data-dock="orchestration"][aria-pressed="true"]')
+      }
+      const fitted = rows.filter((r) => !r.size.includes('first-paint'))
+      const lone = rows.find((r) => r.n === 0 && r.size.includes('first-paint'))
+      ok(IDS[0],
+        fitted.length === 15 && fitted.every((r) => r.platforms >= 1 && r.clipped === 0 && r.covered === 0 && r.compH >= 0.6) && lone && lone.clipped === 0 && lone.compH >= 0.6,
+        JSON.stringify(rows.map((r) => ({ n: r.n, size: r.size, p: r.platforms, wrap: r.wrap, plateH: r.plateH, plateW: r.plateW, compH: r.compH, compW: r.compW, clipped: r.clipped, covered: r.covered }))))
+    } catch (error) {
+      for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
+    } finally {
+      try { win.setSize(w0, h0) } catch { /* closed */ }
       for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* scratch */ } }
     }
   }

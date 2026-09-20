@@ -901,7 +901,8 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       wsP.labelSide === 'below' && three.find((p) => p.id === 'A').labelSide === 'above',
     JSON.stringify({ poly, topTip, leftTip, cornerMiss, centreHit, bandHit, inscribed }))
   // Fill: the workspace and two islands (the golden's composition) through Fit all on the 860×420 stage.
-  const fitAll = D.orchFitCamera(P.orchPlatformBounds(two), st, 24)
+  // M298: the fit the view makes — the label plates' pixels reserved (orchLabelMargins), Fit all's own floor.
+  const fitAll = D.orchFitCamera(P.orchPlatformBounds(two), st, 24, P.orchLabelMargins(two), D.ORCH_FIT_FLOOR)
   const spanY = (list, cam) => { let lo = Infinity, hi = -Infinity; for (const p of list) { const c = D.orchProjectWorld({ x: p.x, y: p.y }, st, cam); const hyp = p.half * cam.k * D.ORCH_COS_TILT; lo = Math.min(lo, c.y - hyp); hi = Math.max(hi, c.y + hyp + 10 * cam.k * D.ORCH_SIN_TILT) } return { lo, hi } }
   const span = spanY(two, fitAll)
   const fillH = (span.hi - span.lo) / st.h
@@ -934,6 +935,60 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       /\+ lift\.current \* fit\.scale, spec\.depth \* 24 - 40\)/.test(cubes) && /reducedMotion \? spec\.lift : THREE\.MathUtils\.damp\(lift\.current, spec\.lift/.test(cubes) &&
       /orchNameTier\(platformOf\(n\.object\.platformId\)\?\.pitchPx \?\? 0, n\.object\.front\)/.test(view) && /data-orch-name-tier="compact"/.test(view) && /front: i \+ cols >= seated\.length/.test(readFileSync(join(root, 'src/renderer/orchestration/orchestration-platforms.ts'), 'utf8')),
     JSON.stringify({ tiers, lift: P.ORCH_SELECT_LIFT }))
+
+  // -------------------------------------------------------------------------
+  // M298. The fit, at every count and every panel shape (orch-fit.*). The
+  // panel sizes are the ones MEASURED in the Electron part (orch-fit.app.1)
+  // on 2026-09-20, less the tools rail: the app's default window gives the
+  // scene 400×224, a narrow window 676×224, a wide one 992×649. The stage
+  // follows each panel's aspect (width 860, height by the shape), so a fit
+  // against the stage IS a fit against the panel.
+  // -------------------------------------------------------------------------
+  const PANELS = [{ name: 'default', w: 400, h: 224 }, { name: 'narrow', w: 676, h: 224 }, { name: 'wide', w: 992, h: 649 }]
+  const LABEL = { h: 44, gap: 8, halfW: 105 }
+  const islN = (n) => Array.from({ length: n - 1 }, (_, i) => isl(`I${i}`, `/r/I${i}`, []))
+  const fleet = (n) => { const islands = islN(n); return P.orchPlatforms({ ...base, roster: [], files: [], homeOf: () => undefined, order: islands.map((i) => i.id), islands }) }
+  const composed = (list, cam, stg) => {
+    let lo = Infinity, hi = -Infinity, xlo = Infinity, xhi = -Infinity, plo = Infinity, phi = -Infinity
+    for (const p of list) {
+      const c = D.orchProjectWorld({ x: p.x, y: p.y }, stg, cam)
+      const hx = p.half * cam.k, hy = hx * D.ORCH_COS_TILT, band = 10 * cam.k * D.ORCH_SIN_TILT
+      plo = Math.min(plo, c.y - hy); phi = Math.max(phi, c.y + hy + band)
+      lo = Math.min(lo, c.y - hy - (p.labelSide === 'above' ? LABEL.gap + LABEL.h : 0)); hi = Math.max(hi, c.y + hy + band + (p.labelSide === 'below' ? LABEL.gap + LABEL.h : 0))
+      xlo = Math.min(xlo, c.x - hx, c.x - LABEL.halfW); xhi = Math.max(xhi, c.x + hx, c.x + LABEL.halfW)
+    }
+    return { plateH: (phi - plo) / stg.h, compH: (hi - lo) / stg.h, compW: (xhi - xlo) / stg.w, clip: lo < 0 || hi > stg.h || xlo < 0 || xhi > stg.w }
+  }
+  const table = []
+  for (const n of [1, 2, 3, 4, 7, 11, 25, 100]) {
+    const list = fleet(n)
+    for (const pn of PANELS) {
+      const stg = { w: 860, h: Math.max(120, Math.round(860 * pn.h / pn.w)) }
+      const cam = D.orchFitCamera(P.orchPlatformBounds(list), stg, 24, P.orchLabelMargins(list), D.ORCH_FIT_FLOOR)
+      const m = composed(list, cam, stg)
+      table.push({ n, panel: pn.name, k: Number(cam.k.toFixed(3)), plateH: Number(m.plateH.toFixed(3)), compH: Number(m.compH.toFixed(3)), compW: Number(m.compW.toFixed(3)), clip: m.clip })
+    }
+  }
+  // Bound on one axis: the composition reaches 90% of the box's width or height (24 px pad each side), and never clips.
+  // …or the zoom ceiling: one platform in a wide panel stops at k = 2.2 before it reaches the box.
+  const bound = (r, pn) => { const stgH = Math.max(120, Math.round(860 * pn.h / pn.w)); return r.compH >= (stgH - 48) / stgH * 0.9 || r.compW >= (860 - 48) / 860 * 0.9 || r.k >= D.ORCH_ZOOM_RANGE.max }
+  ok('orch-fit.1 Fit all fills the real panel at every count: on 1, 2, 3, 4, 7, 11, 25 and 100 platforms, in the default, narrow and wide scene panels the Electron part measured, no plate and no label plate clips the stage, the composition is bound on one axis (it reaches 90% of the padded box\'s width or its height), the plates alone span at least 40% of the height, and the label margins are screen pixels the fit reserves (the same 52 px at k = 2.2 and at k = 0.08) — a hundred platforms fit because Fit all has its own floor under the wheel\'s',
+    table.every((r) => !r.clip && r.plateH >= 0.4 && bound(r, PANELS.find((p) => p.name === r.panel))) && D.ORCH_FIT_FLOOR < D.ORCH_ZOOM_RANGE.min && table.find((r) => r.n === 100 && r.panel === 'narrow').k < D.ORCH_ZOOM_RANGE.min &&
+      P.orchLabelMargins(fleet(3)).top === 52 && P.orchLabelMargins(fleet(3)).bottom > 52 && P.orchLabelMargins([fleet(2)[1]]).bottom < 52 && P.orchLabelMargins([fleet(2)[1]]).top === 52,
+    JSON.stringify(table))
+  // The lattice: band 0 is M294's six cells exactly; later bands widen by ORCH_BAND_GROWTH and centre under it; a cell is still its index's alone.
+  const m294 = (i) => ({ x: P.ORCH_CELL.x0 + P.ORCH_PLATFORM_HALF + (i % 6) * P.ORCH_LATTICE.xPitch, y: P.ORCH_CELL.y0 + P.ORCH_PLATFORM_HALF + (i % 2 === 0 ? P.ORCH_LATTICE.rowPitch : 0) })
+  const band0Same = [0, 1, 2, 3, 4, 5].every((i) => { const c = P.orchCellCentre(i); const m = m294(i); return Math.abs(c.x - m.x) < 1e-9 && Math.abs(c.y - m.y) < 1e-9 })
+  const bands = [6, 14, 24, 36].map((i) => P.orchBandOf(i))
+  const pyramid = bands.map((b) => b.width).join() === '8,10,12,14' && bands.every((b) => b.r === 0) && P.orchBandOf(5).band === 0 && P.orchBandOf(13).band === 1 && P.orchBandOf(13).r === 7
+  const centred = [1, 2, 3].every((b) => { const first = [6, 14, 24][b - 1]; const width = 6 + 2 * b; const xs = Array.from({ length: width }, (_, r) => P.orchCellCentre(first + r).x); return Math.abs((xs[0] + xs[width - 1]) / 2 - (P.orchCellCentre(0).x + P.orchCellCentre(5).x) / 2) < 1e-9 })
+  const appendOnly = [0, 6, 14, 24, 40].every((i) => JSON.stringify(P.orchCellCentre(i)) === JSON.stringify(P.orchCellCentre(i)))
+  const wide25 = P.orchPlatformBounds(fleet(25)), wide100 = P.orchPlatformBounds(fleet(100))
+  ok('orch-fit.2 the lattice grows as a pyramid, not a strip: the first band is M294\'s six cells to the unit, every later band is two cells wider than the one above and centred under the first, a cell is still a function of its index alone, and 25 or 100 platforms are wider than they are tall (a strip of six was 42% and 29% as wide as the stage); the first paint fits a lone platform too, and a stage change refits only a camera the auto-fit set',
+    band0Same && pyramid && centred && appendOnly && wide25.w > wide25.h * D.ORCH_COS_TILT && wide100.w > wide100.h * D.ORCH_COS_TILT &&
+      /if \(first && \(cam\.x !== 0 \|\| cam\.y !== 0 \|\| cam\.k !== 1\)\) return/.test(view) && /autoFitted\.current = true/.test(view) && /if \(!autoFitted\.current\) return/.test(view) && /setStageH\(Math\.max\(120, Math\.round\(\(ORCH_GRAPH_SIZE\.w \* r\.height\) \/ r\.width\)\)\)/.test(view) &&
+      /inset: 0 var\(--orch-rail-w\) 0 0/.test(styles),
+    JSON.stringify({ band0Same, bands, centred, wide25, wide100 }))
 }
 
 const failed = results.filter((x) => !x.pass)

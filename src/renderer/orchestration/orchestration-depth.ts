@@ -113,13 +113,37 @@ export function orchProjectWorld(pt: { x: number; y: number }, stage: { w: numbe
  * stage, centred, with `pad` around it; k clamped to the scene's zoom range.
  */
 export const ORCH_ZOOM_RANGE = { min: 0.22, max: 2.2 } as const
-export function orchFitCamera(bounds: { x: number; y: number; w: number; h: number }, stage: { w: number; h: number }, pad: number): OrchCamera {
-  const k = Math.min(ORCH_ZOOM_RANGE.max, Math.max(ORCH_ZOOM_RANGE.min, Math.min((stage.w - pad * 2) / Math.max(1, bounds.w), (stage.h - pad * 2) / Math.max(1, bounds.h * COS_TILT))))
+/**
+ * M298. Fit all's own floor, under the wheel's: "show everything" outranks
+ * the wheel's legibility floor — at 0.22, a hundred platforms could not be
+ * fitted at all (measured 179% of the stage's height), and what they need at
+ * that size is the summary level semantic zoom already gives them. A wheel
+ * notch from there clamps back into the wheel's range, as before.
+ */
+export const ORCH_FIT_FLOOR = 0.06
+/**
+ * `margins` (M298) are SCREEN pixels the fit keeps clear above and below the
+ * bounds — the label plates, which do not scale with k — so the box the
+ * plates are centred in is the stage minus pad minus those; without them the
+ * labels of eight platforms clipped the panel's top edge (measured).
+ */
+export function orchFitCamera(bounds: { x: number; y: number; w: number; h: number }, stage: { w: number; h: number }, pad: number, margins: { top: number; bottom: number; side?: { px: number; at: number } } = { top: 0, bottom: 0 }, floor: number = ORCH_ZOOM_RANGE.min): OrchCamera {
+  const boxH = Math.max(1, stage.h - pad * 2 - margins.top - margins.bottom)
+  const boxW = Math.max(1, stage.w - pad * 2)
+  // Width: the plates (k · w), or — when a screen-sized label `px` wide either
+  // side of a centre `at` model units inside the edge reaches past them —
+  // k · (w − 2at) + 2px. The tighter of the two; a single plate has no inner
+  // span to trade, so its label's width is the panel's to hold.
+  const side = margins.side
+  const kPlain = boxW / Math.max(1, bounds.w)
+  const kLabel = side !== undefined && bounds.w - 2 * side.at > 1 ? (boxW - 2 * side.px) / (bounds.w - 2 * side.at) : Infinity
+  const k = Math.min(ORCH_ZOOM_RANGE.max, Math.max(floor, Math.min(kPlain, kLabel, boxH / Math.max(1, bounds.h * COS_TILT))))
   const cx = bounds.x + bounds.w / 2
   const cy = bounds.y + bounds.h / 2
-  // Solve orchProjectWorld(centre) = stage centre for cam.x / cam.y.
+  // Solve orchProjectWorld(centre) = the box's centre for cam.x / cam.y.
+  const boxCy = pad + margins.top + boxH / 2
   const fy = stage.h / 2 + (cy - stage.h / 2) * COS_TILT
-  return { k, x: -(cx - stage.w / 2) * k, y: -(fy - stage.h / 2) * k }
+  return { k, x: -(cx - stage.w / 2) * k, y: boxCy - stage.h / 2 - (fy - stage.h / 2) * k }
 }
 
 export interface OrchFit { scale: number; offsetX: number; offsetY: number }

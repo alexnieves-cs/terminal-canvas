@@ -7458,7 +7458,11 @@ body {
    ground SVG (defs/ground/edges), the R3F cube canvas, then the overlay SVG
    (hit-targets/beacons/labels/callouts/packets) — in that paint order, so the
    real-lit meshes sit over the ground and under everything a person clicks. */
-.orch__graph-scene { position: absolute; inset: 0; }
+/* M298. The scene leaves a rail on the right for the camera tools (breadcrumb,
+   Fit / Back, minimap) so they stand BESIDE the composition, never over it —
+   with the fit filling the panel there is no empty corner for them. */
+.orch__graph-scene { position: absolute; inset: 0 var(--orch-rail-w) 0 0; --orch-rail-w: 8.5rem; }
+.orch__graph-wrap { --orch-rail-w: 8.5rem; }
 .orch__graph { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .orch__graph--ground { touch-action: none; }
 /* The overlay SVG is transparent to pointer events except its interactive
@@ -7566,6 +7570,10 @@ body {
    lifts the whole stage ~16px, and at the old top the card's bottom edge covered the `tests`
    cube's needs-you beacon (the critic, round 4). The footprint is otherwise Phase A's. */
 .orch__float--task { top: 0; right: var(--sp-4); }
+/* M298: the islands float keeps its place over the SCENE's top-right, left of the tools rail
+   (the rail would otherwise cover it). That it floats over the composition at all is the
+   chrome pass's input, not the fit's. */
+.orch__graph-wrap > .orch__float--task { right: calc(var(--orch-rail-w, 0px) + var(--sp-4)); }
 .orch__float-code, .orch__term-card .orch__float-code, .orch__selected .orch__float-code {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
@@ -8445,16 +8453,19 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__flat-object { fill: color-mix(in srgb, var(--tone, var(--fg-3)) 35%, var(--deck-surface)); stroke: var(--tone, var(--fg-3)); stroke-width: 1; }
 /* M292. Screen-aligned orientation in the scene's corner: breadcrumb, camera
    buttons, minimap. HTML, outside the projection, so it never tilts or pans. */
-.orch__scene-tools { position: absolute; right: var(--sp-4); bottom: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-end; pointer-events: none; z-index: 1; }
-.orch__scene-tools > * { pointer-events: auto; }
-.orch__crumbs { display: flex; align-items: center; gap: var(--sp-2); max-width: 26rem; font-size: var(--t-xs); color: var(--fg-3); background: var(--glass-3); border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-3); }
-.orch__crumb { background: none; border: 0; padding: 0 var(--sp-1); font: inherit; color: var(--fg-2); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }
+/* M298: the rail. Top-anchored, the scene's full height, its own column: the
+   breadcrumb stacks (one crumb per line, cut to the rail), then the camera
+   buttons, then the minimap; overflow clips rather than spills into the scene. */
+.orch__scene-tools { position: absolute; top: var(--sp-3); right: var(--sp-3); bottom: var(--sp-3); width: calc(var(--orch-rail-w, 8.5rem) - var(--sp-3) * 2); display: flex; flex-direction: column; gap: var(--sp-2); align-items: stretch; overflow: hidden; z-index: 1; }
+.orch__crumbs { display: flex; flex-direction: column; align-items: stretch; gap: 0; font-size: var(--t-xs); color: var(--fg-3); background: var(--glass-3); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); }
+.orch__crumb { background: none; border: 0; padding: 0; font: inherit; color: var(--fg-2); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .orch__crumb:hover { color: var(--fg); }
 .orch__crumb--leaf { color: var(--fg); cursor: default; }
 .orch__crumb-sep::before { content: '\203A'; color: var(--fg-4); }
-.orch__scene-buttons { display: flex; gap: var(--sp-2); }
+.orch__scene-buttons { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.orch__scene-buttons > .orch__mini { flex: 1 1 auto; }
 .orch__webgl-notice { background: var(--glass-3); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); max-width: 24rem; }
-.orch__minimap { display: block; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--glass-3); cursor: crosshair; }
+.orch__minimap { display: block; width: 100%; height: auto; margin-top: auto; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--glass-3); cursor: crosshair; }
 .orch__minimap-plate { fill: color-mix(in srgb, var(--iris) 18%, var(--deck-surface)); stroke: color-mix(in srgb, var(--iris) 60%, transparent); stroke-width: 1; }
 .orch__minimap-plate--group { stroke: color-mix(in srgb, var(--deck-violet) 60%, transparent); stroke-dasharray: 2 2; }
 .orch__minimap-plate[data-lit] { fill: color-mix(in srgb, var(--iris) 40%, var(--deck-surface)); }

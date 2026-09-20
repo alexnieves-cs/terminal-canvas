@@ -75,10 +75,10 @@ import {
   orchActivityEvents,
   subscribeOrchActivity
 } from './orchestration-activity'
-import { ORCH_COS_TILT, ORCH_SIN_TILT, ORCH_ZOOM_RANGE, orchDepthBand, orchFitCamera, orchProjectWorld, type OrchCamera, type OrchDepthBand } from './orchestration-depth'
+import { ORCH_COS_TILT, ORCH_FIT_FLOOR, ORCH_SIN_TILT, ORCH_ZOOM_RANGE, orchDepthBand, orchFitCamera, orchProjectWorld, type OrchCamera, type OrchDepthBand } from './orchestration-depth'
 import type { OrchCubeSpec, OrchPlatformSpec } from './OrchestrationCubes'
 import {
-  ORCH_PLATFORM, ORCH_SELECT_LIFT, ORCH_WORKSPACE_PLATFORM, orchConnectors, orchHiddenLine, orchHitOrder, orchLabelBudget, orchNameTier, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchPlatformHitPolygon, orchPolygonBounds, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSegmentBetween, orchSortRows, orchSpatialStep, orchZoomLevel,
+  ORCH_PLATE_LABEL, ORCH_PLATE_MORE, ORCH_PLATFORM, ORCH_SELECT_LIFT, ORCH_WORKSPACE_PLATFORM, orchConnectors, orchHiddenLine, orchHitOrder, orchLabelBudget, orchLabelMargins, orchNameTier, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchPlatformHitPolygon, orchPolygonBounds, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSegmentBetween, orchSortRows, orchSpatialStep, orchZoomLevel,
   type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchNameTier, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
 } from './orchestration-platforms'
 import { getOrchPrefs, persistedOrchPrefs, seedOrchPrefs, setOrchPrefs, type OrchLens, type OrchSideTab } from './orchestration-prefs'
@@ -114,7 +114,6 @@ import type { OrchCubeTone } from './orchestration-cube-motion'
 /** M292. Waiting-station cards drawn at once; past it the beacon, the plate word and the queue carry the fact. */
 const ORCH_WAITING_CARDS = 3
 /** M294. A platform's label plate: its backing width, height and the gap above the diamond's top tip. */
-const ORCH_PLATE_LABEL = { w: 210, h: 44, gap: 8 } as const
 /** M294. A station-chain connector lights for this long after either end changes state — once, then rests. */
 const ORCH_CONNECTOR_LIT_MS = 1400
 
@@ -642,7 +641,12 @@ function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, onFit }
   const placeLine = p.sub
   // The backing is at most the plate's width plus a little; each line is cut
   // to what fits it (SVG text does not clip), the full text on the title.
-  const plateW = Math.max(150, Math.min(Math.max(w + 12, 150), Math.max(label.length * 6.6, placeLine.length * 5.4, thirdLine.length * 5.4) + 24))
+  // M298: never wider than ORCH_PLATE_LABEL.w — that is the width the fit reserves sideways.
+  const plateW = Math.max(150, Math.min(ORCH_PLATE_LABEL.w, Math.max(w + 12, 150), Math.max(label.length * 6.6, placeLine.length * 5.4, thirdLine.length * 5.4) + 24))
+  // M298: the `+N more` chip stands on the plate's far side from the tip (above an upper-row
+  // label, below a lower-row one) inside the plate's width — beside it, it ran past the fit's
+  // reserved width into the rail (measured on the 61- and 100-session fixtures).
+  const moreY = p.labelSide === 'above' ? -(ORCH_PLATE_MORE.h + ORCH_PLATE_MORE.gap) : ORCH_PLATE_LABEL.h + ORCH_PLATE_MORE.gap
   const fitLine = (text: string, px: number): string => { const cap = Math.max(8, Math.floor((plateW - 16) / px)); return text.length > cap ? `${text.slice(0, cap - 1).trimEnd()}…` : text }
   const placeShown = fitLine(placeLine, 5.4)
   const thirdShown = fitLine(thirdLine, 5.4)
@@ -662,7 +666,7 @@ function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, onFit }
       <text x={8} y={37} className="orch__pplate-sub" data-orch-platform-state={p.state} data-orch-platform-counts><title>{thirdLine}</title>{thirdShown}</text>
       {p.synthetic && <text x={8} y={25} className="orch__pplate-sub" data-orch-grouping style={{ display: 'none' }}>{ORCH_DEP_GROUPING}</text>}
       {hidden !== null && (
-        <g className="orch__pplate-more" transform={`translate(${plateW + 6}, 0)`} data-orch-platform-more={p.hidden.ids.length} role="button" tabIndex={0}
+        <g className="orch__pplate-more" transform={`translate(0, ${moreY})`} data-orch-platform-more={p.hidden.ids.length} role="button" tabIndex={0}
           aria-label={`${hidden} — focus the island to see them all`} onClick={(e) => { e.stopPropagation(); onFit(p.id) }}
           onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); onFit(p.id) } }}>
           <title>{`${hidden}. Focus the island to see every station.`}</title>
@@ -745,22 +749,50 @@ function GraphBoard(props: {
   const [cam, setCam] = useState(() => getOrchPrefs().camera)
   useEffect(() => { setOrchPrefs({ camera: cam }); props.onCamera(cam) }, [cam, props.onCamera])
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
-  const stage = ORCH_GRAPH_SIZE
+  // M298. The stage FOLLOWS the panel's aspect ratio: its width stays the
+  // model's 860 (so x is the same unit everywhere) and its height is what the
+  // panel's shape makes it. The fixed 860×420 stage letterboxed inside the
+  // real panel (xMidYMid meet) — measured 536×224 at the app's default
+  // window, 812×224 narrow, 1128×649 wide: none of them 2.05:1 — so the fit
+  // filled a band of the panel, not the panel; two platforms in the narrow
+  // window spanned 31% of its width. Read off the scene's own box, so the SVG
+  // viewBox, the island's viewBox and the hit-targets keep one projection.
+  const sceneRef = useRef<HTMLDivElement | null>(null)
+  const [stageH, setStageH] = useState<number>(ORCH_GRAPH_SIZE.h)
+  useEffect(() => {
+    const el = sceneRef.current
+    if (el === null || typeof ResizeObserver === 'undefined') return
+    const read = (): void => {
+      const r = el.getBoundingClientRect()
+      if (r.width <= 0 || r.height <= 0) return
+      // Whole units, and never a sliver: a zero-height stage would divide by it.
+      setStageH(Math.max(120, Math.round((ORCH_GRAPH_SIZE.w * r.height) / r.width)))
+    }
+    read()
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const stage = useMemo(() => ({ w: ORCH_GRAPH_SIZE.w, h: stageH }), [stageH])
   // M292. Camera Back: every DELIBERATE move (Fit all, Fit selected, a minimap
   // click, a focus) pushes the camera it left; a pan or a wheel does not, or
   // Back would step through every pixel of a drag.
   const history = useRef<OrchCamera[]>([])
   const [historyDepth, setHistoryDepth] = useState(0)
   const moveCamera = (next: OrchCamera): void => {
+    autoFitted.current = false
     history.current = [...history.current.slice(-19), cam]
     setHistoryDepth(history.current.length)
     setCam(next)
   }
-  const fitAll = (): void => moveCamera(orchFitCamera(orchPlatformBounds(platforms), stage, 24))
+  // M298. Fit all keeps the label plates' pixels clear (orchLabelMargins) and
+  // may go under the wheel's zoom floor (ORCH_FIT_FLOOR): everything, always.
+  const fitAllCamera = (): OrchCamera => orchFitCamera(orchPlatformBounds(platforms), stage, 24, orchLabelMargins(platforms), ORCH_FIT_FLOOR)
+  const fitAll = (): void => moveCamera(fitAllCamera())
   const fitPlatform = (id: string): void => {
     const p = platforms.find((x) => x.id === id)
     if (p === undefined) return
-    moveCamera(orchFitCamera(orchPlatformBounds([p]), stage, 28))
+    moveCamera(orchFitCamera(orchPlatformBounds([p]), stage, 28, orchLabelMargins([p])))
   }
   const back = (): void => {
     const prev = history.current[history.current.length - 1]
@@ -769,8 +801,10 @@ function GraphBoard(props: {
     setHistoryDepth(history.current.length)
     setCam(prev)
   }
-  // The camera flies on TWO occasions only: the first paint of a scene with more
-  // than one platform (the fleet must be in frame), and a change in how many
+  // The camera flies on TWO occasions only: the first paint of a scene whose
+  // camera is still the origin (the fleet must be in frame — M298: a lone
+  // platform too, which the zig-zag seats lower-LEFT of the stage, measured
+  // 43% of the panel's height and clipped at k = 1), and a change in how many
   // platforms there are (a new island landed off-screen). Never on an event.
   const countRef = useRef<number | null>(null)
   useEffect(() => {
@@ -778,15 +812,24 @@ function GraphBoard(props: {
     if (countRef.current === n) return
     const first = countRef.current === null
     countRef.current = n
-    if (first && (n <= 1 || cam.x !== 0 || cam.y !== 0 || cam.k !== 1)) return
+    if (first && (cam.x !== 0 || cam.y !== 0 || cam.k !== 1)) return
     // Even then, only when something is now OFF the stage: a new island that
     // landed in view moves nothing, so the ones a person is looking at stay put.
     const b = orchPlatformBounds(platforms)
     const tl = orchProjectWorld({ x: b.x, y: b.y }, stage, cam)
     const br = orchProjectWorld({ x: b.x + b.w, y: b.y + b.h }, stage, cam)
     if (!first && tl.x >= 0 && tl.y >= 0 && br.x <= stage.w && br.y <= stage.h) return
-    setCam(orchFitCamera(b, stage, 24))
+    autoFitted.current = true
+    setCam(fitAllCamera())
   }, [platforms.length])
+  // M298. The first paint fits against the DEFAULT stage (the panel's box is
+  // read a render later); when the measured stage arrives, a camera the
+  // auto-fit set is fitted again. A camera a person has moved since is not.
+  const autoFitted = useRef(false)
+  useEffect(() => {
+    if (!autoFitted.current) return
+    setCam(fitAllCamera())
+  }, [stageH])
 
   // ---- Projection: platforms, then every object on them, through one camera.
   const focusedIsOn = (id: string): boolean => focusedPlatformId === id
@@ -882,7 +925,7 @@ function GraphBoard(props: {
   for (const n of [...calloutNodes].sort((a, b) => Number(expanded(b.id)) - Number(expanded(a.id)))) {
     const w = n.state === 'wants-you' ? 218 : 184
     const plateTopOf = platformOf(n.object.platformId)?.label.y
-    const fits = (hh: number): boolean => (plateTopOf !== undefined && plateTopOf - hh - 8 >= 8) || n.y + calloutBelow(n.size) + 22 + hh <= ORCH_GRAPH_SIZE.h - 8
+    const fits = (hh: number): boolean => (plateTopOf !== undefined && plateTopOf - hh - 8 >= 8) || n.y + calloutBelow(n.size) + 22 + hh <= stage.h - 8
     if (expanded(n.id) && !fits(calloutHeight(true)) && fits(calloutHeight(false))) compact.add(n.id)
     const h = calloutHeight(expanded(n.id) && !compact.has(n.id))
     const others = footprints.filter((f) => f.id !== n.id)
@@ -895,15 +938,15 @@ function GraphBoard(props: {
     // above a platform and an expanded card is 172 plus its stem, so neither
     // above nor below fits and the clamp fallback landed on the label (the
     // critic, round 3). Beside, the x sweep finds the field past the platform.
-    const beside = Math.max(8, Math.min(ORCH_GRAPH_SIZE.h - h - 8, n.y - h / 2))
+    const beside = Math.max(8, Math.min(stage.h - h - 8, n.y - h / 2))
     const rows = [n.y - n.size - h - 22, ...(plateTop === undefined ? [] : [plateTop - h - 8]), n.y + calloutBelow(n.size) + 22, beside]
-      .filter((y) => y >= 8 && y + h <= ORCH_GRAPH_SIZE.h - 8)
-    if (rows.length === 0) rows.push(Math.max(8, Math.min(ORCH_GRAPH_SIZE.h - h - 8, n.y - n.size - h - 22)))
+      .filter((y) => y >= 8 && y + h <= stage.h - 8)
+    if (rows.length === 0) rows.push(Math.max(8, Math.min(stage.h - h - 8, n.y - n.size - h - 22)))
     const sweep = []
-    for (let x = 8; x <= ORCH_GRAPH_SIZE.w - w - 8; x += 24) sweep.push(x + w / 2 - n.x)
+    for (let x = 8; x <= stage.w - w - 8; x += 24) sweep.push(x + w / 2 - n.x)
     const drifts = [0, ...[...occupied, ...others].flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16, ...sweep]
     const candidates = rows.flatMap((y) => drifts.map((dx) => {
-      const x = Math.max(8, Math.min(ORCH_GRAPH_SIZE.w - w - 8, n.x + dx - w / 2))
+      const x = Math.max(8, Math.min(stage.w - w - 8, n.x + dx - w / 2))
       const box = { x, y, w, h }
       const overlap = occupied.reduce((sum, r) => sum + cover(box, r, 8) * 8, 0) + others.reduce((sum, r) => sum + cover(box, r, 0) * r.weight, 0)
       const distance = Math.hypot(x + w / 2 - n.x, y + h / 2 - n.y)
@@ -973,6 +1016,7 @@ function GraphBoard(props: {
 
   const onWheel = (event: ReactWheelEvent<SVGSVGElement>): void => {
     event.preventDefault()
+    autoFitted.current = false
     const factor = event.deltaY > 0 ? 0.92 : 1.08
     setCam((c) => ({ ...c, k: Math.min(ORCH_ZOOM_RANGE.max, Math.max(ORCH_ZOOM_RANGE.min, c.k * factor)) }))
   }
@@ -986,8 +1030,9 @@ function GraphBoard(props: {
     const d = drag.current
     if (d === null) return
     const svg = event.currentTarget
-    const sx = svg.clientWidth > 0 ? ORCH_GRAPH_SIZE.w / svg.clientWidth : 1
-    const sy = svg.clientHeight > 0 ? ORCH_GRAPH_SIZE.h / svg.clientHeight : 1
+    const sx = svg.clientWidth > 0 ? stage.w / svg.clientWidth : 1
+    const sy = svg.clientHeight > 0 ? stage.h / svg.clientHeight : 1
+    autoFitted.current = false
     setCam((c) => ({ ...c, x: d.cx + (event.clientX - d.x) * sx, y: d.cy + (event.clientY - d.y) * sy }))
   }
   const onPointerUp = (event: ReactPointerEvent<SVGSVGElement>): void => {
@@ -1003,11 +1048,12 @@ function GraphBoard(props: {
   const authored = orchEdgePaintOrder(edges).filter((e) => e.authored === true)
 
   return (
-    <div className="orch__graph-scene" role="group" aria-label="Task platforms" aria-describedby={props.describedBy} data-lens={litIds !== null ? 'true' : undefined} data-orch-webgl={props.webgl} data-orch-quality={props.quality}>
+    <>
+    <div className="orch__graph-scene" ref={sceneRef} role="group" aria-label="Task platforms" aria-describedby={props.describedBy} data-lens={litIds !== null ? 'true' : undefined} data-orch-webgl={props.webgl} data-orch-quality={props.quality}>
       {/* Ground layer: defs and the dependency edges — what the meshes paint OVER. Owns pan/zoom. */}
       <svg
         className="orch__graph orch__graph--ground"
-        viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}
+        viewBox={`0 0 ${stage.w} ${stage.h}`}
         aria-hidden="true"
         onWheel={onWheel}
         onPointerDown={onPointerDown}
@@ -1068,13 +1114,13 @@ function GraphBoard(props: {
       {props.webgl === 'ready' && (
         <WebglBoundary onLost={props.onWebglLost}>
           <Suspense fallback={<div className="orch__cube-canvas" aria-hidden="true" />}>
-            <OrchestrationCubes nodes={cubeSpecs} platforms={platformSpecs} viewBox={ORCH_GRAPH_SIZE} quality={props.quality} />
+            <OrchestrationCubes nodes={cubeSpecs} platforms={platformSpecs} viewBox={stage} quality={props.quality} />
           </Suspense>
         </WebglBoundary>
       )}
       {/* Overlay: hit-targets in PAINT order (orchHitOrder — what elementFromPoint
           answers), plates, beacons, labels, callouts. Root is pointer-events:none. */}
-      <svg className="orch__graph orch__graph--over" data-has-selection={hasSelection ? 'true' : undefined} viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}>
+      <svg className="orch__graph orch__graph--over" data-has-selection={hasSelection ? 'true' : undefined} viewBox={`0 0 ${stage.w} ${stage.h}`}>
         <filter id="orch-glow" x="-40%" y="-40%" width="180%" height="180%">
           <feGaussianBlur stdDeviation="3.5" result="blur" />
           <feMerge>
@@ -1148,7 +1194,13 @@ function GraphBoard(props: {
         ))}
         <EdgePackets edges={authored} fires={props.fires} points={points} />
       </svg>
-      {/* M292. Screen-aligned orientation: breadcrumb, Fit all / Fit selected / Back, the minimap. */}
+    </div>
+      {/* M292. Screen-aligned orientation: breadcrumb, Fit all / Fit selected / Back, the minimap.
+          M298: a RAIL beside the scene, not a corner over it — measured at the app's default
+          window, the stacked corner tools covered a plate or a label in every fixture (one to
+          three of them), because a composition that fills the panel has no empty corner. The
+          rail's width is the fit's to lose at wide windows (11% at 1128 px) and nothing at the
+          default and narrow ones, where the fit is height-bound. */}
       <div className="orch__scene-tools" data-orch-scene-tools>
         <nav className="orch__crumbs" aria-label="Selection breadcrumb" data-orch-crumbs>
           <button type="button" className="orch__crumb" data-orch-crumb="all" {...shellControl(() => { onFocusPlatform(null); fitAll() })}>All work</button>
@@ -1167,7 +1219,7 @@ function GraphBoard(props: {
         </div>
         <Minimap platforms={platforms} cam={cam} stage={stage} onCentre={centreOn} />
       </div>
-    </div>
+    </>
   )
 }
 
