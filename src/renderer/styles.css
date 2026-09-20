@@ -8431,7 +8431,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__flat-object { fill: color-mix(in srgb, var(--tone, var(--fg-3)) 35%, var(--deck-surface)); stroke: var(--tone, var(--fg-3)); stroke-width: 1; }
 /* M292. Screen-aligned orientation in the scene's corner: breadcrumb, camera
    buttons, minimap. HTML, outside the projection, so it never tilts or pans. */
-.orch__scene-tools { position: absolute; left: var(--sp-4); bottom: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-start; pointer-events: none; z-index: 1; }
+.orch__scene-tools { position: absolute; right: var(--sp-4); bottom: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-end; pointer-events: none; z-index: 1; }
 .orch__scene-tools > * { pointer-events: auto; }
 .orch__crumbs { display: flex; align-items: center; gap: var(--sp-2); max-width: 26rem; font-size: var(--t-xs); color: var(--fg-3); background: var(--glass-3); border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-3); }
 .orch__crumb { background: none; border: 0; padding: 0 var(--sp-1); font: inherit; color: var(--fg-2); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }

@@ -848,7 +848,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   const focused = P.orchPlatforms({ ...base, order: ['A'], roster: many, files: [], homeOf: () => '/r/a', focusedId: 'A', islands: [isl('A', '/r/a', many.map((r) => r.id))] }).find((p) => p.id === 'A')
   ok('orch-3d.3 past the cap a platform seats every WAITING station whatever its index, then the live ones, then the rest, and counts the remainder honestly (+N more · none need you); the focused platform expands to seat them all and its footprint grows',
     capped.stations.length === P.ORCH_STATION_CAP + 2 && capped.stations.some((s) => s.id === 's10') && capped.stations.some((s) => s.id === 's11') && capped.stations.some((s) => s.id === 's0') &&
-      capped.hidden.ids.length === 2 && capped.hidden.needsYou === 0 && P.orchHiddenLine(capped) === '+2 more · none need you' && /2 need you/.test(P.orchPlatformCountsLine(capped)) &&
+      capped.hidden.ids.length === 2 && capped.hidden.needsYou === 0 && P.orchHiddenLine(capped) === '+2 more · none need you' && /^2 need you/.test(P.orchPlatformCountsLine(capped)) &&
       focused.stations.length === 12 && focused.hidden.ids.length === 0 && focused.expanded === true && focused.w > capped.w,
     JSON.stringify({ seated: capped.stations.map((s) => s.id), hidden: capped.hidden, counts: P.orchPlatformCountsLine(capped), fw: focused.w, cw: capped.w }))
   // Hit order: an expanded plate paints after its neighbour AND its neighbour's stations; a station wins over its own plate.

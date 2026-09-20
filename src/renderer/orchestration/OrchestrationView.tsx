@@ -78,7 +78,7 @@ import {
 import { ORCH_COS_TILT, ORCH_STAGE_TILT_DEG, ORCH_ZOOM_RANGE, orchDepthBand, orchFitCamera, orchProjectWorld, type OrchCamera, type OrchDepthBand } from './orchestration-depth'
 import type { OrchCubeSpec, OrchPlatformSpec } from './OrchestrationCubes'
 import {
-  ORCH_PLATFORM, ORCH_WORKSPACE_PLATFORM, orchHiddenLine, orchHitOrder, orchLabelBudget, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSortRows, orchSpatialStep, orchZoomLevel,
+  ORCH_PITCH, ORCH_PLATFORM, ORCH_WORKSPACE_PLATFORM, orchHiddenLine, orchHitOrder, orchLabelBudget, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSortRows, orchSpatialStep, orchZoomLevel,
   type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
 } from './orchestration-platforms'
 import { getOrchPrefs, persistedOrchPrefs, seedOrchPrefs, setOrchPrefs, type OrchLens, type OrchSideTab } from './orchestration-prefs'
@@ -111,6 +111,11 @@ import type { OrchCubeTone } from './orchestration-cube-motion'
  * module for its type costs nothing at runtime. That is easy to undo by accident
  * — dropping the `type` keyword re-bundles three with no error and no red suite.
  */
+/** M292. Waiting-station cards drawn at once; past it the beacon, the plate word and the queue carry the fact. */
+const ORCH_WAITING_CARDS = 3
+/** M292. Screen pixels between stations below which no name plate is drawn (a plate is ~92 px wide; measured overlapping at 80). Fit selected on an island reaches it. */
+const ORCH_NAME_PITCH_PX = 96
+
 const OrchestrationCubes = lazy(async () => ({ default: (await import('./OrchestrationCubes')).OrchestrationCubes }))
 
 export interface OrchTemplateInput {
@@ -449,8 +454,10 @@ function SelectedChatPhase({ panelId }: { panelId: string }): JSX.Element | null
 }
 
 /** Cards share the projected cube anchor but never inherit its face rotation. */
-function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSelect, onJump, onInterrupt }: {
+function CubeCallout({ node, offsetX, offsetY = 0, below, drift, band, expanded, task, onSelect, onJump, onInterrupt }: {
   node: OrchGraphNode; offsetX: number; expanded: boolean; task?: string
+  /** M291. How far the placed row sits from the default row on its side (negative = higher); the stem stretches to it. */
+  offsetY?: number
   /** The card hangs under the cube, stem pointing up — set when there is no room above. */
   below: boolean
   /** Callouts pan fastest: the card slides past its cube by this, the stem stretches to follow. */
@@ -489,8 +496,8 @@ function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSele
   const sy = below ? 22 : -22
   const anchorY = below ? node.y + calloutBelow(node.size) : node.y - node.size
   return <g className="orch__callout" data-depth={band} transform={`translate(${node.x}, ${anchorY})`}>
-    <path className="orch__callout-stem" d={`M 0 0 L ${offsetX + drift.x} ${sy + drift.y}`} />
-    <g transform={`translate(${offsetX + drift.x}, ${sy + drift.y}) scale(${s}) translate(${-offsetX}, ${-sy})`}>
+    <path className="orch__callout-stem" d={`M 0 0 L ${offsetX + drift.x} ${sy + drift.y + offsetY}`} />
+    <g transform={`translate(${offsetX + drift.x}, ${sy + drift.y + offsetY}) scale(${s}) translate(${-offsetX}, ${-sy})`}>
     <foreignObject x={offsetX - width / 2} y={below ? 22 : -height - 22} width={width} height={height + 22}>
       <div className="orch__callout-slot" data-below={below || undefined}><div className="orch__callout-card" data-needs={needs || undefined} data-expanded={expanded || undefined}
         onClick={(e) => onCard(e, () => onSelect(node.id))} onDoubleClick={(e) => onCard(e, () => onJump(node.id))}>
@@ -604,10 +611,16 @@ function PlatformPlate({ p, x, y, w, level, focused, selected, onFocus, onFit }:
   // live (branch · own worktree, or a shared directory, said); then the state
   // WORD with the counts — so the plate says what the platform's colour and
   // glow only echo. The place line is the same text the List's column carries.
-  const stateLine = p.synthetic ? 'grouping only' : `${p.island?.source === 'work-item' ? 'Task' : 'Session · no task yet'} · ${p.state}${waiting ? ' · needs you' : ''}`
+  // A session island's state IS `no task yet`; saying it twice was the critic's note.
+  const stateLine = p.synthetic ? 'grouping only' : p.island?.source === 'work-item' ? `Task · ${p.state}` : 'Session · no task yet'
   const thirdLine = `${stateLine} · ${counts}`
   const placeLine = p.sub
-  const plateW = Math.max(150, Math.min(Math.max(w - 8, 150), Math.max(label.length * 6.6, placeLine.length * 5.4, thirdLine.length * 5.4) + 24))
+  // The backing is at most the plate's width plus a little; each line is cut
+  // to what fits it (SVG text does not clip), the full text on the title.
+  const plateW = Math.max(150, Math.min(Math.max(w + 12, 150), Math.max(label.length * 6.6, placeLine.length * 5.4, thirdLine.length * 5.4) + 24))
+  const fitLine = (text: string, px: number): string => { const cap = Math.max(8, Math.floor((plateW - 16) / px)); return text.length > cap ? `${text.slice(0, cap - 1).trimEnd()}…` : text }
+  const placeShown = fitLine(placeLine, 5.4)
+  const thirdShown = fitLine(thirdLine, 5.4)
   return (
     <g className={`orch__pplate${focused ? ' orch__pplate--on' : ''}`} transform={`translate(${x}, ${y})`}
       data-orch-platform-plate={p.id} data-orch-island-id={p.island?.id} data-orch-island={p.island?.itemId ?? p.island?.subjectId ?? undefined}
@@ -619,8 +632,8 @@ function PlatformPlate({ p, x, y, w, level, focused, selected, onFocus, onFit }:
       <rect className="orch__pplate-bg" width={plateW} height={44} rx={6} />
       {waiting && <circle className="orch__cube-beacon orch__pplate-beacon" cx={plateW - 10} cy={10} r={3} aria-hidden="true" />}
       <text x={8} y={13} className="orch__pplate-title" data-orch-island-goal>{label}</text>
-      <text x={8} y={25} className="orch__pplate-sub orch__pplate-place" data-orch-island-place={p.island === undefined ? undefined : ''}>{placeLine}</text>
-      <text x={8} y={37} className="orch__pplate-sub" data-orch-platform-state={p.state} data-orch-platform-counts>{thirdLine}</text>
+      <text x={8} y={25} className="orch__pplate-sub orch__pplate-place" data-orch-island-place={p.island === undefined ? undefined : ''}><title>{placeLine}</title>{placeShown}</text>
+      <text x={8} y={37} className="orch__pplate-sub" data-orch-platform-state={p.state} data-orch-platform-counts><title>{thirdLine}</title>{thirdShown}</text>
       {p.synthetic && <text x={8} y={25} className="orch__pplate-sub" data-orch-grouping style={{ display: 'none' }}>{ORCH_DEP_GROUPING}</text>}
       {hidden !== null && (
         <g className="orch__pplate-more" transform={`translate(${plateW + 6}, 0)`} data-orch-platform-more={p.hidden.ids.length} role="button" tabIndex={0}
@@ -642,8 +655,8 @@ function PlatformPlate({ p, x, y, w, level, focused, selected, onFocus, onFit }:
  */
 function Minimap({ platforms, cam, stage, onCentre }: { platforms: readonly OrchPlatform[]; cam: OrchCamera; stage: { w: number; h: number }; onCentre: (pt: { x: number; y: number }) => void }): JSX.Element {
   const bounds = orchPlatformBounds(platforms)
-  const W = 132
-  const H = 72
+  const W = 112
+  const H = 60
   const s = Math.min(W / Math.max(1, bounds.w + 40), H / Math.max(1, bounds.h + 40))
   const ox = (W - bounds.w * s) / 2 - bounds.x * s
   const oy = (H - bounds.h * s) / 2 - bounds.y * s
@@ -769,16 +782,38 @@ function GraphBoard(props: {
       const node: OrchGraphNode = { id: o.id, title: o.title, kind: o.panelKind === 'file' ? 'file' : o.panelKind, hub: false, x: c.x, y: c.y, state: o.state, size }
       return { ...node, object: o, depth: c.depth + o.layer * 0.02, band: orchDepthBand(Math.max(-1, Math.min(1, c.depth))), drift: { x: 0, y: 0 } }
     })
-  const labelled = orchLabelBudget(projected, { selected: new Set(selectedIds.concat(selectedId === null ? [] : [selectedId])), hovered })
+  const budgeted = orchLabelBudget(projected, { selected: new Set(selectedIds.concat(selectedId === null ? [] : [selectedId])), hovered })
+  // A name plate is ~92 px wide and the station pitch is 46 model units: below
+  // a pitch of ~80 screen px the plates of neighbours paint over each other
+  // (measured at the fitted three-platform view). So a resting station shows
+  // its name only when the pitch allows; the selected, hovered and WAITING ones
+  // always do, and every name is in the List and on hover.
+  const pitchPx = ORCH_PITCH * cam.k
+  // Every kind: a first cut exempted checkpoints and artifacts, and at 30 model
+  // units apart their plates stacked on each other and on the stations' (the critic).
+  // No exception for the selected, hovered or waiting station either: its plate
+  // hung onto the next grid row's cube (the critic). Their CARD carries the name;
+  // a waiting station past the card cap keeps its beacon, its queue row and the
+  // platform's `N need you`. Names for all arrive with Fit selected (evidence).
+  const labelled = new Set(projected.filter((n) => budgeted.has(n.id) && pitchPx >= ORCH_NAME_PITCH_PX).map((n) => n.id))
   const points = new Map(projected.map((n) => [n.id, { x: n.x, y: n.y }]))
 
   const expanded = (id: string): boolean => selectedIds.includes(id) || selectedId === id || hovered === id
+  // M291. A card for the selected, the hovered and the WAITING stations only:
+  // the ring gave every live cube a card, and on a platform of seven stations
+  // those cards covered the plate's label and each other. A working station's
+  // word is on its platform's plate (`N working`) and in the List.
+  // Waiting cards are capped at ORCH_WAITING_CARDS (nearest first): the
+  // 100-session fixture put ten waiting stations on one island and ten amber
+  // cards covered every plate. Every waiting station still has its beacon, its
+  // plate word, the platform's `N need you` and its row in Needs attention.
+  const waitingCards = new Set(projected.filter((n) => n.object.kind === 'station' && n.state === 'wants-you' && !expanded(n.id)).sort((a, b) => b.depth - a.depth).slice(0, ORCH_WAITING_CARDS).map((n) => n.id))
   const calloutNodes = projected.filter((n) => n.object.kind === 'station'
     && (props.memberIds === null || props.memberIds.includes(n.id))
     // A lensed-out cube keeps its place but not its card: the lit set's callouts are the answer.
     && !lensedOut(n.id)
-    && (isLiveRosterState(n.state) || expanded(n.id)))
-  const offsets = new Map<string, number>()
+    && (waitingCards.has(n.id) || expanded(n.id)))
+  const offsets = new Map<string, { x: number; y: number }>()
   // Cards that hang BELOW their cube: a back-row cube has no room above it.
   const below = new Set<string>()
   const occupied: { x: number; y: number; w: number; h: number }[] = []
@@ -786,15 +821,37 @@ function GraphBoard(props: {
   // hides the island's name, which is the one thing the plate is for.
   const footprints = [
     ...projected.map((o) => ({ id: o.id, weight: 1, x: o.x - o.size * 1.4, y: o.y - o.size, w: o.size * 2.8, h: o.size + calloutBelow(o.size) })),
-    ...projPlatforms.map((pp) => ({ id: `plate:${pp.p.id}`, weight: 1.5, x: pp.hit.x + 6, y: pp.hit.y - 40, w: 200, h: 46 }))
+    // The island's label weighs like another CARD (the critic: the selected
+    // station's card sat on the island's goal and repository lines) — a card
+    // over a label hides the one fact the plate exists for.
+    ...projPlatforms.map((pp) => ({ id: `plate:${pp.p.id}`, weight: 12, x: pp.hit.x + 6, y: pp.hit.y - 40, w: 210, h: 46 }))
   ]
   const cover = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }, pad: number): number =>
     Math.max(0, Math.min(a.x + a.w + pad, b.x + b.w) - Math.max(a.x - pad, b.x)) * Math.max(0, Math.min(a.y + a.h + pad, b.y + b.h) - Math.max(a.y - pad, b.y))
+  // A card that cannot clear the label band EXPANDED collapses to its rest
+  // height: the three plates' labels form one band across the stage and the
+  // fitted camera leaves ~130 units above it, less than an expanded card and
+  // its stem — so an expanded card could only ever sit ON a label (the critic,
+  // rounds 1–3). The rest card fits above the band; the detail is the inspector's.
+  const compact = new Set<string>()
   for (const n of [...calloutNodes].sort((a, b) => Number(expanded(b.id)) - Number(expanded(a.id)))) {
     const w = n.state === 'wants-you' ? 218 : 184
-    const h = calloutHeight(expanded(n.id))
+    const plateTopOf = projPlatforms.find((pp) => pp.p.id === n.object.platformId)?.hit.y
+    const fits = (hh: number): boolean => (plateTopOf !== undefined && plateTopOf - 40 - hh - 8 >= 8) || n.y + calloutBelow(n.size) + 22 + hh <= ORCH_GRAPH_SIZE.h - 8
+    if (expanded(n.id) && !fits(calloutHeight(true)) && fits(calloutHeight(false))) compact.add(n.id)
+    const h = calloutHeight(expanded(n.id) && !compact.has(n.id))
     const others = footprints.filter((f) => f.id !== n.id)
-    const rows = [n.y - n.size - h - 22, n.y + calloutBelow(n.size) + 22]
+    // A third row: ABOVE the island's label plate. The row just above the cube
+    // always crosses that label's band (the cubes stand near the plate's top),
+    // and sliding fully off the platform cost the placer more than covering
+    // the label did (the critic, twice) — the field above the platforms is empty.
+    const plateTop = projPlatforms.find((pp) => pp.p.id === n.object.platformId)?.hit.y
+    // And a row BESIDE the cube: at the fitted camera the stage leaves ~130 units
+    // above a platform and an expanded card is 172 plus its stem, so neither
+    // above nor below fits and the clamp fallback landed on the label (the
+    // critic, round 3). Beside, the x sweep finds the field past the platform.
+    const beside = Math.max(8, Math.min(ORCH_GRAPH_SIZE.h - h - 8, n.y - h / 2))
+    const rows = [n.y - n.size - h - 22, ...(plateTop === undefined ? [] : [plateTop - 40 - h - 8]), n.y + calloutBelow(n.size) + 22, beside]
       .filter((y) => y >= 8 && y + h <= ORCH_GRAPH_SIZE.h - 8)
     if (rows.length === 0) rows.push(Math.max(8, Math.min(ORCH_GRAPH_SIZE.h - h - 8, n.y - n.size - h - 22)))
     const sweep = []
@@ -810,7 +867,12 @@ function GraphBoard(props: {
     const placed = candidates[0]
     occupied.push(placed)
     if (placed.y > n.y) below.add(n.id)
-    offsets.set(n.id, placed.x + w / 2 - n.x)
+    // The placed ROW too: the card used to render at the cube's own row whatever
+    // the placer chose (it took an x offset and a side only), so the above-label
+    // row was picked and then drawn on the label. The lift is the difference
+    // from the default row on that side; the stem stretches to it.
+    const defaultY = placed.y > n.y ? n.y + calloutBelow(n.size) + 22 : n.y - n.size - h - 22
+    offsets.set(n.id, { x: placed.x + w / 2 - n.x, y: placed.y - defaultY })
   }
 
   const cubeSpecs: OrchCubeSpec[] = projected.map((n) => {
@@ -996,7 +1058,7 @@ function GraphBoard(props: {
         })}
         {projected.filter((n) => offsets.has(n.id)).map((n) => (
           <g key={`callout-${n.id}`} className="orch__callout-wrap" onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}>
-            <CubeCallout node={n} offsetX={offsets.get(n.id)!} below={below.has(n.id)} drift={n.drift} band={n.band} expanded={expanded(n.id)}
+            <CubeCallout node={n} offsetX={offsets.get(n.id)!.x} offsetY={offsets.get(n.id)!.y} below={below.has(n.id)} drift={n.drift} band={n.band} expanded={expanded(n.id) && !compact.has(n.id)}
               task={props.workItems.find((w) => w.panelId === n.id)?.title} onSelect={onSelect} onJump={onJump}
               onInterrupt={props.onInterrupt && props.canInterrupt(n.id) ? props.onInterrupt : undefined} />
           </g>

@@ -9,7 +9,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 137000 // measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s and 109.2 s at load 20–26 (three other sessions on the machine); 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
+const WATCHDOG_MS = 145000 // measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s, 109.2 s at load 20–26, then 102.8 s in the gate and 116.0 s with demo captures on at load 3; 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
@@ -900,13 +900,19 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const out = await wc.executeJavaScript(HIT_READ)
       const zoomOut = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => e.getAttribute('data-orch-platform-zoom'))`)
       await demo('m291-2-platforms-zoomed-out')
-      await wheel(-100, 12); await settle()
+      await wheel(-100, 10); await settle()
       const inn = await wc.executeJavaScript(HIT_READ)
       await demo('m291-3-platforms-zoomed-in')
-      await wheel(100, 6); await settle()
+      // Names arrive at the evidence zoom: Fit selected on the island (a double-click on its plate).
+      const islandPlate = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene [data-orch-platform-plate][data-orch-island-id]')?.getAttribute('data-orch-platform-plate') ?? null`)
+      await wc.executeJavaScript(`(() => { const h = document.querySelector('.orch__graph-scene [data-orch-platform="${islandPlate}"] [data-orch-platform-hit]'); h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await settle()
       const same = (r) => r.got.kind === r.want.kind && r.got.id === r.want.id
       const kinds = await wc.executeJavaScript(`(() => { const k = (id) => { const c = document.querySelector('.orch__graph-scene [data-node="' + id + '"]'); return c ? { object: c.getAttribute('data-orch-object'), plate: c.querySelector('.orch__cube-role')?.textContent ?? null } : null }; return { pA: k('pA'), pW: k('pW'), pF: k('pF'), pH: k('pH') } })()`)
       const cells = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => ({ id: e.getAttribute('data-orch-platform'), cell: e.getAttribute('data-orch-platform-cell') }))`)
+      // The home terminal stands on the workspace plate, which Fit selected left off stage; read it after Fit all.
+      await click('[data-orch-fit="all"]'); await settle()
+      kinds.pH = await wc.executeJavaScript(`(() => { const c = document.querySelector('.orch__graph-scene [data-node="pH"]'); return c ? { object: c.getAttribute('data-orch-object') } : null })()`)
       ok(IDS[0],
         rest.length >= 6 && rest.every(same) && out.length >= 3 && out.every(same) && inn.length >= 1 && inn.every(same) && rest.some((r) => r.want.kind === 'platform') && rest.some((r) => r.want.object === 'station') &&
           kinds.pA && kinds.pA.object === 'station' && kinds.pW && kinds.pW.object === 'checkpoint' && /^check · /.test(String(kinds.pW.plate)) && kinds.pF && kinds.pF.object === 'artifact' && kinds.pF.plate === 'file' &&
@@ -1044,6 +1050,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
             await settle()
             const expanded = await wc.executeJavaScript(`(() => { const h = document.querySelector('.orch__graph-scene [data-orch-platform="${plate}"]'); return h ? { expanded: h.hasAttribute('data-orch-platform-expanded'), stations: h.parentElement.querySelectorAll('[data-orch-object="station"]').length, more: h.querySelector('[data-orch-platform-more]') !== null } : null })()`)
             facts[facts.length - 1].expanded = expanded
+            await sleep(500) // a hidden window's capturePage can lag the DOM a step
             await demo('m292-fixture-100-focused')
           }
         }
@@ -1217,6 +1224,10 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await click('[data-orch-lens="scene"]')
+      // Names arrive at the evidence zoom: Fit selected on the island first.
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch__graph-scene[data-orch-webgl="unavailable"] [data-orch-platform-plate][data-orch-island-id]') !== null`), 8000)
+      await wc.executeJavaScript(`(() => { const p = document.querySelector('.orch__graph-scene [data-orch-platform-plate][data-orch-island-id]').getAttribute('data-orch-platform-plate'); const h = document.querySelector('.orch__graph-scene [data-orch-platform="' + p + '"] [data-orch-platform-hit]'); h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await settle()
       const denied = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); if (!s || s.getAttribute('data-orch-webgl') !== 'unavailable') return false; return { webgl: s.getAttribute('data-orch-webgl'), canvases: s.querySelectorAll('canvas').length, flatPlates: s.querySelectorAll('[data-orch-flat="platform"]').length, flatObjects: s.querySelectorAll('[data-orch-flat]:not([data-orch-flat="platform"])').length, plates: s.querySelectorAll('[data-orch-platform-plate]').length, words: [...s.querySelectorAll('.orch__cube-role')].map((e) => e.textContent), notice: document.querySelector('[data-orch-webgl-notice]')?.textContent ?? null } })()`), 8000)
       await click('.orch__graph-scene [data-node="qA"]')
       const deniedInspector = await waitUntil(() => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="qA"]'); return i ? { open: i.querySelector('[data-orch-open]')?.textContent ?? null, on: document.querySelector('.orch__graph-scene [data-node="qA"]')?.classList.contains('orch__cube--on') } : false })()`), 4000)
@@ -1240,7 +1251,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       wc.send('agent:state', { panelId: 'qB', state: 'idle' })
       await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       ok(IDS[2],
-        denied && denied.webgl === 'unavailable' && denied.canvases === 0 && denied.flatPlates >= 2 && denied.flatObjects >= 5 && denied.plates >= 2 && denied.words.some((w) => /^check · /.test(w)) && denied.words.includes('file') && typeof denied.notice === 'string' && /3D|WebGL/i.test(denied.notice) &&
+        denied && denied.webgl === 'unavailable' && denied.canvases === 0 && denied.flatPlates >= 1 && denied.flatObjects >= 4 && denied.plates >= 1 && denied.words.some((w) => /^check · /.test(w)) && denied.words.includes('file') && typeof denied.notice === 'string' && /3D|WebGL/i.test(denied.notice) &&
           deniedInspector && deniedInspector.open === 'Open on canvas' && deniedInspector.on === true && jumped === true &&
           reduced.matches === true && reduced.animated.length === 0 && reduced.webgl === 'ready' && reduced.beacon === true && reduced.fit && reduced.list && reducedInspector === 'Open on canvas',
         JSON.stringify({ denied, deniedInspector, jumped, reduced, reducedInspector }))

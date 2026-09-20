@@ -246,10 +246,13 @@ function placementOf(isl: TaskIsland): string {
 export function orchPlatformCountsLine(p: Pick<OrchPlatform, 'counts' | 'hidden'>): string {
   const parts: string[] = []
   const c = p.counts
+  // The words that matter most come FIRST, because the line is cut to its
+  // backing on a small plate (the critic found `needs you` past the ellipsis).
+  if (c.needsYou > 0) parts.push(`${c.needsYou} ${c.needsYou === 1 ? 'needs' : 'need'} you`)
+  if (c.live > 0) parts.push(`${c.live} working`)
   if (c.stations > 0) parts.push(`${c.stations} ${c.stations === 1 ? 'station' : 'stations'}`)
   if (c.checkpoints > 0) parts.push(`${c.checkpoints} ${c.checkpoints === 1 ? 'check' : 'checks'}`)
   if (c.artifacts > 0) parts.push(`${c.artifacts} ${c.artifacts === 1 ? 'file' : 'files'}`)
-  if (c.needsYou > 0) parts.push(`${c.needsYou} ${c.needsYou === 1 ? 'needs' : 'need'} you`)
   return parts.length === 0 ? 'nothing here yet' : parts.join(' · ')
 }
 
