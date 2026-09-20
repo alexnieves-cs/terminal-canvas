@@ -409,8 +409,11 @@ if (typeof CM.orchCubeMotion === 'function') {
 // real three.js rotation in the R3F island (OrchestrationCubes.tsx) when the
 // cube body became a mesh; the view still does the 2D projection either way.
 const cubesSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationCubes.tsx'), 'utf8')
-ok('orch.depth.4 every cube wears the one stage tilt, and the view projects through orchProjectNode',
-  /-ORCH_STAGE_TILT_DEG \* Math\.PI\) \/ 180/.test(cubesSrc) && /orchProjectNode\(/.test(viewSrc) && !/far \? -38/.test(viewSrc))
+// M291: the view projects the platform scene through orchProjectWorld (one
+// uniform camera — a per-row parallax would warp a plate's rectangle); the ring's
+// orchProjectNode stays for the model. Either spelling wears the one tilt.
+ok('orch.depth.4 every cube wears the one stage tilt, and the view projects through orchProjectNode or orchProjectWorld',
+  /-ORCH_STAGE_TILT_DEG \* Math\.PI\) \/ 180/.test(cubesSrc) && /orchProject(Node|World)\(/.test(viewSrc) && !/far \? -38/.test(viewSrc))
 
 // Helpful, not just pretty: the capped ring, the dimming lens, the stage wash.
 const many = build({
@@ -530,6 +533,25 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
       /lazy\(async \(\) => \(\{ default: \(await import\('\.\/OrchestrationCubes'\)\)\.OrchestrationCubes \}\)\)/.test(viewSrc)
   })(),
   'the cube island must stay behind lazy()')
+
+// M292. three's importer set, pinned the way postprocessing's is. `three` and
+// `@react-three/fiber` belong to exactly two modules, both behind the lazy()
+// island; a third importer anywhere Canvas.tsx reaches puts the +2.2MB chunk
+// into startup with no error and every suite green. The check reads the source
+// AND the built chunks: the first chunk must not carry three's renderer.
+ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx and orchestration-bloom.tsx, and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
+  (() => {
+    const { execFileSync } = require('node:child_process')
+    const hits = execFileSync('grep', ['-rlE', "from '(three|@react-three/fiber)'", join(root, 'src')], { encoding: 'utf8' })
+      .trim().split('\n').filter(Boolean).map((x) => x.replace(join(root, 'src/'), '')).sort()
+    const allowed = ['renderer/orchestration/OrchestrationCubes.tsx', 'renderer/orchestration/orchestration-bloom.tsx']
+    if (hits.join() !== allowed.join()) return false
+    const assets = join(root, 'out/renderer/assets')
+    if (!existsSync(assets)) return true // no build yet: the source half stands alone (verify-all builds before the Electron tier, not before this suite)
+    const first = readdirSync(assets).filter((f) => /^index-.*\.js$/.test(f))
+    return first.length > 0 && first.every((f) => !readFileSync(join(assets, f), 'utf8').includes('WebGLRenderer'))
+  })(),
+  'three belongs behind the lazily-loaded island and its bloom door')
 
 // M284 — Orchestrate Phase A's task island, inspector verb and decision queue
 // (orchestration-island.ts), pure: the island is derived from a persisted work item
@@ -790,6 +812,66 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       /r\.kind === 'shared'\) return \{ kind: 'blocked'/.test(bench) && /r\.identity === undefined\) return \{ kind: 'blocked'/.test(bench) &&
       /onRetryOnCanvas\(selectedRow\.id, text\)/.test(view) && !/agentSession\.send/.test(view + bench + write),
     '')
+}
+
+// ---------------------------------------------------------------------------
+// M291 — the platform scene (orchestration-platforms.ts), pure. Stable cells,
+// urgent seating, three kinds by shape, hit order where plates overlap.
+// ---------------------------------------------------------------------------
+{
+  const P = load('src/renderer/orchestration/orchestration-platforms.ts', 'orchestration-platforms.cjs')
+  const D = load('src/renderer/orchestration/orchestration-depth.ts', 'orchestration-depth-m291.cjs')
+  const isl = (id, path, members, extra = {}) => ({ id, itemId: id, source: 'work-item', goal: `goal ${id}`, state: 'working', repository: 'repo', placement: { kind: 'worktree', branch: `b-${id}`, path }, memberIds: members, subjectId: members[0] ?? null, writers: 1, sharedWith: [], group: '/r', ...extra })
+  const row = (id, kind, state) => ({ id, title: id, kind, state, tone: 'idle', agentic: kind === 'chat' })
+  const homes = { c1: '/r/a', c2: '/r/a', c3: '/r/b', w1: '/r/a', w9: '/elsewhere', t9: undefined, f1: '/r/a' }
+  const base = { order: ['A', 'B'], roster: [row('c1', 'chat', 'busy'), row('c2', 'chat', 'idle'), row('c3', 'chat', 'wants-you'), row('w1', 'watcher', 'passed'), row('w9', 'watcher', 'watching'), row('t9', 'terminal', 'idle')], files: [{ id: 'f1', title: 'a.txt', path: '/r/a/a.txt' }], homeOf: (id) => homes[id], focusedId: null }
+  const two = P.orchPlatforms({ ...base, islands: [isl('A', '/r/a', ['c1']), isl('B', '/r/b', ['c3'])] })
+  const a = two.find((p) => p.id === 'A'), b = two.find((p) => p.id === 'B'), ws = two.find((p) => p.id === P.ORCH_WORKSPACE_PLATFORM)
+  ok('orch-3d.1 every object stands on ONE platform: a member on its island, a stray session or file on the island whose directory owns it, and what no island owns on the workspace plate — which is synthetic and says grouping, never a supervisor',
+    two.length === 3 && two[0].id === P.ORCH_WORKSPACE_PLATFORM && a && b && ws && ws.synthetic === true && /not a supervisor/.test(ws.sub) &&
+      a.stations.map((s) => s.id).join() === 'c1,c2' && a.checkpoints.map((s) => s.id).join() === 'w1' && a.artifacts.map((s) => s.id).join() === 'f1' &&
+      b.stations.map((s) => s.id).join() === 'c3' && ws.stations.map((s) => s.id).join() === 't9' && ws.checkpoints.map((s) => s.id).join() === 'w9' &&
+      a.stations.every((s) => s.kind === 'station') && a.checkpoints.every((s) => s.kind === 'checkpoint' && s.layer === 0) && a.artifacts.every((s) => s.kind === 'artifact' && s.path === '/r/a/a.txt'),
+    JSON.stringify(two.map((p) => ({ id: p.id, s: p.stations.map((x) => x.id), c: p.checkpoints.map((x) => x.id), f: p.artifacts.map((x) => x.id) }))))
+  // Stable placement: a third island appends; A and B do not move; a station arriving on A moves nothing.
+  const three = P.orchPlatforms({ ...base, order: ['A', 'B', 'C'], islands: [isl('A', '/r/a', ['c1']), isl('B', '/r/b', ['c3']), isl('C', '/r/c', [])] })
+  const moreOnA = P.orchPlatforms({ ...base, roster: [...base.roster, row('c4', 'chat', 'busy')], homeOf: (id) => (id === 'c4' ? '/r/a' : homes[id]), islands: [isl('A', '/r/a', ['c1']), isl('B', '/r/b', ['c3'])] })
+  const at = (list, id) => { const p = list.find((x) => x.id === id); return p && `${p.x},${p.y},${p.w},${p.h}` }
+  ok('orch-3d.2 placement is stable under live updates: the workspace plate holds cell 0 for good, a new island takes the next cell and moves no existing platform; a station arriving on an island changes neither that platform\'s footprint nor its neighbours\'; cells are a function of the index alone',
+    at(three, 'A') === at(two, 'A') && at(three, 'B') === at(two, 'B') && at(three, P.ORCH_WORKSPACE_PLATFORM) === at(two, P.ORCH_WORKSPACE_PLATFORM) && three.find((p) => p.id === 'C').cell.row === 1 && three.find((p) => p.id === 'C').cell.col === 0 &&
+      at(moreOnA, 'A') === at(two, 'A') && at(moreOnA, 'B') === at(two, 'B') &&
+      JSON.stringify(P.orchCellCentre(3)) === JSON.stringify({ col: 0, row: 1, x: P.ORCH_CELL.x0 + P.ORCH_CELL.w / 2, y: P.ORCH_CELL.y0 + P.ORCH_CELL.h + P.ORCH_CELL.h / 2 }),
+    JSON.stringify({ two: two.map((p) => at(two, p.id)), three: three.map((p) => at(three, p.id)) }))
+  // The cap: 12 stations, two of them waiting and one past the cap in canvas order.
+  const many = Array.from({ length: 12 }, (_, i) => row(`s${i}`, 'chat', i === 10 || i === 11 ? 'wants-you' : i < 3 ? 'busy' : 'idle'))
+  const capped = P.orchPlatforms({ ...base, order: ['A'], roster: many, files: [], homeOf: () => '/r/a', islands: [isl('A', '/r/a', many.map((r) => r.id))] }).find((p) => p.id === 'A')
+  const focused = P.orchPlatforms({ ...base, order: ['A'], roster: many, files: [], homeOf: () => '/r/a', focusedId: 'A', islands: [isl('A', '/r/a', many.map((r) => r.id))] }).find((p) => p.id === 'A')
+  ok('orch-3d.3 past the cap a platform seats every WAITING station whatever its index, then the live ones, then the rest, and counts the remainder honestly (+N more · none need you); the focused platform expands to seat them all and its footprint grows',
+    capped.stations.length === P.ORCH_STATION_CAP + 2 && capped.stations.some((s) => s.id === 's10') && capped.stations.some((s) => s.id === 's11') && capped.stations.some((s) => s.id === 's0') &&
+      capped.hidden.ids.length === 2 && capped.hidden.needsYou === 0 && P.orchHiddenLine(capped) === '+2 more · none need you' && /2 need you/.test(P.orchPlatformCountsLine(capped)) &&
+      focused.stations.length === 12 && focused.hidden.ids.length === 0 && focused.expanded === true && focused.w > capped.w,
+    JSON.stringify({ seated: capped.stations.map((s) => s.id), hidden: capped.hidden, counts: P.orchPlatformCountsLine(capped), fw: focused.w, cw: capped.w }))
+  // Hit order: an expanded plate paints after its neighbour AND its neighbour's stations; a station wins over its own plate.
+  const order = P.orchHitOrder([
+    { kind: 'platform', id: 'A', depth: -0.5, expanded: true }, { kind: 'platform', id: 'B', depth: -0.5 },
+    { kind: 'station', id: 'sB', depth: -0.45, platformId: 'B' }, { kind: 'station', id: 'sA', depth: -0.45, platformId: 'A' }
+  ]).map((t) => t.id)
+  const hit = P.orchHitAt({ x: 50, y: 50 }, [{ id: 'B', kind: 'platform', x: 0, y: 0, w: 100, h: 100 }, { id: 'sB', kind: 'station', x: 40, y: 40, w: 20, h: 20 }, { id: 'A', kind: 'platform', x: 30, y: 30, w: 100, h: 100 }])
+  const own = P.orchHitAt({ x: 50, y: 50 }, [{ id: 'B', kind: 'platform', x: 0, y: 0, w: 100, h: 100 }, { id: 'sB', kind: 'station', x: 40, y: 40, w: 20, h: 20 }])
+  ok('orch-3d.4 hit order is paint order: a station over its own plate wins the click, and an expanded plate covering a neighbour wins over that neighbour\'s stations — the same rule the overlay\'s DOM order applies',
+    order.join() === 'B,sB,A,sA' && hit && hit.id === 'A' && own && own.id === 'sB', JSON.stringify({ order, hit, own }))
+  const cam = { x: 0, y: 0, k: 1 }
+  const st = { w: 860, h: 420 }
+  const top = D.orchProjectWorld({ x: 100, y: 0 }, st, cam), bottom = D.orchProjectWorld({ x: 100, y: 420 }, st, cam)
+  const fit = D.orchFitCamera(P.orchPlatformBounds(three), st, 24)
+  const centre = D.orchProjectWorld({ x: P.orchPlatformBounds(three).x + P.orchPlatformBounds(three).w / 2, y: P.orchPlatformBounds(three).y + P.orchPlatformBounds(three).h / 2 }, st, fit)
+  ok('orch-3d.5 the platform projection is one uniform camera with the stage tilt (y foreshortened by cos tilt, x not), and orchFitCamera puts the bounds\' centre at the stage\'s centre within the zoom range',
+    Math.abs((bottom.y - top.y) - 420 * D.ORCH_COS_TILT) < 1e-9 && top.x === bottom.x && Math.abs(centre.x - 430) < 1e-6 && Math.abs(centre.y - 210) < 1e-6 && fit.k >= D.ORCH_ZOOM_RANGE.min && fit.k <= D.ORCH_ZOOM_RANGE.max,
+    JSON.stringify({ top, bottom, fit, centre }))
+  const cubes = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationCubes.tsx'), 'utf8')
+  const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  ok('orch-3d.6 the three kinds are three SHAPES in the island (cube, hexagonal puck, tablet) and three WORDS on the plate (state, `check · <result>`, `file`), so a test result never reads as another reasoning agent and no state is colour alone; the platform layers are said to be decorative before hit accuracy',
+    /CylinderGeometry\([^)]*6\)/.test(cubes) && /shape === 'tablet'/.test(cubes) && /`check · \$\{stateWord\(node\)\}`/.test(view) && /sub: 'file'/.test(view) && /expendable before hit accuracy/.test(cubes) && /data-orch-object=\{objectKind\}/.test(view))
 }
 
 const failed = results.filter((x) => !x.pass)

@@ -6,7 +6,7 @@
  */
 import { MachineSparkline as Sparkline } from '@renderer/shell/MachineChart'
 import { MotionSurface } from '@renderer/primitives/MotionSurface'
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
+import { Component, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import {
   isChatPanel, isFilePanel, isTerminalPanel, isWatcherPanel, isWorkflowPanel, isWorkPanel
@@ -45,7 +45,6 @@ import {
   orchKeysShouldHandle,
   orchLensLit,
   orchStageShifts,
-  ORCH_OVERFLOW_ID,
   ORCH_STAGE_WASH_MS,
   orchMachineReadout,
   orchMetricLens,
@@ -76,8 +75,12 @@ import {
   orchActivityEvents,
   subscribeOrchActivity
 } from './orchestration-activity'
-import { ORCH_COS_TILT, ORCH_GROUND_K, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
-import type { OrchCubeSpec } from './OrchestrationCubes'
+import { ORCH_COS_TILT, ORCH_STAGE_TILT_DEG, ORCH_ZOOM_RANGE, orchDepthBand, orchFitCamera, orchProjectWorld, type OrchCamera, type OrchDepthBand } from './orchestration-depth'
+import type { OrchCubeSpec, OrchPlatformSpec } from './OrchestrationCubes'
+import {
+  ORCH_PLATFORM, ORCH_WORKSPACE_PLATFORM, orchHiddenLine, orchHitOrder, orchLabelBudget, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSortRows, orchSpatialStep, orchZoomLevel,
+  type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
+} from './orchestration-platforms'
 import { getOrchPrefs, persistedOrchPrefs, seedOrchPrefs, setOrchPrefs, type OrchLens, type OrchSideTab } from './orchestration-prefs'
 import { OrchWorkbench, type BenchSubject } from './OrchWorkbench'
 import { sameOrchestrate, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
@@ -284,7 +287,7 @@ const PLATE_MAX_CHARS = 20
  * character count (the name is mono, so the estimate is close) — measuring
  * text would be a layout read per node per camera frame.
  */
-function NodePlate({ node, synthetic, overflow, x, y }: { node: OrchGraphNode; synthetic: boolean; overflow: boolean; x: number; y: number }): JSX.Element {
+function NodePlate({ node, synthetic, overflow, x, y, sub: subOverride }: { node: OrchGraphNode; synthetic: boolean; overflow: boolean; x: number; y: number; sub?: string }): JSX.Element {
   const name = node.title.length > PLATE_MAX_CHARS ? `${node.title.slice(0, PLATE_MAX_CHARS - 1).trimEnd()}…` : node.title
   const role = node.hub ? (synthetic ? 'Workspace hub' : 'Orchestrator') : overflow ? 'Other' : node.kind
   // A placeholder has no process, so it has no state to say: the role stands alone.
@@ -294,7 +297,9 @@ function NodePlate({ node, synthetic, overflow, x, y }: { node: OrchGraphNode; s
   // the same word twice. The hub and the `+N more` node keep their role, because
   // theirs is not a kind: "Workspace hub", "Orchestrator" and "Other" name a
   // position in the ring that no card repeats and `node.kind` cannot express.
-  const sub = synthetic ? role : node.hub || overflow ? `${stateWord(node)} · ${role}` : stateWord(node)
+  // M291. A checkpoint's plate says `check · <result>` and an artifact's says
+  // `file`: the kind is in the word as well as in the shape.
+  const sub = subOverride ?? (synthetic ? role : node.hub || overflow ? `${stateWord(node)} · ${role}` : stateWord(node))
   const w = Math.max(92, Math.min(176, Math.max(name.length * 6.7, sub.length * 5.6) + 40))
   return (
     <g className="orch__plate" transform={`translate(${x - w / 2}, ${y})`} aria-hidden="true">
@@ -328,11 +333,16 @@ function IsoCube(props: {
   attention: boolean
   /** The board stage this cube's task just entered, while the wash is live. */
   wash?: OrchWash
+  /** M291. Station, checkpoint or artifact — the word on the plate and the DOM hook; absent for the legacy ring. */
+  objectKind?: OrchObjectKind
+  /** M292. Whether this object is inside the label budget; without it the plate is not drawn (the title stays on hover and in the List). */
+  labelled?: boolean
   onSelect: (id: string) => void
   onJump: (id: string) => void
   onOverflow: () => void
 }): JSX.Element {
   const { node, selected, attention, onSelect, onJump, onOverflow } = props
+  const objectKind = props.objectKind
   const overflow = node.overflow !== undefined
   // The overflow node is not a panel: nothing to select or jump to, its verb is the roster.
   const synthetic = node.synthetic === true || node.id === '__hub__' || overflow
@@ -350,6 +360,7 @@ function IsoCube(props: {
       // a lit ring), and every other DOM hook on this element — data-lit,
       // data-depth, data-expanded — is already spelled this way.
       data-node={node.id}
+      data-orch-object={objectKind}
       // The cube's ROLE. The harness seeds by kind so a lit ring contains more
       // than one role — a scene in which every working cube is a terminal cannot
       // show that brightness preserves hue, whatever the shader does.
@@ -376,7 +387,8 @@ function IsoCube(props: {
       {/* Needs-you beacon: a small amber point above the cube. It stops the moment the
           cube is selected — the person has looked, so the graph stops calling. */}
       {attention ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
-      <NodePlate node={node} synthetic={synthetic} overflow={overflow} x={props.labelOffset.x} y={node.size * PLATE_DROP_K + props.labelOffset.y} />
+      {(props.labelled ?? true) && <NodePlate node={node} synthetic={synthetic} overflow={overflow} x={props.labelOffset.x} y={node.size * PLATE_DROP_K + props.labelOffset.y}
+        {...(objectKind === 'checkpoint' ? { sub: `check · ${stateWord(node)}` } : objectKind === 'artifact' ? { sub: 'file' } : {})} />}
     </g>
   )
 }
@@ -571,8 +583,89 @@ function EdgePackets({ edges, points, fires }: {
   )
 }
 
+/**
+ * M291. The platform label plate: the island's goal, its placement line and
+ * its counts, top-left of the plate, screen-aligned (plain SVG text, never
+ * rotated with the stage). It is the island CARD Phase C floated over the ring,
+ * moved onto the platform it names; a click focuses the island, a double-click
+ * fits the camera to it. The `data-orch-island-id` hook is the same one the
+ * List's column carries, so a check may address the island either way.
+ */
+function PlatformPlate({ p, x, y, w, level, focused, selected, onFocus, onFit }: {
+  p: OrchPlatform; x: number; y: number; w: number; level: OrchZoomLevel; focused: boolean; selected: boolean
+  onFocus: (id: string) => void; onFit: (id: string) => void
+}): JSX.Element {
+  const waiting = p.counts.needsYou > 0
+  const ambiguous = p.island !== undefined && p.island.placement.kind === 'shared' && (p.island.writers > 1 || p.island.sharedWith.length > 0)
+  const label = p.label.length > 30 ? `${p.label.slice(0, 29).trimEnd()}…` : p.label
+  const counts = orchPlatformCountsLine(p)
+  const hidden = orchHiddenLine(p)
+  // Three lines, the plan's label: the goal; the repository and where its files
+  // live (branch · own worktree, or a shared directory, said); then the state
+  // WORD with the counts — so the plate says what the platform's colour and
+  // glow only echo. The place line is the same text the List's column carries.
+  const stateLine = p.synthetic ? 'grouping only' : `${p.island?.source === 'work-item' ? 'Task' : 'Session · no task yet'} · ${p.state}${waiting ? ' · needs you' : ''}`
+  const thirdLine = `${stateLine} · ${counts}`
+  const placeLine = p.sub
+  const plateW = Math.max(150, Math.min(Math.max(w - 8, 150), Math.max(label.length * 6.6, placeLine.length * 5.4, thirdLine.length * 5.4) + 24))
+  return (
+    <g className={`orch__pplate${focused ? ' orch__pplate--on' : ''}`} transform={`translate(${x}, ${y})`}
+      data-orch-platform-plate={p.id} data-orch-island-id={p.island?.id} data-orch-island={p.island?.itemId ?? p.island?.subjectId ?? undefined}
+      data-orch-island-source={p.island?.source} data-orch-island-ambiguous={ambiguous || undefined} data-orch-zoom={level}
+      tabIndex={0} role="button" aria-pressed={selected} aria-label={`${p.label} — ${placeLine}; ${thirdLine}`}
+      onClick={(e) => { e.stopPropagation(); onFocus(p.id) }} onDoubleClick={(e) => { e.stopPropagation(); onFit(p.id) }}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); onFocus(p.id) } }}>
+      <title>{`${p.label} — ${placeLine}. ${thirdLine}. Click to select the island; double-click to fit the camera to it.`}</title>
+      <rect className="orch__pplate-bg" width={plateW} height={44} rx={6} />
+      {waiting && <circle className="orch__cube-beacon orch__pplate-beacon" cx={plateW - 10} cy={10} r={3} aria-hidden="true" />}
+      <text x={8} y={13} className="orch__pplate-title" data-orch-island-goal>{label}</text>
+      <text x={8} y={25} className="orch__pplate-sub orch__pplate-place" data-orch-island-place={p.island === undefined ? undefined : ''}>{placeLine}</text>
+      <text x={8} y={37} className="orch__pplate-sub" data-orch-platform-state={p.state} data-orch-platform-counts>{thirdLine}</text>
+      {p.synthetic && <text x={8} y={25} className="orch__pplate-sub" data-orch-grouping style={{ display: 'none' }}>{ORCH_DEP_GROUPING}</text>}
+      {hidden !== null && (
+        <g className="orch__pplate-more" transform={`translate(${plateW + 6}, 0)`} data-orch-platform-more={p.hidden.ids.length} role="button" tabIndex={0}
+          aria-label={`${hidden} — focus the island to see them all`} onClick={(e) => { e.stopPropagation(); onFit(p.id) }}
+          onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); onFit(p.id) } }}>
+          <title>{`${hidden}. Focus the island to see every station.`}</title>
+          <rect className="orch__pplate-bg" width={hidden.length * 5.6 + 16} height={18} rx={9} />
+          <text x={8} y={12.5} className="orch__pplate-sub">{hidden}</text>
+        </g>
+      )}
+    </g>
+  )
+}
+
+/**
+ * M292. The minimap: every platform as a rectangle in model space, the camera's
+ * viewport over them; a click moves the camera there. Screen-aligned HTML/SVG in
+ * the scene's corner, outside the projection.
+ */
+function Minimap({ platforms, cam, stage, onCentre }: { platforms: readonly OrchPlatform[]; cam: OrchCamera; stage: { w: number; h: number }; onCentre: (pt: { x: number; y: number }) => void }): JSX.Element {
+  const bounds = orchPlatformBounds(platforms)
+  const W = 132
+  const H = 72
+  const s = Math.min(W / Math.max(1, bounds.w + 40), H / Math.max(1, bounds.h + 40))
+  const ox = (W - bounds.w * s) / 2 - bounds.x * s
+  const oy = (H - bounds.h * s) / 2 - bounds.y * s
+  // The viewport in model space: invert orchProjectWorld at the stage's corners.
+  const inv = (sx: number, sy: number): { x: number; y: number } => ({
+    x: (sx - stage.w / 2 - cam.x) / cam.k + stage.w / 2,
+    y: ((sy - stage.h / 2 - cam.y) / cam.k) / ORCH_COS_TILT + stage.h / 2
+  })
+  const tl = inv(0, 0)
+  const br = inv(stage.w, stage.h)
+  return (
+    <svg className="orch__minimap" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Minimap of every platform and the camera" data-orch-minimap
+      onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); onCentre({ x: ((e.clientX - r.left) - ox) / s, y: ((e.clientY - r.top) - oy) / s }) }}>
+      {platforms.map((p) => <rect key={p.id} className={`orch__minimap-plate${p.synthetic ? ' orch__minimap-plate--group' : ''}`} data-orch-minimap-plate={p.id} data-lit={p.counts.live > 0 || undefined} data-needs={p.counts.needsYou > 0 || undefined}
+        x={ox + (p.x - p.w / 2) * s} y={oy + (p.y - p.h / 2) * s} width={Math.max(3, p.w * s)} height={Math.max(2, p.h * s)} rx={1} />)}
+      <rect className="orch__minimap-view" x={ox + tl.x * s} y={oy + tl.y * s} width={Math.max(4, (br.x - tl.x) * s)} height={Math.max(3, (br.y - tl.y) * s)} rx={1} />
+    </svg>
+  )
+}
+
 function GraphBoard(props: {
-  nodes: readonly OrchGraphNode[]
+  platforms: readonly OrchPlatform[]
   edges: readonly { from: string; to: string; authored?: boolean; trigger?: string }[]
   fires: ReadonlyMap<string, OrchEdgeFire>
   selectedId: string | null
@@ -580,109 +673,137 @@ function GraphBoard(props: {
   panels: readonly Panel[]
   workItems: readonly PersistedWorkItem[]
   memberIds: readonly string[] | null
-  /** Cubes a metric / roster lens leaves lit; everything else dims in place. `null` = no lens. */
+  /** Objects a metric / roster lens leaves lit; everything else dims in place. `null` = no lens. */
   litIds: ReadonlySet<string> | null
   wash: OrchWash | null
   onInterrupt?: (id: string) => void
   /** M290. Whether this panel's runtime has an interrupt door right now (the view's capability read). */
   canInterrupt: (id: string) => boolean
-  /** M289. The dependency lens is on: trigger words on the authored edges, spokes marked as grouping. */
+  /** M289. The dependency lens is on: trigger words on the authored edges, membership spokes drawn and marked as grouping. */
   depFocus: boolean
   firingKeys: ReadonlySet<string>
+  /** M291. The focused island's platform (expands past the cap; the breadcrumb's middle). */
+  focusedPlatformId: string | null
+  onFocusPlatform: (id: string | null) => void
+  /** M292. Quality tier from the view's frame-time read. */
+  quality: 'full' | 'lean' | 'flat'
+  /** M293. WebGL could not be had: paint flat SVG bodies instead of mounting the island. */
+  webgl: 'ready' | 'unavailable'
+  onWebglLost: () => void
   onCamera: (camera: { x: number; y: number; k: number }) => void
   onSelect: (id: string) => void
   onJump: (id: string) => void
-  onOverflow: () => void
   describedBy?: string
 }): JSX.Element {
-  const { nodes, edges, selectedId, selectedIds, firingKeys, litIds, wash, onSelect, onJump, onOverflow } = props
+  const { platforms, edges, selectedId, selectedIds, firingKeys, litIds, wash, onSelect, onJump, focusedPlatformId, onFocusPlatform } = props
   const lensedOut = (id: string): boolean => litIds !== null && !litIds.has(id)
   const hasSelection = selectedId !== null || selectedIds.length > 0
-  const isSelected = (n: OrchGraphNode): boolean => selectedId === n.id || selectedIds.includes(n.id)
+  const isSelected = (id: string): boolean => selectedId === id || selectedIds.includes(id)
   const attentionOf = useAttentionAck()
   const [hovered, setHovered] = useState<string | null>(null)
   // M283. The camera starts where the user left it, not at the origin (orchestration-prefs.ts).
   const [cam, setCam] = useState(() => getOrchPrefs().camera)
   useEffect(() => { setOrchPrefs({ camera: cam }); props.onCamera(cam) }, [cam, props.onCamera])
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
-  // Project endpoints and cubes together so depth never detaches a connection.
-  // The stage centres on the hub's model position and reads the ring radius off
-  // the satellites, so the tilt foreshortens around whatever the model laid out.
-  const hubNode = nodes.find((n) => n.hub)
-  const stage: OrchStage = {
-    w: ORCH_GRAPH_SIZE.w, h: ORCH_GRAPH_SIZE.h,
-    cx: hubNode?.x ?? ORCH_GRAPH_SIZE.w / 2, cy: hubNode?.y ?? ORCH_GRAPH_SIZE.h / 2,
-    ringR: nodes.reduce((r, n) => n.hub || !hubNode ? r : Math.max(r, Math.hypot(n.x - hubNode.x, n.y - hubNode.y)), 0) || 250
+  const stage = ORCH_GRAPH_SIZE
+  // M292. Camera Back: every DELIBERATE move (Fit all, Fit selected, a minimap
+  // click, a focus) pushes the camera it left; a pan or a wheel does not, or
+  // Back would step through every pixel of a drag.
+  const history = useRef<OrchCamera[]>([])
+  const [historyDepth, setHistoryDepth] = useState(0)
+  const moveCamera = (next: OrchCamera): void => {
+    history.current = [...history.current.slice(-19), cam]
+    setHistoryDepth(history.current.length)
+    setCam(next)
   }
-  const projected = nodes.map((node) => {
-    const p = orchProjectNode(node, stage, cam)
-    return { ...node, x: p.x, y: p.y, size: node.size * p.scale, depth: p.depth, band: p.band, drift: p.calloutDrift }
+  const fitAll = (): void => moveCamera(orchFitCamera(orchPlatformBounds(platforms), stage, 24))
+  const fitPlatform = (id: string): void => {
+    const p = platforms.find((x) => x.id === id)
+    if (p === undefined) return
+    moveCamera(orchFitCamera(orchPlatformBounds([p]), stage, 28))
+  }
+  const back = (): void => {
+    const prev = history.current[history.current.length - 1]
+    if (prev === undefined) return
+    history.current = history.current.slice(0, -1)
+    setHistoryDepth(history.current.length)
+    setCam(prev)
+  }
+  // The camera flies on TWO occasions only: the first paint of a scene with more
+  // than one platform (the fleet must be in frame), and a change in how many
+  // platforms there are (a new island landed off-screen). Never on an event.
+  const countRef = useRef<number | null>(null)
+  useEffect(() => {
+    const n = platforms.length
+    if (countRef.current === n) return
+    const first = countRef.current === null
+    countRef.current = n
+    if (first && (n <= 1 || cam.x !== 0 || cam.y !== 0 || cam.k !== 1)) return
+    // Even then, only when something is now OFF the stage: a new island that
+    // landed in view moves nothing, so the ones a person is looking at stay put.
+    const b = orchPlatformBounds(platforms)
+    const tl = orchProjectWorld({ x: b.x, y: b.y }, stage, cam)
+    const br = orchProjectWorld({ x: b.x + b.w, y: b.y + b.h }, stage, cam)
+    if (!first && tl.x >= 0 && tl.y >= 0 && br.x <= stage.w && br.y <= stage.h) return
+    setCam(orchFitCamera(b, stage, 24))
+  }, [platforms.length])
+
+  // ---- Projection: platforms, then every object on them, through one camera.
+  const focusedIsOn = (id: string): boolean => focusedPlatformId === id
+  const projPlatforms = platforms.map((p) => {
+    const c = orchProjectWorld({ x: p.x, y: p.y }, stage, cam)
+    const w = p.w * cam.k
+    const h = p.h * cam.k
+    const hScreen = h * ORCH_COS_TILT + ORCH_PLATFORM.thickness * cam.k * Math.sin((ORCH_STAGE_TILT_DEG * Math.PI) / 180)
+    const level = orchZoomLevel(w, focusedIsOn(p.id) || p.expanded)
+    return { p, x: c.x, y: c.y, w, h, hScreen, depth: c.depth, level, hit: { x: c.x - w / 2, y: c.y - (h * ORCH_COS_TILT) / 2, w, h: hScreen } }
   })
-  const ground = orchGroundPlane(stage, cam, (hubNode?.size ?? 56) * 0.55)
+  const levelOf = new Map(projPlatforms.map((pp) => [pp.p.id, pp.level]))
+  const objects = orchSceneObjects(platforms)
+  const projected = objects
+    .filter((o) => orchObjectVisible(o, levelOf.get(o.platformId) ?? 'evidence'))
+    .map((o) => {
+      const c = orchProjectWorld({ x: o.x, y: o.y }, stage, cam)
+      const size = o.size * cam.k
+      // A node-shaped record so the callout placer and IsoCube read it unchanged.
+      const node: OrchGraphNode = { id: o.id, title: o.title, kind: o.panelKind === 'file' ? 'file' : o.panelKind, hub: false, x: c.x, y: c.y, state: o.state, size }
+      return { ...node, object: o, depth: c.depth + o.layer * 0.02, band: orchDepthBand(Math.max(-1, Math.min(1, c.depth))), drift: { x: 0, y: 0 } }
+    })
+  const labelled = orchLabelBudget(projected, { selected: new Set(selectedIds.concat(selectedId === null ? [] : [selectedId])), hovered })
+  const points = new Map(projected.map((n) => [n.id, { x: n.x, y: n.y }]))
 
   const expanded = (id: string): boolean => selectedIds.includes(id) || selectedId === id || hovered === id
-  const calloutNodes = projected.filter((n) => !n.synthetic && n.id !== '__hub__' && n.overflow === undefined
+  const calloutNodes = projected.filter((n) => n.object.kind === 'station'
     && (props.memberIds === null || props.memberIds.includes(n.id))
     // A lensed-out cube keeps its place but not its card: the lit set's callouts are the answer.
     && !lensedOut(n.id)
     && (isLiveRosterState(n.state) || expanded(n.id)))
   const offsets = new Map<string, number>()
-  // Cards that hang BELOW their cube: a back-of-ring cube has no room above it,
-  // and x was the only axis clamped — its expanded card drew past the stage top.
+  // Cards that hang BELOW their cube: a back-row cube has no room above it.
   const below = new Set<string>()
   const occupied: { x: number; y: number; w: number; h: number }[] = []
-  // Every node is an obstacle, not only the other cards: a back-of-ring cube's
-  // card hangs BELOW it, straight down the spoke onto the hub, and with only the
-  // hub reserved it slid sideways onto a neighbour's cube and name plate instead.
-  // Each footprint (cube and plate) costs its overlap. A dense ring has NO free
-  // spot for a 184×154 card — four captures of weight-tuning only moved which
-  // node it hid — so the weights say what is least harmful to hide: a REAL hub
-  // costs double (every connection leads to it), a neighbour costs its area, and
-  // the `No supervisor yet` placeholder costs almost nothing, because it says
-  // nothing. With no supervisor the card hangs over the empty centre, as before;
-  // with one, it slides beside it.
-  const footprints = projected.map((o) => ({ id: o.id, weight: o.hub ? (o.synthetic === true || o.id === '__hub__' ? 0.25 : 2) : 1, x: o.x - o.size * 1.4, y: o.y - o.size, w: o.size * 2.8, h: o.size + calloutBelow(o.size) }))
+  // Every object AND every plate is an obstacle; a card over a platform's label
+  // hides the island's name, which is the one thing the plate is for.
+  const footprints = [
+    ...projected.map((o) => ({ id: o.id, weight: 1, x: o.x - o.size * 1.4, y: o.y - o.size, w: o.size * 2.8, h: o.size + calloutBelow(o.size) })),
+    ...projPlatforms.map((pp) => ({ id: `plate:${pp.p.id}`, weight: 1.5, x: pp.hit.x + 6, y: pp.hit.y - 40, w: 200, h: 46 }))
+  ]
   const cover = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }, pad: number): number =>
     Math.max(0, Math.min(a.x + a.w + pad, b.x + b.w) - Math.max(a.x - pad, b.x)) * Math.max(0, Math.min(a.y + a.h + pad, b.y + b.h) - Math.max(a.y - pad, b.y))
   for (const n of [...calloutNodes].sort((a, b) => Number(expanded(b.id)) - Number(expanded(a.id)))) {
     const w = n.state === 'wants-you' ? 218 : 184
     const h = calloutHeight(expanded(n.id))
     const others = footprints.filter((f) => f.id !== n.id)
-    // ABOVE and BELOW are both CANDIDATES, not a decision taken before the search.
-    // This was a one-dimensional search on a two-dimensional board: y was fixed
-    // first (above, or below only when above did not fit on the stage) and only x
-    // was ever swept. On a twelve-node ring that is the whole reason the weights
-    // above had to choose what was "least harmful to hide" — the placer was
-    // picking the best seat in one row while the free seat sat in the other. Below
-    // clears the cube's name plate, mirroring the 22px stem above; a row that runs
-    // off the stage is dropped rather than clamped, because a clamped row silently
-    // re-enters the search as a DIFFERENT box from the one its cost was computed
-    // for. If neither row fits, the old clamp is the fallback.
     const rows = [n.y - n.size - h - 22, n.y + calloutBelow(n.size) + 22]
       .filter((y) => y >= 8 && y + h <= ORCH_GRAPH_SIZE.h - 8)
     if (rows.length === 0) rows.push(Math.max(8, Math.min(ORCH_GRAPH_SIZE.h - h - 8, n.y - n.size - h - 22)))
-    // The candidate set is every gap EDGE plus a coarse sweep of the board. Edges
-    // alone were enough while a card was two lines tall; at three (M280's kind
-    // line) a crowded arc can have no edge-derived slot that clears its
-    // neighbours, and the placer then had to pick the least-bad overlap from a
-    // set that never contained the free spot 30px further along. The sweep is
-    // 24px, which is finer than the 12px gap the edge candidates already leave.
     const sweep = []
     for (let x = 8; x <= ORCH_GRAPH_SIZE.w - w - 8; x += 24) sweep.push(x + w / 2 - n.x)
     const drifts = [0, ...[...occupied, ...others].flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16, ...sweep]
     const candidates = rows.flatMap((y) => drifts.map((dx) => {
       const x = Math.max(8, Math.min(ORCH_GRAPH_SIZE.w - w - 8, n.x + dx - w / 2))
       const box = { x, y, w, h }
-      // Another CARD is never acceptable to cover (its verbs are under it), so it
-      // outweighs any node; among nodes the covered area decides.
       const overlap = occupied.reduce((sum, r) => sum + cover(box, r, 8) * 8, 0) + others.reduce((sum, r) => sum + cover(box, r, 0) * r.weight, 0)
-      // Nearness is part of the cost, not a tie-break: by covered area alone the
-      // card went to the far side of the ring, its stem crossing three spokes — a
-      // card a long way from its cube reads as somebody else's. 60 px² per px of
-      // drift; 20 was measured too weak (the far side still won on area).
-      // Now that y is searched too, the measure is the distance from the CUBE to
-      // the card's centre, so the two rows compete on the same terms — a straight
-      // horizontal comparison would have made every card below free.
       const distance = Math.hypot(x + w / 2 - n.x, y + h / 2 - n.y)
       return { x, y, w, h, overlap: overlap + distance * 60, distance }
     })).sort((a, b) => a.overlap - b.overlap || a.distance - b.distance)
@@ -693,33 +814,40 @@ function GraphBoard(props: {
   }
 
   const cubeSpecs: OrchCubeSpec[] = projected.map((n) => {
-    const overflow = n.overflow !== undefined
-    const synthetic = n.synthetic === true || n.id === '__hub__' || overflow
-    const selected = isSelected(n)
+    const selected = isSelected(n.id)
     return {
-      id: n.id, x: n.x, y: n.y, size: n.size, depth: n.depth, hub: n.hub, synthetic,
-      // toneFromState's five real returns are exactly OrchCubeTone's members;
-      // its declared type is the wider Tone only because TONE_WORKING/TONE_NEEDS_YOU are.
+      id: n.id, x: n.x, y: n.y, size: n.size, depth: n.depth, hub: false, synthetic: false,
+      shape: n.object.kind === 'checkpoint' ? 'puck' : n.object.kind === 'artifact' ? 'tablet' : 'cube',
       tone: toneFromState(n.state) as OrchCubeTone, selected,
-      roleColor: n.hub || n.kind === 'chat' ? '--iris' : n.kind === 'terminal' || n.kind === 'file' ? '--deck-steel' : '--deck-violet',
+      // Role → hue: a chat is the accent, a terminal/file steel, a watcher/workflow violet — the secondary family.
+      roleColor: n.kind === 'chat' ? '--iris' : n.kind === 'terminal' || n.kind === 'file' ? '--deck-steel' : '--deck-violet',
       dimmed: hasSelection && !selected, lensedOut: lensedOut(n.id),
       attention: attentionOf(n, selected)
     }
   })
+  const platformSpecs: OrchPlatformSpec[] = projPlatforms.map((pp) => ({
+    id: pp.p.id, x: pp.x, y: pp.y, w: pp.w, h: pp.h, inset: ORCH_PLATFORM.inset * cam.k, thickness: ORCH_PLATFORM.thickness * cam.k, depth: pp.depth,
+    synthetic: pp.p.synthetic, selected: focusedIsOn(pp.p.id), dimmed: focusedPlatformId !== null && !focusedIsOn(pp.p.id) && hasSelection,
+    lit: pp.p.counts.live > 0, needsYou: pp.p.counts.needsYou > 0, expanded: pp.p.expanded
+  }))
+
+  // Paint (= hit) order: resting plates far→near, their objects, then an expanded plate and its objects.
+  const hitOrder = orchHitOrder([
+    ...projPlatforms.map((pp) => ({ kind: 'platform' as const, id: pp.p.id, depth: pp.depth, expanded: pp.p.expanded })),
+    ...projected.map((n) => ({ kind: n.object.kind, id: n.id, depth: n.depth, platformId: n.object.platformId }))
+  ])
 
   const onWheel = (event: ReactWheelEvent<SVGSVGElement>): void => {
     event.preventDefault()
     const factor = event.deltaY > 0 ? 0.92 : 1.08
-    setCam((c) => ({ ...c, k: Math.min(2.2, Math.max(0.55, c.k * factor)) }))
+    setCam((c) => ({ ...c, k: Math.min(ORCH_ZOOM_RANGE.max, Math.max(ORCH_ZOOM_RANGE.min, c.k * factor)) }))
   }
-
   const onPointerDown = (event: ReactPointerEvent<SVGSVGElement>): void => {
     const target = event.target as SVGElement
-    if (target.closest('.orch__cube, .orch__callout-host')) return
+    if (target.closest('.orch__cube, .orch__callout-host, .orch__pplate')) return
     drag.current = { x: event.clientX, y: event.clientY, cx: cam.x, cy: cam.y }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
-
   const onPointerMove = (event: ReactPointerEvent<SVGSVGElement>): void => {
     const d = drag.current
     if (d === null) return
@@ -728,20 +856,21 @@ function GraphBoard(props: {
     const sy = svg.clientHeight > 0 ? ORCH_GRAPH_SIZE.h / svg.clientHeight : 1
     setCam((c) => ({ ...c, x: d.cx + (event.clientX - d.x) * sx, y: d.cy + (event.clientY - d.y) * sy }))
   }
-
   const onPointerUp = (event: ReactPointerEvent<SVGSVGElement>): void => {
     drag.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
+  const centreOn = (pt: { x: number; y: number }): void => {
+    const fy = stage.h / 2 + (pt.y - stage.h / 2) * ORCH_COS_TILT
+    moveCamera({ k: cam.k, x: -(pt.x - stage.w / 2) * cam.k, y: -(fy - stage.h / 2) * cam.k })
+  }
+  const focusedPlatform = platforms.find((p) => p.id === focusedPlatformId) ?? null
+  const selectedObject = selectedId === null ? null : objects.find((o) => o.id === selectedId) ?? null
+  const authored = orchEdgePaintOrder(edges).filter((e) => e.authored === true)
 
   return (
-    <div className="orch__graph-scene" role="group" aria-label="Agent graph" aria-describedby={props.describedBy} data-lens={litIds !== null ? 'true' : undefined}>
-      {/* Ground layer: defs, ground plane, edges — everything the cube meshes
-          must paint OVER. Owns pan/zoom; a pointerdown that starts on a cube or
-          callout never reaches here because the overlay layer above it claims
-          those hit-targets first (pointer-events re-enabled per element). */}
+    <div className="orch__graph-scene" role="group" aria-label="Task platforms" aria-describedby={props.describedBy} data-lens={litIds !== null ? 'true' : undefined} data-orch-webgl={props.webgl} data-orch-quality={props.quality}>
+      {/* Ground layer: defs and the dependency edges — what the meshes paint OVER. Owns pan/zoom. */}
       <svg
         className="orch__graph orch__graph--ground"
         viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}
@@ -752,90 +881,65 @@ function GraphBoard(props: {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <defs>
-          <radialGradient id="orch-hub-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--iris)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--iris)" stopOpacity="0" />
-          </radialGradient>
-          {/* In the ground group's own coordinates (it is translated and scaled). */}
-          <clipPath id="orch-ground-clip"><ellipse rx={ground.rx} ry={ground.ry} /></clipPath>
-          <radialGradient id="orch-ground-fade-g" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#fff" stopOpacity="1" />
-            <stop offset="70%" stopColor="#fff" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-          </radialGradient>
-          <mask id="orch-ground-fade" maskContentUnits="userSpaceOnUse">
-            <ellipse rx={ground.rx} ry={ground.ry} fill="url(#orch-ground-fade-g)" />
-          </mask>
-        </defs>
-        {/* Ground plane: a grid clipped to the tilted ellipse and faded at its rim,
-            under concentric rings; the ring at 1/ORCH_GROUND_K is the orbit track. It moves
-            with the hub layer, so the hub stays planted while satellites parallax. */}
-        <g transform={`translate(${ground.x}, ${ground.y}) scale(${ground.k})`} aria-hidden="true">
-          <ellipse rx={ground.rx * 1.08} ry={ground.ry * 1.08} fill="url(#orch-hub-glow)" />
-          <ellipse rx={ground.rx} ry={ground.ry} className="orch__ground-plane" mask="url(#orch-ground-fade)" />
-          <g clipPath="url(#orch-ground-clip)" mask="url(#orch-ground-fade)">
-            {Array.from({ length: 13 }, (_, i) => {
-              const t = (i - 6) / 6
-              return <g key={i}>
-                <line className="orch__ground-grid" x1={t * ground.rx} y1={-ground.ry} x2={t * ground.rx} y2={ground.ry} />
-                <line className="orch__ground-grid" x1={-ground.rx} y1={t * ground.ry} x2={ground.rx} y2={t * ground.ry} />
-              </g>
-            })}
-          </g>
-          {[0.4, 1 / ORCH_GROUND_K, 1].map((r) => <ellipse key={r} rx={ground.rx * r} ry={ground.ry * r} className={`orch__ground-ring${r === 1 / ORCH_GROUND_K ? ' orch__ground-ring--track' : ''}`} />)}
-        </g>
-        {/* A platform is a disc on the GROUND, so it is flattened by the stage's own
-            tilt like the ground is — a fixed 0.34 was the old 32° camera's number
-            written down twice. `data-lit` is the agent's real tone, never a role. */}
-        {projected.map(n => <ellipse key={`platform-${n.id}`} className="orch__platform" data-role={n.hub ? 'orchestrator' : n.kind}
-          data-lit={n.synthetic === true || n.overflow !== undefined ? undefined : toneFromState(n.state)}
-          cx={n.x} cy={n.y + n.size * 0.62} rx={n.size * 1.35} ry={n.size * 1.35 * ORCH_COS_TILT} />)}
-        {orchEdgePaintOrder(edges).map((e) => {
-          const from = projected.find((n) => n.id === e.from)
-          const to = projected.find((n) => n.id === e.to)
+        {/* M293. With no WebGL the bodies are flat SVG: the plate's footprint and
+            a glyph-less block per object, so every state's word and shape survive. */}
+        {props.webgl === 'unavailable' && hitOrder.map((t) => {
+          if (t.kind === 'platform') {
+            const pp = projPlatforms.find((x) => x.p.id === t.id)!
+            return <rect key={`flat-${t.id}`} className={`orch__flat-plate${pp.p.synthetic ? ' orch__flat-plate--group' : ''}`} data-orch-flat="platform" x={pp.hit.x} y={pp.hit.y} width={pp.hit.w} height={pp.hit.h} rx={4} data-lit={pp.p.counts.live > 0 || undefined} />
+          }
+          const n = projected.find((x) => x.id === t.id)!
+          return n.object.kind === 'checkpoint'
+            ? <polygon key={`flat-${t.id}`} className="orch__flat-object" data-orch-flat={t.kind} data-tone={toneFromState(n.state)} points={Array.from({ length: 6 }, (_, i) => `${n.x + Math.cos((Math.PI / 3) * i) * n.size},${n.y + Math.sin((Math.PI / 3) * i) * n.size * 0.8}`).join(' ')} />
+            : <rect key={`flat-${t.id}`} className="orch__flat-object" data-orch-flat={t.kind} data-tone={toneFromState(n.state)} x={n.x - n.size * (t.kind === 'artifact' ? 0.7 : 1)} y={n.y - n.size} width={n.size * (t.kind === 'artifact' ? 1.4 : 2)} height={n.size * 2} rx={2} />
+        })}
+        {/* M289/M291. With the lens on, membership is drawn and MARKED as grouping:
+            a quiet dashed spoke from each station to its plate's anchor. At rest a
+            station standing on its plate needs no line. */}
+        {props.depFocus && projected.filter((n) => n.object.kind === 'station').map((n) => {
+          const pp = projPlatforms.find((x) => x.p.id === n.object.platformId)
+          if (pp === undefined) return null
+          return <line key={`spoke-${n.id}`} x1={pp.hit.x + 12} y1={pp.hit.y - 20} x2={n.x} y2={n.y} className={`orch__edge orch__edge--grouping${lensedOut(n.id) ? ' orch__edge--lensed' : ''}`} data-orch-edge="grouping" data-role={n.kind} />
+        })}
+        {authored.map((e) => {
+          const from = points.get(e.from)
+          const to = points.get(e.to)
           if (!from || !to) return null
           const firing = firingKeys.has(`${e.from}:${e.to}`) || firingKeys.has(`${e.to}:${e.from}`)
+          const fromN = projected.find((n) => n.id === e.from)!
+          const toN = projected.find((n) => n.id === e.to)!
           return (
             <line
-              key={`${e.from}-${e.to}-${e.authored === true ? 'a' : 'h'}`}
+              key={`${e.from}-${e.to}-a`}
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}${lensedOut(e.from) || lensedOut(e.to) ? ' orch__edge--lensed' : ''}${props.depFocus && e.authored !== true ? ' orch__edge--grouping' : ''}`}
-              data-role={to.hub ? from.kind : to.kind}
-              data-connected-live={!from.synthetic && !to.synthetic && (isLiveRosterState(from.state) || isLiveRosterState(to.state)) || undefined}
+              className={`orch__edge orch__edge--authored${firing ? ' orch__edge--current' : ''}${lensedOut(e.from) || lensedOut(e.to) ? ' orch__edge--lensed' : ''}`}
+              data-role={toN.kind}
+              data-connected-live={(isLiveRosterState(fromN.state) || isLiveRosterState(toN.state)) || undefined}
               data-edge-activity={firing ? 'firing' : undefined}
-              data-orch-edge={e.authored === true ? 'dependency' : 'grouping'}
+              data-orch-edge="dependency"
             />
           )
         })}
-        {/* M289. With the lens on, every dependency says its trigger on the line, and
-            the synthetic centre says what it is: grouping, not a supervisor. */}
-        {props.depFocus && orchEdgePaintOrder(edges).filter((e) => e.authored === true).map((e) => {
-          const from = projected.find((n) => n.id === e.from)
-          const to = projected.find((n) => n.id === e.to)
+        {props.depFocus && authored.map((e) => {
+          const from = points.get(e.from)
+          const to = points.get(e.to)
           if (!from || !to) return null
           return <text key={`label-${e.from}-${e.to}`} className="orch__edge-label" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 6} textAnchor="middle" data-orch-edge-label={`${e.from}:${e.to}`}>{e.trigger ?? 'a bare link'}</text>
         })}
-        {props.depFocus && hubNode !== undefined && (hubNode.synthetic === true || hubNode.id === '__hub__') && (() => {
-          const h = projected.find((n) => n.id === hubNode.id)
-          return h === undefined ? null : <text className="orch__edge-label orch__edge-label--grouping" x={h.x} y={h.y + h.size + 18} textAnchor="middle" data-orch-grouping>{ORCH_DEP_GROUPING}</text>
-        })()}
       </svg>
-      {/* The R3F island: real-lit cube meshes, painted above the ground/edges and
-          below the hit-targets/callouts. `pointer-events: none` (styles.css) —
-          every click still lands on the SVG layer below or above it. */}
-      {/* The fallback is the same empty box the loaded island renders into, so
-          the layer keeps its place in the sandwich for the frame or two before
-          the chunk arrives — a missing box would let the overlay's hit-targets
-          reflow, and this view is captured as a golden. */}
-      <Suspense fallback={<div className="orch__cube-canvas" aria-hidden="true" />}>
-        <OrchestrationCubes nodes={cubeSpecs} viewBox={ORCH_GRAPH_SIZE} />
-      </Suspense>
-      {/* Overlay layer: hit-targets, beacons, labels and callouts. The svg root
-          is pointer-events:none so an empty-space drag falls through to the
-          ground layer's pan/zoom; each interactive child re-enables its own
-          pointer-events (styles.css), exactly like the single-svg version did
-          via `target.closest('.orch__cube, .orch__callout-host')`. */}
+      {/* The R3F island: platforms and the object meshes, painted above the
+          ground layer and below the hit-targets. `pointer-events: none`. The
+          fallback keeps the layer's box; with no WebGL the island is not mounted
+          at all (the flat bodies above stand in) and the boundary says so. */}
+      {props.webgl === 'ready' && (
+        <WebglBoundary onLost={props.onWebglLost}>
+          <Suspense fallback={<div className="orch__cube-canvas" aria-hidden="true" />}>
+            <OrchestrationCubes nodes={cubeSpecs} platforms={platformSpecs} viewBox={ORCH_GRAPH_SIZE} quality={props.quality} />
+          </Suspense>
+        </WebglBoundary>
+      )}
+      {/* Overlay: hit-targets in PAINT order (orchHitOrder — what elementFromPoint
+          answers), plates, beacons, labels, callouts. Root is pointer-events:none. */}
       <svg className="orch__graph orch__graph--over" data-has-selection={hasSelection ? 'true' : undefined} viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}>
         <filter id="orch-glow" x="-40%" y="-40%" width="180%" height="180%">
           <feGaussianBlur stdDeviation="3.5" result="blur" />
@@ -844,38 +948,52 @@ function GraphBoard(props: {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        {/* Order among these no longer decides visual occlusion of the cube body
-            (the mesh's real z-buffer does), only of labels/beacons, which rarely
-            overlap — kept sorted anyway so a label still wins the same ties. */}
-        {projected.sort((a, b) => a.depth - b.depth || a.y - b.y).map((n) => (
-          <g key={n.id} className="orch__callout-host" data-ghost={props.memberIds !== null && !props.memberIds.includes(n.id) || undefined}
-            data-lensed={lensedOut(n.id) || undefined}
-            onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}
-            onFocus={() => setHovered(n.id)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHovered(null) }}
-            tabIndex={n.synthetic && n.overflow === undefined ? undefined : 0}
-            aria-label={n.overflow !== undefined ? `${n.title} — show them in the agent pool` : n.title}
-            onKeyDown={(e) => {
-              if (e.target !== e.currentTarget || e.key !== 'Enter') return
-              if (n.overflow !== undefined) onOverflow()
-              else if (!n.synthetic) onSelect(n.id)
-            }}>
-          <IsoCube
-            node={n}
-            band={n.band}
-            labelOffset={{ x: Math.tanh(cam.x / 240) * 12, y: Math.tanh(cam.y / 180) * 9 + (cam.k - 1) * 4 }}
-            selected={isSelected(n)}
-            attention={attentionOf(n, isSelected(n))}
-            {...(wash !== null && wash.ids.includes(n.id) ? { wash } : {})}
-            onSelect={onSelect}
-            onJump={onJump}
-            onOverflow={onOverflow}
-          />
-          </g>
-        ))}
-        {/* Cards are billboards nearest the eye, so they paint after EVERY cube. Inside
-            each cube's host, a card flipped under a back-of-ring cube lay beneath the
-            hub, which paints later by depth. The group repeats the host's hover so
-            reaching for Jump never reads as leaving the cube and collapses the card. */}
+        {hitOrder.map((t) => {
+          if (t.kind === 'platform') {
+            const pp = projPlatforms.find((x) => x.p.id === t.id)!
+            return (
+              <g key={`platform-${t.id}`} className={`orch__platform-host${focusedIsOn(t.id) ? ' orch__platform-host--on' : ''}`} data-orch-platform={t.id} data-orch-platform-zoom={pp.level} data-orch-platform-cell={`${pp.p.cell.col},${pp.p.cell.row}`}
+                data-orch-platform-expanded={pp.p.expanded || undefined} data-orch-platform-synthetic={pp.p.synthetic || undefined}
+                onPointerEnter={() => setHovered(`platform:${t.id}`)} onPointerLeave={() => setHovered(null)}>
+                {/* The base plate's footprint IS the hit-target: a click on empty plate
+                    selects the island; a double-click fits the camera to it. */}
+                <rect className="orch__platform-hit" data-orch-platform-hit={t.id} x={pp.hit.x} y={pp.hit.y} width={pp.hit.w} height={pp.hit.h} fill="transparent"
+                  onClick={() => onFocusPlatform(t.id)} onDoubleClick={() => { onFocusPlatform(t.id); fitPlatform(t.id) }} />
+                <PlatformPlate p={pp.p} x={pp.hit.x + 6} y={pp.hit.y - 40} w={pp.w} level={pp.level} focused={focusedIsOn(t.id)} selected={focusedIsOn(t.id) && selectedId === null}
+                  onFocus={(id) => onFocusPlatform(id)} onFit={(id) => { onFocusPlatform(id); fitPlatform(id) }} />
+              </g>
+            )
+          }
+          const n = projected.find((x) => x.id === t.id)!
+          return (
+            <g key={n.id} className="orch__callout-host" data-ghost={props.memberIds !== null && !props.memberIds.includes(n.id) || undefined}
+              data-lensed={lensedOut(n.id) || undefined}
+              onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}
+              onFocus={() => setHovered(n.id)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHovered(null) }}
+              tabIndex={0}
+              aria-label={`${n.title} — ${n.object.kind}`}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget || e.key !== 'Enter') return
+                // Enter INSPECTS: it selects (never toggles off) and the page-level
+                // handler then hands the keyboard to the inspector's Open on canvas.
+                if (!isSelected(n.id)) onSelect(n.id)
+              }}>
+            <IsoCube
+              node={n}
+              band={n.band}
+              labelOffset={{ x: 0, y: 0 }}
+              selected={isSelected(n.id)}
+              attention={attentionOf(n, isSelected(n.id))}
+              objectKind={n.object.kind}
+              labelled={labelled.has(n.id)}
+              {...(wash !== null && wash.ids.includes(n.id) ? { wash } : {})}
+              onSelect={onSelect}
+              onJump={onJump}
+              onOverflow={() => undefined}
+            />
+            </g>
+          )
+        })}
         {projected.filter((n) => offsets.has(n.id)).map((n) => (
           <g key={`callout-${n.id}`} className="orch__callout-wrap" onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}>
             <CubeCallout node={n} offsetX={offsets.get(n.id)!} below={below.has(n.id)} drift={n.drift} band={n.band} expanded={expanded(n.id)}
@@ -883,12 +1001,56 @@ function GraphBoard(props: {
               onInterrupt={props.onInterrupt && props.canInterrupt(n.id) ? props.onInterrupt : undefined} />
           </g>
         ))}
-        {/* Above the cubes so a chip is never hidden behind the object it leaves;
-            the packet fades in and out at the ends so it never sits on a face. */}
-        <EdgePackets edges={edges} fires={props.fires} points={new Map(projected.map((n) => [n.id, n]))} />
+        <EdgePackets edges={authored} fires={props.fires} points={points} />
       </svg>
+      {/* M292. Screen-aligned orientation: breadcrumb, Fit all / Fit selected / Back, the minimap. */}
+      <div className="orch__scene-tools" data-orch-scene-tools>
+        <nav className="orch__crumbs" aria-label="Selection breadcrumb" data-orch-crumbs>
+          <button type="button" className="orch__crumb" data-orch-crumb="all" {...shellControl(() => { onFocusPlatform(null); fitAll() })}>All work</button>
+          {focusedPlatform !== null && <><span className="orch__crumb-sep" aria-hidden="true" />
+            <button type="button" className="orch__crumb" data-orch-crumb="platform" title={focusedPlatform.label} {...shellControl(() => fitPlatform(focusedPlatform.id))}>{focusedPlatform.label}</button></>}
+          {selectedObject !== null && <><span className="orch__crumb-sep" aria-hidden="true" />
+            <span className="orch__crumb orch__crumb--leaf" data-orch-crumb="object">{selectedObject.title} · {selectedObject.kind}</span></>}
+        </nav>
+        {props.webgl === 'unavailable' && (
+          <p className="orch__caption orch__webgl-notice" data-orch-webgl-notice role="status">3D is unavailable here (no WebGL context) — the scene is flat, and every action is the same.</p>
+        )}
+        <div className="orch__scene-buttons" role="toolbar" aria-label="Camera">
+          <button type="button" className="orch__mini" data-orch-fit="all" title="Fit every platform in view" {...shellControl(fitAll)}>Fit all</button>
+          <button type="button" className="orch__mini" data-orch-fit="selected" disabled={focusedPlatform === null && selectedObject === null} title="Fit the selected island in view" {...shellControl(() => { const id = selectedObject?.platformId ?? focusedPlatform?.id; if (id !== undefined) fitPlatform(id) })}>Fit selected</button>
+          <button type="button" className="orch__mini" data-orch-camera-back disabled={historyDepth === 0} title="Back to the previous camera" {...shellControl(back)}>Back</button>
+        </div>
+        <Minimap platforms={platforms} cam={cam} stage={stage} onCentre={centreOn} />
+      </div>
     </div>
   )
+}
+
+/**
+ * M293. WebGL can go two ways: the context never comes (a headless GPU, a
+ * blocked driver, a harness that denies it) — probed BEFORE the island mounts,
+ * by asking a scratch canvas — or it is lost while running. Either way the
+ * view flips to the flat SVG bodies and says so; every action was on the
+ * SVG hit-targets all along, so nothing is lost but the lighting.
+ */
+class WebglBoundary extends Component<{ onLost: () => void; children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false }
+  static getDerivedStateFromError(): { failed: boolean } { return { failed: true } }
+  override componentDidCatch(): void { this.props.onLost() }
+  override render(): ReactNode { return this.state.failed ? <div className="orch__cube-canvas" aria-hidden="true" /> : this.props.children }
+}
+
+export function orchWebglAvailable(): boolean {
+  try {
+    const c = document.createElement('canvas')
+    const gl = c.getContext('webgl2') ?? c.getContext('webgl')
+    if (gl === null) return false
+    const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_lose_context')
+    ext?.loseContext()
+    return true
+  } catch {
+    return false
+  }
 }
 
 function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | undefined, active: boolean): string[] {
@@ -1145,6 +1307,61 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // Append-only: the order state learns new ids and forgets gone ones, never re-sorts.
   useEffect(() => { if (orderedIds.join('\n') !== islandOrder.join('\n')) setIslandOrder(orderedIds) }, [orderedIds, islandOrder])
   const islandGroups = useMemo(() => orchIslandGroups(islands, orderedIds), [islands, orderedIds])
+  // M291. The platform scene: one platform per island in presentation order,
+  // every roster object and file on the platform whose directory owns it, the
+  // rest on the workspace plate. `homeOf` reads the same facts the islands do.
+  const platforms: OrchPlatform[] = useMemo(() => orchPlatforms({
+    islands, order: orderedIds, roster: liveSnap.roster, files: liveSnap.files, focusedId: focusIslandId,
+    homeOf: (id) => {
+      const live = getLiveSession(id)?.cwd
+      if (live !== undefined && live !== '') return live
+      const p = panels.find((x) => x.rect.id === id)
+      if (p === undefined) return undefined
+      if (isChatPanel(p)) return p.chat.cwd
+      if (isTerminalPanel(p)) return p.spec.cwd
+      if (isWatcherPanel(p)) return p.watch.cwd
+      if (isFilePanel(p)) return p.source.path.slice(0, Math.max(0, p.source.path.lastIndexOf('/')))
+      return undefined
+    }
+  }), [islands, orderedIds, liveSnap.roster, liveSnap.files, focusIslandId, panels])
+  const sceneObjects = useMemo(() => orchSceneObjects(platforms), [platforms])
+  const sceneObjectsRef = useRef(sceneObjects)
+  sceneObjectsRef.current = sceneObjects
+  // M293. WebGL is PROBED before the island mounts (a scratch context), and a
+  // context lost at runtime flips the same flag through the boundary. Either
+  // way the scene paints flat SVG bodies and says so; no action depends on it.
+  const [webgl, setWebgl] = useState<'ready' | 'unavailable'>(() => (orchWebglAvailable() ? 'ready' : 'unavailable'))
+  // M292. Quality from MEASURED frame time: the scene reports its frames, and a
+  // tier steps down when the mean of the last window exceeds the budget and
+  // back up when it has been comfortably under it for a while (hysteresis, so
+  // the bloom does not flicker on and off at the edge). Object count alone
+  // decides nothing — it is the frame, not the number, that stalls.
+  const [quality, setQuality] = useState<'full' | 'lean' | 'flat'>('full')
+  const frameSamples = useRef<number[]>([])
+  useEffect(() => {
+    if (webgl !== 'ready') return
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number): void => {
+      const dt = now - last
+      last = now
+      // Only frames the compositor actually painted count; an idle demand-mode
+      // scene yields long gaps that are not "slow frames".
+      if (dt < 250) frameSamples.current = [...frameSamples.current.slice(-59), dt]
+      const samples = frameSamples.current
+      if (samples.length >= 30) {
+        const mean = samples.reduce((a, b) => a + b, 0) / samples.length
+        // The harness pins a tier to measure the same fixture with and without
+        // the quality work (`window.__tcOrchQuality`); the app never sets it.
+        const pinned = (window as unknown as { __tcOrchQuality?: unknown }).__tcOrchQuality
+        setQuality((q) => (pinned === 'full' || pinned === 'lean' || pinned === 'flat' ? pinned : orchQualityStep(q, mean)))
+        ;(window as unknown as { __tcOrchFrame?: number }).__tcOrchFrame = mean
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [webgl])
   const moveIsland = (id: string, dir: -1 | 1): void => {
     const next = orchMoveIsland(orderedIds, id, dir)
     if (next === null) return
@@ -1193,11 +1410,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // closure (computed below, read here through a ref set on every render).
   const depLitRef = useRef<ReadonlySet<string> | null>(null)
   const litIds = depLitRef.current ?? lensLit
-  const openOffRing = useCallback((): void => {
-    setMetric(null)
-    setQuery('')
-    setRosterFilter('off-ring')
-  }, [])
   const visibleFiles = framed.files
 
   const livePanelIds = useMemo(
@@ -1235,6 +1447,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // keyboard (and reduced-motion, and no-WebGL) way to reach every one of them.
   const [lens, setLens] = useState<OrchLens>(() => getOrchPrefs().lens)
   useEffect(() => { setOrchPrefs({ lens }) }, [lens])
+  const lensRef = useRef(lens)
+  lensRef.current = lens
   // M287. Every pref, to the workspace record — coalesced, because the camera
   // moves at pointer speed and each write is a layout save. Skipped when the
   // record already says the same, so mounting the page writes nothing.
@@ -1255,10 +1469,20 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // the mount re-seeds from the record. The unmount flushes what the timer owed.
   useEffect(() => () => { flushOrchestrate() }, [flushOrchestrate])
 
-  const listRows = useMemo(
-    () => [...visibleRoster].sort((a, b) => Number(island?.memberIds.includes(b.id) ?? false) - Number(island?.memberIds.includes(a.id) ?? false)),
-    [visibleRoster, island]
-  )
+  // M293. The List's rows are EVERY object in the scene — stations, checkpoints
+  // and artifacts, each with its platform — in scene order unless a column is
+  // chosen; the roster's filter and query still apply (an artifact matches by
+  // title). The same selection, the same verbs, the same Open on canvas.
+  const [listSort, setListSort] = useState<OrchListSort>({ key: null, dir: 1 })
+  const listRows = useMemo(() => {
+    const visible = new Set(visibleRoster.map((r) => r.id))
+    const q = query.trim().toLowerCase()
+    const labelOf = new Map(platforms.map((p) => [p.id, p.label]))
+    const rows = sceneObjects
+      .filter((o) => o.kind === 'artifact' ? (effectiveFilter === 'all' && (q === '' || o.title.toLowerCase().includes(q))) : visible.has(o.id))
+      .map((o) => ({ ...o, platformLabel: labelOf.get(o.platformId) ?? '', tone: toneFromState(o.state) }))
+    return orchSortRows(rows, listSort)
+  }, [sceneObjects, visibleRoster, query, effectiveFilter, platforms, listSort])
   listOrderRef.current = listRows.map((r) => r.id)
 
   // M284. Needs attention: the chat store's own pending permissions. A request answered
@@ -1286,7 +1510,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   }
 
   // M284. The inspector's subject: the selected session, else the island's task.
-  const inspectTask = selectedRow === null && island !== null
+  const selectedArtifact = selectedRow === null && selectedId !== null ? (liveSnap.files.find((f) => f.id === selectedId) ?? null) : null
+  const selectedArtifactWithPlatform = selectedArtifact === null ? null : { ...selectedArtifact, platformId: sceneObjects.find((o) => o.id === selectedArtifact.id)?.platformId ?? ORCH_WORKSPACE_PLATFORM }
+  const inspectTask = selectedRow === null && selectedArtifact === null && island !== null
   const pendingOfSelected = selectedRow === null ? undefined : pending.find((p) => p.id === selectedRow.id)
   const nextAction = selectedRow !== null
     ? orchNextAction({ state: selectedRow.state, kind: selectedRow.kind, ...(pendingOfSelected !== undefined ? { pendingTool: pendingOfSelected.toolName } : {}) })
@@ -1427,7 +1653,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) return
-      const isArrow = event.key === 'ArrowDown' || event.key === 'ArrowUp'
+      const isArrow = event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'ArrowRight'
       const isEnter = event.key === 'Enter'
       const isEscape = event.key === 'Escape'
       if (!isArrow && !isEnter && !isEscape) return
@@ -1455,10 +1681,26 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         // A focused button's own Enter is its click, and is left alone.
         if (target !== null && target.closest('button, a, input, textarea, select') !== null) return
         event.preventDefault()
-        document.querySelector<HTMLElement>('[data-orch-inspector] [data-orch-open]')?.focus()
+        // After the render the selection just caused, or the button focused is the
+        // one React is about to replace (M293: Enter on a scene object).
+        window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-orch-inspector] [data-orch-open]')?.focus())
         return
       }
       event.preventDefault()
+      // M293. In the SCENE the arrows walk the platforms spatially — the nearest
+      // object in that direction, across islands — so every object is reachable
+      // without a precision click in 3D; the List keeps its row order.
+      const spatial = listRow === null && lensRef.current === 'scene'
+      if (spatial) {
+        const step = orchSpatialStep(sceneObjectsRef.current, primary, event.key as OrchArrow)
+        if (step === null) return
+        select(step.id, { range: event.shiftKey })
+        window.requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>(`.orch__callout-host [data-node="${CSS.escape(step.id)}"]`)?.parentElement?.focus({ preventScroll: true })
+        })
+        return
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') return
       const next = orchRosterStep(rows, primary, event.key === 'ArrowDown' ? 1 : -1)
       if (next === null) return
       select(next, { range: event.shiftKey })
@@ -1635,20 +1877,18 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   }
   const islandColumn = (floating: boolean): JSX.Element | null => {
     if (islands.length === 0) return null
-    if (islands.length === 1 && orderHistory.length === 0) return islandCard(islands[0]!, floating)
+    if (islands.length === 1 && orderHistory.length === 0) return floating ? null : islandCard(islands[0]!, floating)
     // In the SCENE the column rests folded: the focused island's card, the same size as
     // Phase A's one card, and a one-line toggle — an open column covered the ring's back
     // cubes, their needs-you beacons and their callouts (the critic, three scenes). The
     // List always shows it whole.
     const folded = floating && !islandsOpen
-    const focusedCard = island ?? islands[0]!
     if (folded) {
-      // EXACTLY Phase A's card (same class, same single line, same footprint — the critic
-      // measured a wrapped, taller card re-covering the `tests` cube), plus a small pill
-      // to its LEFT; the wrapper is display:contents so both float on their own.
+      // M291. In the scene the island CARD is the platform's own label plate,
+      // so at rest the column is only its toggle: the folded floating card
+      // Phase C fought the critic over would now say the same thing twice.
       return (
         <div className="orch__islands--rest" data-orch-islands data-orch-island-order={orderedIds.join(' ')} role="group" aria-label="Task islands">
-          {islandCard(focusedCard, true)}
           <button type="button" className="orch__mini orch__islands-toggle" style={floatStyle} data-orch-islands-toggle aria-expanded={false} title="Show every island, grouped by repository" {...shellControl(() => setIslandsOpen(true))}>{`${islands.length} islands ▾`}</button>
         </div>
       )
@@ -1839,7 +2079,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             </span>
           </div>
 
-          <div className="orch__graph-wrap">
+          <div className="orch__graph-wrap" data-orch-island-order={orderedIds.join(' ')}>
             {lens === 'list' ? (
               // M284. The List is the scene's equal, not a summary of it: every roster
               // object, the island's members first and marked, each one a real button in
@@ -1848,16 +2088,27 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               // action the scene's selection does.
               <div className="orch__list" data-orch-list role="region" aria-label="Sessions list">
                 {islandColumn(false)}
-                <table className="orch__list-table">
+                <table className="orch__list-table" data-orch-list-sort={listSort.key ?? ''} data-orch-list-dir={listSort.dir === 1 ? 'asc' : 'desc'}>
                   <thead>
-                    <tr><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">State</th><th scope="col">Next</th></tr>
+                    <tr>
+                      {([['name', 'Name'], ['kind', 'Kind'], ['state', 'State'], ['island', 'Island']] as const).map(([key, label]) => (
+                        <th key={key} scope="col" aria-sort={listSort.key === key ? (listSort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+                          <button type="button" className="orch__list-sort" data-orch-list-sort-by={key} title={`Sort by ${label.toLowerCase()}`} {...shellControl(() => setListSort((cur) => orchNextSort(cur, key as OrchListSortKey)))}>
+                            {label}
+                          </button>
+                        </th>
+                      ))}
+                      <th scope="col">Next</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {listRows.map((row) => {
-                      const next = orchNextAction({ state: row.state, kind: row.kind, ...(pending.some((p) => p.id === row.id) ? { pendingTool: pending.find((p) => p.id === row.id)!.toolName } : {}) })
+                      const next = row.kind === 'artifact'
+                        ? { verb: 'open' as const, label: 'Open on canvas to read or edit it' }
+                        : orchNextAction({ state: row.state, kind: row.panelKind, ...(pending.some((p) => p.id === row.id) ? { pendingTool: pending.find((p) => p.id === row.id)!.toolName } : {}) })
                       const inIsland = island?.memberIds.includes(row.id) === true
                       return (
-                        <tr key={row.id} data-orch-list-row={row.id} data-selected={selectedIds.includes(row.id) || undefined}>
+                        <tr key={row.id} data-orch-list-row={row.id} data-orch-list-kind={row.kind} data-selected={selectedIds.includes(row.id) || undefined}>
                           <td>
                             <button type="button" className="orch__list-name" aria-pressed={selectedIds.includes(row.id)}
                               {...shellControl(() => select(row.id))} onDoubleClick={() => jump(row.id)}>
@@ -1865,8 +2116,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                               {row.title}{inIsland && <span className="orch__list-tag">in task</span>}
                             </button>
                           </td>
-                          <td>{row.kind}</td>
-                          <td>{stateWord(row)}</td>
+                          <td>{row.kind === 'station' ? row.panelKind : `${row.kind} · ${row.panelKind}`}</td>
+                          <td>{row.kind === 'artifact' ? 'file' : stateWord(row)}</td>
+                          <td className="orch__list-island" title={row.platformLabel}>{row.platformLabel}</td>
                           <td className="orch__list-next" data-verb={next.verb}>{next.label}</td>
                         </tr>
                       )
@@ -1877,14 +2129,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </div>
             ) : mode === 'dev' ? (
               <GraphBoard
-                nodes={members === null ? framed.graph.nodes : [...framed.graph.nodes, ...liveSnap.graph.nodes.filter((n) => !members.includes(n.id) && n.id !== ORCH_OVERFLOW_ID)]}
+                platforms={platforms}
                 edges={framed.graph.edges}
                 panels={panels}
                 workItems={workItems}
                 memberIds={members}
                 litIds={litIds}
                 wash={wash}
-                onOverflow={openOffRing}
                 canInterrupt={canInterruptId}
                 depFocus={depFocus}
                 {...(blocker !== null ? { describedBy: 'orch-blocker' } : {})}
@@ -1893,6 +2144,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 selectedIds={selectedIds}
                 firingKeys={firingKeys}
                 fires={edgeFires}
+                // EXPLICIT focus only: the primary island is the inspector's default
+                // subject, not a focused platform — a first cut treated it as focused
+                // and it never left the evidence level, whatever the zoom.
+                focusedPlatformId={focusIslandId}
+                onFocusPlatform={(id) => { setFocusIslandId(id); setSelectedIds([]); setFreshNeeds(new Set()) }}
+                quality={quality}
+                webgl={webgl}
+                onWebglLost={() => setWebgl('unavailable')}
                 onCamera={setGraphCamera}
                 onSelect={(id) => select(id)}
                 onJump={jump}
@@ -2191,8 +2450,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
 
           {/* M284. The inspector: identity, state, next action — for the selected session,
               or for the task island when nothing is selected. */}
-          <section className="orch__inspector" aria-label="Inspector" data-orch-inspector={selectedRow?.id ?? (inspectTask ? 'task' : '')}>
-            {selectedRow !== null ? (
+          <section className="orch__inspector" aria-label="Inspector" data-orch-inspector={selectedRow?.id ?? selectedArtifact?.id ?? (inspectTask ? 'task' : '')}>
+            {selectedArtifactWithPlatform !== null ? (
+              // M291. An artifact — a file open on the canvas — standing on a platform.
+              <>
+                <div className="orch__inspector-id">
+                  <span className="orch__roster-kind" aria-hidden="true">{kindGlyph('file')}</span>
+                  <span className="orch__selected-title" data-orch-inspector-title>{selectedArtifactWithPlatform.title}</span>
+                  <span className="orch__roster-state" data-orch-inspector-state>artifact</span>
+                </div>
+                <p className="orch__caption" title={selectedArtifactWithPlatform.path}>file · {displayPath(selectedArtifactWithPlatform.path).short}{selectedArtifactWithPlatform.platformId !== ORCH_WORKSPACE_PLATFORM ? ` · in ${platforms.find((p) => p.id === selectedArtifactWithPlatform.platformId)?.label ?? ''}` : ''}</p>
+                <p className="orch__inspector-next" data-orch-next="open">Next: Open on canvas to read or edit it</p>
+                <div className="orch__roster-actions" data-orch-controls={selectedArtifactWithPlatform.id}>
+                  <button type="button" className="orch__mini" data-orch-open {...shellControl(() => jump(selectedArtifactWithPlatform.id))}>Open on canvas</button>
+                </div>
+              </>
+            ) : selectedRow !== null ? (
               <>
                 <div className="orch__inspector-id">
                   <span className="orch__roster-kind" aria-hidden="true">{kindGlyph(selectedRow.kind)}</span>

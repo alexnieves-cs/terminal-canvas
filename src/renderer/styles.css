@@ -7796,6 +7796,13 @@ body {
   border: 0; background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; padding: 0;
 }
 .orch__list-tag { font-size: var(--t-xs); color: var(--iris); border: 1px solid var(--iris-dim); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
+/* M293. Sortable headers: the button is the header's text; the direction is a
+   pseudo-element off aria-sort, so the glyph is never the control's text. */
+.orch__list-sort { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.orch__list-sort:hover { color: var(--fg); }
+th[aria-sort="ascending"] .orch__list-sort::after { content: ' \25B2'; font-size: 0.8em; }
+th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-size: 0.8em; }
+.orch__list-island { max-width: 14rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fg-3); }
 .orch__list-next[data-verb="answer"], .orch__list-next[data-verb="reply"] { color: var(--amber); }
 .orch__review-words { margin: 0 0 var(--sp-2); font-size: var(--t-sm); color: var(--fg); }
 .orch__review-files { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
@@ -8389,7 +8396,7 @@ body {
 .orch__islands .orch__island-place { white-space: normal; overflow-wrap: anywhere; }
 .orch__islands--rest { display: contents; }
 /* The rest pill sits LEFT of the one card's top edge, never under it: the card keeps Phase A's footprint. */
-.orch__islands-toggle { position: absolute; top: 0; right: calc(16rem + var(--sp-5)); z-index: 1; background: var(--glass-3); }
+.orch__islands-toggle { position: absolute; top: 0; right: var(--sp-4); z-index: 1; background: var(--glass-3); }
 .orch__islands-head .orch__mini { padding: 0 var(--sp-1); }
 .orch__island-tools { display: flex; flex-direction: column; gap: var(--sp-1); }
 .orch__island-tools .orch__mini { padding: 0 var(--sp-1); line-height: 1.4; }
@@ -8398,6 +8405,47 @@ body {
 .orch__edge--grouping { stroke: color-mix(in srgb, var(--iris) 10%, transparent); stroke-dasharray: 2 6; filter: none; }
 .orch__edge-label { font-family: var(--font-mono); font-size: var(--t-xs); fill: var(--amber); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
 .orch__edge-label--grouping { fill: var(--fg-4); }
+/* M291. The platform scene. The plate's label is screen-aligned SVG text over
+   a deck-surface backing, top-left of the plate's hit-target; it is the island
+   card Phase C floated over the ring, moved onto the platform it names. The
+   hit-target is the base plate's footprint and nothing but a footprint — the
+   meshes under it are decorative and expendable before this rect's accuracy. */
+.orch__graph--over .orch__platform-host { pointer-events: auto; }
+.orch__platform-hit { cursor: pointer; }
+.orch__pplate { cursor: pointer; }
+.orch__pplate-bg { fill: color-mix(in srgb, var(--deck-surface) 90%, transparent); stroke: color-mix(in srgb, var(--iris) 30%, var(--line)); stroke-width: 1; }
+.orch__platform-host[data-orch-platform-synthetic] .orch__pplate-bg { stroke: color-mix(in srgb, var(--deck-violet) 45%, var(--line)); stroke-dasharray: 3 3; }
+.orch__pplate--on .orch__pplate-bg, .orch__platform-host--on .orch__pplate-bg { stroke: var(--iris); }
+.orch__pplate:focus-visible .orch__pplate-bg { stroke: var(--iris); stroke-width: 2; }
+.orch__pplate-title { font: 600 var(--t-sm) var(--font-mono); fill: var(--fg); }
+.orch__pplate-sub { font: var(--t-xs) var(--font-ui); fill: var(--fg-3); }
+.orch__pplate-more { cursor: pointer; }
+.orch__pplate-more .orch__pplate-sub { fill: var(--fg-2); }
+.orch__pplate-beacon { pointer-events: none; }
+/* M293. No WebGL: the flat bodies. The plate keeps the deck surface and the
+   accent edge; an object is a block in its TONE with the same plate word beside
+   it — the shape (square, hexagon, tall tablet) still says the kind. */
+.orch__flat-plate { fill: var(--deck-surface); stroke: color-mix(in srgb, var(--iris) 55%, transparent); stroke-width: 1; }
+.orch__flat-plate--group { stroke: color-mix(in srgb, var(--deck-violet) 55%, transparent); stroke-dasharray: 4 4; }
+.orch__flat-plate[data-lit] { fill: color-mix(in srgb, var(--iris) 8%, var(--deck-surface)); }
+.orch__flat-object { fill: color-mix(in srgb, var(--tone, var(--fg-3)) 35%, var(--deck-surface)); stroke: var(--tone, var(--fg-3)); stroke-width: 1; }
+/* M292. Screen-aligned orientation in the scene's corner: breadcrumb, camera
+   buttons, minimap. HTML, outside the projection, so it never tilts or pans. */
+.orch__scene-tools { position: absolute; left: var(--sp-4); bottom: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-start; pointer-events: none; z-index: 1; }
+.orch__scene-tools > * { pointer-events: auto; }
+.orch__crumbs { display: flex; align-items: center; gap: var(--sp-2); max-width: 26rem; font-size: var(--t-xs); color: var(--fg-3); background: var(--glass-3); border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-3); }
+.orch__crumb { background: none; border: 0; padding: 0 var(--sp-1); font: inherit; color: var(--fg-2); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; }
+.orch__crumb:hover { color: var(--fg); }
+.orch__crumb--leaf { color: var(--fg); cursor: default; }
+.orch__crumb-sep::before { content: '\203A'; color: var(--fg-4); }
+.orch__scene-buttons { display: flex; gap: var(--sp-2); }
+.orch__webgl-notice { background: var(--glass-3); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); max-width: 24rem; }
+.orch__minimap { display: block; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--glass-3); cursor: crosshair; }
+.orch__minimap-plate { fill: color-mix(in srgb, var(--iris) 18%, var(--deck-surface)); stroke: color-mix(in srgb, var(--iris) 60%, transparent); stroke-width: 1; }
+.orch__minimap-plate--group { stroke: color-mix(in srgb, var(--deck-violet) 60%, transparent); stroke-dasharray: 2 2; }
+.orch__minimap-plate[data-lit] { fill: color-mix(in srgb, var(--iris) 40%, var(--deck-surface)); }
+.orch__minimap-plate[data-needs] { stroke: var(--amber); }
+.orch__minimap-view { fill: color-mix(in srgb, var(--fg) 6%, transparent); stroke: var(--fg-2); stroke-width: 1; pointer-events: none; }
 .orch__dep-blocked { color: var(--amber); }
 .orch__deps { margin-top: var(--sp-3); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
 .orch__dep-list { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
