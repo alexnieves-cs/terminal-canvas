@@ -1629,7 +1629,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             (the golden critic found `tests`'s beacon hidden, twice). */}
         <span className="orch__float-state">{isl.source === 'work-item' ? 'Task' : 'Session · no task yet'} · {isl.state} · {isl.memberIds.length} {isl.memberIds.length === 1 ? 'session' : 'sessions'}{waiting !== undefined ? ' · needs you' : ''}</span>
         <span className="orch__float-title" data-orch-island-goal>{isl.goal}</span>
-        <span className="orch__island-place" data-orch-island-place title={orchPlacementLine(isl)}>{orchPlacementLine(isl)}</span>
+        <span className="orch__island-place" data-orch-island-place title={orchPlacementLine(isl)}>{floating ? orchPlacementLine({ ...isl, writers: 0 }) : orchPlacementLine(isl)}</span>
       </button>
     )
   }
@@ -1998,22 +1998,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     : <Sparkline values={[]} />}
                 </div>
               </div>
-              {/* M290. Run limits: each says whether main ENFORCES it or it is advisory, and
-                  what it covers. Unknown spend reads Unknown; no cap is implied across
-                  providers that report none. */}
-              <div className="orch__limits" data-orch-limits aria-label="Run limits">
-                <div className="orch__section-title">Run limits</div>
-                <ul className="orch__limit-list">
-                  {limits.map((l) => (
-                    <li key={l.id} className="orch__limit" data-orch-limit={l.id} data-orch-limit-kind={l.kind} title={l.coverage}>
-                      <span className="orch__limit-label">{l.label}</span>
-                      <span className="orch__limit-kind" data-kind={l.kind}>{l.kind}</span>
-                      <span className="orch__limit-value">{l.value}</span>
-                      <span className="orch__caption orch__limit-coverage">{l.coverage}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
               {computeBlocks.length > 0 && (
                 <div className="orch__compute" aria-label="Compute by panel">
                   {computeBlocks.map((block) => (
@@ -2186,6 +2170,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </ul>
             )}
           </section>
+
+          {/* M290. Run limits: each says whether main ENFORCES it or it is advisory, and
+              what it covers. Unknown spend reads Unknown; no cap is implied across
+              providers that report none. A folded line at rest (the critic: the block in
+              the System card made the bottom row taller and shrank the whole diorama). */}
+          <details className="orch__brief orch__limits" data-orch-limits>
+            <summary className="orch__brief-summary">Run limits · {limits.filter((l) => l.kind === 'enforced').length} enforced · {limits.filter((l) => l.kind === 'advisory').length} advisory</summary>
+            <ul className="orch__limit-list">
+              {limits.map((l) => (
+                <li key={l.id} className="orch__limit" data-orch-limit={l.id} data-orch-limit-kind={l.kind} title={l.coverage}>
+                  <span className="orch__limit-label">{l.label}</span>
+                  <span className="orch__limit-kind" data-kind={l.kind}>{l.kind}</span>
+                  <span className="orch__limit-value">{l.value}</span>
+                  <span className="orch__caption orch__limit-coverage">{l.coverage}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
 
           {/* M284. The inspector: identity, state, next action — for the selected session,
               or for the task island when nothing is selected. */}

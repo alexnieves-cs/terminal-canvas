@@ -8403,7 +8403,8 @@ body {
 .orch__control-notes { list-style: none; margin: var(--sp-1) 0 0; padding: 0; }
 .orch__retry { margin-top: var(--sp-2); padding: var(--sp-2); border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line)); border-radius: var(--r-sm); }
 .orch__retry-prompt { max-height: 8rem; overflow: auto; white-space: pre-wrap; }
-.orch__limits { margin-top: var(--sp-3); }
+.orch__limits { margin-bottom: var(--sp-3); }
+.orch__float .orch__island-place { max-width: 100%; }
 .orch__limit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .orch__limit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 var(--sp-2); align-items: baseline; font-size: var(--t-xs); }
 .orch__limit-label { color: var(--fg-2); font-weight: 600; }
