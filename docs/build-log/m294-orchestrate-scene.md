@@ -359,3 +359,47 @@ point". None is written; the person decides after looking at the composites in `
   fixed 860×420 stage (composition), the missing cyan edge light and ambient floor pool
   (material/glow), the bridge-only connectors, the truncated compact name tier, and the
   light theme's grey inversion.
+
+## The critic's round against the chrome pass (2026-09-20)
+
+Judged against the two references and the last accepted golden, from the three
+`out/shots/*.vs-reference.png` composites written by M297's harness, with M299's chrome in
+frame. **Not a fresh-context critic** — this round was made by a session that had already read
+this ledger and M299's, so it is worth less than M297's on the questions M297 already asked;
+it is recorded because the goldens were owed and a person had to look before they were written.
+
+One sentence per scene, the verdict this run writes its golden on:
+
+- **`orchestration` (light)** — the *chrome* now reads as the reference (title row, mixed-case
+  tiles each carrying one action, the two side cards, an open Changes · Checks · Output
+  workbench), but the *scene* inside it is still the weaker half: pale grey slabs on a pale
+  ground with no material and no focal point, pushed into the lower right of a stage whose
+  upper-left third is empty, and the two overlay cards on the plates (`Workspace — grouping
+  only`, `2 sessions`) restate the shared-directory and session facts the title row says one
+  line above them.
+- **`orchestration-dark`** — the closest of the three to the reference, and the one that
+  answers M294's "small, flat, unlit": role-tinted violet and teal platforms on a blue-black
+  ground read as a lit stage rather than cardboard; what remains is legibility and furniture —
+  the per-cube names are three or four characters at the fitted pitch, the camera rail
+  (`All work` / `2 islands` / `Fit all` / `Fit selected` / `Back`) is bare text with no surface
+  where the reference draws a tidy `− Fit +` pill, and the minimap at lower right is a
+  near-empty box carrying two pale diamonds at high visual weight.
+- **`orchestration-working`** — M294's "nearly indistinguishable from the idle one" is answered
+  in the CHROME and only partly in the SCENE: the strip says `Running — claude — api`, the
+  tiles say `Active agents 1 · View agents`, the attention card carries the working agent with
+  the shared-directory change warning, and the Activity feed lists the became-working events;
+  but the bloom M280 built reads weaker than the last golden's, because M298's fit shrank the
+  platforms, so *busy* is carried by text more than by light.
+
+Two of M297's open items are NOT closed by this round and are still owed:
+
+- The working fixture seeds three busy and one waiting; this capture still shows
+  `Active agents 1` and `Waiting on you 0`. The working verdict above is therefore still partly
+  a verdict on the fixture's seeding, exactly as M297's Found/deferred said. Measure before the
+  working scene is judged again.
+- The `● 1` pill beside `View` in the top bar is still unnamed — present in the working
+  capture, absent from the goldens, identified by no round so far.
+
+The goldens are written on these three sentences: every divergence above is a KNOWN and
+recorded one, none is a regression against quadrant 3, and the chrome changes are M299's on
+purpose. The scene-side notes are the next pass's input, not a reason to withhold a baseline.

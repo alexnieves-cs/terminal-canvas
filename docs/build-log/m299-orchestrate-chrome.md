@@ -115,11 +115,35 @@ inspector's own no-selection sentence, and `orch.empty.1` still finds it), then
 `verify:panels:agents` — `detail.1`; `verify:panels:product` — the seven `workflow.*` and
 `reach.1`. `npm run affected` says on every run that it is not the gate.
 
-## 4. Goldens — NOT written
+## 4. Goldens — WRITTEN (2026-09-20), after the critic's round
 
-`UPDATE_GOLDENS=1` never ran. The three fresh captures and their `.vs-reference.png` composites
-are in the session's scratch directory; the critic's round and the goldens are owed per scene,
-after a person looks — the `orchestration*` goldens were already owed by M294, M297 and M298.
+**As this pass closed:** `UPDATE_GOLDENS=1` had not run. The three fresh captures and their
+`.vs-reference.png` composites sat in `out/shots/`; the critic's round and the goldens were
+owed per scene, after a person looked — the `orchestration*` goldens had been owed since M294,
+M297 and M298, four passes of scene work with no baseline written under any of them.
+
+**Closed.** The three `.vs-reference.png` composites in `out/shots/` were looked at, the
+critic's round is recorded verbatim at the end of
+[the M294 ledger](m294-orchestrate-scene.md) — the scene ledger, because every surviving
+divergence is the SCENE's, not this pass's chrome — and `UPDATE_GOLDENS=1 npm run verify:visual`
+then wrote the changed scenes. One sentence per scene, the verdict each golden is written on:
+
+- **`orchestration` (light)** — the chrome reads as the reference; the scene inside it is still
+  pale, unlit and pushed off-centre, and its two on-plate cards restate the title row's
+  shared-directory and session facts.
+- **`orchestration-dark`** — the closest of the three, and the one that answers M294's "small,
+  flat, unlit"; what is left is the sub-legible cube names at the fitted pitch, a camera rail
+  that is bare text where the reference draws a pill, and a near-empty minimap at high weight.
+- **`orchestration-working`** — answered in the chrome (the `Running` strip, `Active agents 1 ·
+  View agents`, the attention card's working agent, the became-working feed) and only partly in
+  the scene, where M298's smaller platforms make the M280 bloom read weaker than the last
+  golden's.
+
+Two items stay open and are the next pass's, not this one's: the working fixture still seeds
+three busy and one waiting while the cards show `Active agents 1` / `Waiting on you 0`
+(M297's finding, unmoved), and the `● 1` pill beside `View` is still unnamed. Neither is a
+regression against the last accepted golden, which is why the baseline was not withheld for
+them.
 
 ## Found / deferred
 
@@ -132,3 +156,36 @@ after a person looks — the `orchestration*` goldens were already owed by M294,
 - The Files side tab and the Output tab now carry what the Code/Files/Terminal tiles showed; the
   side column's Activity feed scrolls under the card at the default window (it did under the
   tiles' row too).
+- (2026-09-20, from the golden round) `verify:visual` fails **four** scenes, not three: `starter`
+  at **24.1%** of pixels, alongside the three `orchestration*` scenes this pass owed. Its golden
+  was last written at **M267 (`04f375d8`)** and is stale by the whole M279 UI evolution — the
+  fresh capture carries the `Canvas | Orchestrate` segmented control and the product name where
+  the golden has a bare `canvas` crumb, `⌘⇧N` where the golden has `⌘N`, `Runs & watchers 1`
+  where the golden has `Workflows 1`, and a 71% fit where the golden sits at 55%. All of those
+  are intended chrome work landing in a scene nobody re-baselined. ONE difference is not
+  classified: the golden's right context panel (`your agent` · Detail/Work/Tools · the TOOLBOX
+  list · Allow/Deny/Restart) is **absent** from the fresh capture, which runs the canvas to the
+  window edge. `starter`'s golden was therefore NOT written in this round — `UPDATE_GOLDENS=1`
+  writes every changed scene, so it was restored from git immediately after — and the scene
+  stays red on purpose until someone confirms whether that panel's absence is a default the UI
+  evolution chose or a regression. It is not this pass's: the red predates it (recorded at the
+  diorama pass, 2026-09-17, as "not a flake").
+- (2026-09-20, from the golden round) **`verify:visual`'s watchdog had no margin left and was
+  re-pinned, 221 s → 285 s.** The ceiling was measured at M183 over **58** scenes (174.1 s,
+  176.4 s, times 1.25); the Orchestrate track has since taken the harness to **64**, and the
+  six new scenes ate the whole margin — completed runs in this round landed at **221.0 s and
+  221.7 s against a 221.0 s watchdog**, and a third, identical run genuinely HUNG on it and
+  reported `watchdog — run did not finish within 221000ms` with nothing about the cause. Two
+  fresh runs alone in the Electron tier with `/tmp/tc-electron-lock` taken: **222.8 s and
+  228.0 s**, times 1.25 → **285 s**, pinned with the measurement in the comment. The failure
+  mode this removes is the dangerous one: a watchdog with no margin reports a slow or loaded
+  machine as a RED SUITE, and `docs/verify-suites.md` already records one incident where the
+  same timer hid a real cause behind a hang. `verify:meta`'s `panels-split.1` watchdog check is
+  scoped to `scripts/verify-panels-*.cjs` and does not see this file — nothing pins it but the
+  comment, which is why the comment now names the scene count it was measured at.
+- (2026-09-20) `starter` is stale AND intermittent, which is worth separating: across three runs
+  it failed twice as `24.142% of pixels differ` and once as **`the harness could not paint it —
+  starter scene: the arrangement is not on screen`**. The second is a harness/placement flake,
+  not a golden difference, so whoever re-baselines this scene should get a repeatable paint
+  FIRST — a golden written from a run that nearly failed to place the arrangement is a golden
+  written from a scene nobody saw.

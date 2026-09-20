@@ -62,12 +62,18 @@ const TILE_BUDGET = 0.35 // of one tile's pixels: a changed word fills a tile pa
 // way before the comparison, so the two sides see one scale.
 const GOLDEN_SCALE = 0.5
 // The whole run: the harness paints 55 scenes in under three minutes.
-// Measured (M183): the harness paints 58 scenes, the workflow editor's among
-// them. Two green runs of this suite, alone in the Electron tier: 174.1 s and
-// 176.4 s wall, times 1.25 — the M135 rule; the M160 figures (166.5 s, 166.2 s
-// over 55 scenes) are what this replaces, and an update run that writes
-// goldens tripped the old 209 s ceiling. Re-measure when a milestone adds scenes.
-const WATCHDOG_MS = 221000
+// Measured (2026-09-20, the M294/M299 golden round): the harness paints 64
+// scenes — the Orchestrate track added six since the M183 measurement — and two
+// runs alone in the Electron tier, the lock taken, clocked 222.8 s and 228.0 s
+// wall, times 1.25 — the M135 rule. The 221 s ceiling this replaces was measured
+// at 58 scenes (174.1 s, 176.4 s) and had been eaten whole by the six new ones:
+// completed runs were landing at 221.0 s and 221.7 s against a 221.0 s watchdog,
+// so the suite was a coin flip and one confirmation run genuinely hung on it.
+// A watchdog with no margin reports a SLOW MACHINE as a red suite, which is the
+// one thing this timer must never do. The M160 figures (166.5 s, 166.2 s over 55
+// scenes) are the earlier baseline. Re-measure when a milestone adds scenes —
+// and this comment is the record that it was not done for six of them.
+const WATCHDOG_MS = 285000
 
 const results = []
 const ok = (n, pass, detail) => {
