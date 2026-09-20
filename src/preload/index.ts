@@ -33,6 +33,7 @@ import type { PanelTextExportRequest } from '../shared/export'
 import type { OrphanRow } from '../shared/orphans'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
+import type { EventRow, TimelineFilter } from '../shared/run-ledger'
 import type { MachineCostTarget } from '../shared/machine-cost'
 
 /**
@@ -223,6 +224,8 @@ const bridge: CanvasBridge = {
   },
   ledger: {
     list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit),
+    timeline: (filter: TimelineFilter, limit: number) => ipcRenderer.invoke(IPC.LEDGER_TIMELINE, filter, limit),
+    event: (row: Omit<EventRow, 'kind'>) => ipcRenderer.invoke(IPC.LEDGER_EVENT, row),
     usage: (since: number) => ipcRenderer.invoke(IPC.LEDGER_USAGE, since)
   },
   agentSession: {

@@ -991,9 +991,94 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     JSON.stringify({ band0Same, bands, centred, wide25, wide100 }))
 }
 
-const failed = results.filter((x) => !x.pass)
-console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)
-if (failed.length) {
-  for (const f of failed) console.log(`  FAIL ${f.id}${f.detail ? ` — ${f.detail}` : ''}`)
-  process.exit(1)
+// M300 — orch-timeline.*. THE DURABLE RECORD. It rides the run ledger's own
+// stream, so these run the REAL writer against a real temp file rather than a
+// model of it: a trim that forgets to say what it dropped is the failure this
+// phase exists to stop, and it is invisible to a check that only reads types.
+{
+  const { mkdtempSync, writeFileSync, readFileSync } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const L = load('src/main/run-ledger.ts', 'run-ledger.cjs')
+  const S = load('src/shared/run-ledger.ts', 'run-ledger-shared.cjs')
+  const dir = mkdtempSync(join(tmpdir(), 'tc-ledger-'))
+
+  // The parser's record rules, per field.
+  const good = { kind: 'event', runId: 'r1', at: 5, event: 'handoff', source: 'app', title: 'fired', paths: ['a.ts', ''], extra: 1 }
+  const parsed = S.parseEventRow(good)
+  const rules = {
+    kept: parsed !== null && parsed.title === 'fired' && parsed.runId === 'r1',
+    // A path list is filtered, not rejected; an unknown field is not carried.
+    paths: JSON.stringify(parsed?.paths) === '["a.ts"]' && parsed?.extra === undefined,
+    // An unknown kind or source from a LATER build drops the row rather than
+    // being coerced into a kind this build would then show as another sort of fact.
+    laterKind: S.parseEventRow({ ...good, event: 'deployment' }) === null,
+    laterSource: S.parseEventRow({ ...good, source: 'ci' }) === null,
+    noRun: S.parseEventRow({ ...good, runId: '' }) === null,
+    noTitle: S.parseEventRow({ ...good, title: '' }) === null,
+    // A gap that dropped nothing is not a gap.
+    zeroGap: S.parseGapRow({ kind: 'gap', at: 1, dropped: 0 }) === null,
+    gap: JSON.stringify(S.parseGapRow({ kind: 'gap', at: 1, dropped: 3 })) === '{"kind":"gap","at":1,"dropped":3}'
+  }
+  ok('orch-timeline.1 a durable event row parses field by field: a malformed optional field costs the field and keeps the row, an unknown event kind or source from a later build drops the row rather than being coerced, a row with no run id or no title is not a record, and a gap that dropped nothing is not a gap',
+    Object.values(rules).every(Boolean), JSON.stringify(rules))
+
+  // The type is the enforcement: there is nowhere in the row to put output
+  // bytes, which is what keeps the retention bound a ROW COUNT.
+  const src = readFileSync(join(root, 'src/shared/run-ledger.ts'), 'utf8')
+  ok('orch-timeline.2 references only, enforced by the type: EventRow has paths and no output/body/content/stdout field, and the shared module still says so in one place',
+    /export interface EventRow \{[^}]*\}/s.test(src) &&
+      !/\n\s+(output|body|content|stdout|stderr|text|bytes)\??:/.test(src.slice(src.indexOf('export interface EventRow'), src.indexOf('export interface GapRow'))) &&
+      /paths\?: string\[\]/.test(src),
+    'EventRow')
+
+  ;(async () => {
+    const file = join(dir, 'ledger.jsonl')
+    const led = L.createRunLedger({ file, maxLines: 10 })
+    const ev = (n, over) => ({ kind: 'event', runId: 'r1', at: n, event: 'tool', source: 'agent', title: `e${n}`, ...over })
+    for (let n = 1; n <= 8; n += 1) await led.append(ev(n))
+    await led.append({ panelId: 'p1', command: 'npm test', cwd: '/w', startedAt: 1, endedAt: 2, exitCode: 0 })
+    const read = await led.timeline({ runId: 'r1' }, 100)
+    const newestFirst = read.entries.map((e) => e.row.title ?? e.row.command).slice(0, 2).join()
+    ok('orch-timeline.3 a timeline read is newest first, filtered by subject, and says whether it reached the start: a run filter keeps that run\'s events and leaves a command row to the panel filter that can claim it, and reachedStart is true only when the scan consumed the file',
+      read.reachedStart === true && newestFirst === 'e8,e7' && read.entries.every((e) => e.kind === 'event') &&
+        (await led.timeline({ runId: 'r1' }, 3)).reachedStart === false &&
+        (await led.timeline({ panelIds: ['p1'] }, 100)).entries.some((e) => e.kind === 'command'),
+      JSON.stringify({ reachedStart: read.reachedStart, n: read.entries.length, newestFirst }))
+
+    // Past the cap: the trim must leave a marker, and a SECOND trim must merge
+    // into it rather than appending a second one.
+    for (let n = 9; n <= 24; n += 1) await led.append(ev(n))
+    const lines = readFileSync(file, 'utf8').split('\n').filter((l) => l !== '')
+    const gaps = lines.map((l) => JSON.parse(l)).filter((r) => r.kind === 'gap')
+    const after = await led.timeline({ runId: 'r1' }, 100)
+    const gapEntries = after.entries.filter((e) => e.kind === 'gap')
+    ok('orch-timeline.4 a trim SAYS what it dropped: past the cap the file carries exactly one gap row, at its head, whose count is the rows the record no longer has; a second trim merges into that gap rather than appending another, the file never exceeds the cap, and the gap reaches the reader through every subject filter because it is a fact about the FILE',
+      lines.length <= 10 && gaps.length === 1 && gaps[0].dropped >= 15 && JSON.parse(lines[0]).kind === 'gap' &&
+        gapEntries.length === 1 && after.entries[after.entries.length - 1].kind === 'gap',
+      JSON.stringify({ lines: lines.length, gaps, tail: after.entries[after.entries.length - 1]?.kind }))
+
+    // A malformed line costs that line, never the read.
+    writeFileSync(file, 'not json\n' + JSON.stringify(ev(99)) + '\n')
+    const led2 = L.createRunLedger({ file, maxLines: 10 })
+    const salvage = await led2.timeline({ runId: 'r1' }, 100)
+    ok('orch-timeline.5 a malformed line costs that line and never the record: a ledger whose first line is not JSON still reads its remaining rows',
+      salvage.entries.length === 1 && salvage.entries[0].row.title === 'e99', JSON.stringify(salvage.entries.length))
+
+    const failed = results.filter((x) => !x.pass)
+    console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)
+    if (failed.length) {
+      for (const f of failed) console.log(`  FAIL ${f.id}${f.detail ? ` — ${f.detail}` : ''}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  })().catch((e) => {
+    // A throw inside the async block would otherwise exit 0 with no summary —
+    // a suite that proves nothing and says nothing, which is worse than a red.
+    console.log(`verify:orchestration FAILED to run the ledger checks — ${String(e && e.stack ? e.stack : e)}`)
+    process.exit(1)
+  })
 }
+
+// The ledger block above is the file's ONE exit, because its checks are async:
+// a synchronous summary here would print a count that is short by five and
+// then race the real one. Every check in this suite is counted there.

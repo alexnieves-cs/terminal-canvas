@@ -2,7 +2,7 @@ import type { AgentPlanReply, AgentPlanRequest } from './plan'
 import type { ImageResult, StarterFiles } from './starter'
 import type { TemplateSaveResult } from './templates'
 import type { WatchTrigger } from './watch-trigger'
-import type { RunRow, UsageRow } from './run-ledger'
+import type { EventRow, RunRow, TimelineFilter, TimelineRead, UsageRow } from './run-ledger'
 import type { ReviewIdentity } from './review-identity'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
@@ -559,6 +559,22 @@ export const IPC = {
   LEDGER_LIST: 'ledger:list',
   /** M142. This week's usage rows from the run ledger, priced in the renderer. */
   LEDGER_USAGE: 'ledger:usage',
+  /**
+   * M300. Orchestrate's durable record, for one subject, newest first —
+   * command outcomes, durable events and any gap the trim left, merged.
+   * READ ONLY: nothing on this channel re-runs anything, which is the plan's
+   * "event inspection is read-only" made structural rather than promised.
+   */
+  LEDGER_TIMELINE: 'ledger:timeline',
+  /**
+   * M300. Append ONE durable event. The renderer owns the facts main cannot
+   * see — a handoff's outcome, the artifact a task produced — so it needs a
+   * door; main owns the file, the queue and the trim, so the door is an
+   * append and nothing else. It cannot delete, edit or re-order a row, and a
+   * row it writes carries the `source` the caller names rather than one main
+   * infers.
+   */
+  LEDGER_EVENT: 'ledger:event',
   /**
    * M65. The spawn sheet: main resolves a preset (absent command included)
    * or a typed command into a template, refuses a directory that does not
@@ -1659,6 +1675,18 @@ export interface CanvasBridge {
     list(panelId: string, limit: number): Promise<RunRow[]>
     /** M142. Every usage row at or after `since` (epoch ms), newest first — the history half of backlog #19. */
     usage(since: number): Promise<UsageRow[]>
+    /**
+     * M300. The DURABLE record for one subject, newest first. Distinct from
+     * the activity ring the renderer keeps in memory: that is a live tail and
+     * this is history, and Orchestrate's Timeline tab says which is which.
+     * `reachedStart` false means the limit filled, never that nothing is older.
+     */
+    timeline(filter: TimelineFilter, limit: number): Promise<TimelineRead>
+    /**
+     * M300. Append one durable event. Returns false when the write was
+     * refused — the caller says so rather than assuming it landed.
+     */
+    event(row: Omit<EventRow, 'kind'>): Promise<boolean>
   }
   /** M73. The agent-session runtime. `agent` below is the older agent-STATE surface (M6c/M6d); the two are different facts. */
   agentSession: {

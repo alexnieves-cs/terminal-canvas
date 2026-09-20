@@ -118,7 +118,7 @@ broker:audit jira:transitions jira:comment jira:transition file:open file:read f
 fs:list toolbox:read toolbox:permissions file:write file:create diagnostics:sample
 diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx
 tool:generate env:report link:open ledger:list
-ledger:usage spawn:sheet spawn:recent spawn:recent-used agent:create agent:send agent:interrupt agent:dispose
+ledger:usage ledger:timeline ledger:event spawn:sheet spawn:recent spawn:recent-used agent:create agent:send agent:interrupt agent:dispose
 agent:answer agent:list agent:transcript agent:import agent:clipboard-image
 attachment:clipboard-file agent:auto-start agent:auto-stop agent:grants agent:revoke-grants
 agent:pool-start agent:pool-stop teammate:list teammate:save teammate:delete

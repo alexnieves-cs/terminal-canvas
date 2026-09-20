@@ -22,7 +22,7 @@ import { incomingWorkflowGraphSchema, graphProblems } from '../shared/workflow-g
 import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
-import type { RunRow } from '../shared/run-ledger'
+import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
   PanelSpec,
@@ -522,7 +522,17 @@ export function registerIpcHandlers(
   /** M253. Appended last, like every collaborator before it. */
   pack: PackHandlers = INERT_PACK,
   /** M255. Appended last, like every collaborator before it. */
-  publisher: PublishHandlers = INERT_PUBLISH
+  publisher: PublishHandlers = INERT_PUBLISH,
+  /**
+   * M300. The durable record's two doors, appended last so no existing
+   * positional call site shifts. Inert by default like every collaborator
+   * before them, and the defaults are the HONEST ones: an unwired read
+   * answers "no entries, and the scan did not reach the start", never an
+   * empty record that reads as "nothing happened"; an unwired write answers
+   * false, so a caller reports that its row did not land.
+   */
+  ledgerTimeline: (filter: TimelineFilter, limit: number) => Promise<TimelineRead> = async () => ({ entries: [], reachedStart: false }),
+  ledgerEvent: (row: EventRow) => Promise<boolean> = async () => false
 ): void {
   ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
@@ -691,6 +701,12 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
+  // M300. The same clamp the list read takes, for the same reason: a limit is
+  // the caller's ask, not the caller's authority over how much main reads.
+  ipcMain.handle(IPC.LEDGER_TIMELINE, (_event, filter: TimelineFilter, limit: number) => ledgerTimeline(filter ?? {}, Math.max(1, Math.min(200, limit))))
+  // The `kind` is MAIN's, never the caller's: a door that took the discriminant
+  // from the renderer could write a usage or a gap row through the event door.
+  ipcMain.handle(IPC.LEDGER_EVENT, (_event, row: Omit<EventRow, 'kind'>) => ledgerEvent({ ...row, kind: 'event' }))
   ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))
   ipcMain.handle(IPC.DIAGNOSTICS_SAMPLE, () => ({
     ipcMessagesPerSecond: ptyManager.ipcMessageRate()

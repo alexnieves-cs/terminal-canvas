@@ -16,8 +16,11 @@ import { existsSync } from 'node:fs'
  * before-quit waits on — a lost last row is a lost row, not a lost file.
  */
 import type { RunRow } from '../shared/run-ledger'
-export type { RunRow, UsageRow, LedgerRow } from '../shared/run-ledger'
-import { parseUsageRow, type LedgerRow, type UsageRow } from '../shared/run-ledger'
+export type { RunRow, UsageRow, EventRow, GapRow, LedgerRow, TimelineEntry, TimelineFilter, TimelineRead } from '../shared/run-ledger'
+import {
+  parseEventRow, parseGapRow, parseUsageRow,
+  type GapRow, type LedgerRow, type TimelineEntry, type TimelineFilter, type TimelineRead, type UsageRow
+} from '../shared/run-ledger'
 import { parseReviewIdentity } from '../shared/review-identity'
 
 export interface RunLedger {
@@ -26,9 +29,38 @@ export interface RunLedger {
   list(panelId: string, limit: number): Promise<RunRow[]>
   /** M142. Every usage row at or after `since`, newest first. */
   usage(since: number): Promise<UsageRow[]>
+  /**
+   * M300. The durable record for one subject, newest first: command outcomes,
+   * durable events, and any gap the trim left, merged in one pass so the
+   * reader cannot show two of them out of order.
+   */
+  timeline(filter: TimelineFilter, limit: number): Promise<TimelineRead>
 }
 
 export const RUN_LEDGER_MAX_LINES = 2000
+
+/**
+ * A command row read back, field by field. M286's split, now shared by both
+ * readers: a malformed OPTIONAL field costs the field and keeps the row, and
+ * a line that is not a command row at all (a usage row, an event, a gap)
+ * returns null rather than a row of defaults.
+ */
+function runRowOf(raw: unknown): RunRow | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const r = raw as Partial<RunRow> & { kind?: unknown }
+  if (r.kind !== undefined) return null
+  if (typeof r.panelId !== 'string' || typeof r.command !== 'string') return null
+  const tested = parseReviewIdentity(r.tested)
+  return {
+    panelId: r.panelId,
+    command: r.command,
+    cwd: typeof r.cwd === 'string' ? r.cwd : '',
+    startedAt: typeof r.startedAt === 'number' ? r.startedAt : 0,
+    endedAt: typeof r.endedAt === 'number' ? r.endedAt : 0,
+    exitCode: typeof r.exitCode === 'number' ? r.exitCode : null,
+    ...(tested === undefined ? {} : { tested })
+  }
+}
 
 export function createRunLedger(o: { file: string; maxLines?: number }): RunLedger {
   const max = o.maxLines ?? RUN_LEDGER_MAX_LINES
@@ -46,12 +78,33 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
     }
   }
 
+  /**
+   * M300. The trim keeps `max - 1` rows and spends the freed line on a GAP
+   * row at the head, because a trimmed ledger and a quiet one are otherwise
+   * the same file and an empty timeline would read as "nothing happened".
+   *
+   * A second trim MERGES into the leading gap instead of appending another —
+   * the markers would otherwise accumulate one per trim forever, which is the
+   * same bounded leak the count-tracking above was written to close.
+   */
   const trim = async (): Promise<void> => {
     const lines = await readLines()
     if (lines.length <= max) return
-    const kept = lines.slice(lines.length - max)
+    const kept = lines.slice(lines.length - (max - 1))
+    let dropped = lines.length - kept.length
+    // A gap among the dropped lines carries rows this file already forgot;
+    // its count is inherited, never restarted, or the record would understate
+    // how much is missing every time it trims again.
+    for (const line of lines.slice(0, lines.length - kept.length)) {
+      try {
+        const gap = parseGapRow(JSON.parse(line))
+        // The marker line itself is not one of the rows it stands for.
+        if (gap !== null) dropped += gap.dropped - 1
+      } catch { /* a malformed line costs that line */ }
+    }
+    const marker: GapRow = { kind: 'gap', at: Date.now(), dropped }
     const tmp = `${o.file}.tmp`
-    await writeFile(tmp, kept.join('\n') + '\n')
+    await writeFile(tmp, [JSON.stringify(marker), ...kept].join('\n') + '\n')
     await rename(tmp, o.file)
   }
 
@@ -83,21 +136,45 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
       const out: RunRow[] = []
       for (let i = lines.length - 1; i >= 0 && out.length < limit; i -= 1) {
         try {
-          const parsed = JSON.parse(lines[i]!) as Partial<RunRow>
-          if (parsed.panelId !== panelId || typeof parsed.command !== 'string') continue
-          // M286. Field-level, like the rest of the row: a malformed `tested`
-          // costs the stamp and keeps the row.
-          const tested = parseReviewIdentity(parsed.tested)
-          out.push({
-            panelId, command: parsed.command, cwd: typeof parsed.cwd === 'string' ? parsed.cwd : '',
-            startedAt: typeof parsed.startedAt === 'number' ? parsed.startedAt : 0,
-            endedAt: typeof parsed.endedAt === 'number' ? parsed.endedAt : 0,
-            exitCode: typeof parsed.exitCode === 'number' ? parsed.exitCode : null,
-            ...(tested === undefined ? {} : { tested })
-          })
+          const row = runRowOf(JSON.parse(lines[i]!))
+          if (row !== null && row.panelId === panelId) out.push(row)
         } catch { /* a malformed line costs that line */ }
       }
       return out
+    },
+    async timeline(filter, limit) {
+      await queue
+      const lines = await readLines()
+      const panels = filter.panelIds === undefined ? null : new Set(filter.panelIds)
+      const entries: TimelineEntry[] = []
+      let i = lines.length - 1
+      for (; i >= 0 && entries.length < limit; i -= 1) {
+        try {
+          const raw: unknown = JSON.parse(lines[i]!)
+          // A gap is nobody's panel and nobody's task: it is a statement about
+          // the FILE, so it passes every filter. Hiding it behind a subject
+          // filter would put the reader back in front of a silent hole.
+          const gap = parseGapRow(raw)
+          if (gap !== null) { entries.push({ kind: 'gap', row: gap }); continue }
+          const event = parseEventRow(raw)
+          if (event !== null) {
+            if (filter.runId !== undefined && event.runId !== filter.runId) continue
+            if (filter.itemId !== undefined && event.itemId !== filter.itemId) continue
+            // An event with no panel belongs to the task, so it is kept by a
+            // panel filter only when the task filter already matched it.
+            if (panels !== null && event.panelId !== undefined && !panels.has(event.panelId)) continue
+            if (panels !== null && event.panelId === undefined && filter.itemId === undefined) continue
+            entries.push({ kind: 'event', row: event })
+            continue
+          }
+          const command = runRowOf(raw)
+          // A command row predates the run id and carries no item, so only a
+          // panel filter can claim it; a run/task-only read leaves it out
+          // rather than guessing which execution ran it.
+          if (command !== null && panels !== null && panels.has(command.panelId)) entries.push({ kind: 'command', row: command })
+        } catch { /* a malformed line costs that line */ }
+      }
+      return { entries, reachedStart: i < 0 }
     }
   }
 }

@@ -254,7 +254,20 @@ app.whenReady().then(async () => {
     createDocxHandlers(state),
     createToolGeneratorWiring(state),
     createPackWiring(state, stores, menu.afterPresetChange, which),
-    createPublishHandlers(state, stores, control)
+    createPublishHandlers(state, stores, control),
+    // M300. The durable record's two doors, on the SAME ledger the M52 read
+    // half above uses — one file, one queue, one trim.
+    (filter, limit) => stores.runLedger.timeline(filter, limit),
+    async (row) => {
+      try {
+        await stores.runLedger.append(row)
+        return true
+      } catch {
+        // A row that did not land is reported as not landed. The caller says
+        // so; it does not get a silent true and a record with a hole in it.
+        return false
+      }
+    }
   )
   createWindow(state, stores)
 
