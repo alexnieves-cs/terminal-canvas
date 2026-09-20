@@ -106,6 +106,11 @@ keyframe and a token duration; the compact plate uses `--t-xs`).
   centre at three zooms) and `orch-3d.app.2` (append-only cells, exact rects) both pass against
   the polygons unchanged. Fixture measurements on this build: 1/6/25/100 sessions at 8.3 /
   8.3 / 11.6 / 19.7 ms mean pinned full (Phase D: 16.8 ms at 100), every tier `full`.
+- `npm run affected` on e76f2ea0: **29/31 suites in 583 s**, the two reds being
+  `verify:panels:agents` (`detail.1`) and `verify:panels:product` (`workflow.edit.1`, `.edit.2`,
+  `.lib.1`, `.wire.1`, `.inspect.1`, `.save.1`, `.panel.1e`, `reach.1`) — the same nine
+  pre-existing reds Phase D's gate lists, attributed by id, none new. `verify:panels:core`,
+  `shell`, `kinds`, `orchestrate`, `xterm` and `canvas` green.
 - Captures to look at (the worktree's `out/demo/`, from the second run): `m291-4-new-island-
   appended.png` (three plates, names at rest, labels above and below), `m292-fixture-6.png`
   (compact tier on a 3×3 grid, amber-rimmed deck with a waiting station), `m292-fixture-25.png`
