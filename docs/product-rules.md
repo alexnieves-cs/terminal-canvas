@@ -83,6 +83,48 @@ and 5.0 did not spend them.
   correction, OSC 133, the PTY flush gate, dormancy tiers and the WebGL budget. The frame gets
   the new material; the cells inside it do not change unless a milestone specs it with a golden.
 
+## The critic and the reference (M297)
+
+A restyle towards an art-direction image is judged against THAT IMAGE, never only against
+the previous golden and the legibility rules. Phase D's fresh-context critic was handed the
+golden and the rules and accepted the loss of the hub, the connectors and the station names as
+"the stated design, not a regression"; M294 then repaired the scene with no fresh critic at
+all. Both are the same gap: the reference was a habit, and a fresh context has no habits.
+
+- **The reference is in the harness** (`verify:meta critic.reference.1`). An `orchestration*`
+  scene in `scripts/shot.cjs` names its `reference` PNG(s) beside its intent — repo paths,
+  tracked, so a clone has them — and `npm run shot` writes `<scene>.vs-reference.png` next to
+  the capture: the reference(s) on the top row, the last golden beside the fresh capture
+  beneath, labelled in the pixels. That composite is what the critic is handed, one image
+  per scene, so the comparison cannot be skipped. `node scripts/shot-composite.cjs
+  [shotDir]` remakes them from an old shot directory without Electron.
+- **The critic is fresh-context** — an Agent with no repo context, given only the
+  composites and this section — and answers one question per scene: *does this read as the
+  reference?* It lists every divergence, in this order: **silhouette** (the shapes and the
+  cluster's outline), **material** (the blue-black glass, cyan edges, violet accents),
+  **glow** (what blooms, what pools on the floor, what stays dark), **connectors** (traces
+  between stations, direction, brightness), **labels** (names at rest, their face and
+  placement), **composition** (the scene's share of the window, the focal point, the fill),
+  **chrome** (header, rails, workbench, cards). Dark first, then light; the working scene
+  against the dark idle one.
+- **Every changed scene gets the critic's sentence in the ledger BEFORE `UPDATE_GOLDENS=1`**
+  — verbatim, including the divergences the author disagrees with, with the disagreement
+  written beside them. The divergence list is the input to the next pass, not a verdict on
+  the branch; a golden is still written only after a person has looked.
+- **Reference features that are deliberately NOT copied.** The critic is told these so a
+  missing one is not reported as a divergence, and so their absence is never "fixed":
+  the central **orchestrator/supervisor hub** and its spokes (`docs/orchestrate-reference-plan.md`:
+  islands grouped by repository, an optional REAL supervisor, and "a central crystal must not
+  imply a supervisor exists"); the **sample copy** (`Payment API`, `research-agent`,
+  `code-agent`, `Good evening, Alex`, the acceptance criteria); the **"Interactive concept ·
+  sample data"** pill; the reference's **greeting and activity column** and its
+  **always-visible CPU/memory card** (replaced by the scope, queue and inspector, and by
+  run limits); the **fixed Terminal / Code / Files mosaic** (replaced by the resizable
+  workbench); the **decorative server blocks** where they compete with task labels; and
+  **endless connector motion**. What IS to be preserved is the plan's own sentence: the
+  blue-black material, cyan edges, violet accents, layered platforms, crystal focal point
+  and readable glass.
+
 ## The v10 product contract (M193, D01)
 
 The run after 5.0.0 executes [the ordered product development guide](docs/product-development-guide-2026-09-08.md)

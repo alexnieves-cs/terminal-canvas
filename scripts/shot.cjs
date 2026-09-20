@@ -14,7 +14,12 @@
    Output: <SHOT_DIR>/<scene>.png for every scene, plus manifest.json — the
    scene list with each scene's stated INTENT, which is what the critic is
    handed alongside the images. Add a scene by appending to SCENES; an intent
-   is one sentence saying what the picture is supposed to show.
+   is one sentence saying what the picture is supposed to show. A scene that
+   restyles towards an art-direction image names it in `reference` (repo
+   paths, tracked — verify:meta critic.reference.1), and the run then also
+   writes <scene>.vs-reference.png, the reference beside the capture, which
+   is what a fresh-context critic is handed (docs/product-rules.md, "The
+   critic and the reference").
 
    Fenced like every Electron harness here: a throwaway userData, its own
    layout file, its own scrollback and projects directories, the direct
@@ -22,6 +27,7 @@
    tmux sockets. It spawns real shells. */
 const { join } = require('node:path')
 const { loadRenderer } = require('./load-renderer.cjs')
+const { composeManifest } = require('./shot-composite.cjs')
 const { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync, statSync, openSync, readSync, closeSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
@@ -693,7 +699,7 @@ const SCENES = [
       await k.js(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await sleep(200)
     } },
-  { name: 'orchestration', intent: 'M271/M274/M275, cubes on an R3F island since the diorama R3F pass. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, real-lit WebGL agent cubes (a shared light rig and shadow-catching ground, one stage tilt) standing on an elliptical ground plane, the hub painted behind the near satellites (a real depth buffer, not painter\'s order), upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run, and so are the System card\'s CPU/Memory numbers and their two sparklines — those are a REAL sample of this machine\'s process table, so they differ between two runs a minute apart (measured 2 MB against 1 MB), and the memory tile is the one that failed the dark golden\'s tile budget at 81%. The cards, labels and geometry are unmasked; only the live values are. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
+  { name: 'orchestration', reference: ['docs/design-reference.png', 'docs/design/orchestrate-preview.png'], intent: 'M271/M274/M275, cubes on an R3F island since the diorama R3F pass. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, real-lit WebGL agent cubes (a shared light rig and shadow-catching ground, one stage tilt) standing on an elliptical ground plane, the hub painted behind the near satellites (a real depth buffer, not painter\'s order), upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run, and so are the System card\'s CPU/Memory numbers and their two sparklines — those are a REAL sample of this machine\'s process table, so they differ between two runs a minute apart (measured 2 MB against 1 MB), and the memory tile is the one that failed the dark golden\'s tile budget at 81%. The cards, labels and geometry are unmasked; only the live values are. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
     run: async (k) => {
       // Sized so the capture never inherits the previous scene's window (a golden
       // at 865 against an 868 capture was this scene's standing red), and stilled
@@ -725,7 +731,7 @@ const SCENES = [
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },
-  { name: 'orchestration-dark', intent: 'Command deck in dark mode: blue-black ground, glass cubes, role-tinted platforms, mono labels and separate state dots. Same selection as the light scene; clocks, greeting and the live machine readouts masked (see the light scene\'s disclosure) and reduced motion enabled.', size: [1440, 900],
+  { name: 'orchestration-dark', reference: ['docs/design-reference.png', 'docs/design/orchestrate-preview.png'], intent: 'Command deck in dark mode: blue-black ground, glass cubes, role-tinted platforms, mono labels and separate state dots. Same selection as the light scene; clocks, greeting and the live machine readouts masked (see the light scene\'s disclosure) and reduced motion enabled.', size: [1440, 900],
     run: async (k) => {
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       try {
@@ -749,7 +755,7 @@ const SCENES = [
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },
-  { name: 'orchestration-working', intent: 'M280. The ring with work ACTUALLY RUNNING, which is the state the rest of the diorama is designed for and the one no other scene shows: three agents busy and one waiting on a person, so the bloom tiers, the role-coloured halos and the ground pools under lit nodes are all in frame at once. The companion to `orchestration-dark`, which is the same ring with everything idle — that scene pins that idle does NOT bloom (a dark floor and unlit slabs), this one pins that working does. DISCLOSED, and the only thing faked: the fixture spawns no real agent, so the harness sends the same `agent:state` transitions main would have sent for four of the fixture\'s own panels, addressed by the `data-node` each cube carries; every pixel after that is the real model, the real material and the real composer. Dark theme and reduced motion, so a mid-bob cube cannot move a tile between runs; clocks, greeting and the live machine readouts masked as in the pair above.', size: [1440, 900],
+  { name: 'orchestration-working', reference: ['docs/design-reference.png', 'docs/design/orchestrate-preview.png'], intent: 'M280. The ring with work ACTUALLY RUNNING, which is the state the rest of the diorama is designed for and the one no other scene shows: three agents busy and one waiting on a person, so the bloom tiers, the role-coloured halos and the ground pools under lit nodes are all in frame at once. The companion to `orchestration-dark`, which is the same ring with everything idle — that scene pins that idle does NOT bloom (a dark floor and unlit slabs), this one pins that working does. DISCLOSED, and the only thing faked: the fixture spawns no real agent, so the harness sends the same `agent:state` transitions main would have sent for four of the fixture\'s own panels, addressed by the `data-node` each cube carries; every pixel after that is the real model, the real material and the real composer. Dark theme and reduced motion, so a mid-bob cube cannot move a tile between runs; clocks, greeting and the live machine readouts masked as in the pair above.', size: [1440, 900],
     run: async (k) => {
       // RUNS LAST of the three, and opens the page itself rather than
       // inheriting it. Sequenced between `orchestration` and its dark twin, the
@@ -1420,14 +1426,27 @@ app.whenReady().then(async () => {
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
     try {
       await scene.run(kit)
-      manifest.push({ file: `${scene.name}.png`, intent: scene.intent })
+      manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}) })
     } catch (error) {
       console.log(`scene ${scene.name} failed: ${error && error.message || error}`)
-      manifest.push({ file: `${scene.name}.png`, intent: scene.intent, failed: String(error && error.message || error) })
+      manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}), failed: String(error && error.message || error) })
     }
   }
   writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2))
   console.log(`wrote ${join(OUT, 'manifest.json')} (${manifest.length} scenes)`)
+  // M297. A scene that names a `reference` (the art-direction PNG it is
+  // meant to read as) also gets <scene>.vs-reference.png: reference over
+  // golden-beside-capture, labelled, one image — so the critic handed this
+  // directory is handed the comparison, not reminded to make it. Plain node
+  // (scripts/shot-composite.cjs), so it can be re-run on an old shot dir
+  // without Electron. A composite that cannot be written is printed, not
+  // thrown: the captures are the primary output and must still be cleaned
+  // up and reported.
+  try {
+    for (const p of composeManifest(OUT, manifest)) console.log(`wrote ${p}`)
+  } catch (error) {
+    console.log(`reference composite failed: ${error && error.message || error}`)
+  }
 
   ptyManager.killAll()
   for (const p of [FIX, scrollbackDir, SHOT_HOME]) { try { if (existsSync(p)) rmSync(p, { recursive: true, force: true }) } catch { /* best effort */ } }

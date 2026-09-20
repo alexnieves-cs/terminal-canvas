@@ -982,7 +982,8 @@ console.log('\n' + '='.repeat(60))
   // A SCENE is `{ name: '…', intent:` — the bare `{ name: '…'` form also
   // matched a DevTools media feature (`{ name: 'prefers-reduced-motion', value:`)
   // inside the reduced-motion scene and counted it as a scene with no golden.
-  const declared = [...shot.matchAll(/\{ name: '([a-z0-9-]+)', intent:/g)].map((m) => m[1])
+  // M297: a scene may carry `reference: [...]` between its name and intent.
+  const declared = [...shot.matchAll(/\{ name: '([a-z0-9-]+)', (?:reference: \[[^\]]*\], )?intent:/g)].map((m) => m[1])
   const goldensDir = join(ROOT, 'verify', 'visual', 'goldens')
   const goldens = existsSync(goldensDir) ? readdirSync(goldensDir).filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')) : []
   const missing = declared.filter((n) => !goldens.includes(n))
@@ -994,6 +995,48 @@ console.log('\n' + '='.repeat(60))
     script !== null && /require\('electron'\)/.test(script) && typeof pkg.scripts['verify:visual'] === 'string' && !chain.includes('verify:visual') &&
       declared.length >= 50 && missing.length === 0 && stray.length === 0 && channel !== null && budget !== null,
     JSON.stringify({ script: script !== null, declared: declared.length, goldens: goldens.length, missing: missing.slice(0, 8), stray: stray.slice(0, 8), channel: channel && channel[1], budget: budget && budget[1] }))
+}
+
+// M297 — critic.reference.1. Every Orchestrate scene the shot harness
+// declares names the reference image it is meant to read as, the file
+// exists AND is tracked, the harness reaches the composite helper, and the
+// critic brief the ledger rule sends a restyle to is in product-rules.md.
+// Why: Phase D's fresh-context critic was handed the previous golden and the
+// legibility rules, never the reference, and accepted the loss of the hub,
+// the connectors and the station names as "the stated design". A reference
+// that is a habit is a reference a fresh context does not have; a reference
+// that is an untracked path (docs/design/ was, for two days) is one a clone
+// cannot have. Tracked is asked of git's index, not the filesystem, so a
+// path that exists only on the author's machine is red here and not on
+// their screen. The scene count is pinned here, not in prose.
+{
+  const { execFileSync } = require('node:child_process')
+  const shot = read('scripts/shot.cjs') || ''
+  const rules = read('docs/product-rules.md') || ''
+  const composite = read('scripts/shot-composite.cjs')
+  // Each scene is one object literal starting `{ name: '…', ` and running to
+  // the next scene or the end of SCENES; `reference: [...]` must sit inside
+  // the orchestration ones. Text, like visual.1, because requiring shot.cjs
+  // needs Electron.
+  const heads = [...shot.matchAll(/\{ name: '([a-z0-9-]+)', (?:reference: \[([^\]]*)\], )?intent:/g)]
+  const orch = heads.filter((m) => m[1].startsWith('orchestration'))
+  const refsOf = (m) => (m[2] ? [...m[2].matchAll(/'([^']+)'/g)].map((r) => r[1]) : [])
+  let tracked = []
+  try { tracked = execFileSync('git', ['ls-files', 'docs/'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean) } catch { tracked = null }
+  const problems = []
+  for (const m of orch) {
+    const refs = refsOf(m)
+    if (refs.length === 0) problems.push(`${m[1]}: no reference`)
+    for (const r of refs) {
+      if (!existsSync(join(ROOT, r))) problems.push(`${m[1]}: ${r} does not exist`)
+      else if (tracked && !tracked.includes(r)) problems.push(`${m[1]}: ${r} is not tracked`)
+    }
+  }
+  const brief = /^## The critic and the reference/m.test(rules) && /deliberately (NOT|not) copied/.test(rules) && /vs-reference\.png/.test(rules)
+  ok('critic.reference.1 every orchestration* shot scene names a reference PNG that exists and is tracked, the harness writes the composite, and product-rules.md carries the critic brief with its excluded features',
+    orch.length === 3 && problems.length === 0 && tracked !== null && composite !== null &&
+      /require\('\.\/shot-composite\.cjs'\)/.test(shot) && /composeManifest\(OUT, manifest\)/.test(shot) && brief,
+    JSON.stringify({ orchestration: orch.map((m) => m[1]), problems, git: tracked !== null, composite: composite !== null, brief }))
 }
 
 // M190 — guide.1. THE GUIDE IS CHECKED AS A FILE, and the check is about the

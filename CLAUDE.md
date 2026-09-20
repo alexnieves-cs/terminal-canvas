@@ -267,3 +267,7 @@ are easy to get subtly wrong in ways that are hard to self-review.
 - **A golden changes on purpose or not at all.** A restyle regenerates its scenes, and each
   changed scene gets a critic's sentence in the ledger before `UPDATE_GOLDENS=1` writes it. A
   blind re-baseline is a regression that cannot be seen.
+- **A restyle towards a reference is judged against the reference** — the fresh-context
+  critic is handed `<scene>.vs-reference.png` and the brief in
+  [docs/product-rules.md](docs/product-rules.md) ("The critic and the reference"), which also
+  lists the reference features deliberately not copied.
