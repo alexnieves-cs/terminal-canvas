@@ -47,6 +47,12 @@ export type IslandPlacement =
   | { kind: 'unknown' }
 
 export interface TaskIsland {
+  /**
+   * M288. The island's own id, stable across renders: the work item's id, or
+   * `dir:<path>` for the sessions of one directory that no task names. What
+   * the presentation order and the focus name.
+   */
+  id: string
   /** The work item, or absent when the island is a lone session with no task yet. */
   itemId?: string
   source: 'work-item' | 'session'
@@ -57,6 +63,21 @@ export interface TaskIsland {
   memberIds: readonly string[]
   /** The panel whose review baseline IS the task's review subject (the lane's chat). */
   subjectId: string | null
+  /**
+   * M288. How many agent sessions on this canvas run IN the island's directory
+   * (the placement path, or under it) — every one of them can write there. A
+   * worktree normally counts 1; a shared directory with 2+ is the ambiguity the
+   * plan says to show, not to attribute away.
+   */
+  writers: number
+  /** M288. Other islands whose directory this one shares (by id). Empty for an isolated worktree. */
+  sharedWith: readonly string[]
+  /**
+   * M288. The grouping key: the repository this island belongs to, derived from
+   * real paths — a worktree's root, else the shared directory itself. `null`
+   * when no member reports a directory. Never a project record.
+   */
+  group: string | null
 }
 
 function baseName(path: string): string {
@@ -64,33 +85,53 @@ function baseName(path: string): string {
   return parts[parts.length - 1] ?? path
 }
 
+const within = (cwd: string, dir: string): boolean => cwd === dir || cwd.startsWith(dir.endsWith('/') ? dir : `${dir}/`)
+
 /**
- * The ONE task Phase A shows. The same pick as the canvas's focused task (Canvas
- * passes `taskMemberIds` for the first `working` item, else the first `review`),
- * so the island and the frame the scene already draws can never name two tasks.
- * With no such item, the first agent session stands as an island of its own —
- * "open one task" must work before anyone has used the board.
+ * The ONE task Phase A shows — kept as the PRIMARY island: the same pick as the
+ * canvas's focused task (Canvas passes `taskMemberIds` for the first `working`
+ * item, else the first `review`), so the frame the scene draws and the first
+ * island can never name two tasks. With no such item, the first agent session
+ * stands as an island of its own — "open one task" must work before anyone
+ * has used the board.
  */
 export function orchPickIslandItem(items: readonly IslandItemInput[]): IslandItemInput | null {
   return items.find((w) => w.state === WORK_ITEM_STATES[1]) ?? items.find((w) => w.state === WORK_ITEM_STATES[2]) ?? null
 }
 
-export function orchTaskIsland(input: {
+export interface IslandsInput {
   items: readonly IslandItemInput[]
   worktrees: readonly IslandWorktreeInput[]
   sessions: readonly IslandSessionInput[]
   membersOf: (itemId: string) => readonly string[]
   cwdOf: (panelId: string) => string | undefined
-}): TaskIsland | null {
-  const item = orchPickIslandItem(input.items)
-  if (item !== null) {
+}
+
+/**
+ * M288. EVERY island: one per task in `working` or `review` (the same two
+ * states the primary pick reads), then one per DIRECTORY for the agent
+ * sessions no task names. Grouping is derived from real paths — a worktree
+ * record's root and path, a member's cwd — and never from a project record.
+ * The array is in the items' own order; presentation order is
+ * `orchIslandOrder`'s, kept per workspace, so a new island never re-arranges
+ * the ones already on screen.
+ */
+export function orchTaskIslands(input: IslandsInput): TaskIsland[] {
+  const dirOf = (id: string | undefined): string | undefined => {
+    if (id === undefined) return undefined
+    const cwd = input.cwdOf(id)
+    return cwd === undefined || cwd === '' ? undefined : cwd
+  }
+  const agentic = input.sessions.filter((s) => s.agentic)
+  const taken = new Set<string>()
+  const islands: TaskIsland[] = []
+  for (const item of input.items) {
+    if (item.state !== WORK_ITEM_STATES[1] && item.state !== WORK_ITEM_STATES[2]) continue
     const members = input.membersOf(item.id)
+    for (const m of members) taken.add(m)
+    if (item.panelId !== undefined) taken.add(item.panelId)
     const tree = item.worktreeId === undefined ? undefined : input.worktrees.find((w) => w.id === item.worktreeId)
-    const memberCwd = [item.panelId, ...members].flatMap((id) => {
-      if (id === undefined) return []
-      const cwd = input.cwdOf(id)
-      return cwd === undefined || cwd === '' ? [] : [cwd]
-    })[0]
+    const memberCwd = [item.panelId, ...members].map(dirOf).find((c): c is string => c !== undefined)
     const placement: IslandPlacement = tree !== undefined
       ? { kind: 'worktree', branch: tree.branch, path: tree.path }
       : memberCwd !== undefined ? { kind: 'shared', path: memberCwd } : { kind: 'unknown' }
@@ -98,7 +139,8 @@ export function orchTaskIsland(input: {
     // the directory a member runs in. Derived from real paths — never a project record.
     const fromKey = item.key === undefined ? null : repoOfKey(item.key)
     const repository = fromKey ?? (tree !== undefined ? baseName(tree.root) : memberCwd !== undefined ? baseName(memberCwd) : null)
-    return {
+    islands.push({
+      id: item.id,
       itemId: item.id,
       source: 'work-item',
       goal: item.title,
@@ -106,28 +148,101 @@ export function orchTaskIsland(input: {
       repository,
       placement,
       memberIds: members,
-      subjectId: item.panelId ?? members[0] ?? null
-    }
+      subjectId: item.panelId ?? members[0] ?? null,
+      writers: 0,
+      sharedWith: [],
+      group: tree !== undefined ? tree.root : memberCwd ?? null
+    })
   }
-  const session = input.sessions.find((s) => s.agentic)
-  if (session === undefined) return null
-  const cwd = input.cwdOf(session.id)
-  return {
-    source: 'session',
-    goal: session.title,
-    state: 'no task yet',
-    repository: cwd === undefined || cwd === '' ? null : baseName(cwd),
-    placement: cwd === undefined || cwd === '' ? { kind: 'unknown' } : { kind: 'shared', path: cwd },
-    memberIds: [session.id],
-    subjectId: session.id
+  // The sessions no task names, one island per directory (a session with no
+  // directory at all is its own island, said as such).
+  const loose = agentic.filter((s) => !taken.has(s.id))
+  const byDir = new Map<string, IslandSessionInput[]>()
+  for (const s of loose) {
+    const dir = dirOf(s.id) ?? `\0${s.id}`
+    const list = byDir.get(dir) ?? []
+    list.push(s)
+    byDir.set(dir, list)
   }
+  for (const [dir, list] of byDir) {
+    const real = dir.startsWith('\0') ? undefined : dir
+    islands.push({
+      id: real === undefined ? `session:${list[0]!.id}` : `dir:${real}`,
+      source: 'session',
+      goal: list.length === 1 ? list[0]!.title : `${list.length} sessions`,
+      state: 'no task yet',
+      repository: real === undefined ? null : baseName(real),
+      placement: real === undefined ? { kind: 'unknown' } : { kind: 'shared', path: real },
+      memberIds: list.map((s) => s.id),
+      subjectId: list[0]!.id,
+      writers: 0,
+      sharedWith: [],
+      group: real ?? null
+    })
+  }
+  // Writers and sharing, over the WHOLE canvas: any agent session inside the
+  // island's directory can write there, member or not.
+  const cwds = agentic.map((s) => ({ id: s.id, cwd: dirOf(s.id) })).filter((x): x is { id: string; cwd: string } => x.cwd !== undefined)
+  return islands.map((isl) => {
+    if (isl.placement.kind === 'unknown') return isl
+    const dir = isl.placement.path
+    const writers = cwds.filter((c) => within(c.cwd, dir)).length
+    const sharedWith = islands.filter((o) => o.id !== isl.id && o.placement.kind !== 'unknown' && (within(o.placement.path, dir) || within(dir, o.placement.path))).map((o) => o.id)
+    return { ...isl, writers, sharedWith }
+  })
+}
+
+/** Phase A's one island: the primary of `orchTaskIslands`, or null when there is none. */
+export function orchTaskIsland(input: IslandsInput): TaskIsland | null {
+  const all = orchTaskIslands(input)
+  const item = orchPickIslandItem(input.items)
+  if (item !== null) return all.find((i) => i.itemId === item.id) ?? null
+  return all.find((i) => i.source === 'session') ?? null
+}
+
+/**
+ * M288. Stable placement: the previous order, minus islands that are gone,
+ * then every new island appended in the model's order. A returning user finds
+ * work where it was; a new task never shuffles the others.
+ */
+export function orchIslandOrder(prev: readonly string[], ids: readonly string[]): string[] {
+  const live = new Set(ids)
+  const kept = prev.filter((id) => live.has(id))
+  const seen = new Set(kept)
+  for (const id of ids) if (!seen.has(id)) { kept.push(id); seen.add(id) }
+  return kept
+}
+
+/** A presentation move by one step; null when it would change nothing. Undo is the previous array. */
+export function orchMoveIsland(order: readonly string[], id: string, dir: -1 | 1): string[] | null {
+  const at = order.indexOf(id)
+  const to = at + dir
+  if (at === -1 || to < 0 || to >= order.length) return null
+  const next = [...order]
+  next.splice(at, 1)
+  next.splice(to, 0, id)
+  return next
+}
+
+/** M288. Islands grouped by repository (`group`), in presentation order, the group named by its real path. */
+export function orchIslandGroups(islands: readonly TaskIsland[], order: readonly string[]): { key: string | null; label: string; islands: TaskIsland[] }[] {
+  const byId = new Map(islands.map((i) => [i.id, i]))
+  const sorted = order.map((id) => byId.get(id)).filter((i): i is TaskIsland => i !== undefined)
+  const groups: { key: string | null; label: string; islands: TaskIsland[] }[] = []
+  for (const isl of sorted) {
+    const g = groups.find((x) => x.key === isl.group)
+    if (g !== undefined) g.islands.push(isl)
+    else groups.push({ key: isl.group, label: isl.group === null ? 'no repository found' : baseName(isl.group), islands: [isl] })
+  }
+  return groups
 }
 
 /** The island's placement in words — the line under its goal. */
-export function orchPlacementLine(island: Pick<TaskIsland, 'repository' | 'placement'>): string {
+export function orchPlacementLine(island: Pick<TaskIsland, 'repository' | 'placement'> & Partial<Pick<TaskIsland, 'writers'>>): string {
   const repo = island.repository ?? 'no repository found'
-  if (island.placement.kind === 'worktree') return `${repo} · ${island.placement.branch} · own worktree`
-  if (island.placement.kind === 'shared') return `${repo} · shared directory`
+  const writers = island.writers ?? 0
+  if (island.placement.kind === 'worktree') return `${repo} · ${island.placement.branch} · own worktree${writers > 1 ? ` · ${writers} sessions write here` : ''}`
+  if (island.placement.kind === 'shared') return `${repo} · shared directory${writers > 1 ? ` · ${writers} sessions write here` : ''}`
   return `${repo} · no working directory reported`
 }
 

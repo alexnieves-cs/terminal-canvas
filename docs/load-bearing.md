@@ -4830,3 +4830,56 @@ looking for `stale` waits out its timeout. `orch-bench.4` reads a real watcher r
 off the ledger for exactly this reason. The shape is `verify:ipc`'s positional-argument rule one
 layer down: the harness is a second composition root, and a collaborator it does not know about
 is one it cannot wire.
+
+**Every Orchestrate workbench read is TICKETED by the subject key it was asked for, and an
+answer lands only while that key is current AND it is newer than the last answer that landed
+for it — then the RENDER checks the landed read's key against the subject once more
+(`orchestration/orch-subject-gate.ts`, `OrchWorkbench.tsx`'s `useChanges`/`useChecks`, M288).**
+Phase A's `keyRef.current === asked` guard closed the plain late answer and left two holes that
+only show under a fast hand: a rapid A → B → A switch lets B's slow answer land while A's fast
+one is already up — the key check passes because A IS current again — and two answers for ONE
+subject (Refresh twice) arrive out of order and the older overwrites the newer. Neither throws;
+a diff sits under another task's controls, or a stale one under its own, with no red. The gate's
+per-key monotonic sequence refuses both (`orch-islands.4` pins it in plain node;
+`orch-islands.app.2` samples the DOM through the flips: `data-orch-bench-subject`,
+`data-orch-controls-subject` and `data-orch-diff-subject` must agree at every sample, and a diff
+key must start with the subject). The render-time guard is the belt to that brace: even a state
+value that lags a frame paints as `loading`, never as the other subject's rows. A NEW read in the
+strip (Artifacts, Timeline) must mint a ticket where it STARTS, not where it lands — a ticket
+minted on landing is always newest and gates nothing.
+
+**Commit and discard from Orchestrate reach main only through `orch-review-write.ts`, which
+ALWAYS sends `expect` and refuses by name when the read carried no identity — stricter than the
+review node on purpose (`orchestration/orch-review-write.ts`, `verify:orchestration
+workbench.1`/`orch.gate.3`/`orch-limits.4`, M290).** The node keeps its pre-M285 arm (no
+identity → no re-check, the commit runs) because a machine whose `hash-object` is unhappy should
+still be able to commit from the surface that shows it the whole tree. The workbench shows a
+diff BESIDE a freshness line, so a write whose freshness could not be judged is exactly the
+write Phase B exists to refuse; here it is a sentence, never a write. Two pins hold the door
+shut: every file under `orchestration/` except the write module is scanned for
+`review.commit(`/`review.discard(` (a second caller would skip the identity refusal without
+anyone noticing), and the write module's two calls are pinned with `expect: input.identity` in
+the argument text. A `shared` result blocks both by name in the strip
+(`data-orch-write-blocked`), for the reason the cross-worktree node's entry gives: hiding the
+controls would make "not supported here" read as "not built".
+
+**An Orchestrate control exists only where the backend registry says the door exists, and a
+runtime that has no door is ABSENT with its reason kept — never a button that fails
+(`orchestration/orchestration-controls.ts`, `shared/agent-backends.ts`, M290).** The pre-M290
+page offered Interrupt on every busy chat; a codex or copilot chat has no interrupt door
+(`BACKENDS[b].interrupts` false), so the button wrote a control line the CLI ignored and main
+killed the process 200 ms later under a verb that means "finish gracefully" on claude. Now
+`orchControls` reads `interrupts`/`resumes` off the row and the roster state, and the inspector
+names the four absences with the registry's own reason (`data-orch-control-absent`). Two words
+are load-bearing in the wording and pinned by `orch-limits.1`: Interrupt "stops the current
+generation … the process stays up, nothing … is rolled back, and no resumable checkpoint is
+kept"; Retry "previews … sends nothing until you send it on the canvas, and a command that failed
+is not assumed safe to repeat" — the retry's only exit is `insertIntoComposer`, unsent
+(`orch-limits.app.1` counts the fake's user lines before and after). `orchSessionStanding` keeps
+an interrupted run apart from a stopped session even after main's interrupt-timeout kill leaves
+the session `exited`: the chat store's `lastTurn` (new in M290, never persisted) carries the
+`aborted`/`interrupt-timeout` reason, and `exited` + that reason reads `interrupted`, not
+`stopped`. A limit row says `enforced` only when main refuses or queues on it
+(`agents.maxConcurrent`, `agents.budgetUsd`, `agents.budgetWindowPercent`); time is always
+`advisory` because nothing enforces one; spend sums only sessions whose row has `reportsCost`
+and counts the rest as Unknown by number, so no universal cap is implied across providers.

@@ -28,6 +28,8 @@ export interface OrchPrefs {
   tab: OrchSideTab
   /** M287. The workbench's height and tab, the plan's "persist panel sizes per workspace". */
   workbench: { height: number; tab: WorkbenchTab; open: boolean }
+  /** M288. Island presentation order (orchestrate-prefs.ts `islands`). */
+  islands: readonly string[]
 }
 
 const DEFAULTS: OrchPrefs = {
@@ -35,7 +37,8 @@ const DEFAULTS: OrchPrefs = {
   lens: 'scene',
   camera: { x: 0, y: 0, k: 1 },
   tab: 'activity',
-  workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes', open: false }
+  workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes', open: false },
+  islands: []
 }
 
 /**
@@ -52,13 +55,14 @@ export function seedOrchPrefs(persisted: PersistedOrchestrate | undefined): void
     ...(persisted.mode === undefined ? {} : { mode: persisted.mode }),
     ...(persisted.sideTab === undefined ? {} : { tab: persisted.sideTab }),
     ...(persisted.camera === undefined ? {} : { camera: { ...persisted.camera } }),
-    ...(persisted.workbench === undefined ? {} : { workbench: { height: persisted.workbench.height, tab: persisted.workbench.tab, open: persisted.workbench.open === true } })
+    ...(persisted.workbench === undefined ? {} : { workbench: { height: persisted.workbench.height, tab: persisted.workbench.tab, open: persisted.workbench.open === true } }),
+    ...(persisted.islands === undefined ? {} : { islands: [...persisted.islands] })
   }
 }
 
 /** The record the workspace saves — every field, so a relaunch returns to the same view. */
 export function persistedOrchPrefs(p: OrchPrefs): PersistedOrchestrate {
-  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? { open: true as const } : {}) }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera } }
+  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? { open: true as const } : {}) }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera }, ...(p.islands.length === 0 ? {} : { islands: [...p.islands] }) }
 }
 
 let prefs: OrchPrefs = DEFAULTS

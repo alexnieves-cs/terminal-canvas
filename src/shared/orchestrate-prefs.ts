@@ -32,6 +32,13 @@ export interface PersistedOrchestrate {
   mode?: 'dev' | 'pipeline'
   sideTab?: 'activity' | 'files'
   camera?: { x: number; y: number; k: number }
+  /**
+   * M288. The islands' presentation ORDER, by island id, oldest first. A new
+   * island appends and never re-arranges the ones a person already knows; a
+   * move is presentation only (never a dispatch) and is undoable on the page.
+   * Ids that no longer name an island are dropped on read.
+   */
+  islands?: string[]
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -64,6 +71,10 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
   if (raw.sideTab === 'activity' || raw.sideTab === 'files') out.sideTab = raw.sideTab
   const c = raw.camera
   if (isRecord(c) && isNum(c.x) && isNum(c.y) && isNum(c.k) && c.k > 0) out.camera = { x: c.x, y: c.y, k: c.k }
+  if (Array.isArray(raw.islands)) {
+    const ids = raw.islands.filter((v): v is string => typeof v === 'string' && v !== '')
+    if (ids.length === raw.islands.length) { if (ids.length > 0) out.islands = [...new Set(ids)] } else warnings.push('dropped a malformed orchestrate islands order')
+  } else if (raw.islands !== undefined) warnings.push('dropped a malformed orchestrate islands order')
   return Object.keys(out).length === 0 ? undefined : out
 }
 
@@ -74,7 +85,8 @@ export function carryOrchestrate(p: PersistedOrchestrate): PersistedOrchestrate 
     ...(p.lens === undefined ? {} : { lens: p.lens }),
     ...(p.mode === undefined ? {} : { mode: p.mode }),
     ...(p.sideTab === undefined ? {} : { sideTab: p.sideTab }),
-    ...(p.camera === undefined ? {} : { camera: { x: p.camera.x, y: p.camera.y, k: p.camera.k } })
+    ...(p.camera === undefined ? {} : { camera: { x: p.camera.x, y: p.camera.y, k: p.camera.k } }),
+    ...(p.islands === undefined || p.islands.length === 0 ? {} : { islands: [...p.islands] })
   }
 }
 
