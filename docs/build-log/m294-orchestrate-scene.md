@@ -132,11 +132,209 @@ My own look, against the reference first (the process gap this pass closes):
   deck is a rim with a beacon and the word. Accepted. No fresh-context critic was run on this
   branch; the goldens stay owed to the user's look.
 
+### Round 3 — 2026-09-20, fresh-context critic against the reference (M297)
+
+The first round judged against the reference by someone who had not seen the code. M297 put
+the reference in the harness (`scripts/shot.cjs` `reference`, `scripts/shot-composite.cjs`,
+`verify:meta critic.reference.1`, the brief in `docs/product-rules.md`), captured the three
+scenes on main at dce87bb4 (`SHOT_ONLY=orchestration,orchestration-working,orchestration-dark`),
+and handed an Agent with no repo context ONLY the three `<scene>.vs-reference.png` composites
+and the brief, dark first. Its divergences are quoted verbatim below, every one, including
+those the author disagrees with — the disagreement is written beside them in *[brackets]*.
+Nothing was fixed in this pass; this list is the input to the fit and chrome passes.
+
+**orchestration-dark** — verdict: "The current capture has adopted the reference's
+isometric-platform vocabulary but delivers it small, flat, unlit and unreadable, so it does
+not yet read as the reference."
+
+- silhouette: "The current capture shows a compact cluster of four or five flat isometric
+  diamond platforms fanned around a central raised diamond, with stubby hexagonal prisms
+  standing on the platforms like pegs; the whole cluster occupies roughly a 400 by 200 pixel
+  band in a viewport several times that size. The reference's silhouette is a wide, stepped
+  city of layered platforms rising toward a tall central crystal, with the platforms stacked
+  at visibly different heights so the cluster reads as terraces rather than as tiles laid on
+  one plane. In the capture the platforms are near-coplanar and the hexagonal prisms are of
+  one uniform size, so the outline is a low, flat blot rather than a rising massif."
+  *[Agreed on height: the tiers exist in the model (M294's platform tiers) but read as
+  coplanar at this pitch. The "central crystal" is the plan's preserved focal point, not the
+  rejected supervisor hub — a crystal that is an island's focal object, never a supervisor.]*
+- material: "The platform tops are a dull desaturated navy with a slightly lighter
+  violet-grey plate for the selected island, and the glass reads opaque and matte rather than
+  translucent; the hexagonal prisms are flat blue-grey solids with no visible refraction or
+  inner structure. The reference's platforms are deep blue-black glass with a visible cyan
+  hairline on every edge and a faint interior shimmer, and the hex stations carry a bright
+  cyan rim that makes them read as lit glass. The capture's edges are almost unlit — there is
+  one faint violet edge line on the selected platform and nothing on the rest — so the 'cyan
+  edges, readable glass' quality of the plan is not present."
+- glow: "Almost nothing blooms. The reference pools a soft blue-cyan light on the floor under
+  the whole cluster and puts a bright halo around the central crystal and a smaller glow
+  under each active station; the capture has one dim violet-grey wash under the selected
+  platform and a small pale-blue blob near the top-right station, and the rest of the floor
+  is a flat dark grey-blue with no pooling light. The ambient dark of the reference is a rich
+  near-black blue; the capture's surround is a mid-grey-blue slab that flattens the contrast
+  the glow would need." *[Partly by design: `orchestration-dark` is the idle scene and M280
+  pinned that idle does NOT bloom. The floor's mid-grey-blue and the missing ambient pool
+  under the cluster are real divergences.]*
+- connectors: "The capture has a few short thin white-grey line segments between the central
+  diamond and adjacent platforms, barely distinguishable from the platform edges, with no
+  direction, no brightness gradient and no glow. The reference's traces are bright cyan lines
+  that step between stations along the isometric grid, brighten toward the active station and
+  are visibly the brightest element after the crystal. In the idle scene the absence of
+  bright traces is defensible, but the current traces are so faint they do not read as
+  connectors at all." *[Agreed; the short bridge between interlocking diamonds is M294's own
+  deferred item — the long floor traces need a floor layer under the meshes.]*
+- labels: "Names at rest appear as tiny grey monospace captions under the prisms (worker b,
+  workflow…, plan.md, tests, codex — …) in a face that is too small to read at the capture's
+  scale, and they sit on top of the platform tops without any plate behind them. The
+  reference labels each station with a legible two-line card (name in white, role in
+  cyan-grey) floating on a dark rounded plate above the station, so the name is readable at
+  rest and clearly attached to its station. The capture's one readable label is a floating
+  white card at top-left reading 'claude — api / terminal / idle / Jump' that is a UI
+  popover, not a scene label, and it sits over the cluster rather than beside its station."
+  *[Partly the composite's scale — the capture is shown at two thirds — but the compact name
+  tier's hard truncation is M294's known deferred item, and the selected card sitting over
+  the cluster rather than beside its station is real.]*
+- composition: "The scene occupies roughly a third of the workbench area in width and the
+  cluster is small and centred with wide empty margins on every side, so the eye lands on
+  the surrounding chrome rather than on the scene. The reference gives the scene the full
+  centre panel edge to edge, fills it with the cluster, and lets the central crystal own the
+  composition with the stat cards and side panels as supporting frames. The capture's focal
+  point is not the scene's centre but the white 'claude — api' popover in the top-left and
+  the bright 'Watchdog fires under load' label above it, neither of which is the crystal."
+  *[Agreed. The stage is the fixed 860×420 band M294's diagnosis already named; this is the
+  fit pass's input, not the scene's.]*
+- chrome: "The header, four stat cards, the 'Queued — Group buttons are mouse-only' bar, the
+  Jump/Mark done/Focus related/Open Files toolbar, the agent pool list on the left, the NEEDS
+  ATTENTION panel on the right with a new 'RUN LIMITS — 0 ENFORCED — 4 ADVISORY' row and a
+  'NOT AVAILABLE HERE — INTERRUPT, RETRY, REASSIGN, STOP' row, and the System/Current
+  Task/Terminal/Code/Files card row below the scene are all present and all in the same
+  grey-on-navy face. The reference's chrome is darker, more compact and lower contrast so the
+  scene glows out of it; the capture's chrome is bright-bordered and busy, and the five
+  bottom cards plus the 'Changes / Checks / Output — Bound to the selection — claude — api'
+  strip take about the same vertical space as the scene itself. A small pill at top-right
+  reading '● 1' has appeared beside 'View' that was not in the golden." *[The chrome pass's
+  input. The '● 1' pill beside View is not identified here; check what it is before the
+  chrome pass touches it.]*
+- against the golden: "the golden's ring of floating dark-cube nodes on a soft ellipse of
+  light has been replaced by the isometric diamond platforms, which is closer to the
+  reference in vocabulary; but the golden's scene was larger, better centred and had a
+  visible soft floor glow and legible node labels, all of which the current capture has lost.
+  Net: closer in form, worse in presence."
+
+**orchestration-working** — verdict: "The working scene is nearly indistinguishable from the
+idle one and does not show the reference's lit-station contrast, so it does not read as the
+reference and regresses on the one thing this scene exists to show."
+
+*[Disagreed in part, and the disagreement is a FINDING: the capture's own stat cards read
+`ACTIVE AGENTS 1 working` and `WAITING ON YOU 0 Clear`, and the critic noticed. The scene's
+intent is three busy and one waiting; in this capture only one seeded transition took, so the
+critic judged a scene the fixture did not build. Whether the model blooms under three busy
+agents is not answered by this image either way. The seeding must be re-measured before the
+working scene is judged again — see Found / deferred.]*
+
+- silhouette: "Same compact five-platform diamond cluster with uniform hexagonal prisms as
+  the idle scene; nothing in the silhouette changes when three agents are working. The
+  reference keeps the same silhouette between states but raises the crystal and the active
+  station's prism as taller, brighter forms so the working stations stand out of the outline.
+  The capture's silhouette is identical to idle down to the pixel."
+- material: "The platform tops are the same matte navy and violet-grey slabs; the only
+  material change from idle is that the central platform now carries a slightly brighter
+  violet plate and the top-right prism has a faint pale-blue cap. The reference's working
+  stations show glass that is visibly lit from within, with a saturated cyan rim and a warm
+  violet floor plate under the active one. Cyan edge light is still absent in the capture."
+- glow: "One pale-blue smear appears behind the top-right station and one dim violet pool
+  under the central platform; that is the whole difference between working and idle, and it
+  is faint enough that a viewer would not notice it without the two captures side by side.
+  The reference's working scene has each lit station bloom with a bright cyan halo, the
+  crystal's glow spread across the floor, and the busy stations clearly brighter than the
+  idle ones. There is no per-station glow for the three busy agents, and no distinct
+  treatment for the one that is waiting on a person."
+- connectors: "Same short faint grey segments as idle, with no brightening, no direction and
+  no motion cue toward the busy stations. The reference brightens the traces into the active
+  stations so the connectors show where the work is flowing. The capture's connectors do not
+  communicate work at all."
+- labels: "Same tiny grey monospace names under the prisms, unreadable at rest, with the
+  'Watchdog fires under load' task label at the top and no per-station state word visible in
+  the scene. The reference labels the working station with its name and a 'Working' or
+  'Warning' state under it on its card; the capture's state words (working, needs you) live
+  only in the left agent-pool list and the right-hand panel, not on the scene. Nothing in the
+  scene marks the station that is waiting on a person."
+- composition: "Unchanged from idle: a small cluster centred in a wide viewport with the
+  bright chrome dominating. The reference's working scene is meant to draw the eye to the lit
+  stations; here the eye still lands on the white task label and the right-hand text panel."
+- chrome: "The stat cards now read '1 working / 1 in progress / 0 idle / 0 Clear', the banner
+  reads 'Running — claude — api', and the NEEDS ATTENTION panel has grown a long text block
+  (Run limits, task summary, 'Shared directory — 3 sessions write in…', 'BRIEF & ACCEPTANCE
+  CRITERIA — NONE YET') plus a seven-row activity feed. Two '● 1 / ● 1' pills sit beside View
+  at top-right. Compared with the reference's dedicated 'Needs attention — 2 decisions' list
+  with two clear decision rows, the capture's right panel is a dense wall of small grey text.
+  The stat card WAITING ON YOU reads '0 Clear' although one agent is described as waiting on
+  a person, which contradicts the scene's premise."
+- against the golden: "the golden's working state was legible — a bright cyan glow around
+  the working 'claude — api' node, an amber 'needs you' halo on the tests node, and a '1
+  waiting' NEEDS ATTENTION card at the top right; the current capture has none of those three
+  signals. Net: the working/idle distinction is materially weaker than in the golden."
+
+**orchestration** (light) — verdict: "The light capture is a pale, unlit wireframe of the
+platform cluster with no material, glow or focal point, and it does not read as the
+reference." *[The reference has no light theme, as the critic says; M294 left the light
+theme un-judged and the pool stands down over a light ground by design (GroundPool's header).
+The material point — an inversion to grey rather than a light-theme translation of lit
+glass — is the real finding.]*
+
+- silhouette: "The same compact five-platform diamond cluster with uniform dark hexagonal
+  prisms, now rendered as pale grey-blue plates on a lighter grey slab; the raised centre and
+  the layered heights are even less legible because the platforms and the floor are nearly
+  the same tone. The reference's stepped massif is not present."
+- material: "The platforms are flat pale-lavender and pale-blue plates with a slightly
+  darker outline; the hex prisms are solid dark navy blocks that sit on top like game pieces.
+  There is no glass, no translucency and no cyan edge; the blue-black material of the
+  reference has simply been inverted to grey, not translated into a light-theme equivalent
+  of lit glass."
+- glow: "None. The floor is a uniform light grey with no pooled light, no halo under the
+  centre and no bloom on any prism; the one visual accent is a small darker-violet plate
+  under the selected island. The reference's glow has no counterpart."
+- connectors: "Faint white segments between the central diamond and adjacent platforms,
+  invisible against the pale floor except where they cross a darker plate. They do not read
+  as connectors."
+- labels: "Tiny dark-grey monospace names under the prisms, marginally more legible than in
+  dark because of the light floor, but still too small at rest and still without a plate or
+  a state word. The floating white 'claude — api / terminal / idle / Jump' popover again sits
+  over the cluster at top-left."
+- composition: "Identical framing to the dark scenes: a small cluster in a wide grey
+  viewport with generous empty margins, and the white popover and the 'Watchdog fires under
+  load' label as the de facto focal points. The scene has no focal point of its own."
+- chrome: "Header, stat cards, toolbar, agent pool, NEEDS ATTENTION with the Run limits and
+  'NOT AVAILABLE HERE' rows, the five bottom cards and the Changes/Checks/Output strip, all
+  in a clean light grey face; the chrome is consistent with the light dark-theme chrome and
+  is the most resolved part of the capture. A '● 1' pill again appears beside View."
+- against the golden: "the golden's light scene was a large centred ring of dark cubes on a
+  soft blue ellipse with readable labels; the current capture's smaller flat cluster with
+  unreadable labels and no glow is less legible and less present than the golden."
+
+**Cross-scene**, verbatim: "All three captures share one composition fault: the scene is
+roughly a third of the workbench and centred with wide margins, while the reference gives the
+scene the whole centre and fills it." "All three captures lack the two most identifying
+material cues of the reference: cyan edge light on every platform and prism, and pooled floor
+glow under the cluster." "Working differs from idle only by one faint pale-blue smear and a
+slightly brighter central plate; the golden's working state was clearly more distinct than the
+current one." "Rest labels are unreadable at capture scale in all three scenes; the
+reference's rest labels are legible cards." "The '● 1' / '● 1 ● 1' pills beside View at
+top-right are new relative to the golden in all three scenes." "The working scene's WAITING ON
+YOU card shows '0 Clear' while the scene is described as having one agent waiting on a person."
+
 ## Goldens owed
 
 `verify:visual`'s `orchestration`, `orchestration-dark` and `orchestration-working` scenes
 change on purpose; no golden is written on this branch (`UPDATE_GOLDENS=1` only after looking,
 and the user decides). The captures to look at are listed under Gate.
+
+Still owed after M297's round (2026-09-20), per scene, with the critic's verdict in one line:
+`orchestration-dark` — vocabulary adopted, "small, flat, unlit and unreadable"; `orchestration-working` —
+"nearly indistinguishable from the idle one", and this capture's own cards show only one agent
+working and none waiting, so the scene the intent describes was not built by the fixture in
+this run; `orchestration` (light) — "a pale, unlit wireframe … no material, glow or focal
+point". None is written; the person decides after looking at the composites in `out/shots/`.
 
 ## Found / deferred
 
@@ -150,3 +348,14 @@ and the user decides). The captures to look at are listed under Gate.
   floor); the full title is the plate's `<title>`, the card's and the List's.
 - Light theme: the rims read on `--deck-surface` through the same tokens; the pool stands down
   there (additive over a light ground is a hole, GroundPool's header). Not re-judged here.
+- (M297, from the critic's round) The `orchestration-working` capture on main at dce87bb4 shows
+  `ACTIVE AGENTS 1 working` and `WAITING ON YOU 0 Clear` where the scene seeds three busy and
+  one waiting; the harness's own guards (`≥3 addressable cubes`, `.orch__cube--busy` present)
+  passed, so at least one seed took and the rest did not reach the cards. Measure before the
+  working scene is judged again; the critic's working verdict is partly a verdict on this.
+- (M297) A `● 1` pill beside `View` in the top bar, in every scene, not in the goldens and
+  not identified by the critic or here. Name it before the chrome pass.
+- (M297) Every verbatim divergence above is the fit pass's and the chrome pass's input; the
+  fixed 860×420 stage (composition), the missing cyan edge light and ambient floor pool
+  (material/glow), the bridge-only connectors, the truncated compact name tier, and the
+  light theme's grey inversion.
