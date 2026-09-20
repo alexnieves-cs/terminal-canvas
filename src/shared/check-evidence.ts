@@ -203,12 +203,13 @@ export function checksFromWatchers(
  */
 export function bindCheckFreshness(
   checks: readonly CheckRecord[],
-  currentOf: (base: string) => ReviewIdentity | undefined | null
+  /** The subject's identity NOW for a tested base, in the check's own directory — two lanes can share a base sha. */
+  currentOf: (base: string, cwd: string) => ReviewIdentity | undefined | null
 ): CheckRecord[] {
   return checks.map((c) => {
     if (c.observed !== 'passed' && c.observed !== 'failed') return c
     if (c.tested === undefined) return { ...c, outcome: 'unknown', note: 'the content it tested was not recorded, so this result cannot be placed against the changes' }
-    const now = currentOf(c.tested.base)
+    const now = currentOf(c.tested.base, c.context.cwd)
     if (now === null) return { ...c, note: 'freshness not read yet' }
     if (now === undefined) return { ...c, outcome: 'unknown', note: 'the changes could not be re-read, so whether this result is about them is unknown' }
     if (sameReviewIdentity(now, c.tested)) return { ...c, outcome: c.observed }

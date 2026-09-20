@@ -19,6 +19,8 @@ import {
 import { WORKBENCH_TABS, clampWorkbenchHeight, type WorkbenchTab } from '@shared/orchestrate-prefs'
 import type { WorktreeListRow } from '@shared/ipc-contract'
 import { orchLogsCoverage } from './orchestration-model'
+import { createSubjectGate } from './orch-subject-gate'
+import { orchCommit, orchDiscard, type OrchWriteOutcome } from './orch-review-write'
 
 /**
  * M287. THE WORKBENCH — Orchestrate's bottom strip: Changes · Checks · Output,
@@ -38,10 +40,18 @@ import { orchLogsCoverage } from './orchestration-model'
  * the canvas's handoff (`taskHandoffOf`) outright, for the reason
  * `ReviewTaskContext.paths` gives: a second signature is a second author.
  *
- * NOTHING HERE WRITES THE TREE. Commit and discard stay on the review node
- * ("Review on canvas"); the one mutation this strip makes is the person's
- * mark, through `onPatchWorkItem`. The brief is READ here and edited in the
- * inspector; neither launches anything.
+ * TWO WRITES, BOTH RE-CHECKED (M290). Commit and discard reach main through
+ * `orch-review-write.ts` — the review node's own executors with M285's
+ * `expect` — and are offered only for a `changes` result that carries an
+ * identity; a `shared` result blocks them BY NAME. The other mutation this
+ * strip makes is the person's mark, through `onPatchWorkItem`. The brief is
+ * READ here and edited in the inspector; neither launches anything.
+ *
+ * EVERY READ IS SUBJECT-BOUND (M288). A read is ticketed by the subject key
+ * it was asked for (`orch-subject-gate.ts`) and lands only while that key is
+ * current and no newer answer for it has landed; and the RENDER checks the
+ * landed read's key against the subject once more, so a diff can never sit
+ * under another subject's controls even if state lags a frame.
  *
  * EVERY UNAVAILABLE FACT IS A SENTENCE: a non-git folder, a lane that has not
  * started, a missing baseline, a ledger nobody could read, a session with no
@@ -54,7 +64,9 @@ export type BenchSubject =
 
 export function benchSubjectKey(s: BenchSubject | null): string {
   if (s === null) return ''
-  return s.kind === 'session' ? `session:${s.id}` : `task:${s.itemId}:${s.lane?.id ?? ''}`
+  // M288 (the critic): the chat is part of a lane-less task's READ, so it is part of its key —
+  // a task re-pointed at another conversation must re-ask, not keep the old chat's rows.
+  return s.kind === 'session' ? `session:${s.id}` : `task:${s.itemId}:${s.lane?.id ?? ''}:${s.chatId ?? ''}`
 }
 
 export interface OrchWorkbenchProps {
@@ -89,10 +101,10 @@ export interface OrchWorkbenchProps {
 
 type ChangesRead =
   | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'no-lane' }
-  | { kind: 'lane-missing' }
-  | { kind: 'result'; result: ReviewResult; repoRoot: string; base: string | undefined; sectionNote?: string }
+  | { kind: 'loading'; key: string }
+  | { kind: 'no-lane'; key: string }
+  | { kind: 'lane-missing'; key: string }
+  | { kind: 'result'; key: string; result: ReviewResult; repoRoot: string; base: string | undefined; sectionNote?: string }
 
 type DiffRead =
   | { kind: 'none' }
@@ -113,37 +125,45 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
   keyRef.current = key
   const readRef = useRef(read)
   readRef.current = read
+  // M288. Two gates: one for the subject's file list, one for the open diff.
+  // A ticket is minted when a read STARTS; an answer lands only if its ticket
+  // is for the current key and newer than the last that landed for it.
+  const gate = useRef(createSubjectGate()).current
+  const diffGate = useRef(createSubjectGate()).current
   useEffect(() => {
+    gate.move(key)
+    diffGate.move('')
     setDiff({ kind: 'none' })
     if (!active || subject === null || typeof window.canvas?.review?.panel !== 'function') { setRead({ kind: 'idle' }); return }
     let live = true
     const asked = key
-    setRead({ kind: 'loading' })
-    const land = (r: ChangesRead): void => { if (live && keyRef.current === asked) setRead(r) }
+    const ticket = gate.ask(key)
+    setRead({ kind: 'loading', key: asked })
+    const land = (r: ChangesRead): void => { if (live && gate.lands(ticket)) setRead(r) }
     // A task in a SHARED directory (a chat, no worktree) reads its chat's own baseline —
     // Phase A's read — rather than claiming nothing was started (the critic caught the
     // island saying `working · 4 sessions` over a strip saying `no lane yet`).
     const sessionId = subject.kind === 'session' ? subject.id : subject.lane === undefined ? subject.chatId : undefined
     if (sessionId !== undefined) {
       void Promise.all([window.canvas.review.panel(sessionId), window.canvas.review.baseline(sessionId)]).then(
-        ([result, baseline]) => land({ kind: 'result', result, repoRoot: result.kind === 'changes' || result.kind === 'shared' || result.kind === 'clean' ? result.root : '', base: baseline?.sha }),
-        () => land({ kind: 'result', result: { kind: 'repo-unreadable', detail: 'the review could not be read' }, repoRoot: '', base: undefined })
+        ([result, baseline]) => land({ kind: 'result', key: asked, result, repoRoot: result.kind === 'changes' || result.kind === 'shared' || result.kind === 'clean' ? result.root : '', base: baseline?.sha }),
+        () => land({ kind: 'result', key: asked, result: { kind: 'repo-unreadable', detail: 'the review could not be read' }, repoRoot: '', base: undefined })
       )
     } else if (subject.kind === 'session' || subject.lane === undefined) {
-      land({ kind: 'no-lane' })
+      land({ kind: 'no-lane', key: asked })
     } else {
       const lane = subject.lane
       void window.canvas.review.across(lane.root).then(
         (across) => {
-          if (across.kind === 'git-missing') { land({ kind: 'result', result: { kind: 'git-missing' }, repoRoot: lane.path, base: undefined }); return }
-          if (across.kind === 'unreadable') { land({ kind: 'result', result: { kind: 'repo-unreadable', detail: across.detail }, repoRoot: lane.path, base: undefined }); return }
+          if (across.kind === 'git-missing') { land({ kind: 'result', key: asked, result: { kind: 'git-missing' }, repoRoot: lane.path, base: undefined }); return }
+          if (across.kind === 'unreadable') { land({ kind: 'result', key: asked, result: { kind: 'repo-unreadable', detail: across.detail }, repoRoot: lane.path, base: undefined }); return }
           const section: ReviewSection | undefined = laneSection(across.sections, lane.path)
-          if (section === undefined) { land({ kind: 'lane-missing' }); return }
+          if (section === undefined) { land({ kind: 'lane-missing', key: asked }); return }
           const r = section.result
           const base = r.kind === 'changes' || r.kind === 'shared' || r.kind === 'clean' ? r.identity?.base : undefined
-          land({ kind: 'result', result: r, repoRoot: section.path, base, ...(section.note === undefined ? {} : { sectionNote: section.note }) })
+          land({ kind: 'result', key: asked, result: r, repoRoot: section.path, base, ...(section.note === undefined ? {} : { sectionNote: section.note }) })
         },
-        () => land({ kind: 'result', result: { kind: 'repo-unreadable', detail: 'the lane could not be read' }, repoRoot: lane.path, base: undefined })
+        () => land({ kind: 'result', key: asked, result: { kind: 'repo-unreadable', detail: 'the lane could not be read' }, repoRoot: lane.path, base: undefined })
       )
     }
     return () => { live = false }
@@ -151,18 +171,24 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
   const openFile = useCallback((f: ReviewFile): void => {
     const asked = keyRef.current
     const r = readRef.current
-    if (r.kind !== 'result') return
+    if (r.kind !== 'result' || r.key !== asked) return
     const dkey = `${asked}:${f.path}`
+    diffGate.move(dkey)
     // A lane section carries its fork point only inside its identity: with no
     // identity there is no sha to diff against, and that is said, not guessed.
     if (r.base === undefined) { setDiff({ kind: 'no-base', key: dkey }); return }
+    const ticket = diffGate.ask(dkey)
     setDiff({ kind: 'loading', key: dkey })
     void window.canvas.review.diff({ repoRoot: r.repoRoot, baselineSha: r.base, path: f.path, untracked: f.untracked }).then(
-      (d) => { if (keyRef.current === asked) setDiff({ kind: 'diff', key: dkey, diff: d }) },
-      () => { if (keyRef.current === asked) setDiff({ kind: 'diff', key: dkey, diff: { kind: 'unavailable' } }) }
+      (d) => { if (keyRef.current === asked && diffGate.lands(ticket)) setDiff({ kind: 'diff', key: dkey, diff: d }) },
+      () => { if (keyRef.current === asked && diffGate.lands(ticket)) setDiff({ kind: 'diff', key: dkey, diff: { kind: 'unavailable' } }) }
     )
-  }, [])
-  return { read, diff, openFile }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // The render-time guard: a read or a diff that is not about THIS subject is
+  // shown as nothing at all, whatever state still holds it.
+  const bound: ChangesRead = read.kind !== 'idle' && read.key !== key ? { kind: 'loading', key } : read
+  const boundDiff: DiffRead = diff.kind !== 'none' && !diff.key.startsWith(`${key}:`) ? { kind: 'none' } : diff
+  return { read: bound, diff: boundDiff, openFile }
 }
 
 /** Every arm named, none rendered as an error it is not (Phase A's words, kept). */
@@ -208,13 +234,16 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
     return [...new Set([...subject.memberIds, ...(subject.chatId === undefined ? [] : [subject.chatId])])]
   }, [subject])
   const idsKey = ledgerIds.join(' ')
+  const gate = useRef(createSubjectGate()).current
   useEffect(() => {
+    gate.move(key)
     if (!active || subject === null) { setRows(null); return }
     let live = true
     const asked = key
-    if (ledgerIds.length === 0 || typeof window.canvas?.ledger?.list !== 'function') { setRows({ key: asked, rows: [], unreadable: false, panels: 0 }); return }
+    const ticket = gate.ask(key)
+    if (ledgerIds.length === 0 || typeof window.canvas?.ledger?.list !== 'function') { if (gate.lands(ticket)) setRows({ key: asked, rows: [], unreadable: false, panels: 0 }); return }
     void Promise.allSettled(ledgerIds.map((id) => window.canvas.ledger.list(id, LEDGER_ROWS_PER_PANEL))).then((settled) => {
-      if (!live) return
+      if (!live || !gate.lands(ticket)) return
       setRows({ key: asked, rows: settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])), unreadable: settled.some((r) => r.status === 'rejected'), panels: ledgerIds.length })
     })
     return () => { live = false }
@@ -243,15 +272,17 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
   useEffect(() => {
     if (bases.length === 0 || typeof window.canvas?.review?.identity !== 'function') { setIdentities(new Map()); return }
     let live = true
+    // Keyed by cwd AND base (the critic): two lanes forked from one main commit share a
+    // base sha, and a map keyed by base alone let one lane's content answer the other's checks.
     void Promise.all(bases.map(async (b) => {
       const [cwd, base] = b.split('\0') as [string, string]
-      try { return [base, (await window.canvas.review.identity({ root: cwd, base })) ?? undefined] as const } catch { return [base, undefined] as const }
+      try { return [b, (await window.canvas.review.identity({ root: cwd, base })) ?? undefined] as const } catch { return [b, undefined] as const }
     })).then((pairs) => { if (live) setIdentities(new Map(pairs)) })
     return () => { live = false }
   }, [basesKey, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
   const evidence = useMemo<CheckEvidence | null>(() => {
     if (subject === null || rows === null || rows.key !== key) return null
-    const bound = bindCheckFreshness(raw, (base) => (identities.has(base) ? identities.get(base) : null))
+    const bound = bindCheckFreshness(raw, (base, cwd) => { const k = `${cwd}\0${base}`; return identities.has(k) ? identities.get(k) : null })
     const claims = claimsFromTranscript(chat.turns)
     return checkEvidence(bound, claims, { ledgerRead: !rows.unreadable, ledgerPanels: rows.panels, transcriptRead: chat.turns.length > 0 || (subject.kind === 'session' ? true : subject.chatId !== undefined) })
   }, [subject, rows, key, raw, identities, chat.turns])
@@ -291,6 +322,19 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh)
   const checks = useChecks(subject, open && tab === 'checks', panels, worktrees, refresh + localRefresh)
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null)
+  // M290. The two writes' draft state and their last outcome, per subject key —
+  // a draft opened on one subject must not survive a selection change.
+  const subjectKey = benchSubjectKey(subject)
+  const [writeDraft, setWriteDraft] = useState<{ key: string; kind: 'commit' | 'discard'; message: string; busy: boolean } | null>(null)
+  const [writeOutcome, setWriteOutcome] = useState<{ key: string; outcome: OrchWriteOutcome } | null>(null)
+  const draft = writeDraft !== null && writeDraft.key === subjectKey ? writeDraft : null
+  // The key at CALL time, for the async writes below: `subjectKey` in a closure is the
+  // key that minted the call and compares equal to itself (the critic), so a late
+  // answer must be judged against the key on screen NOW, and must only touch a draft
+  // that is still its own.
+  const subjectKeyRef = useRef(subjectKey)
+  subjectKeyRef.current = subjectKey
+  const outcome = writeOutcome !== null && writeOutcome.key === subjectKey ? writeOutcome.outcome : null
 
   // The top edge drags. Height is measured from the strip's bottom, so dragging
   // UP grows it; pointer capture keeps the gesture when the cursor leaves the
@@ -347,6 +391,54 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   }
 
   const reviewOnCanvasId = subject === null ? null : subject.kind === 'session' ? subject.id : subject.chatId ?? null
+  // M290. Commit and discard: only a `changes` result with an identity; `shared`
+  // is blocked by name; a lane task discards through its conversation (main
+  // judges peers by that panel), and without one says so.
+  const writable = ((): { kind: 'ok'; root: string; base: string | undefined; identity: ReviewIdentity; paths: string[]; subjectId: string | null } | { kind: 'blocked'; reason: string } | null => {
+    if (subject === null || changes.read.kind !== 'result') return null
+    const r = changes.read.result
+    if (r.kind === 'shared') return { kind: 'blocked', reason: `commit and discard are blocked here by name — ${r.panelCount} sessions share this directory, so the diff is not this subject's alone; commit from the session that wrote it` }
+    if (r.kind !== 'changes') return null
+    if (r.identity === undefined) return { kind: 'blocked', reason: 'commit and discard need the content identity this read did not carry — refresh; if it stays absent, git could not hash the tree' }
+    return { kind: 'ok', root: changes.read.repoRoot, base: changes.read.base, identity: r.identity, paths: r.files.map((f) => f.path), subjectId: subject.kind === 'session' ? subject.id : subject.chatId ?? null }
+  })()
+  // A discard restores to the review's BASE — a lane's fork point, a session's
+  // start. If HEAD has moved past that base (the agent committed in the lane),
+  // restoring to it would silently undo committed work in the tree, so the
+  // draft asks main for the identity against HEAD first and refuses by name
+  // when it differs from the read's. Said, never guessed.
+  const openDiscard = async (): Promise<void> => {
+    if (writable === null || writable.kind !== 'ok') return
+    const asked = subjectKey
+    setWriteDraft({ key: asked, kind: 'discard', message: '', busy: true })
+    let gate: string | null = null
+    if (writable.base === undefined) gate = 'no revision to restore to — the review\'s starting point could not be read'
+    else if (writable.subjectId === null) gate = 'a discard needs the task\'s conversation to judge who else writes here, and this task has none'
+    else if (typeof window.canvas?.review?.identity === 'function') {
+      const atHead = await window.canvas.review.identity({ root: writable.root, base: 'HEAD' }).catch(() => null)
+      if (atHead === null) gate = 'the tree could not be re-read against HEAD, so nothing is restored'
+      else if (atHead.content !== writable.identity.content) gate = `HEAD has moved past the point this review compares against (${writable.base.slice(0, 10)}) — a commit was made since; restoring to that point would undo committed work in the tree, so discard from the review node on the canvas instead`
+    }
+    if (subjectKeyRef.current !== asked) return
+    if (gate !== null) { setWriteDraft((d) => (d?.key === asked ? null : d)); setWriteOutcome({ key: asked, outcome: { kind: 'refused', sentence: gate } }); return }
+    setWriteDraft((d) => (d?.key === asked ? { key: asked, kind: 'discard', message: '', busy: false } : d))
+  }
+  const runWrite = async (): Promise<void> => {
+    if (draft === null || writable === null || writable.kind !== 'ok') return
+    setWriteDraft({ ...draft, busy: true })
+    const asked = subjectKey
+    const out = draft.kind === 'commit'
+      ? await orchCommit({ root: writable.root, paths: writable.paths, message: draft.message, identity: writable.identity })
+      : writable.base === undefined || writable.subjectId === null
+        ? { kind: 'refused' as const, sentence: 'the discard gate did not run — refresh and try again' }
+        : await orchDiscard({ root: writable.root, baseline: writable.base, subjectId: writable.subjectId, paths: writable.paths, identity: writable.identity })
+    // Landed for the subject it was asked for, or dropped: a late outcome must
+    // not paint under another subject's controls.
+    if (subjectKeyRef.current !== asked) return
+    setWriteOutcome({ key: asked, outcome: out })
+    setWriteDraft((d) => (d?.key === asked ? null : d))
+    if (out.kind === 'done' || out.kind === 'moved') { setLocalRefresh((n) => n + 1); onRefreshTaskHandoffs?.() }
+  }
   const dataSubject = subject === null ? '' : subject.kind === 'session' ? subject.id : subject.chatId ?? subject.itemId
 
   return (
@@ -411,20 +503,47 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                   )}
                 </>
               )}
-              <div className="orch__roster-actions">
+              <div className="orch__roster-actions" data-orch-controls-subject={subjectKey}>
                 {canMark && <button type="button" className="orch__mini" data-orch-bench-mark {...shellControl(mark)}>{item?.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}</button>}
                 {onReviewOnCanvas !== undefined && reviewOnCanvasId !== null && (
                   <button type="button" className="orch__mini" data-orch-review-canvas {...shellControl(() => onReviewOnCanvas(reviewOnCanvasId))}>Review on canvas</button>
                 )}
+                {writable?.kind === 'ok' && draft === null && (
+                  <>
+                    <button type="button" className="orch__mini" data-orch-bench-commit {...shellControl(() => setWriteDraft({ key: subjectKey, kind: 'commit', message: '', busy: false }))}>Commit…</button>
+                    <button type="button" className="orch__mini orch__mini--stop" data-orch-bench-discard {...shellControl(() => { void openDiscard() })}>Discard…</button>
+                  </>
+                )}
               </div>
+              {writable?.kind === 'blocked' && <p className="orch__caption" data-orch-write-blocked>{writable.reason}</p>}
+              {draft !== null && writable?.kind === 'ok' && (
+                <div className="orch__bench-write" data-orch-write-draft={draft.kind}>
+                  {draft.kind === 'commit' ? (
+                    <label className="orch__brief-field">
+                      <span className="orch__section-title">Commit message</span>
+                      <input className="orch__brief-input" data-orch-write-message type="text" value={draft.message} placeholder={`${writable.paths.length} file${writable.paths.length === 1 ? '' : 's'} in ${displayPath(writable.root).short}`}
+                        onChange={(e) => setWriteDraft({ ...draft, message: e.target.value })} />
+                    </label>
+                  ) : draft.busy && draft.message === '' ? (
+                    <p className="orch__caption" role="status">Checking that HEAD still stands at the point this review compares against…</p>
+                  ) : (
+                    <p className="orch__caption">Discard restores {writable.paths.length} file{writable.paths.length === 1 ? '' : 's'} in {displayPath(writable.root).short} to the point this review compares against{writable.base === undefined ? '' : ` (${writable.base.slice(0, 10)})`} and removes new files. The tree is re-read first; if it moved since you read it, nothing is written.</p>
+                  )}
+                  <span className="orch__roster-actions">
+                    <button type="button" className={`orch__mini${draft.kind === 'discard' ? ' orch__mini--stop' : ''}`} data-orch-write-go={draft.kind} disabled={draft.busy || (draft.kind === 'commit' && draft.message.trim() === '')} {...shellControl(() => { void runWrite() })}>{draft.busy ? 'Working…' : draft.kind === 'commit' ? 'Commit' : `Discard ${writable.paths.length} file${writable.paths.length === 1 ? '' : 's'}`}</button>
+                    <button type="button" className="orch__mini" data-orch-write-cancel disabled={draft.busy} {...shellControl(() => setWriteDraft(null))}>Cancel</button>
+                  </span>
+                </div>
+              )}
+              {outcome !== null && <p className="orch__caption" role="status" data-orch-write-outcome={outcome.kind}>{outcome.sentence}</p>}
             </div>
-            <div className="orch__bench-col orch__bench-col--diff">
+            <div className="orch__bench-col orch__bench-col--diff" data-orch-diff-subject={subjectKey}>
               {changes.diff.kind === 'none' && changes.read.kind === 'result' && (changes.read.result.kind === 'changes' || changes.read.result.kind === 'shared') && <p className="orch__caption">Choose a file to read its diff.</p>}
               {changes.diff.kind === 'loading' && <p className="orch__caption" role="status">Reading the diff…</p>}
               {changes.diff.kind === 'no-base' && <p className="orch__caption">No revision to diff against — the review's starting point could not be read.</p>}
               {changes.diff.kind === 'diff' && (
                 changes.diff.diff.kind === 'diff' ? (
-                  <pre className="orch__diff orch__diff--bench" data-orch-diff aria-label="Diff">
+                  <pre className="orch__diff orch__diff--bench" data-orch-diff data-orch-diff-key={changes.diff.key} aria-label="Diff">
                     {changes.diff.diff.lines.map((line, i) => (
                       <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}`}>{outward(line.text, `panel ${dataSubject}`).text}{'\n'}</span>
                     ))}

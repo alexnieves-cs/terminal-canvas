@@ -15,7 +15,7 @@ import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-
 import { formatCpu, formatMemory, getMachineCostSampledAt, listMachineCosts, useMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
-import { useChat, lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
+import { useChat, getChat, lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { edgeFiredAt, useEdgeActivityVersion } from '@renderer/canvas/useEdgeActivity'
@@ -84,9 +84,13 @@ import { sameOrchestrate, type PersistedOrchestrate, type WorkbenchTab } from '@
 import type { ReviewHandoff } from '@shared/review-readiness'
 import { onChatTurnEnd } from '@renderer/chat/chat-store'
 import {
-  orchAnswerKey, orchAttentionRows, orchNextAction, orchPlacementLine, orchPruneSent, orchTaskIsland,
+  orchAnswerKey, orchAttentionRows, orchIslandGroups, orchIslandOrder, orchMoveIsland, orchNextAction, orchPickIslandItem, orchPlacementLine, orchPruneSent, orchTaskIslands,
   type OrchAttentionRow, type TaskIsland
 } from './orchestration-island'
+import { ORCH_DEP_GROUPING, ORCH_DEP_READ_ONLY, orchBlockedLine, orchDependencyEdges, orchDependencyFocus, type OrchDependencyEdge } from './orchestration-dependency'
+import { orchControls, orchLimits, orchRetryPreview, orchSessionStanding, orchSpendWord } from './orchestration-controls'
+import { useRateLimit } from '@renderer/session/rate-limit-store'
+import { BACKENDS, type AgentBackend } from '@shared/agent-backends'
 import type { WorktreeListRow } from '@shared/ipc-contract'
 import type { OrchCubeTone } from './orchestration-cube-motion'
 
@@ -144,6 +148,17 @@ export interface OrchestrationViewProps {
   /** M287. The canvas's own readiness judgement for a task — the ONE author of its signature and identity. */
   taskHandoffOf?: (itemId: string) => ReviewHandoff | undefined
   onRefreshTaskHandoffs?: () => void
+  /**
+   * M289. What the canvas RECORDED for each handoff edge (`useHandoff`'s
+   * `setResult` sentences, keyed `from:to`) — the one source of "did it fire,
+   * was it skipped, and why". The lens reads these back; it decides nothing.
+   */
+  automationResults?: ReadonlyMap<string, string>
+  /**
+   * M290. Retry's one exit: open the chat on the canvas with the previewed
+   * prompt in its composer, UNSENT. Nothing on this page sends a message.
+   */
+  onRetryOnCanvas?: (panelId: string, prompt: string) => void
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
@@ -569,6 +584,10 @@ function GraphBoard(props: {
   litIds: ReadonlySet<string> | null
   wash: OrchWash | null
   onInterrupt?: (id: string) => void
+  /** M290. Whether this panel's runtime has an interrupt door right now (the view's capability read). */
+  canInterrupt: (id: string) => boolean
+  /** M289. The dependency lens is on: trigger words on the authored edges, spokes marked as grouping. */
+  depFocus: boolean
   firingKeys: ReadonlySet<string>
   onCamera: (camera: { x: number; y: number; k: number }) => void
   onSelect: (id: string) => void
@@ -781,13 +800,26 @@ function GraphBoard(props: {
             <line
               key={`${e.from}-${e.to}-${e.authored === true ? 'a' : 'h'}`}
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}${lensedOut(e.from) || lensedOut(e.to) ? ' orch__edge--lensed' : ''}`}
+              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}${lensedOut(e.from) || lensedOut(e.to) ? ' orch__edge--lensed' : ''}${props.depFocus && e.authored !== true ? ' orch__edge--grouping' : ''}`}
               data-role={to.hub ? from.kind : to.kind}
               data-connected-live={!from.synthetic && !to.synthetic && (isLiveRosterState(from.state) || isLiveRosterState(to.state)) || undefined}
               data-edge-activity={firing ? 'firing' : undefined}
+              data-orch-edge={e.authored === true ? 'dependency' : 'grouping'}
             />
           )
         })}
+        {/* M289. With the lens on, every dependency says its trigger on the line, and
+            the synthetic centre says what it is: grouping, not a supervisor. */}
+        {props.depFocus && orchEdgePaintOrder(edges).filter((e) => e.authored === true).map((e) => {
+          const from = projected.find((n) => n.id === e.from)
+          const to = projected.find((n) => n.id === e.to)
+          if (!from || !to) return null
+          return <text key={`label-${e.from}-${e.to}`} className="orch__edge-label" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 6} textAnchor="middle" data-orch-edge-label={`${e.from}:${e.to}`}>{e.trigger ?? 'a bare link'}</text>
+        })}
+        {props.depFocus && hubNode !== undefined && (hubNode.synthetic === true || hubNode.id === '__hub__') && (() => {
+          const h = projected.find((n) => n.id === hubNode.id)
+          return h === undefined ? null : <text className="orch__edge-label orch__edge-label--grouping" x={h.x} y={h.y + h.size + 18} textAnchor="middle" data-orch-grouping>{ORCH_DEP_GROUPING}</text>
+        })()}
       </svg>
       {/* The R3F island: real-lit cube meshes, painted above the ground/edges and
           below the hit-targets/callouts. `pointer-events: none` (styles.css) —
@@ -848,7 +880,7 @@ function GraphBoard(props: {
           <g key={`callout-${n.id}`} className="orch__callout-wrap" onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}>
             <CubeCallout node={n} offsetX={offsets.get(n.id)!} below={below.has(n.id)} drift={n.drift} band={n.band} expanded={expanded(n.id)}
               task={props.workItems.find((w) => w.panelId === n.id)?.title} onSelect={onSelect} onJump={onJump}
-              onInterrupt={props.onInterrupt && props.panels.some((p) => p.rect.id === n.id && isChatPanel(p)) && ['busy', 'starting', 'wants-you'].includes(n.state) ? props.onInterrupt : undefined} />
+              onInterrupt={props.onInterrupt && props.canInterrupt(n.id) ? props.onInterrupt : undefined} />
           </g>
         ))}
         {/* Above the cubes so a chip is never hidden behind the object it leaves;
@@ -907,7 +939,7 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -931,10 +963,44 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // clipped the card row). A tab, Review changes, a terminal card or a drag opens it.
   const [benchOpen, setBenchOpen] = useState<boolean>(() => getOrchPrefs().workbench.open)
   const openBench = useCallback((t: WorkbenchTab): void => { setBenchTab(t); setBenchOpen(true) }, [])
-  const [benchPinned, setBenchPinned] = useState<BenchSubject | null>(null)
+  // The pin is a DESCRIPTOR (which session, which task), never a frozen subject: a task
+  // pinned before its lane existed must read the lane once it does (the critic).
+  const [benchPin, setBenchPin] = useState<{ kind: 'session'; id: string } | { kind: 'task'; itemId: string } | null>(null)
   const [benchRefresh, setBenchRefresh] = useState(0)
   useEffect(() => onChatTurnEnd(() => setBenchRefresh((n) => n + 1)), [])
   useEffect(() => { setOrchPrefs({ workbench: { tab: benchTab, height: benchHeight, open: benchOpen } }) }, [benchTab, benchHeight, benchOpen])
+  // M288. Which island the inspector and the workbench are about (null = the
+  // canvas's focused task, Phase A's pick), the islands' presentation order
+  // (seeded from the workspace record, appended-only) and the undo stack of
+  // presentation moves — a move changes this array and nothing else.
+  const [focusIslandId, setFocusIslandId] = useState<string | null>(null)
+  const [islandsOpen, setIslandsOpen] = useState(false)
+  const [islandOrder, setIslandOrder] = useState<readonly string[]>(() => getOrchPrefs().islands)
+  const [orderHistory, setOrderHistory] = useState<readonly (readonly string[])[]>([])
+  useEffect(() => { setOrchPrefs({ islands: islandOrder }) }, [islandOrder])
+  // M289. The dependency lens: on, the lit set is the selection's dependency
+  // closure and everything else dims in place. Read-only by construction.
+  const [depFocus, setDepFocus] = useState(false)
+  // M290. The retry PREVIEW, by panel id; nothing is sent from this page.
+  const [retryFor, setRetryFor] = useState<string | null>(null)
+  // M290. The global limits, read off the settings store the way the
+  // navigator and the file tree read theirs; re-read when settings change.
+  const [limitRows, setLimitRows] = useState<{ maxConcurrent: number; budgetUsd: number; budgetWindowPercent: number } | null>(null)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      if (typeof window.canvas?.settings?.list !== 'function') { setLimitRows({ maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0 }); return }
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const num = (id: string): number => { const v = rows.find((r) => r.id === id)?.value; const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0 }
+        setLimitRows({ maxConcurrent: num('agents.maxConcurrent'), budgetUsd: num('agents.budgetUsd'), budgetWindowPercent: num('agents.budgetWindowPercent') })
+      }, () => { if (live) setLimitRows({ maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0 }) })
+    }
+    read()
+    const off = typeof window.canvas?.settings?.onChanged === 'function' ? window.canvas.settings.onChanged(() => read()) : undefined
+    return () => { live = false; off?.() }
+  }, [])
+  const rateLimit = useRateLimit()
   // Foreground cards respond first, then settle at the edge of their readable area.
   const floatStyle = mode === 'dev' ? { translate: `${Math.tanh(graphCamera.x / 20) * 22}px ${Math.tanh(graphCamera.y / 14) * 16 - (graphCamera.k - 1) * 8}px` } : undefined
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
@@ -1046,8 +1112,57 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
 
   liveEdgesRef.current = liveSnap.graph.edges
 
-  const members = frameTask && taskMemberIds !== undefined && taskMemberIds.length > 0
-    ? taskMemberIds
+  // M284. The one task island (orchestration-island.ts), from the persisted work item
+  // and the worktree record it names — the same pick as the canvas's focused task.
+  const worktrees = useOrchWorktrees(workItems)
+  const islands: TaskIsland[] = useMemo(() => orchTaskIslands({
+    items: workItems.map((w) => ({
+      id: w.id, title: w.title, state: w.state,
+      ...(w.key !== undefined ? { key: w.key } : {}),
+      ...(w.panelId !== undefined ? { panelId: w.panelId } : {}),
+      ...(w.worktreeId !== undefined ? { worktreeId: w.worktreeId } : {})
+    })),
+    worktrees,
+    sessions: liveSnap.roster.map((r) => ({ id: r.id, title: r.title, kind: r.kind, agentic: r.kind === 'chat' || (r.kind === 'terminal' && panels.some((p) => p.rect.id === r.id && isTerminalPanel(p) && p.spec.agent !== undefined)) })),
+    membersOf: (itemId) => taskMembersOf?.(itemId) ?? [],
+    cwdOf: (id) => {
+      const live = getLiveSession(id)?.cwd
+      if (live !== undefined && live !== '') return live
+      const p = panels.find((x) => x.rect.id === id)
+      if (p !== undefined && isChatPanel(p)) return p.chat.cwd
+      if (p !== undefined && isTerminalPanel(p)) return p.spec.cwd
+      return undefined
+    }
+  }), [workItems, worktrees, liveSnap.roster, panels, taskMembersOf])
+  // M288. The PRIMARY island is Phase A's pick (the canvas's focused task, else the
+  // first session island); the FOCUSED island is the one the person chose here, or
+  // the primary. Every read below that says `island` means the focused one.
+  const primaryItem = useMemo(() => orchPickIslandItem(workItems.map((w) => ({ id: w.id, title: w.title, state: w.state }))), [workItems])
+  const primaryIsland: TaskIsland | null = (primaryItem !== null ? islands.find((i) => i.itemId === primaryItem.id) : undefined) ?? islands.find((i) => i.source === 'session') ?? null
+  const island: TaskIsland | null = (focusIslandId === null ? undefined : islands.find((i) => i.id === focusIslandId)) ?? primaryIsland
+  const islandIds = useMemo(() => islands.map((i) => i.id), [islands])
+  const orderedIds = useMemo(() => orchIslandOrder(islandOrder, islandIds), [islandOrder, islandIds])
+  // Append-only: the order state learns new ids and forgets gone ones, never re-sorts.
+  useEffect(() => { if (orderedIds.join('\n') !== islandOrder.join('\n')) setIslandOrder(orderedIds) }, [orderedIds, islandOrder])
+  const islandGroups = useMemo(() => orchIslandGroups(islands, orderedIds), [islands, orderedIds])
+  const moveIsland = (id: string, dir: -1 | 1): void => {
+    const next = orchMoveIsland(orderedIds, id, dir)
+    if (next === null) return
+    setOrderHistory((h) => [...h, orderedIds])
+    setIslandOrder(next)
+  }
+  const undoMove = (): void => {
+    const prev = orderHistory[orderHistory.length - 1]
+    if (prev === undefined) return
+    setIslandOrder(orchIslandOrder(prev, islandIds))
+    setOrderHistory(orderHistory.slice(0, -1))
+  }
+  // M288. The frame is the canvas's focused task (Phase A) until a person picks
+  // another island here; then it is that island's members.
+  const members = frameTask
+    ? (focusIslandId !== null && island !== null && island.memberIds.length > 0
+        ? island.memberIds
+        : taskMemberIds !== undefined && taskMemberIds.length > 0 ? taskMemberIds : null)
     : null
   const framed = orchTaskFrame({
     graph: liveSnap.graph,
@@ -1070,10 +1185,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   selectedIdsRef.current = selectedIds
 
   const lensIds = useMemo(() => new Set(visibleRoster.map((r) => r.id)), [visibleRoster])
-  const litIds = useMemo(
+  const lensLit = useMemo(
     () => orchLensLit(framed.graph.nodes, lensIds, effectiveFilter !== 'all' || query.trim() !== ''),
     [framed.graph.nodes, lensIds, effectiveFilter, query]
   )
+  // M289. With the dependency lens on, the lit set is the selection's dependency
+  // closure (computed below, read here through a ref set on every render).
+  const depLitRef = useRef<ReadonlySet<string> | null>(null)
+  const litIds = depLitRef.current ?? lensLit
   const openOffRing = useCallback((): void => {
     setMetric(null)
     setQuery('')
@@ -1123,36 +1242,19 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   onOrchestrateRef.current = onOrchestrate
   const persistedRef = useRef(orchestrate)
   persistedRef.current = orchestrate
+  const flushOrchestrate = useCallback((): void => {
+    const next = persistedOrchPrefs(getOrchPrefs())
+    if (!sameOrchestrate(persistedRef.current, next)) onOrchestrateRef.current?.(next)
+  }, [])
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const next = persistedOrchPrefs(getOrchPrefs())
-      if (!sameOrchestrate(persistedRef.current, next)) onOrchestrateRef.current?.(next)
-    }, 250)
+    const timer = window.setTimeout(flushOrchestrate, 250)
     return () => window.clearTimeout(timer)
-  }, [tab, mode, lens, graphCamera, benchTab, benchHeight, benchOpen])
+  }, [tab, mode, lens, graphCamera, benchTab, benchHeight, benchOpen, islandOrder, flushOrchestrate])
+  // M288. Leaving the page inside the 250 ms window dropped the pending write —
+  // measured as an Undo move that came back undone on the next visit, because
+  // the mount re-seeds from the record. The unmount flushes what the timer owed.
+  useEffect(() => () => { flushOrchestrate() }, [flushOrchestrate])
 
-  // M284. The one task island (orchestration-island.ts), from the persisted work item
-  // and the worktree record it names — the same pick as the canvas's focused task.
-  const worktrees = useOrchWorktrees(workItems)
-  const island: TaskIsland | null = useMemo(() => orchTaskIsland({
-    items: workItems.map((w) => ({
-      id: w.id, title: w.title, state: w.state,
-      ...(w.key !== undefined ? { key: w.key } : {}),
-      ...(w.panelId !== undefined ? { panelId: w.panelId } : {}),
-      ...(w.worktreeId !== undefined ? { worktreeId: w.worktreeId } : {})
-    })),
-    worktrees,
-    sessions: liveSnap.roster.map((r) => ({ id: r.id, title: r.title, kind: r.kind, agentic: r.kind === 'chat' || (r.kind === 'terminal' && panels.some((p) => p.rect.id === r.id && isTerminalPanel(p) && p.spec.agent !== undefined)) })),
-    membersOf: (itemId) => taskMembersOf?.(itemId) ?? [],
-    cwdOf: (id) => {
-      const live = getLiveSession(id)?.cwd
-      if (live !== undefined && live !== '') return live
-      const p = panels.find((x) => x.rect.id === id)
-      if (p !== undefined && isChatPanel(p)) return p.chat.cwd
-      if (p !== undefined && isTerminalPanel(p)) return p.spec.cwd
-      return undefined
-    }
-  }), [workItems, worktrees, liveSnap.roster, panels, taskMembersOf])
   const listRows = useMemo(
     () => [...visibleRoster].sort((a, b) => Number(island?.memberIds.includes(b.id) ?? false) - Number(island?.memberIds.includes(a.id) ?? false)),
     [visibleRoster, island]
@@ -1212,6 +1314,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     }
     return island.subjectId === null ? null : { kind: 'session', id: island.subjectId, title: island.goal }
   }, [selectedRow, island, workItems, worktrees])
+  const subjectOfTask = useCallback((itemId: string): BenchSubject | null => {
+    const item = workItems.find((w) => w.id === itemId)
+    if (item === undefined) return null
+    const isl = islands.find((i) => i.itemId === itemId)
+    const lane = item.worktreeId === undefined ? undefined : worktrees.find((w) => w.id === item.worktreeId)
+    return {
+      kind: 'task', itemId, title: item.title, memberIds: isl?.memberIds ?? (taskMembersOf?.(itemId) ?? []),
+      ...(lane === undefined ? {} : { lane: { id: lane.id, path: lane.path, root: lane.root, branch: lane.branch } }),
+      ...(item.panelId === undefined ? {} : { chatId: item.panelId })
+    }
+  }, [workItems, islands, worktrees, taskMembersOf])
+  const benchPinned: BenchSubject | null = benchPin === null ? null
+    : benchPin.kind === 'session'
+      ? { kind: 'session', id: benchPin.id, title: liveSnap.roster.find((r) => r.id === benchPin.id)?.title ?? benchPin.id }
+      : subjectOfTask(benchPin.itemId) ?? { kind: 'task', itemId: benchPin.itemId, title: benchPin.itemId, memberIds: [] }
+  const setBenchPinned = useCallback((s: BenchSubject | null): void => {
+    setBenchPin(s === null ? null : s.kind === 'session' ? { kind: 'session', id: s.id } : { kind: 'task', itemId: s.itemId })
+  }, [])
   const benchSubject = benchPinned ?? benchCurrent
 
   const stageItems = useMemo(
@@ -1380,12 +1500,62 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const openSecs = Math.max(0, Math.floor((now - openedAt) / 1000))
   const openLabel = `${String(Math.floor(openSecs / 3600)).padStart(2, '0')}:${String(Math.floor((openSecs % 3600) / 60)).padStart(2, '0')}:${String(openSecs % 60).padStart(2, '0')}`
 
+  // M290. Interrupt only where the runtime has an interrupt door — read off
+  // the backend registry, never assumed for every chat (codex and copilot have none).
+  const backendOf = (id: string): AgentBackend | undefined => {
+    const panel = panels.find((p) => p.rect.id === id)
+    return panel !== undefined && isChatPanel(panel) ? panel.chat.backend ?? 'claude' : undefined
+  }
   const canInterruptId = (id: string): boolean => {
     const row = liveSnap.roster.find((r) => r.id === id)
-    const panel = panels.find((p) => p.rect.id === id)
-    return row !== undefined && panel !== undefined && isChatPanel(panel)
+    const backend = backendOf(id)
+    return row !== undefined && backend !== undefined && BACKENDS[backend].interrupts
       && (row.state === 'busy' || row.state === 'starting' || row.state === 'wants-you')
   }
+  const lastUserPrompt = (id: string): string | undefined => {
+    const turns = getChat(id).turns
+    for (let i = turns.length - 1; i >= 0; i -= 1) {
+      const t = turns[i]!
+      if (t.role !== 'user') continue
+      const text = t.blocks.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim()
+      if (text !== '') return text
+    }
+    return undefined
+  }
+  const selectedChat = useChat(selectedRow !== null && selectedRow.kind === 'chat' ? selectedRow.id : '')
+  // A chat's roster word comes from the agent-state store, which reads a process
+  // that ended between turns as `idle`; the SESSION's own status says `exited`.
+  // For the controls and the standing the session's word is the fact.
+  const selectedState = selectedRow === null ? '' : selectedRow.kind === 'chat' && selectedChat.snapshot?.status === 'exited' ? 'exited' : selectedRow.state
+  const selectedControls = selectedRow === null ? null : orchControls({
+    kind: selectedRow.kind, title: selectedRow.title, state: selectedState,
+    ...(backendOf(selectedRow.id) === undefined ? {} : { backend: backendOf(selectedRow.id)! }),
+    ...(selectedChat.lastTurn === undefined ? {} : { lastTurn: selectedChat.lastTurn }),
+    ...(selectedRow.kind === 'chat' && lastUserPrompt(selectedRow.id) !== undefined ? { lastPrompt: lastUserPrompt(selectedRow.id)! } : {})
+  })
+  const selectedStanding = selectedRow === null ? null : orchSessionStanding({ state: selectedState, ...(selectedChat.lastTurn === undefined ? {} : { lastTurn: selectedChat.lastTurn }) })
+  const selectedSpend = selectedRow === null ? null : orchSpendWord({ ...(backendOf(selectedRow.id) === undefined ? {} : { backend: backendOf(selectedRow.id)! }), ...(selectedChat.snapshot?.costUsd ?? selectedChat.meta?.costUsd) === undefined ? {} : { costUsd: (selectedChat.snapshot?.costUsd ?? selectedChat.meta?.costUsd)! } })
+  const retryPreview = retryFor !== null && selectedRow !== null && retryFor === selectedRow.id && backendOf(retryFor) !== undefined && lastUserPrompt(retryFor) !== undefined
+    ? orchRetryPreview({ title: selectedRow.title, backend: backendOf(retryFor)!, ...(selectedLive?.cwd === undefined || selectedLive.cwd === '' ? {} : { cwd: selectedLive.cwd }), lastPrompt: lastUserPrompt(retryFor)!, ...(selectedChat.lastTurn === undefined ? {} : { lastTurn: selectedChat.lastTurn }) })
+    : null
+  // M289. The typed relations, from the graph's authored edges and the canvas's
+  // recorded outcomes; the focus is the selection's closure.
+  const depEdges: OrchDependencyEdge[] = useMemo(() => orchDependencyEdges({
+    edges: liveSnap.graph.edges,
+    results: automationResults ?? new Map(),
+    stateOf: (id) => liveSnap.roster.find((r) => r.id === id)?.state,
+    titleOf: (id) => liveSnap.roster.find((r) => r.id === id)?.title ?? id
+  }), [liveSnap.graph.edges, liveSnap.roster, automationResults])
+  const depFocusData = selectedId !== null && selectedId !== '__hub__' ? orchDependencyFocus(selectedId, depEdges) : null
+  depLitRef.current = depFocus && depFocusData !== null ? depFocusData.lit : null
+  const depTouches = depFocusData !== null && (depFocusData.prerequisites.length > 0 || depFocusData.dependents.length > 0)
+  const blockedLine = depFocusData === null ? null : orchBlockedLine(depFocusData)
+  const limits = orchLimits({
+    maxConcurrent: limitRows?.maxConcurrent ?? 0, budgetUsd: limitRows?.budgetUsd ?? 0, budgetWindowPercent: limitRows?.budgetWindowPercent ?? 0,
+    inFlight: panels.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,
+    sessions: panels.filter(isChatPanel).map((p) => { const c = getChat(p.rect.id); const cost = c.snapshot?.costUsd ?? c.meta?.costUsd; return { backend: p.chat.backend ?? 'claude', ...(cost === undefined ? {} : { costUsd: cost }) } }),
+    rateLimit
+  })
   const selectedCanStop = selectedRow !== null && canInterruptId(selectedRow.id)
   const canInterruptAll = selectedIds.length > 0 && selectedIds.every(canInterruptId) && onInterrupt !== undefined
   const canJumpAll = selectedIds.length > 0 && selectedIds.every((id) => id !== '__hub__' && liveSnap.roster.some((r) => r.id === id))
@@ -1429,28 +1599,85 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const outputCommand = selectedLive?.currentCommand || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.command : undefined)
   const outputCwd = selectedLive?.cwd || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.cwd : undefined)
 
-  // M284. ONE island card, floating over the scene or leading the List — in the List a
-  // floating card covered the table's State and Next columns.
-  const islandCard = (floating: boolean): JSX.Element | null => island === null ? null : (
-              <button
-                type="button"
-                className={`${floating ? 'orch__float orch__float--task ' : 'orch__island--static '}orch__island${inspectTask ? ' orch__island--on' : ''}`}
-                style={floating ? floatStyle : undefined}
-                data-orch-island={island.itemId ?? island.subjectId ?? ''}
-                data-orch-island-source={island.source}
-                aria-pressed={inspectTask}
-                title="Select the task — Open on canvas is in the inspector"
-                {...shellControl(() => { setSelectedIds([]); setFreshNeeds(new Set()) })}
-              >
-                {/* Kind and state share ONE line, and the stage is that WORD, not the bars the
-                    old task card drew under it: the card must be no taller than the one it
-                    replaced, or it covers the ring's back cubes and their needs-you beacons
-                    (the golden critic found `tests`'s beacon hidden, twice). */}
-                <span className="orch__float-state">{island.source === 'work-item' ? 'Task' : 'Session · no task yet'} · {island.state} · {island.memberIds.length} {island.memberIds.length === 1 ? 'session' : 'sessions'}{islandWaiting !== undefined ? ' · needs you' : ''}</span>
-                <span className="orch__float-title" data-orch-island-goal>{island.goal}</span>
-                <span className="orch__island-place" data-orch-island-place>{orchPlacementLine(island)}</span>
-              </button>
-  )
+  // M284/M288. Island cards — ONE floating card when there is one island (Phase A's
+  // card, unchanged), a grouped column when there are more; in the List they lead the
+  // table. A click FOCUSES the island (inspector and workbench follow) and stays on
+  // this page; Open on canvas is the inspector's labelled action. The move arrows are
+  // PRESENTATION ONLY: they reorder this column, write the order to the workspace
+  // record, and dispatch nothing; Undo move puts the previous order back.
+  const islandFocused = (isl: TaskIsland): boolean => selectedRow === null && island !== null && island.id === isl.id
+  const islandCard = (isl: TaskIsland, floating: boolean): JSX.Element => {
+    const waiting = attentionRows.find((r) => isl.memberIds.includes(r.id))
+    const ambiguous = isl.placement.kind === 'shared' && (isl.writers > 1 || isl.sharedWith.length > 0)
+    return (
+      <button
+        key={isl.id}
+        type="button"
+        className={`${floating ? 'orch__float orch__float--task ' : 'orch__island--static '}orch__island${islandFocused(isl) ? ' orch__island--on' : ''}`}
+        style={floating ? floatStyle : undefined}
+        data-orch-island={isl.itemId ?? isl.subjectId ?? ''}
+        data-orch-island-id={isl.id}
+        data-orch-island-source={isl.source}
+        data-orch-island-ambiguous={ambiguous || undefined}
+        aria-pressed={islandFocused(isl)}
+        title="Select the task — Open on canvas is in the inspector"
+        {...shellControl(() => { setFocusIslandId(isl.id === primaryIsland?.id ? null : isl.id); setSelectedIds([]); setFreshNeeds(new Set()) })}
+      >
+        {/* Kind and state share ONE line, and the stage is that WORD, not the bars the
+            old task card drew under it: the card must be no taller than the one it
+            replaced, or it covers the ring's back cubes and their needs-you beacons
+            (the golden critic found `tests`'s beacon hidden, twice). */}
+        <span className="orch__float-state">{isl.source === 'work-item' ? 'Task' : 'Session · no task yet'} · {isl.state} · {isl.memberIds.length} {isl.memberIds.length === 1 ? 'session' : 'sessions'}{waiting !== undefined ? ' · needs you' : ''}</span>
+        <span className="orch__float-title" data-orch-island-goal>{isl.goal}</span>
+        <span className="orch__island-place" data-orch-island-place title={orchPlacementLine(isl)}>{floating ? orchPlacementLine({ ...isl, writers: 0 }) : orchPlacementLine(isl)}</span>
+      </button>
+    )
+  }
+  const islandColumn = (floating: boolean): JSX.Element | null => {
+    if (islands.length === 0) return null
+    if (islands.length === 1 && orderHistory.length === 0) return islandCard(islands[0]!, floating)
+    // In the SCENE the column rests folded: the focused island's card, the same size as
+    // Phase A's one card, and a one-line toggle — an open column covered the ring's back
+    // cubes, their needs-you beacons and their callouts (the critic, three scenes). The
+    // List always shows it whole.
+    const folded = floating && !islandsOpen
+    const focusedCard = island ?? islands[0]!
+    if (folded) {
+      // EXACTLY Phase A's card (same class, same single line, same footprint — the critic
+      // measured a wrapped, taller card re-covering the `tests` cube), plus a small pill
+      // to its LEFT; the wrapper is display:contents so both float on their own.
+      return (
+        <div className="orch__islands--rest" data-orch-islands data-orch-island-order={orderedIds.join(' ')} role="group" aria-label="Task islands">
+          {islandCard(focusedCard, true)}
+          <button type="button" className="orch__mini orch__islands-toggle" style={floatStyle} data-orch-islands-toggle aria-expanded={false} title="Show every island, grouped by repository" {...shellControl(() => setIslandsOpen(true))}>{`${islands.length} islands ▾`}</button>
+        </div>
+      )
+    }
+    return (
+      <div className={floating ? 'orch__float orch__float--task orch__islands' : 'orch__islands orch__islands--static'} style={floating ? floatStyle : undefined} data-orch-islands data-orch-islands-open="" data-orch-island-order={orderedIds.join(' ')} role="group" aria-label="Task islands">
+        <div className="orch__section-head orch__islands-head">
+          {floating
+            ? <button type="button" className="orch__mini" data-orch-islands-toggle aria-expanded={true} {...shellControl(() => setIslandsOpen(false))}>{`${islands.length} islands ▴`}</button>
+            : <span className="orch__section-title">{islands.length} islands</span>}
+          {orderHistory.length > 0 && <button type="button" className="orch__mini" data-orch-island-undo {...shellControl(undoMove)}>Undo move</button>}
+        </div>
+        {islandGroups.map((g) => (
+          <div key={g.key ?? '\0none'} className="orch__island-group" data-orch-island-group={g.key ?? ''}>
+            <span className="orch__caption orch__island-group-label" title={g.key ?? undefined}>{g.label} · <span data-orch-grouping>{ORCH_DEP_GROUPING}</span></span>
+            {g.islands.map((isl) => (
+              <div key={isl.id} className="orch__island-row">
+                {islandCard(isl, false)}
+                <span className="orch__island-tools" aria-label={`Move ${isl.goal}`}>
+                  <button type="button" className="orch__mini" data-orch-island-move="up" data-orch-island-of={isl.id} disabled={orderedIds.indexOf(isl.id) === 0} title="Move up — presentation only, nothing is dispatched" {...shellControl(() => moveIsland(isl.id, -1))}>▲</button>
+                  <button type="button" className="orch__mini" data-orch-island-move="down" data-orch-island-of={isl.id} disabled={orderedIds.indexOf(isl.id) === orderedIds.length - 1} title="Move down — presentation only, nothing is dispatched" {...shellControl(() => moveIsland(isl.id, 1))}>▼</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="orch" role="region" aria-label="Orchestration">
@@ -1620,7 +1847,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               // page's own keyboard model), and the inspector beside it carries every
               // action the scene's selection does.
               <div className="orch__list" data-orch-list role="region" aria-label="Sessions list">
-                {islandCard(false)}
+                {islandColumn(false)}
                 <table className="orch__list-table">
                   <thead>
                     <tr><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">State</th><th scope="col">Next</th></tr>
@@ -1658,6 +1885,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 litIds={litIds}
                 wash={wash}
                 onOverflow={openOffRing}
+                canInterrupt={canInterruptId}
+                depFocus={depFocus}
                 {...(blocker !== null ? { describedBy: 'orch-blocker' } : {})}
                 onInterrupt={onInterrupt}
                 selectedId={selectedId}
@@ -1740,7 +1969,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 (own worktree + branch, or a shared directory, said). A click SELECTS the
                 task — the inspector follows — and stays on this page; Open on canvas is
                 the inspector's separate, labelled action (the plan's direct controls). */}
-            {island !== null && lens === 'scene' && islandCard(true)}
+            {lens === 'scene' && islandColumn(true)}
           </div>
 
           <div className="orch__bottom">
@@ -1942,6 +2171,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             )}
           </section>
 
+          {/* M290. Run limits: each says whether main ENFORCES it or it is advisory, and
+              what it covers. Unknown spend reads Unknown; no cap is implied across
+              providers that report none. A folded line at rest (the critic: the block in
+              the System card made the bottom row taller and shrank the whole diorama). */}
+          <details className="orch__brief orch__limits" data-orch-limits>
+            <summary className="orch__brief-summary">Run limits · {limits.filter((l) => l.kind === 'enforced').length} enforced · {limits.filter((l) => l.kind === 'advisory').length} advisory</summary>
+            <ul className="orch__limit-list">
+              {limits.map((l) => (
+                <li key={l.id} className="orch__limit" data-orch-limit={l.id} data-orch-limit-kind={l.kind} title={l.coverage}>
+                  <span className="orch__limit-label">{l.label}</span>
+                  <span className="orch__limit-kind" data-kind={l.kind}>{l.kind}</span>
+                  <span className="orch__limit-value">{l.value}</span>
+                  <span className="orch__caption orch__limit-coverage">{l.coverage}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+
           {/* M284. The inspector: identity, state, next action — for the selected session,
               or for the task island when nothing is selected. */}
           <section className="orch__inspector" aria-label="Inspector" data-orch-inspector={selectedRow?.id ?? (inspectTask ? 'task' : '')}>
@@ -1954,13 +2201,86 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 </div>
                 <p className="orch__caption">{selectedRow.kind} · {selectedRow.id}{island?.memberIds.includes(selectedRow.id) === true ? ` · in ${island.goal}` : ''}{outputCwd !== undefined ? ` · ${displayPath(outputCwd).short}` : ''}</p>
                 {nextAction !== null && <p className="orch__inspector-next" data-orch-next={nextAction.verb}>Next: {nextAction.label}</p>}
-                <div className="orch__roster-actions">
+                {/* M290. Standing and spend, kept apart: a stopped session, an interrupted
+                    run and an unknown spend are three different facts. */}
+                {selectedRow.kind === 'chat' && selectedStanding !== null && <p className="orch__caption" data-orch-standing={selectedStanding.kind}>{selectedStanding.word}</p>}
+                {selectedRow.kind === 'chat' && selectedSpend !== null && <p className="orch__caption" data-orch-spend={selectedSpend.known ? 'known' : 'unknown'}>Spend: {selectedSpend.word}</p>}
+                {blockedLine !== null && <p className="orch__inspector-next orch__dep-blocked" data-orch-dep-blocked>{blockedLine}</p>}
+                <div className="orch__roster-actions" data-orch-controls={selectedRow.id}>
                   <button type="button" className="orch__mini" data-orch-open {...shellControl(() => jump(selectedRow.id))}>Open on canvas</button>
                   {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
-                  {selectedCanStop && onInterrupt !== undefined && (
-                    <button type="button" className="orch__mini orch__mini--stop" {...shellControl(() => onInterrupt(selectedRow.id))}><Stop size={12} /> Interrupt</button>
-                  )}
+                  {/* M290. Controls only where the runtime supports them; each button's title
+                      says exactly what it affects. Absent ones are named in the caption below. */}
+                  {selectedControls?.controls.map((c) => c.id === 'interrupt'
+                    ? (onInterrupt !== undefined && <button key={c.id} type="button" className="orch__mini orch__mini--stop" data-orch-control="interrupt" title={c.affects} {...shellControl(() => onInterrupt(selectedRow.id))}><Stop size={12} /> {c.label}</button>)
+                    : <button key={c.id} type="button" className="orch__mini" data-orch-control="retry" title={c.affects} aria-expanded={retryFor === selectedRow.id} {...shellControl(() => setRetryFor((cur) => (cur === selectedRow.id ? null : selectedRow.id)))}>{c.label}</button>)}
                 </div>
+                {selectedControls !== null && selectedControls.controls.length > 0 && (
+                  <ul className="orch__control-notes" data-orch-control-notes>
+                    {selectedControls.controls.map((c) => <li key={c.id} className="orch__caption"><strong>{c.label.replace('…', '')}</strong> {c.affects}</li>)}
+                  </ul>
+                )}
+                {/* Folded (the critic: seven lines of prose at the rest layer): the summary says how
+                    many and which; the reasons open on demand. */}
+                {selectedControls !== null && (selectedRow.kind === 'chat' || selectedRow.kind === 'terminal') && (
+                  <details className="orch__brief orch__absent" data-orch-control-absent={selectedControls.absent.map((a) => a.id).join(' ')}>
+                    <summary className="orch__brief-summary">Not available here · {selectedControls.absent.map((a) => a.id).join(', ')}</summary>
+                    <ul className="orch__control-notes">{selectedControls.absent.map((a) => <li key={a.id} className="orch__caption"><strong>{a.id}</strong> — {a.reason}</li>)}</ul>
+                  </details>
+                )}
+                {retryPreview !== null && (
+                  <div className="orch__retry" data-orch-retry-preview={selectedRow.id} role="group" aria-label="Retry preview">
+                    <div className="orch__section-title">Retry — a preview, nothing sent</div>
+                    <p className="orch__caption">To <strong data-orch-retry-target>{retryPreview.target}</strong> on {retryPreview.backend}{retryPreview.cwd !== undefined ? ` in ${displayPath(retryPreview.cwd).short}` : ''}.</p>
+                    <pre className="orch__term-log orch__retry-prompt" aria-label="Prompt to resend">{outward(retryPreview.prompt, `panel ${selectedRow.id}`).text}</pre>
+                    <p className="orch__caption">{retryPreview.note}</p>
+                    <span className="orch__roster-actions">
+                      {onRetryOnCanvas !== undefined && <button type="button" className="orch__mini" data-orch-retry-go {...shellControl(() => { const text = lastUserPrompt(selectedRow.id); setRetryFor(null); if (text !== undefined) onRetryOnCanvas(selectedRow.id, text) })}>Open on canvas with this prompt</button>}
+                      <button type="button" className="orch__mini" data-orch-retry-cancel {...shellControl(() => setRetryFor(null))}>Cancel</button>
+                    </span>
+                  </div>
+                )}
+                {/* M289. Dependencies — the typed relations this object is on, read-only. */}
+                {depFocusData !== null && (depTouches || depFocus) && (
+                  <section className="orch__deps" data-orch-deps={selectedRow.id} aria-label="Dependencies">
+                    <div className="orch__section-head">
+                      <div className="orch__section-title">Dependencies</div>
+                      <button type="button" className="orch__mini" data-orch-dep-focus aria-pressed={depFocus} {...shellControl(() => setDepFocus((v) => !v))}>{depFocus ? 'Show all' : 'Focus dependencies'}</button>
+                    </div>
+                    {!depTouches && <p className="orch__caption">No typed relation touches this object — the spokes in the scene are grouping, not dependencies.</p>}
+                    {depFocusData.prerequisites.length > 0 && (
+                      <>
+                        <span className="orch__caption">Prerequisites — what must happen first</span>
+                        <ul className="orch__dep-list" data-orch-dep-prereqs>
+                          {depFocusData.prerequisites.map((e) => (
+                            <li key={`${e.from}:${e.to}`} className="orch__dep-row" data-orch-dep-edge={`${e.from}:${e.to}`} data-orch-dep-status={e.status}>
+                              <button type="button" className="orch__activity-row" title={`Select ${e.fromTitle}`} {...shellControl(() => select(e.from))}>
+                                <span className="orch__activity-title">{e.fromTitle} → {e.trigger}</span>
+                                <span className="orch__activity-detail">{e.status}{e.sentence !== undefined ? ` · ${e.sentence}` : ''} · {e.condition}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {depFocusData.dependents.length > 0 && (
+                      <>
+                        <span className="orch__caption">Dependents — what waits on this</span>
+                        <ul className="orch__dep-list" data-orch-dep-dependents>
+                          {depFocusData.dependents.map((e) => (
+                            <li key={`${e.from}:${e.to}`} className="orch__dep-row" data-orch-dep-edge={`${e.from}:${e.to}`} data-orch-dep-status={e.status}>
+                              <button type="button" className="orch__activity-row" title={`Select ${e.toTitle}`} {...shellControl(() => select(e.to))}>
+                                <span className="orch__activity-title">{e.trigger} → {e.toTitle}</span>
+                                <span className="orch__activity-detail">{e.status}{e.sentence !== undefined ? ` · ${e.sentence}` : ''} · {e.condition}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    <p className="orch__caption" data-orch-dep-readonly>{ORCH_DEP_READ_ONLY}</p>
+                  </section>
+                )}
               </>
             ) : island !== null ? (
               <>
@@ -1970,6 +2290,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   <span className="orch__roster-state" data-orch-inspector-state>{island.state}</span>
                 </div>
                 <p className="orch__caption">{orchPlacementLine(island)}{island.placement.kind !== 'unknown' ? ` · ${displayPath(island.placement.path).short}` : ''}</p>
+                {/* M288. Shared-directory ambiguity, shown: when more than one session can
+                    write here, no change is attributed to this task alone. */}
+                {island.placement.kind === 'shared' && (island.writers > 1 || island.sharedWith.length > 0) && (
+                  <p className="orch__caption orch__island-ambiguity" data-orch-island-ambiguity={island.writers}>
+                    Shared directory — {island.writers} sessions write in {displayPath(island.placement.path).short}{island.sharedWith.length > 0 ? `, across ${island.sharedWith.length + 1} islands` : ''}; a change here cannot be attributed to this task alone, and the workbench says so per read.
+                  </p>
+                )}
                 <p className="orch__inspector-next" data-orch-next={islandWaiting !== undefined ? 'answer' : island.state === WORK_ITEM_STATES[2] ? 'review' : 'watch'}>
                   Next: {islandWaiting !== undefined ? `Answer ${islandWaiting.title}'s ${islandWaiting.toolName} request` : island.state === WORK_ITEM_STATES[2] ? 'Review its changes' : 'Watch its sessions work'}
                 </p>

@@ -7311,6 +7311,15 @@ export function Canvas({
             onPatchWorkItem={patchWorkItem}
             taskHandoffOf={taskHandoffOf}
             onRefreshTaskHandoffs={refreshTaskHandoffs}
+            // M289. What each handoff edge RECORDED, for the read-only lens.
+            automationResults={automationResult}
+            // M290. Retry's exit: the chat on the canvas with the prompt in its
+            // composer, unsent — the composer's own send is the only send.
+            onRetryOnCanvas={(id, text) => {
+              leaveForCanvas()
+              paletteActions.goToPanel(id)
+              insertIntoComposer(id, text)
+            }}
           />
         </div>
       )}

@@ -588,7 +588,9 @@ const benchSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkben
 ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every diff line through outward(), and reads review only through window.canvas.review.*',
   /outward\(p\.argument/.test(viewSrc) && /outward\(line\.text/.test(benchSrc) &&
     /canvas\.review\.panel\(/.test(benchSrc) && /canvas\.review\.diff\(/.test(benchSrc) &&
-    !/review\.(commit|discard)\(/.test(viewSrc + benchSrc))
+    !/review\.(commit|discard)\(/.test(viewSrc + benchSrc) &&
+    // M290. The two writes moved into ONE named module; every other file under orchestration/ stays write-free.
+    readdirSync(join(root, 'src/renderer/orchestration')).filter((f) => f !== 'orch-review-write.ts').every((f) => !/review\.(commit|discard)\(/.test(readFileSync(join(root, 'src/renderer/orchestration', f), 'utf8'))))
 
 // M283. The page boundary, read off Canvas.tsx: the covered host is inert, and the
 // predicate every edit:* chord and canvas shortcut gates on includes the cover. The
@@ -631,6 +633,162 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     /\(\['activity', 'files'\] as const\)/.test(view) && !/\['activity', 'terminal', 'review', 'files'\]/.test(view) &&
       /seedOrchPrefs\(orchestrate\)/.test(view) && /onOrchestrateRef\.current\?\.\(next\)/.test(view) && /sameOrchestrate\(persistedRef\.current, next\)/.test(view) &&
       /\.\.\.\(orchestrate === undefined \? \{\} : \{ orchestrate \}\)/.test(canvasSrc) && /orchestrate=\{orchestrate\}/.test(canvasSrc) && /onOrchestrate=\{setOrchestrate\}/.test(canvasSrc) && /onPatchWorkItem=\{patchWorkItem\}/.test(canvasSrc) && /taskHandoffOf=\{taskHandoffOf\}/.test(canvasSrc),
+    '')
+}
+
+// M288 — orch-islands.*. MANY ISLANDS, HONEST SUBJECTS, pure: one island per
+// working/review task and per directory of loose sessions, grouped by real
+// paths; writers counted over the whole canvas; an append-only order; and the
+// subject gate that drops a late or out-of-order answer by name.
+{
+  const I = load('src/renderer/orchestration/orchestration-island.ts', 'orchestration-island.cjs')
+  const G = load('src/renderer/orchestration/orch-subject-gate.ts', 'orch-subject-gate.cjs')
+  const cwds = { c1: '/r/app-wt1', c2: '/r/app-wt2', c3: '/r/app', c4: '/r/app', c5: '/r/docs', t9: '/r/app/sub' }
+  const input = {
+    items: [
+      { id: 'i1', title: 'Payments', state: 'working', panelId: 'c1', worktreeId: 'w1' },
+      { id: 'i2', title: 'Search', state: 'review', panelId: 'c2', worktreeId: 'w2' },
+      { id: 'i3', title: 'Typed in place', state: 'working', panelId: 'c3' },
+      { id: 'i4', title: 'Queued', state: 'todo' }
+    ],
+    worktrees: [
+      { id: 'w1', branch: 'tc/payments', path: '/r/app-wt1', root: '/r/app' },
+      { id: 'w2', branch: 'tc/search', path: '/r/app-wt2', root: '/r/app' }
+    ],
+    sessions: [
+      { id: 'c1', title: 'pay chat', kind: 'chat', agentic: true }, { id: 'c2', title: 'search chat', kind: 'chat', agentic: true },
+      { id: 'c3', title: 'typed chat', kind: 'chat', agentic: true }, { id: 'c4', title: 'loose chat', kind: 'chat', agentic: true },
+      { id: 'c5', title: 'docs chat', kind: 'chat', agentic: true }, { id: 't9', title: 'shell', kind: 'terminal', agentic: false }
+    ],
+    membersOf: (id) => ({ i1: ['c1'], i2: ['c2'], i3: ['c3'] }[id] ?? []),
+    cwdOf: (id) => cwds[id]
+  }
+  const all = typeof I.orchTaskIslands === 'function' ? I.orchTaskIslands(input) : []
+  const byId = Object.fromEntries(all.map((i) => [i.id, i]))
+  ok('orch-islands.1 one island per working/review task plus one per directory of loose sessions, each with its own subject, an honest count and a context label from real paths; two isolated worktrees of one repository group under that repository and never share a subject',
+    all.length === 5 && byId.i1 && byId.i2 && byId.i3 && byId['dir:/r/app'] && byId['dir:/r/docs'] && !all.some((i) => i.itemId === 'i4') &&
+      byId.i1.subjectId === 'c1' && byId.i2.subjectId === 'c2' && byId.i1.subjectId !== byId.i2.subjectId &&
+      byId.i1.placement.kind === 'worktree' && byId.i2.placement.kind === 'worktree' && byId.i1.group === '/r/app' && byId.i2.group === '/r/app' &&
+      byId.i1.sharedWith.length === 0 && byId.i1.writers === 1 &&
+      I.orchPlacementLine(byId.i1) === 'app · tc/payments · own worktree' &&
+      byId['dir:/r/docs'].memberIds.join() === 'c5' && byId['dir:/r/docs'].subjectId === 'c5' && byId['dir:/r/docs'].state === 'no task yet',
+    JSON.stringify(all.map((i) => ({ id: i.id, subject: i.subjectId, place: i.placement, group: i.group, writers: i.writers, shared: i.sharedWith }))))
+  ok('orch-islands.2 a shared directory is SAID with its writer count over the whole canvas (a task in /r/app counts the loose chat and nothing under a different root), the loose sessions of that directory are an island that shares with it, and the placement line names the count',
+    byId.i3.placement.kind === 'shared' && byId.i3.writers === 2 && byId.i3.sharedWith.join() === 'dir:/r/app' &&
+      byId['dir:/r/app'].writers === 2 && byId['dir:/r/app'].sharedWith.join() === 'i3' && byId['dir:/r/app'].memberIds.join() === 'c4' &&
+      I.orchPlacementLine(byId.i3) === 'app · shared directory · 2 sessions write here' &&
+      byId['dir:/r/docs'].writers === 1 && byId['dir:/r/docs'].sharedWith.length === 0,
+    JSON.stringify({ i3: byId.i3, loose: byId['dir:/r/app'] }))
+  const order1 = I.orchIslandOrder([], ['i1', 'i2'])
+  const order2 = I.orchIslandOrder(['i2', 'i1'], ['i1', 'i2', 'i3'])
+  const order3 = I.orchIslandOrder(['i2', 'i9', 'i1'], ['i1', 'i2'])
+  const moved = I.orchMoveIsland(['i1', 'i2', 'i3'], 'i3', -1)
+  const groups = I.orchIslandGroups(all, ['i2', 'dir:/r/docs', 'i1', 'i3', 'dir:/r/app'])
+  ok('orch-islands.3 placement is append-only: a new island joins at the END of the kept order, a gone one drops out, a move steps one place and returns a new array (the old one is the undo), and grouping follows the order it is given',
+    order1.join() === 'i1,i2' && order2.join() === 'i2,i1,i3' && order3.join() === 'i2,i1' &&
+      moved.join() === 'i1,i3,i2' && I.orchMoveIsland(['i1', 'i2'], 'i1', -1) === null && I.orchMoveIsland(['i1', 'i2'], 'zz', 1) === null &&
+      groups.map((g) => g.label).join() === 'app,docs' && groups[0].islands.map((i) => i.id).join() === 'i2,i1,i3,dir:/r/app',
+    JSON.stringify({ order1, order2, order3, moved, groups: groups.map((g) => [g.label, g.islands.map((i) => i.id)]) }))
+  const gate = G.createSubjectGate()
+  gate.move('A'); const a1 = gate.ask('A')
+  gate.move('B'); const b1 = gate.ask('B')
+  gate.move('A'); const a2 = gate.ask('A')
+  const late = { b: gate.lands(b1), a2: gate.lands(a2), a1: gate.lands(a1) }
+  gate.move('C'); const c1 = gate.ask('C'); const c2 = gate.ask('C')
+  const ooo = { c2: gate.lands(c2), c1: gate.lands(c1), c2again: gate.lands(c2) }
+  ok('orch-islands.4 the subject gate: a rapid A → B → A switch lands only the read asked for the CURRENT A (B\'s late answer and A\'s first, older answer are dropped), and two answers for one subject arriving out of order keep the newer (the older is dropped, and nothing lands twice)',
+    late.b === false && late.a2 === true && late.a1 === false && ooo.c2 === true && ooo.c1 === false && ooo.c2again === false && gate.current() === 'C',
+    JSON.stringify({ late, ooo }))
+  const primary = I.orchTaskIsland(input)
+  ok('orch-islands.5 Phase A\'s one island is the PRIMARY of the many — the canvas\'s focused task by the same pick — so the frame and the first island still name one task',
+    primary && primary.id === 'i1' && primary.subjectId === 'c1', JSON.stringify(primary))
+}
+
+// M289 — orch-dep.*. THE DEPENDENCY LENS, pure: authored edges only, the
+// trigger's exact condition, the canvas's recorded sentence as the status, a
+// skipped prerequisite as a NAMED blocker, the transitive closure as the lit set.
+{
+  const Dp = load('src/renderer/orchestration/orchestration-dependency.ts', 'orchestration-dependency.cjs')
+  const edges = [
+    { from: '__hub__', to: 'build' }, { from: '__hub__', to: 'test' }, { from: '__hub__', to: 'deploy' }, { from: '__hub__', to: 'lint' },
+    { from: 'build', to: 'test', authored: true, trigger: 'on exit 0' },
+    { from: 'test', to: 'deploy', authored: true, trigger: 'on exit 0' },
+    { from: 'lint', to: 'deploy', authored: true },
+    { from: 'other', to: 'lint', authored: true, trigger: 'after a turn' }
+  ]
+  const results = new Map([['build:test', 'skipped — exit 1 is not exit 0'], ['other:lint', 'handed off 12 lines after a turn']])
+  const states = { build: 'exited', test: 'idle', deploy: 'idle', lint: 'idle', other: 'idle' }
+  const dep = Dp.orchDependencyEdges({ edges, results, stateOf: (id) => states[id], titleOf: (id) => id.toUpperCase() })
+  const testFocus = Dp.orchDependencyFocus('test', dep)
+  const deployFocus = Dp.orchDependencyFocus('deploy', dep)
+  const lintFocus = Dp.orchDependencyFocus('lint', dep)
+  ok('orch-dep.1 only authored edges are dependencies (hub spokes never appear), each carries its trigger and the exact condition in words, a bare link is said to cross nothing, and the status is the canvas\'s recorded sentence — fired, skipped — or pending/unknown when nothing was recorded (an exited source with no record is unknown, never blocked)',
+    dep.length === 4 && !dep.some((e) => e.from === '__hub__') &&
+      dep.find((e) => e.from === 'build').status === 'skipped' && dep.find((e) => e.from === 'build').condition === 'fires only when the source exits with code 0' &&
+      dep.find((e) => e.from === 'other').status === 'fired' && dep.find((e) => e.from === 'lint').trigger === 'a bare link' && /crosses it on its own/.test(dep.find((e) => e.from === 'lint').condition) &&
+      dep.find((e) => e.from === 'test').status === 'pending' && Dp.orchDepStatus(undefined, 'exited') === 'unknown',
+    JSON.stringify(dep))
+  ok('orch-dep.2 a dependency failure blocks downstream with a NAMED reason: test\'s prerequisite build was skipped, so test reads Blocked with the recorded sentence and the source\'s name; deploy, one step further, lists test as a pending prerequisite and is not called blocked by inference',
+    testFocus.blockers.length === 1 && testFocus.blockers[0].from === 'build' && testFocus.blockers[0].reason === 'skipped — exit 1 is not exit 0' &&
+      Dp.orchBlockedLine(testFocus) === 'Blocked — BUILD: skipped — exit 1 is not exit 0' &&
+      deployFocus.blockers.length === 0 && Dp.orchBlockedLine(deployFocus) === null && deployFocus.prerequisites.map((e) => e.from).sort().join() === 'lint,test',
+    JSON.stringify({ testFocus: { ...testFocus, lit: [...testFocus.lit] }, deployBlock: Dp.orchBlockedLine(deployFocus) }))
+  ok('orch-dep.3 the focus lights the transitive closure both ways and nothing else, the lens says it is read-only, and grouping is labelled as grouping — no sentence in the module names a supervisor',
+    [...testFocus.lit].sort().join() === 'build,deploy,test' && [...lintFocus.lit].sort().join() === 'deploy,lint,other' && [...deployFocus.lit].sort().join() === 'build,deploy,lint,other,test' &&
+      /read-only/.test(Dp.ORCH_DEP_READ_ONLY) && /not a supervisor/.test(Dp.ORCH_DEP_GROUPING) &&
+      !/\.dispatch\(|\.send\(|spawn\(|agentSession|window\.canvas/.test(readFileSync(join(root, 'src/renderer/orchestration/orchestration-dependency.ts'), 'utf8')),
+    JSON.stringify({ test: [...testFocus.lit], lint: [...lintFocus.lit], deploy: [...deployFocus.lit] }))
+}
+
+// M290 — orch-limits.*. CAPABILITY-AWARE CONTROLS AND LIMITS, pure: a control
+// exists only where the backend registry says the door exists; the words are
+// the plan's; a limit says enforced or advisory and what it covers; unknown
+// spend reads Unknown; a stopped session, an interrupted run and an unknown
+// spend are three different answers.
+{
+  const C = load('src/renderer/orchestration/orchestration-controls.ts', 'orchestration-controls.cjs')
+  const busyClaude = C.orchControls({ kind: 'chat', title: 'api', backend: 'claude', state: 'busy' })
+  const busyCodex = C.orchControls({ kind: 'chat', title: 'cx', backend: 'codex', state: 'busy' })
+  const idleClaude = C.orchControls({ kind: 'chat', title: 'api', backend: 'claude', state: 'idle', lastTurn: { kind: 'ok', at: 1 } })
+  const exitedClaude = C.orchControls({ kind: 'chat', title: 'api', backend: 'claude', state: 'exited', lastPrompt: 'run the tests' })
+  const interruptedClaude = C.orchControls({ kind: 'chat', title: 'api', backend: 'claude', state: 'idle', lastTurn: { kind: 'interrupted', at: 1 }, lastPrompt: 'go' })
+  const term = C.orchControls({ kind: 'terminal', title: 'sh', state: 'busy' })
+  const ids = (r) => r.controls.map((c) => c.id).join()
+  ok('orch-limits.1 Interrupt appears only for a generating chat whose backend has an interrupt door (claude yes, codex no — the registry\'s own reason kept), Retry only after a failed or stopped turn with a prompt to retry from on a backend that resumes, and reassign and stop are ABSENT with a reason on every input; the words promise no rollback, no process end, no checkpoint, and a retry that sends nothing and repeats no failed command',
+    ids(busyClaude) === 'interrupt' && /no resumable checkpoint/.test(busyClaude.controls[0].affects) && /process stays up/.test(busyClaude.controls[0].affects) && /rolled back/.test(busyClaude.controls[0].affects) &&
+      ids(busyCodex) === '' && busyCodex.absent.find((a) => a.id === 'interrupt').reason === 'codex has no interrupt — close the panel to stop it' &&
+      ids(idleClaude) === '' && ids(exitedClaude) === 'retry' && /sends nothing/.test(exitedClaude.controls[0].affects) && /not assumed safe to repeat/.test(exitedClaude.controls[0].affects) &&
+      ids(interruptedClaude) === 'retry' && ids(term) === '' &&
+      [busyClaude, busyCodex, idleClaude, exitedClaude, term].every((r) => r.absent.some((a) => a.id === 'reassign') && r.absent.some((a) => a.id === 'stop')),
+    JSON.stringify({ busyClaude, busyCodex, idleClaude, exitedClaude, interruptedClaude, term }))
+  const none = C.orchLimits({ maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0, inFlight: 1, sessions: [{ backend: 'claude', costUsd: 0.5 }, { backend: 'codex' }], rateLimit: { kind: 'none' } })
+  const set = C.orchLimits({ maxConcurrent: 2, budgetUsd: 5, budgetWindowPercent: 80, inFlight: 1, sessions: [{ backend: 'claude', costUsd: 1.25 }, { backend: 'claude' }, { backend: 'copilot' }], rateLimit: { kind: 'allowed', overage: false, at: 1, windows: { five_hour: { utilization: 0.42 } } } })
+  const row = (rows, id) => rows.find((r) => r.id === id)
+  ok('orch-limits.2 every limit says which KIND it is and what it covers: with nothing set all four read advisory (time always does — no runtime enforces one); with the three settings set, concurrency, spend and the usage window read enforced and name what is not covered; spend sums only reporting sessions and counts the unknown ones by number, never implying a cap across providers that report none',
+    none.length === 4 && none.every((r) => r.kind === 'advisory') && row(none, 'spend').value === '$0.50 · 1 session unknown' && /nothing refuses/.test(row(none, 'spend').coverage) &&
+      row(set, 'concurrency').kind === 'enforced' && row(set, 'concurrency').value === '1 of 2 turns in flight' && /terminals and watchers are not counted/.test(row(set, 'concurrency').coverage) &&
+      row(set, 'spend').kind === 'enforced' && row(set, 'spend').value === '$1.25 of $5.00 · 2 sessions unknown' && /not counted and not capped/.test(row(set, 'spend').coverage) &&
+      row(set, 'window').kind === 'enforced' && row(set, 'window').value === '42% used · stops at 80%' && /report no window are not covered/.test(row(set, 'window').coverage) &&
+      row(set, 'time').kind === 'advisory' && row(set, 'time').value === 'no time limit',
+    JSON.stringify({ none, set }))
+  const st = (i) => C.orchSessionStanding(i)
+  ok('orch-limits.3 a stopped session, an interrupted run and an unknown spend stay distinguishable: exited is stopped, an interrupted last turn on a live session is interrupted (not idle, not stopped), an aborted turn carries main\'s reason, and spend is Unknown WITH its reason for a codex session, a claude session that has reported nothing, and a non-agent',
+    st({ state: 'exited', exitCode: 1 }).kind === 'stopped' && /exited \(1\)/.test(st({ state: 'exited', exitCode: 1 }).word) &&
+      st({ state: 'idle', lastTurn: { kind: 'interrupted', at: 1 } }).kind === 'interrupted' && st({ state: 'idle', lastTurn: { kind: 'ok', at: 1 } }).kind === 'idle' &&
+      st({ state: 'idle', lastTurn: { kind: 'aborted', at: 1, reason: 'budget' } }).word === 'aborted — budget; the session is still up' && st({ state: 'busy' }).kind === 'running' &&
+      C.orchSpendWord({ backend: 'codex' }).word === 'Unknown — codex reports no cost' && C.orchSpendWord({ backend: 'claude' }).known === false && /reported nothing yet/.test(C.orchSpendWord({ backend: 'claude' }).word) &&
+      C.orchSpendWord({}).known === false && C.orchSpendWord({ backend: 'claude', costUsd: 2 }).word === '$2.00 reported by claude',
+    '')
+  const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
+  const write = readFileSync(join(root, 'src/renderer/orchestration/orch-review-write.ts'), 'utf8')
+  const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  ok('orch-limits.4 commit and discard reach main ONLY through orch-review-write.ts, which always sends `expect` (a read with no identity is refused by name, never written), the workbench offers them only for a `changes` result with an identity and blocks `shared` by name, and the composer\'s retry exit inserts into the canvas composer and never sends',
+    /review\.commit\(\{ root: input\.root, paths: \[\.\.\.input\.paths\], message: input\.message\.trim\(\), expect: input\.identity \}\)/.test(write) &&
+      /review\.discard\(\{ root: input\.root, baseline: input\.baseline, subjectId: input\.subjectId, paths: \[\.\.\.input\.paths\], expect: input\.identity \}\)/.test(write) &&
+      /if \(input\.identity === undefined\) return \{ kind: 'refused'/.test(write) &&
+      /orchCommit, orchDiscard/.test(bench) && !/review\.commit\(|review\.discard\(/.test(bench) &&
+      /r\.kind === 'shared'\) return \{ kind: 'blocked'/.test(bench) && /r\.identity === undefined\) return \{ kind: 'blocked'/.test(bench) &&
+      /onRetryOnCanvas\(selectedRow\.id, text\)/.test(view) && !/agentSession\.send/.test(view + bench + write),
     '')
 }
 
