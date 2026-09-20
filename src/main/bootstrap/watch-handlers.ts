@@ -61,6 +61,8 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
     },
     now: () => Date.now(),
     ledger: { append: (row) => runLedger.append(row) },
+    // M286. What the run tested: the tree at the watcher's cwd against its HEAD.
+    identityOf: (cwd) => stores.reviewEngine.identityAtHead(cwd),
     onState: (id, watchState) => {
       // sendToRenderer OPENS a window when there is none (macOS's closed-window
       // state), so a timer watcher's tick would pop the app back open while

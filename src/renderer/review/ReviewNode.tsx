@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent a
 import type { ReviewPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ReviewAcross, ReviewDiff, ReviewResult } from '@shared/review'
+import type { ReviewIdentity } from '@shared/review-identity'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { NODE_FILE_CAP, buildReviewNodeModel, type ReviewNodeRow } from './review-node-model'
 import { useChat } from '@renderer/chat/chat-store'
@@ -37,7 +38,7 @@ export interface ReviewTaskContext {
    * judged — two authors of one fact.
    */
   paths: readonly string[]
-  reviewed?: { at: number; signature: string; files: number }
+  reviewed?: { at: number; signature: string; files: number; identity?: ReviewIdentity }
   /** The agent's own last words, when the lane's conversation is open. Its ACCOUNT, never evidence. */
   account?: string
   /** Ask the canvas to re-read the lane's diff, so the card and this node move together. */
@@ -50,10 +51,27 @@ export interface ReviewTaskContext {
   ledgerPanelIds: readonly string[]
   /** The lane's conversation, for the agent's own reported commands. Absent when it is closed. */
   chatPanelId?: string
-  onMarkReviewed: (itemId: string, signature: string, files: number) => void
+  /** M285. `identity` is what main said the changes ARE at this read (`handoff.changes.identity`); absent when git could not say, and the mark then reads `unknown` until it is re-marked. */
+  onMarkReviewed: (itemId: string, signature: string, files: number, identity: ReviewIdentity | undefined) => void
   /** Focus the lane's chat and INSERT a message — never send it. */
   onContinue: (itemId: string, paths: readonly string[]) => void
 }
+
+/**
+ * M285. The identity the node's current result carries, spread into a
+ * commit or discard request as `expect` — so main re-reads the tree right
+ * before it writes and refuses by name if the content moved. A result with
+ * no identity (git could not say) sends none, and then no re-check runs:
+ * that is the pre-M285 behaviour, kept rather than turned into a refusal of
+ * every commit on a machine whose `hash-object` is unhappy.
+ */
+function expectIdentity(result: ReviewResult | undefined): { expect: ReviewIdentity } | Record<string, never> {
+  if (result === undefined || (result.kind !== 'changes' && result.kind !== 'shared') || result.identity === undefined) return {}
+  return { expect: result.identity }
+}
+
+const SUBJECT_MOVED_COMMIT = 'the changes moved since this was read — nothing was committed; refresh, look again and retry'
+const SUBJECT_MOVED_DISCARD = 'the changes moved since this was read — nothing was discarded; refresh, look again and retry'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -336,7 +354,11 @@ function renderTask(
         <p className="pf__note review-node__note" data-review-task-mark={h.standing}>
           {h.standing === 'stale'
             ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here, and the lane has changed since`
-            : `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here`}
+            // M285. A mark with no content identity was recorded by a build
+            // that could see only the diff's shape; it is not called current.
+            : h.standing === 'unknown'
+              ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here before this canvas recorded what it read — mark again to make the review checkable`
+              : `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here`}
         </p>
       )}
 
@@ -349,7 +371,7 @@ function renderTask(
         <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="mark"
           disabled={!markable}
           title={markable ? 'record that you have read these changes' : readOnly ? 'leave merged view to act on this review' : (h.state === 'ready' || h.state === 'shared') ? 'the changes are still being read' : h.detail}
-          onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length); task.onRefresh() }) : undefined}>
+          onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length, h.changes?.identity); task.onRefresh() }) : undefined}>
           {task.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}
         </button>
         {/* INSERTED into the composer, never sent — M80's rule for every
@@ -693,7 +715,7 @@ function ReviewNodeImpl({
     setDiscarding(true)
     setOutcome(null)
     void window.canvas.review.discard(
-      { root: subject.repoRoot, baseline: subject.baselineSha, subjectId: subject.subjectId, paths: [path] }
+      { root: subject.repoRoot, baseline: subject.baselineSha, subjectId: subject.subjectId, paths: [path], ...expectIdentity(result) }
     )
       .then((r) => {
         setDiscarding(false)
@@ -718,6 +740,7 @@ function ReviewNodeImpl({
         setOutcome(
           r.kind === 'nothing-to-discard' ? 'nothing to discard'
             : r.kind === 'refused' ? `discard refused — ${r.detail}`
+            : r.kind === 'subject-moved' ? SUBJECT_MOVED_DISCARD
             : `could not discard — ${r.detail}`)
         setRefreshToken((n) => n + 1)
       })
@@ -740,7 +763,7 @@ function ReviewNodeImpl({
     setDiscarding(true)
     setOutcome(null)
     void window.canvas.review.discard(
-      { root: subject.repoRoot, baseline: subject.baselineSha, subjectId: subject.subjectId, paths }
+      { root: subject.repoRoot, baseline: subject.baselineSha, subjectId: subject.subjectId, paths, ...expectIdentity(result) }
     )
       .then((r) => {
         setDiscarding(false)
@@ -758,6 +781,7 @@ function ReviewNodeImpl({
         setOutcome(
           r.kind === 'nothing-to-discard' ? 'nothing to discard'
             : r.kind === 'refused' ? `discard refused — ${r.detail}`
+            : r.kind === 'subject-moved' ? SUBJECT_MOVED_DISCARD
             : `could not discard — ${r.detail}`)
         setRefreshToken((n) => n + 1)
       })
@@ -797,7 +821,7 @@ function ReviewNodeImpl({
     setCommitting(true)
     setOutcome(null)
     void window.canvas.review.commit(
-      { root: subject.repoRoot, paths: model.commit.paths, message }
+      { root: subject.repoRoot, paths: model.commit.paths, message, ...expectIdentity(result) }
     )
       .then((r) => {
         setCommitting(false)
@@ -823,7 +847,11 @@ function ReviewNodeImpl({
             // `failed` would send them to look at a git that is working.
             : r.kind === 'head-moved'
               ? 'the repository moved since this was read — refresh and try again'
-              : 'nothing to commit — the files changed since this was read')
+              // M285. Its own sentence: not git failing, not HEAD moving —
+              // the working tree's CONTENT is not what was on screen.
+              : r.kind === 'subject-moved'
+                ? SUBJECT_MOVED_COMMIT
+                : 'nothing to commit — the files changed since this was read')
       })
       // A REJECTED INVOKE MUST LAND IN A VISIBLE STATE. Left to the catch-less
       // version, `committing` stays true forever: the button reads "committing…"

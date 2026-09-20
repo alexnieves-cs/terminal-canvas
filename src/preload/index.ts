@@ -324,7 +324,8 @@ const bridge: CanvasBridge = {
     diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req),
     commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req),
     discard: (req: ReviewDiscardRequest) => ipcRenderer.invoke(IPC.REVIEW_DISCARD, req),
-    across: (root: string) => ipcRenderer.invoke(IPC.REVIEW_ACROSS, root)
+    across: (root: string) => ipcRenderer.invoke(IPC.REVIEW_ACROSS, root),
+    identity: (req: { root: string; base: string }) => ipcRenderer.invoke(IPC.REVIEW_IDENTITY, req)
   },
   git: {
     status: (root: string) => ipcRenderer.invoke(IPC.GIT_STATUS, root)

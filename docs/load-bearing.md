@@ -4799,3 +4799,34 @@ SEEDING in two of two runs, by a mechanism nobody found. No plain-node suite cov
 across the whole list, so a split is verified by bundling `palette-entry.cjs` in both worktrees,
 calling `buildCommands` on one fixture, and diffing the JSON: 193 rows, same order, same
 reasons, same 117 export names, byte-identical. Run that before trusting a green tier.
+
+**A review's freshness is decided by the CONTENT identity main sends, never by the shape
+signature, and a mark without one reads `unknown` — never `current` (`shared/review-identity.ts`,
+`review-engine.ts`'s `identityOf`, `review-readiness.ts`'s `reviewStanding`, M285).** The
+signature fingerprints sorted paths, counts and three flags (`readiness.3` pins that bound), so a
+same-size edit — one line replaced by another of the same length — kept a recorded review reading
+`current`. The identity is `base` (the baseline or fork sha) plus the first 32 hex of a SHA-256
+over `git diff --binary --full-index --no-ext-diff --no-color <base>` and, for each untracked
+non-ignored file, `path\0<hash-object blob>`; the policy is WRITTEN on the shared type and pinned
+as text by `review-id.4`. Three things fail silently if forgotten: **(1)** the renderer must never
+hash its own copy (`review-id.4` scans `src/renderer` for `createHash`/`hashReviewContent`) — a
+second author drifts on the first stale read; **(2)** a clean tree's shortcut identity in
+`reviewAt` and a full `identityOf` read must agree byte for byte, which is why
+`EMPTY_REVIEW_CONTENT` is the hash of two empty parts and not of nothing (`review-id.2` pins the
+parity); **(3)** a commit or discard that carries `expect` is refused by name (`subject-moved`)
+when the tree moved, and REFUSED — not run unchecked — when the identity cannot be re-read or the
+build has no `identityOf` (`review-id.3`). `parseReviewIdentity` is field-level: a malformed
+identity costs the identity and keeps the mark, and the mark then reads `unknown`.
+
+**A check's `tested` stamp is written by MAIN as the exit lands, and the panels harness must
+mirror every `identityOf` dep `stores.ts` wires, or the Electron tier proves a different app
+(`main/pty-manager.ts`'s `RunsDeps.identityOf`, `watch-runner.ts`'s deps, `scripts/panels-harness.cjs`,
+M286).** The harness composes its own `createReviewEngine`, `createReviewCommitter`,
+`createReviewDiscarder`, `PtyManager` runs deps and `createWatchRunner` rather than calling
+`createStores`, so a dependency added in `stores.ts` (or `watch-handlers.ts`) is ABSENT in the
+harness until copied — every one of them is optional with an inert default, so nothing goes red:
+ledger rows simply arrive unstamped, `bindCheckFreshness` reads them `unknown`, and a check
+looking for `stale` waits out its timeout. `orch-bench.4` reads a real watcher row's `tested`
+off the ledger for exactly this reason. The shape is `verify:ipc`'s positional-argument rule one
+layer down: the harness is a second composition root, and a collaborator it does not know about
+is one it cannot wire.

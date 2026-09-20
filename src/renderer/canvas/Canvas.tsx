@@ -234,6 +234,7 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
+import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
@@ -348,6 +349,11 @@ export function Canvas({
   // workspace. Absent until the first application; a record, not layout —
   // never in history, kept across a reset's undo like runs and bookmarks.
   const [starter, setStarter] = useState<PersistedStarter | undefined>(() => initial.starter)
+  // M287. Orchestrate's per-workspace layout record: seeded from the workspace,
+  // written by the Orchestrate page, saved beside the starter.
+  const [orchestrate, setOrchestrate] = useState<PersistedOrchestrate | undefined>(() => initial.orchestrate)
+  const orchestrateRef = useRef(orchestrate)
+  orchestrateRef.current = orchestrate
   const starterRef = useRef(starter)
   starterRef.current = starter
   const annotationsRef = useRef(annotations)
@@ -2027,7 +2033,7 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter, retainedOutcomesRef, setRetainedOutcomes, workItemsRef, setWorkItems,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter, orchestrateRef, setOrchestrate, retainedOutcomesRef, setRetainedOutcomes, workItemsRef, setWorkItems,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
@@ -2597,9 +2603,10 @@ export function Canvas({
       ...(annotations.length === 0 ? {} : { annotations }),
       ...(workItems.length === 0 ? {} : { workItems }),
       ...(retainedOutcomes.length === 0 ? {} : { retainedOutcomes }),
-      ...(starter === undefined ? {} : { starter })
+      ...(starter === undefined ? {} : { starter }),
+      ...(orchestrate === undefined ? {} : { orchestrate })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, retainedOutcomes, starter])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, retainedOutcomes, starter, orchestrate])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -4025,6 +4032,22 @@ export function Canvas({
       return result.kind === 'spawned'
     }
     w.__m81SupervisorOffered = (): boolean => !panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)
+    // M287. A watcher panel, minted the way the palette's `watch` verb mints
+    // one (makeWatcherPanel + commitHistory + selectOnly); the node registers
+    // itself with main on mount, so a check can then `watcher.run` it and read
+    // a REAL run's outcome and stamp in the workbench. The trigger is a timer
+    // an hour out — the check runs it by hand.
+    w.__m287Watcher = (cwd: string, command: string, args: string[]): string => {
+      const watcherId = `w${nextIdRef.current++}`
+      const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      setPanels((current) => {
+        const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), { cwd, command, args, trigger: { kind: 'timer', everyMs: 3600000 } })]
+        commitHistory(next)
+        return next
+      })
+      selectOnly(watcherId)
+      return watcherId
+    }
     // M74's two verbs, through the same functions the palette rows, the
     // action bar and the chrome buttons call.
     w.__m74OpenAsChat = (id: string): Promise<{ kind: string; reason?: string }> => openAsChatRef.current(id)
@@ -7281,6 +7304,13 @@ export function Canvas({
               leaveForCanvas()
               openReview(id)
             }}
+            // M287. The workspace's Orchestrate record, the board's one patch
+            // door, and the canvas's own readiness judgement — one author each.
+            orchestrate={orchestrate}
+            onOrchestrate={setOrchestrate}
+            onPatchWorkItem={patchWorkItem}
+            taskHandoffOf={taskHandoffOf}
+            onRefreshTaskHandoffs={refreshTaskHandoffs}
           />
         </div>
       )}

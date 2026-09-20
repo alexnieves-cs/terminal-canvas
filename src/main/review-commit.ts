@@ -10,6 +10,7 @@ import {
 } from './git-args'
 import type { GitResult, GitRunner } from './review-engine'
 import type { ReviewCommitRequest, ReviewCommitResult } from '@shared/review'
+import { sameReviewIdentity, type ReviewIdentity } from '@shared/review-identity'
 
 /**
  * How much of git's own output reaches the renderer. A rejecting hook can
@@ -28,6 +29,13 @@ export interface ReviewCommitDeps {
   tempIndexPath: () => string
   /** Best-effort removal, called in a finally on every path. */
   removeTempIndex: (path: string) => void
+  /**
+   * M285. The subject's content identity NOW (`ReviewEngine.identityOf`).
+   * Optional so every committer fixture before M285 builds; when absent, a
+   * request's `expect` cannot be checked and the commit is REFUSED rather
+   * than run unchecked — a caller that asked for the guard must get it.
+   */
+  identityOf?: (root: string, base: string) => Promise<ReviewIdentity | undefined>
 }
 
 const detailOf = (r: GitResult): string =>
@@ -94,6 +102,21 @@ export function createReviewCommitter(
     try {
       const seeded = await deps.run(buildReadTreeArgs(req.root), scratch)
       if (!seeded.ok) return { kind: 'failed', detail: detailOf(seeded) }
+
+      // M285. THE CONTENT RE-CHECK, immediately before the stage that copies
+      // the working tree into the scratch index — the last moment a read
+      // can still describe what is about to be committed. The person read a
+      // diff with identity `expect`; if the tree's identity is not that one
+      // now, the diff they approved is not the diff being committed, and the
+      // answer is `subject-moved` with nothing staged. An UNREADABLE identity
+      // is not a moved one and gets its own arm: refusing with the reason,
+      // rather than committing on the strength of a check that did not run.
+      if (req.expect !== undefined) {
+        if (deps.identityOf === undefined) return { kind: 'refused', detail: 'the changes could not be re-read before committing — this build cannot compute a content identity' }
+        const now = await deps.identityOf(req.root, req.expect.base)
+        if (now === undefined) return { kind: 'refused', detail: 'the changes could not be re-read before committing — look again and retry' }
+        if (!sameReviewIdentity(now, req.expect)) return { kind: 'subject-moved' }
+      }
 
       const staged = await deps.run(buildStageArgs(req.root, req.paths), scratch)
       if (!staged.ok) return { kind: 'failed', detail: detailOf(staged) }

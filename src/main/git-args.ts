@@ -218,6 +218,38 @@ export function buildUntrackedArgs(root: string): string[] {
   return ['-C', root, 'ls-files', '-z', '--others', '--exclude-standard']
 }
 
+/**
+ * M285. The bytes the review content identity hashes — see
+ * `shared/review-identity.ts` for the policy this argv implements. `--binary`
+ * so a changed image is covered by content and not only by its path;
+ * `--full-index` so two different blobs cannot share an abbreviated id in the
+ * header; `--no-ext-diff` and `--no-color` so a user's diff tool or colour
+ * config cannot change the bytes. The `-c` pins are the critic's finding:
+ * those two flags leave `diff.renames`, `diff.algorithm`, `diff.context`,
+ * `diff.noprefix`/`mnemonicPrefix`, `diff.indentHeuristic` and
+ * `diff.ignoreSubmodules` in play, and the SAME tree hashed differently under
+ * two configs (the safe direction — a mark went stale — but a false claim of
+ * machine-independence). Pinned to git's defaults, spelled out.
+ */
+export const CONTENT_DIFF_CONFIG: readonly string[] = [
+  'diff.renames=true', 'diff.algorithm=myers', 'diff.context=3', 'diff.interHunkContext=0',
+  'diff.noprefix=false', 'diff.mnemonicPrefix=false', 'diff.indentHeuristic=true',
+  'diff.ignoreSubmodules=none', 'diff.suppressBlankEmpty=false', 'core.quotePath=true'
+]
+export function buildContentDiffArgs(root: string, baseline: string): string[] {
+  return ['-C', root, ...CONTENT_DIFF_CONFIG.flatMap((c) => ['-c', c]), 'diff', '--binary', '--full-index', '--no-ext-diff', '--no-color', baseline]
+}
+
+/**
+ * M285. The blob id of each untracked file, one per line in argument order,
+ * READ without writing: `hash-object` without `-w` stores nothing, where the
+ * tempting `add -N` would mutate the index an agent may be mid-commit in
+ * (`buildUntrackedArgs`'s reason, one call later).
+ */
+export function buildHashObjectArgs(root: string, paths: readonly string[]): string[] {
+  return ['-C', root, 'hash-object', '--', ...paths]
+}
+
 /** Declared here, first called in M9b — the review node renders hunks. */
 export function buildFileDiffArgs(root: string, baseline: string, path: string): string[] {
   return ['-C', root, 'diff', baseline, '--', path]

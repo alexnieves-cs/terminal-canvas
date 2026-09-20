@@ -139,7 +139,10 @@ export function createStores(state: MainState): Stores {
     removeFile: (p) => unlinkSync(p),
     isDirectory: (p) => {
       try { return statSync(p).isDirectory() } catch { return false }
-    }
+    },
+    // M285. The engine's own identity read, so the re-check before a write
+    // and the answer the person read are one computation.
+    identityOf: (root, base) => reviewEngine.identityOf(root, base)
   })
   const reviewCommit = createReviewCommitter({
     run: gitRunner,
@@ -150,7 +153,8 @@ export function createStores(state: MainState): Stores {
     // Best effort: a scratch index that outlives its commit is a stale file in
     // a directory nothing else reads, and throwing here would turn a successful
     // commit into a rejected invoke.
-    removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } }
+    removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } },
+    identityOf: (root, base) => reviewEngine.identityOf(root, base)
   })
 
   // The once-only guard. Written here rather than inside PtyManager because the
@@ -263,7 +267,16 @@ export function createStores(state: MainState): Stores {
     // M52. The run ledger (an append stream beside layout.json) and the
     // shell-integration directory the rc files are written under. Declared
     // above this construction because they are values, not getters.
-    { ledger: runLedger, integrationDir: join(userData, 'shell-integration'), now: () => Date.now(), control: { socket: controlSocketPath, binDir: launcherDir } }
+    {
+      ledger: runLedger, integrationDir: join(userData, 'shell-integration'), now: () => Date.now(), control: { socket: controlSocketPath, binDir: launcherDir },
+      // M286. The stamp a ledger row carries: the panel's baseline, read at
+      // the moment of use (the store is the thing that knows it), through
+      // the engine's one identity computation.
+      identityOf: (panelId) => {
+        const b = layoutStore.baseline(panelId)
+        return b === undefined ? Promise.resolve(undefined) : reviewEngine.identityOf(b.root, b.sha)
+      }
+    }
   )
 
   /**

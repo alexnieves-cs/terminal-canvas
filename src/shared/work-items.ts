@@ -24,6 +24,8 @@
  * Pure: no DOM, no React, no electron. `verify:layout work.1–.4`.
  */
 
+import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
+
 export type WorkItemState = 'todo' | 'working' | 'review' | 'done'
 export const WORK_ITEM_STATES: readonly WorkItemState[] = ['todo', 'working', 'review', 'done']
 /** The states a USER may set. The runtime sets the other two; a drop target exists for these only. */
@@ -50,6 +52,16 @@ export interface PersistedWorkItem {
   url?: string
   /** The opening context a dispatch sends; absent when the provider gave none. */
   description?: string
+  /**
+   * M287. THE BRIEF — what the person wants done, in their words, edited on
+   * Orchestrate's inspector and shown beside the changes. The USER's field,
+   * like `state`: a provider re-add never touches it. Absent until typed;
+   * an empty string is not written. Editing it launches nothing — it is
+   * text a person reads before deciding, never a message sent anywhere.
+   */
+  brief?: string
+  /** M287. Acceptance criteria, one per entry, the brief's rule. A malformed list costs the field. */
+  criteria?: string[]
   state: WorkItemState
   /** The provider's own word, display only. */
   remoteState?: string
@@ -76,7 +88,19 @@ export interface PersistedWorkItem {
    * when a provider re-adds the item, because re-reading an issue from GitHub
    * says nothing about whether somebody looked at the lane.
    */
-  reviewed?: { at: number; signature: string; files: number }
+  reviewed?: {
+    at: number
+    signature: string
+    files: number
+    /**
+     * M285. The CONTENT identity the review was recorded against
+     * (`review-identity.ts`), beside the shape signature. Absent on every
+     * mark written before M285, and absence reads as freshness UNKNOWN —
+     * never `current` — because the shape signature alone cannot see a
+     * same-size edit. A malformed identity costs this field, not the mark.
+     */
+    identity?: ReviewIdentity
+  }
   anchor?: WorkItemAnchor
   createdAt: number
   updatedAt: number
@@ -109,13 +133,15 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.key === undefined ? {} : { key: item.key }),
     ...(item.url === undefined ? {} : { url: item.url }),
     ...(item.description === undefined ? {} : { description: item.description }),
+    ...(item.brief === undefined || item.brief === '' ? {} : { brief: item.brief }),
+    ...(item.criteria === undefined || item.criteria.length === 0 ? {} : { criteria: item.criteria.filter((c) => c !== '') }),
     ...(item.remoteState === undefined ? {} : { remoteState: item.remoteState }),
     ...(item.teammateId === undefined ? {} : { teammateId: item.teammateId }),
     ...(item.panelId === undefined ? {} : { panelId: item.panelId }),
     ...(item.worktreeId === undefined ? {} : { worktreeId: item.worktreeId }),
     ...(item.pr === undefined ? {} : { pr: { number: item.pr.number, url: item.pr.url } }),
     ...(item.note === undefined ? {} : { note: item.note }),
-    ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files } }),
+    ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files, ...(item.reviewed.identity === undefined ? {} : { identity: carryReviewIdentity(item.reviewed.identity) }) } }),
     ...(item.anchor === undefined ? {} : { anchor: { panelId: item.anchor.panelId, dx: item.anchor.dx, dy: item.anchor.dy } })
   }
 }
@@ -139,12 +165,19 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
   // The safe direction is also the honest one — no mark reads as `none`,
   // which offers a review rather than claiming one happened.
   const rv = raw.reviewed
+  // M285. The identity is parsed field-level inside the mark: an absent key
+  // (every pre-M285 file) and a malformed one both leave a mark WITHOUT an
+  // identity, which every reader turns into "freshness unknown".
+  const identity = isRecord(rv) ? parseReviewIdentity(rv.identity) : undefined
   const reviewed = isRecord(rv) && isNum(rv.at) && isStr(rv.signature) && isNum(rv.files)
-    ? { at: rv.at, signature: rv.signature, files: rv.files }
+    ? { at: rv.at, signature: rv.signature, files: rv.files, ...(identity === undefined ? {} : { identity }) }
     : undefined
   const a = raw.anchor
   const anchor = isRecord(a) && isStr(a.panelId) && isNum(a.dx) && isNum(a.dy) ? { panelId: a.panelId, dx: a.dx, dy: a.dy } : undefined
   const opt = (v: unknown): string | undefined => (isStr(v) ? v : undefined)
+  // M287. Field-level, like the anchor: a criteria list that is not a list
+  // of strings costs the list, never the card.
+  const criteria = Array.isArray(raw.criteria) && raw.criteria.every((c) => typeof c === 'string') ? (raw.criteria as string[]).filter((c) => c !== '') : undefined
   return {
     item: carryWorkItem({
       id: raw.id,
@@ -156,6 +189,8 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       key: opt(raw.key),
       url: opt(raw.url),
       description: typeof raw.description === 'string' ? raw.description : undefined,
+      brief: opt(raw.brief),
+      criteria,
       remoteState: opt(raw.remoteState),
       teammateId: opt(raw.teammateId),
       panelId: opt(raw.panelId),

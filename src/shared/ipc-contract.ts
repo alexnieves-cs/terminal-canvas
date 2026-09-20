@@ -3,6 +3,7 @@ import type { ImageResult, StarterFiles } from './starter'
 import type { TemplateSaveResult } from './templates'
 import type { WatchTrigger } from './watch-trigger'
 import type { RunRow, UsageRow } from './run-ledger'
+import type { ReviewIdentity } from './review-identity'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
@@ -90,6 +91,8 @@ export interface WatcherStateEvent {
   pending: boolean
   /** The trigger could not be armed, in words the node's body shows. */
   disarmed?: string
+  /** M286. What the last run tested — the tree's content identity against its HEAD as the run ended. Absent when unreadable. */
+  tested?: ReviewIdentity
 }
 
 export interface MemoryEntryRow {
@@ -368,6 +371,13 @@ export const IPC = {
   GIT_STATUS: 'git:status',
   /** M86. The main tree, then every worktree this app created for the root, each with its own diff since its fork. */
   REVIEW_ACROSS: 'review:across',
+  /**
+   * M286. The subject's content identity NOW against a base (M285's policy),
+   * so the workbench can bind a recorded check to what stands today. A pull,
+   * like every review:* channel, and null when git could not answer — the
+   * renderer never computes one of these itself.
+   */
+  REVIEW_IDENTITY: 'review:identity',
   /**
    * Turn the work a review node reports into a commit.
    *
@@ -1813,6 +1823,8 @@ export interface CanvasBridge {
     discard(req: ReviewDiscardRequest): Promise<ReviewDiscardResult>
     /** M86. See REVIEW_ACROSS. */
     across(root: string): Promise<ReviewAcross>
+    /** M286. See REVIEW_IDENTITY. */
+    identity(req: { root: string; base: string }): Promise<ReviewIdentity | null>
   }
   /** M86. See GIT_STATUS. */
   git: {

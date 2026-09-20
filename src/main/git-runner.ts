@@ -97,7 +97,8 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
         bin,
         args,
         {
-          encoding: 'utf8',
+          // M285. `bytes` reads latin1 (byte-preserving) for the content hash.
+          encoding: opts?.bytes === true ? 'latin1' : 'utf8',
           // A diff can legitimately be large. The default 1MB cap would reject
           // it as an error, which would read as baseline-lost — a wrong answer
           // produced by a buffer size.

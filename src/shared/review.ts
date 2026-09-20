@@ -1,4 +1,5 @@
 import type { PanelId } from './types'
+import type { ReviewIdentity } from './review-identity'
 
 /**
  * A panel's session-start snapshot: the repository it was spawned into, and a
@@ -136,8 +137,15 @@ export type ReviewResult =
   | { kind: 'never-started' }
   | { kind: 'git-missing' }
   | { kind: 'baseline-lost'; root: string }
-  | { kind: 'clean'; root: string }
-  | { kind: 'changes'; root: string; files: ReviewFile[]; added: number; removed: number }
+  /**
+   * M285. `identity` on the three arms that describe a readable tree: what
+   * the changes ARE (base revision + content hash, `review-identity.ts`), so a
+   * recorded review can be told apart from a same-size edit. Computed by
+   * main and ABSENT when its git calls failed — a reader must then say
+   * freshness is unknown, never assume fresh.
+   */
+  | { kind: 'clean'; root: string; identity?: ReviewIdentity }
+  | { kind: 'changes'; root: string; files: ReviewFile[]; added: number; removed: number; identity?: ReviewIdentity }
   /**
    * Two or more panels that have RUN share this repository, so no per-panel
    * diff is attributable: each panel's diff-since-its-own-baseline contains
@@ -145,7 +153,7 @@ export type ReviewResult =
    * that is true at the repository level — and `panelCount` is what the pane
    * says instead of a name.
    */
-  | { kind: 'shared'; root: string; panelCount: number; files: ReviewFile[] }
+  | { kind: 'shared'; root: string; panelCount: number; files: ReviewFile[]; identity?: ReviewIdentity }
   /**
    * The cwd IS (or may be) a repository, and git declined to open it — the
    * Command Line Tools stub, safe.directory, an unreadable .git, a vanished
@@ -208,6 +216,14 @@ export interface ReviewCommitRequest {
   /** Every path the result reported — not only the ones under the render cap. */
   paths: string[]
   message: string
+  /**
+   * M285. The identity the changes had when the person READ them. Main
+   * re-reads the subject's identity immediately before staging and answers
+   * `subject-moved` if it differs — a commit of a diff nobody looked at is
+   * the mutation this phase exists to refuse. Absent on a caller written
+   * before M285, and then no re-check runs, exactly as before.
+   */
+  expect?: ReviewIdentity
 }
 
 /**
@@ -229,6 +245,8 @@ export type ReviewCommitResult =
   | { kind: 'committed'; sha: string }
   | { kind: 'nothing-to-commit' }
   | { kind: 'head-moved' }
+  /** M285. The working tree's content differs from what the caller `expect`ed; nothing was staged. The fix is to look again. */
+  | { kind: 'subject-moved' }
   | { kind: 'refused'; detail: string }
   | { kind: 'failed'; detail: string }
 
@@ -243,6 +261,8 @@ export interface ReviewDiscardRequest {
   subjectId: PanelId
   /** Every path the result reported — not only the ones under the render cap. */
   paths: string[]
+  /** M285. See `ReviewCommitRequest.expect`: re-checked before the restore, refused by name if moved. */
+  expect?: ReviewIdentity
 }
 
 /**
@@ -255,5 +275,7 @@ export interface ReviewDiscardRequest {
 export type ReviewDiscardResult =
   | { kind: 'discarded'; restored: string[]; removed: string[]; failed: { path: string; detail: string }[] }
   | { kind: 'nothing-to-discard' }
+  /** M285. The tree moved since the caller read it; nothing was restored or removed. */
+  | { kind: 'subject-moved' }
   | { kind: 'refused'; detail: string }
   | { kind: 'failed'; detail: string }

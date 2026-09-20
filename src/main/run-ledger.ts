@@ -18,6 +18,7 @@ import { existsSync } from 'node:fs'
 import type { RunRow } from '../shared/run-ledger'
 export type { RunRow, UsageRow, LedgerRow } from '../shared/run-ledger'
 import { parseUsageRow, type LedgerRow, type UsageRow } from '../shared/run-ledger'
+import { parseReviewIdentity } from '../shared/review-identity'
 
 export interface RunLedger {
   append(row: LedgerRow): Promise<void>
@@ -84,11 +85,15 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
         try {
           const parsed = JSON.parse(lines[i]!) as Partial<RunRow>
           if (parsed.panelId !== panelId || typeof parsed.command !== 'string') continue
+          // M286. Field-level, like the rest of the row: a malformed `tested`
+          // costs the stamp and keeps the row.
+          const tested = parseReviewIdentity(parsed.tested)
           out.push({
             panelId, command: parsed.command, cwd: typeof parsed.cwd === 'string' ? parsed.cwd : '',
             startedAt: typeof parsed.startedAt === 'number' ? parsed.startedAt : 0,
             endedAt: typeof parsed.endedAt === 'number' ? parsed.endedAt : 0,
-            exitCode: typeof parsed.exitCode === 'number' ? parsed.exitCode : null
+            exitCode: typeof parsed.exitCode === 'number' ? parsed.exitCode : null,
+            ...(tested === undefined ? {} : { tested })
           })
         } catch { /* a malformed line costs that line */ }
       }

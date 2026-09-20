@@ -4014,6 +4014,32 @@ console.log('\n' + '='.repeat(60))
         JSON.stringify(roundTrip.snapshot.workspaces[0].workItems[0].reviewed) === JSON.stringify(mark),
       JSON.stringify({ bareKeys: Object.keys(bare), carried: carried.reviewed, upserted: upserted[0] && upserted[0].reviewed, parsedIds: parsed.map((i) => i.id), badMark, roundTrip: roundTrip.snapshot.workspaces[0].workItems[0] }))
   } catch (e) { ok('work.readiness.1 (threw)', false, String(e)) }
+  // M285. The mark's CONTENT identity: a pre-M285 record parses exactly as
+  // before (no identity key, and none invented), a well-formed identity
+  // round-trips through the parser and carryWorkItem as a fresh object, and
+  // a malformed identity costs the IDENTITY and keeps the mark — the field
+  // rule applied one level down.
+  try {
+    const base = { id: 'r1', source: 'github', key: 'acme/canvas#9', title: 't', state: 'todo', createdAt: 1, updatedAt: 1 }
+    const identity = { base: 'abc123', content: 'f'.repeat(32) }
+    const withId = { at: 99, signature: 'deadbeef', files: 3, identity }
+    const parsed = W.parseWorkItems([
+      { ...base, id: 'old', reviewed: { at: 99, signature: 'deadbeef', files: 3 } },
+      { ...base, id: 'new', reviewed: withId },
+      { ...base, id: 'bad-id', reviewed: { at: 99, signature: 'deadbeef', files: 3, identity: { base: 'abc', content: 'short' } } }
+    ], [])
+    const byId = (id) => parsed.find((i) => i.id === id)
+    const carried = W.carryWorkItem({ ...base, reviewed: withId })
+    const roundTrip = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, workItems: [{ ...base, reviewed: withId }] }], activeWorkspaceId: 'w1' }))
+    ok('work.review-id.1 a pre-M285 mark parses without an identity and none is invented; a well-formed identity round-trips as a fresh object; a malformed identity costs the identity and keeps the mark',
+      parsed.length === 3 &&
+        byId('old').reviewed !== undefined && !('identity' in byId('old').reviewed) &&
+        JSON.stringify(byId('new').reviewed.identity) === JSON.stringify(identity) &&
+        byId('bad-id').reviewed !== undefined && byId('bad-id').reviewed.files === 3 && !('identity' in byId('bad-id').reviewed) &&
+        JSON.stringify(carried.reviewed.identity) === JSON.stringify(identity) && carried.reviewed.identity !== identity &&
+        JSON.stringify(roundTrip.snapshot.workspaces[0].workItems[0].reviewed.identity) === JSON.stringify(identity),
+      JSON.stringify({ old: byId('old'), neu: byId('new'), bad: byId('bad-id'), carried: carried.reviewed }))
+  } catch (e) { ok('work.review-id.1 (threw)', false, String(e)) }
 }
 
 // M209 (D11). Retained outcomes are task history, not a second run parser:
@@ -5068,6 +5094,66 @@ try {
     JSON.stringify(walk))
 } catch (e) {
   ok('wfx (threw)', false, String(e && e.stack || e))
+}
+
+// M287 — orchestrate.1 / work.brief.1. THE ORCHESTRATE RECORD and THE BRIEF.
+// Both are workspace records with the record rules: absent stays absent (no
+// key invented, none written for nothing), a malformed field costs the field,
+// a well-formed one round-trips through the ONE parser as a fresh object.
+{
+  try {
+    const w = []
+    const absent = L.parseOrchestrate(undefined, w)
+    const empty = L.parseOrchestrate({}, w)
+    const notObj = L.parseOrchestrate('yes', w)
+    const full = L.parseOrchestrate({ workbench: { height: 300, tab: 'checks' }, lens: 'list', mode: 'pipeline', sideTab: 'files', camera: { x: 1, y: 2, k: 1.5 } }, [])
+    const badBench = []
+    const halfBad = L.parseOrchestrate({ workbench: { height: 'tall', tab: 'checks' }, lens: 'list' }, badBench)
+    const unknownTab = L.parseOrchestrate({ workbench: { height: 300, tab: 'artifacts' } }, [])
+    const opened = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: true } }, [])
+    const notOpened = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: 'yes' } }, [])
+    const clamped = L.parseOrchestrate({ workbench: { height: 5, tab: 'output' } }, [])
+    const clampedHigh = L.parseOrchestrate({ workbench: { height: 99999, tab: 'output' } }, [])
+    const badCamera = L.parseOrchestrate({ lens: 'scene', camera: { x: 0, y: 0, k: 0 } }, [])
+    const carried = L.carryOrchestrate(full)
+    const parsedAbsent = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 } }], activeWorkspaceId: 'w1' }))
+    const parsedWith = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, orchestrate: { workbench: { height: 300, tab: 'checks' } } }], activeWorkspaceId: 'w1' }))
+    ok('orchestrate.1 the record is absent for a pre-M287 file and for an empty object, dropped by name when not an object; each field parses on its own (a malformed workbench costs the workbench and keeps the lens; an unknown tab — artifacts — is not a tab; the height is clamped to the workbench\'s range; a zero-scale camera is dropped); carry is a fresh object; the workspace parser keeps it absent or carries it through',
+      absent === undefined && empty === undefined && notObj === undefined && w.some((t) => /orchestrate record/.test(t)) &&
+        JSON.stringify(full) === JSON.stringify({ workbench: { height: 300, tab: 'checks' }, lens: 'list', mode: 'pipeline', sideTab: 'files', camera: { x: 1, y: 2, k: 1.5 } }) &&
+        JSON.stringify(halfBad) === JSON.stringify({ lens: 'list' }) && badBench.some((t) => /workbench/.test(t)) &&
+        unknownTab === undefined &&
+        // `open` is written only as true; anything else is absent — closed.
+        opened.workbench.open === true && !('open' in notOpened.workbench) && !('open' in full.workbench) &&
+        clamped.workbench.height === L.WORKBENCH_MIN_HEIGHT && clampedHigh.workbench.height === L.WORKBENCH_MAX_HEIGHT &&
+        JSON.stringify(badCamera) === JSON.stringify({ lens: 'scene' }) &&
+        JSON.stringify(carried) === JSON.stringify(full) && carried !== full && carried.workbench !== full.workbench &&
+        L.sameOrchestrate(full, carried) && !L.sameOrchestrate(full, halfBad) && L.sameOrchestrate(undefined, undefined) &&
+        !('orchestrate' in parsedAbsent.snapshot.workspaces[0]) &&
+        JSON.stringify(parsedWith.snapshot.workspaces[0].orchestrate) === JSON.stringify({ workbench: { height: 300, tab: 'checks' } }),
+      JSON.stringify({ w, full, halfBad, badBench, unknownTab, clamped, clampedHigh, badCamera, wsA: Object.keys(parsedAbsent.snapshot.workspaces[0]), wsB: parsedWith.snapshot.workspaces[0].orchestrate }))
+  } catch (e) { ok('orchestrate.1 (threw)', false, String(e)) }
+  try {
+    const base = { id: 'r1', source: 'github', key: 'acme/canvas#9', title: 't', state: 'todo', createdAt: 1, updatedAt: 1 }
+    const parsed = L.parseWorkItems([
+      { ...base, id: 'old' },
+      { ...base, id: 'both', brief: 'make it fast', criteria: ['p95 under 100ms', '', 'no new deps'] },
+      { ...base, id: 'bad', brief: 42, criteria: ['ok', 7] },
+      { ...base, id: 'empty', brief: '', criteria: [] }
+    ], [])
+    const by = (id) => parsed.find((i) => i.id === id)
+    const carried = L.carryWorkItem({ ...base, brief: 'b', criteria: ['c1', 'c2'] })
+    const upserted = L.upsertWorkItem([L.carryWorkItem({ ...base, brief: 'keep me', criteria: ['and me'] })], { ...base, title: 'renamed upstream' }, 500)
+    ok('work.brief.1 brief and criteria are absent on a pre-M287 item and stay absent; strings and a string list round-trip with empty criteria filtered; a non-string brief or a mixed list costs the field and keeps the card; an empty brief is not written; a provider re-add keeps both, because they are the person\'s',
+      parsed.length === 4 &&
+        !('brief' in by('old')) && !('criteria' in by('old')) &&
+        by('both').brief === 'make it fast' && JSON.stringify(by('both').criteria) === JSON.stringify(['p95 under 100ms', 'no new deps']) &&
+        !('brief' in by('bad')) && !('criteria' in by('bad')) && by('bad').title === 't' &&
+        !('brief' in by('empty')) && !('criteria' in by('empty')) &&
+        carried.brief === 'b' && JSON.stringify(carried.criteria) === JSON.stringify(['c1', 'c2']) &&
+        upserted[0].title === 'renamed upstream' && upserted[0].brief === 'keep me' && JSON.stringify(upserted[0].criteria) === JSON.stringify(['and me']),
+      JSON.stringify({ old: by('old'), both: by('both'), bad: by('bad'), empty: by('empty'), carried, upserted }))
+  } catch (e) { ok('work.brief.1 (threw)', false, String(e)) }
 }
 
 const failed = results.filter((r) => !r.pass)

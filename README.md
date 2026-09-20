@@ -368,7 +368,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:merged / workspace:move-panels
                        review:panel / review:baseline / review:at
                        review:diff / review:commit / review:discard
-                       review:across / git:status
+                       review:across / review:identity / git:status
                        credential:list / credential:set / credential:delete
                        credential:verify
                        github:list / broker:audit
@@ -1061,6 +1061,9 @@ price of not killing something.
 | M282 | Orchestrate jump cards — the bottom strip gains Terminal, Code and Files previews that select and jump to canvas panels, with no embedded xterm or Monaco and no `file:read`; Deployments declined for want of a provider. Its closeout carries the goldens and the gate for the whole reference track — [log](docs/build-log/m282-orchestration-jump-cards.md) | ✅ done |
 | M283 | Orchestrate Phase A — the Canvas / Orchestrate page boundary: the covered canvas stays mounted, inert and deaf to typing and the edit chords, and returns unchanged — [log](docs/build-log/m283-m284-orchestrate-phase-a.md) | ✅ done |
 | M284 | Orchestrate Phase A — one real task island: goal, repository and branch; inspector, Needs attention with real permission answers, output mirror, review, Open on canvas, keyboard list — [log](docs/build-log/m283-m284-orchestrate-phase-a.md) | ✅ done |
+| M285 | Orchestrate Phase B — review content identity: base revision plus a hash of the diff's bytes under a written snapshot policy, computed in main, persisted on the mark compatibly (an old mark reads freshness unknown), re-checked before every commit and discard — [log](docs/build-log/m285-m287-orchestrate-phase-b.md) | ✅ done |
+| M286 | Orchestrate Phase B — revision-bound check evidence: one record per check with its command, context, outcome, timestamp and the identity it tested, from the run ledger and watcher outcomes; stale when the subject moved; a transcript claim is a claim, never a result — [log](docs/build-log/m285-m287-orchestrate-phase-b.md) | ✅ done |
+| M287 | Orchestrate Phase B — the resizable Changes · Checks · Output workbench, bound to the selection or pinned by name, sized and tabbed per workspace; brief and acceptance criteria on a task; unavailable data said — [log](docs/build-log/m285-m287-orchestrate-phase-b.md) | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

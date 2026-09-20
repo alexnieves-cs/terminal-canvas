@@ -261,7 +261,9 @@ app.whenReady().then(() => {
   // its own dialog; the sample pack is written by main and read like any pack.
   // M262 spawn:recent-used (145) — when each recent spawn directory was last
   // used, a sibling read so spawn:recent keeps its string[] answer.
-  const EXPECTED_CHANNELS = 145
+  // M286 review:identity (146) — the subject's content identity now, a pull
+  // like every review:* channel, so a check can be bound to what stands.
+  const EXPECTED_CHANNELS = 146
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

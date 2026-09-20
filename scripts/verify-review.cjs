@@ -2020,11 +2020,16 @@ if (GIT) {
       const files = [file('a.ts', 3, 1), file('b.ts', 0, 2)]
       const sig = R.reviewSignature(files)
       const other = R.reviewSignature([file('a.ts', 4, 1)])
-      const readyCurrent = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: sig, files: 2 } }), section: section(changes(files)), supervision: ended })
-      const readyStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section(changes(files)), supervision: ended })
-      const workingStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section(changes(files)), supervision: running })
-      const none = R.reviewHandoff({ item: laned(), section: section(changes(files)), supervision: ended })
-      const cleanAfterReview = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+      // M285. The standing is decided by the CONTENT identity main sends with
+      // the section; the signature stays the shape the mark describes.
+      const ID = { base: 'b1', content: 'a'.repeat(32) }
+      const OTHER_ID = { base: 'b1', content: 'b'.repeat(32) }
+      const withId = (result, identity) => ({ ...result, identity })
+      const readyCurrent = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: sig, files: 2, identity: ID } }), section: section(withId(changes(files), ID)), supervision: ended })
+      const readyStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1, identity: OTHER_ID } }), section: section(withId(changes(files), ID)), supervision: ended })
+      const workingStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1, identity: OTHER_ID } }), section: section(withId(changes(files), ID)), supervision: running })
+      const none = R.reviewHandoff({ item: laned(), section: section(withId(changes(files), ID)), supervision: ended })
+      const cleanAfterReview = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1, identity: OTHER_ID } }), section: section(withId({ kind: 'clean', root: LANE }, { base: 'b1', content: 'c'.repeat(32) })), supervision: ended })
       ok(NAME,
         readyCurrent.standing === 'current' && readyCurrent.state === 'ready' &&
           readyStale.standing === 'stale' && readyStale.state === 'ready' &&
@@ -2033,9 +2038,11 @@ if (GIT) {
           none.standing === 'none' &&
           // A lane that went clean after a review is not "current": there is no diff to still be current about.
           cleanAfterReview.standing === 'stale' && cleanAfterReview.state === 'empty' &&
-          R.reviewStanding(undefined, sig) === 'none' &&
-          R.reviewStanding({ at: 1, signature: sig, files: 2 }, sig) === 'current' &&
-          R.reviewStanding({ at: 1, signature: other, files: 1 }, sig) === 'stale',
+          R.reviewStanding(undefined, sig, ID) === 'none' &&
+          R.reviewStanding({ at: 1, signature: sig, files: 2, identity: ID }, sig, ID) === 'current' &&
+          R.reviewStanding({ at: 1, signature: other, files: 1, identity: OTHER_ID }, sig, ID) === 'stale' &&
+          // The diff could not be read now: a recorded review is stale, not current.
+          R.reviewStanding({ at: 1, signature: sig, files: 2, identity: ID }, undefined, undefined) === 'stale',
         JSON.stringify({ sig, other, readyCurrent, readyStale, workingStale, none, cleanAfterReview }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
@@ -2219,6 +2226,231 @@ if (GIT) {
         JSON.stringify({ marker, looksLikeSha, decls, acrossMentionsBaseline: acrossFn.includes('baselineSha') }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
+
+// M285 — REVIEW CONTENT IDENTITY. The signature's recorded bound (readiness.3)
+// is that a same-size edit is invisible to it; these checks are the other
+// side of that bound: main hashes the diff's BYTES under the written policy
+// (shared/review-identity.ts), the persisted mark carries what it read, an
+// old mark reads `unknown`, and a mutation re-reads the tree before writing.
+{
+  const NUMSTAT = { '-C /r diff --numstat -z b1': { stdout: ['3\t1\ta.ts', ''].join('\0') } }
+  const CFG = R.CONTENT_DIFF_CONFIG.flatMap((c) => ['-c', c]).join(' ')
+  const DIFF_KEY = `-C /r ${CFG} diff --binary --full-index --no-ext-diff --no-color b1`
+  const same = (a, b) => a !== undefined && b !== undefined && a.base === b.base && a.content === b.content
+  {
+    const NAME = 'review-id.1 a same-size edit moves the identity: two reads with IDENTICAL numstat rows and IDENTICAL signatures but different diff bytes are two identities; identical bytes are one; a different base is another; an untracked file is hashed by content, not by name; and the argv is the policy\'s (--binary --full-index --no-ext-diff --no-color; hash-object without -w)'
+    try {
+      const calls = []
+      const eng = (diffBytes, untracked, blob) => R.createReviewEngine({
+        run: async (args) => { calls.push(args.join(' ')); return fakeRunner({ ...EXISTS, ...NUMSTAT, '-C /r ls-files -z --others --exclude-standard': { stdout: untracked === undefined ? '' : `${untracked}\0` }, [DIFF_KEY]: { stdout: diffBytes }, [`-C /r hash-object -- ${untracked}`]: { stdout: `${blob}\n` } })(args) },
+        baselineOf: () => ({ root: '/r', sha: 'b1' }), peersInRepo: () => 0
+      })
+      const a = await eng('@@ -1 +1 @@\n-x\n+y\n').review('p1')
+      const b = await eng('@@ -1 +1 @@\n-p\n+q\n').review('p1')
+      const a2 = await eng('@@ -1 +1 @@\n-x\n+y\n').review('p1')
+      const u1 = await eng('@@ -1 +1 @@\n-x\n+y\n', 'new.txt', 'blob1').review('p1')
+      const u2 = await eng('@@ -1 +1 @@\n-x\n+y\n', 'new.txt', 'blob2').review('p1')
+      const otherBase = await R.createReviewEngine({ run: fakeRunner({ '-C /r cat-file -e b2': { stdout: '' }, '-C /r diff --numstat -z b2': NUMSTAT['-C /r diff --numstat -z b1'], ...NO_UNTRACKED, [`-C /r ${CFG} diff --binary --full-index --no-ext-diff --no-color b2`]: { stdout: '@@ -1 +1 @@\n-x\n+y\n' } }), baselineOf: () => ({ root: '/r', sha: 'b2' }), peersInRepo: () => 0 }).review('p1')
+      ok(NAME,
+        a.kind === 'changes' && b.kind === 'changes' && a2.kind === 'changes' && u1.kind === 'changes' && u2.kind === 'changes' && otherBase.kind === 'changes' &&
+          // The shape is identical — the very bound readiness.3 pins…
+          R.reviewSignature(a.files) === R.reviewSignature(b.files) &&
+          // …and the identity is not.
+          a.identity !== undefined && b.identity !== undefined && !same(a.identity, b.identity) &&
+          same(a.identity, a2.identity) &&
+          a.identity.base === 'b1' && /^[0-9a-f]{32}$/.test(a.identity.content) &&
+          // The untracked file's CONTENT moves it; its name alone does not carry it.
+          !same(u1.identity, a.identity) && !same(u1.identity, u2.identity) &&
+          // Same bytes, different base: a different subject.
+          otherBase.identity !== undefined && otherBase.identity.content === a.identity.content && !same(otherBase.identity, a.identity) &&
+          calls.includes(DIFF_KEY) && calls.includes('-C /r hash-object -- new.txt') && !calls.some((c) => /hash-object.* -w/.test(c)) &&
+          // The critic's gap: two diffs differing only in a non-UTF-8 byte (é vs è in Latin-1) are two identities.
+          !same((await eng('-\xe9\n+x\n').review('p1')).identity, (await eng('-\xe8\n+x\n').review('p1')).identity) &&
+          // Every pin is on the argv, and the config keys are the ones the critic named.
+          /diff\.renames=true/.test(DIFF_KEY) && /diff\.algorithm=myers/.test(DIFF_KEY) && /diff\.noprefix=false/.test(DIFF_KEY) && /diff\.ignoreSubmodules=none/.test(DIFF_KEY),
+        JSON.stringify({ a: a.identity, b: b.identity, a2: a2.identity, u1: u1.identity, u2: u2.identity, otherBase: otherBase.identity, calls: calls.slice(0, 8) }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'review-id.2 absence is unknown, never fresh: a mark written before M285 (no identity) is `unknown` even when its signature still matches; a failed diff or hash-object read sends NO identity and a mark judged against it is `stale`; a clean tree\'s shortcut identity equals a full identityOf read of the same tree; a malformed identity parses to nothing and costs only itself'
+    try {
+      const sig = R.reviewSignature([{ path: 'a.ts', added: 3, removed: 1, binary: false, untracked: false }])
+      const ID = { base: 'b1', content: 'a'.repeat(32) }
+      const oldMark = R.reviewStanding({ at: 1, signature: sig, files: 1 }, sig, ID)
+      const noDiff = await engineWith({ ...EXISTS, ...NUMSTAT, ...NO_UNTRACKED, [DIFF_KEY]: { ok: false, code: 128, stderr: 'fatal' } }).review('p1')
+      const noHash = await engineWith({ ...EXISTS, ...NUMSTAT, '-C /r ls-files -z --others --exclude-standard': { stdout: 'n.txt\0' }, [DIFF_KEY]: { stdout: 'd' }, '-C /r hash-object -- n.txt': { ok: false, code: 1 } }).review('p1')
+      const halfHash = await engineWith({ ...EXISTS, ...NUMSTAT, '-C /r ls-files -z --others --exclude-standard': { stdout: 'n.txt\0m.txt\0' }, [DIFF_KEY]: { stdout: 'd' }, '-C /r hash-object -- n.txt m.txt': { stdout: 'onlyone\n' } }).review('p1')
+      const judgedAgainstNone = R.reviewStanding({ at: 1, signature: sig, files: 1, identity: ID }, sig, noDiff.identity)
+      const cleanShortcut = await engineWith({ ...EXISTS, '-C /r diff --numstat -z b1': { stdout: '' }, ...NO_UNTRACKED }).review('p1')
+      const cleanFull = await engineWith({ ...EXISTS, ...NO_UNTRACKED, [DIFF_KEY]: { stdout: '' } }).identityOf('/r', 'b1')
+      ok(NAME,
+        oldMark === 'unknown' &&
+          noDiff.kind === 'changes' && noDiff.identity === undefined &&
+          noHash.kind === 'changes' && noHash.identity === undefined &&
+          halfHash.kind === 'changes' && halfHash.identity === undefined &&
+          judgedAgainstNone === 'stale' &&
+          cleanShortcut.kind === 'clean' && cleanShortcut.identity !== undefined && cleanFull !== undefined && same(cleanShortcut.identity, cleanFull) && cleanShortcut.identity.content === R.EMPTY_REVIEW_CONTENT &&
+          R.parseReviewIdentity({ base: 'b1', content: 'a'.repeat(32) }) !== undefined &&
+          R.parseReviewIdentity({ base: 'b1', content: 'a'.repeat(31) }) === undefined &&
+          R.parseReviewIdentity({ base: '', content: 'a'.repeat(32) }) === undefined &&
+          R.parseReviewIdentity({ base: 'b1', content: 'A'.repeat(32) }) === undefined &&
+          R.parseReviewIdentity('b1:aaaa') === undefined && R.parseReviewIdentity(undefined) === undefined,
+        JSON.stringify({ oldMark, noDiff: noDiff.identity, noHash: noHash.identity, halfHash: halfHash.identity, judgedAgainstNone, cleanShortcut: cleanShortcut.identity, cleanFull }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'review-id.3 a mutation re-reads the subject IMMEDIATELY before writing: a commit whose `expect` no longer matches is `subject-moved` with nothing staged, a discard likewise with nothing restored or removed; a matching identity proceeds; an unreadable identity is REFUSED by name rather than run unchecked; a build with no identityOf refuses a request that asked for the guard; and a request with no `expect` runs exactly as before, calling identityOf never'
+    try {
+      const ID = { base: 'b1', content: 'a'.repeat(32) }
+      const MOVED = { base: 'b1', content: 'b'.repeat(32) }
+      const mk = (now) => { const g = fakeGit({ 'rev-parse': { stdout: 'h1\n' }, 'ls-tree': { stdout: 'kept.ts\0' } }); const ids = []; const identityOf = async (root, base) => { ids.push(`${root}@${base}`); return now }
+        return { g, ids, commit: R.createReviewCommitter({ run: g.run, tempIndexPath: () => '/scratch/idx', removeTempIndex: () => {}, identityOf }), discard: R.createReviewDiscarder({ run: g.run, peersInRepo: () => 0, removeFile: (p) => g.calls.push({ args: ['fs', 'rm', p] }), isDirectory: () => false, identityOf }) } }
+      const REQ = { root: '/r', paths: ['kept.ts'], message: 'm' }
+      const DREQ = { root: '/r', baseline: 'b1', subjectId: 'p1', paths: ['kept.ts', 'new.ts'] }
+      const moved = mk(MOVED); const cMoved = await moved.commit({ ...REQ, expect: ID }); const dMoved = await moved.discard({ ...DREQ, expect: ID })
+      const still = mk(ID); const cStill = await still.commit({ ...REQ, expect: ID }); const dStill = await still.discard({ ...DREQ, expect: ID })
+      const unread = mk(undefined); const cUnread = await unread.commit({ ...REQ, expect: ID }); const dUnread = await unread.discard({ ...DREQ, expect: ID })
+      const noDep = fakeGit({ 'rev-parse': { stdout: 'h1\n' }, 'ls-tree': { stdout: 'kept.ts\0' } })
+      const cNoDep = await R.createReviewCommitter({ run: noDep.run, tempIndexPath: () => '/scratch/idx', removeTempIndex: () => {} })({ ...REQ, expect: ID })
+      const dNoDep = await R.createReviewDiscarder({ run: noDep.run, peersInRepo: () => 0, removeFile: () => {}, isDirectory: () => false })({ ...DREQ, expect: ID })
+      const plain = mk(MOVED); const cPlain = await plain.commit(REQ); const dPlain = await plain.discard(DREQ)
+      const subs = (g) => g.calls.map((c) => c.args[2] ?? c.args[1])
+      ok(NAME,
+        cMoved.kind === 'subject-moved' && !subs(moved.g).includes('update-index') && !subs(moved.g).includes('commit') &&
+          dMoved.kind === 'subject-moved' && !subs(moved.g).includes('restore') && !moved.g.calls.some((c) => c.args[0] === 'fs') &&
+          moved.ids.length === 2 && moved.ids.every((i) => i === '/r@b1') &&
+          cStill.kind === 'committed' && dStill.kind === 'discarded' && dStill.restored.join() === 'kept.ts' &&
+          // The re-check sits right before the stage, after read-tree.
+          subs(still.g).indexOf('read-tree') < subs(still.g).indexOf('update-index') &&
+          cUnread.kind === 'refused' && /re-read/.test(cUnread.detail) && dUnread.kind === 'refused' && /re-read/.test(dUnread.detail) &&
+          cNoDep.kind === 'refused' && /content identity/.test(cNoDep.detail) && dNoDep.kind === 'refused' && /content identity/.test(dNoDep.detail) &&
+          cPlain.kind === 'committed' && dPlain.kind === 'discarded' && plain.ids.length === 0,
+        JSON.stringify({ cMoved, dMoved, movedIds: moved.ids, cStill, dStill, cUnread, dUnread, cNoDep, dNoDep, cPlain, dPlain, plainIds: plain.ids }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'review-id.4 the policy is WRITTEN where the identity is defined and pinned as text: the shared header names --binary, untracked files by hash-object, ignored files excluded, and absence as unknown; main is the one hasher (no sha256 or hashReviewContent call under src/renderer); and the identity rides in every `clean`/`changes`/`shared` answer as an optional field'
+    try {
+      const shared = readFileSync(join(__dirname, '..', 'src', 'shared', 'review-identity.ts'), 'utf8')
+      const contract = readFileSync(join(__dirname, '..', 'src', 'shared', 'review.ts'), 'utf8')
+      const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.ts') || e.name.endsWith('.tsx') ? [join(dir, e.name)] : [])
+      const rendererHashes = walk(join(__dirname, '..', 'src', 'renderer')).filter((f) => /createHash\(|hashReviewContent|reviewIdentityOf\(/.test(readFileSync(f, 'utf8')))
+      ok(NAME,
+        /--binary/.test(shared) && /hash-object/.test(shared) && /Ignored files/.test(shared) && /ABSENCE MEANS UNKNOWN, NEVER FRESH/.test(shared) && /ls-files --others\s*\n?\s*\*?\s*--exclude-standard/.test(shared) &&
+          rendererHashes.length === 0 &&
+          /kind: 'clean'; root: string; identity\?: ReviewIdentity/.test(contract) &&
+          /kind: 'changes'; root: string; files: ReviewFile\[\]; added: number; removed: number; identity\?: ReviewIdentity/.test(contract) &&
+          /kind: 'shared'; root: string; panelCount: number; files: ReviewFile\[\]; identity\?: ReviewIdentity/.test(contract),
+        JSON.stringify({ rendererHashes }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+}
+
+// M286 — REVISION-BOUND CHECK EVIDENCE. A check records what it tested, and
+// the outcome it shows is bound to whether that is still what stands.
+{
+  const LANE = '/w/lanes/tc-p1'
+  const ID = { base: 'b1', content: 'a'.repeat(32) }
+  const MOVED = { base: 'b1', content: 'b'.repeat(32) }
+  const row = (extra) => ({ panelId: 'n1', command: 'npm test', cwd: LANE, startedAt: 10, endedAt: 20, exitCode: 0, ...(extra || {}) })
+  {
+    const NAME = 'check-fresh.1 a changed revision makes passing evidence STALE: an exit-0 row stamped with the identity it tested stands while the subject still has that identity, becomes `stale` (its exit code kept, a note saying why) once the identity moved, and a failed row goes stale the same way; running, not-run and unknown records are never stale, because there is no result to be'
+    try {
+      const checks = R.checksFromLedger([row({ tested: ID }), row({ startedAt: 30, endedAt: 40, exitCode: 1, tested: ID }), row({ startedAt: 50, endedAt: 0, exitCode: null })], LANE)
+      const watchers = R.checksFromWatchers([
+        { id: 'w1', cwd: LANE, command: 'npm', args: ['test'], status: 'not-started' },
+        { id: 'w2', cwd: LANE, command: 'npm', args: ['test'], status: 'running', startedAt: 60 },
+        { id: 'w3', cwd: LANE, command: 'npm', args: ['test'], status: 'passed', exitCode: 0, startedAt: 70, endedAt: 80, tested: ID },
+        { id: 'w4', cwd: LANE, command: 'npm', args: ['test'], status: 'exited', exitCode: null, signal: 'SIGKILL', startedAt: 90, endedAt: 100, tested: ID }
+      ], LANE)
+      const all = [...checks, ...watchers]
+      const fresh = R.bindCheckFreshness(all, () => ID)
+      const stale = R.bindCheckFreshness(all, () => MOVED)
+      const by = (list, key) => list.find((c) => c.key === key)
+      ok(NAME,
+        by(fresh, 'ledger:n1:10').outcome === 'passed' && by(fresh, 'ledger:n1:30').outcome === 'failed' && by(fresh, 'watcher:w3:70').outcome === 'passed' && by(fresh, 'watcher:w4:90').outcome === 'failed' &&
+          by(stale, 'ledger:n1:10').outcome === 'stale' && by(stale, 'ledger:n1:10').exitCode === 0 && /earlier version/.test(by(stale, 'ledger:n1:10').note) && by(stale, 'ledger:n1:10').observed === 'passed' &&
+          by(stale, 'ledger:n1:30').outcome === 'stale' && by(stale, 'ledger:n1:30').exitCode === 1 &&
+          by(stale, 'watcher:w3:70').outcome === 'stale' &&
+          // No result, no staleness.
+          by(stale, 'ledger:n1:50').outcome === 'unknown' && by(stale, 'watcher:w1:0').outcome === 'not-run' && by(stale, 'watcher:w2:60').outcome === 'running' &&
+          // Bound by BASE: currentOf is asked with the record's own base, never a global one.
+          R.bindCheckFreshness([by(all, 'ledger:n1:10')], (base) => (base === 'b1' ? ID : MOVED))[0].outcome === 'passed',
+        JSON.stringify({ fresh, stale }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'check-fresh.2 exit 0 never produces "tests passed" wording: checkWords says `exit 0`, `exit 1`, `running`, `not run`, `no result`, `ended by signal` and `stale · exit N at an earlier revision`, and the module\'s source never spells "tests passed" or "all tests"; a command\'s TEXT decides nothing (npm test and make ci with the same code get the same word)'
+    try {
+      const mk = (extra) => R.bindCheckFreshness(R.checksFromLedger([row(extra)], LANE), () => ID)[0]
+      const words = {
+        pass: R.checkWords(mk({ tested: ID })),
+        fail: R.checkWords(mk({ exitCode: 1, tested: ID })),
+        stale: R.checkWords(R.bindCheckFreshness(R.checksFromLedger([row({ tested: ID })], LANE), () => MOVED)[0]),
+        lost: R.checkWords(mk({ exitCode: null })),
+        unstamped: R.checkWords(mk({})),
+        running: R.checkWords(R.checksFromWatchers([{ id: 'w', cwd: LANE, command: 'x', args: [], status: 'running', startedAt: 1 }], LANE)[0]),
+        notRun: R.checkWords(R.checksFromWatchers([{ id: 'w', cwd: LANE, command: 'x', args: [], status: 'not-started' }], LANE)[0]),
+        signalled: R.checkWords(R.bindCheckFreshness(R.checksFromWatchers([{ id: 'w', cwd: LANE, command: 'x', args: [], status: 'exited', exitCode: null, signal: 'SIGTERM', startedAt: 1, endedAt: 2, tested: ID }], LANE), () => ID)[0]),
+        make: R.checkWords(mk({ command: 'make ci', tested: ID }))
+      }
+      const src = readFileSync(join(__dirname, '..', 'src', 'shared', 'check-evidence.ts'), 'utf8')
+      ok(NAME,
+        words.pass === 'exit 0' && words.fail === 'exit 1' && words.stale === 'stale · exit 0 at an earlier revision' && words.lost === 'no result' &&
+          words.unstamped === 'exit 0 · revision unknown' && words.running === 'running' && words.notRun === 'not run' && words.signalled === 'ended by signal' &&
+          words.make === words.pass &&
+          !Object.values(words).some((w) => /passed|tests/i.test(w)) &&
+          !/tests passed|all tests/i.test(src),
+        JSON.stringify(words))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'check-fresh.3 a missing source reads UNKNOWN, never green: a row with no tested identity is `unknown` with a note even at exit 0; a subject whose identity cannot be re-read now makes every stamped result `unknown`; an unread freshness (null) keeps the outcome and SAYS it was not read; and the empty arm names which nothing it is — no ledger, nowhere to read, nothing ran, a closed conversation'
+    try {
+      const unstamped = R.bindCheckFreshness(R.checksFromLedger([row({})], LANE), () => ID)[0]
+      const unreadable = R.bindCheckFreshness(R.checksFromLedger([row({ tested: ID })], LANE), () => undefined)[0]
+      const unread = R.bindCheckFreshness(R.checksFromLedger([row({ tested: ID })], LANE), () => null)[0]
+      const noLedger = R.checkEvidence([], [], { ledgerRead: false, ledgerPanels: 2, transcriptRead: true })
+      const nowhere = R.checkEvidence([], [], { ledgerRead: true, ledgerPanels: 0, transcriptRead: true })
+      const nothing = R.checkEvidence([], [], { ledgerRead: true, ledgerPanels: 2, transcriptRead: false })
+      const some = R.checkEvidence(R.checksFromLedger([row({ tested: ID })], LANE), [], { ledgerRead: true, ledgerPanels: 1, transcriptRead: true })
+      ok(NAME,
+        unstamped.outcome === 'unknown' && unstamped.observed === 'passed' && /not recorded/.test(unstamped.note) &&
+          unreadable.outcome === 'unknown' && /could not be re-read/.test(unreadable.note) &&
+          unread.outcome === 'passed' && /not read yet/.test(unread.note) &&
+          noLedger.unavailable.length === 1 && /could not read its own record/.test(noLedger.unavailable[0]) &&
+          nowhere.unavailable.length === 1 && /nowhere to read/.test(nowhere.unavailable[0]) &&
+          nothing.unavailable.length === 2 && /no checks have run/.test(nothing.unavailable[0]) && /conversation is closed/.test(nothing.unavailable[1]) &&
+          some.unavailable === undefined && some.checks.length === 1,
+        JSON.stringify({ unstamped, unreadable, unread, noLedger, nowhere, nothing }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+  {
+    const NAME = 'check-fresh.4 an agent-authored claim is a CLAIM and never a result: transcript commands come out as CheckClaim rows in their own list, with the word claim in their source, and none of them is a CheckRecord; the lane filter keeps a neighbouring lane out; a worktree branch rides in the context when the cwd is inside one; and the list sorts failures first, then stale, newest first within'
+    try {
+      const turns = [
+        { id: 't1', role: 'assistant', at: 100, blocks: [{ type: 'tool_use', id: 'u1', name: 'Bash', input: { command: 'npm test' } }] },
+        { id: 't2', role: 'user', at: 101, blocks: [{ type: 'tool_result', toolUseId: 'u1', content: 'ok', isError: false }] },
+        { id: 't3', role: 'assistant', at: 102, blocks: [{ type: 'tool_use', id: 'u2', name: 'Bash', input: { command: 'npm run build' } }] }
+      ]
+      const claims = R.claimsFromTranscript(turns)
+      const checks = R.bindCheckFreshness(R.checksFromLedger([
+        row({ tested: ID }), row({ startedAt: 30, endedAt: 40, exitCode: 1, tested: ID }), row({ startedAt: 50, endedAt: 60, exitCode: 0, tested: MOVED }),
+        row({ startedAt: 70, endedAt: 80, cwd: `${LANE}-old`, tested: ID })
+      ], LANE, (cwd) => (cwd === LANE ? 'tc/p1' : undefined)), () => ID)
+      const ev = R.checkEvidence(checks, claims, { ledgerRead: true, ledgerPanels: 1, transcriptRead: true })
+      ok(NAME,
+        claims.length === 2 && claims.every((c) => /claim/.test(c.source) && c.claimed !== undefined && c.outcome === undefined && c.source !== undefined) &&
+          claims.find((c) => c.command === 'npm test').claimed === 'ok' && claims.find((c) => c.command === 'npm run build').claimed === 'unanswered' &&
+          ev.claims.length === 2 && ev.checks.every((c) => c.source === 'ledger') &&
+          // The neighbouring lane's row is out; three remain.
+          ev.checks.length === 3 && ev.checks.every((c) => c.context.worktree === 'tc/p1') &&
+          ev.checks.map((c) => c.outcome).join() === 'failed,stale,passed',
+        JSON.stringify({ claims, checks: ev.checks.map((c) => [c.key, c.outcome, c.context]) }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+}
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)

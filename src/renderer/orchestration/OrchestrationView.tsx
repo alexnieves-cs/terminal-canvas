@@ -44,7 +44,6 @@ import {
   orchFilesCoverage,
   orchKeysShouldHandle,
   orchLensLit,
-  orchLogsCoverage,
   orchStageShifts,
   ORCH_OVERFLOW_ID,
   ORCH_STAGE_WASH_MS,
@@ -79,13 +78,16 @@ import {
 } from './orchestration-activity'
 import { ORCH_COS_TILT, ORCH_GROUND_K, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
 import type { OrchCubeSpec } from './OrchestrationCubes'
-import { getOrchPrefs, setOrchPrefs, type OrchLens } from './orchestration-prefs'
+import { getOrchPrefs, persistedOrchPrefs, seedOrchPrefs, setOrchPrefs, type OrchLens, type OrchSideTab } from './orchestration-prefs'
+import { OrchWorkbench, type BenchSubject } from './OrchWorkbench'
+import { sameOrchestrate, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
+import type { ReviewHandoff } from '@shared/review-readiness'
+import { onChatTurnEnd } from '@renderer/chat/chat-store'
 import {
   orchAnswerKey, orchAttentionRows, orchNextAction, orchPlacementLine, orchPruneSent, orchTaskIsland,
   type OrchAttentionRow, type TaskIsland
 } from './orchestration-island'
 import type { WorktreeListRow } from '@shared/ipc-contract'
-import type { ReviewDiff, ReviewResult } from '@shared/review'
 import type { OrchCubeTone } from './orchestration-cube-motion'
 
 /**
@@ -134,12 +136,20 @@ export interface OrchestrationViewProps {
   onAnswer?: (id: string, requestId: string, allow: boolean) => void
   /** M284. The existing review node for this panel, on the canvas (openReview) — a labelled page change. */
   onReviewOnCanvas?: (panelId: string) => void
+  /** M287. This workspace's persisted Orchestrate layout, and where a change goes (the workspace record, saved by the canvas). */
+  orchestrate?: PersistedOrchestrate
+  onOrchestrate?: (next: PersistedOrchestrate) => void
+  /** M287. The board's one patch door, for the brief, the criteria and the review mark. Nothing here dispatches. */
+  onPatchWorkItem?: (itemId: string, fields: Partial<PersistedWorkItem>) => void
+  /** M287. The canvas's own readiness judgement for a task — the ONE author of its signature and identity. */
+  taskHandoffOf?: (itemId: string) => ReviewHandoff | undefined
+  onRefreshTaskHandoffs?: () => void
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
 interface OrchWash { at: number; stage: WorkItemState; ids: readonly string[] }
 
-type SideTab = 'activity' | 'terminal' | 'review' | 'files'
+type SideTab = OrchSideTab
 
 function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplateInput[]): OrchPanelInput[] {
   return panels.map((p) => {
@@ -896,77 +906,12 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
   return rows
 }
 
-export type OrchReviewState =
-  | { kind: 'idle' }
-  | { kind: 'loading'; subjectId: string }
-  | { kind: 'result'; subjectId: string; result: ReviewResult }
-
-export type OrchDiffState =
-  | { kind: 'none' }
-  | { kind: 'loading'; key: string }
-  | { kind: 'no-baseline'; key: string }
-  | { kind: 'diff'; key: string; diff: ReviewDiff }
-
-/**
- * M284. The selected subject's review, through the SAME executors the review node
- * uses (`review.panel`, `review.baseline`, `review.diff` — git in main, no file:read,
- * no watch). Every answer is tagged with the subject it was asked for and dropped if
- * the selection moved meanwhile: rapid selection must never put one task's diff
- * under another's controls.
- */
-function useOrchReview(subjectId: string | null, active: boolean, refresh: number): {
-  review: OrchReviewState
-  diff: OrchDiffState
-  openFile: (path: string, untracked: boolean) => void
-} {
-  const [review, setReview] = useState<OrchReviewState>({ kind: 'idle' })
-  const [diff, setDiff] = useState<OrchDiffState>({ kind: 'none' })
-  const subjectRef = useRef(subjectId)
-  subjectRef.current = subjectId
-  useEffect(() => {
-    setDiff({ kind: 'none' })
-    if (!active || subjectId === null || typeof window.canvas?.review?.panel !== 'function') { setReview({ kind: 'idle' }); return }
-    let live = true
-    setReview({ kind: 'loading', subjectId })
-    void window.canvas.review.panel(subjectId).then(
-      (result) => { if (live && subjectRef.current === subjectId) setReview({ kind: 'result', subjectId, result }) },
-      () => { if (live && subjectRef.current === subjectId) setReview({ kind: 'result', subjectId, result: { kind: 'repo-unreadable', detail: 'the review could not be read' } }) }
-    )
-    return () => { live = false }
-  }, [subjectId, active, refresh])
-  const openFile = useCallback((path: string, untracked: boolean): void => {
-    const asked = subjectRef.current
-    if (asked === null) return
-    const key = `${asked}:${path}`
-    setDiff({ kind: 'loading', key })
-    void (async () => {
-      const baseline = await window.canvas.review.baseline(asked)
-      if (subjectRef.current !== asked) return
-      if (baseline === null) { setDiff({ kind: 'no-baseline', key }); return }
-      const result = await window.canvas.review.panel(asked)
-      if (subjectRef.current !== asked) return
-      if (result.kind !== 'changes' && result.kind !== 'shared') { setDiff({ kind: 'diff', key, diff: { kind: 'unavailable' } }); return }
-      const d = await window.canvas.review.diff({ repoRoot: result.root, baselineSha: baseline.sha, path, untracked })
-      if (subjectRef.current === asked) setDiff({ kind: 'diff', key, diff: d })
-    })().catch(() => { if (subjectRef.current === asked) setDiff({ kind: 'diff', key, diff: { kind: 'unavailable' } }) })
-  }, [])
-  return { review, diff, openFile }
-}
-
-/** M284. What a review answer says in words — every arm named, none rendered as an error it is not. */
-function reviewWords(result: ReviewResult): string {
-  if (result.kind === 'changes') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} · +${result.added} −${result.removed} since this session started`
-  if (result.kind === 'shared') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} in a repository ${result.panelCount} sessions share — authorship is ambiguous, so none is attributed to this one`
-  if (result.kind === 'clean') return 'No changes since this session started'
-  if (result.kind === 'never-started') return 'This session has not run yet, so it has no baseline to review against'
-  if (result.kind === 'not-a-repo') return 'Not in a git repository — there is no diff to review'
-  if (result.kind === 'git-missing') return 'git is not available, so changes cannot be read'
-  if (result.kind === 'baseline-lost') return 'The starting point of this session is gone from the repository'
-  return `git could not read the repository: ${result.detail}`
-}
-
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs } = props
+  // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
+  // the states below read them — a useState initializer, so it runs once per
+  // mount and never on a later render of the same page.
+  useState(() => { seedOrchPrefs(orchestrate); return true })
   const [tick, setTick] = useState(0)
   // M283. Seeded from, and written back to, Orchestrate's own prefs so a round trip
   // through the Canvas returns to the same view (orchestration-prefs.ts).
@@ -978,6 +923,18 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [mode, setMode] = useState<OrchMode>(() => getOrchPrefs().mode)
   const [graphCamera, setGraphCamera] = useState(() => getOrchPrefs().camera)
   useEffect(() => { setOrchPrefs({ tab, mode }) }, [tab, mode])
+  // M287. The workbench: its tab, its height, and what it is pinned to. The pin
+  // is NOT persisted — it names a live panel id, meaningless after a relaunch.
+  const [benchTab, setBenchTab] = useState<WorkbenchTab>(() => getOrchPrefs().workbench.tab)
+  const [benchHeight, setBenchHeight] = useState<number>(() => getOrchPrefs().workbench.height)
+  // Closed at rest (the critic: an open strip by default squeezed the scene to half and
+  // clipped the card row). A tab, Review changes, a terminal card or a drag opens it.
+  const [benchOpen, setBenchOpen] = useState<boolean>(() => getOrchPrefs().workbench.open)
+  const openBench = useCallback((t: WorkbenchTab): void => { setBenchTab(t); setBenchOpen(true) }, [])
+  const [benchPinned, setBenchPinned] = useState<BenchSubject | null>(null)
+  const [benchRefresh, setBenchRefresh] = useState(0)
+  useEffect(() => onChatTurnEnd(() => setBenchRefresh((n) => n + 1)), [])
+  useEffect(() => { setOrchPrefs({ workbench: { tab: benchTab, height: benchHeight, open: benchOpen } }) }, [benchTab, benchHeight, benchOpen])
   // Foreground cards respond first, then settle at the edge of their readable area.
   const floatStyle = mode === 'dev' ? { translate: `${Math.tanh(graphCamera.x / 20) * 22}px ${Math.tanh(graphCamera.y / 14) * 16 - (graphCamera.k - 1) * 8}px` } : undefined
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
@@ -1159,6 +1116,20 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // keyboard (and reduced-motion, and no-WebGL) way to reach every one of them.
   const [lens, setLens] = useState<OrchLens>(() => getOrchPrefs().lens)
   useEffect(() => { setOrchPrefs({ lens }) }, [lens])
+  // M287. Every pref, to the workspace record — coalesced, because the camera
+  // moves at pointer speed and each write is a layout save. Skipped when the
+  // record already says the same, so mounting the page writes nothing.
+  const onOrchestrateRef = useRef(onOrchestrate)
+  onOrchestrateRef.current = onOrchestrate
+  const persistedRef = useRef(orchestrate)
+  persistedRef.current = orchestrate
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = persistedOrchPrefs(getOrchPrefs())
+      if (!sameOrchestrate(persistedRef.current, next)) onOrchestrateRef.current?.(next)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [tab, mode, lens, graphCamera, benchTab, benchHeight, benchOpen])
 
   // M284. The one task island (orchestration-island.ts), from the persisted work item
   // and the worktree record it names — the same pick as the canvas's focused task.
@@ -1222,8 +1193,26 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const reviewSubjectId = selectedRow !== null
     ? (selectedRow.kind === 'chat' || selectedRow.kind === 'terminal' ? selectedRow.id : null)
     : island?.subjectId ?? null
-  const [reviewRefresh, setReviewRefresh] = useState(0)
-  const orchReview = useOrchReview(reviewSubjectId, tab === 'review', reviewRefresh)
+  // M287. What the workbench is bound to: the selected session, else the island's
+  // task (with its lane, so Changes reads the lane's fork diff — the canvas's own
+  // read) or, for a session with no task, that session.
+  const benchCurrent: BenchSubject | null = useMemo(() => {
+    if (selectedRow !== null) {
+      return selectedRow.kind === 'chat' || selectedRow.kind === 'terminal' ? { kind: 'session', id: selectedRow.id, title: selectedRow.title } : null
+    }
+    if (island === null) return null
+    if (island.itemId !== undefined) {
+      const item = workItems.find((w) => w.id === island.itemId)
+      const lane = item?.worktreeId === undefined ? undefined : worktrees.find((w) => w.id === item.worktreeId)
+      return {
+        kind: 'task', itemId: island.itemId, title: island.goal, memberIds: island.memberIds,
+        ...(lane === undefined ? {} : { lane: { id: lane.id, path: lane.path, root: lane.root, branch: lane.branch } }),
+        ...(item?.panelId === undefined ? {} : { chatId: item.panelId })
+      }
+    }
+    return island.subjectId === null ? null : { kind: 'session', id: island.subjectId, title: island.goal }
+  }, [selectedRow, island, workItems, worktrees])
+  const benchSubject = benchPinned ?? benchCurrent
 
   const stageItems = useMemo(
     () => filterWorkItems(workItems.map((w) => ({
@@ -1739,7 +1728,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 className="orch__float orch__float--term"
                 style={floatStyle}
                 title="Jump to terminal"
-                {...shellControl(() => { select(liveSnap.terminalSnippet!.panelId); setTab('terminal') })}
+                {...shellControl(() => { select(liveSnap.terminalSnippet!.panelId); openBench('output') })}
                 onDoubleClick={() => jump(liveSnap.terminalSnippet!.panelId)}
               >
                 <span className="orch__float-title">{liveSnap.terminalSnippet.title}</span>
@@ -1841,7 +1830,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   type="button"
                   className="orch__jump-card"
                   title="Double-click to jump to the panel"
-                  {...shellControl(() => { select(outputPanelId); setTab('terminal') })}
+                  {...shellControl(() => { select(outputPanelId); openBench('output') })}
                   onDoubleClick={() => jump(outputPanelId)}
                 >
                   <span className="orch__jump-head">
@@ -1967,7 +1956,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 {nextAction !== null && <p className="orch__inspector-next" data-orch-next={nextAction.verb}>Next: {nextAction.label}</p>}
                 <div className="orch__roster-actions">
                   <button type="button" className="orch__mini" data-orch-open {...shellControl(() => jump(selectedRow.id))}>Open on canvas</button>
-                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => setTab('review'))}>Review changes</button>}
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
                   {selectedCanStop && onInterrupt !== undefined && (
                     <button type="button" className="orch__mini orch__mini--stop" {...shellControl(() => onInterrupt(selectedRow.id))}><Stop size={12} /> Interrupt</button>
                   )}
@@ -1989,8 +1978,21 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     if (island.itemId !== undefined) onJumpWorkItem(island.itemId)
                     else if (island.subjectId !== null) jump(island.subjectId)
                   })}>Open on canvas</button>
-                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => setTab('review'))}>Review changes</button>}
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
                 </div>
+                {/* M287. The brief and the acceptance criteria — the task's own words,
+                    persisted on the work item through the board's one patch door.
+                    Editing them LAUNCHES NOTHING: no dispatch, no send, no spawn is
+                    reachable from these handlers (verify:orchestration workbench.2). */}
+                {island.itemId !== undefined && onPatchWorkItem !== undefined && (
+                  <OrchBriefEditor
+                    key={island.itemId}
+                    itemId={island.itemId}
+                    brief={workItems.find((w) => w.id === island.itemId)?.brief ?? ''}
+                    criteria={workItems.find((w) => w.id === island.itemId)?.criteria ?? []}
+                    onPatchWorkItem={onPatchWorkItem}
+                  />
+                )}
               </>
             ) : (
               <p className="orch__caption">Select a session in the scene or the list to inspect it.</p>
@@ -1998,7 +2000,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           </section>
 
           <div className="orch__tabs" role="tablist">
-                {(['activity', 'terminal', 'review', 'files'] as const).map((t) => (
+                {(['activity', 'files'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -2006,7 +2008,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   aria-selected={tab === t}
                   className={`orch__tab${tab === t ? ' orch__tab--on' : ''}`}
                   {...shellControl(() => setTab(t))}
-                >{t === 'activity' ? 'Activity' : t === 'terminal' ? 'Output' : t === 'review' ? 'Review' : 'Files'}</button>
+                >{t === 'activity' ? 'Activity' : 'Files'}</button>
               ))}
           </div>
           {tab === 'activity' && (
@@ -2049,82 +2051,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </ul>
             </>
           )}
-          {tab === 'terminal' && (
-            <div className="orch__term-tab" data-orch-density="detail">
-              <p className="orch__caption">{orchLogsCoverage()}</p>
-              {outputPanelId === null ? (
-                <EmptyState id="orch-terminal" onVerb={onShowCanvas} />
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="orch__term-card"
-                    {...shellControl(() => jump(outputPanelId))}
-                  >
-                    <span className="orch__float-title">{selectedRow?.title ?? liveSnap.terminalSnippet?.title}</span>
-                    {outputCommand !== undefined && outputCommand !== '' && <code className="orch__float-code">{outputCommand}</code>}
-                    <span className="orch__task-jump">Jump to panel</span>
-                  </button>
-                  <pre className="orch__term-log" aria-label="Scrollback tail">
-                    {outputLines.length === 0 ? 'No recorded output yet for this panel.' : outputLines.join('\n')}
-                  </pre>
-                </>
-              )}
-            </div>
-          )}
-          {tab === 'review' && (
-            // M284. The selected subject's changes through the review node's own executors,
-            // read-only here. Committing or discarding stays on the review node — a labelled
-            // page change — so this page never carries a second copy of those gates.
-            <div className="orch__review" data-orch-review={reviewSubjectId ?? ''}>
-              {reviewSubjectId === null ? (
-                <p className="orch__caption">Select a chat or terminal session, or the task, to review its changes.</p>
-              ) : (
-                <>
-                  <p className="orch__caption">Changes by {titleOf(reviewSubjectId)} — read from git, since the session started.</p>
-                  {orchReview.review.kind !== 'result' ? (
-                    <p className="orch__caption" role="status">Reading changes…</p>
-                  ) : (
-                    <>
-                      <p className="orch__review-words" data-orch-review-kind={orchReview.review.result.kind}>{reviewWords(orchReview.review.result)}</p>
-                      {(orchReview.review.result.kind === 'changes' || orchReview.review.result.kind === 'shared') && (
-                        <ul className="orch__review-files">
-                          {orchReview.review.result.files.map((f) => (
-                            <li key={f.path}>
-                              <button type="button" className={`orch__activity-row${orchReview.diff.kind !== 'none' && orchReview.diff.key === `${reviewSubjectId}:${f.path}` ? ' orch__roster-row--on' : ''}`}
-                                data-orch-review-file={f.path} {...shellControl(() => orchReview.openFile(f.path, f.untracked))}>
-                                <span className="orch__roster-kind" aria-hidden="true"><KindFile /></span>
-                                <span className="orch__activity-title">{f.path}</span>
-                                <span className="orch__activity-detail">{f.binary ? 'binary' : f.untracked ? 'new file' : `+${f.added} −${f.removed}`}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </>
-                  )}
-                  {orchReview.diff.kind === 'loading' && <p className="orch__caption" role="status">Reading the diff…</p>}
-                  {orchReview.diff.kind === 'no-baseline' && <p className="orch__caption">This session has no baseline to diff against.</p>}
-                  {orchReview.diff.kind === 'diff' && (
-                    orchReview.diff.diff.kind === 'diff' ? (
-                      <pre className="orch__diff" data-orch-diff aria-label="Diff">
-                        {orchReview.diff.diff.lines.map((line, i) => (
-                          <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}`}>{outward(line.text, `panel ${reviewSubjectId}`).text}{'\n'}</span>
-                        ))}
-                        {orchReview.diff.diff.truncated > 0 && <span className="orch__diff-line orch__diff-line--meta">{`… ${orchReview.diff.diff.truncated} more lines — open the review on canvas for the whole diff`}</span>}
-                      </pre>
-                    ) : <p className="orch__caption">{orchReview.diff.diff.kind === 'binary' ? 'A binary file — no text diff to show.' : 'The diff could not be read.'}</p>
-                  )}
-                  <div className="orch__roster-actions">
-                    <button type="button" className="orch__mini" data-orch-review-refresh {...shellControl(() => setReviewRefresh((n) => n + 1))}>Refresh</button>
-                    {onReviewOnCanvas !== undefined && (
-                      <button type="button" className="orch__mini" data-orch-review-canvas {...shellControl(() => onReviewOnCanvas(reviewSubjectId))}>Review on canvas</button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
           {tab === 'files' && (
             <>
               <p className="orch__caption">{orchFilesCoverage()}</p>
@@ -2153,7 +2079,68 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           )}
         </aside></MotionSurface>
       </div>
+      {/* M287. The workbench: Changes · Checks · Output, under the scene. */}
+      <OrchWorkbench
+        subject={benchSubject}
+        current={benchCurrent}
+        pinned={benchPinned}
+        onPin={setBenchPinned}
+        tab={benchTab}
+        onTab={setBenchTab}
+        height={benchHeight}
+        onHeight={setBenchHeight}
+        open={benchOpen}
+        onOpen={setBenchOpen}
+        panels={panels}
+        workItems={workItems}
+        worktrees={worktrees}
+        taskHandoffOf={taskHandoffOf}
+        onRefreshTaskHandoffs={onRefreshTaskHandoffs}
+        onPatchWorkItem={onPatchWorkItem}
+        onReviewOnCanvas={onReviewOnCanvas}
+        onJump={jump}
+        onShowCanvas={onShowCanvas}
+        output={{ panelId: outputPanelId, title: selectedRow?.title ?? liveSnap.terminalSnippet?.title, command: outputCommand, lines: outputLines }}
+        refresh={benchRefresh}
+      />
     </div>
+  )
+}
+
+/**
+ * M287. Two fields, saved on blur or Enter-less commit — never on every
+ * keystroke, so a half-typed brief is not written twenty times, and never
+ * sent anywhere: the only call out of here is `onPatchWorkItem`.
+ */
+function OrchBriefEditor({ itemId, brief, criteria, onPatchWorkItem }: {
+  itemId: string
+  brief: string
+  criteria: readonly string[]
+  onPatchWorkItem: (itemId: string, fields: Partial<PersistedWorkItem>) => void
+}): JSX.Element {
+  const [briefDraft, setBriefDraft] = useState(brief)
+  const [criteriaDraft, setCriteriaDraft] = useState(criteria.join('\n'))
+  const commitBrief = (): void => { if (briefDraft.trim() !== brief) onPatchWorkItem(itemId, { brief: briefDraft.trim() }) }
+  const commitCriteria = (): void => {
+    const next = criteriaDraft.split('\n').map((c) => c.trim()).filter((c) => c !== '')
+    if (next.join('\n') !== criteria.join('\n')) onPatchWorkItem(itemId, { criteria: next })
+  }
+  // A <details>, open only when something is written: two textareas at rest pushed the
+  // inspector's Activity feed out of frame (the critic).
+  return (
+    <details className="orch__brief" data-orch-brief-editor={itemId} open={brief !== '' || criteria.length > 0}>
+      <summary className="orch__brief-summary">Brief &amp; acceptance criteria{brief === '' && criteria.length === 0 ? ' · none yet' : ''}</summary>
+      <label className="orch__brief-field">
+        <span className="orch__section-title">Brief</span>
+        <textarea className="orch__brief-input" data-orch-brief rows={2} value={briefDraft} placeholder="What should be done, in your words. Editing this starts nothing."
+          onChange={(e) => setBriefDraft(e.target.value)} onBlur={commitBrief} />
+      </label>
+      <label className="orch__brief-field">
+        <span className="orch__section-title">Acceptance criteria</span>
+        <textarea className="orch__brief-input" data-orch-criteria rows={2} value={criteriaDraft} placeholder="One per line."
+          onChange={(e) => setCriteriaDraft(e.target.value)} onBlur={commitCriteria} />
+      </label>
+    </details>
   )
 }
 
