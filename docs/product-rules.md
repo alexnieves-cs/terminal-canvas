@@ -121,7 +121,14 @@ all. Both are the same gap: the reference was a habit, and a fresh context has n
   **always-visible CPU/memory card** (replaced by the scope, queue and inspector, and by
   run limits); the **fixed Terminal / Code / Files mosaic** (replaced by the resizable
   workbench); the **decorative server blocks** where they compete with task labels; and
-  **endless connector motion**. What IS to be preserved is the plan's own sentence: the
+  **endless connector motion**. The chrome pass (M299) adds to this list: the tile
+  vocabulary **`Ready to review · Running · Queued`** (the tiles keep the model's four counts —
+  active agents, tasks in progress, watchers, waiting on you — each with its one action); the
+  **tick marks on acceptance criteria** (no criterion carries a verdict, so a row gets a
+  neutral ring); the **`Execution context` box with `$1.84` spend** (run limits stay one
+  quiet row, spend reads Unknown where a backend reports none); the **Artifacts and Timeline
+  tabs** (Phase E's, not stubbed); and the **sample diff** and its `Contract check · failed`
+  verdict card. What IS to be preserved is the plan's own sentence: the
   blue-black material, cyan edges, violet accents, layered platforms, crystal focal point
   and readable glass.
 

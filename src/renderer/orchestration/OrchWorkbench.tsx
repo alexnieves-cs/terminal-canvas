@@ -16,7 +16,7 @@ import {
   bindCheckFreshness, checkEvidence, checkWords, checksFromLedger, checksFromWatchers, claimsFromTranscript,
   type CheckEvidence, type CheckRecord
 } from '@shared/check-evidence'
-import { WORKBENCH_TABS, clampWorkbenchHeight, type WorkbenchTab } from '@shared/orchestrate-prefs'
+import { WORKBENCH_DEFAULT_HEIGHT, WORKBENCH_TABS, clampWorkbenchHeight, type WorkbenchTab } from '@shared/orchestrate-prefs'
 import type { WorktreeListRow } from '@shared/ipc-contract'
 import { orchLogsCoverage } from './orchestration-model'
 import { createSubjectGate } from './orch-subject-gate'
@@ -117,6 +117,10 @@ type DiffRead =
  * dropped if it moved meanwhile — rapid selection must never put one task's
  * diff under another's name (Phase A's rule, kept).
  */
+/** M299. How often, and how many times, a `never-started` read is asked again before it is left as said. */
+const NEVER_STARTED_REASK_MS = 1500
+const NEVER_STARTED_REASKS = 6
+
 function useChanges(subject: BenchSubject | null, active: boolean, refresh: number): { read: ChangesRead; diff: DiffRead; openFile: (f: ReviewFile) => void } {
   const [read, setRead] = useState<ChangesRead>({ kind: 'idle' })
   const [diff, setDiff] = useState<DiffRead>({ kind: 'none' })
@@ -130,16 +134,31 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
   // is for the current key and newer than the last that landed for it.
   const gate = useRef(createSubjectGate()).current
   const diffGate = useRef(createSubjectGate()).current
+  // M299. The strip rests OPEN, so a session is read the moment it is selected — often
+  // before main has captured its baseline, which answers `never-started`. That answer
+  // resolves by itself once the session starts, so it is asked again a few times, spaced
+  // out; every re-ask mints its own ticket and lands under the same subject rule.
+  const [again, setAgain] = useState(0)
+  const attemptsRef = useRef(0)
+  useEffect(() => { attemptsRef.current = 0 }, [key, refresh])
   useEffect(() => {
     gate.move(key)
     diffGate.move('')
     setDiff({ kind: 'none' })
     if (!active || subject === null || typeof window.canvas?.review?.panel !== 'function') { setRead({ kind: 'idle' }); return }
     let live = true
+    let retry: number | undefined
     const asked = key
     const ticket = gate.ask(key)
     setRead({ kind: 'loading', key: asked })
-    const land = (r: ChangesRead): void => { if (live && gate.lands(ticket)) setRead(r) }
+    const land = (r: ChangesRead): void => {
+      if (!live || !gate.lands(ticket)) return
+      setRead(r)
+      if (r.kind === 'result' && r.result.kind === 'never-started' && attemptsRef.current < NEVER_STARTED_REASKS) {
+        attemptsRef.current += 1
+        retry = window.setTimeout(() => { if (live) setAgain((a) => a + 1) }, NEVER_STARTED_REASK_MS)
+      }
+    }
     // A task in a SHARED directory (a chat, no worktree) reads its chat's own baseline —
     // Phase A's read — rather than claiming nothing was started (the critic caught the
     // island saying `working · 4 sessions` over a strip saying `no lane yet`).
@@ -166,8 +185,8 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
         () => land({ kind: 'result', key: asked, result: { kind: 'repo-unreadable', detail: 'the lane could not be read' }, repoRoot: lane.path, base: undefined })
       )
     }
-    return () => { live = false }
-  }, [key, active, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { live = false; if (retry !== undefined) window.clearTimeout(retry) }
+  }, [key, active, refresh, again]) // eslint-disable-line react-hooks/exhaustive-deps
   const openFile = useCallback((f: ReviewFile): void => {
     const asked = keyRef.current
     const r = readRef.current
@@ -445,7 +464,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
     <section className="orch__bench" data-orch-workbench data-orch-bench-tab={tab} data-orch-bench-open={open || undefined} data-orch-bench-subject={benchSubjectKey(subject)} style={open ? { height: `${height}px` } : undefined} aria-label="Workbench">
       <div className="orch__bench-handle" role="separator" aria-orientation="horizontal" aria-label="Resize the workbench" data-orch-bench-handle
         onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
-        onDoubleClick={() => onHeight(clampWorkbenchHeight(240))} />
+        onDoubleClick={() => onHeight(clampWorkbenchHeight(WORKBENCH_DEFAULT_HEIGHT))} />
       <div className="orch__bench-head">
         <div className="orch__tabs orch__tabs--bench" role="tablist" aria-label="Workbench tabs">
           {WORKBENCH_TABS.map((t) => (

@@ -720,10 +720,10 @@ const SCENES = [
         const picked = await k.js(`(() => { const c = document.querySelector('.orch__cube:not(.orch__cube--hub):not(.orch__cube--overflow):not(.orch__cube--synthetic)'); if (c) c.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!c })()`)
         if (!picked) throw new Error('orchestration scene: no satellite cube to select')
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__callout-card[data-expanded]')`)); i++) await sleep(100)
-        // The one thing hidden: the wall clock, the view-open timer and the
-        // time-of-day greeting change every run (a changed word is a red tile), so
-        // they keep their boxes but paint nothing. verify:orchestration owns their words.
-        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting, .orch__perf-value, .orch__perf-card svg { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        // M299. Nothing is masked any more: the wall clock, the view-open timer and
+        // the time-of-day greeting this mask hid are gone from the page. The empty
+        // style stays as the hook, so a future live value has a named place to go.
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(600)
         await k.shot('orchestration')
         await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
@@ -736,7 +736,7 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       try {
         await k.theme('dark')
-        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting, .orch__perf-value, .orch__perf-card svg { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(600)
         await k.shot('orchestration-dark')
       } finally {
@@ -802,7 +802,7 @@ const SCENES = [
         }
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube--busy')`)); i++) await sleep(100)
         if (!(await k.js(`!!document.querySelector('.orch__cube--busy')`))) throw new Error('orchestration-working: no cube took the busy tone, so the lit ring this scene exists to show is not in the frame')
-        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting, .orch__perf-value, .orch__perf-card svg { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(700)
         await k.shot('orchestration-working')
       } finally {

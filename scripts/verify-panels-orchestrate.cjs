@@ -9,6 +9,14 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
+/** M299. `--orch-rail-w: 8.5rem` at 16 px — the tools rail the fit check's wrap still includes. */
+const ORCH_RAIL_PX = 136
+/**
+ * M299. A lone platform is at the wheel's zoom ceiling before it meets either axis of the
+ * taller default panel; its floor is M298's own measurement in the 224 px panel — the
+ * composition's 0.80 × 224 = 179 px — so the pass can never make it smaller than it was.
+ */
+const M298_DEFAULT_COMP_PX = 179
 const WATCHDOG_MS = 180000 // measured 2026-09-20 with M298's orch-fit.app.1 in (five fixture reloads of 0/1/21/61/100 sessions, three window sizes each): 142.8 s with demo captures on at load ~3 against the 145 s pin, so 1.25x, to the next second. Before M298: 145000, measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s, 109.2 s at load 20–26, then 102.8 s in the gate and 116.0 s with demo captures on at load 3; 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
@@ -250,7 +258,8 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           bound: b.querySelector('[data-orch-bench-bound]')?.textContent ?? null, boundKind: b.querySelector('[data-orch-bench-bound]')?.getAttribute('data-orch-bench-bound') ?? null,
           height: b.getBoundingClientRect().height, open: b.hasAttribute('data-orch-bench-open'), benches: document.querySelectorAll('[data-orch-workbench]').length } })()`)
       const island = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-island="${itemId}"]') !== null`), 6000)
-      // Closed at rest: the tab bar alone. The inspector's Review changes opens it on Changes.
+      // M299: OPEN at rest, at its height (M287 rested it closed under five bottom tiles; the
+      // tiles are gone). The inspector's Review changes lands it on Changes.
       const closedRead = await waitUntil(async () => { const b = await benchRead(); return b && b.subject.startsWith('task:' + itemId) ? b : false }, 6000)
       await click('[data-orch-inspector] [data-orch-review-open]')
       const b0 = await waitUntil(async () => { const b = await benchRead(); return b && b.open === true ? b : false }, 6000)
@@ -377,13 +386,13 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const persisted = await waitUntil(() => { layoutStore.flushSync(); const ws = layoutStore.initial(); return ws.orchestrate && ws.orchestrate.workbench && Math.abs(ws.orchestrate.workbench.height - (heightBefore + 100)) < 3 ? ws.orchestrate : false }, 6000)
       await demo('m287-9-workbench-resized')
       ok(IDS[0],
-        closedRead && closedRead.open === false && closedRead.height < 80 &&
-          b0 && b0.open === true && b0.height >= 200 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
+        closedRead && closedRead.open === true && closedRead.height >= 180 &&
+          b0 && b0.open === true && b0.height >= 180 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
           boundToChat && boundToChat.boundKind === 'selection' && boundToChat.subject === 'session:' + plainChatId &&
           pinnedRead && /^Pinned to /.test(pinnedRead.bound) && pinnedRead.subject === 'session:' + plainChatId &&
           stillPinned && stillPinned.boundKind === 'pinned' && stillPinned.subject === 'session:' + plainChatId &&
           unpinned && /Make two loud/.test(unpinned.bound) &&
-          dragged === true && resized && persisted && persisted.workbench.tab === 'checks' && persisted.workbench.open === true && persisted.lens === 'list',
+          dragged === true && resized && persisted && persisted.workbench.tab === 'checks' && !('open' in persisted.workbench) && persisted.lens === 'list',
         JSON.stringify({ closedRead, b0, boundToChat, pinnedRead, stillPinned, unpinned, heightBefore, dragged, resized: resized && resized.height, persisted }))
     } catch (bErr) {
       for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr) + ' | renderer: ' + (bLog.slice(-4).join(' || ') || '(none)'))
@@ -1068,10 +1077,15 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const { waiting } = await seed(6)
       const wheel = (dy, n) => wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph--ground'); const r = s.getBoundingClientRect(); for (let i = 0; i < ${n}; i++) s.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: ${dy}, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
       const readLevels = () => wc.executeJavaScript(`(() => ({ levels: [...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => e.getAttribute('data-orch-platform-zoom')), objects: document.querySelectorAll('.orch__graph-scene [data-node]').length, waiting: [...document.querySelectorAll('.orch__graph-scene [data-node][data-tone="needs-you"]')].map((e) => e.getAttribute('data-node')), counts: [...document.querySelectorAll('.orch__graph-scene [data-orch-platform-counts]')].map((e) => e.textContent), view: document.querySelector('.orch__minimap-view')?.getAttribute('width'), plates: document.querySelectorAll('.orch__minimap-plate').length }))()`)
-      await wheel(120, 14); await settle()
+      // M299: 30 notches, not 14 — the rest camera fits a taller scene panel (the bottom tiles
+      // are gone), so 14 notches from it no longer reached the far level; the floor clamps the rest.
+      await wheel(120, 30); await settle()
       const far = await readLevels()
       await demo('m292-1-summary')
-      await wheel(-120, 8); await settle()
+      // Mid and near are measured from the REST camera (Fit all), six notches out and eight in —
+      // what 14 out / 8 in / 14 in reached before M299, when 14 notches did not hit the floor.
+      await click('[data-orch-fit="all"]'); await settle()
+      await wheel(120, 6); await settle()
       const mid = await readLevels()
       await wheel(-120, 14); await settle()
       const near = await readLevels()
@@ -1361,8 +1375,12 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       }
       const fitted = rows.filter((r) => !r.size.includes('first-paint'))
       const lone = rows.find((r) => r.n === 0 && r.size.includes('first-paint'))
+      const fills = (r) => r.compH >= 0.6 || (r.compW * r.wrap.w) / (r.wrap.w - ORCH_RAIL_PX) >= 0.9 || (r.platforms === 1 && r.compH * r.wrap.h >= M298_DEFAULT_COMP_PX)
       ok(IDS[0],
-        fitted.length === 15 && fitted.every((r) => r.platforms >= 1 && r.clipped === 0 && r.covered === 0 && r.compH >= 0.6) && lone && lone.clipped === 0 && lone.compH >= 0.6,
+        // M299: bound on ONE axis — 60% of the panel's height, or 90% of the scene's width (the wrap
+        // less the 8.5rem rail): the default panel is 314 px tall now, and four or more platforms
+        // meet the 400 px scene width before they meet its height.
+        fitted.length === 15 && fitted.every((r) => r.platforms >= 1 && r.clipped === 0 && r.covered === 0 && fills(r)) && lone && lone.clipped === 0 && fills(lone),
         JSON.stringify(rows.map((r) => ({ n: r.n, size: r.size, p: r.platforms, wrap: r.wrap, plateH: r.plateH, plateW: r.plateW, compH: r.compH, compW: r.compW, clipped: r.clipped, covered: r.covered }))))
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)

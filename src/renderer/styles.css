@@ -7316,18 +7316,6 @@ body {
     var(--deck-ground);
 }
 .orch__header { display: flex; flex-direction: column; gap: var(--sp-4); flex-shrink: 0; }
-.orch__brand { display: flex; align-items: flex-start; gap: var(--sp-4); }
-.orch__mark { color: var(--iris); display: inline-flex; margin-top: var(--sp-1); filter: drop-shadow(0 0 8px color-mix(in srgb, var(--iris) 45%, transparent)); }
-.orch__brand-copy { min-width: 0; flex: 1; }
-.orch__product {
-  display: block;
-  font-size: var(--t-xs);
-  font-weight: 600;
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-  color: var(--iris);
-}
-.orch__greeting { margin: var(--sp-1) 0 0; font-size: var(--t-md); color: var(--fg-2); max-width: 48rem; }
 .orch__blocker {
   margin: 0;
   font-size: var(--t-sm);
@@ -7338,18 +7326,6 @@ body {
   background: var(--glass-1);
 }
 .orch__blocker[data-orch-blocker="waiting-on-you"] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, var(--line)); }
-.orch__clocks { display: flex; gap: var(--sp-3); flex-shrink: 0; }
-.orch__clock {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--glass-2);
-}
-.orch__clock-label { font-size: var(--t-xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: var(--track-caps); }
-.orch__clock-value { font-size: var(--t-md); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
 .orch__metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7378,9 +7354,21 @@ body {
   border-color: color-mix(in srgb, var(--tone, var(--iris)) 55%, var(--line));
   background: var(--iris-dim);
 }
-.orch__metric-label { font-size: var(--t-xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.04em; }
-.orch__metric-value { font-size: var(--t-xl); font-weight: 600; color: var(--fg); line-height: 1.1; }
-.orch__metric-sub { font-size: var(--t-xs); color: var(--tone, var(--fg-3)); }
+/* M299. Mixed-case tiles: a label, then the count with its ONE next action on the same
+   line. `data-empty` (count 0) is quiet — no action, a dimmed count — the rest rule. */
+.orch__metric-label { font-size: var(--t-sm); color: var(--fg-2); }
+.orch__metric-line { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.orch__metric-value { font-size: var(--t-xl); font-weight: 600; color: var(--fg); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.orch__metric-action { font-size: var(--t-xs); color: var(--tone, var(--iris)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orch__metric[data-empty] { cursor: default; }
+.orch__metric[data-empty] .orch__metric-value { color: var(--fg-4); }
+.orch__metric:not([data-empty]) { border-color: color-mix(in srgb, var(--tone, var(--line)) 40%, var(--line)); }
+/* The title row: the page and its scope, one line; the focused task's context under it. */
+.orch__title-row { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.orch__title { margin: 0; font-size: var(--t-xl); font-weight: 600; letter-spacing: -0.01em; color: var(--fg); line-height: 1.2; }
+.orch__title-scope { font-size: var(--t-sm); font-weight: 500; color: var(--fg-3); font-family: var(--font-mono); letter-spacing: 0; }
+.orch__context { margin: 0; font-size: var(--t-sm); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__context-goal { color: var(--iris); }
 .orch__body {
   flex: 1;
   min-height: 0;
@@ -7398,7 +7386,7 @@ body {
   margin-bottom: var(--sp-2);
 }
 .orch__section-head .orch__section-title { margin-bottom: 0; }
-.orch__roster, .orch__side, .orch__perf, .orch__task-panel, .orch__selected, .orch__jump {
+.orch__roster, .orch__side {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--glass-1);
@@ -7431,10 +7419,10 @@ body {
 }
 .orch__roster-row--on { background: var(--iris-dim); border-color: color-mix(in srgb, var(--iris) 40%, var(--line)); }
 .orch__roster-kind { display: inline-flex; color: var(--fg-3); }
-.orch__roster-label, .orch__activity-title, .orch__task-title, .orch__float-title, .orch__selected-title, .orch__pipeline-item-title {
+.orch__roster-label, .orch__activity-title, .orch__float-title, .orch__selected-title, .orch__pipeline-item-title {
   font-size: var(--t-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.orch__roster-state, .orch__activity-detail, .orch__float-state, .orch__task-state, .orch__task-note, .orch__pipeline-item-state {
+.orch__roster-state, .orch__activity-detail, .orch__float-state, .orch__pipeline-item-state {
   font-size: var(--t-xs); color: var(--tone, var(--fg-3));
 }
 .orch__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tone, var(--fg-4)); flex-shrink: 0; box-shadow: 0 0 8px var(--tone, transparent); }
@@ -7574,113 +7562,14 @@ body {
    (the rail would otherwise cover it). That it floats over the composition at all is the
    chrome pass's input, not the fit's. */
 .orch__graph-wrap > .orch__float--task { right: calc(var(--orch-rail-w, 0px) + var(--sp-4)); }
-.orch__float-code, .orch__term-card .orch__float-code, .orch__selected .orch__float-code {
+.orch__float-code, .orch__term-card .orch__float-code {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
   color: var(--green);
   word-break: break-all;
 }
-.orch__bottom {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
-  gap: var(--sp-4);
-  flex-shrink: 0;
-}
-/* Five columns is narrow: the stage buttons wrap rather than clip the last stage out of reach. */
-.orch__task-card .orch__steps { flex-wrap: wrap; }
-.orch__task-main { min-width: 0; max-width: 100%; }
-/* Jump cards (M282): previews of canvas panels. Height is capped so a long tail never grows the strip. */
-.orch__jump-card {
-  display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2);
-  width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
-}
-.orch__jump-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.orch__jump-log {
-  margin: 0; padding: var(--sp-2); max-height: 6.5rem; overflow: hidden;
-  border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--well); color: var(--green);
-  font-family: var(--font-mono); font-size: var(--t-xs); line-height: 1.4; white-space: pre; text-overflow: ellipsis;
-}
-.orch__jump-list { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
-.orch__jump-row {
-  display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: var(--sp-1) var(--sp-2);
-  border: 0; border-radius: var(--r-sm); background: none; color: var(--fg-2); font: inherit; font-size: var(--t-xs); text-align: left; cursor: pointer;
-}
-.orch__jump-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.orch__jump-row:hover, .orch__jump-row--on { background: var(--well); color: var(--fg); }
-.orch__perf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
-.orch__perf-card { display: flex; flex-direction: column; gap: var(--sp-1); }
-.orch__perf-label { font-size: var(--t-xs); color: var(--fg-3); }
-.orch__perf-value { font-size: var(--t-md); font-weight: 600; }
 .orch__caption { margin: 0 0 var(--sp-2); font-size: var(--t-xs); color: var(--fg-4); }
 .orch [data-orch-density="detail"] .orch__section-title { color: var(--fg-3); font-weight: 500; }
-.orch__clock-label { font-size: var(--t-xs); color: var(--fg-4); text-transform: uppercase; letter-spacing: var(--track-caps); }
-.orch__spark { display: block; margin-top: var(--sp-1); }
-.orch__compute { display: flex; align-items: flex-end; gap: var(--sp-2); height: 4.5rem; margin-top: var(--sp-3); }
-.orch__compute-block {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--sp-1);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--fg-3);
-  cursor: pointer;
-  font-family: var(--font-ui);
-}
-.orch__compute-bar {
-  width: 100%;
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  background: linear-gradient(180deg, var(--iris), color-mix(in srgb, var(--green) 70%, var(--iris)));
-  min-height: 4px;
-}
-.orch__compute-block--on .orch__compute-bar { box-shadow: 0 0 10px color-mix(in srgb, var(--iris) 50%, transparent); }
-.orch__compute-label { font-size: var(--t-xs); }
-.orch__task-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2); padding: 0; border: 0; background: transparent; }
-.orch__task-main {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  width: 100%;
-  padding: var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--s-1);
-  color: var(--fg);
-  font-family: var(--font-ui);
-  cursor: pointer;
-  text-align: left;
-}
-/* The column flex above is `align-items: flex-start`, so each child shrink-wraps
-   to its CONTENT width on the cross axis — the title span is then exactly as wide
-   as its text, its own `overflow: hidden` never engages, and the ellipsis rule at
-   the top of this block does nothing. What the person sees is the card clipping a
-   task name mid-word with no truncation mark, which reads as a rendering fault
-   rather than elision. It only became visible when M282 took the strip from three
-   cells to five; the same trap is one `align-items` away in any of these cards. */
-.orch__task-main > * { align-self: stretch; max-width: 100%; }
-.orch__task-jump { font-size: var(--t-xs); color: var(--iris); }
-.orch__steps { display: flex; gap: var(--sp-2); width: 100%; margin-top: var(--sp-1); }
-.orch__step { flex: 1; height: 3px; border-radius: var(--r-sm); background: var(--s-5); }
-.orch__step--on { background: var(--iris); }
-.orch__step-btn {
-  flex: 1;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--s-1);
-  color: var(--fg-3);
-  font-family: var(--font-ui);
-  font-size: var(--t-xs);
-  padding: var(--sp-1) var(--sp-2);
-  cursor: pointer;
-  text-transform: capitalize;
-}
-.orch__step-btn--on { color: var(--fg); border-color: var(--iris); background: var(--iris-dim); }
-.orch__step-btn--sel { box-shadow: 0 0 0 1px var(--iris); }
 .orch__tabs { display: flex; gap: var(--sp-1); margin-bottom: var(--sp-3); }
 .orch__tab {
   border: 0;
@@ -7823,7 +7712,6 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__diff-line--del { color: var(--red); }
 .orch__diff-line--hunk { color: var(--blue); }
 .orch__diff-line--meta { color: var(--fg-3); }
-.orch__selected-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
 .orch__term-log {
   margin: var(--sp-3) 0 0;
   padding: var(--sp-3);
@@ -7925,8 +7813,6 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   .orch__bench-changes { grid-template-columns: minmax(0, 1fr); }
   .orch__bench[data-orch-bench-open] { max-height: 40vh; }
   .orch__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .orch__bottom { grid-template-columns: minmax(0, 1fr); }
-  .orch__clocks { display: none; }
 }
 
 /* M270–M273. Calm shell, HUD v2, motion, resume — paint-only, tokens only. */
@@ -8244,15 +8130,11 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__cube[data-depth="far"] .orch__plate-bg { fill: color-mix(in srgb, var(--deck-surface) 72%, transparent); }
 .orch__cube--synthetic .orch__plate-bg, .orch__cube--overflow .orch__plate-bg { stroke-dasharray: 3 3; }
 .orch__metric { position: relative; overflow: hidden; padding: var(--sp-3) var(--sp-4); background: var(--deck-surface); }
-.orch__metric::after { content: ''; height: 2px; width: 28%; position: absolute; bottom: 0; left: var(--sp-4); background: var(--tone, var(--blue)); transition: width var(--dur-2) var(--ease); }
-.orch__metric[aria-pressed="true"]::after { width: 80%; }
+/* M299: no underline bar — the tile's tone is its border and its action word (the reference). */
 .orch__metric-value { font-size: var(--t-xl); font-variant-numeric: tabular-nums; }
 .orch__side { background: var(--deck-surface); }
 .orch__event-chip { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--r-md); color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, transparent); grid-row: 1 / span 2; }
-.orch__perf-card { padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--deck-surface); min-width: 0; }
-.orch__spark { width: 100%; height: 36px; min-width: 0; }
 
-@media (prefers-reduced-motion: reduce) { .orch__metric::after { transition: none; } }
 
 .orch__edge[data-connected-live] { stroke-dasharray: 3 7; animation: edge-current var(--dur-flow) linear infinite; }
 @media (prefers-reduced-motion: reduce) { .orch__edge[data-connected-live] { animation: none; } }
@@ -8357,7 +8239,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 }
 
 /* M281: dark HUD glass stays local to Orchestrate; live edges retain M280's recipe. */
-[data-theme="dark"] .orch :is(.orch__metric, .orch__roster, .orch__side, .orch__perf, .orch__task-panel, .orch__selected, .orch__jump, .orch__float, .orch__callout-card) {
+[data-theme="dark"] .orch :is(.orch__metric, .orch__roster, .orch__side, .orch__float, .orch__callout-card) {
   background: linear-gradient(145deg, color-mix(in srgb, var(--iris) 9%, transparent), transparent 58%), color-mix(in srgb, var(--deck-surface) 88%, transparent);
   border-color: color-mix(in srgb, var(--iris) 28%, var(--line));
   backdrop-filter: blur(16px);
@@ -8372,10 +8254,6 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   border-color: color-mix(in srgb, var(--iris) 18%, var(--line));
   box-shadow: inset 0 1px 0 var(--edge-light);
 }
-[data-theme="dark"] .orch .orch__perf-card {
-  background: color-mix(in srgb, var(--deck-ground) 66%, transparent);
-  border-color: color-mix(in srgb, var(--iris) 18%, var(--line));
-}
 [data-theme="dark"] .orch .orch__roster-row--on {
   background: linear-gradient(90deg, var(--iris-dim), transparent);
   border-color: color-mix(in srgb, var(--iris) 42%, var(--line));
@@ -8387,10 +8265,36 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 [data-theme="dark"] .orch .orch__graph-wrap::before {
   background: radial-gradient(ellipse 60% 40% at 50% 38%, color-mix(in srgb, var(--iris) 22%, transparent), transparent 70%), radial-gradient(ellipse 80% 30% at 50% 88%, color-mix(in srgb, var(--iris) 14%, transparent), transparent 72%);
 }
-.orch__task-fill { display: none; }
-[data-theme="dark"] .orch .orch__task-fill { display: block; height: 3px; width: 100%; overflow: hidden; border-radius: var(--r-sm); background: var(--s-5); }
-[data-theme="dark"] .orch .orch__task-fill > span { display: block; height: 100%; background: var(--iris); box-shadow: 0 0 8px var(--iris); }
-.orch__phase { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--t-xs); color: var(--fg-2); }
+.orch__task-jump { font-size: var(--t-xs); color: var(--iris); }
+
+/* M299. The chrome pass: the side column's two cards, the quiet limits row, the
+   criteria rows and the follow-up composer. The section hooks (`.orch__needs`,
+   `.orch__inspector`) keep their names — Phase A–C checks select on them. */
+/* The two cards' heads are mixed case (the reference); the pipeline/list section titles keep theirs. */
+.orch__needs > .orch__section-head .orch__section-title, .orch__inspector > .orch__section-head .orch__section-title { text-transform: none; letter-spacing: 0; font-size: var(--t-sm); color: var(--fg); }
+.orch__island-ambiguity { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__brief-summary--quiet { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--fg-4); font-size: var(--t-xs); }
+.orch__needs-title { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.orch__inspector-id--card { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; margin-bottom: var(--sp-2); }
+.orch__inspector-glyph { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--r-md); color: var(--iris); border: 1px solid color-mix(in srgb, var(--iris) 35%, var(--line)); background: var(--iris-dim); }
+.orch__inspector-name { display: flex; flex-direction: column; min-width: 0; gap: 0; }
+.orch__inspector-name .orch__caption { margin: 0; }
+.orch__chip { font-size: var(--t-xs); padding: 0 var(--sp-2); line-height: 1.6; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--green) 40%, var(--line)); color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); white-space: nowrap; }
+.orch__inspector-task { display: flex; flex-direction: column; gap: 0; margin: var(--sp-2) 0; min-width: 0; }
+.orch__inspector-task-title { font-size: var(--t-md); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__inspector-task .orch__caption { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__inspector-box { display: flex; flex-direction: column; gap: var(--sp-1); margin: var(--sp-2) 0; padding: var(--sp-2) var(--sp-3); border: 1px solid color-mix(in srgb, var(--tone, var(--iris)) 30%, var(--line)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--tone, var(--iris)) 6%, transparent); }
+.orch__inspector-box:empty { display: none; }
+.orch__inspector-box .orch__caption { margin: 0; }
+.orch__inspector-box .orch__inspector-next { color: var(--tone, var(--fg)); }
+.orch__criteria { margin: var(--sp-2) 0; }
+.orch__criteria-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__criterion { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-2); }
+.orch__criterion-mark { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--fg-4); transform: translateY(1px); }
+.orch__followup { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; margin-top: var(--sp-3); }
+.orch__followup-input { min-width: 0; font: inherit; font-size: var(--t-sm); color: var(--fg); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3); }
+.orch__followup-input:focus { outline: none; border-color: var(--iris); }
+.orch__followup-refusal { grid-column: 1 / -1; margin: 0; color: var(--amber); }
 
 /* M288–M290. Orchestrate Phase C: the island column, the dependency lens, the controls and limits. */
 .orch__islands { gap: var(--sp-2); max-width: 20rem; max-height: 60%; overflow: auto; }

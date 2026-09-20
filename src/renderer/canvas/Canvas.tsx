@@ -7320,6 +7320,11 @@ export function Canvas({
               paletteActions.goToPanel(id)
               insertIntoComposer(id, text)
             }}
+            // M299. The title row's scope, and the follow-up composer's one send door:
+            // the same agentSession.send a chat's composer uses, its answer read by the
+            // one sentence-maker, so a refusal reads the same on both pages.
+            workspaceName={workspaceRows.find((w) => w.active)?.name}
+            onSend={async (id, text) => sendRefusalSentence(await window.canvas.agentSession.send(id, text, []))}
           />
         </div>
       )}

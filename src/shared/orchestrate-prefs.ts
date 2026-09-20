@@ -23,11 +23,22 @@ export const WORKBENCH_TABS: readonly WorkbenchTab[] = ['changes', 'checks', 'ou
 /** The workbench cannot be dragged shut, and cannot swallow the scene. */
 export const WORKBENCH_MIN_HEIGHT = 120
 export const WORKBENCH_MAX_HEIGHT = 720
-export const WORKBENCH_DEFAULT_HEIGHT = 240
+/**
+ * M299. The resting height, now that the strip rests OPEN: 200, measured so the
+ * scene panel is no shorter than it was under M282's tiles at the wide window
+ * (1128×649 before; 240 left it 614) and 90 px taller at the default one.
+ */
+export const WORKBENCH_DEFAULT_HEIGHT = 200
 
 export interface PersistedOrchestrate {
-  /** `open` absent is CLOSED: the strip rests as its tab bar and opens on a tab, a Review changes, or a drag (the critic: an open default squeezed the scene). */
-  workbench?: { height: number; tab: WorkbenchTab; open?: true }
+  /**
+   * `open` absent is OPEN (M299): the workbench is the page's evidence area and
+   * rests at its height; only a person's collapse is written, as `open: false`.
+   * M287 wrote `open: true` and read absence as closed — that rest state was
+   * chosen with five jump tiles under the scene, and those tiles are gone.
+   * A pre-M299 record's `open: true` still parses; its absence now reads open.
+   */
+  workbench?: { height: number; tab: WorkbenchTab; open?: boolean }
   lens?: 'scene' | 'list'
   mode?: 'dev' | 'pipeline'
   sideTab?: 'activity' | 'files'
@@ -64,7 +75,7 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
   const out: PersistedOrchestrate = {}
   const wb = raw.workbench
   if (isRecord(wb) && isNum(wb.height) && WORKBENCH_TABS.includes(wb.tab as WorkbenchTab)) {
-    out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab, ...(wb.open === true ? { open: true as const } : {}) }
+    out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab, ...(typeof wb.open === 'boolean' ? { open: wb.open } : {}) }
   } else if (wb !== undefined) warnings.push('dropped a malformed orchestrate workbench')
   if (raw.lens === 'scene' || raw.lens === 'list') out.lens = raw.lens
   if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode

@@ -4,7 +4,6 @@
  * markDone, setCenterView). Selection here drives the other panes; a jump
  * returns to the canvas so pan/zoom/PTY stay the canvas's.
  */
-import { MachineSparkline as Sparkline } from '@renderer/shell/MachineChart'
 import { MotionSurface } from '@renderer/primitives/MotionSurface'
 import { Component, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react'
 import type { Panel } from '@renderer/panels/panels'
@@ -12,7 +11,7 @@ import {
   isChatPanel, isFilePanel, isTerminalPanel, isWatcherPanel, isWorkflowPanel, isWorkPanel
 } from '@renderer/panels/panels'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
-import { formatCpu, formatMemory, getMachineCostSampledAt, listMachineCosts, useMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
+import { getMachineCostSampledAt, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
 import { useChat, getChat, lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
@@ -46,7 +45,6 @@ import {
   orchLensLit,
   orchStageShifts,
   ORCH_STAGE_WASH_MS,
-  orchMachineReadout,
   orchMetricLens,
   orchRosterStep,
   orchTaskFrame,
@@ -68,7 +66,6 @@ import {
   type OrchPanelInput,
   type OrchRosterFilter,
   type OrchRosterRow,
-  orchBestFile,
   orchPhase
 } from './orchestration-model'
 import {
@@ -165,9 +162,19 @@ export interface OrchestrationViewProps {
   automationResults?: ReadonlyMap<string, string>
   /**
    * M290. Retry's one exit: open the chat on the canvas with the previewed
-   * prompt in its composer, UNSENT. Nothing on this page sends a message.
+   * prompt in its composer, UNSENT. Retry never sends; the one send on this
+   * page is the follow-up composer's `onSend` (M299), owned by the canvas.
    */
   onRetryOnCanvas?: (panelId: string, prompt: string) => void
+  /** M299. The workspace's name, for the title row (`Orchestrate / <workspace>`). */
+  workspaceName?: string
+  /**
+   * M299. The follow-up composer's ONE exit: the canvas hands in the chat
+   * composer's own send door, resolved to the refusal sentence or null. The
+   * view spells no send of its own (`orch-limits.4`); absent, no input is
+   * rendered — a dead composer is a promise the page cannot keep.
+   */
+  onSend?: (panelId: string, text: string) => Promise<string | null>
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
@@ -1298,7 +1305,7 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -1367,9 +1374,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [metric, setMetric] = useState<OrchMetricId | null>(null)
   const [activityScope, setActivityScope] = useState<OrchActivityScope>('live')
   const [pipelineStage, setPipelineStage] = useState<WorkItemState | null>(null)
-  const [cpuHistory, setCpuHistory] = useState<number[]>([])
-  const [memHistory, setMemHistory] = useState<number[]>([])
-  const [openedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   const [frameTask, setFrameTask] = useState(true)
   const [edgeFires, setEdgeFires] = useState<Map<string, OrchEdgeFire>>(() => new Map())
@@ -1382,7 +1386,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const selectedIdsRef = useRef<string[]>([])
   const total = useMachineCostTotal()
   const selectedId = selectedIds[selectedIds.length - 1] ?? null
-  const selectedCost = useMachineCost(selectedId ?? '')
   const selectedLive = useLiveSession(selectedId ?? '')
 
   useEffect(() => {
@@ -1437,14 +1440,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     const timer = window.setTimeout(() => setNow(Date.now()), soonest + 16)
     return () => window.clearTimeout(timer)
   }, [edgeFires, now])
-
-  useEffect(() => {
-    const sampledAt = getMachineCostSampledAt()
-    const panelCount = listMachineCosts().length
-    if (sampledAt === null || panelCount <= 0) return
-    setCpuHistory((h) => [...h, total.cpuPercent].slice(-24))
-    setMemHistory((h) => [...h, total.memoryBytes / (1024 * 1024)].slice(-24))
-  }, [total.cpuPercent, total.memoryBytes])
 
   const activity = useSyncExternalStore(
     subscribeOrchActivity,
@@ -1636,9 +1631,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     ? selectedRow.id
     : liveSnap.terminalSnippet?.panelId ?? null
   const outputKind = selectedRow?.kind ?? (liveSnap.terminalSnippet ? 'terminal' : undefined)
-  // Always pulled now: the bottom strip's Terminal card shows the same tail the Logs tab does.
+  // Always pulled: the workbench's Output tab shows this tail (M299: the Terminal tile is gone).
   const outputLines = useOrchOutput(outputPanelId, outputKind, true)
-  const codeFile = orchBestFile(visibleFiles, selectedId)
 
   // M284. Scene | List — the same objects and the same actions, the list being the
   // keyboard (and reduced-motion, and no-WebGL) way to reach every one of them.
@@ -1765,18 +1759,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     })), pipelineStage),
     [workItems, pipelineStage]
   )
-
-  const computeBlocks = useMemo(() => {
-    void tick
-    return listMachineCosts()
-      .slice()
-      .sort((a, b) => b.cpuPercent - a.cpuPercent)
-      .slice(0, 6)
-      .map((c) => {
-        const row = liveSnap.roster.find((r) => r.id === c.panelId)
-        return { ...c, title: row?.title ?? c.panelId }
-      })
-  }, [liveSnap.roster, total.cpuPercent, total.memoryBytes, tick])
 
   const jump = useCallback((id: string): void => { onJumpPanel(id) }, [onJumpPanel])
   const select = useCallback((id: string, opts?: { additive?: boolean; range?: boolean }): void => {
@@ -1926,19 +1908,6 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     return new Set(orchEdgePackets(liveEdgesRef.current, edgeFires, Date.now()).map((p) => p.key))
   }, [edgeFires, now])
 
-  const machineReadout = orchMachineReadout({
-    sampledAt: getMachineCostSampledAt(),
-    now,
-    cpuPercent: total.cpuPercent,
-    memoryBytes: total.memoryBytes,
-    panelCount: listMachineCosts().length
-  })
-
-  const clock = new Date(now)
-  const clockLabel = `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}:${String(clock.getSeconds()).padStart(2, '0')}`
-  const openSecs = Math.max(0, Math.floor((now - openedAt) / 1000))
-  const openLabel = `${String(Math.floor(openSecs / 3600)).padStart(2, '0')}:${String(Math.floor((openSecs % 3600) / 60)).padStart(2, '0')}:${String(openSecs % 60).padStart(2, '0')}`
-
   // M290. Interrupt only where the runtime has an interrupt door — read off
   // the backend registry, never assumed for every chat (codex and copilot have none).
   const backendOf = (id: string): AgentBackend | undefined => {
@@ -1989,6 +1958,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   depLitRef.current = depFocus && depFocusData !== null ? depFocusData.lit : null
   const depTouches = depFocusData !== null && (depFocusData.prerequisites.length > 0 || depFocusData.dependents.length > 0)
   const blockedLine = depFocusData === null ? null : orchBlockedLine(depFocusData)
+  // M299. The card's role line and the criteria rows read what exists: the registry's
+  // backend id for a chat, and the work item's own criteria — never a verdict, which no
+  // criterion carries (checks live in the workbench, read from the ledger).
+  const selectedBackend = selectedRow !== null && selectedRow.kind === 'chat' ? backendOf(selectedRow.id) : undefined
+  const islandCriteria: readonly string[] = island?.itemId !== undefined ? (workItems.find((w) => w.id === island.itemId)?.criteria ?? []) : []
   const limits = orchLimits({
     maxConcurrent: limitRows?.maxConcurrent ?? 0, budgetUsd: limitRows?.budgetUsd ?? 0, budgetWindowPercent: limitRows?.budgetWindowPercent ?? 0,
     inFlight: panels.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,
@@ -2119,44 +2093,46 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   return (
     <div className="orch" role="region" aria-label="Orchestration">
       <header className="orch__header">
-        <div className="orch__brand">
-          {/* No mark and no product name here: the top bar, 40px above, already
-              says both. The page opens on the one line that is about NOW. */}
-          <div className="orch__brand-copy">
-            <p className="orch__greeting">{liveSnap.greeting}</p>
-          </div>
-          <div className="orch__clocks">
-            <div className="orch__clock" title="Local time">
-              <span className="orch__clock-label">Local</span>
-              <span className="orch__clock-value">{clockLabel}</span>
-            </div>
-            <div className="orch__clock" title="How long this Orchestration view has been open">
-              <span className="orch__clock-label">View open</span>
-              <span className="orch__clock-value">{openLabel}</span>
-            </div>
-          </div>
+        {/* M299. The title row: the page and its scope, then the focused task's context
+            (goal · repository · branch · placement) from the real island. No mark and no
+            product name (the top bar says both); no greeting (its task count is the tile's);
+            no clock and no view-open timer (M269's HUD — the menu bar has the clock, and
+            how long this page has been open is not a fact about the work). */}
+        <div className="orch__title-row">
+          <h1 className="orch__title">
+            Orchestrate
+            {workspaceName !== undefined && workspaceName !== '' && <span className="orch__title-scope"> / {workspaceName}</span>}
+          </h1>
+          {island !== null && (
+            <p className="orch__context" data-orch-context={island.placement.kind}>
+              <span className="orch__context-goal">{island.goal}</span>
+              <span className="orch__context-place"> · {orchPlacementLine(island)}</span>
+            </p>
+          )}
         </div>
+        {/* M299. Each tile is its honest count and ONE next action, wired to a door that
+            exists: the lens (the tile's click since M269), the first waiting row, the review
+            workbench. At zero the tile is quiet — a count, no action, no state word — because
+            a rest fact is never a zero-value statement (`Watchers 0 idle` was one). */}
         <div className="orch__metrics" data-orch-density="rest">
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.activeAgents > 0 ? TONE_WORKING : 'idle'} aria-pressed={metric === 'agents'} {...shellControl(() => applyMetric('agents'))}>
-            <span className="orch__metric-label">Active agents</span>
-            <span className="orch__metric-value">{liveSnap.counts.activeAgents}</span>
-            <span className="orch__metric-sub">{liveSnap.counts.activeAgents > 0 ? agentWord('busy').word : agentWord('idle').word}</span>
-          </button>
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.tasksInProgress > 0 ? TONE_WORKING : 'idle'} aria-pressed={metric === 'tasks'} {...shellControl(() => applyMetric('tasks'))}>
-            <span className="orch__metric-label">Tasks in progress</span>
-            <span className="orch__metric-value">{liveSnap.counts.tasksInProgress}</span>
-            <span className="orch__metric-sub">{liveSnap.counts.tasksInProgress > 0 ? 'In progress' : 'Clear'}</span>
-          </button>
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.watchersRunning > 0 ? TONE_WORKING : 'idle'} aria-pressed={metric === 'watchers'} {...shellControl(() => applyMetric('watchers'))}>
-            <span className="orch__metric-label">Watchers</span>
-            <span className="orch__metric-value">{liveSnap.counts.watchersRunning}</span>
-            <span className="orch__metric-sub">{liveSnap.counts.watchersRunning > 0 ? agentWord('busy').word : agentWord('idle').word}</span>
-          </button>
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.waiting > 0 ? 'needs-you' : 'idle'} aria-pressed={metric === 'waiting'} {...shellControl(() => applyMetric('waiting'))}>
-            <span className="orch__metric-label">Waiting on you</span>
-            <span className="orch__metric-value">{liveSnap.counts.waiting}</span>
-            <span className="orch__metric-sub">{liveSnap.counts.waiting > 0 ? 'Attention' : 'Clear'}</span>
-          </button>
+          {([
+            { id: 'agents', label: 'Active agents', n: liveSnap.counts.activeAgents, tone: TONE_WORKING, action: 'View agents',
+              go: () => applyMetric('agents') },
+            { id: 'tasks', label: 'Tasks in progress', n: liveSnap.counts.tasksInProgress, tone: TONE_WORKING, action: reviewSubjectId !== null ? 'Review changes' : 'View tasks',
+              go: () => { applyMetric('tasks'); if (reviewSubjectId !== null) openBench('changes') } },
+            { id: 'watchers', label: 'Watchers', n: liveSnap.counts.watchersRunning, tone: TONE_WORKING, action: 'View watchers',
+              go: () => applyMetric('watchers') },
+            { id: 'waiting', label: 'Waiting on you', n: liveSnap.counts.waiting, tone: 'needs-you', action: 'Inspect',
+              go: () => { applyMetric('waiting'); const first = attentionRows[0]?.id ?? waitingOnly[0]?.id; if (first !== undefined) select(first) } }
+          ] as const).map((t) => (
+            <button key={t.id} type="button" className="orch__metric" data-orch-metric={t.id} data-tone={t.n > 0 ? t.tone : 'idle'} data-empty={t.n === 0 || undefined} aria-pressed={metric === t.id} {...shellControl(t.go)}>
+              <span className="orch__metric-label">{t.label}</span>
+              <span className="orch__metric-line">
+                <span className="orch__metric-value">{t.n}</span>
+                {t.n > 0 && <span className="orch__metric-action" data-orch-metric-action>{t.action}</span>}
+              </span>
+            </button>
+          ))}
         </div>
         {/* The textual truth. It reads liveSnap — never the lens, frame or ring
             cap — so the scene below may illustrate it but can never hide it. */}
@@ -2428,162 +2404,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             {lens === 'scene' && islandColumn(true)}
           </div>
 
-          <div className="orch__bottom">
-            <div className="orch__perf" aria-label="System performance" data-orch-density="detail">
-              <div className="orch__section-title">System</div>
-              <p className="orch__caption">{
-                machineReadout.kind === 'none' || machineReadout.kind === 'empty'
-                  ? 'No process sample yet'
-                  : machineReadout.kind === 'stale'
-                    ? `Last sample ${machineReadout.age}`
-                    : 'From this machine\'s process table'
-              }</p>
-              <div className="orch__perf-grid">
-                <div className="orch__perf-card">
-                  <span className="orch__perf-label">CPU</span>
-                  <span className="orch__perf-value">{machineReadout.cpu}</span>
-                  {machineReadout.kind === 'live' || machineReadout.kind === 'stale'
-                    ? <Sparkline values={cpuHistory} />
-                    : <Sparkline values={[]} />}
-                </div>
-                <div className="orch__perf-card">
-                  <span className="orch__perf-label">Memory</span>
-                  <span className="orch__perf-value">{machineReadout.memory}</span>
-                  {machineReadout.kind === 'live' || machineReadout.kind === 'stale'
-                    ? <Sparkline values={memHistory} tone="--green" />
-                    : <Sparkline values={[]} />}
-                </div>
-              </div>
-              {computeBlocks.length > 0 && (
-                <div className="orch__compute" aria-label="Compute by panel">
-                  {computeBlocks.map((block) => (
-                    <button
-                      key={block.panelId}
-                      type="button"
-                      className={`orch__compute-block${selectedId === block.panelId ? ' orch__compute-block--on' : ''}`}
-                      title={`${block.title} · ${formatCpu(block.cpuPercent)}`}
-                      {...shellControl(() => select(block.panelId))}
-                    >
-                      <span className="orch__compute-bar" style={{ height: `${Math.min(100, Math.max(8, block.cpuPercent))}%` }} />
-                      <span className="orch__compute-label">{formatCpu(block.cpuPercent)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="orch__task-panel">
-              <div className="orch__section-title">Current task</div>
-              {liveSnap.task === null ? (
-                <EmptyState id="orch-task" onVerb={onShowCanvas} />
-              ) : (
-                <div className="orch__task-card">
-                  <button type="button" className="orch__task-main" {...shellControl(() => onJumpWorkItem(liveSnap.task!.id))}>
-                    <span className="orch__task-title">{liveSnap.task.title}</span>
-                    <span className="orch__task-state" data-tone={TONE_WORKING}>{liveSnap.task.state}</span>
-                    {liveSnap.task.note !== undefined && <span className="orch__task-note">{liveSnap.task.note}</span>}
-                  </button>
-                  <div className="orch__steps" role="list" aria-label="Task stages">
-                    {WORK_ITEM_STATES.map((s, i) => (
-                      <button
-                        key={s}
-                        type="button"
-                        className={`orch__step-btn${i <= liveSnap.task!.stepIndex ? ' orch__step-btn--on' : ''}${pipelineStage === s ? ' orch__step-btn--sel' : ''}`}
-                        title={s}
-                        {...shellControl(() => { setMode('pipeline'); setPipelineStage((cur) => cur === s ? null : s) })}
-                      >{s}</button>
-                    ))}
-                  </div>
-                  <div className="orch__roster-actions">
-                    <button type="button" className="orch__mini" {...shellControl(() => onJumpWorkItem(liveSnap.task!.id))}>Open on canvas</button>
-                    {onMarkDone !== undefined && USER_SET_STATES.includes(WORK_ITEM_STATES[3]) && liveSnap.task.state !== WORK_ITEM_STATES[3] && (
-                      <button type="button" className="orch__mini" {...shellControl(() => onMarkDone(liveSnap.task!.id))}>Mark done</button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Jump cards (M282): previews that JUMP, never an embedded xterm or Monaco — a second
-                xterm here would refit and SIGWINCH the running agent, and file:read re-arms a watch. */}
-            <div className="orch__jump orch__selected" aria-label="Terminal">
-              <div className="orch__section-title">Terminal</div>
-              {outputPanelId === null ? (
-                <EmptyState id="orch-selected" />
-              ) : (
-                <button
-                  type="button"
-                  className="orch__jump-card"
-                  title="Double-click to jump to the panel"
-                  {...shellControl(() => { select(outputPanelId); openBench('output') })}
-                  onDoubleClick={() => jump(outputPanelId)}
-                >
-                  <span className="orch__jump-head">
-                    <span className="orch__selected-title">{selectedRow?.title ?? liveSnap.terminalSnippet?.title}</span>
-                    {selectedRow !== null && <span className="orch__roster-state" data-tone={selectedRow.tone}>{stateWord(selectedRow)}</span>}
-                  </span>
-                  {selectedRow?.kind === 'chat' && <SelectedChatPhase panelId={selectedRow.id} />}
-                  {outputCommand !== undefined && outputCommand !== '' && <code className="orch__float-code">{outputCommand}</code>}
-                  <pre className="orch__jump-log" aria-label="Scrollback tail">
-                    {outputLines.length === 0 ? 'No recorded output yet.' : outputLines.slice(-6).join('\n')}
-                  </pre>
-                  <span className="orch__caption">
-                    {selectedCost !== undefined ? `${formatCpu(selectedCost.cpuPercent)} · ${formatMemory(selectedCost.memoryBytes)}` : ''}
-                    {outputCwd !== undefined ? `${selectedCost !== undefined ? ' · ' : ''}${displayPath(outputCwd).short}` : ''}
-                  </span>
-                </button>
-              )}
-            </div>
-
-            <div className="orch__jump" aria-label="Code">
-              <div className="orch__section-title">Code</div>
-              {codeFile === null ? (
-                <EmptyState id="orch-files" onVerb={onShowCanvas} />
-              ) : (
-                <button
-                  type="button"
-                  className="orch__jump-card"
-                  title={displayPath(codeFile.path).full}
-                  {...shellControl(() => { select(codeFile.id); jump(codeFile.id) })}
-                >
-                  <span className="orch__jump-head">
-                    <span className="orch__roster-kind" aria-hidden="true"><KindFile /></span>
-                    <span className="orch__selected-title">{codeFile.title}</span>
-                  </span>
-                  <code className="orch__float-code">{displayPath(codeFile.path).short}</code>
-                  <span className="orch__task-jump">Open in its panel</span>
-                </button>
-              )}
-            </div>
-
-            <div className="orch__jump" aria-label="Files">
-              <div className="orch__section-title">Files</div>
-              {visibleFiles.length === 0 ? (
-                <EmptyState id="orch-files" onVerb={onShowCanvas} />
-              ) : (
-                <>
-                  <ul className="orch__jump-list">
-                    {visibleFiles.slice(0, 5).map((f) => (
-                      <li key={f.id}>
-                        <button
-                          type="button"
-                          className={`orch__jump-row${selectedId === f.id ? ' orch__jump-row--on' : ''}`}
-                          title={displayPath(f.path).full}
-                          {...shellControl(() => select(f.id))}
-                          onDoubleClick={() => jump(f.id)}
-                        >
-                          <KindFile /><span>{f.title}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  {onOpenFiles !== undefined && (
-                    <button type="button" className="orch__mini" {...shellControl(() => onOpenFiles())}>Open files</button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+          {/* M299. No bottom row. M282's five tiles (System, Current task, Terminal, Code,
+              Files) are gone: CPU/memory is deep detail and lives in the shell's machine
+              chart; the task's stage, Mark done and its brief are the inspector's; the
+              terminal tail is the workbench's Output tab; the open file is the inspector's
+              artifact arm and the Files side tab. The room they took is the workbench's. */}
         </main>
 
         <MotionSurface open enter><aside className="orch__side" aria-label="Decisions and inspector">
@@ -2592,14 +2417,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           <section className="orch__needs" aria-label="Needs attention" data-orch-needs>
             <div className="orch__section-head">
               <div className="orch__section-title">Needs attention</div>
-              <span className="orch__caption">{attentionRows.length + waitingOnly.length === 0 ? 'Nothing needs you' : `${attentionRows.length + waitingOnly.length} waiting`}</span>
+              <span className="orch__caption">{attentionRows.length + waitingOnly.length === 0 ? 'Nothing needs you' : `${attentionRows.length + waitingOnly.length} decision${attentionRows.length + waitingOnly.length === 1 ? '' : 's'}`}</span>
             </div>
             {(attentionRows.length > 0 || waitingOnly.length > 0) && (
               <ul className="orch__needs-list">
                 {attentionRows.map((row) => (
                   <li key={orchAnswerKey(row.id, row.requestId)} className="orch__needs-row" data-orch-needs-row={row.id} data-orch-request={row.requestId} data-sent={row.sent || undefined}>
                     <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
-                      <span className="orch__needs-title">{row.title}</span>
+                      <span className="orch__needs-title"><span className="orch__dot status-dot" data-tone="needs-you" aria-hidden="true" />{row.title}</span>
                       <span className="orch__needs-ask">wants to use <strong>{row.toolName}</strong>{row.argument !== '' ? ` · ${row.argument}` : ''}</span>
                     </button>
                     {row.sent ? (
@@ -2615,7 +2440,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 {waitingOnly.map((row) => (
                   <li key={row.id} className="orch__needs-row" data-orch-needs-row={row.id}>
                     <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
-                      <span className="orch__needs-title">{row.title}</span>
+                      <span className="orch__needs-title"><span className="orch__dot status-dot" data-tone="needs-you" aria-hidden="true" />{row.title}</span>
                       <span className="orch__needs-ask">is waiting on you — reply in its conversation</span>
                     </button>
                     <span className="orch__needs-actions">
@@ -2632,7 +2457,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               providers that report none. A folded line at rest (the critic: the block in
               the System card made the bottom row taller and shrank the whole diorama). */}
           <details className="orch__brief orch__limits" data-orch-limits>
-            <summary className="orch__brief-summary">Run limits · {limits.filter((l) => l.kind === 'enforced').length} enforced · {limits.filter((l) => l.kind === 'advisory').length} advisory</summary>
+            <summary className="orch__brief-summary orch__brief-summary--quiet">Run limits · {limits.filter((l) => l.kind === 'enforced').length} enforced · {limits.filter((l) => l.kind === 'advisory').length} advisory</summary>
             <ul className="orch__limit-list">
               {limits.map((l) => (
                 <li key={l.id} className="orch__limit" data-orch-limit={l.id} data-orch-limit-kind={l.kind} title={l.coverage}>
@@ -2664,19 +2489,42 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </>
             ) : selectedRow !== null ? (
               <>
-                <div className="orch__inspector-id">
-                  <span className="orch__roster-kind" aria-hidden="true">{kindGlyph(selectedRow.kind)}</span>
-                  <span className="orch__selected-title" data-orch-inspector-title>{selectedRow.title}</span>
-                  <span className="orch__roster-state" data-tone={selectedRow.tone} data-orch-inspector-state>{stateWord(selectedRow)}</span>
+                {/* M299. The selected-agent card: glyph, name, role line (kind · backend), the
+                    Selected chip; then the task it is in, a status box (next action, standing,
+                    spend, dependency block — the M290 facts, kept apart), the task's acceptance
+                    criteria as rows, the M290 controls, and a follow-up composer on the real
+                    send door. Every data-orch-* hook of Phases A–C stays where it was. */}
+                <div className="orch__inspector-id orch__inspector-id--card">
+                  <span className="orch__inspector-glyph" aria-hidden="true">{kindGlyph(selectedRow.kind)}</span>
+                  <span className="orch__inspector-name">
+                    <span className="orch__selected-title" data-orch-inspector-title>{selectedRow.title}</span>
+                    <span className="orch__caption">
+                      <span className="orch__roster-state" data-tone={selectedRow.tone} data-orch-inspector-state>{stateWord(selectedRow)}</span>
+                      {` · ${selectedRow.kind}`}{selectedBackend !== undefined ? ` · ${selectedBackend}` : ''}
+                    </span>
+                  </span>
+                  <span className="orch__chip" data-orch-selected-chip>Selected</span>
                 </div>
-                <p className="orch__caption">{selectedRow.kind} · {selectedRow.id}{island?.memberIds.includes(selectedRow.id) === true ? ` · in ${island.goal}` : ''}{outputCwd !== undefined ? ` · ${displayPath(outputCwd).short}` : ''}</p>
-                {nextAction !== null && <p className="orch__inspector-next" data-orch-next={nextAction.verb}>Next: {nextAction.label}</p>}
-                {/* M290. Standing and spend, kept apart: a stopped session, an interrupted
-                    run and an unknown spend are three different facts. */}
-                {selectedRow.kind === 'chat' && selectedStanding !== null && <p className="orch__caption" data-orch-standing={selectedStanding.kind}>{selectedStanding.word}</p>}
-                {selectedRow.kind === 'chat' && selectedSpend !== null && <p className="orch__caption" data-orch-spend={selectedSpend.known ? 'known' : 'unknown'}>Spend: {selectedSpend.word}</p>}
-                {blockedLine !== null && <p className="orch__inspector-next orch__dep-blocked" data-orch-dep-blocked>{blockedLine}</p>}
+                {island?.memberIds.includes(selectedRow.id) === true ? (
+                  <div className="orch__inspector-task">
+                    <span className="orch__inspector-task-title">{island.goal}</span>
+                    <span className="orch__caption">{orchPlacementLine(island)}</span>
+                  </div>
+                ) : (
+                  <p className="orch__caption">{selectedRow.id}{outputCwd !== undefined ? ` · ${displayPath(outputCwd).short}` : ''}</p>
+                )}
+                <div className="orch__inspector-box" data-tone={blockedLine !== null ? 'needs-you' : selectedRow.tone}>
+                  {nextAction !== null && <p className="orch__inspector-next" data-orch-next={nextAction.verb}>Next: {nextAction.label}</p>}
+                  {selectedRow.kind === 'chat' && <SelectedChatPhase panelId={selectedRow.id} />}
+                  {/* M290. Standing and spend, kept apart: a stopped session, an interrupted
+                      run and an unknown spend are three different facts. */}
+                  {selectedRow.kind === 'chat' && selectedStanding !== null && <p className="orch__caption" data-orch-standing={selectedStanding.kind}>{selectedStanding.word}</p>}
+                  {selectedRow.kind === 'chat' && selectedSpend !== null && <p className="orch__caption" data-orch-spend={selectedSpend.known ? 'known' : 'unknown'}>Spend: {selectedSpend.word}</p>}
+                  {blockedLine !== null && <p className="orch__inspector-next orch__dep-blocked" data-orch-dep-blocked>{blockedLine}</p>}
+                </div>
+                {island?.memberIds.includes(selectedRow.id) === true && islandCriteria.length > 0 && <OrchCriteria criteria={islandCriteria} />}
                 <div className="orch__roster-actions" data-orch-controls={selectedRow.id}>
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-checks-open {...shellControl(() => openBench('checks'))}>Inspect checks</button>}
                   <button type="button" className="orch__mini" data-orch-open {...shellControl(() => jump(selectedRow.id))}>Open on canvas</button>
                   {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
                   {/* M290. Controls only where the runtime supports them; each button's title
@@ -2694,9 +2542,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     many and which; the reasons open on demand. */}
                 {selectedControls !== null && (selectedRow.kind === 'chat' || selectedRow.kind === 'terminal') && (
                   <details className="orch__brief orch__absent" data-orch-control-absent={selectedControls.absent.map((a) => a.id).join(' ')}>
-                    <summary className="orch__brief-summary">Not available here · {selectedControls.absent.map((a) => a.id).join(', ')}</summary>
+                    <summary className="orch__brief-summary orch__brief-summary--quiet">Not available here · {selectedControls.absent.map((a) => a.id).join(', ')}</summary>
                     <ul className="orch__control-notes">{selectedControls.absent.map((a) => <li key={a.id} className="orch__caption"><strong>{a.id}</strong> — {a.reason}</li>)}</ul>
                   </details>
+                )}
+                {selectedRow.kind === 'chat' && onSend !== undefined && (
+                  <OrchFollowUp key={selectedRow.id} panelId={selectedRow.id} title={selectedRow.title} onSend={onSend} />
                 )}
                 {retryPreview !== null && (
                   <div className="orch__retry" data-orch-retry-preview={selectedRow.id} role="group" aria-label="Retry preview">
@@ -2762,20 +2613,27 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 <p className="orch__caption">{orchPlacementLine(island)}{island.placement.kind !== 'unknown' ? ` · ${displayPath(island.placement.path).short}` : ''}</p>
                 {/* M288. Shared-directory ambiguity, shown: when more than one session can
                     write here, no change is attributed to this task alone. */}
+                {/* M299: one line, the whole sentence on its title (the critic: a long amber paragraph). */}
                 {island.placement.kind === 'shared' && (island.writers > 1 || island.sharedWith.length > 0) && (
-                  <p className="orch__caption orch__island-ambiguity" data-orch-island-ambiguity={island.writers}>
-                    Shared directory — {island.writers} sessions write in {displayPath(island.placement.path).short}{island.sharedWith.length > 0 ? `, across ${island.sharedWith.length + 1} islands` : ''}; a change here cannot be attributed to this task alone, and the workbench says so per read.
+                  <p className="orch__caption orch__island-ambiguity" data-orch-island-ambiguity={island.writers} title={`Shared directory — ${island.writers} sessions write in ${displayPath(island.placement.path).short}${island.sharedWith.length > 0 ? `, across ${island.sharedWith.length + 1} islands` : ''}; a change here cannot be attributed to this task alone, and the workbench says so per read.`}>
+                    Shared directory — {island.writers} sessions write here; a change cannot be attributed to this task alone
                   </p>
                 )}
                 <p className="orch__inspector-next" data-orch-next={islandWaiting !== undefined ? 'answer' : island.state === WORK_ITEM_STATES[2] ? 'review' : 'watch'}>
                   Next: {islandWaiting !== undefined ? `Answer ${islandWaiting.title}'s ${islandWaiting.toolName} request` : island.state === WORK_ITEM_STATES[2] ? 'Review its changes' : 'Watch its sessions work'}
                 </p>
+                {islandCriteria.length > 0 && <OrchCriteria criteria={islandCriteria} />}
                 <div className="orch__roster-actions">
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-checks-open {...shellControl(() => openBench('checks'))}>Inspect checks</button>}
                   <button type="button" className="orch__mini" data-orch-open {...shellControl(() => {
                     if (island.itemId !== undefined) onJumpWorkItem(island.itemId)
                     else if (island.subjectId !== null) jump(island.subjectId)
                   })}>Open on canvas</button>
                   {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => openBench('changes'))}>Review changes</button>}
+                  {/* M299. Mark done moved here from M282's Current task tile. */}
+                  {island.itemId !== undefined && onMarkDone !== undefined && USER_SET_STATES.includes(WORK_ITEM_STATES[3]) && island.state !== WORK_ITEM_STATES[3] && (
+                    <button type="button" className="orch__mini" data-orch-mark-done {...shellControl(() => onMarkDone(island.itemId!))}>Mark done</button>
+                  )}
                 </div>
                 {/* M287. The brief and the acceptance criteria — the task's own words,
                     persisted on the work item through the board's one patch door.
@@ -2792,7 +2650,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 )}
               </>
             ) : (
-              <p className="orch__caption">Select a session in the scene or the list to inspect it.</p>
+              // M299. Nothing selected and no island: the fact is that no task is in progress
+              // (M282's Current task tile said this; the tile is gone, the sentence is not).
+              <EmptyState id="orch-task" onVerb={onShowCanvas} />
             )}
           </section>
 
@@ -2905,6 +2765,67 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
 }
 
 /**
+ * M299. Acceptance criteria as rows. The marker is a neutral ring, never a tick: no
+ * criterion carries a verdict, and drawing one would claim a check that was not made.
+ */
+function OrchCriteria({ criteria }: { criteria: readonly string[] }): JSX.Element {
+  return (
+    <div className="orch__criteria" data-orch-criteria={criteria.length}>
+      <div className="orch__section-title">Acceptance criteria</div>
+      <ul className="orch__criteria-list" title="Written by a person on the task; no verdict is recorded per criterion — the workbench's Checks tab reads the ledger">
+        {criteria.map((c, i) => <li key={i} className="orch__criterion"><span className="orch__criterion-mark" aria-hidden="true" />{c}</li>)}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * M299. The follow-up composer: one line to the selected chat through the SAME
+ * door its canvas composer uses (`onSend`, wired by the canvas), never a second path. The
+ * draft clears only on an accepted send; a refusal is shown beside the field in main's
+ * own sentence. The menu's Paste arrives as `edit:paste` (not a native paste — the
+ * gotcha in CLAUDE.md), so the field subscribes while it has focus, as Palette does.
+ */
+function OrchFollowUp({ panelId, title, onSend }: { panelId: string; title: string; onSend: (panelId: string, text: string) => Promise<string | null> }): JSX.Element {
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => window.canvas.edit.onPaste((text) => {
+    if (document.activeElement !== inputRef.current) return
+    setDraft((d) => d + text)
+  }), [])
+  const send = (): void => {
+    const text = draft.trim()
+    if (text === '' || busy) return
+    setBusy(true)
+    setRefusal(null)
+    void onSend(panelId, text).then((why) => {
+      setBusy(false)
+      if (why === null) setDraft('')
+      else setRefusal(why)
+    })
+  }
+  return (
+    <form className="orch__followup" data-orch-followup={panelId} onSubmit={(e) => { e.preventDefault(); send() }}>
+      <input
+        ref={inputRef}
+        type="text"
+        className="orch__followup-input"
+        data-orch-followup-input
+        value={draft}
+        placeholder={`Follow up with ${title}…`}
+        aria-label={`Follow up with ${title}`}
+        disabled={busy}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <button type="submit" className="orch__mini orch__followup-send" data-orch-followup-send disabled={busy || draft.trim() === ''}>Send</button>
+      {refusal !== null && <p className="orch__caption orch__followup-refusal" role="status" data-orch-followup-refusal>{refusal}</p>}
+    </form>
+  )
+}
+
+/**
  * M287. Two fields, saved on blur or Enter-less commit — never on every
  * keystroke, so a half-typed brief is not written twenty times, and never
  * sent anywhere: the only call out of here is `onPatchWorkItem`.
@@ -2922,11 +2843,12 @@ function OrchBriefEditor({ itemId, brief, criteria, onPatchWorkItem }: {
     const next = criteriaDraft.split('\n').map((c) => c.trim()).filter((c) => c !== '')
     if (next.join('\n') !== criteria.join('\n')) onPatchWorkItem(itemId, { criteria: next })
   }
-  // A <details>, open only when something is written: two textareas at rest pushed the
-  // inspector's Activity feed out of frame (the critic).
+  // A <details>, FOLDED at rest (M299; M287 opened it when something was written, and its
+  // two textareas then repeated the criteria the card now shows as rows). The summary says
+  // whether anything is written; the fields open on demand.
   return (
-    <details className="orch__brief" data-orch-brief-editor={itemId} open={brief !== '' || criteria.length > 0}>
-      <summary className="orch__brief-summary">Brief &amp; acceptance criteria{brief === '' && criteria.length === 0 ? ' · none yet' : ''}</summary>
+    <details className="orch__brief" data-orch-brief-editor={itemId}>
+      <summary className="orch__brief-summary orch__brief-summary--quiet">{brief === '' && criteria.length === 0 ? 'Brief & acceptance criteria · none yet' : 'Edit brief & acceptance criteria'}</summary>
       <label className="orch__brief-field">
         <span className="orch__section-title">Brief</span>
         <textarea className="orch__brief-input" data-orch-brief rows={2} value={briefDraft} placeholder="What should be done, in your words. Editing this starts nothing."
