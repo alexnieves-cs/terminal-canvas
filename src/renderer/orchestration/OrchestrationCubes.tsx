@@ -20,8 +20,17 @@ import { ORCH_STAGE_TILT_DEG, orchFitViewbox, type OrchFit } from './orchestrati
 import { orchCubeMotion, type OrchCubeTone } from './orchestration-cube-motion'
 import { OrchestrationBloom } from './orchestration-bloom'
 
+/**
+ * M291. What stands on a platform. The SHAPE is the kind — a station is a cube,
+ * a checkpoint (a watcher's result) a hexagonal puck, an artifact (a file) a
+ * thin standing tablet — so a test result never reads as another reasoning
+ * agent, and the word beside it on the plate says the same.
+ */
+export type OrchObjectShape = 'cube' | 'puck' | 'tablet'
+
 export interface OrchCubeSpec {
   id: string
+  shape?: OrchObjectShape
   /** Already-projected viewBox-space position/size (post pan/zoom/depth — the same numbers the SVG hit-target uses). */
   x: number
   y: number
@@ -41,9 +50,68 @@ export interface OrchCubeSpec {
   attention: boolean
 }
 
+/**
+ * M291. A platform: the island's base plate and its raised inner plate, in the
+ * reference's blue-black material with cyan edges; the workspace plate (grouping)
+ * wears violet edges — violet is a SECONDARY family distinction, never a state.
+ * `w`/`h` are the footprint in the camera's units BEFORE the stage tilt: the mesh
+ * wears the same rotateX the cubes do, so the tilt foreshortens it the way it
+ * foreshortens them, and the SVG hit-target above it is cut to the same rule.
+ * Both layers are the same fixed thickness for every platform — height is never
+ * a hidden score — and both are decorative, expendable before hit accuracy.
+ */
+export interface OrchPlatformSpec {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  /** Inner plate inset and the layer thickness, already scaled by the camera. */
+  inset: number
+  thickness: number
+  depth: number
+  synthetic: boolean
+  selected: boolean
+  dimmed: boolean
+  /** Something on it is working: the inner plate is lit. */
+  lit: boolean
+  /** Something on it waits on a person: an amber rim on the inner plate (the word and beacon are on the SVG plate). */
+  needsYou: boolean
+  expanded: boolean
+}
+
 export interface OrchestrationCubesProps {
   nodes: readonly OrchCubeSpec[]
+  platforms?: readonly OrchPlatformSpec[]
   viewBox: { w: number; h: number }
+  /**
+   * M292. Quality tier from measured frame time: `full` is the composer, shadows
+   * and pools; `lean` drops the composer (the bloom degrades rather than stalls)
+   * and the pools; `flat` also drops shadows. Labels are bounded in the overlay.
+   */
+  quality?: 'full' | 'lean' | 'flat'
+}
+
+/**
+ * M292. One geometry per (shape, size class), shared by every mesh of that class
+ * and never disposed: a hundred stations used to build a hundred BoxGeometries
+ * (and a hundred EdgesGeometries) and dispose them on every size change. Sizes
+ * are quantised to half a pixel so a zoom does not mint a class per frame.
+ */
+const geometryCache = new Map<string, { body: THREE.BufferGeometry; outline: THREE.EdgesGeometry }>()
+function sharedGeometry(shape: OrchObjectShape | 'hub', half: number): { body: THREE.BufferGeometry; outline: THREE.EdgesGeometry } {
+  const q = Math.round(half * 2) / 2
+  const key = `${shape}:${q}`
+  let got = geometryCache.get(key)
+  if (got === undefined) {
+    const body = shape === 'hub' ? new THREE.IcosahedronGeometry(q * 1.2, 0)
+      : shape === 'puck' ? new THREE.CylinderGeometry(q * 1.05, q * 1.05, q * 0.9, 6)
+      : shape === 'tablet' ? new THREE.BoxGeometry(q * 1.5, q * 2.1, Math.max(2, q * 0.22))
+      : new THREE.BoxGeometry(q * 2, q * 2, q * 2)
+    got = { body, outline: new THREE.EdgesGeometry(body) }
+    geometryCache.set(key, got)
+  }
+  return got
 }
 
 function readCssColor(varName: string): THREE.Color {
@@ -140,18 +208,14 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   // (a cube's corners reach half * 1.73, an icosahedron's hull is tighter) while
   // still sitting INSIDE the box footprint its SVG hit-target was sized to —
   // this canvas only has to look right under targets it must not move.
-  const geometry = useMemo(() => (
-    node.hub
-      ? new THREE.IcosahedronGeometry(half * 1.2, 0)
-      : new THREE.BoxGeometry(half * 2, half * 2, half * 2)
-  ), [half, node.hub])
-  useEffect(() => () => geometry.dispose(), [geometry])
-  const outline = useMemo(() => new THREE.EdgesGeometry(geometry), [geometry])
-  useEffect(() => () => outline.dispose(), [outline])
+  // Shared, never disposed here (see sharedGeometry): the class outlives the mesh.
+  const { body: geometry, outline } = sharedGeometry(node.hub ? 'hub' : node.shape ?? 'cube', half)
   // Same tilt/yaw the CSS-3D body wore: one fixed stage rotateX, plus a per-node
   // yaw so satellites don't all face the camera identically (orchestration-depth.ts).
-  const yawDeg = node.hub ? 45 : 40 + (node.x / viewBoxW) * 10
-  const rotation: [number, number, number] = [(-ORCH_STAGE_TILT_DEG * Math.PI) / 180, (yawDeg * Math.PI) / 180, 0]
+  const yawDeg = node.hub ? 45 : node.shape === 'tablet' ? 12 : 40 + (node.x / viewBoxW) * 10
+  // A puck is a cylinder whose axis is already "up": no yaw, or its hexagon would
+  // read as a tumbling die; a tablet turns a little so its thin edge shows.
+  const rotation: [number, number, number] = [(-ORCH_STAGE_TILT_DEG * Math.PI) / 180, node.shape === 'puck' ? 0 : (yawDeg * Math.PI) / 180, 0]
 
   useFrame((state, delta) => {
     const nowMs = state.clock.elapsedTime * 1000
@@ -231,6 +295,73 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
         <lineBasicMaterial ref={edge} color={base} transparent />
       </lineSegments>
     </mesh>
+  )
+}
+
+/**
+ * M291. One platform: base plate plus raised inner plate. The body is the deck
+ * surface token (blue-black in the dark theme, the light theme's own surface in
+ * the light one), the edges the accent (cyan) or, for the workspace plate,
+ * violet — family, not state. A lit plate's inner layer glows a little under
+ * the composer's threshold (it must never bloom past the stations on it);
+ * a plate waiting on a person carries an amber rim IN ADDITION to the word and
+ * the beacon on its SVG label, so colour is never the only carrier.
+ */
+function PlatformMesh({ spec, fit, size, reducedMotion }: { spec: OrchPlatformSpec; fit: OrchFit; size: { width: number; height: number }; reducedMotion: boolean }): JSX.Element {
+  const group = useRef<THREE.Group>(null!)
+  const lift = useRef(0)
+  const invalidate = useThree((s) => s.invalidate)
+  const [surface, setSurface] = useState(() => readCssColor('--deck-surface'))
+  const [edgeTone, setEdgeTone] = useState(() => readCssColor(spec.synthetic ? '--deck-violet' : '--iris'))
+  const [amber, setAmber] = useState(() => readCssColor('--amber'))
+  useEffect(() => {
+    const sync = (): void => { setSurface(readCssColor('--deck-surface')); setEdgeTone(readCssColor(spec.synthetic ? '--deck-violet' : '--iris')); setAmber(readCssColor('--amber')) }
+    const observer = new MutationObserver(sync)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-contrast', 'style'] })
+    sync()
+    return () => observer.disconnect()
+  }, [spec.synthetic])
+  useEffect(() => invalidate(), [surface, edgeTone, amber, invalidate])
+  const w = spec.w * fit.scale
+  const h = spec.h * fit.scale
+  const t = Math.max(3, spec.thickness * fit.scale)
+  const inset = spec.inset * fit.scale
+  const base = useMemo(() => new THREE.BoxGeometry(w, h, t), [w, h, t])
+  const inner = useMemo(() => new THREE.BoxGeometry(Math.max(8, w - inset * 2), Math.max(8, h - inset * 2), t * 0.6), [w, h, inset, t])
+  const baseEdges = useMemo(() => new THREE.EdgesGeometry(base), [base])
+  const innerEdges = useMemo(() => new THREE.EdgesGeometry(inner), [inner])
+  useEffect(() => () => { base.dispose(); inner.dispose(); baseEdges.dispose(); innerEdges.dispose() }, [base, inner, baseEdges, innerEdges])
+  const screenX = spec.x * fit.scale + fit.offsetX
+  const screenY = spec.y * fit.scale + fit.offsetY
+  const rotation: [number, number, number] = [(-ORCH_STAGE_TILT_DEG * Math.PI) / 180, 0, 0]
+  const dim = spec.dimmed && !spec.selected
+  // A FINITE selection lift (6px), damped like the cubes'; reduced motion snaps.
+  useFrame((_state, delta) => {
+    const target = spec.selected ? 6 : 0
+    lift.current = reducedMotion ? target : THREE.MathUtils.damp(lift.current, target, 12, delta)
+    // Under every object on it: the cubes sit at depth * 24 (+ lift); the plate
+    // sits a layer below so a standing cube is never cut by its own floor.
+    group.current.position.set(screenX - size.width / 2, -(screenY - size.height / 2), spec.depth * 24 - 40 + lift.current)
+    if (!reducedMotion && Math.abs(lift.current - target) > 0.05) _state.invalidate()
+  })
+  const edgeOpacity = (spec.selected ? 1 : spec.synthetic ? 0.55 : 0.8) * (dim ? 0.55 : 1)
+  return (
+    <group ref={group} rotation={rotation}>
+      <mesh geometry={base} receiveShadow>
+        <meshPhysicalMaterial color={surface} roughness={0.55} metalness={0.25} clearcoat={0.4} clearcoatRoughness={0.4} emissive={edgeTone} emissiveIntensity={dim ? 0.02 : 0.05} />
+      </mesh>
+      <lineSegments geometry={baseEdges}>
+        <lineBasicMaterial color={edgeTone} transparent opacity={edgeOpacity} />
+      </lineSegments>
+      <mesh geometry={inner} position={[0, 0, t * 0.5 + t * 0.3 + (spec.expanded ? 0 : 0)]} receiveShadow>
+        {/* The lit tier stays UNDER the bloom threshold (0.62 luminance): the plate
+            is the floor the stations glow above, not a light of its own. */}
+        <meshPhysicalMaterial color={surface} roughness={0.5} metalness={0.3} clearcoat={0.5} clearcoatRoughness={0.3} emissive={spec.needsYou ? amber : edgeTone} emissiveIntensity={(spec.lit || spec.needsYou ? 0.22 : 0.08) * (dim ? 0.5 : 1)} />
+      </mesh>
+      <lineSegments geometry={innerEdges} position={[0, 0, t * 0.5 + t * 0.3]}>
+        <lineBasicMaterial color={spec.needsYou ? amber : edgeTone} transparent opacity={edgeOpacity} />
+      </lineSegments>
+    </group>
   )
 }
 
@@ -351,7 +482,7 @@ function useGlowTextureOnce(): THREE.Texture {
   }, [])
 }
 
-function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCubeSpec[]; viewBox: { w: number; h: number }; reducedMotion: boolean }): JSX.Element {
+function CubeScene({ nodes, platforms, viewBox, reducedMotion, quality }: { nodes: readonly OrchCubeSpec[]; platforms: readonly OrchPlatformSpec[]; viewBox: { w: number; h: number }; reducedMotion: boolean; quality: 'full' | 'lean' | 'flat' }): JSX.Element {
   const size = useThree((s) => s.size)
   const gl = useThree((s) => s.gl)
   const fit = useMemo(() => orchFitViewbox(viewBox, size), [viewBox, size.width, size.height])
@@ -370,16 +501,23 @@ function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCube
       <FitCamera width={size.width} height={size.height} />
       {/* Mounted INSIDE the Canvas so it shares the demand loop; it takes the
           render from fiber at priority 1 and owns tone mapping while mounted. */}
-      <OrchestrationBloom />
+      {/* M292. The composer is the first thing to go: a bloom pass over a
+          hundred-station scene is what stalls, and without it the tiers still
+          read (working is brighter than idle in the raw emissive), so the bloom
+          DEGRADES rather than stalls. */}
+      {quality === 'full' && <OrchestrationBloom />}
       <ambientLight intensity={0.8} />
-      <directionalLight position={[160, 260, 340]} intensity={1.3} castShadow={!reducedMotion}>
+      <directionalLight position={[160, 260, 340]} intensity={1.3} castShadow={!reducedMotion && quality !== 'flat'}>
         <orthographicCamera attach="shadow-camera" args={[-size.width, size.width, size.height, -size.height, 1, 1200]} />
       </directionalLight>
       <mesh position={[0, 0, -80]} receiveShadow>
         <planeGeometry args={[size.width * 1.4, size.height * 1.4]} />
         <shadowMaterial transparent opacity={0.28} />
       </mesh>
-      {darkTheme && nodes.map((n) => (
+      {platforms.map((p) => (
+        <PlatformMesh key={`platform-${p.id}`} spec={p} fit={fit} size={size} reducedMotion={reducedMotion} />
+      ))}
+      {darkTheme && quality === 'full' && nodes.map((n) => (
         <GroundPool key={`pool-${n.id}`} node={n} fit={fit} size={size} texture={glowTexture} />
       ))}
       {nodes.map((n) => (
@@ -389,7 +527,7 @@ function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCube
   )
 }
 
-export function OrchestrationCubes({ nodes, viewBox }: OrchestrationCubesProps): JSX.Element {
+export function OrchestrationCubes({ nodes, platforms = [], viewBox, quality = 'full' }: OrchestrationCubesProps): JSX.Element {
   const reducedMotion = reducedMotionNow()
   return (
     <div className="orch__cube-canvas" aria-hidden="true">
@@ -398,13 +536,13 @@ export function OrchestrationCubes({ nodes, viewBox }: OrchestrationCubesProps):
         // Explicit type: fiber 9.4's boolean/default shorthand asks for
         // PCFSoftShadowMap, which this three.js version removed — every
         // shadow re-resolve logged a deprecation warning without this.
-        shadows={reducedMotion ? false : 'percentage'}
+        shadows={reducedMotion || quality === 'flat' ? false : 'percentage'}
         dpr={[1, 2]}
         // Always demand: a cube with motion left invalidates from its own useFrame.
         frameloop="demand"
         gl={{ antialias: true, alpha: true }}
       >
-        <CubeScene nodes={nodes} viewBox={viewBox} reducedMotion={reducedMotion} />
+        <CubeScene nodes={nodes} platforms={platforms} viewBox={viewBox} reducedMotion={reducedMotion} quality={quality} />
       </Canvas>
     </div>
   )

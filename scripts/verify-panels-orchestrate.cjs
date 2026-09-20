@@ -9,10 +9,10 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 116000 // measured 2026-09-19 at the split, with Phase C's checks in (orch-task.1–.7, orch-bench.1–.4, orch-dep.app.1–.2, orch-islands.app.1–.3, orch-limits.app.1–.3: two real lanes, a shared directory, a real exit-ok handoff, a workbench commit and discard): green runs 92.1 s at load 7–11 and 81.9 s at load 7; 1.25x the slower, to the next second. A red first run at load 11–16 took 120.2 s — the load flake docs/load-bearing.md names, not this pin's.
+const WATCHDOG_MS = 145000 // measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s, 109.2 s at load 20–26, then 102.8 s in the gate and 116.0 s with demo captures on at load 3; 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
-  const { attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
+  const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
   // As in `agents`: a renderer reload must DETACH every session, exactly as
   // main/index.ts wires it, or a fixture that expects a dormant panel after a
   // reload finds it live. Installed once, at this part's start.
@@ -512,7 +512,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
     const consistent = (b) => b !== null && b.controls === b.subject && b.diffSubject === b.subject && (b.diffKey === null || b.diffKey.startsWith(b.subject + ':'))
     const sends = () => chatSpawns.reduce((n, sp) => n + sp.proc.stdin.filter((l) => { try { return JSON.parse(l).type === 'user' } catch { return false } }).length, 0)
     const IDS = [
-      'orch-islands.app.1 two isolated write tasks in two REAL worktrees of one repository are two islands (the scene\'s column folded at rest to the focused card and a toggle) grouped under that repository (labelled grouping, not a supervisor), each with its own branch, count and context label, and each with its OWN review subject: A\'s Changes lists only A\'s file and diff, B\'s only B\'s, and the diff pane, the controls and the strip name the same subject at every read',
+      'orch-islands.app.1 two isolated write tasks in two REAL worktrees of one repository are two islands (in the scene each is a platform whose plate is its card, and the column rests folded to a toggle — M291) grouped under that repository (labelled grouping, not a supervisor), each with its own branch, count and context label, and each with its OWN review subject: A\'s Changes lists only A\'s file and diff, B\'s only B\'s, and the diff pane, the controls and the strip name the same subject at every read',
       'orch-islands.app.2 rapid selection (A → B → A in one tick) and out-of-order answers (a diff still in flight when the subject changes; Refresh twice in one tick) never put one task\'s diff under another task\'s controls: sampled through the flips, the strip, the controls and the diff pane always name one subject, and the late answers are dropped',
       'orch-islands.app.3 shared-directory ambiguity is shown, not guessed: two chats in one directory are one island marked ambiguous, its label counts the sessions that write there, the inspector says a change cannot be attributed to the task alone, and Changes reads the review engine\'s `shared` arm with commit and discard blocked by name',
       'orch-dep.app.2 a visual layout change dispatches nothing and is undoable: moving an island in the column changes only the presentation order (persisted to the workspace record), leaves spawns, sends, lanes and PTY sessions untouched, Undo move restores the previous order, and a new island appends without re-arranging the others',
@@ -565,6 +565,8 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // Folded at rest IN THE SCENE (the List shows the column whole; an earlier block may have left the lens there).
       await click('[data-orch-lens="scene"]')
       const folded = await waitUntil(() => wc.executeJavaScript(`(() => { const col = document.querySelector('[data-orch-islands]'); if (!col) return false; return { open: col.hasAttribute('data-orch-islands-open'), cards: col.querySelectorAll('[data-orch-island-id]').length, toggle: col.querySelector('[data-orch-islands-toggle]')?.textContent ?? null } })()`), 8000)
+      // M291. The scene's platform plates carry the island ids the column's cards do.
+      const plates = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-orch-platform-plate][data-orch-island-id]')].map((e) => e.getAttribute('data-orch-island-id'))`)
       const isl1 = await waitUntil(async () => { const r = await islandsRead(); return r && r.cards.some((c) => c.id === itemA) && r.cards.some((c) => c.id === itemB) ? r : false }, 8000)
       await demo('m288-1-two-islands')
       // A: its own subject, its own file, its own diff.
@@ -583,13 +585,13 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const cardA = isl1.cards.find((c) => c.id === itemA), cardB = isl1.cards.find((c) => c.id === itemB)
       const repoName = repo.split('/').filter(Boolean).pop()
       ok(IDS[0],
-        folded && folded.open === false && folded.cards === 1 && /2 islands/.test(String(folded.toggle)) &&
+        folded && folded.open === false && folded.cards === 0 && /2 islands/.test(String(folded.toggle)) && plates.includes(itemA) && plates.includes(itemB) &&
           isl1 && isl1.cards.length >= 2 && cardA && cardB && /own worktree/.test(cardA.place) && /own worktree/.test(cardB.place) && cardA.place !== cardB.place &&
           new RegExp(`^${A.lane.branch === undefined ? '' : ''}`).test('') && cardA.place.includes(A.lane.branch) && cardB.place.includes(B.lane.branch) && /1 session/.test(cardA.state) &&
           isl1.groups.length === 1 && isl1.groups[0].n >= 2 && isl1.groups[0].label.startsWith(repoName) && /not a supervisor/.test(String(isl1.grouping)) &&
           a1 && a1.files.join() === 'a.txt' && consistent(a1) && a2 && consistent(a2) && a2.diffKey === `${keyA}:a.txt` &&
           b1 && b1.files.join() === 'b.txt' && consistent(b1) && b2 && consistent(b2) && b2.subject === keyB && !/A changed/.test(b2.text) && b2.diffKey === null,
-        JSON.stringify({ folded, isl1, a1: a1 && { subject: a1.subject, files: a1.files, controls: a1.controls, diffSubject: a1.diffSubject }, a2: a2 && { diffKey: a2.diffKey }, b1: b1 && { subject: b1.subject, files: b1.files }, b2: b2 && { subject: b2.subject, diffKey: b2.diffKey, hasA: /A changed/.test(b2.text) }, log: cLog.slice(-3) }))
+        JSON.stringify({ folded, plates, isl1, a1: a1 && { subject: a1.subject, files: a1.files, controls: a1.controls, diffSubject: a1.diffSubject }, a2: a2 && { diffKey: a2.diffKey }, b1: b1 && { subject: b1.subject, files: b1.files }, b2: b2 && { subject: b2.subject, diffKey: b2.diffKey, hasA: /A changed/.test(b2.text) }, log: cLog.slice(-3) }))
 
       // orch-islands.app.2 — rapid selection and out-of-order answers, sampled.
       const samples = []
@@ -825,4 +827,463 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       try { if (shared) rmSync(shared, { recursive: true, force: true }) } catch { /* best effort */ }
     }
   }
+  // ---------------------------------------------------------------------
+  // M291 — the platform scene in the REAL renderer (orch-3d.app.*): hit
+  // targets read through document.elementFromPoint at three zooms, and stable
+  // placement when a new island lands while the page is open.
+  // ---------------------------------------------------------------------
+  {
+    const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+    const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+    const demo = async (name) => {
+      if (!process.env.TC_DEMO_SHOTS) return
+      mkdirSync(process.env.TC_DEMO_SHOTS, { recursive: true })
+      writeFileSync(join(process.env.TC_DEMO_SHOTS, `${name}.png`), (await wc.capturePage()).toPNG())
+    }
+    const IDS = [
+      'orch-3d.app.1 every platform, station, checkpoint and artifact is what document.elementFromPoint answers at the centre of its own hit-target, at the resting zoom and after zooming out and in; where a station stands over its plate the station wins, and a checkpoint and an artifact are distinct objects (their own shape word) beside the stations',
+      'orch-3d.app.2 placement is stable under a live update: a session minted in a NEW directory while the page is open lands on a new platform in the next cell, every existing platform keeps its cell and (with nothing off-stage) its exact hit-target, and the persisted island order only appends'
+    ]
+    try {
+      state.backend = createDirectBackend('verify: direct (m291 platforms)')
+      const home = require('node:os').homedir()
+      const repo = mkdtempSync(join(tmpdir(), 'tc panels orch 3d-'))
+      const g = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+      g('init', '-q', '.'); g('config', 'user.email', 'v@example.com'); g('config', 'user.name', 'v')
+      writeFileSync(join(repo, 'a.txt'), 'a\n'); g('add', '-A'); g('commit', '-qm', 'init')
+      // Two agent terminals in the repository (an island of one directory), a
+      // watcher there (a checkpoint), a file panel there (an artifact), and one
+      // plain terminal at home (the workspace plate). All off the viewport so
+      // nothing spawns at boot.
+      const term = (id, cwd, agent) => ({ kind: 'terminal', rect: { id, x: 6000, y: 6000, w: 320, h: 220 }, z: 1, spec: { panelId: id, cwd, command: '/bin/sh', args: [], ...(agent ? { agent: 'claude-code' } : {}) } })
+      layoutStore.save({
+        panels: fromPanels([
+          term('pA', repo, true), term('pB', repo, true), term('pH', home, false),
+          { kind: 'watcher', rect: { id: 'pW', x: 6000, y: 6400, w: 320, h: 220 }, z: 1, watch: { cwd: repo, command: '/bin/sh', args: ['-c', 'true'], trigger: { kind: 'timer', everyMs: 3600000 } } },
+          { kind: 'file', rect: { id: 'pF', x: 6400, y: 6400, w: 320, h: 220 }, z: 1, source: { path: join(repo, 'a.txt') } }
+        ]),
+        camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+      })
+      layoutStore.flushSync()
+      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await re
+      await settle()
+      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await waitUntil(orchShown, 3000)
+      await click('[data-orch-lens="scene"]')
+      await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= 2 && document.querySelector('.orch__graph-scene [data-node="pW"]') !== null`), 8000)
+      await settle()
+      // Every hit-target's centre, asked of the DOM: the element there must belong to the same object.
+      const HIT_READ = `(() => {
+        const out = []
+        // Only targets ON the stage: a zoom can carry an object past the scene's
+        // clipped box, where the element under its centre is whatever pane sits there.
+        const stage = document.querySelector('.orch__graph--ground').getBoundingClientRect()
+        const on = (c) => c.x > stage.left + 2 && c.x < stage.right - 2 && c.y > stage.top + 2 && c.y < stage.bottom - 2
+        const own = (el) => { const o = el && el.closest('[data-node]'); if (o) return { kind: 'object', id: o.getAttribute('data-node') }; const p = el && el.closest('[data-orch-platform]'); return p ? { kind: 'platform', id: p.getAttribute('data-orch-platform') } : { kind: 'none', id: el ? el.className.baseVal || el.className : null } }
+        for (const el of document.querySelectorAll('.orch__graph-scene [data-orch-platform-hit]')) {
+          const r = el.getBoundingClientRect(); const c = { x: r.left + r.width / 2, y: r.top + r.height * 0.8 }
+          if (on(c)) out.push({ want: { kind: 'platform', id: el.getAttribute('data-orch-platform-hit') }, got: own(document.elementFromPoint(c.x, c.y)), w: r.width })
+        }
+        for (const el of document.querySelectorAll('.orch__graph-scene [data-node] .orch__cube-hit')) {
+          const r = el.getBoundingClientRect(); const c = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+          const cube = el.closest('[data-node]')
+          if (on(c)) out.push({ want: { kind: 'object', id: cube.getAttribute('data-node'), object: cube.getAttribute('data-orch-object') }, got: own(document.elementFromPoint(c.x, c.y)) })
+        }
+        return out
+      })()`
+      const wheel = (dy, n) => wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph--ground'); const r = s.getBoundingClientRect(); for (let i = 0; i < ${n}; i++) s.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: ${dy}, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+      const rest = await wc.executeJavaScript(HIT_READ)
+      await demo('m291-1-platforms-rest')
+      await wheel(100, 6); await settle()
+      const out = await wc.executeJavaScript(HIT_READ)
+      const zoomOut = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => e.getAttribute('data-orch-platform-zoom'))`)
+      await demo('m291-2-platforms-zoomed-out')
+      await wheel(-100, 10); await settle()
+      const inn = await wc.executeJavaScript(HIT_READ)
+      await demo('m291-3-platforms-zoomed-in')
+      // Names arrive at the evidence zoom: Fit selected on the island (a double-click on its plate).
+      const islandPlate = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene [data-orch-platform-plate][data-orch-island-id]')?.getAttribute('data-orch-platform-plate') ?? null`)
+      await wc.executeJavaScript(`(() => { const h = document.querySelector('.orch__graph-scene [data-orch-platform="${islandPlate}"] [data-orch-platform-hit]'); h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await settle()
+      const same = (r) => r.got.kind === r.want.kind && r.got.id === r.want.id
+      const kinds = await wc.executeJavaScript(`(() => { const k = (id) => { const c = document.querySelector('.orch__graph-scene [data-node="' + id + '"]'); return c ? { object: c.getAttribute('data-orch-object'), plate: c.querySelector('.orch__cube-role')?.textContent ?? null } : null }; return { pA: k('pA'), pW: k('pW'), pF: k('pF'), pH: k('pH') } })()`)
+      const cells = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => ({ id: e.getAttribute('data-orch-platform'), cell: e.getAttribute('data-orch-platform-cell') }))`)
+      // The home terminal stands on the workspace plate, which Fit selected left off stage; read it after Fit all.
+      await click('[data-orch-fit="all"]'); await settle()
+      kinds.pH = await wc.executeJavaScript(`(() => { const c = document.querySelector('.orch__graph-scene [data-node="pH"]'); return c ? { object: c.getAttribute('data-orch-object') } : null })()`)
+      ok(IDS[0],
+        rest.length >= 6 && rest.every(same) && out.length >= 3 && out.every(same) && inn.length >= 1 && inn.every(same) && rest.some((r) => r.want.kind === 'platform') && rest.some((r) => r.want.object === 'station') &&
+          kinds.pA && kinds.pA.object === 'station' && kinds.pW && kinds.pW.object === 'checkpoint' && /^check · /.test(String(kinds.pW.plate)) && kinds.pF && kinds.pF.object === 'artifact' && kinds.pF.plate === 'file' &&
+          kinds.pH && kinds.pH.object === 'station' && cells.length >= 2,
+        JSON.stringify({ rest, out: out.filter((r) => !same(r)), inn: inn.filter((r) => !same(r)), zoomOut, kinds, cells }))
+
+      // orch-3d.app.2 — a new island lands while the page is open.
+      const before = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => { const r = e.querySelector('[data-orch-platform-hit]').getBoundingClientRect(); return { id: e.getAttribute('data-orch-platform'), cell: e.getAttribute('data-orch-platform-cell'), x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) } })`)
+      const orderBefore = await wc.executeJavaScript(`document.querySelector('.orch__graph-wrap')?.getAttribute('data-orch-island-order') ?? ''`)
+      const camBefore = await wc.executeJavaScript(`(() => { const v = document.querySelector('.orch__minimap-view'); return v ? v.getAttribute('x') + ',' + v.getAttribute('width') : null })()`)
+      const repo2 = mkdtempSync(join(tmpdir(), 'tc panels orch 3d-two-'))
+      const minted = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(repo2)})`)
+      const after = await waitUntil(() => wc.executeJavaScript(`(() => { const list = [...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')]; if (list.length !== ${before.length} + 1) return false; return list.map((e) => { const r = e.querySelector('[data-orch-platform-hit]').getBoundingClientRect(); return { id: e.getAttribute('data-orch-platform'), cell: e.getAttribute('data-orch-platform-cell'), x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) } }) })()`), 8000)
+      await settle()
+      const orderAfter = await wc.executeJavaScript(`document.querySelector('.orch__graph-wrap')?.getAttribute('data-orch-island-order') ?? ''`)
+      const camAfter = await wc.executeJavaScript(`(() => { const v = document.querySelector('.orch__minimap-view'); return v ? v.getAttribute('x') + ',' + v.getAttribute('width') : null })()`)
+      await demo('m291-4-new-island-appended')
+      const kept = after ? before.every((b) => { const a = after.find((x) => x.id === b.id); return a && a.cell === b.cell }) : false
+      const newOne = after ? after.find((a) => !before.some((b) => b.id === a.id)) : null
+      const lastCell = before.map((b) => b.cell.split(',').map(Number)).sort((p, q) => (p[1] * 3 + p[0]) - (q[1] * 3 + q[0])).pop()
+      const nextIndex = lastCell[1] * 3 + lastCell[0] + 1
+      // The camera moves ONLY when the new platform landed off-stage (then the
+      // minimap's viewport changed); when it did not move, every rect is exact.
+      const camMoved = camBefore !== camAfter
+      const rectsKept = after ? before.every((b) => { const a = after.find((x) => x.id === b.id); return a && a.x === b.x && a.y === b.y && a.w === b.w }) : false
+      ok(IDS[1],
+        minted && minted.kind === 'spawned' && after && kept && newOne && newOne.cell === `${nextIndex % 3},${Math.floor(nextIndex / 3)}` && (rectsKept || camMoved) &&
+          orderAfter.startsWith(orderBefore) && orderAfter.length > orderBefore.length && orderAfter.includes(repo2.split('/').pop()),
+        JSON.stringify({ minted, before, after, orderBefore, orderAfter, rectsKept, camMoved }))
+      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      try { rmSync(repo, { recursive: true, force: true }); rmSync(repo2, { recursive: true, force: true }) } catch { /* scratch */ }
+    } catch (error) {
+      for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // M292 — semantic zoom, the minimap, Fit / Back, and the MEASURED fixtures
+  // (orch-zoom.app.*). The fixtures are 1, 6, 25 and 100 agent sessions spread
+  // over directories (one island per ten sessions), seeded through the real
+  // store and reloaded; frame time is read off requestAnimationFrame while the
+  // camera is driven by wheel events every frame, memory off the renderer's
+  // JS heap and its process working set. The numbers go to the console as
+  // MEASURE lines for the ledger; the check asserts what must hold at every
+  // size: every waiting station is drawn, and the honest overflow count.
+  // ---------------------------------------------------------------------
+  {
+    const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+    const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+    const demo = async (name) => {
+      if (!process.env.TC_DEMO_SHOTS) return
+      mkdirSync(process.env.TC_DEMO_SHOTS, { recursive: true })
+      writeFileSync(join(process.env.TC_DEMO_SHOTS, `${name}.png`), (await wc.capturePage()).toPNG())
+    }
+    const IDS = [
+      'orch-zoom.app.1 semantic zoom: zoomed out every platform is at task summary (its plate says the state and the counts, idle stations are not drawn, a WAITING station still is); zoomed in the platform shows its stations, then its evidence; Fit all brings every platform on stage, Fit selected frames the focused island, Back returns the previous camera, the breadcrumb names All work › island › object, and the minimap draws every platform with the viewport over them',
+      'orch-zoom.app.2 fixtures of 1, 6, 25 and 100 sessions all render: every waiting station is drawn at every size (never behind an overflow), a platform past the cap says +N more with an honest count, a focused platform expands to seat them all, the quality tier is one of full / lean / flat and never stalls the page (the measurement loop completes), and frame time and memory were recorded for the ledger'
+    ]
+    const dirs = []
+    try {
+      state.backend = createDirectBackend('verify: direct (m292 zoom)')
+      const seed = async (n) => {
+        const groups = Math.max(1, Math.ceil(n / 10))
+        while (dirs.length < groups) dirs.push(mkdtempSync(join(tmpdir(), `tc panels orch fx${dirs.length}-`)))
+        const panels = []
+        for (let i = 0; i < n; i++) panels.push({ kind: 'terminal', rect: { id: `fx${i}`, x: 6000 + i * 10, y: 6000, w: 320, h: 220 }, z: 1, spec: { panelId: `fx${i}`, cwd: dirs[i % groups], command: '/bin/sh', args: [], agent: 'claude-code' } })
+        layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await re
+        await settle()
+        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await waitUntil(orchShown, 3000)
+        await click('[data-orch-lens="scene"]')
+        await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        // A fifth working, a tenth waiting on a person — the tiers the scene is for.
+        const waiting = []
+        for (let i = 0; i < n; i++) {
+          if (i % 10 === 3) { wc.send('agent:state', { panelId: `fx${i}`, state: 'wants-you' }); waiting.push(`fx${i}`) }
+          else if (i % 5 === 1) wc.send('agent:state', { panelId: `fx${i}`, state: 'busy' })
+        }
+        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= ${groups} && !!document.querySelector('.orch__cube-canvas canvas')`), 15000)
+        await settle()
+        return { groups, waiting }
+      }
+      const measure = async (label) => {
+        // 90 frames, the camera zoomed a notch every frame so every frame is a
+        // real repaint (demand mode would otherwise paint nothing, honestly).
+        const frames = await wc.executeJavaScript(`new Promise((resolve) => {
+          const s = document.querySelector('.orch__graph--ground'); const r = s.getBoundingClientRect()
+          const dts = []; let last = performance.now(); let i = 0
+          const step = (now) => { dts.push(now - last); last = now; i += 1
+            s.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: i % 30 < 15 ? 60 : -60, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }))
+            if (i < 90) requestAnimationFrame(step); else resolve(dts.slice(1)) }
+          requestAnimationFrame(step) })`)
+        const sorted = [...frames].sort((a, b) => a - b)
+        const mean = frames.reduce((a, b) => a + b, 0) / frames.length
+        const p95 = sorted[Math.floor(sorted.length * 0.95)]
+        const heap = await wc.executeJavaScript(`performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null`)
+        const pid = wc.getOSProcessId()
+        const metrics = app.getAppMetrics()
+        const renderer = metrics.find((m) => m.pid === pid)
+        const gpu = metrics.find((m) => m.type === 'GPU')
+        const quality = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene')?.getAttribute('data-orch-quality') ?? null`)
+        const counts = await wc.executeJavaScript(`({ platforms: document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length, objects: document.querySelectorAll('.orch__graph-scene [data-node]').length, plates: document.querySelectorAll('.orch__graph-scene .orch__plate').length })`)
+        const row = { label, meanMs: Math.round(mean * 10) / 10, p95Ms: Math.round(p95 * 10) / 10, heapMB: heap, rendererWorkingSetMB: renderer ? Math.round(renderer.memory.workingSetSize / 1024) : null, gpuWorkingSetMB: gpu ? Math.round(gpu.memory.workingSetSize / 1024) : null, quality, ...counts }
+        console.log(`MEASURE ${JSON.stringify(row)}`)
+        return row
+      }
+      const rows = []
+      const facts = []
+      for (const n of [1, 6, 25, 100]) {
+        const { groups, waiting } = await seed(n)
+        // BEFORE the quality work: the tier pinned to full (composer, shadows, pools, every plate).
+        await wc.executeJavaScript(`window.__tcOrchQuality = 'full'`)
+        await sleep(600)
+        rows.push(await measure(`${n} sessions · pinned full`))
+        // AFTER: adaptive — the tier follows the measured frame.
+        await wc.executeJavaScript(`delete window.__tcOrchQuality`)
+        await sleep(1200)
+        rows.push(await measure(`${n} sessions · adaptive`))
+        await click('[data-orch-fit="all"]'); await settle()
+        const fact = await wc.executeJavaScript(`(() => {
+          const waitingDrawn = [...document.querySelectorAll('.orch__graph-scene [data-node][data-tone="needs-you"]')].map((e) => e.getAttribute('data-node'))
+          const more = [...document.querySelectorAll('.orch__graph-scene [data-orch-platform-more]')].map((e) => ({ n: Number(e.getAttribute('data-orch-platform-more')), text: e.querySelector('text')?.textContent ?? '' }))
+          return { waitingDrawn, more, platforms: document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length, quality: document.querySelector('.orch__graph-scene')?.getAttribute('data-orch-quality') ?? null }
+        })()`)
+        facts.push({ n, groups, waiting, ...fact })
+        await demo(`m292-fixture-${n}`)
+        if (n === 100) {
+          // Focus a capped platform: it expands and seats every station.
+          const plate = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene [data-orch-platform-more]')?.closest('[data-orch-platform]')?.getAttribute('data-orch-platform') ?? null`)
+          if (plate !== null) {
+            await wc.executeJavaScript(`(() => { const h = document.querySelector('.orch__graph-scene [data-orch-platform="${plate}"] [data-orch-platform-hit]'); h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+            await settle()
+            const expanded = await wc.executeJavaScript(`(() => { const h = document.querySelector('.orch__graph-scene [data-orch-platform="${plate}"]'); return h ? { expanded: h.hasAttribute('data-orch-platform-expanded'), stations: h.parentElement.querySelectorAll('[data-orch-object="station"]').length, more: h.querySelector('[data-orch-platform-more]') !== null } : null })()`)
+            facts[facts.length - 1].expanded = expanded
+            await sleep(500) // a hidden window's capturePage can lag the DOM a step
+            await demo('m292-fixture-100-focused')
+          }
+        }
+        await click('[data-dock="orchestration"][aria-pressed="true"]')
+        for (let i = 0; i < n; i++) wc.send('agent:state', { panelId: `fx${i}`, state: 'idle' })
+      }
+      const okFacts = facts.every((f) => f.waiting.every((id) => f.waitingDrawn.includes(id)) && f.platforms >= f.groups && ['full', 'lean', 'flat'].includes(f.quality))
+      const big = facts.find((f) => f.n === 100)
+      ok(IDS[1],
+        okFacts && rows.length === 8 && rows.every((r) => Number.isFinite(r.meanMs)) && big && big.more.length > 0 && big.more.every((m) => /^\+\d+ more · (none|\d+) need you$/.test(m.text)) &&
+          big.expanded && big.expanded.expanded === true && big.expanded.more === false && big.expanded.stations >= 10,
+        JSON.stringify({ rows, facts: facts.map((f) => ({ n: f.n, groups: f.groups, platforms: f.platforms, waiting: f.waiting.length, drawn: f.waitingDrawn.length, more: f.more, quality: f.quality, expanded: f.expanded })) }))
+
+      // orch-zoom.app.1 — on the 6-session fixture: levels, fit, back, breadcrumb, minimap.
+      const { waiting } = await seed(6)
+      const wheel = (dy, n) => wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph--ground'); const r = s.getBoundingClientRect(); for (let i = 0; i < ${n}; i++) s.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: ${dy}, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+      const readLevels = () => wc.executeJavaScript(`(() => ({ levels: [...document.querySelectorAll('.orch__graph-scene [data-orch-platform]')].map((e) => e.getAttribute('data-orch-platform-zoom')), objects: document.querySelectorAll('.orch__graph-scene [data-node]').length, waiting: [...document.querySelectorAll('.orch__graph-scene [data-node][data-tone="needs-you"]')].map((e) => e.getAttribute('data-node')), counts: [...document.querySelectorAll('.orch__graph-scene [data-orch-platform-counts]')].map((e) => e.textContent), view: document.querySelector('.orch__minimap-view')?.getAttribute('width'), plates: document.querySelectorAll('.orch__minimap-plate').length }))()`)
+      await wheel(120, 14); await settle()
+      const far = await readLevels()
+      await demo('m292-1-summary')
+      await wheel(-120, 8); await settle()
+      const mid = await readLevels()
+      await wheel(-120, 14); await settle()
+      const near = await readLevels()
+      await demo('m292-2-evidence')
+      await click('[data-orch-fit="all"]'); await settle()
+      const fitted = await wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph--ground').getBoundingClientRect(); return [...document.querySelectorAll('.orch__graph-scene [data-orch-platform-hit]')].every((h) => { const r = h.getBoundingClientRect(); return r.left >= s.left - 1 && r.right <= s.right + 1 && r.top >= s.top - 1 && r.bottom <= s.bottom + 1 }) })()`)
+      const viewAfterFit = await wc.executeJavaScript(`document.querySelector('.orch__minimap-view')?.getAttribute('width')`)
+      await click('.orch__graph-scene [data-orch-platform-plate]'); await settle()
+      await click('[data-orch-fit="selected"]'); await settle()
+      const viewAfterSel = await wc.executeJavaScript(`document.querySelector('.orch__minimap-view')?.getAttribute('width')`)
+      const crumbsSel = await wc.executeJavaScript(`[...document.querySelectorAll('[data-orch-crumb]')].map((e) => e.getAttribute('data-orch-crumb') + ':' + e.textContent)`)
+      await click('.orch__graph-scene [data-node="fx0"]'); await settle()
+      const crumbsObj = await wc.executeJavaScript(`[...document.querySelectorAll('[data-orch-crumb]')].map((e) => e.getAttribute('data-orch-crumb') + ':' + e.textContent)`)
+      await click('[data-orch-camera-back]'); await settle()
+      const viewAfterBack = await wc.executeJavaScript(`document.querySelector('.orch__minimap-view')?.getAttribute('width')`)
+      await demo('m292-3-breadcrumb-minimap')
+      ok(IDS[0],
+        far.levels.length >= 1 && far.levels.every((l) => l === 'summary') && far.counts.length >= 1 && far.counts.some((c) => /station/.test(c)) && far.counts.every((c) => c !== '') && waiting.every((id) => far.waiting.includes(id)) && far.objects === far.waiting.length &&
+          mid.levels.some((l) => l === 'stations' || l === 'evidence') && mid.objects > far.objects && near.levels.some((l) => l === 'evidence') &&
+          fitted === true && far.plates >= 1 && viewAfterFit !== null && viewAfterSel !== null && Number(viewAfterSel) < Number(viewAfterFit) && viewAfterBack === viewAfterFit &&
+          crumbsSel.some((c) => c.startsWith('all:All work')) && crumbsSel.some((c) => c.startsWith('platform:')) && crumbsObj.some((c) => /^object:.*station$/.test(c)),
+        JSON.stringify({ far, mid: { levels: mid.levels, objects: mid.objects }, near: { levels: near.levels }, fitted, viewAfterFit, viewAfterSel, viewAfterBack, crumbsSel, crumbsObj }))
+      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      for (let i = 0; i < 6; i++) wc.send('agent:state', { panelId: `fx${i}`, state: 'idle' })
+    } catch (error) {
+      for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
+    } finally {
+      for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* scratch */ } }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // M293 — parity and fallback (orch-parity.app.*): the List holds every scene
+  // object with the same actions and sorts; the keyboard walks the scene; the
+  // WebGL context is actually DENIED and every essential action survives;
+  // reduced motion, a narrow window and the dark theme keep them reachable.
+  // ---------------------------------------------------------------------
+  {
+    const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+    const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+    const demo = async (name) => {
+      if (!process.env.TC_DEMO_SHOTS) return
+      mkdirSync(process.env.TC_DEMO_SHOTS, { recursive: true })
+      writeFileSync(join(process.env.TC_DEMO_SHOTS, `${name}.png`), (await wc.capturePage()).toPNG())
+    }
+    const IDS = [
+      'orch-parity.app.1 the List is the scene\'s equal: every station, checkpoint and artifact the scene draws is a row with its kind, state and island, sortable by each column (ascending, descending, back to scene order), selection syncs both ways, a row\'s double-click and the inspector\'s Open on canvas are the same labelled action, and Enter in the List inspects rather than leaves',
+      'orch-parity.app.2 the keyboard reaches every object without a precision click: in the scene the arrow keys step to the nearest object in that direction across platforms, focus follows the selection, Enter hands the keyboard to the inspector\'s Open on canvas, and a double-click on a platform focuses that island and frames it',
+      'orch-parity.app.3 with WebGL actually DENIED (getContext returns null for every webgl kind before the page opens) the scene says so, mounts no island, paints flat plates and objects with their words, and a click, the inspector and Open on canvas all still work; under prefers-reduced-motion nothing in the scene animates and the same actions stand',
+      'orch-parity.app.4 a narrow window (980px) and the dark theme keep the essential actions on screen and reachable: Scene | List, Fit all, the Needs attention door, the inspector\'s Open on canvas and the workbench tabs all have a visible box inside the viewport'
+    ]
+    const dirs = []
+    const [w0, h0] = win.getSize()
+    try {
+      state.backend = createDirectBackend('verify: direct (m293 parity)')
+      const home = require('node:os').homedir()
+      const repo = mkdtempSync(join(tmpdir(), 'tc panels orch parity-')); dirs.push(repo)
+      writeFileSync(join(repo, 'notes.txt'), 'n\n')
+      const term = (id, cwd, agent, x) => ({ kind: 'terminal', rect: { id, x, y: 6000, w: 320, h: 220 }, z: 1, spec: { panelId: id, cwd, command: '/bin/sh', args: [], ...(agent ? { agent: 'claude-code' } : {}) } })
+      const seed = async () => {
+        layoutStore.save({
+          panels: fromPanels([
+            term('qA', repo, true, 6000), term('qB', repo, true, 6400), term('qH', home, false, 6800),
+            { kind: 'watcher', rect: { id: 'qW', x: 6000, y: 6400, w: 320, h: 220 }, z: 1, watch: { cwd: repo, command: '/bin/sh', args: ['-c', 'true'], trigger: { kind: 'timer', everyMs: 3600000 } } },
+            { kind: 'file', rect: { id: 'qF', x: 6400, y: 6400, w: 320, h: 220 }, z: 1, source: { path: join(repo, 'notes.txt') } }
+          ]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await re
+        await settle()
+        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await waitUntil(orchShown, 3000)
+        await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      }
+      await seed()
+      await click('[data-orch-lens="scene"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-node]').length >= 5`), 8000)
+      const sceneIds = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__graph-scene [data-node]')].map((e) => e.getAttribute('data-node') + ':' + e.getAttribute('data-orch-object')).sort()`)
+      // The List: every scene object, with kind, state and island.
+      await click('[data-orch-lens="list"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-orch-list-row]').length >= 5`), 6000)
+      const readRows = () => wc.executeJavaScript(`[...document.querySelectorAll('[data-orch-list-row]')].map((r) => ({ id: r.getAttribute('data-orch-list-row'), kind: r.getAttribute('data-orch-list-kind'), cells: [...r.querySelectorAll('td')].map((c) => c.textContent.trim()), selected: r.hasAttribute('data-selected') }))`)
+      const rows0 = await readRows()
+      const listIds = rows0.map((r) => `${r.id}:${r.kind}`).sort()
+      // Titles without the `in task` tag; a tie keeps scene order in both directions.
+      const titles = (rows) => rows.map((r) => r.cells[0].replace(/in task$/, ''))
+      await click('[data-orch-list-sort-by="name"]'); const asc = titles(await readRows())
+      await click('[data-orch-list-sort-by="name"]'); const desc = titles(await readRows())
+      await click('[data-orch-list-sort-by="name"]'); const back = (await readRows()).map((r) => r.id)
+      const sorts = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__list-table th')].map((t) => t.getAttribute('aria-sort'))`)
+      await click('[data-orch-list-sort-by="kind"]'); const byKind = (await readRows()).map((r) => r.kind)
+      await click('[data-orch-list-sort-by="kind"]'); await click('[data-orch-list-sort-by="kind"]')
+      // Selection syncs: the artifact row selects, the inspector shows it with Open on canvas; then the scene shows the same selection.
+      await click('[data-orch-list-row="qF"] button')
+      const artifactInspector = await waitUntil(() => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="qF"]'); return i ? { title: i.querySelector('[data-orch-inspector-title]')?.textContent, state: i.querySelector('[data-orch-inspector-state]')?.textContent, open: i.querySelector('[data-orch-open]')?.textContent, rowOn: document.querySelector('[data-orch-list-row="qF"]')?.hasAttribute('data-selected') } : false })()`), 4000)
+      await click('[data-orch-lens="scene"]')
+      const sceneOn = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch__graph-scene [data-node="qF"]')?.classList.contains('orch__cube--on') || false`), 4000)
+      await demo('m293-1-list-parity')
+      // Enter on a List row (its button) selects it — the inspector follows the
+      // selection, so that IS inspecting — and stays on this page (Phase A's model).
+      await click('[data-orch-lens="list"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="qA"] button') !== null`), 4000)
+      wc.focus()
+      await wc.executeJavaScript(`(() => { document.querySelector('[data-orch-list-row="qA"] button').focus(); return true })()`)
+      // A button's Enter activation rides the keypress: the `char` event is what makes one.
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'char', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+      const afterEnter = await waitUntil(() => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="qA"] [data-orch-open]'); return i ? { focused: 'open', still: document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null } : false })()`), 4000)
+      ok(IDS[0],
+        sceneIds.length >= 5 && listIds.join() === sceneIds.join() && rows0.some((r) => r.kind === 'checkpoint' && /^checkpoint · watcher/.test(r.cells[1])) && rows0.some((r) => r.kind === 'artifact' && r.cells[2] === 'file') &&
+          rows0.every((r) => r.cells[3] !== '') && asc.join() === [...asc].sort((a, b) => a.localeCompare(b)).join() && desc.every((t, i) => i === 0 || desc[i - 1].localeCompare(t) >= 0) && back.join() === rows0.map((r) => r.id).join() &&
+          sorts.every((x) => x === 'none' || x === null) && byKind.join() === [...byKind].sort().join() &&
+          artifactInspector && artifactInspector.state === 'artifact' && artifactInspector.open === 'Open on canvas' && artifactInspector.rowOn === true && sceneOn === true &&
+          afterEnter && afterEnter.focused === 'open' && afterEnter.still === true,
+        JSON.stringify({ sceneIds, listIds, rows0: rows0.slice(0, 6), asc, desc, back, sorts, byKind, artifactInspector, sceneOn, afterEnter }))
+
+      // orch-parity.app.2 — the keyboard in the scene.
+      await click('[data-orch-lens="scene"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-node]').length >= 5`), 6000)
+      await click('[data-orch-fit="all"]'); await settle()
+      await click('.orch__graph-scene [data-node="qW"]'); await settle()
+      const pos = await wc.executeJavaScript(`Object.fromEntries([...document.querySelectorAll('.orch__graph-scene [data-node]')].map((e) => { const r = e.querySelector('.orch__cube-hit').getBoundingClientRect(); return [e.getAttribute('data-node'), { x: r.left + r.width / 2, y: r.top + r.height / 2 }] }))`)
+      wc.focus()
+      await wc.executeJavaScript(`document.querySelector('.orch__graph-scene [data-node="qW"]').parentElement.focus()`)
+      const press = async (code) => { wc.sendInputEvent({ type: 'keyDown', keyCode: code }); wc.sendInputEvent({ type: 'keyUp', keyCode: code }); await sleep(120) }
+      await press('Right')
+      const afterRight = await waitUntil(() => wc.executeJavaScript(`(() => { const on = document.querySelector('.orch__graph-scene .orch__cube--on'); if (!on || on.getAttribute('data-node') === 'qW') return false; return { id: on.getAttribute('data-node'), focused: document.activeElement?.querySelector('[data-node]')?.getAttribute('data-node') ?? null } })()`), 3000)
+      const walk = [afterRight && afterRight.id]
+      for (let i = 0; i < 6 && walk.length < 6; i++) { await press('Right'); const id = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene .orch__cube--on')?.getAttribute('data-node') ?? null`); if (id && !walk.includes(id)) walk.push(id) }
+      for (let i = 0; i < 6; i++) { await press('Down'); await press('Left'); const id = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene .orch__cube--on')?.getAttribute('data-node') ?? null`); if (id && !walk.includes(id)) walk.push(id) }
+      const rightIsRight = afterRight && pos[afterRight.id] && pos.qW && pos[afterRight.id].x > pos.qW.x
+      await press('Return')
+      const enterScene = await waitUntil(() => wc.executeJavaScript(`document.activeElement?.hasAttribute('data-orch-open') || false`), 3000)
+      // A platform's double-click focuses the island and frames it.
+      const viewBefore = await wc.executeJavaScript(`document.querySelector('.orch__minimap-view')?.getAttribute('width')`)
+      const plateId = await wc.executeJavaScript(`document.querySelector('.orch__graph-scene [data-orch-platform-plate][data-orch-island-id]')?.getAttribute('data-orch-platform-plate') ?? null`)
+      await wc.executeJavaScript(`(() => { const h = document.querySelector('.orch__graph-scene [data-orch-platform="${plateId}"] [data-orch-platform-hit]'); h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await settle()
+      const focusedPlate = await wc.executeJavaScript(`(() => ({ on: document.querySelector('.orch__graph-scene [data-orch-platform="${plateId}"]')?.classList.contains('orch__platform-host--on'), view: document.querySelector('.orch__minimap-view')?.getAttribute('width'), crumb: [...document.querySelectorAll('[data-orch-crumb="platform"]')].map((e) => e.textContent).join(), inspector: document.querySelector('[data-orch-inspector]')?.getAttribute('data-orch-inspector') }))()`)
+      await demo('m293-2-keyboard-walk')
+      ok(IDS[1],
+        afterRight && rightIsRight && afterRight.focused === afterRight.id && new Set(walk).size >= 3 && enterScene === true &&
+          focusedPlate.on === true && focusedPlate.view !== null && Number(focusedPlate.view) < Number(viewBefore) && focusedPlate.crumb !== '' && focusedPlate.inspector === 'task',
+        JSON.stringify({ afterRight, walk, pos, enterScene, viewBefore, focusedPlate }))
+
+      // orch-parity.app.3 — WebGL denied for real, then reduced motion.
+      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await wc.executeJavaScript(`(() => { const orig = HTMLCanvasElement.prototype.getContext; window.__tcOrigGetContext = orig; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /webgl/i.test(String(kind)) ? null : orig.call(this, kind, ...rest) }; return true })()`)
+      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await waitUntil(orchShown, 3000)
+      await click('[data-orch-lens="scene"]')
+      // Names arrive at the evidence zoom: Fit selected on the island first.
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch__graph-scene[data-orch-webgl="unavailable"] [data-orch-platform-plate][data-orch-island-id]') !== null`), 8000)
+      await wc.executeJavaScript(`(() => { const p = document.querySelector('.orch__graph-scene [data-orch-platform-plate][data-orch-island-id]').getAttribute('data-orch-platform-plate'); const h = document.querySelector('.orch__graph-scene [data-orch-platform="' + p + '"] [data-orch-platform-hit]'); h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await settle()
+      const denied = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); if (!s || s.getAttribute('data-orch-webgl') !== 'unavailable') return false; return { webgl: s.getAttribute('data-orch-webgl'), canvases: s.querySelectorAll('canvas').length, flatPlates: s.querySelectorAll('[data-orch-flat="platform"]').length, flatObjects: s.querySelectorAll('[data-orch-flat]:not([data-orch-flat="platform"])').length, plates: s.querySelectorAll('[data-orch-platform-plate]').length, words: [...s.querySelectorAll('.orch__cube-role')].map((e) => e.textContent), notice: document.querySelector('[data-orch-webgl-notice]')?.textContent ?? null } })()`), 8000)
+      await click('.orch__graph-scene [data-node="qA"]')
+      const deniedInspector = await waitUntil(() => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="qA"]'); return i ? { open: i.querySelector('[data-orch-open]')?.textContent ?? null, on: document.querySelector('.orch__graph-scene [data-node="qA"]')?.classList.contains('orch__cube--on') } : false })()`), 4000)
+      await demo('m293-3-webgl-denied')
+      await click('[data-orch-inspector="qA"] [data-orch-open]')
+      const jumped = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') === null && document.querySelector('.panel[data-panel-id="qA"]') !== null`), 4000)
+      await wc.executeJavaScript(`(() => { HTMLCanvasElement.prototype.getContext = window.__tcOrigGetContext; delete window.__tcOrigGetContext; return true })()`)
+      // Reduced motion: the emulated media, then every orch animation must be stood down and the actions stand.
+      try { wc.debugger.attach('1.3') } catch { /* attached */ }
+      await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await waitUntil(orchShown, 3000)
+      await click('[data-orch-lens="scene"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-node]').length >= 5`), 8000)
+      wc.send('agent:state', { panelId: 'qB', state: 'wants-you' })
+      await settle()
+      const reduced = await wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); const animated = document.getAnimations().filter((a) => a.effect && a.effect.target && s.contains(a.effect.target) && a.playState === 'running').map((a) => (a.animationName || a.constructor.name) + ':' + (a.effect.target.className.baseVal || a.effect.target.className)); return { matches: matchMedia('(prefers-reduced-motion: reduce)').matches, animated, webgl: s.getAttribute('data-orch-webgl'), beacon: s.querySelector('[data-node="qB"] .orch__cube-beacon') !== null, fit: !!document.querySelector('[data-orch-fit="all"]'), list: !!document.querySelector('[data-orch-lens="list"]') } })()`)
+      await click('.orch__graph-scene [data-node="qB"]')
+      const reducedInspector = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-inspector="qB"] [data-orch-open]')?.textContent ?? false`), 4000)
+      await demo('m293-4-reduced-motion')
+      wc.send('agent:state', { panelId: 'qB', state: 'idle' })
+      await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
+      ok(IDS[2],
+        denied && denied.webgl === 'unavailable' && denied.canvases === 0 && denied.flatPlates >= 1 && denied.flatObjects >= 4 && denied.plates >= 1 && denied.words.some((w) => /^check · /.test(w)) && denied.words.includes('file') && typeof denied.notice === 'string' && /3D|WebGL/i.test(denied.notice) &&
+          deniedInspector && deniedInspector.open === 'Open on canvas' && deniedInspector.on === true && jumped === true &&
+          reduced.matches === true && reduced.animated.length === 0 && reduced.webgl === 'ready' && reduced.beacon === true && reduced.fit && reduced.list && reducedInspector === 'Open on canvas',
+        JSON.stringify({ denied, deniedInspector, jumped, reduced, reducedInspector }))
+
+      // orch-parity.app.4 — narrow and dark.
+      win.setSize(980, 700)
+      await settle()
+      await wc.executeJavaScript(`document.documentElement.setAttribute('data-theme', 'dark')`)
+      await click('.orch__graph-scene [data-node="qA"]'); await settle()
+      await click('[data-orch-workbench] [role="tab"]').catch(() => null)
+      const narrow = await wc.executeJavaScript(`(() => {
+        const inside = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight }
+        return { w: innerWidth, h: innerHeight, theme: document.documentElement.getAttribute('data-theme'),
+          lens: inside(document.querySelector('[data-orch-lens="list"]')), fit: inside(document.querySelector('[data-orch-fit="all"]')), attention: inside(document.querySelector('[data-dock="attention"]')) ?? inside(document.querySelector('[data-orch-needs]')),
+          open: inside(document.querySelector('[data-orch-inspector] [data-orch-open]')), tabs: inside(document.querySelector('.orch__workbench [role="tab"], [data-orch-workbench] [role="tab"]')), minimap: inside(document.querySelector('[data-orch-minimap]')) }
+      })()`)
+      await demo('m293-5-narrow-dark')
+      await wc.executeJavaScript(`document.documentElement.setAttribute('data-theme', 'light')`)
+      win.setSize(w0, h0)
+      await settle()
+      ok(IDS[3],
+        narrow.w <= 990 && narrow.theme === 'dark' && narrow.lens === true && narrow.fit === true && narrow.attention === true && narrow.open === true && narrow.tabs === true && narrow.minimap === true,
+        JSON.stringify(narrow))
+      await click('[data-dock="orchestration"][aria-pressed="true"]')
+    } catch (error) {
+      for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
+    } finally {
+      try { win.setSize(w0, h0) } catch { /* closed */ }
+      try { await wc.executeJavaScript(`(() => { if (window.__tcOrigGetContext) { HTMLCanvasElement.prototype.getContext = window.__tcOrigGetContext; delete window.__tcOrigGetContext } document.documentElement.setAttribute('data-theme', 'light'); return true })()`) } catch { /* reloaded */ }
+      try { wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] }) } catch { /* detached */ }
+      for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* scratch */ } }
+    }
+  }
+
 })

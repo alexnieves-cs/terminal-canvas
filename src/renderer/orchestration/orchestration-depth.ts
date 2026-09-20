@@ -88,6 +88,38 @@ export function orchGroundPlane(stage: OrchStage, cam: OrchCamera, baseDrop: num
 
 export const ORCH_COS_TILT = COS_TILT
 
+/**
+ * M291. The platform scene's projection: ONE uniform camera over a world that
+ * may be larger than the stage. Unlike `orchProjectNode`, no per-layer parallax —
+ * a platform is a rectangle spanning many y values, and a zoom rate that varies
+ * with y would warp its footprint (and detach its hit-target from the mesh, which
+ * is exactly what the cubes' fixed tilt exists to prevent). The tilt is the same
+ * foreshortening of y by cos(ORCH_STAGE_TILT_DEG), around the stage's centre.
+ * `depth` is the screen-y rank the meshes stack by: further down is nearer.
+ */
+export function orchProjectWorld(pt: { x: number; y: number }, stage: { w: number; h: number }, cam: OrchCamera): { x: number; y: number; depth: number } {
+  const fy = stage.h / 2 + (pt.y - stage.h / 2) * COS_TILT
+  return {
+    x: stage.w / 2 + (pt.x - stage.w / 2) * cam.k + cam.x,
+    y: stage.h / 2 + (fy - stage.h / 2) * cam.k + cam.y,
+    depth: (pt.y - stage.h / 2) / (stage.h / 2)
+  }
+}
+
+/**
+ * M292. The camera that shows `bounds` (model units, pre-tilt) whole in the
+ * stage, centred, with `pad` around it; k clamped to the scene's zoom range.
+ */
+export const ORCH_ZOOM_RANGE = { min: 0.22, max: 2.2 } as const
+export function orchFitCamera(bounds: { x: number; y: number; w: number; h: number }, stage: { w: number; h: number }, pad: number): OrchCamera {
+  const k = Math.min(ORCH_ZOOM_RANGE.max, Math.max(ORCH_ZOOM_RANGE.min, Math.min((stage.w - pad * 2) / Math.max(1, bounds.w), (stage.h - pad * 2) / Math.max(1, bounds.h * COS_TILT))))
+  const cx = bounds.x + bounds.w / 2
+  const cy = bounds.y + bounds.h / 2
+  // Solve orchProjectWorld(centre) = stage centre for cam.x / cam.y.
+  const fy = stage.h / 2 + (cy - stage.h / 2) * COS_TILT
+  return { k, x: -(cx - stage.w / 2) * k, y: -(fy - stage.h / 2) * k }
+}
+
 export interface OrchFit { scale: number; offsetX: number; offsetY: number }
 
 /**

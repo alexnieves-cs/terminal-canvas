@@ -4883,3 +4883,40 @@ the session `exited`: the chat store's `lastTurn` (new in M290, never persisted)
 (`agents.maxConcurrent`, `agents.budgetUsd`, `agents.budgetWindowPercent`); time is always
 `advisory` because nothing enforces one; spend sums only sessions whose row has `reportsCost`
 and counts the rest as Unknown by number, so no universal cap is implied across providers.
+
+**In the Orchestrate platform scene, hit order IS paint order, and both are `orchHitOrder`'s
+(`orchestration/orchestration-platforms.ts`, `OrchestrationView.tsx`'s overlay, M291).** The
+meshes are `pointer-events: none` glass; every click lands on the overlay SVG, where the DOM
+order decides what `elementFromPoint` answers. That order is one pure list — resting plates
+far to near, then their objects, then an EXPANDED plate and last its own objects — and the
+overlay maps it verbatim. A second ordering (a `sort` on the platforms alone, a card painted
+after the objects) silently makes a neighbour's station clickable THROUGH a focused plate that
+covers it, with no red anywhere; `orch-3d.4` pins the rule in plain node and `orch-3d.app.1`
+asks the real DOM at three zooms. The platform meshes (two layers, a fixed thickness, a finite
+lift) are decorative and expendable before that rect's accuracy — they never decide a hit.
+
+**The workspace platform holds cell 0 for good, and an island's cell is a function of its
+index in the persisted order alone (`orchPlatforms`, M291).** A first cut placed the workspace
+plate LAST; every new island then moved it one cell along, measured in the real app as the
+plate a person was looking at sliding right (`orch-3d.app.2`). Sizes are fixed too: a station
+arriving on one island cannot resize its neighbours, because past `ORCH_STATION_CAP` the plate
+seats the most urgent and COUNTS the rest (`+N more · none need you`), and only the FOCUSED
+plate expands. Every waiting (`wants-you`) station is seated on top of the cap, never inside it
+— a cap that counted them showed fewer working stations the more agents waited (`orch-3d.3`).
+
+**`three` and `@react-three/fiber` have exactly two importers, both behind the lazy island,
+and the pin reads the BUILT chunks (`orch-zoom.3`, M292).** `orch.bloom-door.1/.2` pinned
+postprocessing's importer and the `lazy()`; nothing pinned three's, and a static import from
+anything `Canvas.tsx` reaches puts ~2.3 MB into the first chunk with every suite green. The
+check greps the source for the importer set AND, when `out/renderer/assets` exists, refuses
+any `index-*.js` that contains `WebGLRenderer` — the source half alone cannot see a re-export
+chain. Measured 2026-09-20: `OrchestrationCubes-*.js` 2,344 kB apart, the first chunk with no
+renderer in it.
+
+**Orchestrate's quality tier follows the MEASURED frame, never a count, and the harness pins
+it only through `window.__tcOrchQuality` (`OrchestrationView.tsx`, M292).** A window of
+painted frames steps the tier down at a mean over 24 ms and up under 12 ms (hysteresis, so the
+bloom does not flicker at the edge); `lean` drops the composer and the ground pools, `flat`
+also the shadows — the bloom degrades before it stalls. The 1/6/25/100-session fixtures in
+`orch-zoom.app.2` measure each size pinned `full` and then adaptive on the same build; the
+numbers are the ledger's, and they are validation targets, not capacity claims.
