@@ -512,7 +512,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
     const consistent = (b) => b !== null && b.controls === b.subject && b.diffSubject === b.subject && (b.diffKey === null || b.diffKey.startsWith(b.subject + ':'))
     const sends = () => chatSpawns.reduce((n, sp) => n + sp.proc.stdin.filter((l) => { try { return JSON.parse(l).type === 'user' } catch { return false } }).length, 0)
     const IDS = [
-      'orch-islands.app.1 two isolated write tasks in two REAL worktrees of one repository are two islands grouped under that repository (labelled grouping, not a supervisor), each with its own branch, count and context label, and each with its OWN review subject: A\'s Changes lists only A\'s file and diff, B\'s only B\'s, and the diff pane, the controls and the strip name the same subject at every read',
+      'orch-islands.app.1 two isolated write tasks in two REAL worktrees of one repository are two islands (the scene\'s column folded at rest to the focused card and a toggle) grouped under that repository (labelled grouping, not a supervisor), each with its own branch, count and context label, and each with its OWN review subject: A\'s Changes lists only A\'s file and diff, B\'s only B\'s, and the diff pane, the controls and the strip name the same subject at every read',
       'orch-islands.app.2 rapid selection (A → B → A in one tick) and out-of-order answers (a diff still in flight when the subject changes; Refresh twice in one tick) never put one task\'s diff under another task\'s controls: sampled through the flips, the strip, the controls and the diff pane always name one subject, and the late answers are dropped',
       'orch-islands.app.3 shared-directory ambiguity is shown, not guessed: two chats in one directory are one island marked ambiguous, its label counts the sessions that write there, the inspector says a change cannot be attributed to the task alone, and Changes reads the review engine\'s `shared` arm with commit and discard blocked by name',
       'orch-dep.app.2 a visual layout change dispatches nothing and is undoable: moving an island in the column changes only the presentation order (persisted to the workspace record), leaves spawns, sends, lanes and PTY sessions untouched, Undo move restores the previous order, and a new island appends without re-arranging the others',
@@ -550,16 +550,21 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       itemA = A.id; itemB = B.id; chatA = A.chatId; chatB = B.chatId
       writeFileSync(join(A.lane.path, 'a.txt'), 'A changed\n')
       writeFileSync(join(B.lane.path, 'b.txt'), 'B changed\n')
-      const keyA = `task:${itemA}:${A.lane.id}`
-      const keyB = `task:${itemB}:${B.lane.id}`
+      const keyA = `task:${itemA}:${A.lane.id}:${chatA}`
+      const keyB = `task:${itemB}:${B.lane.id}:${chatB}`
       const spawns0 = chatSpawns.length, lanes0 = layoutStore.worktrees().length, sends0 = sends(), ptys0 = (await sessionMap(wc)).size
 
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await settle()
-      const islandsRead = () => wc.executeJavaScript(`(() => { const col = document.querySelector('[data-orch-islands]'); if (!col) return null
+      // The scene's column rests folded (the focused card + a toggle); every read below wants it open.
+      const openIslands = () => wc.executeJavaScript(`(() => { const t = document.querySelector('[data-orch-islands-toggle][aria-expanded="false"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!t })()`)
+      const islandsRead = async () => { await openIslands(); return wc.executeJavaScript(`(() => { const col = document.querySelector('[data-orch-islands]'); if (!col) return null
         return { order: col.getAttribute('data-orch-island-order'), cards: [...col.querySelectorAll('[data-orch-island-id]')].map((c) => ({ id: c.getAttribute('data-orch-island-id'), place: c.querySelector('[data-orch-island-place]')?.textContent ?? null, state: c.querySelector('.orch__float-state')?.textContent ?? null, ambiguous: c.hasAttribute('data-orch-island-ambiguous') })),
-          groups: [...col.querySelectorAll('[data-orch-island-group]')].map((gr) => ({ key: gr.getAttribute('data-orch-island-group'), label: gr.querySelector('.orch__island-group-label')?.textContent ?? null, n: gr.querySelectorAll('[data-orch-island-id]').length })), grouping: col.querySelector('[data-orch-grouping]')?.textContent ?? null } })()`)
+          groups: [...col.querySelectorAll('[data-orch-island-group]')].map((gr) => ({ key: gr.getAttribute('data-orch-island-group'), label: gr.querySelector('.orch__island-group-label')?.textContent ?? null, n: gr.querySelectorAll('[data-orch-island-id]').length })), grouping: col.querySelector('[data-orch-grouping]')?.textContent ?? null } })()`) }
+      // Folded at rest IN THE SCENE (the List shows the column whole; an earlier block may have left the lens there).
+      await click('[data-orch-lens="scene"]')
+      const folded = await waitUntil(() => wc.executeJavaScript(`(() => { const col = document.querySelector('[data-orch-islands]'); if (!col) return false; return { open: col.hasAttribute('data-orch-islands-open'), cards: col.querySelectorAll('[data-orch-island-id]').length, toggle: col.querySelector('[data-orch-islands-toggle]')?.textContent ?? null } })()`), 8000)
       const isl1 = await waitUntil(async () => { const r = await islandsRead(); return r && r.cards.some((c) => c.id === itemA) && r.cards.some((c) => c.id === itemB) ? r : false }, 8000)
       await demo('m288-1-two-islands')
       // A: its own subject, its own file, its own diff.
@@ -578,12 +583,13 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const cardA = isl1.cards.find((c) => c.id === itemA), cardB = isl1.cards.find((c) => c.id === itemB)
       const repoName = repo.split('/').filter(Boolean).pop()
       ok(IDS[0],
-        isl1 && isl1.cards.length >= 2 && cardA && cardB && /own worktree/.test(cardA.place) && /own worktree/.test(cardB.place) && cardA.place !== cardB.place &&
+        folded && folded.open === false && folded.cards === 1 && /2 islands/.test(String(folded.toggle)) &&
+          isl1 && isl1.cards.length >= 2 && cardA && cardB && /own worktree/.test(cardA.place) && /own worktree/.test(cardB.place) && cardA.place !== cardB.place &&
           new RegExp(`^${A.lane.branch === undefined ? '' : ''}`).test('') && cardA.place.includes(A.lane.branch) && cardB.place.includes(B.lane.branch) && /1 session/.test(cardA.state) &&
           isl1.groups.length === 1 && isl1.groups[0].n >= 2 && isl1.groups[0].label.startsWith(repoName) && /not a supervisor/.test(String(isl1.grouping)) &&
           a1 && a1.files.join() === 'a.txt' && consistent(a1) && a2 && consistent(a2) && a2.diffKey === `${keyA}:a.txt` &&
           b1 && b1.files.join() === 'b.txt' && consistent(b1) && b2 && consistent(b2) && b2.subject === keyB && !/A changed/.test(b2.text) && b2.diffKey === null,
-        JSON.stringify({ isl1, a1: a1 && { subject: a1.subject, files: a1.files, controls: a1.controls, diffSubject: a1.diffSubject }, a2: a2 && { diffKey: a2.diffKey }, b1: b1 && { subject: b1.subject, files: b1.files }, b2: b2 && { subject: b2.subject, diffKey: b2.diffKey, hasA: /A changed/.test(b2.text) }, log: cLog.slice(-3) }))
+        JSON.stringify({ folded, isl1, a1: a1 && { subject: a1.subject, files: a1.files, controls: a1.controls, diffSubject: a1.diffSubject }, a2: a2 && { diffKey: a2.diffKey }, b1: b1 && { subject: b1.subject, files: b1.files }, b2: b2 && { subject: b2.subject, diffKey: b2.diffKey, hasA: /A changed/.test(b2.text) }, log: cLog.slice(-3) }))
 
       // orch-islands.app.2 — rapid selection and out-of-order answers, sampled.
       const samples = []

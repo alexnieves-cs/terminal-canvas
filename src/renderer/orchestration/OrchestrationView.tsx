@@ -963,7 +963,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // clipped the card row). A tab, Review changes, a terminal card or a drag opens it.
   const [benchOpen, setBenchOpen] = useState<boolean>(() => getOrchPrefs().workbench.open)
   const openBench = useCallback((t: WorkbenchTab): void => { setBenchTab(t); setBenchOpen(true) }, [])
-  const [benchPinned, setBenchPinned] = useState<BenchSubject | null>(null)
+  // The pin is a DESCRIPTOR (which session, which task), never a frozen subject: a task
+  // pinned before its lane existed must read the lane once it does (the critic).
+  const [benchPin, setBenchPin] = useState<{ kind: 'session'; id: string } | { kind: 'task'; itemId: string } | null>(null)
   const [benchRefresh, setBenchRefresh] = useState(0)
   useEffect(() => onChatTurnEnd(() => setBenchRefresh((n) => n + 1)), [])
   useEffect(() => { setOrchPrefs({ workbench: { tab: benchTab, height: benchHeight, open: benchOpen } }) }, [benchTab, benchHeight, benchOpen])
@@ -972,6 +974,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // (seeded from the workspace record, appended-only) and the undo stack of
   // presentation moves — a move changes this array and nothing else.
   const [focusIslandId, setFocusIslandId] = useState<string | null>(null)
+  const [islandsOpen, setIslandsOpen] = useState(false)
   const [islandOrder, setIslandOrder] = useState<readonly string[]>(() => getOrchPrefs().islands)
   const [orderHistory, setOrderHistory] = useState<readonly (readonly string[])[]>([])
   useEffect(() => { setOrchPrefs({ islands: islandOrder }) }, [islandOrder])
@@ -1311,6 +1314,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     }
     return island.subjectId === null ? null : { kind: 'session', id: island.subjectId, title: island.goal }
   }, [selectedRow, island, workItems, worktrees])
+  const subjectOfTask = useCallback((itemId: string): BenchSubject | null => {
+    const item = workItems.find((w) => w.id === itemId)
+    if (item === undefined) return null
+    const isl = islands.find((i) => i.itemId === itemId)
+    const lane = item.worktreeId === undefined ? undefined : worktrees.find((w) => w.id === item.worktreeId)
+    return {
+      kind: 'task', itemId, title: item.title, memberIds: isl?.memberIds ?? (taskMembersOf?.(itemId) ?? []),
+      ...(lane === undefined ? {} : { lane: { id: lane.id, path: lane.path, root: lane.root, branch: lane.branch } }),
+      ...(item.panelId === undefined ? {} : { chatId: item.panelId })
+    }
+  }, [workItems, islands, worktrees, taskMembersOf])
+  const benchPinned: BenchSubject | null = benchPin === null ? null
+    : benchPin.kind === 'session'
+      ? { kind: 'session', id: benchPin.id, title: liveSnap.roster.find((r) => r.id === benchPin.id)?.title ?? benchPin.id }
+      : subjectOfTask(benchPin.itemId) ?? { kind: 'task', itemId: benchPin.itemId, title: benchPin.itemId, memberIds: [] }
+  const setBenchPinned = useCallback((s: BenchSubject | null): void => {
+    setBenchPin(s === null ? null : s.kind === 'session' ? { kind: 'session', id: s.id } : { kind: 'task', itemId: s.itemId })
+  }, [])
   const benchSubject = benchPinned ?? benchCurrent
 
   const stageItems = useMemo(
@@ -1608,17 +1629,36 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             (the golden critic found `tests`'s beacon hidden, twice). */}
         <span className="orch__float-state">{isl.source === 'work-item' ? 'Task' : 'Session · no task yet'} · {isl.state} · {isl.memberIds.length} {isl.memberIds.length === 1 ? 'session' : 'sessions'}{waiting !== undefined ? ' · needs you' : ''}</span>
         <span className="orch__float-title" data-orch-island-goal>{isl.goal}</span>
-        <span className="orch__island-place" data-orch-island-place>{orchPlacementLine(isl)}</span>
+        <span className="orch__island-place" data-orch-island-place title={orchPlacementLine(isl)}>{orchPlacementLine(isl)}</span>
       </button>
     )
   }
   const islandColumn = (floating: boolean): JSX.Element | null => {
     if (islands.length === 0) return null
     if (islands.length === 1 && orderHistory.length === 0) return islandCard(islands[0]!, floating)
+    // In the SCENE the column rests folded: the focused island's card, the same size as
+    // Phase A's one card, and a one-line toggle — an open column covered the ring's back
+    // cubes, their needs-you beacons and their callouts (the critic, three scenes). The
+    // List always shows it whole.
+    const folded = floating && !islandsOpen
+    const focusedCard = island ?? islands[0]!
+    if (folded) {
+      // EXACTLY Phase A's card (same class, same single line, same footprint — the critic
+      // measured a wrapped, taller card re-covering the `tests` cube), plus a small pill
+      // to its LEFT; the wrapper is display:contents so both float on their own.
+      return (
+        <div className="orch__islands--rest" data-orch-islands data-orch-island-order={orderedIds.join(' ')} role="group" aria-label="Task islands">
+          {islandCard(focusedCard, true)}
+          <button type="button" className="orch__mini orch__islands-toggle" style={floatStyle} data-orch-islands-toggle aria-expanded={false} title="Show every island, grouped by repository" {...shellControl(() => setIslandsOpen(true))}>{`${islands.length} islands ▾`}</button>
+        </div>
+      )
+    }
     return (
-      <div className={floating ? 'orch__float orch__float--task orch__islands' : 'orch__islands orch__islands--static'} style={floating ? floatStyle : undefined} data-orch-islands data-orch-island-order={orderedIds.join(' ')} role="group" aria-label="Task islands">
+      <div className={floating ? 'orch__float orch__float--task orch__islands' : 'orch__islands orch__islands--static'} style={floating ? floatStyle : undefined} data-orch-islands data-orch-islands-open="" data-orch-island-order={orderedIds.join(' ')} role="group" aria-label="Task islands">
         <div className="orch__section-head orch__islands-head">
-          <span className="orch__section-title">{islands.length} islands</span>
+          {floating
+            ? <button type="button" className="orch__mini" data-orch-islands-toggle aria-expanded={true} {...shellControl(() => setIslandsOpen(false))}>{`${islands.length} islands ▴`}</button>
+            : <span className="orch__section-title">{islands.length} islands</span>}
           {orderHistory.length > 0 && <button type="button" className="orch__mini" data-orch-island-undo {...shellControl(undoMove)}>Undo move</button>}
         </div>
         {islandGroups.map((g) => (
@@ -2178,10 +2218,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     {selectedControls.controls.map((c) => <li key={c.id} className="orch__caption"><strong>{c.label.replace('…', '')}</strong> {c.affects}</li>)}
                   </ul>
                 )}
+                {/* Folded (the critic: seven lines of prose at the rest layer): the summary says how
+                    many and which; the reasons open on demand. */}
                 {selectedControls !== null && (selectedRow.kind === 'chat' || selectedRow.kind === 'terminal') && (
-                  <p className="orch__caption" data-orch-control-absent={selectedControls.absent.map((a) => a.id).join(' ')}>
-                    Not available here: {selectedControls.absent.map((a) => `${a.id} — ${a.reason}`).join('; ')}.
-                  </p>
+                  <details className="orch__brief orch__absent" data-orch-control-absent={selectedControls.absent.map((a) => a.id).join(' ')}>
+                    <summary className="orch__brief-summary">Not available here · {selectedControls.absent.map((a) => a.id).join(', ')}</summary>
+                    <ul className="orch__control-notes">{selectedControls.absent.map((a) => <li key={a.id} className="orch__caption"><strong>{a.id}</strong> — {a.reason}</li>)}</ul>
+                  </details>
                 )}
                 {retryPreview !== null && (
                   <div className="orch__retry" data-orch-retry-preview={selectedRow.id} role="group" aria-label="Retry preview">
@@ -2209,7 +2252,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                         <ul className="orch__dep-list" data-orch-dep-prereqs>
                           {depFocusData.prerequisites.map((e) => (
                             <li key={`${e.from}:${e.to}`} className="orch__dep-row" data-orch-dep-edge={`${e.from}:${e.to}`} data-orch-dep-status={e.status}>
-                              <button type="button" className="orch__activity-row" {...shellControl(() => select(e.from))}>
+                              <button type="button" className="orch__activity-row" title={`Select ${e.fromTitle}`} {...shellControl(() => select(e.from))}>
                                 <span className="orch__activity-title">{e.fromTitle} → {e.trigger}</span>
                                 <span className="orch__activity-detail">{e.status}{e.sentence !== undefined ? ` · ${e.sentence}` : ''} · {e.condition}</span>
                               </button>
@@ -2224,7 +2267,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                         <ul className="orch__dep-list" data-orch-dep-dependents>
                           {depFocusData.dependents.map((e) => (
                             <li key={`${e.from}:${e.to}`} className="orch__dep-row" data-orch-dep-edge={`${e.from}:${e.to}`} data-orch-dep-status={e.status}>
-                              <button type="button" className="orch__activity-row" {...shellControl(() => select(e.to))}>
+                              <button type="button" className="orch__activity-row" title={`Select ${e.toTitle}`} {...shellControl(() => select(e.to))}>
                                 <span className="orch__activity-title">{e.trigger} → {e.toTitle}</span>
                                 <span className="orch__activity-detail">{e.status}{e.sentence !== undefined ? ` · ${e.sentence}` : ''} · {e.condition}</span>
                               </button>

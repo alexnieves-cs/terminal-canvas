@@ -64,7 +64,9 @@ export type BenchSubject =
 
 export function benchSubjectKey(s: BenchSubject | null): string {
   if (s === null) return ''
-  return s.kind === 'session' ? `session:${s.id}` : `task:${s.itemId}:${s.lane?.id ?? ''}`
+  // M288 (the critic): the chat is part of a lane-less task's READ, so it is part of its key —
+  // a task re-pointed at another conversation must re-ask, not keep the old chat's rows.
+  return s.kind === 'session' ? `session:${s.id}` : `task:${s.itemId}:${s.lane?.id ?? ''}:${s.chatId ?? ''}`
 }
 
 export interface OrchWorkbenchProps {
@@ -99,9 +101,9 @@ export interface OrchWorkbenchProps {
 
 type ChangesRead =
   | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'no-lane' }
-  | { kind: 'lane-missing' }
+  | { kind: 'loading'; key: string }
+  | { kind: 'no-lane'; key: string }
+  | { kind: 'lane-missing'; key: string }
   | { kind: 'result'; key: string; result: ReviewResult; repoRoot: string; base: string | undefined; sectionNote?: string }
 
 type DiffRead =
@@ -136,7 +138,7 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
     let live = true
     const asked = key
     const ticket = gate.ask(key)
-    setRead({ kind: 'loading' })
+    setRead({ kind: 'loading', key: asked })
     const land = (r: ChangesRead): void => { if (live && gate.lands(ticket)) setRead(r) }
     // A task in a SHARED directory (a chat, no worktree) reads its chat's own baseline —
     // Phase A's read — rather than claiming nothing was started (the critic caught the
@@ -148,7 +150,7 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
         () => land({ kind: 'result', key: asked, result: { kind: 'repo-unreadable', detail: 'the review could not be read' }, repoRoot: '', base: undefined })
       )
     } else if (subject.kind === 'session' || subject.lane === undefined) {
-      land({ kind: 'no-lane' })
+      land({ kind: 'no-lane', key: asked })
     } else {
       const lane = subject.lane
       void window.canvas.review.across(lane.root).then(
@@ -156,7 +158,7 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
           if (across.kind === 'git-missing') { land({ kind: 'result', key: asked, result: { kind: 'git-missing' }, repoRoot: lane.path, base: undefined }); return }
           if (across.kind === 'unreadable') { land({ kind: 'result', key: asked, result: { kind: 'repo-unreadable', detail: across.detail }, repoRoot: lane.path, base: undefined }); return }
           const section: ReviewSection | undefined = laneSection(across.sections, lane.path)
-          if (section === undefined) { land({ kind: 'lane-missing' }); return }
+          if (section === undefined) { land({ kind: 'lane-missing', key: asked }); return }
           const r = section.result
           const base = r.kind === 'changes' || r.kind === 'shared' || r.kind === 'clean' ? r.identity?.base : undefined
           land({ kind: 'result', key: asked, result: r, repoRoot: section.path, base, ...(section.note === undefined ? {} : { sectionNote: section.note }) })
@@ -184,7 +186,7 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // The render-time guard: a read or a diff that is not about THIS subject is
   // shown as nothing at all, whatever state still holds it.
-  const bound: ChangesRead = read.kind === 'result' && read.key !== key ? { kind: 'loading' } : read
+  const bound: ChangesRead = read.kind !== 'idle' && read.key !== key ? { kind: 'loading', key } : read
   const boundDiff: DiffRead = diff.kind !== 'none' && !diff.key.startsWith(`${key}:`) ? { kind: 'none' } : diff
   return { read: bound, diff: boundDiff, openFile }
 }
@@ -270,15 +272,17 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
   useEffect(() => {
     if (bases.length === 0 || typeof window.canvas?.review?.identity !== 'function') { setIdentities(new Map()); return }
     let live = true
+    // Keyed by cwd AND base (the critic): two lanes forked from one main commit share a
+    // base sha, and a map keyed by base alone let one lane's content answer the other's checks.
     void Promise.all(bases.map(async (b) => {
       const [cwd, base] = b.split('\0') as [string, string]
-      try { return [base, (await window.canvas.review.identity({ root: cwd, base })) ?? undefined] as const } catch { return [base, undefined] as const }
+      try { return [b, (await window.canvas.review.identity({ root: cwd, base })) ?? undefined] as const } catch { return [b, undefined] as const }
     })).then((pairs) => { if (live) setIdentities(new Map(pairs)) })
     return () => { live = false }
   }, [basesKey, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
   const evidence = useMemo<CheckEvidence | null>(() => {
     if (subject === null || rows === null || rows.key !== key) return null
-    const bound = bindCheckFreshness(raw, (base) => (identities.has(base) ? identities.get(base) : null))
+    const bound = bindCheckFreshness(raw, (base, cwd) => { const k = `${cwd}\0${base}`; return identities.has(k) ? identities.get(k) : null })
     const claims = claimsFromTranscript(chat.turns)
     return checkEvidence(bound, claims, { ledgerRead: !rows.unreadable, ledgerPanels: rows.panels, transcriptRead: chat.turns.length > 0 || (subject.kind === 'session' ? true : subject.chatId !== undefined) })
   }, [subject, rows, key, raw, identities, chat.turns])
@@ -324,6 +328,12 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const [writeDraft, setWriteDraft] = useState<{ key: string; kind: 'commit' | 'discard'; message: string; busy: boolean } | null>(null)
   const [writeOutcome, setWriteOutcome] = useState<{ key: string; outcome: OrchWriteOutcome } | null>(null)
   const draft = writeDraft !== null && writeDraft.key === subjectKey ? writeDraft : null
+  // The key at CALL time, for the async writes below: `subjectKey` in a closure is the
+  // key that minted the call and compares equal to itself (the critic), so a late
+  // answer must be judged against the key on screen NOW, and must only touch a draft
+  // that is still its own.
+  const subjectKeyRef = useRef(subjectKey)
+  subjectKeyRef.current = subjectKey
   const outcome = writeOutcome !== null && writeOutcome.key === subjectKey ? writeOutcome.outcome : null
 
   // The top edge drags. Height is measured from the strip's bottom, so dragging
@@ -409,9 +419,9 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
       if (atHead === null) gate = 'the tree could not be re-read against HEAD, so nothing is restored'
       else if (atHead.content !== writable.identity.content) gate = `HEAD has moved past the point this review compares against (${writable.base.slice(0, 10)}) — a commit was made since; restoring to that point would undo committed work in the tree, so discard from the review node on the canvas instead`
     }
-    if (benchSubjectKey(subject) !== asked) return
-    if (gate !== null) { setWriteDraft(null); setWriteOutcome({ key: asked, outcome: { kind: 'refused', sentence: gate } }); return }
-    setWriteDraft({ key: asked, kind: 'discard', message: '', busy: false })
+    if (subjectKeyRef.current !== asked) return
+    if (gate !== null) { setWriteDraft((d) => (d?.key === asked ? null : d)); setWriteOutcome({ key: asked, outcome: { kind: 'refused', sentence: gate } }); return }
+    setWriteDraft((d) => (d?.key === asked ? { key: asked, kind: 'discard', message: '', busy: false } : d))
   }
   const runWrite = async (): Promise<void> => {
     if (draft === null || writable === null || writable.kind !== 'ok') return
@@ -424,9 +434,9 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
         : await orchDiscard({ root: writable.root, baseline: writable.base, subjectId: writable.subjectId, paths: writable.paths, identity: writable.identity })
     // Landed for the subject it was asked for, or dropped: a late outcome must
     // not paint under another subject's controls.
-    if (benchSubjectKey(subject) !== asked) return
+    if (subjectKeyRef.current !== asked) return
     setWriteOutcome({ key: asked, outcome: out })
-    setWriteDraft(null)
+    setWriteDraft((d) => (d?.key === asked ? null : d))
     if (out.kind === 'done' || out.kind === 'moved') { setLocalRefresh((n) => n + 1); onRefreshTaskHandoffs?.() }
   }
   const dataSubject = subject === null ? '' : subject.kind === 'session' ? subject.id : subject.chatId ?? subject.itemId

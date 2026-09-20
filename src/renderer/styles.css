@@ -8381,6 +8381,13 @@ body {
 .orch__island-group-label { margin: 0; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orch__island-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-1); align-items: start; }
 .orch__island-row .orch__island--static { margin-bottom: 0; }
+/* A column card may take a second line for its context (the count is the fact the line exists for);
+   the ONE floating card keeps Phase A's single line and height. */
+.orch__islands .orch__island-place { white-space: normal; overflow-wrap: anywhere; }
+.orch__islands--rest { display: contents; }
+/* The rest pill sits LEFT of the one card's top edge, never under it: the card keeps Phase A's footprint. */
+.orch__islands-toggle { position: absolute; top: var(--sp-4); right: calc(16rem + var(--sp-5)); z-index: 1; background: var(--glass-3); }
+.orch__islands-head .orch__mini { padding: 0 var(--sp-1); }
 .orch__island-tools { display: flex; flex-direction: column; gap: var(--sp-1); }
 .orch__island-tools .orch__mini { padding: 0 var(--sp-1); line-height: 1.4; }
 .orch__island-ambiguity { color: var(--amber); }
@@ -8398,10 +8405,10 @@ body {
 .orch__retry-prompt { max-height: 8rem; overflow: auto; white-space: pre-wrap; }
 .orch__limits { margin-top: var(--sp-3); }
 .orch__limit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
-.orch__limit { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 0 var(--sp-2); align-items: baseline; font-size: var(--t-xs); }
+.orch__limit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 var(--sp-2); align-items: baseline; font-size: var(--t-xs); }
 .orch__limit-label { color: var(--fg-2); font-weight: 600; }
 .orch__limit-kind { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-4); }
 .orch__limit-kind[data-kind="enforced"] { color: var(--green); }
-.orch__limit-value { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__limit-value { grid-column: 1 / -1; color: var(--fg); white-space: normal; overflow-wrap: anywhere; }
 .orch__limit-coverage { grid-column: 1 / -1; margin: 0; display: none; }
 .orch__bench-write { margin-top: var(--sp-2); display: flex; flex-direction: column; gap: var(--sp-1); }
