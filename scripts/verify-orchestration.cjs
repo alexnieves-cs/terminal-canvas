@@ -840,7 +840,8 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   ok('orch-3d.2 placement is stable under live updates: the workspace plate holds cell 0 for good, a new island takes the next cell and moves no existing platform; a station arriving on an island changes neither that platform\'s footprint nor its neighbours\'; cells are a function of the index alone',
     at(three, 'A') === at(two, 'A') && at(three, 'B') === at(two, 'B') && at(three, P.ORCH_WORKSPACE_PLATFORM) === at(two, P.ORCH_WORKSPACE_PLATFORM) && three.find((p) => p.id === 'C').cell.row === 1 && three.find((p) => p.id === 'C').cell.col === 0 &&
       at(moreOnA, 'A') === at(two, 'A') && at(moreOnA, 'B') === at(two, 'B') &&
-      JSON.stringify(P.orchCellCentre(3)) === JSON.stringify({ col: 0, row: 1, x: P.ORCH_CELL.x0 + P.ORCH_CELL.w / 2, y: P.ORCH_CELL.y0 + P.ORCH_CELL.h + P.ORCH_CELL.h / 2 }),
+      // M294: the zig-zag — index 3 is odd, so the UPPER row, three half-pitches along; the cell stays the 3-wide append ordinal.
+      JSON.stringify(P.orchCellCentre(3)) === JSON.stringify({ col: 0, row: 1, x: P.ORCH_CELL.x0 + P.ORCH_PLATFORM_HALF + 3 * P.ORCH_LATTICE.xPitch, y: P.ORCH_CELL.y0 + P.ORCH_PLATFORM_HALF }),
     JSON.stringify({ two: two.map((p) => at(two, p.id)), three: three.map((p) => at(three, p.id)) }))
   // The cap: 12 stations, two of them waiting and one past the cap in canvas order.
   const many = Array.from({ length: 12 }, (_, i) => row(`s${i}`, 'chat', i === 10 || i === 11 ? 'wants-you' : i < 3 ? 'busy' : 'idle'))
@@ -872,6 +873,67 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
   ok('orch-3d.6 the three kinds are three SHAPES in the island (cube, hexagonal puck, tablet) and three WORDS on the plate (state, `check · <result>`, `file`), so a test result never reads as another reasoning agent and no state is colour alone; the platform layers are said to be decorative before hit accuracy',
     /CylinderGeometry\([^)]*6\)/.test(cubes) && /shape === 'tablet'/.test(cubes) && /`check · \$\{stateWord\(node\)\}`/.test(view) && /sub: 'file'/.test(view) && /expendable before hit accuracy/.test(cubes) && /data-orch-object=\{objectKind\}/.test(view))
+
+  // -------------------------------------------------------------------------
+  // M294. The isometric scene pass: the diamond's hit outline follows the mesh,
+  // the zig-zag fills the stage, connectors are grouping and finite, names
+  // degrade by tier, and the selection lift is a visible world-y move.
+  // -------------------------------------------------------------------------
+  const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
+  const wsP = three.find((p) => p.id === P.ORCH_WORKSPACE_PLATFORM)
+  const k1 = { x: 0, y: 0, k: 1 }
+  const c0 = D.orchProjectWorld({ x: wsP.x, y: wsP.y }, st, k1)
+  const hx = wsP.half, hy = wsP.half * D.ORCH_COS_TILT, bandPx = 10 * D.ORCH_SIN_TILT
+  const poly = P.orchPlatformHitPolygon(c0, hx, hy, bandPx)
+  const topTip = D.orchProjectWorld({ x: wsP.x, y: wsP.y - wsP.half }, st, k1), leftTip = D.orchProjectWorld({ x: wsP.x - wsP.half, y: wsP.y }, st, k1)
+  const near = (a, b) => Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6
+  const box = P.orchPolygonBounds(poly)
+  const target = { id: 'ws', kind: 'platform', ...box, points: poly }
+  const cornerMiss = P.orchHitAt({ x: box.x + 3, y: box.y + 3 }, [target]) === null
+  const centreHit = P.orchHitAt({ x: c0.x, y: c0.y }, [target])?.id === 'ws'
+  const bandHit = P.orchHitAt({ x: c0.x, y: c0.y + hy + bandPx * 0.5 }, [target])?.id === 'ws'
+  const inscribed = three.every((p) => p.stations.every((s) => Math.abs(s.x - p.x) + Math.abs(s.y - p.y) + P.ORCH_OBJECT_SIZE.station <= p.half + 1e-6))
+  ok('orch-iso.1 the platform is the reference\'s isometric diamond and its hit-target is cut to the mesh\'s own rule: a square turned 45° in its own plane inside the stage tilt (the mesh), a six-point outline whose tips are the projected corners of that square (the SVG polygon, the flat fallback and orchHitAt alike) — a click in the diamond\'s empty corner misses, the centre and the thickness band hit — every station stands inside the diamond, and the label box sits clear above the top tip',
+    /rotation=\{\[0, 0, Math\.PI \/ 4\]\}/.test(cubes) && /spec\.side \* fit\.scale/.test(cubes) &&
+      /<polygon className="orch__platform-hit" data-orch-platform-hit=\{t\.id\} points=\{pp\.points/.test(view) && /data-orch-flat="platform" points=\{pp\.points/.test(view) &&
+      near(poly[0], topTip) && near(poly[5], leftTip) && poly.length === 6 && cornerMiss && centreHit && bandHit && inscribed &&
+      /p\.labelSide === 'above' \? y - hy - ORCH_PLATE_LABEL\.gap - ORCH_PLATE_LABEL\.h : y \+ hy \+ band \+ ORCH_PLATE_LABEL\.gap/.test(view) && /weight: 12, \.\.\.pp\.label/.test(view) &&
+      wsP.labelSide === 'below' && three.find((p) => p.id === 'A').labelSide === 'above',
+    JSON.stringify({ poly, topTip, leftTip, cornerMiss, centreHit, bandHit, inscribed }))
+  // Fill: the workspace and two islands (the golden's composition) through Fit all on the 860×420 stage.
+  const fitAll = D.orchFitCamera(P.orchPlatformBounds(two), st, 24)
+  const spanY = (list, cam) => { let lo = Infinity, hi = -Infinity; for (const p of list) { const c = D.orchProjectWorld({ x: p.x, y: p.y }, st, cam); const hyp = p.half * cam.k * D.ORCH_COS_TILT; lo = Math.min(lo, c.y - hyp); hi = Math.max(hi, c.y + hyp + 10 * cam.k * D.ORCH_SIN_TILT) } return { lo, hi } }
+  const span = spanY(two, fitAll)
+  const fillH = (span.hi - span.lo) / st.h
+  // The composition: the plates plus their label plates (44 px tall, an 8 px gap past the tip they hang from).
+  const compose = { lo: span.lo - 52, hi: span.hi + 52 }
+  const fillComposed = (compose.hi - compose.lo) / st.h
+  const rows = new Set(two.map((p) => Math.round(p.y)))
+  const fromIndex = [0, 1, 2, 3, 6, 7].every((i) => JSON.stringify(P.orchCellCentre(i)) === JSON.stringify(P.orchCellCentre(i)))
+  ok('orch-iso.2 a fleet of three fills the stage: the zig-zag lattice puts the workspace lower-left, the first island upper-middle and the second lower-right — two rows, so Fit all uses the stage\'s HEIGHT: the plates span more than 60% of it and the composition (plates and their labels) more than 85% (one straight row sat in the middle third); a cell is still a function of its index alone, and Fit all keeps every plate inside the stage',
+    rows.size === 2 && wsP.y > three.find((p) => p.id === 'A').y && fillH >= 0.6 && fillComposed >= 0.85 && span.lo >= 0 && span.hi <= st.h && fromIndex && fitAll.k <= D.ORCH_ZOOM_RANGE.max,
+    JSON.stringify({ fillH: Number(fillH.toFixed(3)), fillComposed: Number(fillComposed.toFixed(3)), k: Number(fitAll.k.toFixed(3)), span, rows: [...rows] }))
+  // Connectors: platform-to-next and station chains, no hub, trimmed clear of both outlines, grouping in the DOM, finite in CSS.
+  const cons = P.orchConnectors(three)
+  const stationChains = three.reduce((n, p) => n + Math.max(0, p.stations.length - 1), 0)
+  const diamond = (p) => { const c = D.orchProjectWorld({ x: p.x, y: p.y }, st, k1); return P.orchPlatformHitPolygon(c, p.half, p.half * D.ORCH_COS_TILT, bandPx) }
+  const pA = three.find((p) => p.id === 'A')
+  const segAB = P.orchSegmentBetween(D.orchProjectWorld({ x: wsP.x, y: wsP.y }, st, k1), D.orchProjectWorld({ x: pA.x, y: pA.y }, st, k1), diamond(wsP), diamond(pA))
+  const clear = segAB !== null && !P.orchPointInPolygon({ x: segAB.x1 + (segAB.x2 - segAB.x1) * 0.5, y: segAB.y1 + (segAB.y2 - segAB.y1) * 0.5 }, diamond(wsP)) && !P.orchPointInPolygon({ x: segAB.x1 + (segAB.x2 - segAB.x1) * 0.5, y: segAB.y1 + (segAB.y2 - segAB.y1) * 0.5 }, diamond(pA))
+  const litRule = styles.match(/\.orch__connector--lit \{[^}]*animation: edge-current var\(--dur-packet\) ease-out 1;/)
+  const stilled = /prefers-reduced-motion[\s\S]*?\.orch__connector--lit \{ animation: none; \}/.test(styles)
+  ok('orch-iso.3 connectors are light paths, honestly: one from each platform to the next and a chain along a plate\'s stations, none to a hub (no synthetic node exists to meet at), every one marked and titled GROUPING in the DOM — distinct from the authored dependency edge\'s element, word and colour — trimmed clear of both outlines it joins, dimmed by the dependency lens, and lit ONCE per state event (a one-iteration keyframe, re-keyed per event, stood down under reduced motion)',
+    cons.filter((c) => c.kind === 'platform').length === three.length - 1 && cons.filter((c) => c.kind === 'station').length === stationChains && cons.every((c) => !/hub|supervisor/i.test(c.from + c.to)) &&
+      /data-orch-edge="grouping" data-orch-connector=\{c\.kind\}/.test(view) && /<title>\{ORCH_DEP_GROUPING\}<\/title><\/line>/.test(view) && /props\.depFocus \? ' orch__connector--lensed'/.test(view) &&
+      /key=\{`\$\{c\.kind\}-\$\{c\.from\}-\$\{c\.to\}-\$\{c\.lit\}`\}/.test(view) && clear && litRule !== null && stilled &&
+      /data-orch-edge="dependency"/.test(view),
+    JSON.stringify({ cons: cons.length, stationChains, segAB, clear, lit: litRule !== null, stilled }))
+  const tiers = [P.orchNameTier(100, false), P.orchNameTier(70, true), P.orchNameTier(70, false), P.orchNameTier(40, true)]
+  ok('orch-iso.4 names at rest degrade by density tier, never a switch: a full plate (glyph, name, state word) when the station pitch on screen clears 96 px, a compact two-line plate cut to the pitch above 56 px where nothing stands in the row below, none past that — and the selection lift is a VISIBLE finite move along world y (an orthographic camera cannot show z), applied to the hit polygon, the label and the objects on the plate as one number the mesh damps to and reduced motion snaps',
+    tiers.join() === 'full,compact,none,none' && P.ORCH_SELECT_LIFT >= 12 && /const lift = focused \? ORCH_SELECT_LIFT : 0/.test(view) && /const y = c\.y - lift/.test(view) && /y = c\.y - \(pp\?\.lift \?\? 0\)/.test(view) &&
+      /\+ lift\.current \* fit\.scale, spec\.depth \* 24 - 40\)/.test(cubes) && /reducedMotion \? spec\.lift : THREE\.MathUtils\.damp\(lift\.current, spec\.lift/.test(cubes) &&
+      /orchNameTier\(platformOf\(n\.object\.platformId\)\?\.pitchPx \?\? 0, n\.object\.front\)/.test(view) && /data-orch-name-tier="compact"/.test(view) && /front: i \+ cols >= seated\.length/.test(readFileSync(join(root, 'src/renderer/orchestration/orchestration-platforms.ts'), 'utf8')),
+    JSON.stringify({ tiers, lift: P.ORCH_SELECT_LIFT }))
 }
 
 const failed = results.filter((x) => !x.pass)

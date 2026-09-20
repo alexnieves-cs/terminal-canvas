@@ -87,6 +87,8 @@ export function orchGroundPlane(stage: OrchStage, cam: OrchCamera, baseDrop: num
 }
 
 export const ORCH_COS_TILT = COS_TILT
+/** A model z-unit (up off the stage) projects to this many screen px; the platform's thickness band and its deck's rise use it. */
+export const ORCH_SIN_TILT = Math.sin((ORCH_STAGE_TILT_DEG * Math.PI) / 180)
 
 /**
  * M291. The platform scene's projection: ONE uniform camera over a world that

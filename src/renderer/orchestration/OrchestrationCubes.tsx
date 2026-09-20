@@ -48,28 +48,37 @@ export interface OrchCubeSpec {
   lensedOut: boolean
   /** Unacknowledged wants-you — gates the finite pulse, same condition the beacon uses. */
   attention: boolean
+  /**
+   * M294. The platform's selection lift this object stands on, in screen px.
+   * `y` already includes it (the SVG target is there now); the mesh damps from
+   * the un-lifted row to it so the plate and its objects rise together.
+   */
+  lift?: number
 }
 
 /**
- * M291. A platform: the island's base plate and its raised inner plate, in the
- * reference's blue-black material with cyan edges; the workspace plate (grouping)
- * wears violet edges — violet is a SECONDARY family distinction, never a state.
- * `w`/`h` are the footprint in the camera's units BEFORE the stage tilt: the mesh
- * wears the same rotateX the cubes do, so the tilt foreshortens it the way it
- * foreshortens them, and the SVG hit-target above it is cut to the same rule.
- * Both layers are the same fixed thickness for every platform — height is never
- * a hidden score — and both are decorative, expendable before hit accuracy.
+ * M291/M294. A platform: the island's ISOMETRIC DIAMOND — a square plate of
+ * `side` (camera units, pre-tilt) turned 45° in its own plane and then tilted
+ * with the stage like everything else — in three stacked tiers, each `inset`
+ * smaller than the one under it, in the reference's blue-black material with an
+ * emissive cyan rim; the workspace plate (grouping) wears violet — violet is a
+ * SECONDARY family distinction, never a state. The SVG hit-target above it is
+ * cut to the same rule (orchPlatformHitPolygon: the base's silhouette). Every
+ * platform has the same tiers and thickness — height is never a hidden score —
+ * and the tiers are decorative, expendable before hit accuracy. `lift` is the
+ * finite selection lift in screen px along world y (an orthographic camera
+ * cannot show a z lift); the target moved by it already, the mesh damps to it.
  */
 export interface OrchPlatformSpec {
   id: string
   x: number
   y: number
-  w: number
-  h: number
-  /** Inner plate inset and the layer thickness, already scaled by the camera. */
+  side: number
+  /** Tier inset and the base's thickness, already scaled by the camera. */
   inset: number
   thickness: number
   depth: number
+  lift: number
   synthetic: boolean
   selected: boolean
   dimmed: boolean
@@ -170,6 +179,9 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   const mesh = useRef<THREE.Mesh>(null!)
   const material = useRef<THREE.MeshPhysicalMaterial>(null!)
   const lift = useRef(0)
+  // M294. The platform's selection lift, damped like the plate's own so the
+  // object rises WITH its plate; the projected y already includes the target.
+  const plateLift = useRef(node.lift ?? 0)
   const edge = useRef<THREE.LineBasicMaterial>(null!)
   // Scratch colours: useFrame allocated a THREE.Color per cube per frame before.
   const body = useRef(new THREE.Color())
@@ -232,8 +244,11 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
       reducedMotion
     })
     lift.current = reducedMotion ? motion.lift : THREE.MathUtils.damp(lift.current, motion.lift, 12, delta)
+    const plateTarget = node.lift ?? 0
+    plateLift.current = reducedMotion ? plateTarget : THREE.MathUtils.damp(plateLift.current, plateTarget, 12, delta)
     const screenX = node.x * fit.scale + fit.offsetX
-    const screenY = node.y * fit.scale + fit.offsetY
+    // The target sits at the LIFTED row; the mesh trails it by what it has not yet risen.
+    const screenY = (node.y + (plateTarget - plateLift.current)) * fit.scale + fit.offsetY
     mesh.current.position.set(
       screenX - size.width / 2,
       -(screenY - size.height / 2) - motion.yOffset,
@@ -279,6 +294,7 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
     // 520ms settle); past them the cube is at rest and asks for nothing.
     if (!reducedMotion && (
       Math.abs(lift.current - motion.lift) > 0.05 ||
+      Math.abs(plateLift.current - plateTarget) > 0.05 ||
       (node.tone === TONE_WORKING && !node.synthetic) ||
       (node.tone === 'starting' && sinceToneMs < 600) ||
       (node.attention && sinceAttentionMs < 3700)
@@ -299,17 +315,25 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
 }
 
 /**
- * M291. One platform: base plate plus raised inner plate. The body is the deck
- * surface token (blue-black in the dark theme, the light theme's own surface in
- * the light one), the edges the accent (cyan) or, for the workspace plate,
- * violet — family, not state. A lit plate's inner layer glows a little under
- * the composer's threshold (it must never bloom past the stations on it);
- * a plate waiting on a person carries an amber rim IN ADDITION to the word and
- * the beacon on its SVG label, so colour is never the only carrier.
+ * M291/M294. One platform: the isometric diamond in three stacked tiers. The
+ * body is the deck surface token (blue-black in the dark theme, the light
+ * theme's own surface in the light one); each tier wears an emissive RIM in
+ * the accent (cyan) or, for the workspace plate, violet — family, not state.
+ * The rim is a line whose colour is pushed past the composer's luminance
+ * threshold (`toneMapped={false}`, full opacity on the deck), so it blooms the
+ * way the reference's edges glow, while the tiers' faces stay UNDER it: the
+ * plate is the floor the stations glow above, not a light of its own. A plate
+ * waiting on a person carries an amber rim on its deck IN ADDITION to the word
+ * and the beacon on its SVG label, so colour is never the only carrier.
+ *
+ * The 45° turn is an inner group's rotation about z — the square's own plane —
+ * INSIDE the stage tilt (the outer group's rotateX), which is the order that
+ * projects the plate to the diamond the SVG hit polygon is cut to; turning the
+ * outer group instead would swing the plate out of the stage's plane.
  */
-function PlatformMesh({ spec, fit, size, reducedMotion }: { spec: OrchPlatformSpec; fit: OrchFit; size: { width: number; height: number }; reducedMotion: boolean }): JSX.Element {
+function PlatformMesh({ spec, fit, size, reducedMotion, quality }: { spec: OrchPlatformSpec; fit: OrchFit; size: { width: number; height: number }; reducedMotion: boolean; quality: 'full' | 'lean' | 'flat' }): JSX.Element {
   const group = useRef<THREE.Group>(null!)
-  const lift = useRef(0)
+  const lift = useRef(spec.lift)
   const invalidate = useThree((s) => s.invalidate)
   const [surface, setSurface] = useState(() => readCssColor('--deck-surface'))
   const [edgeTone, setEdgeTone] = useState(() => readCssColor(spec.synthetic ? '--deck-violet' : '--iris'))
@@ -322,46 +346,73 @@ function PlatformMesh({ spec, fit, size, reducedMotion }: { spec: OrchPlatformSp
     return () => observer.disconnect()
   }, [spec.synthetic])
   useEffect(() => invalidate(), [surface, edgeTone, amber, invalidate])
-  const w = spec.w * fit.scale
-  const h = spec.h * fit.scale
+  const side = spec.side * fit.scale
   const t = Math.max(3, spec.thickness * fit.scale)
   const inset = spec.inset * fit.scale
-  const base = useMemo(() => new THREE.BoxGeometry(w, h, t), [w, h, t])
-  const inner = useMemo(() => new THREE.BoxGeometry(Math.max(8, w - inset * 2), Math.max(8, h - inset * 2), t * 0.6), [w, h, inset, t])
-  const baseEdges = useMemo(() => new THREE.EdgesGeometry(base), [base])
-  const innerEdges = useMemo(() => new THREE.EdgesGeometry(inner), [inner])
-  useEffect(() => () => { base.dispose(); inner.dispose(); baseEdges.dispose(); innerEdges.dispose() }, [base, inner, baseEdges, innerEdges])
+  // Three tiers: the base (full thickness), a middle tier and the deck (half
+  // each), every one inset from the one below. Same for every platform.
+  const tiers = useMemo(() => [
+    { side, thick: t, z: 0 },
+    { side: Math.max(12, side - inset * 2), thick: t * 0.5, z: t * 0.5 + t * 0.25 },
+    { side: Math.max(12, side - inset * 4), thick: t * 0.5, z: t * 0.5 + t * 0.5 + t * 0.25 }
+  ].map((tier) => { const body = new THREE.BoxGeometry(tier.side, tier.side, tier.thick); return { ...tier, body, edges: new THREE.EdgesGeometry(body) } }), [side, t, inset])
+  useEffect(() => () => { for (const tier of tiers) { tier.body.dispose(); tier.edges.dispose() } }, [tiers])
   const screenX = spec.x * fit.scale + fit.offsetX
   const screenY = spec.y * fit.scale + fit.offsetY
   const rotation: [number, number, number] = [(-ORCH_STAGE_TILT_DEG * Math.PI) / 180, 0, 0]
   const dim = spec.dimmed && !spec.selected
-  // A FINITE selection lift (6px), damped like the cubes'; reduced motion snaps.
+  // The FINITE selection lift (ORCH_SELECT_LIFT, in the spec), along world y —
+  // up on screen, which an orthographic camera can show; damped like the
+  // cubes', reduced motion snaps. The SVG target is already at the lifted row.
   useFrame((_state, delta) => {
-    const target = spec.selected ? 6 : 0
-    lift.current = reducedMotion ? target : THREE.MathUtils.damp(lift.current, target, 12, delta)
+    lift.current = reducedMotion ? spec.lift : THREE.MathUtils.damp(lift.current, spec.lift, 12, delta)
     // Under every object on it: the cubes sit at depth * 24 (+ lift); the plate
     // sits a layer below so a standing cube is never cut by its own floor.
-    group.current.position.set(screenX - size.width / 2, -(screenY - size.height / 2), spec.depth * 24 - 40 + lift.current)
-    if (!reducedMotion && Math.abs(lift.current - target) > 0.05) _state.invalidate()
+    group.current.position.set(screenX - size.width / 2, -(screenY - size.height / 2) + lift.current * fit.scale, spec.depth * 24 - 40)
+    if (!reducedMotion && Math.abs(lift.current - spec.lift) > 0.05) _state.invalidate()
   })
-  const edgeOpacity = (spec.selected ? 1 : spec.synthetic ? 0.55 : 0.8) * (dim ? 0.55 : 1)
+  const rimOpacity = (spec.selected ? 1 : spec.synthetic ? 0.6 : 0.85) * (dim ? 0.5 : 1)
   return (
     <group ref={group} rotation={rotation}>
-      <mesh geometry={base} receiveShadow>
-        <meshPhysicalMaterial color={surface} roughness={0.55} metalness={0.25} clearcoat={0.4} clearcoatRoughness={0.4} emissive={edgeTone} emissiveIntensity={dim ? 0.02 : 0.05} />
-      </mesh>
-      <lineSegments geometry={baseEdges}>
-        <lineBasicMaterial color={edgeTone} transparent opacity={edgeOpacity} />
-      </lineSegments>
-      <mesh geometry={inner} position={[0, 0, t * 0.5 + t * 0.3 + (spec.expanded ? 0 : 0)]} receiveShadow>
-        {/* The lit tier stays UNDER the bloom threshold (0.62 luminance): the plate
-            is the floor the stations glow above, not a light of its own. */}
-        <meshPhysicalMaterial color={surface} roughness={0.5} metalness={0.3} clearcoat={0.5} clearcoatRoughness={0.3} emissive={spec.needsYou ? amber : edgeTone} emissiveIntensity={(spec.lit || spec.needsYou ? 0.22 : 0.08) * (dim ? 0.5 : 1)} />
-      </mesh>
-      <lineSegments geometry={innerEdges} position={[0, 0, t * 0.5 + t * 0.3]}>
-        <lineBasicMaterial color={spec.needsYou ? amber : edgeTone} transparent opacity={edgeOpacity} />
-      </lineSegments>
+      <group rotation={[0, 0, Math.PI / 4]}>
+        {tiers.map((tier, i) => {
+          const deck = i === tiers.length - 1
+          const rim = deck && spec.needsYou ? amber : edgeTone
+          return (
+            <group key={i} position={[0, 0, tier.z]}>
+              <mesh geometry={tier.body} receiveShadow>
+                {/* The faces stay under the bloom threshold and keep the FAMILY tone; the
+                    deck of a lit plate glows a little more. Amber is the RIM only — an amber
+                    face read as a solid orange slab, the state shouting over the shape. */}
+                <meshPhysicalMaterial color={surface} roughness={0.5} metalness={0.3} clearcoat={0.5} clearcoatRoughness={0.3}
+                  emissive={edgeTone} emissiveIntensity={(deck ? (spec.lit || spec.needsYou ? 0.2 : 0.1) : 0.05) * (dim ? 0.5 : 1)} />
+              </mesh>
+              <lineSegments geometry={tier.edges}>
+                <lineBasicMaterial color={rim} transparent opacity={deck ? rimOpacity : rimOpacity * 0.7} toneMapped={false} />
+              </lineSegments>
+            </group>
+          )
+        })}
+      </group>
+      {/* The floor glow the reference's platforms sit in: an additive disc under
+          the base, squashed to the diamond's screen aspect. Full quality only;
+          additive over a light ground reads as a hole (GroundPool's header). */}
+      {quality === 'full' && <PlatformPool spec={spec} side={side} tone={edgeTone} dim={dim} />}
     </group>
+  )
+}
+
+function PlatformPool({ spec, side, tone, dim }: { spec: OrchPlatformSpec; side: number; tone: THREE.Color; dim: boolean }): JSX.Element | null {
+  const texture = useGlowTextureOnce()
+  const dark = useDarkTheme()
+  if (!dark) return null
+  const r = side / Math.SQRT2
+  return (
+    // In the tilted group's local plane, so the tilt squashes it like the plate; a hair below the base.
+    <mesh position={[0, 0, -2]} scale={[r * 2.6, r * 2.6, 1]}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial map={texture} color={tone} transparent opacity={(spec.lit || spec.selected ? 0.34 : 0.18) * (dim ? 0.4 : 1)} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+    </mesh>
   )
 }
 
@@ -515,7 +566,7 @@ function CubeScene({ nodes, platforms, viewBox, reducedMotion, quality }: { node
         <shadowMaterial transparent opacity={0.28} />
       </mesh>
       {platforms.map((p) => (
-        <PlatformMesh key={`platform-${p.id}`} spec={p} fit={fit} size={size} reducedMotion={reducedMotion} />
+        <PlatformMesh key={`platform-${p.id}`} spec={p} fit={fit} size={size} reducedMotion={reducedMotion} quality={quality} />
       ))}
       {darkTheme && quality === 'full' && nodes.map((n) => (
         <GroundPool key={`pool-${n.id}`} node={n} fit={fit} size={size} texture={glowTexture} />

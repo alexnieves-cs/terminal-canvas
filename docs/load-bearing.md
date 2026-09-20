@@ -4920,3 +4920,20 @@ bloom does not flicker at the edge); `lean` drops the composer and the ground po
 also the shadows — the bloom degrades before it stalls. The 1/6/25/100-session fixtures in
 `orch-zoom.app.2` measure each size pinned `full` and then adaptive on the same build; the
 numbers are the ledger's, and they are validation targets, not capacity claims.
+
+**Orchestrate's selection lift is along WORLD Y, never z (`OrchestrationCubes.tsx`
+`PlatformMesh`, M294).** The island is an orthographic camera, so a move along z has no
+perspective and paints NOTHING — Phase D's 6-unit z lift was invisible by construction, with
+every suite green. The visible lift (`ORCH_SELECT_LIFT`, screen px) moves the plate up the
+screen, which is why the hit polygon, the label and the objects on the plate must move by the
+same number in the view's projection: a mesh that rises while its target stays is a click that
+lands on the wrong island. `orch-iso.4` pins the axis and the shared number.
+
+**Orchestrate's platform hit-target is a POLYGON cut to the mesh's silhouette
+(`orchPlatformHitPolygon`, M294).** The plate is a square turned 45° inside the stage tilt, so
+its footprint is a diamond; a bounding box answers a click in the diamond's empty corner with
+the wrong island, silently, and `elementFromPoint` checks at the target's centre never see it.
+The SVG `<polygon>`, the flat fallback and the pure `orchHitAt` (point-in-polygon when a target
+carries `points`) share the one outline; `orch-iso.1` pins that its tips are the projected
+corners of the mesh's square. Turning the plate in the OUTER group instead of an inner one
+swings it out of the stage's plane and the outline no longer matches.

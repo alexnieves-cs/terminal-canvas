@@ -8115,6 +8115,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
      the beacon is the only cube animation still in CSS. */
   .orch__cube-beacon { animation: none; }
   .orch__edge[data-edge-activity="firing"] { animation: none; stroke-dasharray: none; }
+  .orch__connector--lit { animation: none; }
   .orch__wp[data-orch-stage-shift] { animation: none; }
   .panel__motion--demoting, .panel__motion--waking { animation: none; }
   .dock__badge[data-attention-new], .edge-indicator[data-attention-new], .orch__roster-row[data-attention-new] { animation: none; }
@@ -8403,6 +8404,19 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__island-ambiguity { color: var(--amber); }
 .orch__island[data-orch-island-ambiguous] .orch__island-place { color: var(--amber); }
 .orch__edge--grouping { stroke: color-mix(in srgb, var(--iris) 10%, transparent); stroke-dasharray: 2 6; filter: none; }
+/* M294. Connectors: faint light paths between platforms and along a plate's
+   stations, GROUPING (their title says so) and never a dependency — dotted and
+   quiet where an authored edge is solid amber and thick. A station chain lights
+   ONCE when either end changes state (the element is re-keyed per event, so the
+   one-shot animation restarts and nothing loops); the dependency lens dims them
+   to nothing so the focus stays on authored edges alone. */
+.orch__connector { stroke: color-mix(in srgb, var(--iris) 28%, transparent); stroke-width: 1.25; stroke-linecap: round; stroke-dasharray: 1 5; fill: none; pointer-events: none; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--iris) 40%, transparent)); }
+.orch__connector--platform { stroke: color-mix(in srgb, var(--iris) 42%, transparent); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.orch__connector--lit { stroke: var(--iris); stroke-dasharray: 10 6; animation: edge-current var(--dur-packet) ease-out 1; }
+.orch__connector--lensed { stroke: color-mix(in srgb, var(--iris) 6%, transparent); filter: none; animation: none; }
+/* The compact name tier (M294): two short lines cut to the station pitch, no glyph tile. */
+.orch__plate--compact .orch__cube-label { font-size: var(--t-xs); font-family: var(--font-mono); }
+.orch__plate--compact .orch__cube-role { font-size: var(--t-xs); }
 .orch__edge-label { font-family: var(--font-mono); font-size: var(--t-xs); fill: var(--amber); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
 .orch__edge-label--grouping { fill: var(--fg-4); }
 /* M291. The platform scene. The plate's label is screen-aligned SVG text over

@@ -28,12 +28,32 @@
  * A waiting (needs-you) station is ALWAYS seated, whatever the cap — a blocked
  * or needs-input object is never hidden behind an overflow node.
  *
- * Height is never a hidden quantitative score: every platform has the same two
- * layers (a base and a raised inner plate the stations stand on) and the same
+ * Height is never a hidden quantitative score: every platform has the same three
+ * layers (a base, a middle tier and the deck the stations stand on) and the same
  * thickness; selection lifts by a fixed, finite amount. Those layers are
  * DECORATIVE and expendable before hit accuracy or legibility — the hit-target
  * is the base plate's footprint, computed here, and nothing about the layers
  * changes it.
+ *
+ * M294. The plate is the reference's ISOMETRIC DIAMOND: a square of side
+ * `ORCH_PLATFORM.side` rotated 45° in its own plane BEFORE the stage tilt, so it
+ * projects to a rhombus `2·half` wide and `2·half·cos(tilt)` tall. Its footprint
+ * is therefore a POLYGON, not a box, and the hit rule follows the mesh: the
+ * hit-target is the six-point outline `orchPlatformHitPolygon` cuts (the top
+ * face's diamond plus the thickness band under its lower edges), tested with a
+ * point-in-polygon in `orchHitAt` and drawn as the same `<polygon>` in the SVG —
+ * a box would have answered a click in the diamond's empty corners with the
+ * wrong island, silently. Stations stand on the deck inside the diamond's
+ * inscribed axis-aligned square (half-side `half / 2`), which is why the pitch
+ * adapts to the count (`orchStationPitch`) instead of a fixed 46.
+ *
+ * Cells are a ZIG-ZAG strip, still a function of the index alone: even indices
+ * take the lower row, odd the upper, each half a pitch further right, so
+ * neighbouring diamonds interlock and a fleet of three fills the stage's
+ * height as well as its width (one straight row sat in the middle third). The
+ * workspace plate is index 0 (lower-left); the reported `cell` stays the
+ * 3-wide append index (`col = i % 3`, `row = ⌊i / 3⌋`) the live-update check
+ * derives "the next cell" from — it is an ordinal, not a position.
  */
 import type { OrchRosterRow } from './orchestration-model'
 import { isLiveRosterState } from './orchestration-model'
@@ -48,13 +68,35 @@ export const ORCH_WORKSPACE_PLATFORM = '__workspace__'
 /** Stations a platform seats at rest. Past it: `+N more`, unless focused. */
 export const ORCH_STATION_CAP = 8
 
-/** Model units. The grid is three cells wide; rows go down (nearer the camera). */
-export const ORCH_CELL = { w: 286, h: 210, cols: 3, x0: 1, y0: 4 } as const
-/** The plate's footprint inside a cell, before the stage's tilt; the inner plate is inset. */
-export const ORCH_PLATFORM = { w: 250, h: 150, inset: 18, thickness: 10, innerLift: 8 } as const
-/** Station pitch on the inner plate and the object sizes (half-extents the meshes read). */
-export const ORCH_PITCH = 46
+/**
+ * The plate: a square of `side` (pre-rotation), three stacked layers each
+ * `inset` smaller than the one under it, every layer `thickness` thick (model
+ * z-units; the base is the full thickness, the tiers above it half each), and
+ * `stack` the z from the base's top face to the deck's — the screen rise the
+ * view lifts a standing station by, so it stands ON the deck, not in it.
+ */
+export const ORCH_PLATFORM = { side: 220, inset: 14, thickness: 10, stack: 10, layers: 3 } as const
+/** Half the diamond's diagonal (pre-tilt): the plate's half-width on screen at k = 1, and its pre-tilt half-height. */
+export const ORCH_PLATFORM_HALF = ORCH_PLATFORM.side / Math.SQRT2
+/**
+ * Model units. `cols` is the width of the APPEND INDEX (`cell.col/row`), not a
+ * row of geometry: positions come from the zig-zag lattice below. `gap` is the
+ * clearance between two interlocking diamonds' edges (pre-tilt units).
+ */
+export const ORCH_CELL = { cols: 3, x0: 1, y0: 4, gap: 20, perBand: 6 } as const
+/** The lattice: half a diamond-plus-gap per index along x; the two rows a diamond-plus-gap apart. */
+export const ORCH_LATTICE = { xPitch: ORCH_PLATFORM_HALF + ORCH_CELL.gap / 2, rowPitch: ORCH_PLATFORM_HALF + ORCH_CELL.gap } as const
+/** Station pitch bounds on the deck (adaptive to the count, see orchStationPitch) and the object sizes (half-extents the meshes read). */
+export const ORCH_PITCH = { min: 46, max: 76 } as const
 export const ORCH_OBJECT_SIZE = { station: 17, checkpoint: 14, artifact: 13 } as const
+/**
+ * M294. The finite selection lift, in SCREEN pixels along world y (up). The
+ * first cut lifted 6 units along z, which an orthographic camera cannot show —
+ * a pure z move has no perspective — so "selected" painted nothing. The hit
+ * polygon, the label and the objects on the plate move by the same amount, so
+ * the target keeps following the mesh; the mesh damps to it (reduced motion snaps).
+ */
+export const ORCH_SELECT_LIFT = 14
 
 export interface OrchSceneObject {
   id: string
@@ -69,8 +111,14 @@ export interface OrchSceneObject {
   y: number
   /** Half-extent in model units. */
   size: number
-  /** Which layer it stands on: 1 = the inner plate (stations), 0 = the base (checkpoints, artifacts). */
+  /** Which layer it stands on: 1 = the deck (stations), 0 = the base ring (checkpoints, artifacts). */
   layer: 0 | 1
+  /**
+   * M294. Nothing of its kind stands in the grid row below it on this plate —
+   * the space a resting name plate hangs into is free. The compact name tier
+   * needs it; the full tier (a wide pitch) does not.
+   */
+  front: boolean
   /** A file artifact's path, for the inspector and the List. */
   path?: string
 }
@@ -88,11 +136,22 @@ export interface OrchPlatform {
   /** The island behind it, when it is one. */
   island?: TaskIsland
   cell: { col: number; row: number }
-  /** Model-space centre and footprint (the BASE plate, pre-tilt). */
+  /**
+   * M294. Where the label plate hangs: `above` the top tip on the upper row,
+   * `below` the bottom tip on the lower row — a lower plate's top tip points
+   * into the V between two upper plates, where a label would cover their bodies.
+   */
+  labelSide: 'above' | 'below'
+  /** Model-space centre and the diamond's BOUNDING footprint (the base plate, pre-tilt): `w = h = 2 · half`. */
   x: number
   y: number
   w: number
   h: number
+  /** The square's side before its 45° turn; `half = side / √2` is the diamond's half-diagonal. */
+  side: number
+  half: number
+  /** The station pitch this plate seats its grid at (adaptive, see orchStationPitch). */
+  pitch: number
   /** Expanded on focus past the cap — wider than its cell; painted over its neighbours. */
   expanded: boolean
   stations: OrchSceneObject[]
@@ -120,15 +179,49 @@ const within = (dir: string, root: string): boolean => dir === root || dir.start
 
 const urgency = (state: OrchRosterRow['state']): number => (state === 'wants-you' ? 0 : isLiveRosterState(state) ? 1 : 2)
 
+/**
+ * A cell's centre from its index alone. The zig-zag: within a band of
+ * `perBand` indices, index r stands `r · xPitch` to the right, on the LOWER
+ * row when r is even and the upper when odd — the workspace (index 0) is
+ * lower-left, the first island upper-middle, the second lower-right, so three
+ * platforms form a centred cluster; bands stack down, two rows apart.
+ */
 export function orchCellCentre(index: number): { col: number; row: number; x: number; y: number } {
   const col = index % ORCH_CELL.cols
   const row = Math.floor(index / ORCH_CELL.cols)
-  return { col, row, x: ORCH_CELL.x0 + col * ORCH_CELL.w + ORCH_CELL.w / 2, y: ORCH_CELL.y0 + row * ORCH_CELL.h + ORCH_CELL.h / 2 }
+  const band = Math.floor(index / ORCH_CELL.perBand)
+  const r = index % ORCH_CELL.perBand
+  const half = ORCH_PLATFORM_HALF
+  return {
+    col, row,
+    x: ORCH_CELL.x0 + half + r * ORCH_LATTICE.xPitch,
+    y: ORCH_CELL.y0 + half + band * 2 * ORCH_LATTICE.rowPitch + (r % 2 === 0 ? ORCH_LATTICE.rowPitch : 0)
+  }
 }
 
-/** Grid columns for n objects: square-ish, at most 4 on a resting plate. */
+/** Grid columns for n objects: square-ish, at most `max` on a resting plate. */
 function gridCols(n: number, max: number): number {
   return Math.max(1, Math.min(max, Math.ceil(Math.sqrt(Math.max(1, n)))))
+}
+
+/** The axis-aligned square a diamond of half-diagonal `half` inscribes: its half-side. */
+export const orchInscribedHalf = (half: number): number => half / 2
+
+/**
+ * The pitch a resting plate seats a `cols × rows` grid at: as wide as the
+ * inscribed square allows, between `ORCH_PITCH.min` and `.max` — two stations
+ * stand far enough apart for full name plates, nine still fit the deck.
+ */
+export function orchStationPitch(cols: number, rows: number, half: number = ORCH_PLATFORM_HALF): number {
+  const room = (orchInscribedHalf(half) - ORCH_OBJECT_SIZE.station - 6) * 2
+  const span = Math.max(1, Math.max(cols, rows) - 1)
+  return Math.max(ORCH_PITCH.min, Math.min(ORCH_PITCH.max, Math.floor(room / span)))
+}
+
+/** The side an EXPANDED plate needs so a `cols × rows` grid at `pitch` fits its inscribed square. */
+function expandedSide(cols: number, rows: number, pitch: number): number {
+  const halfNeeded = (Math.max(cols, rows) - 1) * pitch / 2 + ORCH_OBJECT_SIZE.station + 10
+  return Math.max(ORCH_PLATFORM.side, halfNeeded * 2 * Math.SQRT2)
 }
 
 /**
@@ -193,30 +286,38 @@ export function orchPlatforms(input: OrchPlatformsInput): OrchPlatform[] {
     const files = artifactsOf.get(slot.id) ?? []
     const expanded = input.focusedId === slot.id && all.length > ORCH_STATION_CAP
     const { seated, hidden } = orchSeatStations(all, ORCH_STATION_CAP, expanded)
-    // Stations on the inner plate: a grid centred on the plate. Past the cap
-    // (focused) the plate grows to seat them all; the grid then may exceed the
-    // cell and the plate paints OVER its neighbours (last in the overlay).
-    const cols = gridCols(seated.length, expanded ? Math.max(4, Math.ceil(Math.sqrt(seated.length))) : 4)
+    // Stations on the deck: a grid centred in the diamond's inscribed square.
+    // Past the cap (focused) the plate grows to seat them all; the diamond then
+    // may exceed its cell and paints OVER its neighbours (last in the overlay).
+    const cols = gridCols(seated.length, expanded ? Math.max(3, Math.ceil(Math.sqrt(seated.length))) : 3)
     const rows = Math.max(1, Math.ceil(seated.length / cols))
-    const w = expanded ? Math.max(ORCH_PLATFORM.w, cols * ORCH_PITCH + ORCH_PLATFORM.inset * 2 + 64) : ORCH_PLATFORM.w
-    const h = expanded ? Math.max(ORCH_PLATFORM.h, rows * ORCH_PITCH + ORCH_PLATFORM.inset * 2 + 28) : ORCH_PLATFORM.h
-    // Checkpoints line the left edge of the base plate, artifacts the right; the
-    // stations' grid sits between, a little to the right of centre so the
-    // label plate (top-left) has the plate's corner to itself.
-    const gridX0 = cell.x - ((cols - 1) * ORCH_PITCH) / 2
-    const gridY0 = cell.y + 10 - ((rows - 1) * ORCH_PITCH) / 2
+    const pitch = expanded ? ORCH_PITCH.max : orchStationPitch(cols, rows)
+    const side = expanded ? expandedSide(cols, rows, pitch) : ORCH_PLATFORM.side
+    const half = side / Math.SQRT2
+    const w = half * 2
+    const h = half * 2
+    const gridX0 = cell.x - ((cols - 1) * pitch) / 2
+    const gridY0 = cell.y - ((rows - 1) * pitch) / 2
     const stations: OrchSceneObject[] = seated.map((r, i) => ({
       id: r.id, title: r.title, kind: 'station', panelKind: r.kind, state: r.state, platformId: slot.id,
-      x: gridX0 + (i % cols) * ORCH_PITCH, y: gridY0 + Math.floor(i / cols) * ORCH_PITCH, size: ORCH_OBJECT_SIZE.station, layer: 1
+      x: gridX0 + (i % cols) * pitch, y: gridY0 + Math.floor(i / cols) * pitch, size: ORCH_OBJECT_SIZE.station, layer: 1,
+      front: i + cols >= seated.length
     }))
-    const edgeY = (i: number, n: number): number => cell.y + 6 + (i - (n - 1) / 2) * 30
+    // Checkpoints walk the base ring's lower-LEFT edge from the left tip toward
+    // the bottom tip, artifacts the lower-RIGHT edge from the right tip — the
+    // stations' inscribed square never reaches those tips, so the evidence stands
+    // clear of the grid, and the two kinds are on two sides as well as two shapes.
+    const alongEdge = (i: number, sign: -1 | 1): { x: number; y: number } => {
+      const t = 0.14 + 0.16 * i
+      return { x: cell.x + sign * (half - t * half - 12), y: cell.y + t * half - 12 }
+    }
     const checkpoints: OrchSceneObject[] = checks.map((r, i) => ({
       id: r.id, title: r.title, kind: 'checkpoint', panelKind: 'watcher', state: r.state, platformId: slot.id,
-      x: cell.x - w / 2 + 18, y: edgeY(i, checks.length), size: ORCH_OBJECT_SIZE.checkpoint, layer: 0
+      ...alongEdge(i, -1), size: ORCH_OBJECT_SIZE.checkpoint, layer: 0, front: i === checks.length - 1
     }))
     const artifacts: OrchSceneObject[] = files.map((f, i) => ({
       id: f.id, title: f.title, kind: 'artifact', panelKind: 'file', state: 'idle', platformId: slot.id,
-      x: cell.x + w / 2 - 18, y: edgeY(i, files.length), size: ORCH_OBJECT_SIZE.artifact, layer: 0, path: f.path
+      ...alongEdge(i, 1), size: ORCH_OBJECT_SIZE.artifact, layer: 0, front: i === files.length - 1, path: f.path
     }))
     const needsYou = all.filter((s) => s.state === 'wants-you').length
     return {
@@ -227,7 +328,8 @@ export function orchPlatforms(input: OrchPlatformsInput): OrchPlatform[] {
       synthetic: isl === undefined,
       ...(isl === undefined ? {} : { island: isl }),
       cell: { col: cell.col, row: cell.row },
-      x: cell.x, y: cell.y, w, h, expanded,
+      labelSide: index % 2 === 0 ? 'below' : 'above',
+      x: cell.x, y: cell.y, w, h, side, half, pitch, expanded,
       stations, checkpoints, artifacts,
       hidden: { ids: hidden.map((s) => s.id), needsYou: hidden.filter((s) => s.state === 'wants-you').length },
       counts: { stations: all.length, checkpoints: checks.length, artifacts: files.length, needsYou, live: all.filter((s) => isLiveRosterState(s.state)).length }
@@ -269,32 +371,115 @@ export function orchSceneObjects(platforms: readonly OrchPlatform[]): OrchSceneO
 
 /** Model-space bounds of every platform (pre-tilt), for Fit all. */
 export function orchPlatformBounds(platforms: readonly OrchPlatform[]): { x: number; y: number; w: number; h: number } {
-  if (platforms.length === 0) return { x: 0, y: 0, w: ORCH_CELL.w, h: ORCH_CELL.h }
+  if (platforms.length === 0) return { x: 0, y: 0, w: ORCH_PLATFORM_HALF * 2, h: ORCH_PLATFORM_HALF * 2 }
   let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
   for (const p of platforms) {
     x0 = Math.min(x0, p.x - p.w / 2); x1 = Math.max(x1, p.x + p.w / 2)
-    // The label plate and a station's lift sit ABOVE the plate; leave room for them.
-    y0 = Math.min(y0, p.y - p.h / 2 - 48); y1 = Math.max(y1, p.y + p.h / 2 + 12)
+    // The label plate sits above the top tip or below the bottom one
+    // (labelSide); leave room on that side. Pre-tilt units, so it scales with k.
+    y0 = Math.min(y0, p.y - p.h / 2 - (p.labelSide === 'above' ? ORCH_LABEL_ROOM : 24))
+    y1 = Math.max(y1, p.y + p.h / 2 + (p.labelSide === 'below' ? ORCH_LABEL_ROOM : 16))
   }
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
+/** Pre-tilt room past a diamond's tip for its label plate. */
+export const ORCH_LABEL_ROOM = 90
 
-export interface OrchHitTarget { id: string; kind: 'platform' | OrchObjectKind; x: number; y: number; w: number; h: number; platformId?: string }
+export interface OrchHitTarget {
+  id: string; kind: 'platform' | OrchObjectKind; x: number; y: number; w: number; h: number; platformId?: string
+  /** M294. A platform's outline; when present the test is point-in-polygon and the box is only its bounds. */
+  points?: readonly { x: number; y: number }[]
+}
 
 /**
- * The topmost target under a point, in PAINT order (the last box containing
+ * M294. The platform's hit outline ON SCREEN: the projected diamond (centre,
+ * half-width `hx`, half-height `hy = hx · cos tilt`) plus the thickness band
+ * `band` px under its two lower edges — the six points the mesh's silhouette
+ * has. The stacked tiers rise inside this outline (each tier is inset further
+ * than it rises), so the base's silhouette IS the platform's.
+ */
+export function orchPlatformHitPolygon(c: { x: number; y: number }, hx: number, hy: number, band: number): { x: number; y: number }[] {
+  return [
+    { x: c.x, y: c.y - hy }, { x: c.x + hx, y: c.y }, { x: c.x + hx, y: c.y + band },
+    { x: c.x, y: c.y + hy + band }, { x: c.x - hx, y: c.y + band }, { x: c.x - hx, y: c.y }
+  ]
+}
+
+export function orchPolygonBounds(points: readonly { x: number; y: number }[]): { x: number; y: number; w: number; h: number } {
+  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
+  for (const p of points) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y) }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+/** Even-odd point-in-polygon, edges inclusive enough for a click on the outline. */
+export function orchPointInPolygon(pt: { x: number; y: number }, points: readonly { x: number; y: number }[]): boolean {
+  let inside = false
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i]!; const b = points[j]!
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
+}
+
+/**
+ * The topmost target under a point, in PAINT order (the last target containing
  * the point wins) — the same rule the overlay SVG's DOM order applies, so a
  * plain-node check and `document.elementFromPoint` answer alike. Platforms
  * paint far-to-near and objects after every platform, because an object only
  * ever overlaps what is BEHIND it on screen (it stands up from its plate), and
  * an expanded platform paints after its neighbours because it covers them.
+ * A platform target carries its polygon; an object is its box.
  */
 export function orchHitAt(point: { x: number; y: number }, targets: readonly OrchHitTarget[]): OrchHitTarget | null {
   for (let i = targets.length - 1; i >= 0; i--) {
     const t = targets[i]!
+    if (t.points !== undefined) { if (orchPointInPolygon(point, t.points)) return t; continue }
     if (point.x >= t.x && point.x <= t.x + t.w && point.y >= t.y && point.y <= t.y + t.h) return t
   }
   return null
+}
+
+/**
+ * M294. The part of segment a→b OUTSIDE both outlines: from where it leaves
+ * `outlineA` to where it enters `outlineB` — so a connector runs from one
+ * plate's edge to the next and never across a body. Null when the outlines
+ * overlap along the segment (nothing to draw) or an end is not inside its outline.
+ */
+export function orchSegmentBetween(a: { x: number; y: number }, b: { x: number; y: number }, outlineA: readonly { x: number; y: number }[], outlineB: readonly { x: number; y: number }[]): { x1: number; y1: number; x2: number; y2: number } | null {
+  const crossings = (outline: readonly { x: number; y: number }[]): number[] => {
+    const ts: number[] = []
+    const dx = b.x - a.x; const dy = b.y - a.y
+    for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+      const p = outline[j]!; const q = outline[i]!
+      const ex = q.x - p.x; const ey = q.y - p.y
+      const den = dx * ey - dy * ex
+      if (Math.abs(den) < 1e-9) continue
+      const t = ((p.x - a.x) * ey - (p.y - a.y) * ex) / den
+      const u = ((p.x - a.x) * dy - (p.y - a.y) * dx) / den
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) ts.push(t)
+    }
+    return ts
+  }
+  const exitA = Math.max(...crossings(outlineA), -Infinity)
+  const enterB = Math.min(...crossings(outlineB), Infinity)
+  if (!Number.isFinite(exitA) || !Number.isFinite(enterB) || enterB <= exitA) return null
+  return { x1: a.x + (b.x - a.x) * exitA, y1: a.y + (b.y - a.y) * exitA, x2: a.x + (b.x - a.x) * enterB, y2: a.y + (b.y - a.y) * enterB }
+}
+
+/**
+ * M294. The scene's connectors — light paths that make it read as connected,
+ * and are GROUPING, never dependency: a path from each platform to the next in
+ * lattice order, and a chain along a plate's seated stations. There is no hub
+ * and no supervisor node: a path joins two things that exist. Authored
+ * dependency edges (M289) are a different element with a different word; the
+ * lens dims these and focuses only on those.
+ */
+export interface OrchConnector { kind: 'platform' | 'station'; from: string; to: string; platformId: string }
+export function orchConnectors(platforms: readonly OrchPlatform[]): OrchConnector[] {
+  const out: OrchConnector[] = []
+  for (let i = 1; i < platforms.length; i++) out.push({ kind: 'platform', from: platforms[i - 1]!.id, to: platforms[i]!.id, platformId: platforms[i]!.id })
+  for (const p of platforms) for (let i = 1; i < p.stations.length; i++) out.push({ kind: 'station', from: p.stations[i - 1]!.id, to: p.stations[i]!.id, platformId: p.id })
+  return out
 }
 
 /**
@@ -345,6 +530,23 @@ export function orchObjectVisible(o: Pick<OrchSceneObject, 'kind' | 'state'>, le
 
 /** Name plates the scene may draw at once; past it the plates go to the objects that matter most. */
 export const ORCH_LABEL_BUDGET = 48
+
+/**
+ * M294. What name plate a resting object gets, by the DENSITY at this zoom:
+ * `full` (glyph, name, state word) when the station pitch on screen clears a
+ * full plate's width; `compact` (name and state word in two short lines, cut
+ * to the pitch) when the pitch is narrower but nothing stands in the row the
+ * plate hangs into; `none` past that — the name stays on hover, on its card
+ * and in the List. A density rule that degrades by tier rather than a switch
+ * that hides every name at rest (the critic's "no names on stations").
+ */
+export type OrchNameTier = 'full' | 'compact' | 'none'
+export const ORCH_NAME_PITCH_PX = { full: 96, compact: 56 } as const
+export function orchNameTier(pitchPx: number, front: boolean): OrchNameTier {
+  if (pitchPx >= ORCH_NAME_PITCH_PX.full) return 'full'
+  if (pitchPx >= ORCH_NAME_PITCH_PX.compact && front) return 'compact'
+  return 'none'
+}
 
 /**
  * Which objects get a name plate: selected and waiting ones first, then the
