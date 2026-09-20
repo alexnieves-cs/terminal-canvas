@@ -48,6 +48,14 @@ export interface ChatState {
    * the inspector renders as `unknown` rather than `none`.
    */
   grants?: string[]
+  /**
+   * M290. How the last turn ENDED, this launch: ok, interrupted (a partial
+   * answer), an error result, or aborted by main with its reason. Kept so
+   * Orchestrate can tell an interrupted run from a stopped session from an
+   * idle one — three states that read as one `idle` dot otherwise. Absent
+   * until a turn has ended; never persisted.
+   */
+  lastTurn?: { kind: 'ok' | 'interrupted' | 'error' | 'aborted'; at: number; reason?: string }
 }
 
 const states = new Map<string, ChatState>()
@@ -388,7 +396,7 @@ export function applyChatEvent(event: AgentSessionEvent): void {
         usage: event.usage ? addTotals(snap.usage, event.usage) : snap.usage,
         costUsd: event.costUsd ?? snap.costUsd
       }
-      update(event.id, { ...prev, snapshot: nextSnap, live: null })
+      update(event.id, { ...prev, snapshot: nextSnap, live: null, lastTurn: { kind: event.interrupted ? 'interrupted' : event.ok === false ? 'error' : 'ok', at: Date.now() } })
       // An interrupted turn is not a turn's end: its answer is partial.
       // …and an error result is not a completed turn either: a handoff
       // after a failed turn would carry an answer that is not one.
@@ -396,7 +404,7 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       return
     }
     case 'turn-aborted':
-      update(event.id, { ...prev, live: null })
+      update(event.id, { ...prev, live: null, lastTurn: { kind: 'aborted', at: Date.now(), reason: event.reason } })
       return
     case 'queued':
       if (!snap) return
