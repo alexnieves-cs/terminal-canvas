@@ -18,6 +18,7 @@ import {
 } from '@shared/check-evidence'
 import { WORKBENCH_DEFAULT_HEIGHT, WORKBENCH_TABS, clampWorkbenchHeight, type WorkbenchTab } from '@shared/orchestrate-prefs'
 import type { WorktreeListRow } from '@shared/ipc-contract'
+import type { EventRow, GapRow, OrchEventSource, TimelineFilter, TimelineRead as LedgerTimelineRead } from '@shared/run-ledger'
 import { orchLogsCoverage } from './orchestration-model'
 import { createSubjectGate } from './orch-subject-gate'
 import { orchCommit, orchDiscard, type OrchWriteOutcome } from './orch-review-write'
@@ -89,6 +90,13 @@ export interface OrchWorkbenchProps {
   onRefreshTaskHandoffs?: () => void
   onPatchWorkItem?: (itemId: string, fields: Partial<PersistedWorkItem>) => void
   onReviewOnCanvas?: (panelId: string) => void
+  /**
+   * M300. Open an artifact's file on the canvas. OPTIONAL, and the Artifacts
+   * row says so when it is absent rather than looking like a dead control —
+   * the class of defect M195 named. The path is opened by the canvas's own
+   * file verb, so nothing here owns a second file reader.
+   */
+  onOpenPath?: (path: string) => void
   onJump: (id: string) => void
   onShowCanvas?: () => void
   /** Phase A's output mirror, owned by the view (it also feeds the scene's terminal card). */
@@ -333,13 +341,224 @@ function CheckOutput({ record }: { record: CheckRecord }): JSX.Element {
   )
 }
 
+/* ── The durable record: Artifacts and Timeline ──────────────────────────── */
+
+/**
+ * M300. The two new tabs read ONE thing — `ledger.timeline` — because they
+ * are two views of the same durable record: Artifacts is what a run produced,
+ * Timeline is what it did. One read, one gate, one set of words for what is
+ * missing; two reads would let the same subject answer twice and disagree.
+ *
+ * THIS IS HISTORY, NOT THE LIVE TAIL. `orchestration-activity.ts` is a
+ * fifty-event in-memory ring that is empty after a relaunch and says nothing
+ * about what it forgot; this is a file. Both tabs say which they are showing,
+ * because an audit is worth nothing if a reader cannot tell it from a feed.
+ */
+const TIMELINE_ROWS = 120
+
+type TimelineRead =
+  | { kind: 'idle' }
+  | { kind: 'loading'; key: string }
+  /** The door is not wired at all — a harness, an older build. Not "nothing happened". */
+  | { kind: 'unwired'; key: string }
+  | { kind: 'read'; key: string; read: LedgerTimelineRead }
+
+function useTimeline(subject: BenchSubject | null, active: boolean, refresh: number): TimelineRead {
+  const [read, setRead] = useState<TimelineRead>({ kind: 'idle' })
+  const key = benchSubjectKey(subject)
+  const gate = useRef(createSubjectGate()).current
+  // The panels a subject's rows can be filed under: a session is itself, a
+  // task is its members and its conversation. The same set the Checks tab
+  // asks the ledger for, for the same reason — one subject, one membership.
+  const filter = useMemo((): TimelineFilter | null => {
+    if (subject === null) return null
+    if (subject.kind === 'session') return { panelIds: [subject.id] }
+    const panelIds = [...new Set([...subject.memberIds, ...(subject.chatId === undefined ? [] : [subject.chatId])])]
+    return { itemId: subject.itemId, ...(panelIds.length > 0 ? { panelIds } : {}) }
+  }, [subject])
+  const filterKey = JSON.stringify(filter)
+  useEffect(() => {
+    gate.move(key)
+    if (!active || filter === null) { setRead({ kind: 'idle' }); return }
+    if (typeof window.canvas?.ledger?.timeline !== 'function') { setRead({ kind: 'unwired', key }); return }
+    let live = true
+    const asked = key
+    const ticket = gate.ask(key)
+    setRead({ kind: 'loading', key: asked })
+    void window.canvas.ledger.timeline(filter, TIMELINE_ROWS).then(
+      (r) => { if (live && gate.lands(ticket)) setRead({ kind: 'read', key: asked, read: r }) },
+      // A read that FAILED is not a read that found nothing.
+      () => { if (live && gate.lands(ticket)) setRead({ kind: 'unwired', key: asked }) }
+    )
+    return () => { live = false }
+  }, [key, filterKey, active, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The render-time guard, as everywhere else in this strip: a read that is
+  // not about THIS subject shows as nothing, whatever state still holds it.
+  return read.kind !== 'idle' && read.key !== key ? { kind: 'loading', key } : read
+}
+
+/** Absolute, because "2 minutes ago" ages on screen while nothing re-reads it. */
+function stamp(at: number): string {
+  const d = new Date(at)
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+}
+
+/** The row's own words for where it came from — never inferred at render. */
+function sourceWords(source: OrchEventSource): string {
+  return source === 'agent' ? 'the agent said so'
+    : source === 'person' ? 'a person did this here'
+      : source === 'shell' ? 'the shell reported it'
+        : source === 'watcher' ? 'a watcher ran it'
+          : source === 'provider' ? 'the provider reported it'
+            : 'this app recorded it'
+}
+
+function gapWords(row: GapRow): string {
+  return `${row.dropped} earlier ${row.dropped === 1 ? 'entry is' : 'entries are'} missing — the record was trimmed at its size limit on ${stamp(row.at)}. This is a gap, not a quiet period.`
+}
+
+/**
+ * The durable record's own header sentence, per subject. It states the two
+ * things a reader cannot get from the rows: that this is the persisted record
+ * and not the live feed, and whether the scan reached the beginning.
+ */
+function recordWords(read: LedgerTimelineRead): string {
+  const older = read.reachedStart ? 'This is the beginning of the record.' : `Older entries exist beyond the ${TIMELINE_ROWS} shown.`
+  return `The durable record — what was written to disk, not the live feed. ${older}`
+}
+
+function TimelineTab({ read, subject }: { read: TimelineRead; subject: BenchSubject }): JSX.Element {
+  if (read.kind === 'loading' || read.kind === 'idle') return <p className="orch__caption" role="status">Reading the record…</p>
+  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-timeline-kind="unwired">The durable record could not be read in this build, so there is no history to show — this is not a claim that nothing happened.</p>
+  const { entries } = read.read
+  if (entries.length === 0) {
+    return (
+      <p className="orch__review-words" data-orch-timeline-kind="empty">
+        {read.read.reachedStart
+          ? `The record holds nothing for ${subject.title} yet. Dispatches, command outcomes, permission answers and handoffs are written here as they happen.`
+          : `No entries for ${subject.title} in the most recent ${TIMELINE_ROWS} of the record.`}
+      </p>
+    )
+  }
+  return (
+    <>
+      <p className="orch__caption" data-orch-timeline-head>{recordWords(read.read)}</p>
+      <ul className="orch__review-files" aria-label="Timeline" data-orch-timeline={entries.length}>
+        {entries.map((e, i) => (
+          e.kind === 'gap' ? (
+            <li key={`gap:${e.row.at}:${i}`} className="orch__activity-row orch__check-row" data-orch-timeline-gap={e.row.dropped}>
+              <span className="orch__check-outcome" data-outcome="unknown">gap</span>
+              <span className="orch__activity-title">{gapWords(e.row)}</span>
+            </li>
+          ) : e.kind === 'command' ? (
+            <li key={`cmd:${e.row.panelId}:${e.row.endedAt}:${i}`} className="orch__activity-row orch__check-row" data-orch-timeline-kind="command">
+              <span className="orch__check-outcome" data-outcome={e.row.exitCode === 0 ? 'passed' : e.row.exitCode === null ? 'unknown' : 'failed'}>
+                {e.row.exitCode === null ? 'command · unknown' : `command · exit ${e.row.exitCode}`}
+              </span>
+              <span className="orch__activity-title"><code>{e.row.command}</code></span>
+              <span className="orch__activity-detail">
+                {stamp(e.row.endedAt)} · the shell reported it · {displayPath(e.row.cwd).short}
+                {e.row.tested === undefined ? ' · the revision it tested is unknown' : ` · tested ${e.row.tested.base.slice(0, 7)}`}
+              </span>
+            </li>
+          ) : (
+            <li key={`ev:${e.row.runId}:${e.row.at}:${i}`} className="orch__activity-row orch__check-row" data-orch-timeline-kind={e.row.event} data-orch-timeline-source={e.row.source}>
+              <span className="orch__check-outcome" data-outcome={e.row.event === 'permission' ? 'unknown' : 'passed'}>{e.row.event}</span>
+              <span className="orch__activity-title">{e.row.title}</span>
+              <span className="orch__activity-detail">
+                {stamp(e.row.at)} · {sourceWords(e.row.source)}
+                {e.row.detail === undefined ? '' : ` · ${e.row.detail}`}
+                {e.row.paths === undefined ? '' : ` · ${e.row.paths.length} file${e.row.paths.length === 1 ? '' : 's'}`}
+              </span>
+            </li>
+          )
+        ))}
+      </ul>
+    </>
+  )
+}
+
+/**
+ * M300. ARTIFACTS: what the executions produced, as REFERENCES.
+ *
+ * The record stores paths, never contents, so this list resolves nothing
+ * until a person opens a row — and then it opens the file the ordinary way,
+ * on the canvas, which is the one reader that already owns file watching. An
+ * artifact whose file has since moved or been rewritten is therefore not
+ * shown stale: its row says the record is a reference and the content is
+ * read live.
+ *
+ * Grouped by EXECUTION, because provenance is the point: M302's rerun mints a
+ * new run id, so an earlier run's files stay under the earlier run's heading
+ * and can never be re-attributed to the rerun.
+ */
+function ArtifactsTab({ read, subject, onOpenPath }: { read: TimelineRead; subject: BenchSubject; onOpenPath?: (path: string) => void }): JSX.Element {
+  if (read.kind === 'loading' || read.kind === 'idle') return <p className="orch__caption" role="status">Reading the record…</p>
+  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-artifacts-kind="unwired">The durable record could not be read in this build, so the artifacts it holds cannot be listed — this is not a claim that none were produced.</p>
+  const produced = read.read.entries.flatMap((e) => (e.kind === 'event' && e.row.event === 'artifact' ? [e.row] : []))
+  const trimmed = read.read.entries.some((e) => e.kind === 'gap')
+  if (produced.length === 0) {
+    return (
+      <p className="orch__review-words" data-orch-artifacts-kind="empty">
+        Nothing has been recorded as produced by {subject.title} yet. Changed files are recorded here when a review is marked, so the record keeps which execution produced them.
+        {trimmed ? ' Earlier entries have been trimmed from the record, so this does not cover the whole history.' : ''}
+      </p>
+    )
+  }
+  // Newest run first; the entries already arrive newest first, so first sight wins.
+  const runs: { runId: string; at: number; rows: EventRow[] }[] = []
+  for (const row of produced) {
+    const found = runs.find((r) => r.runId === row.runId)
+    if (found === undefined) runs.push({ runId: row.runId, at: row.at, rows: [row] })
+    else found.rows.push(row)
+  }
+  return (
+    <>
+      <p className="orch__caption" data-orch-artifacts-head>
+        References, not copies: the record keeps each path and the execution that produced it, and the file itself is read live when you open it.
+        {trimmed ? ' Earlier entries have been trimmed, so this is not the whole history.' : ''}
+      </p>
+      <div data-orch-artifacts={produced.length}>
+        {runs.map((run) => (
+          <div key={run.runId} data-orch-artifact-run={run.runId}>
+            <div className="orch__section-title">{run.rows[0]?.title ?? 'Produced'} · {stamp(run.at)} · run {run.runId.slice(0, 8)}</div>
+            {run.rows.every((row) => row.paths === undefined || row.paths.length === 0) && (
+              // A recorded production with no references is a real fact and
+              // gets a sentence: the count survived, the paths did not. An
+              // empty list under the heading would read as "it produced
+              // nothing", which is the opposite of what the row says.
+              <p className="orch__caption" data-orch-artifact-pathless>This execution recorded what it produced, but not which files — the paths were not available when the record was written.</p>
+            )}
+            <ul className="orch__review-files" aria-label="Artifacts">
+              {run.rows.flatMap((row) => (row.paths ?? []).map((path) => (
+                <li key={`${row.runId}:${row.at}:${path}`} data-orch-artifact={path}>
+                  <button type="button" className="orch__activity-row orch__check-row" disabled={onOpenPath === undefined}
+                    title={onOpenPath === undefined ? 'this build cannot open a file from here' : `open ${path} on the canvas`}
+                    {...shellControl(() => onOpenPath?.(path))}>
+                    <span className="orch__check-outcome" data-outcome="passed">file</span>
+                    <span className="orch__activity-title"><code>{displayPath(path).short}</code></span>
+                    <span className="orch__activity-detail" title={path}>{stamp(row.at)} · {sourceWords(row.source)}{row.tested === undefined ? ' · at an unknown revision' : ` · at ${row.tested.base.slice(0, 7)}`} · Open on canvas</span>
+                  </button>
+                </li>
+              )))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 /* ── The strip ───────────────────────────────────────────────────────────── */
 
 export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
-  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onJump, onShowCanvas, output, refresh } = props
+  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh } = props
   const [localRefresh, setLocalRefresh] = useState(0)
   const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh)
   const checks = useChecks(subject, open && tab === 'checks', panels, worktrees, refresh + localRefresh)
+  // M300. One read for both new tabs — they are two views of one record, and a
+  // second read would let the same subject answer twice and disagree.
+  const record = useTimeline(subject, open && (tab === 'artifacts' || tab === 'timeline'), refresh + localRefresh)
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null)
   // M290. The two writes' draft state and their last outcome, per subject key —
   // a draft opened on one subject must not survive a selection change.
@@ -470,7 +689,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
           {WORKBENCH_TABS.map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} data-orch-bench-tab-button={t}
               className={`orch__tab${open && tab === t ? ' orch__tab--on' : ''}`} {...shellControl(() => { onTab(t); onOpen(true) })}>
-              {t === 'changes' ? 'Changes' : t === 'checks' ? 'Checks' : 'Output'}
+              {t === 'changes' ? 'Changes' : t === 'checks' ? 'Checks' : t === 'output' ? 'Output' : t === 'artifacts' ? 'Artifacts' : 'Timeline'}
             </button>
           ))}
         </div>
@@ -628,6 +847,14 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                 )}
               </>
             )}
+          </div>
+        ) : tab === 'artifacts' ? (
+          <div className="orch__bench-checks" data-orch-artifacts-subject={dataSubject}>
+            <ArtifactsTab read={record} subject={subject} onOpenPath={onOpenPath} />
+          </div>
+        ) : tab === 'timeline' ? (
+          <div className="orch__bench-checks" data-orch-timeline-subject={dataSubject}>
+            <TimelineTab read={record} subject={subject} />
           </div>
         ) : (
           <div className="orch__term-tab">

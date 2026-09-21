@@ -251,6 +251,7 @@ import { TRIGGER_WORDS } from './trigger-words'
 import type { PanelSearchResult } from '@shared/ipc-contract'
 // M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
+import { adoptedRunId, recordOrchEvent } from '../orchestration/orch-record'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
 const EMPTY_SHELF: Shelf = { columns: [] }
@@ -4238,6 +4239,17 @@ export function Canvas({
   // stable setter so the hook's effect does not re-subscribe every render.
   const setHandoffResult = useCallback((key: string, sentence: string) => {
     setAutomationResult((current) => new Map(current).set(key, sentence))
+    // M300. The same funnel, recorded. This map is IN MEMORY — Phase C's
+    // deferred item is exactly that after a relaunch a handoff that fired
+    // reads `unknown`, because the only record of it was this Map. The
+    // durable row is what survives; the lens reads it back in M301.
+    // `app` is the honest source: this app ran the automation, and the
+    // sentence is its own vocabulary, not an agent's claim.
+    const [from, to] = key.split(':')
+    void recordOrchEvent({
+      runId: adoptedRunId(from ?? key), panelId: from, event: 'handoff', source: 'app',
+      title: `Handoff ${from} → ${to}`, detail: sentence
+    })
   }, [])
   const scrollbackEnabled = useCallback(() => scrollbackPersistRef.current, [])
 
@@ -7296,6 +7308,17 @@ export function Canvas({
             onOpenFiles={() => {
               leaveForCanvas()
               chrome.chooseNavigator('files')
+            }}
+            /*
+             * M300. An artifact opens through the canvas's OWN file verb —
+             * the same `openFilePanel` the palette row, the drop and the M13
+             * link all reach — so Orchestrate owns no second file reader and
+             * inherits the watch ownership that one already has. It changes
+             * page, which is why the row labels itself "Open on canvas".
+             */
+            onOpenPath={(path) => {
+              leaveForCanvas()
+              openFileAtCentre(path)
             }}
             onShowCanvas={() => chrome.setCenterView('canvas')}
             // M284. The Dock's, the palette's and the inspector's executor — one permission path.

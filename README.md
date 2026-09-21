@@ -384,7 +384,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        memory:list / memory:add / vault:read
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
-                       env:report / link:open / ledger:list / ledger:usage
+                       env:report / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
                        spawn:sheet / spawn:recent / spawn:recent-used
                        agent:create / agent:send / agent:interrupt / agent:dispose
                        agent:answer / agent:list / agent:transcript / agent:import
@@ -1073,6 +1073,9 @@ price of not killing something.
 | M294 | Orchestrate scene pass — the platform scene looks like the reference again: isometric diamond platforms in three emissive-rimmed tiers, a polygon hit rule cut to the mesh's silhouette, names on stations at rest by density tier, grouping connectors (no hub, finite motion), a zig-zag lattice that fills the stage's height, and a selection lift that can be seen — [log](docs/build-log/m294-orchestrate-scene.md) | ✅ done |
 | M298 | Orchestrate fit pass — the composition fills the real scene panel at every count and window size: the stage follows the panel's aspect (no letterbox), label margins in pixels, Fit all's own zoom floor, a pyramid lattice past the first band, the camera tools in a rail beside the scene, a lone platform fitted on first paint; measured at 1–100 platforms across three window sizes and pinned (`orch-fit.*`, `orch-fit.app.1`). |
 | M299 | Orchestrate chrome pass — the frame around the scene matches the reference: a title row (`Orchestrate / <workspace>` and the focused task's context line) replaces M269's greeting and clocks; mixed-case metric tiles that each carry their one next action and go quiet at zero; the side column is two cards — Needs attention (dot, title, reason, action) and the selected-agent card (role line, Selected chip, task, status box, acceptance criteria as rows, the M290 controls, a follow-up composer on the chat's own send door); Run limits and the absence fold are one quiet row each; M282's five bottom tiles are gone and the workbench rests OPEN at its height — the scene panel grew, measured. [Ledger](docs/build-log/m299-orchestrate-chrome.md). |
+| M300 | Orchestrate Phase E, the durable record — an `EventRow` and a trim-written `GapRow` riding run-ledger.ts's own append stream (one queue, one ring trim), references only and enforced by the type; `ledger:timeline` merges command rows, events and gaps newest-first and says whether it reached the start; `ledger:event` is main's append-only write door, its `kind` main's own. The workbench's tab list goes three → five: **Artifacts** (references grouped by execution, opened live on the canvas) and **Timeline** (the durable record, distinguished in words from the in-memory activity ring), each subject-bound, read-only, and explicit about a gap, an unwired door or a record with nothing in it. The renderer writes through ONE door (`orch-record.ts`, importer set pinned) at the four moments it owns a fact main cannot see. [Ledger](docs/build-log/m300-m302-orchestrate-phase-e.md). |
+| M301 | Orchestrate Phase E, restart reconciliation. [Ledger](docs/build-log/m300-m302-orchestrate-phase-e.md). |
+| M302 | Orchestrate Phase E, reusable arrangements and saved views. [Ledger](docs/build-log/m300-m302-orchestrate-phase-e.md). |
 
 ### What's next — the v10 run (D01–D20)
 

@@ -133,6 +133,12 @@ export interface OrchestrationViewProps {
   onMarkDone?: (itemId: string) => void
   onFocusRelated?: (panelId: string) => void
   onOpenFiles?: () => void
+  /**
+   * M300. Open ONE file on the canvas, by path — the Artifacts tab's door.
+   * Optional like every capability prop on this page: absent means the row is
+   * disabled and says why, never a control that looks live and does nothing.
+   */
+  onOpenPath?: (path: string) => void
   onShowCanvas?: () => void
   /** D08 member panel ids for the focused board task; empty/absent = no frame. */
   taskMemberIds?: readonly string[]
@@ -1305,7 +1311,7 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -2755,6 +2761,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         onRefreshTaskHandoffs={onRefreshTaskHandoffs}
         onPatchWorkItem={onPatchWorkItem}
         onReviewOnCanvas={onReviewOnCanvas}
+        {...(onOpenPath === undefined ? {} : { onOpenPath })}
         onJump={jump}
         onShowCanvas={onShowCanvas}
         output={{ panelId: outputPanelId, title: selectedRow?.title ?? liveSnap.terminalSnippet?.title, command: outputCommand, lines: outputLines }}

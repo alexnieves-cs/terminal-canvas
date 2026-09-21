@@ -32,6 +32,7 @@ import type { CapturedPanel } from '@shared/ipc-contract'
 import { railLabel } from '../../shell/rail-rows'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
+import { adoptedRunId, recordOrchEvent } from '../../orchestration/orch-record'
 
 export type PresetsActions = Pick<PaletteActions,
   | 'spawnPreset'
@@ -593,7 +594,19 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // as present); a scoped answer refreshes the store's grants mirror.
     answerApproval: (id, requestId, allow, scope) => {
       void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
-        .then(() => { if (scope !== undefined) refreshChatGrants(id) })
+        .then(() => {
+          if (scope !== undefined) refreshChatGrants(id)
+          // M300. The decision is recorded AFTER main accepted it, so the
+          // record holds answers that actually took effect — main is the
+          // source of truth for permission identity, and a row written
+          // before its answer landed would survive a refusal main made.
+          // The source is `person` because a person decided it here.
+          void recordOrchEvent({
+            runId: adoptedRunId(id), panelId: id, event: 'permission', source: 'person',
+            title: allow ? 'Allowed a request' : 'Denied a request',
+            detail: `${requestId}${scope === undefined ? '' : ` · for this ${scope}`}`
+          })
+        })
     },
     openAsChat: (id) => openAsChat(id),
     openInTerminal: (id) => openInTerminal(id),

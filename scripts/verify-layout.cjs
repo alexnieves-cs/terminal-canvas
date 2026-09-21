@@ -5109,7 +5109,7 @@ try {
     const full = L.parseOrchestrate({ workbench: { height: 300, tab: 'checks' }, lens: 'list', mode: 'pipeline', sideTab: 'files', camera: { x: 1, y: 2, k: 1.5 } }, [])
     const badBench = []
     const halfBad = L.parseOrchestrate({ workbench: { height: 'tall', tab: 'checks' }, lens: 'list' }, badBench)
-    const unknownTab = L.parseOrchestrate({ workbench: { height: 300, tab: 'artifacts' } }, [])
+    const unknownTab = L.parseOrchestrate({ workbench: { height: 300, tab: 'deployments' } }, [])
     const opened = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: true } }, [])
     const notOpened = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: 'yes' } }, [])
     const closed = L.parseOrchestrate({ workbench: { height: 300, tab: 'output', open: false } }, [])
@@ -5119,7 +5119,7 @@ try {
     const carried = L.carryOrchestrate(full)
     const parsedAbsent = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 } }], activeWorkspaceId: 'w1' }))
     const parsedWith = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, orchestrate: { workbench: { height: 300, tab: 'checks' } } }], activeWorkspaceId: 'w1' }))
-    ok('orchestrate.1 the record is absent for a pre-M287 file and for an empty object, dropped by name when not an object; each field parses on its own (a malformed workbench costs the workbench and keeps the lens; an unknown tab — artifacts — is not a tab; the height is clamped to the workbench\'s range; a zero-scale camera is dropped); carry is a fresh object; the workspace parser keeps it absent or carries it through',
+    ok('orchestrate.1 the record is absent for a pre-M287 file and for an empty object, dropped by name when not an object; each field parses on its own (a malformed workbench costs the workbench and keeps the lens; an unknown tab — a later build\'s, not M300\'s five — is not a tab; the height is clamped to the workbench\'s range; a zero-scale camera is dropped); carry is a fresh object; the workspace parser keeps it absent or carries it through',
       absent === undefined && empty === undefined && notObj === undefined && w.some((t) => /orchestrate record/.test(t)) &&
         JSON.stringify(full) === JSON.stringify({ workbench: { height: 300, tab: 'checks' }, lens: 'list', mode: 'pipeline', sideTab: 'files', camera: { x: 1, y: 2, k: 1.5 } }) &&
         JSON.stringify(halfBad) === JSON.stringify({ lens: 'list' }) && badBench.some((t) => /workbench/.test(t)) &&

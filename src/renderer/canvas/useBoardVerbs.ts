@@ -22,6 +22,7 @@ import type { PaletteController } from '@renderer/palette/usePalette'
 import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
 import type { useTaskHandoffs } from './useTaskHandoffs'
+import { adoptedRunId, beginRun, mintRunId, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
 
 /**
  * Read off the hook that owns them rather than re-spelled here: these four
@@ -253,6 +254,20 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       return { kind: 'refused', reason: notSent }
     }
     patch({ note: undefined })
+    // M300. The dispatch is RECORDED once it has actually happened — after the
+    // lane, the conversation and the first send all landed. Every refusal
+    // above returns before this line, because a row written when an action was
+    // merely offered would put a dispatch in the history of a task nobody
+    // dispatched. This is also where the execution's id is minted: a rerun
+    // (M302) mints another, so an earlier run's artifacts stay the earlier
+    // run's. Not awaited — recording is beside the work, never in front of it.
+    const runId = mintRunId()
+    beginRun(itemId, runId)
+    void recordOrchEvent({
+      runId, itemId, panelId: chatId, event: 'dispatch', source: 'person',
+      title: `Dispatched ${item.key ?? item.title}`,
+      detail: `${teammateId} in ${lane.path}`
+    })
     return { kind: 'started', itemId, panelId: chatId }
   }, [commitHistory, selectOnly])
   const dispatchWorkItem = useCallback((itemId: string, teammateId: string, root?: string, swarm?: SwarmMark): Promise<StartWorkOutcome> => {
@@ -446,7 +461,34 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
    */
   const patchWorkItem = useCallback((itemId: string, fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) => {
     setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
-  }, [])
+    // M300. A REVIEW MARK is the moment this app knows which files an
+    // execution produced AND that a person accepted them, so it is where the
+    // artifact references are recorded — with the content identity the mark
+    // was bound to, which is what lets a later reader say whether the files
+    // have moved on since. Paths only: the record never copies a file.
+    //
+    // Only a mark writes a row. Every other patch — a note, a state, a brief
+    // edit — passes through here constantly and records nothing, because a
+    // row per keystroke is a log, not a history.
+    const reviewed = fields.reviewed
+    if (reviewed !== undefined && reviewed.files > 0) {
+      // `reviewed.files` is a COUNT — the mark records how much was reviewed,
+      // not which paths. The paths come from the same read the mark was made
+      // against (`taskPathsOf`), so the row's references and the mark's
+      // signature describe one review rather than two. When that read is no
+      // longer held, the row is still written: the count and the identity are
+      // the durable facts, and a row with no paths says so by having none,
+      // which the Artifacts tab shows as a run with nothing listed under it.
+      const paths = taskPathsOf(itemId)
+      void recordOrchEvent({
+        runId: runOfTask(itemId) ?? adoptedRunId(itemId), itemId, event: 'artifact', source: 'person',
+        title: `Reviewed ${reviewed.files} changed file${reviewed.files === 1 ? '' : 's'}`,
+        ...(paths === undefined ? {} : { paths }),
+        ...(reviewed.identity === undefined ? {} : { tested: reviewed.identity }),
+        at: reviewed.at
+      })
+    }
+  }, [taskPathsOf])
   /**
    * M202 (D07). Everything the review node's task section needs, resolved
    * where the facts live. `undefined` — and so no task section at all — when

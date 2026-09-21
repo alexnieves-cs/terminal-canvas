@@ -17,8 +17,15 @@
  * Pure: no DOM, no React, no electron. `verify:layout orchestrate.1`.
  */
 
-export type WorkbenchTab = 'changes' | 'checks' | 'output'
-export const WORKBENCH_TABS: readonly WorkbenchTab[] = ['changes', 'checks', 'output']
+/**
+ * M300. FIVE TABS, and the last two arrived with their readers. M287 pinned
+ * this list at three deliberately — "an empty tab is a promise the page
+ * cannot keep" — so Artifacts and Timeline were not stubbed until the durable
+ * record existed to fill them. The order is the plan's: what changed, what
+ * validated it, what it printed, what it produced, what happened.
+ */
+export type WorkbenchTab = 'changes' | 'checks' | 'output' | 'artifacts' | 'timeline'
+export const WORKBENCH_TABS: readonly WorkbenchTab[] = ['changes', 'checks', 'output', 'artifacts', 'timeline']
 
 /** The workbench cannot be dragged shut, and cannot swallow the scene. */
 export const WORKBENCH_MIN_HEIGHT = 120

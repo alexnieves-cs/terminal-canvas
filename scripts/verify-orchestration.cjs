@@ -627,9 +627,15 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
 }
 
 // M287 — workbench.1–.3. THE WORKBENCH, pinned as text where behaviour lives
-// in the Electron tier (verify:panels:agents orch-bench.*): three tabs and not
-// five, no write door, a brief editor that can launch nothing, and the record
-// that persists it wired through the canvas.
+// in the Electron tier (verify:panels:agents orch-bench.*): the tab list, no
+// write door, a brief editor that can launch nothing, and the record that
+// persists it wired through the canvas.
+//
+// M300. FIVE tabs now, and the check moved with the readers rather than ahead
+// of them: M287 pinned three precisely so Artifacts and Timeline could not be
+// stubbed as empty promises, so widening this line is only honest in the same
+// commit that gives each of them a reader. The read-only half is unchanged and
+// gains one: the strip may READ the durable record and may not WRITE to it.
 {
   const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
   const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
@@ -637,12 +643,25 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   const orchDir = join(root, 'src/renderer/orchestration')
   const orchSrc = readdirSync(orchDir).map((f) => readFileSync(join(orchDir, f), 'utf8')).join('\n')
-  ok('workbench.1 the workbench has exactly Changes · Checks · Output — WORKBENCH_TABS names those three, no artifacts or timeline tab is stubbed anywhere under orchestration/, and the strip reaches only READ doors (review.panel/across/diff/identity, ledger.list, scrollback.tail): no review.commit, review.discard, agentSession.send or spawn',
-    /WORKBENCH_TABS: readonly WorkbenchTab\[\] = \['changes', 'checks', 'output'\]/.test(prefs) &&
-      !/'artifacts'|'timeline'/.test(orchSrc) &&
+  ok('workbench.1 the workbench has exactly Changes · Checks · Output · Artifacts · Timeline — WORKBENCH_TABS names those five, each new tab has a READER in the strip (the durable record\'s timeline read) rather than an empty promise, and the strip still reaches only READ doors (review.panel/across/diff/identity, ledger.list, ledger.timeline, scrollback.tail): no review.commit, review.discard, agentSession.send, spawn — and no ledger.event, because the record is inspected here and written elsewhere',
+    /WORKBENCH_TABS: readonly WorkbenchTab\[\] = \['changes', 'checks', 'output', 'artifacts', 'timeline'\]/.test(prefs) &&
+      /function ArtifactsTab\(/.test(bench) && /function TimelineTab\(/.test(bench) && /ledger\.timeline\(/.test(bench) &&
       /review\.panel\(|review\.across\(|review\.diff\(|review\.identity\(|ledger\.list\(|scrollback\.tail\(/.test(bench) &&
-      !/review\.commit|review\.discard|agentSession\.send|agentSession\.create|spawn\./.test(bench),
-    JSON.stringify({ commit: /review\.commit/.test(bench), discard: /review\.discard/.test(bench), send: /agentSession\.send/.test(bench) }))
+      !/review\.commit|review\.discard|agentSession\.send|agentSession\.create|spawn\.|ledger\.event/.test(bench),
+    JSON.stringify({ commit: /review\.commit/.test(bench), discard: /review\.discard/.test(bench), send: /agentSession\.send/.test(bench), event: /ledger\.event/.test(bench) }))
+  // M300. The two new tabs' own rule: every arm of their read is a SENTENCE.
+  // An unwired door, a failed read, a record with nothing for this subject and
+  // a trimmed record are four different facts, and none of them is an empty box.
+  ok('workbench.1b Artifacts and Timeline say what they do not have: an unwired or failed read is named as such and not as "nothing happened", an empty record says what would be written there, a trim reaches both tabs as a gap sentence, the durable record is distinguished from the live feed in words, and neither tab can re-run anything (no retry, send, dispatch or spawn in either body)',
+    /is not a claim that nothing happened/.test(bench) && /is not a claim that none were produced/.test(bench) &&
+      /The durable record — what was written to disk, not the live feed/.test(bench) &&
+      /This is a gap, not a quiet period/.test(bench) &&
+      /Older entries exist beyond the/.test(bench) && /This is the beginning of the record/.test(bench) &&
+      (() => {
+        const a = bench.slice(bench.indexOf('function TimelineTab('), bench.indexOf('/* ── The strip'))
+        return !/onRetry|agentSession|dispatch|spawn|\.run\(|review\.commit/.test(a)
+      })(),
+    'artifacts/timeline words')
   const editorStart = view.indexOf('function OrchBriefEditor(')
   const editor = editorStart === -1 ? '' : view.slice(editorStart, view.indexOf('\nexport const OrchestrationView', editorStart))
   ok('workbench.2 editing a brief launches nothing: the brief editor calls onPatchWorkItem and NO dispatch, send, spawn, startWork or run, saves on blur rather than on every keystroke, and its inputs are named so a check can find them',
@@ -1019,6 +1038,24 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     zeroGap: S.parseGapRow({ kind: 'gap', at: 1, dropped: 0 }) === null,
     gap: JSON.stringify(S.parseGapRow({ kind: 'gap', at: 1, dropped: 3 })) === '{"kind":"gap","at":1,"dropped":3}'
   }
+  // M300 — the WRITE door's importer set, the same shape as sonner's
+  // (`toast.door.1`): a door reachable from anywhere is a door nobody can pin,
+  // and history is exactly the surface where a stray writer does damage that
+  // never goes red.
+  {
+    const srcDir = join(root, 'src')
+    const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]))
+    const files = walk(srcDir).filter((f) => /\.tsx?$/.test(f))
+    const writers = files.filter((f) => /ledger\??\.event\b/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(srcDir.length + 1))
+    const importers = files.filter((f) => /from '.*orch-record'/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(srcDir.length + 1)).sort()
+    const record = readFileSync(join(srcDir, 'renderer/orchestration/orch-record.ts'), 'utf8')
+    ok('orch-timeline.6 the renderer writes history through ONE door: only orch-record.ts calls ledger.event, its importers are the three verbs that own a fact main cannot see (dispatch, the permission answer, the review mark) plus the canvas\'s handoff funnel, and the door itself starts nothing — no send, spawn, create or run',
+      JSON.stringify(writers) === JSON.stringify(['renderer/orchestration/orch-record.ts']) &&
+        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts']) &&
+        !/agentSession|spawn\.|\.send\(|review\.commit|review\.discard/.test(record),
+      JSON.stringify({ writers, importers }))
+  }
+
   ok('orch-timeline.1 a durable event row parses field by field: a malformed optional field costs the field and keeps the row, an unknown event kind or source from a later build drops the row rather than being coerced, a row with no run id or no title is not a record, and a gap that dropped nothing is not a gap',
     Object.values(rules).every(Boolean), JSON.stringify(rules))
 
