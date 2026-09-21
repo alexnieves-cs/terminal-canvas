@@ -252,7 +252,7 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
   evidence: CheckEvidence | null
   identities: ReadonlyMap<string, ReviewIdentity | undefined>
 } {
-  const [rows, setRows] = useState<{ key: string; rows: import('@shared/run-ledger').RunRow[]; unreadable: boolean; panels: number } | null>(null)
+  const [rows, setRows] = useState<{ key: string; rows: import('@shared/run-ledger').RunRow[]; unreadable: boolean; panels: number; hiddenWatchers: number; hiddenUnrun: number } | null>(null)
   const [identities, setIdentities] = useState<Map<string, ReviewIdentity | undefined>>(() => new Map())
   const key = benchSubjectKey(subject)
   const ledgerIds = useMemo(() => {
@@ -268,10 +268,43 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
     let live = true
     const asked = key
     const ticket = gate.ask(key)
-    if (ledgerIds.length === 0 || typeof window.canvas?.ledger?.list !== 'function') { if (gate.lands(ticket)) setRows({ key: asked, rows: [], unreadable: false, panels: 0 }); return }
-    void Promise.allSettled(ledgerIds.map((id) => window.canvas.ledger.list(id, LEDGER_ROWS_PER_PANEL))).then((settled) => {
-      if (!live || !gate.lands(ticket)) return
-      setRows({ key: asked, rows: settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])), unreadable: settled.some((r) => r.status === 'rejected'), panels: ledgerIds.length })
+    if (ledgerIds.length === 0 || typeof window.canvas?.ledger?.list !== 'function') { if (gate.lands(ticket)) setRows({ key: asked, rows: [], unreadable: false, panels: 0, hiddenWatchers: 0, hiddenUnrun: 0 }); return }
+    /*
+     * M300, closing Phase B's inherited item. The Checks tab read watchers off
+     * the CANVAS's watcher panels only, so a watcher armed in main from a
+     * template with no panel was invisible — a check that ran and failed, and
+     * a page that showed no checks at all.
+     *
+     * The durable record is the right owner, and it already holds these:
+     * main's watch runner appends a ledger row per watcher run, with the
+     * watcher's id as its panel id, its command, its cwd and what it tested.
+     * So the fix is a read, not a new store — ask main which watchers exist,
+     * and read the rows of the ones the canvas has no panel for. The lane
+     * filter in `checksFromLedger` still decides whether a row is this
+     * subject's, so a watcher in somebody else's directory stays out.
+     *
+     * The limitation that remains is named rather than papered over: a
+     * panel-less watcher that has NEVER run has no row and no command text
+     * anywhere the renderer can reach, so it is counted in a sentence instead
+     * of being invented as a row.
+     */
+    const panelIds = new Set(panels.map((p) => p.rect.id))
+    const armed = typeof window.canvas?.watcher?.list === 'function' ? window.canvas.watcher.list().catch(() => []) : Promise.resolve([])
+    void armed.then((states) => {
+      const hidden = states.filter((w) => !panelIds.has(w.id))
+      const hiddenUnrun = hidden.filter((w) => w.status === 'not-started').length
+      const ids = [...new Set([...ledgerIds, ...hidden.map((w) => w.id)])]
+      return Promise.allSettled(ids.map((id) => window.canvas.ledger.list(id, LEDGER_ROWS_PER_PANEL))).then((settled) => {
+        if (!live || !gate.lands(ticket)) return
+        setRows({
+          key: asked,
+          rows: settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
+          unreadable: settled.some((r) => r.status === 'rejected'),
+          panels: ledgerIds.length,
+          hiddenWatchers: hidden.length,
+          hiddenUnrun
+        })
+      })
     })
     return () => { live = false }
   }, [key, idsKey, active, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -284,7 +317,14 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
   }, [worktrees])
   const raw = useMemo<CheckRecord[]>(() => {
     if (subject === null || rows === null || rows.key !== key) return []
-    const ledger = checksFromLedger(rows.rows, lanePath, worktreeOf)
+    // M300. A watcher WITH a panel is read from the watcher store below, and
+    // its ledger rows would otherwise list the same runs a second time under a
+    // different key. The panel roster is the discriminator, applied here at
+    // render rather than in the fetch: the fetch's roster can be a frame stale
+    // (it does not re-run on every panel change, by design), and a duplicated
+    // check is a wrong count, which this tab exists to get right.
+    const watcherPanelIds = new Set(panels.filter(isWatcherPanel).map((p) => p.rect.id))
+    const ledger = checksFromLedger(rows.rows, lanePath, worktreeOf).filter((c) => !watcherPanelIds.has(c.panelId))
     const watchers = checksFromWatchers(panels.filter(isWatcherPanel).map((p) => {
       const w = getWatch(p.rect.id)
       return { id: p.rect.id, cwd: p.watch.cwd, command: p.watch.command, args: p.watch.args, status: w.status, exitCode: w.exitCode, signal: w.signal, startedAt: w.startedAt, endedAt: w.endedAt, tested: w.tested }
@@ -311,7 +351,13 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
     if (subject === null || rows === null || rows.key !== key) return null
     const bound = bindCheckFreshness(raw, (base, cwd) => { const k = `${cwd}\0${base}`; return identities.has(k) ? identities.get(k) : null })
     const claims = claimsFromTranscript(chat.turns)
-    return checkEvidence(bound, claims, { ledgerRead: !rows.unreadable, ledgerPanels: rows.panels, transcriptRead: chat.turns.length > 0 || (subject.kind === 'session' ? true : subject.chatId !== undefined) })
+    const got = checkEvidence(bound, claims, { ledgerRead: !rows.unreadable, ledgerPanels: rows.panels, transcriptRead: chat.turns.length > 0 || (subject.kind === 'session' ? true : subject.chatId !== undefined) })
+    // M300. The limitation the durable read cannot close, said rather than
+    // hidden: an armed watcher with no panel and no run yet has no command
+    // text anywhere this page can reach, so it is counted, not invented.
+    if (rows.hiddenUnrun === 0) return got
+    const sentence = `${rows.hiddenUnrun} watcher${rows.hiddenUnrun === 1 ? '' : 's'} armed without a panel on this canvas ${rows.hiddenUnrun === 1 ? 'has' : 'have'} not run yet — past runs are listed from the record, but a watcher with no run has no command to show here.`
+    return { ...got, unavailable: [...(got.unavailable ?? []), sentence] }
   }, [subject, rows, key, raw, identities, chat.turns])
   return { evidence, identities }
 }

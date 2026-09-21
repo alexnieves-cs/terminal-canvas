@@ -22,16 +22,28 @@ old artifacts keep their provenance.* Plus this run's added condition: **Artifac
 are tabs with something in them**, each subject-bound, each explicit about what it does not
 have.
 
-## Retention
+## Retention — as built
 
-*(Filled as M300 lands; written at the definition too, per the prompt.)*
+Written at the definition (`shared/run-ledger.ts`'s `EventRow` and `GapRow`, `main/run-ledger.ts`'s
+`trim`) and here.
 
-- **What is kept:** references only — what happened and where the evidence is. No output bytes,
-  no artifact content snapshots.
-- **What bounds it:** a ROW COUNT, not bytes, because the record rides `main/run-ledger.ts`'s
-  existing count-tracked ring trim.
-- **What is dropped first:** the oldest rows, by the trim.
-- **What the drop costs the reader:** a gap, and a gap must SAY it is a gap.
+- **What is kept:** references only — what happened and where the evidence is. Command,
+  execution context, tested revision, exit outcome, changed PATHS, permission decisions,
+  handoffs. No output bytes and no artifact content, and the TYPE is the enforcement: `EventRow`
+  has nowhere to put a body, the same trick `RunRow` uses. `orch-timeline.2` pins it.
+- **What bounds it:** a ROW COUNT — `RUN_LEDGER_MAX_LINES`, 2000 — because the record rides the
+  run ledger's existing count-tracked ring trim. Not bytes, because with no bodies a row is a
+  few hundred bytes and a count is the honest bound.
+- **What is dropped first:** the oldest lines, by the trim, which now keeps `max - 1` rows and
+  spends the freed line on a gap marker.
+- **What the drop costs the reader:** nothing silently. The gap row carries how many entries
+  went and when; it passes every subject filter, because it is a fact about the FILE; a second
+  trim merges into it rather than appending another, inheriting its count, so the markers
+  cannot grow one per trim. `orch-timeline.4`.
+- **What was NOT added, and why:** a per-event content identity. Phase B measured a
+  `git diff --binary` per command end; a write of that shape per event is Phase F's question if
+  it is ever wanted. Per-command output capture is handed to **Phase F by name** for the same
+  reason — see Found / deferred.
 
 ## Why references only
 
@@ -43,23 +55,45 @@ capture is handed to Phase F by name**, not silently dropped.
 
 ## M300 — Durable timeline
 
-- [ ] A durable event row rides the EXISTING ledger stream (`shared/run-ledger.ts`'s
+- [x] A durable event row rides the EXISTING ledger stream (`shared/run-ledger.ts`'s
       `LedgerRow` union), not a new store — inheriting the queue, the ring trim and the
       malformed-line rule, and costing `panels-harness.cjs` no new mirror.
-- [ ] The record links dispatch, tools, permission decisions, command outcomes, changed
+- [x] The record links dispatch, tools, permission decisions, command outcomes, changed
       artifacts and handoffs, for a task and for a session.
-- [ ] Transient vs persisted is distinguished in the DATA and in the WORDS on screen.
-- [ ] Every entry carries source, timestamp and freshness.
-- [ ] A trim records what it dropped, so a gap reads as a gap and never as "nothing happened".
-- [ ] `WORKBENCH_TABS` goes three → five; `verify:orchestration workbench.1` re-pinned at five
+- [x] Transient vs persisted is distinguished in the DATA and in the WORDS on screen.
+- [x] Every entry carries source, timestamp and freshness.
+- [x] A trim records what it dropped, so a gap reads as a gap and never as "nothing happened".
+- [x] `WORKBENCH_TABS` goes three → five; `verify:orchestration workbench.1` re-pinned at five
       IN THE SAME COMMIT as the readers.
-- [ ] **Timeline** tab: read-only, subject-bound through `orch-subject-gate.ts`, live tail and
+- [x] **Timeline** tab: read-only, subject-bound through `orch-subject-gate.ts`, live tail and
       durable record visibly different things.
-- [ ] **Artifacts** tab: a provenance list over references; an artifact whose content has moved
+- [x] **Artifacts** tab: a provenance list over references; an artifact whose content has moved
       on says so rather than showing a stale body.
-- [ ] Inherited Phase B item FIXED: the Checks tab reads watchers off the canvas's watcher
+- [x] Inherited Phase B item FIXED: the Checks tab reads watchers off the canvas's watcher
       panels only, so a watcher armed in main from a template with no panel is invisible.
-- [ ] Inherited Phase B item HANDED TO F by name: per-command output capture, with the reason.
+- [x] Inherited Phase B item HANDED TO F by name: per-command output capture, with the reason.
+
+### M300 as built
+
+| Piece | Where | Check |
+|---|---|---|
+| `EventRow`, `GapRow`, their parsers, the timeline types | `shared/run-ledger.ts` | `orch-timeline.1`, `.2` |
+| The gap-writing, gap-merging trim and the merged `timeline()` reader | `main/run-ledger.ts` | `orch-timeline.3`, `.4`, `.5` |
+| `ledger:timeline` and `ledger:event`, appended LAST to `registerIpcHandlers` | `shared/ipc-contract.ts`, `preload/`, `main/ipc.ts`, `main/index.ts` | `verify:ipc`, `verify:meta` 14 |
+| The renderer's ONE write door and its importer set | `renderer/orchestration/orch-record.ts` | `orch-timeline.6` |
+| Artifacts and Timeline, their words and their read | `OrchWorkbench.tsx`, `shared/orchestrate-prefs.ts` | `workbench.1`, `workbench.1b` |
+| Panel-less watchers reach Checks through the record | `OrchWorkbench.tsx` | `orch-timeline.7` |
+
+The four write points, each the moment the renderer owns a fact main cannot see:
+a **dispatch** that completed (`useBoardVerbs.ts` — every refusal returns first), a
+**permission** answer main accepted (`palette-actions/presets.ts`), a **handoff** outcome at the
+funnel that also feeds Phase C's in-memory map (`Canvas.tsx`), and a **review mark**
+(`useBoardVerbs.ts`'s `patchWorkItem`, which fires only for `reviewed` — every other patch
+records nothing, because a row per keystroke is a log and not a history).
+
+Main already wrote the fifth without knowing it: `main/watch-runner.ts` has appended a ledger
+row per watcher run since M52, with the watcher's id as its panel id. That is why Phase B's
+inherited item closed as a READ rather than a new store.
 
 ## M301 — Restart reconciliation
 

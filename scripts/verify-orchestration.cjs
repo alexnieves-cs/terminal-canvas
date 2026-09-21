@@ -1056,6 +1056,21 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       JSON.stringify({ writers, importers }))
   }
 
+  // M300 — Phase B's inherited item, pinned where it was lost: the Checks tab
+  // read watchers off the CANVAS's panels only, so a watcher armed in main
+  // from a template with no panel was invisible — a failed check and a page
+  // showing none. Main already writes a ledger row per watcher run, so the
+  // fix is a read; the piece that cannot be read is SAID.
+  {
+    const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
+    ok('orch-timeline.7 a watcher armed without a canvas panel is no longer invisible to Checks: the strip asks main which watchers exist, reads the durable rows of the ones no panel covers, drops a ledger row for a watcher the canvas DOES have a panel for (it is listed once, from the watcher store), and names the one case it cannot show — an armed watcher that has never run has no command text to list',
+      /watcher\?\.list|watcher\.list\(\)/.test(bench) && /hiddenWatchers/.test(bench) && /hiddenUnrun/.test(bench) &&
+        /const watcherPanelIds = new Set\(panels\.filter\(isWatcherPanel\)/.test(bench) &&
+        /\.filter\(\(c\) => !watcherPanelIds\.has\(c\.panelId\)\)/.test(bench) &&
+        /has no command to show here/.test(bench),
+      'checks/watchers')
+  }
+
   ok('orch-timeline.1 a durable event row parses field by field: a malformed optional field costs the field and keeps the row, an unknown event kind or source from a later build drops the row rather than being coerced, a row with no run id or no title is not a record, and a gap that dropped nothing is not a gap',
     Object.values(rules).every(Boolean), JSON.stringify(rules))
 
