@@ -17,7 +17,7 @@ const ORCH_RAIL_PX = 136
  * composition's 0.80 × 224 = 179 px — so the pass can never make it smaller than it was.
  */
 const M298_DEFAULT_COMP_PX = 179
-const WATCHDOG_MS = 180000 // measured 2026-09-20 with M298's orch-fit.app.1 in (five fixture reloads of 0/1/21/61/100 sessions, three window sizes each): 142.8 s with demo captures on at load ~3 against the 145 s pin, so 1.25x, to the next second. Before M298: 145000, measured 2026-09-20 with Phase D's blocks in (orch-3d.app.1–.2, orch-zoom.app.1–.2 — four fixture reloads of 1/6/25/100 sessions with eight measurements — and orch-parity.app.1–.4, beside Phase A–C's): green runs 103.5 s, 106.4 s, 109.2 s at load 20–26, then 102.8 s in the gate and 116.0 s with demo captures on at load 3; 1.25x the slowest, to the next second. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
+const WATCHDOG_MS = 210000 // measured 2026-09-20 with M301's orch-reconcile.app.1/.2 in (a real chat, a turn, a kill through the runner's exit path and two page re-reads): 163.9 s against the 180 s pin, which put headroom.1 red at 91%; 1.25x the slowest, to the next second. Before M301: 180000, measured 2026-09-20 with M298's orch-fit.app.1 in (five fixture reloads of 0/1/21/61/100 sessions, three window sizes each): 142.8 s with demo captures on at load ~3 against the 145 s pin. Before M298: 145000, measured with Phase D's blocks in: green runs 103.5 s, 106.4 s, 109.2 s at load 20–26. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
@@ -213,7 +213,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
       setter.call(el, ${JSON.stringify(text)}); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); return true })()`)
     const IDS = [
-      'orch-bench.1 the workbench is ONE strip with exactly Changes · Checks · Output, bound to the selection by name, pinnable and unpinnable by name, and resizable by its top edge with the height and the tab persisted per workspace on disk',
+      'orch-bench.1 the workbench is ONE strip with exactly Changes · Checks · Output · Artifacts · Timeline (M300 — the last two arrived WITH their readers), bound to the selection by name, pinnable and unpinnable by name, and resizable by its top edge with the height and the tab persisted per workspace on disk',
       'orch-bench.2 a task with a real lane: Changes shows the lane\'s fork diff (a file tree and a readable diff), and a brief and criteria typed in the inspector persist on the work item and show beside the changes — launching nothing (no new chat, no new lane)',
       'orch-bench.3 a SAME-SIZE edit invalidates the prior review: Mark reviewed reads current and writes the identity on disk; one line replaced by another of the same length leaves the shape signature identical, and after Refresh the mark reads stale because the content identity moved',
       'orch-bench.4 a changed revision makes check evidence stale, and unavailable data is explicit: a watcher run in the lane reads exit 0 with the identity it tested; an edit to the lane makes it stale after Refresh; a failed run reads exit 1 and opens its command, context and output; a session in a plain folder says it is not in a git repository and that no checks have run'
@@ -387,7 +387,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await demo('m287-9-workbench-resized')
       ok(IDS[0],
         closedRead && closedRead.open === true && closedRead.height >= 180 &&
-          b0 && b0.open === true && b0.height >= 180 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
+          b0 && b0.open === true && b0.height >= 180 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output,Artifacts,Timeline' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
           boundToChat && boundToChat.boundKind === 'selection' && boundToChat.subject === 'session:' + plainChatId &&
           pinnedRead && /^Pinned to /.test(pinnedRead.bound) && pinnedRead.subject === 'session:' + plainChatId &&
           stillPinned && stillPinned.boundKind === 'pinned' && stillPinned.subject === 'session:' + plainChatId &&
@@ -1391,23 +1391,28 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   }
 
   // ---------------------------------------------------------------------
-  // M301 — Orchestrate Phase E: reconciliation, driven by a REAL kill.
+  // ---------------------------------------------------------------------
+  // M301 — Orchestrate Phase E: reconciliation, against REAL state.
   //
-  // The session is killed through the runner's own exit path — the manager
-  // sees the process go, exactly as it does when a real CLI dies — and then
-  // the page is asked what it says. The check is deliberately not written
-  // against the flags it expects to find: it asks main's own session list
-  // and reads the WORDS off the DOM.
+  // MEASURED HERE, and it changed the design: a chat's PROCESS exits between
+  // turns and `--resume` brings it back, so a killed process is NOT a gone
+  // conversation. The check therefore proves the DIFFERENCE, which is the
+  // thing a person needs the page to get right:
   //
-  // The honest limit, recorded here and in the ledger: this part's agent is
-  // the harness's fake runner, so the kill exercises the manager's real exit
-  // path and not an OS signal to a real CLI. The OS-signal case is the manual
-  // demo in the ledger.
+  //   kill the process   → the page still shows the conversation, and says
+  //                        the process is down and it resumes on your next
+  //                        message. It must NOT say "no session".
+  //   forget the session → this is what a relaunch does to the runtime's
+  //                        record, and the page must say no session is
+  //                        running, with how it ended and when it was seen.
+  //
+  // Both are driven through real doors: the runner's own exit path, and the
+  // runtime's dispose. Nothing sets a flag on the view model.
   // ---------------------------------------------------------------------
   {
     const IDS = [
-      'orch-reconcile.app.1 a killed session stops being called live: main\'s session list drops it, the page stops counting it as an active agent, and its word is no longer `idle`',
-      'orch-reconcile.app.2 the page says what it cannot see rather than nothing: the selected object carries a sentence naming that no session is running for it, and never a crash or deadlock diagnosis'
+      'orch-reconcile.app.1 a killed PROCESS is not a gone conversation: the page keeps the session\'s own word, says the process is down and that it resumes on the next message, and never claims there is no session',
+      'orch-reconcile.app.2 a session the runtime no longer holds — what a relaunch leaves — reads `no session`, is dropped from the live word, and carries a sentence saying so without diagnosing a crash or a deadlock'
     ]
     try {
       const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -1419,7 +1424,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(repo)})`)
       const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
       const spawnsBefore = chatSpawns.length
-      // A turn, so the session is unambiguously live and has spoken.
+      // A real turn, so the session exists and the runtime has spoken for it.
       await waitUntil(() => wc.executeJavaScript(`(() => {
         const ta = document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-input]'); if (!ta || ta.disabled) return false
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
@@ -1436,37 +1441,50 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await settle()
       const readState = () => wc.executeJavaScript(`(() => {
         const i = document.querySelector('[data-orch-inspector="${chatId}"]')
+        const st = i?.querySelector('[data-orch-inspector-state]')
         return {
-          state: i?.querySelector('[data-orch-inspector-state]')?.textContent ?? null,
-          reconcile: i?.querySelector('[data-orch-reconcile]')?.getAttribute('data-orch-reconcile') ?? null,
-          sentence: i?.querySelector('[data-orch-reconcile]')?.textContent ?? null,
-          agents: document.querySelector('[data-orch-tile="agents"] [data-orch-tile-count]')?.textContent ?? null
+          state: st?.textContent ?? null,
+          reconcile: st?.getAttribute('data-orch-reconcile') ?? null,
+          sentence: i?.querySelector('[data-orch-reconcile-detail]')?.textContent ?? null
         }
       })()`)
+      const refresh = async () => { await click('[data-orch-bench-refresh]'); await settle() }
+      await refresh()
       const before = await readState()
-      // THE KILL. Every process this chat has spawned, through the runner's
-      // own exit path — not a flag set on the view model.
+
+      // (1) THE KILL — every process this chat spawned, through the runner's
+      // own exit path, which is the path a dying CLI takes.
       for (const sp of chatSpawns.slice(spawnsBefore)) sp.proc.kill()
-      // Main's own answer first: the check must not read the page for a fact
-      // main is the source of truth for.
-      const gone = await waitUntil(async () => {
+      const exited = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`window.canvas.agentSession.list().then((r) => r.map((x) => ({ id: x.id, status: x.status, code: x.exitCode ?? null, signal: x.exitSignal ?? null })))`)
+        const mine = rows.find((r) => r.id === chatId)
+        return mine !== undefined && !['starting', 'ready', 'streaming'].includes(mine.status) ? mine : false
+      }, 8000).catch(() => null)
+      await refresh()
+      const killed = await readState()
+      ok(IDS[0],
+        exited !== null && killed.reconcile !== null && killed.reconcile !== 'unknown' && killed.reconcile !== 'ended' &&
+          killed.state !== 'no session' && typeof killed.sentence === 'string' && /resumes on your next message/.test(killed.sentence),
+        JSON.stringify({ before, exited, killed }))
+
+      // (2) THE FORGETTING — dispose drops the runtime's record, which is the
+      // state a relaunch leaves behind: a panel with a session id and a
+      // runtime that has never heard of it.
+      await wc.executeJavaScript(`window.canvas.agentSession.dispose(${JSON.stringify(chatId)})`)
+      const forgotten = await waitUntil(async () => {
         const rows = await wc.executeJavaScript(`window.canvas.agentSession.list().then((r) => r.map((x) => x.id))`)
         return rows.includes(chatId) ? false : rows
       }, 8000).catch(() => null)
-      // The page re-reads on its refresh tick; Refresh is the person's door to it.
-      await click('[data-orch-bench-refresh]')
-      await settle()
+      await refresh()
       const after = await waitUntil(async () => {
         const r = await readState()
-        return r.state !== null && r.state !== before.state ? r : false
+        return r.reconcile === 'ended' || r.reconcile === 'unknown' ? r : false
       }, 8000).catch(() => null)
-      ok(IDS[0],
-        before.state === 'idle' && gone !== null && after !== null && after.state !== 'idle' && after.state === 'no session',
-        JSON.stringify({ before, after, gone }))
       ok(IDS[1],
-        after !== null && after.reconcile !== null && typeof after.sentence === 'string' && after.sentence.length > 10 &&
+        forgotten !== null && after !== null && after.state === 'no session' &&
+          typeof after.sentence === 'string' && /no session is running for this/.test(after.sentence) &&
           !/crash|deadlock|stuck|hung/i.test(after.sentence),
-        JSON.stringify({ reconcile: after && after.reconcile, sentence: after && after.sentence }))
+        JSON.stringify({ forgotten, after }))
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* scratch */ }
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)

@@ -37,6 +37,33 @@ export const WORKBENCH_MAX_HEIGHT = 720
  */
 export const WORKBENCH_DEFAULT_HEIGHT = 200
 
+/**
+ * M302. A SAVED VIEW: filters, camera and layout, and NOTHING ELSE.
+ *
+ * The plan's rule is that a saved view records no runtime mutations, and the
+ * TYPE is where that is enforced rather than in a reviewer's memory. There is
+ * no panel id, no work-item id, no session, no command and no verb in this
+ * record — so "opening a saved view starts nothing" is not a promise about
+ * the code that applies it, it is a fact about what the record can hold.
+ *
+ * A SELECTION is deliberately not here either, for Phase A's reason: a
+ * selection that came back with a view would re-aim the pool and the feed at
+ * a session the person had left — and after a relaunch, at one that may not
+ * exist at all.
+ */
+export interface OrchSavedView {
+  id: string
+  name: string
+  lens?: 'scene' | 'list'
+  mode?: 'dev' | 'pipeline'
+  sideTab?: 'activity' | 'files'
+  camera?: { x: number; y: number; k: number }
+  workbench?: { height: number; tab: WorkbenchTab; open?: boolean }
+}
+
+/** The newest kept; a workspace with a hundred views is a menu nobody reads. */
+export const ORCH_VIEWS_MAX = 12
+
 export interface PersistedOrchestrate {
   /**
    * `open` absent is OPEN (M299): the workbench is the page's evidence area and
@@ -57,6 +84,12 @@ export interface PersistedOrchestrate {
    * Ids that no longer name an island are dropped on read.
    */
   islands?: string[]
+  /**
+   * M302. The person's saved views, oldest first. Absent on every pre-M302
+   * file; a malformed view is dropped BY NAME with its siblings kept, which
+   * is the field rule applied one level down.
+   */
+  views?: OrchSavedView[]
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -93,7 +126,40 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
     const ids = raw.islands.filter((v): v is string => typeof v === 'string' && v !== '')
     if (ids.length === raw.islands.length) { if (ids.length > 0) out.islands = [...new Set(ids)] } else warnings.push('dropped a malformed orchestrate islands order')
   } else if (raw.islands !== undefined) warnings.push('dropped a malformed orchestrate islands order')
+  const views = raw.views
+  if (Array.isArray(views)) {
+    const kept: OrchSavedView[] = []
+    for (const v of views) {
+      const parsedView = parseSavedView(v)
+      if (parsedView === null) warnings.push('dropped a malformed orchestrate saved view')
+      else kept.push(parsedView)
+    }
+    if (kept.length > 0) out.views = kept.slice(-ORCH_VIEWS_MAX)
+  } else if (views !== undefined) warnings.push('dropped a malformed orchestrate views list')
   return Object.keys(out).length === 0 ? undefined : out
+}
+
+/**
+ * One view, field by field. A view with no id or no name is not a view — it
+ * could not be opened or named — so it is dropped; every OTHER field is
+ * optional and a malformed one costs that field, because a view whose camera
+ * is corrupt is still a usable lens-and-layout view.
+ */
+function parseSavedView(raw: unknown): OrchSavedView | null {
+  if (!isRecord(raw)) return null
+  if (typeof raw.id !== 'string' || raw.id === '') return null
+  if (typeof raw.name !== 'string' || raw.name.trim() === '') return null
+  const out: OrchSavedView = { id: raw.id, name: raw.name }
+  if (raw.lens === 'scene' || raw.lens === 'list') out.lens = raw.lens
+  if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode
+  if (raw.sideTab === 'activity' || raw.sideTab === 'files') out.sideTab = raw.sideTab
+  const c = raw.camera
+  if (isRecord(c) && isNum(c.x) && isNum(c.y) && isNum(c.k) && c.k > 0) out.camera = { x: c.x, y: c.y, k: c.k }
+  const wb = raw.workbench
+  if (isRecord(wb) && isNum(wb.height) && WORKBENCH_TABS.includes(wb.tab as WorkbenchTab)) {
+    out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab, ...(typeof wb.open === 'boolean' ? { open: wb.open } : {}) }
+  }
+  return out
 }
 
 /** A fresh object, field by field — a spread would write `lens: undefined` as a present key. */
@@ -104,7 +170,21 @@ export function carryOrchestrate(p: PersistedOrchestrate): PersistedOrchestrate 
     ...(p.mode === undefined ? {} : { mode: p.mode }),
     ...(p.sideTab === undefined ? {} : { sideTab: p.sideTab }),
     ...(p.camera === undefined ? {} : { camera: { x: p.camera.x, y: p.camera.y, k: p.camera.k } }),
-    ...(p.islands === undefined || p.islands.length === 0 ? {} : { islands: [...p.islands] })
+    ...(p.islands === undefined || p.islands.length === 0 ? {} : { islands: [...p.islands] }),
+    ...(p.views === undefined || p.views.length === 0 ? {} : { views: p.views.map(carrySavedView) })
+  }
+}
+
+/** A fresh view object, field by field, for `carryOrchestrate`'s reason. */
+function carrySavedView(v: OrchSavedView): OrchSavedView {
+  return {
+    id: v.id,
+    name: v.name,
+    ...(v.lens === undefined ? {} : { lens: v.lens }),
+    ...(v.mode === undefined ? {} : { mode: v.mode }),
+    ...(v.sideTab === undefined ? {} : { sideTab: v.sideTab }),
+    ...(v.camera === undefined ? {} : { camera: { x: v.camera.x, y: v.camera.y, k: v.camera.k } }),
+    ...(v.workbench === undefined ? {} : { workbench: { height: v.workbench.height, tab: v.workbench.tab, ...(v.workbench.open === true ? { open: true as const } : {}) } })
   }
 }
 

@@ -1144,6 +1144,98 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       'lens seeding')
   }
 
+  // M302 — orch-reuse.*. SAVED VIEWS and the provenance property. The rule the
+  // plan cares about — "a saved view records filters, camera and layout, never
+  // runtime mutations" — is checked against the RECORD's shape, because that is
+  // where it is enforced: a record with no session, task or command in it
+  // cannot start anything, whatever a future handler does with it.
+  {
+    const P = load('src/renderer/orchestration/orchestration-prefs.ts', 'orchestration-prefs.cjs')
+    const O = load('src/shared/orchestrate-prefs.ts', 'orchestrate-prefs-m302.cjs')
+    const prefsSrc = readFileSync(join(root, 'src/shared/orchestrate-prefs.ts'), 'utf8')
+    const viewType = prefsSrc.slice(prefsSrc.indexOf('export interface OrchSavedView'), prefsSrc.indexOf('export const ORCH_VIEWS_MAX'))
+    const base = { mode: 'pipeline', lens: 'list', camera: { x: 3, y: 4, k: 2 }, tab: 'files', workbench: { height: 300, tab: 'timeline', open: false }, islands: ['a'], views: [] }
+    const saved = P.viewFromPrefs(base, '  Review layout  ', 'v1')
+    const applied = P.prefsFromView({ ...base, mode: 'dev', lens: 'scene', camera: { x: 0, y: 0, k: 1 }, tab: 'activity', workbench: { height: 200, tab: 'changes', open: true } }, saved)
+    ok('orch-reuse.1 a saved view is filters, camera and layout and NOTHING else: the record has no session, task, panel, command or verb field, so opening one cannot start anything; the name is trimmed, applying it restores the lens, mode, side tab, camera and workbench exactly, and a field the view does not carry is left alone rather than reset',
+      !/(panelId|itemId|sessionId|chatId|command|verb|run|dispatch|selected)/i.test(viewType) &&
+        saved.name === 'Review layout' && saved.lens === 'list' && saved.workbench.tab === 'timeline' && saved.workbench.open === false &&
+        applied.lens === 'list' && applied.mode === 'pipeline' && applied.tab === 'files' && applied.camera.k === 2 &&
+        applied.workbench.height === 300 && applied.workbench.tab === 'timeline' && applied.workbench.open === false &&
+        // A view carrying only a lens leaves everything else as it was.
+        P.prefsFromView(base, { id: 'v2', name: 'lens only', lens: 'scene' }).camera.k === 2 &&
+        // The islands order is not a view's: it is the workspace's own record.
+        applied.islands.join() === 'a',
+      JSON.stringify({ saved, applied }))
+
+    const warns = []
+    const parsed = O.parseOrchestrate({ views: [{ id: 'a', name: 'A', lens: 'list' }, { id: '', name: 'no id' }, { id: 'c', name: '   ' }, { id: 'd', name: 'D', camera: { x: 1, y: 1, k: 0 } }] }, warns)
+    const many = O.parseOrchestrate({ views: Array.from({ length: 20 }, (_, i) => ({ id: `v${i}`, name: `V${i}` })) }, [])
+    const dup = P.withSavedView([{ id: 'x', name: 'Review' }], { id: 'y', name: 'Review' })
+    ok('orch-reuse.2 the record rules, one level down: a view with no id or a blank name is not a view and is dropped BY NAME with its siblings kept, a malformed camera costs the camera and keeps the view, the list is capped at ORCH_VIEWS_MAX newest-first, saving a name that already exists REPLACES it rather than doubling it, and a pre-M302 file has no views at all',
+      parsed.views.length === 2 && parsed.views[0].id === 'a' && parsed.views[1].id === 'd' && parsed.views[1].camera === undefined &&
+        warns.length === 2 && many.views.length === O.ORCH_VIEWS_MAX && many.views[0].id === 'v8' &&
+        dup.length === 1 && dup[0].id === 'y' &&
+        O.parseOrchestrate({ lens: 'list' }, []).views === undefined,
+      JSON.stringify({ kept: parsed.views, warns, many: many.views.length, dup }))
+
+    // The provenance property, which falls out of M300's design rather than
+    // needing machinery: a rerun goes through the SAME dispatch verb, which
+    // mints a fresh run id every time, and the Artifacts tab groups by run id.
+    const R = load('src/renderer/orchestration/orch-record.ts', 'orch-record-m302.cjs')
+    const board = readFileSync(join(root, 'src/renderer/canvas/useBoardVerbs.ts'), 'utf8')
+    const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
+    const ids = new Set(Array.from({ length: 200 }, () => R.mintRunId()))
+    ok('orch-reuse.3 a rerun is a NEW execution and an old artifact keeps its provenance: every dispatch mints a fresh run id (200 mints, 200 distinct) and the id is never derived from the task, an adopted id is MARKED as adopted so an inferred grouping cannot pass for a real execution, and the Artifacts tab groups references by run id so a later run cannot re-attribute an earlier run\'s files to itself',
+      ids.size === 200 && !R.mintRunId('x').includes('undefined') &&
+        R.adoptedRunId('c1').startsWith('adopted-') && !R.mintRunId().startsWith('adopted-') &&
+        /const runId = mintRunId\(\)/.test(board) && /beginRun\(itemId, runId\)/.test(board) &&
+        /runs\.find\(\(r\) => r\.runId === row\.runId\)/.test(bench) && /data-orch-artifact-run=\{run\.runId\}/.test(bench),
+      JSON.stringify({ distinct: ids.size, sample: R.mintRunId(), adopted: R.adoptedRunId('c1') }))
+  }
+
+  // M302 — orch-reuse.4. A SAVED ARRANGEMENT starts nothing. The rule is
+  // structural: every node is a chat whose message is INSERTED, and the
+  // validation commands are prose rather than terminal nodes, because a
+  // terminal node runs its command when the template is instantiated and a
+  // validation command may deploy, publish or cost money.
+  {
+    const A = load('src/renderer/orchestration/orch-arrangement.ts', 'orch-arrangement.cjs')
+    const input = {
+      goal: 'Make the retry path safe',
+      brief: 'Retry only idempotent calls.',
+      criteria: ['no double charges', 'p95 under 100ms'],
+      validation: ['npm test', 'npm run deploy:staging'],
+      placement: 'a worktree on retry-fix',
+      members: [
+        { panelId: 'c1', title: 'Explorer', cwd: '/w/a', message: 'look first', dx: 0, dy: 0 },
+        { panelId: 'c2', title: 'Implementer', cwd: '/w/a', dx: 400, dy: 0 }
+      ],
+      edges: [
+        { from: 'c1', to: 'c2', trigger: 'on-idle' },
+        { from: 'c1', to: 'c2', trigger: 'on-idle' },
+        { from: 'c2', to: 'gone', trigger: 'on-idle' },
+        { from: 'c1', to: 'c1', trigger: 'on-idle' }
+      ]
+    }
+    const t = A.arrangementTemplate('  Retry arrangement  ', input)
+    const nodeKinds = new Set(t.nodes.map((n) => n.kind))
+    ok('orch-reuse.4 a saved arrangement is a template that RUNS NOTHING when started: every node is a chat whose first message is inserted and not sent, no node carries a command or a preset that could spawn one, the validation commands are recorded as words under their own heading with the reason, edges name node KEYS (never panel ids) and an edge to a non-member, a duplicate or a self-edge is dropped, and the description says outright that starting it sends nothing',
+      nodeKinds.size === 1 && nodeKinds.has('chat') &&
+        t.nodes.every((n) => n.command === undefined && n.presetId === undefined && n.args === undefined) &&
+        t.nodes[0].message === 'look first' && t.nodes[1].message === undefined &&
+        t.nodes.map((n) => n.key).join() === 'seat-1,seat-2' &&
+        JSON.stringify(t.edges) === JSON.stringify([{ from: 'seat-1', to: 'seat-2', trigger: 'on-idle' }]) &&
+        t.name === 'Retry arrangement' && t.id === undefined && t.reviewed === undefined &&
+        t.description.includes(A.ARRANGEMENT_VALIDATION_HEADING) && t.description.includes('npm run deploy:staging') &&
+        t.description.includes(A.ARRANGEMENT_INERT_LINE) && t.description.includes('no double charges') &&
+        // The RESULTS do not travel: no path, diff, check or run id in the record.
+        !/(runId|diff|artifact|exitCode|reviewed)/i.test(JSON.stringify(t)) &&
+        // A nameless save falls back to the goal rather than saving an untitled record.
+        A.arrangementTemplate('   ', input).name === 'Make the retry path safe',
+      JSON.stringify({ nodes: t.nodes, edges: t.edges, name: t.name }))
+  }
+
   ok('orch-timeline.1 a durable event row parses field by field: a malformed optional field costs the field and keeps the row, an unknown event kind or source from a later build drops the row rather than being coerced, a row with no run id or no title is not a record, and a gap that dropped nothing is not a gap',
     Object.values(rules).every(Boolean), JSON.stringify(rules))
 

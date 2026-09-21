@@ -15,7 +15,7 @@
  * through the layout file, which this must never share.
  */
 import type { OrchMode } from './orchestration-model'
-import { WORKBENCH_DEFAULT_HEIGHT, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
+import { ORCH_VIEWS_MAX, WORKBENCH_DEFAULT_HEIGHT, type OrchSavedView, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
 
 export type OrchLens = 'scene' | 'list'
 /** M287. Output and Review left the side column for the workbench; the side keeps Activity and Files. */
@@ -30,6 +30,12 @@ export interface OrchPrefs {
   workbench: { height: number; tab: WorkbenchTab; open: boolean }
   /** M288. Island presentation order (orchestrate-prefs.ts `islands`). */
   islands: readonly string[]
+  /**
+   * M302. The person's saved views. They live here beside the live prefs
+   * because they are made OF them — a view is this record's own fields,
+   * named and kept — and they persist through the same one write.
+   */
+  views: readonly OrchSavedView[]
 }
 
 const DEFAULTS: OrchPrefs = {
@@ -38,7 +44,8 @@ const DEFAULTS: OrchPrefs = {
   camera: { x: 0, y: 0, k: 1 },
   tab: 'activity',
   workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes', open: true },
-  islands: []
+  islands: [],
+  views: []
 }
 
 /**
@@ -56,13 +63,55 @@ export function seedOrchPrefs(persisted: PersistedOrchestrate | undefined): void
     ...(persisted.sideTab === undefined ? {} : { tab: persisted.sideTab }),
     ...(persisted.camera === undefined ? {} : { camera: { ...persisted.camera } }),
     ...(persisted.workbench === undefined ? {} : { workbench: { height: persisted.workbench.height, tab: persisted.workbench.tab, open: persisted.workbench.open !== false } }),
-    ...(persisted.islands === undefined ? {} : { islands: [...persisted.islands] })
+    ...(persisted.islands === undefined ? {} : { islands: [...persisted.islands] }),
+    ...(persisted.views === undefined ? {} : { views: persisted.views.map((v) => ({ ...v })) })
   }
+}
+
+/**
+ * M302. The CURRENT view, captured as a record — filters, camera and layout,
+ * and nothing else, which the type guarantees. It reads the live prefs, so
+ * "save this view" saves exactly what the person is looking at.
+ */
+export function viewFromPrefs(p: OrchPrefs, name: string, id: string): OrchSavedView {
+  return {
+    id,
+    name: name.trim(),
+    lens: p.lens,
+    mode: p.mode,
+    sideTab: p.tab,
+    camera: { ...p.camera },
+    workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? {} : { open: false }) }
+  }
+}
+
+/**
+ * M302. Apply a saved view to the live prefs. It can only set the fields a
+ * view HOLDS, which is why opening one starts nothing: there is no session,
+ * no task and no command in the record to act on. A field the view does not
+ * carry is left as it is rather than reset to a default — half a saved view
+ * is still the person's view.
+ */
+export function prefsFromView(p: OrchPrefs, v: OrchSavedView): OrchPrefs {
+  return {
+    ...p,
+    ...(v.lens === undefined ? {} : { lens: v.lens }),
+    ...(v.mode === undefined ? {} : { mode: v.mode }),
+    ...(v.sideTab === undefined ? {} : { tab: v.sideTab }),
+    ...(v.camera === undefined ? {} : { camera: { ...v.camera } }),
+    ...(v.workbench === undefined ? {} : { workbench: { height: v.workbench.height, tab: v.workbench.tab, open: v.workbench.open !== false } })
+  }
+}
+
+/** The newest kept, oldest dropped; a name that already exists is REPLACED, not doubled. */
+export function withSavedView(views: readonly OrchSavedView[], next: OrchSavedView): OrchSavedView[] {
+  const others = views.filter((v) => v.id !== next.id && v.name !== next.name)
+  return [...others, next].slice(-ORCH_VIEWS_MAX)
 }
 
 /** The record the workspace saves — every field, so a relaunch returns to the same view. */
 export function persistedOrchPrefs(p: OrchPrefs): PersistedOrchestrate {
-  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? {} : { open: false }) }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera }, ...(p.islands.length === 0 ? {} : { islands: [...p.islands] }) }
+  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? {} : { open: false }) }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera }, ...(p.islands.length === 0 ? {} : { islands: [...p.islands] }), ...(p.views.length === 0 ? {} : { views: p.views.map((v) => ({ ...v })) }) }
 }
 
 let prefs: OrchPrefs = DEFAULTS

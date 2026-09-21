@@ -78,9 +78,9 @@ import {
   ORCH_PLATE_LABEL, ORCH_PLATE_MORE, ORCH_PLATFORM, ORCH_SELECT_LIFT, ORCH_WORKSPACE_PLATFORM, orchConnectors, orchHiddenLine, orchHitOrder, orchLabelBudget, orchLabelMargins, orchNameTier, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchPlatformHitPolygon, orchPolygonBounds, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSegmentBetween, orchSortRows, orchSpatialStep, orchZoomLevel,
   type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchNameTier, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
 } from './orchestration-platforms'
-import { getOrchPrefs, persistedOrchPrefs, seedOrchPrefs, setOrchPrefs, type OrchLens, type OrchSideTab } from './orchestration-prefs'
+import { getOrchPrefs, persistedOrchPrefs, prefsFromView, seedOrchPrefs, setOrchPrefs, viewFromPrefs, withSavedView, type OrchLens, type OrchSideTab } from './orchestration-prefs'
 import { OrchWorkbench, type BenchSubject } from './OrchWorkbench'
-import { sameOrchestrate, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
+import { sameOrchestrate, type OrchSavedView, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
 import type { ReviewHandoff } from '@shared/review-readiness'
 import { onChatTurnEnd } from '@renderer/chat/chat-store'
 import {
@@ -182,6 +182,12 @@ export interface OrchestrationViewProps {
    * rendered — a dead composer is a promise the page cannot keep.
    */
   onSend?: (panelId: string, text: string) => Promise<string | null>
+  /**
+   * M302. Save an island's shape as a reusable template. OPTIONAL like every
+   * capability on this page: absent, no button is rendered — a control that
+   * looks live and does nothing is the defect class M195 named.
+   */
+  onSaveArrangement?: (islandId: string) => Promise<string | null>
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
@@ -203,13 +209,52 @@ type SideTab = OrchSideTab
  * mounting and hearing back. A read that FAILS also leaves it null — a door
  * that could not answer is not a door that answered "nothing".
  */
-function useLiveSessions(refresh: number): ReadonlySet<string> | null {
-  const [live, setLive] = useState<ReadonlySet<string> | null>(null)
+export interface OrchSessionFact {
+  /** The runtime holds a session record for this panel. */
+  live: boolean
+  /** A process is up right now. An idle resumable chat is live and not running. */
+  running: boolean
+  exit?: { code?: number | null; signal?: string }
+}
+
+/**
+ * MEASURED, M301, and it changed the design: for this runtime a chat's
+ * PROCESS EXITING IS NOT THE CONVERSATION ENDING. The agent process exits
+ * between turns and `--resume` brings it back, so `status: 'exited'` is the
+ * ordinary state of an idle chat. A first version read liveness off that
+ * status and made every idle agent on the page say `no session`;
+ * `orch-task.2` caught it.
+ *
+ * So liveness is MEMBERSHIP: does the runtime hold a session record for this
+ * panel at all. That is the fact a relaunch destroys and the one the plan
+ * means by "reconcile against real sessions" — main has the record or it does
+ * not. The status is still read, but for WORDS: an ended process's exit code
+ * and signal are what let the card say a session stopped on its own rather
+ * than being stopped by something else, without ever calling it a crash.
+ */
+const RUNNING_STATUSES: readonly string[] = ['starting', 'ready', 'streaming']
+
+function useLiveSessions(refresh: number): ReadonlyMap<string, OrchSessionFact> | null {
+  const [live, setLive] = useState<ReadonlyMap<string, OrchSessionFact> | null>(null)
   useEffect(() => {
     if (typeof window.canvas?.agentSession?.list !== 'function') return
     let alive = true
     void window.canvas.agentSession.list().then(
-      (rows) => { if (alive) setLive(new Set(rows.map((r) => r.id))) },
+      (rows) => {
+        if (!alive) return
+        const map = new Map<string, OrchSessionFact>()
+        for (const r of rows) {
+          // Listed at all = the runtime holds this session. `running` is the
+          // narrower fact of a process being up right now, which an idle
+          // resumable chat does not have and does not need.
+          map.set(r.id, {
+            live: true,
+            running: RUNNING_STATUSES.includes(r.status),
+            ...(RUNNING_STATUSES.includes(r.status) ? {} : { exit: { ...(r.exitCode === undefined ? {} : { code: r.exitCode }), ...(r.exitSignal === undefined ? {} : { signal: r.exitSignal }) } })
+          })
+        }
+        setLive(map)
+      },
       () => { if (alive) setLive(null) }
     )
     return () => { alive = false }
@@ -261,7 +306,7 @@ function useLastSeen(refresh: number): ReadonlyMap<string, number> | null {
 function panelsToInput(
   panels: readonly Panel[],
   templates: readonly OrchTemplateInput[],
-  live: ReadonlySet<string> | null,
+  live: ReadonlyMap<string, OrchSessionFact> | null,
   lastSeen: ReadonlyMap<string, number> | null
 ): OrchPanelInput[] {
   return panels.map((p) => {
@@ -285,7 +330,7 @@ function panelsToInput(
          * answered (`live !== null`); before that, and for a terminal, the
          * pre-M301 behaviour stands and is recorded as a limitation.
          */
-        ...(live === null ? {} : { liveSession: live.has(id), hadSession: p.chat.sessionId !== undefined }),
+        ...(live === null ? {} : { liveSession: live.get(id)?.live === true, hadSession: p.chat.sessionId !== undefined }),
         ...(lastSeen?.get(id) === undefined ? {} : { lastSeen: lastSeen.get(id) }),
         supervisor: p.chat.supervisor === true,
         orchestrator: p.chat.orchestrator !== undefined,
@@ -1403,7 +1448,7 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend, onSaveArrangement } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -1561,8 +1606,18 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     if (liveSessions === null) return null
     const p = panels.find((x) => x.rect.id === id)
     const hadSession = p !== undefined && isChatPanel(p) && p.chat.sessionId !== undefined
+    const fact = liveSessions.get(id)
+    const state = getAgentState(id)
     return standingOf({
-      agentic, liveSession: liveSessions.has(id), hadSession,
+      agentic, liveSession: fact?.live === true, hadSession,
+      // The runtime's word, so a LIVE session reads `live` and not `starting`
+      // — the first version left this out and every live agent's card said
+      // "the session is live and has not reported yet", forever.
+      ...(state === undefined ? {} : { agentState: state }),
+      // The exit is carried whether or not the runtime still holds the
+      // session: on a LIVE one it words "the process is down, the
+      // conversation resumes", and on a gone one it words how it ended.
+      ...(fact?.exit === undefined ? {} : { exit: fact.exit }),
       ...(lastSeen?.get(id) === undefined ? {} : { lastSeen: lastSeen.get(id) })
     })
   }, [liveSessions, lastSeen, panels])
@@ -1782,6 +1837,47 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // measured as an Undo move that came back undone on the next visit, because
   // the mount re-seeds from the record. The unmount flushes what the timer owed.
   useEffect(() => () => { flushOrchestrate() }, [flushOrchestrate])
+
+  /*
+   * M302 — SAVED VIEWS. A view is the page's own prefs, named and kept, and
+   * it persists through the SAME write every other pref takes; there is no
+   * second store and no second door.
+   *
+   * Applying one sets the layout state and nothing else. It cannot start,
+   * stop, retry or select anything — not because this handler is careful but
+   * because `OrchSavedView` has no field that names a session, a task or a
+   * command. The plan's rule ("saved views record filters, camera and layout,
+   * never runtime mutations") is therefore enforced by the record's shape.
+   *
+   * This also closes Phase A's deferred "Orchestrate prefs are in memory" for
+   * the preferences a view owns: they now survive a relaunch in the
+   * workspace's record.
+   */
+  const [savedViews, setSavedViews] = useState<readonly OrchSavedView[]>(() => getOrchPrefs().views)
+  const [viewName, setViewName] = useState<string | null>(null)
+  const applyView = useCallback((v: OrchSavedView): void => {
+    const next = prefsFromView(getOrchPrefs(), v)
+    setOrchPrefs(next)
+    // The React state follows the prefs, in the same order the page reads them.
+    setLens(next.lens)
+    setMode(next.mode)
+    setTab(next.tab)
+    setGraphCamera(next.camera)
+    setBenchTab(next.workbench.tab)
+    setBenchHeight(next.workbench.height)
+    setBenchOpen(next.workbench.open)
+  }, [])
+  const commitView = useCallback((name: string): void => {
+    const trimmed = name.trim()
+    if (trimmed === '') return
+    const view = viewFromPrefs(getOrchPrefs(), trimmed, `view-${Date.now().toString(36)}`)
+    const views = withSavedView(getOrchPrefs().views, view)
+    setOrchPrefs({ views })
+    setSavedViews(views)
+    setViewName(null)
+    flushOrchestrate()
+  }, [flushOrchestrate])
+  const saveView = useCallback((): void => { setViewName('') }, [])
 
   // M293. The List's rows are EVERY object in the scene — stations, checkpoints
   // and artifacts, each with its platform — in scene order unless a column is
@@ -2373,6 +2469,34 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   data-orch-lens={l} {...shellControl(() => setLens(l))}>{l === 'scene' ? 'Scene' : 'List'}</button>
               ))}
             </span>
+            {/* M302. SAVED VIEWS — filters, camera and layout, and nothing else.
+                Opening one starts nothing, and that is a fact about the RECORD
+                (shared/orchestrate-prefs.ts's OrchSavedView holds no session,
+                task, command or verb), not a promise about this handler. */}
+            <span className="orch__lens" role="group" aria-label="Saved views" data-orch-views={savedViews.length}>
+              {savedViews.map((v) => (
+                <button key={v.id} type="button" className="orch__tab" data-orch-view={v.id}
+                  title={`show this workspace's ${v.name} view — filters, camera and layout only; it starts nothing`}
+                  {...shellControl(() => applyView(v))}>{v.name}</button>
+              ))}
+              {viewName === null ? (
+                <button type="button" className="orch__tab" data-orch-view-save
+                  title="save the current lens, camera and workbench layout as a named view"
+                  {...shellControl(saveView)}>Save view</button>
+              ) : (
+                /* An inline name, never window.prompt: a modal dialog from the
+                   renderer blocks every IPC answer in flight, and Electron
+                   disables it anyway. Enter saves, Escape abandons. */
+                <input className="orch__view-name" data-orch-view-name autoFocus value={viewName}
+                  placeholder="name this view" aria-label="Name this view"
+                  onChange={(e) => setViewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitView(viewName) }
+                    if (e.key === 'Escape') { e.preventDefault(); setViewName(null) }
+                  }}
+                  onBlur={() => setViewName(null)} />
+              )}
+            </span>
           </div>
 
           <div className="orch__graph-wrap" data-orch-island-order={orderedIds.join(' ')}>
@@ -2622,7 +2746,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   <span className="orch__inspector-name">
                     <span className="orch__selected-title" data-orch-inspector-title>{selectedRow.title}</span>
                     <span className="orch__caption">
-                      <span className="orch__roster-state" data-tone={selectedRow.tone} data-orch-inspector-state>{stateWord(selectedRow)}</span>
+                      {/* M301. The standing rides the state span as a data hook so a
+                          check can read it whatever the word is; the SENTENCE below
+                          appears only when there is one to make, because an empty
+                          line is an empty box. */}
+                      <span className="orch__roster-state" data-tone={selectedRow.tone} data-orch-inspector-state
+                        {...(selectedReconcile === null ? {} : { 'data-orch-reconcile': selectedReconcile.standing })}>{stateWord(selectedRow)}</span>
                       {` · ${selectedRow.kind}`}{selectedBackend !== undefined ? ` · ${selectedBackend}` : ''}
                     </span>
                   </span>
@@ -2634,7 +2763,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     "stopped", "crashed" and "finished" are not distinguishable
                     from here, and the plan forbids guessing between them. */}
                 {selectedReconcile !== null && selectedReconcile.detail !== '' && (
-                  <p className="orch__caption" data-orch-reconcile={selectedReconcile.standing}>{selectedReconcile.detail}</p>
+                  <p className="orch__caption" data-orch-reconcile-detail={selectedReconcile.standing}>{selectedReconcile.detail}</p>
                 )}
                 {island?.memberIds.includes(selectedRow.id) === true ? (
                   <div className="orch__inspector-task">
@@ -2764,6 +2893,15 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   {/* M299. Mark done moved here from M282's Current task tile. */}
                   {island.itemId !== undefined && onMarkDone !== undefined && USER_SET_STATES.includes(WORK_ITEM_STATES[3]) && island.state !== WORK_ITEM_STATES[3] && (
                     <button type="button" className="orch__mini" data-orch-mark-done {...shellControl(() => onMarkDone(island.itemId!))}>Mark done</button>
+                  )}
+                  {/* M302. Save this island's shape as a reusable arrangement — an
+                      ordinary template, through the ordinary door, so it is readable
+                      by every other surface that reads templates. Its title says the
+                      one thing a person must know before starting it again. */}
+                  {onSaveArrangement !== undefined && island.memberIds.length > 0 && (
+                    <button type="button" className="orch__mini" data-orch-save-arrangement
+                      title="save the agents, their directories and the handoffs between them as a template — starting it opens conversations with their messages ready, and sends nothing"
+                      {...shellControl(() => { void onSaveArrangement(island.id) })}>Save arrangement</button>
                   )}
                 </div>
                 {/* M287. The brief and the acceptance criteria — the task's own words,

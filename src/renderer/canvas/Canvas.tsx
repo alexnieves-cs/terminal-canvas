@@ -252,6 +252,7 @@ import type { PanelSearchResult } from '@shared/ipc-contract'
 // M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
 import { adoptedRunId, recordOrchEvent } from '../orchestration/orch-record'
+import { arrangementTemplate } from '../orchestration/orch-arrangement'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
 const EMPTY_SHELF: Shelf = { columns: [] }
@@ -7392,6 +7393,47 @@ export function Canvas({
             // one sentence-maker, so a refusal reads the same on both pages.
             workspaceName={workspaceRows.find((w) => w.active)?.name}
             onSend={async (id, text) => sendRefusalSentence(await window.canvas.agentSession.send(id, text, []))}
+            /*
+             * M302. SAVE AN ARRANGEMENT. The shape is built here, where the
+             * panels and their links live, and saved through the EXISTING
+             * template door — so a saved arrangement is an ordinary template
+             * everywhere else in the app, with no second store and no schema
+             * of its own. Refusals are sentences, never silence.
+             */
+            onSaveArrangement={async (islandId) => {
+              const item = workItems.find((w) => w.id === islandId)
+              const shown = displayPanelsRef.current
+              const memberIds = item === undefined
+                ? shown.filter((p) => isChatPanel(p)).map((p) => p.rect.id)
+                : taskMemberships(shown, [item])[0]?.members.map((m) => m.panelId) ?? []
+              const members = memberIds.flatMap((id) => {
+                const p = shown.find((x) => x.rect.id === id)
+                if (p === undefined || !isChatPanel(p)) return []
+                return [{ panelId: id, title: railLabel(p, undefined), cwd: p.chat.cwd, rect: p.rect }]
+              })
+              if (members.length === 0) return 'this island has no conversation to save — an arrangement is its agents and the handoffs between them'
+              // Offsets from the FIRST member, so the saved shape is the shape
+              // on screen and not a set of absolute coordinates that would put
+              // the next instantiation wherever this one happened to sit.
+              const origin = members[0]!.rect
+              const edges = members.flatMap((m) => {
+                const p = shown.find((x) => x.rect.id === m.panelId)
+                return (p?.links ?? []).flatMap((l) => (l.automation?.kind === 'handoff' && l.automation.enabled
+                  ? [{ from: m.panelId, to: l.to, trigger: l.automation.trigger }]
+                  : []))
+              })
+              const template = arrangementTemplate(item?.title ?? 'Arrangement', {
+                goal: item?.title ?? 'Arrangement',
+                ...(item?.brief === undefined ? {} : { brief: item.brief }),
+                ...(item?.criteria === undefined ? {} : { criteria: item.criteria }),
+                members: members.map((m) => ({ panelId: m.panelId, title: m.title, cwd: m.cwd, dx: m.rect.x - origin.x, dy: m.rect.y - origin.y })),
+                edges
+              })
+              const saved = await window.canvas.template.save(template)
+              if (saved.kind === 'stale') return 'another editor saved this template first — open it and try again'
+              paletteActionsRef.current?.say(`Saved “${template.name}” as an arrangement — starting it opens its conversations and sends nothing`)
+              return null
+            }}
           />
         </div>
       )}

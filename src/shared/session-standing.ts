@@ -45,11 +45,25 @@ export type SessionStanding =
   /** No session was ever recorded for this panel — nothing to reconcile. */
   | 'never-started'
 
+/**
+ * M301. How a session that is no longer running ENDED, when main can say.
+ * The plan requires stopped, interrupted, disconnected, crashed and unknown
+ * to stay distinguishable, and this is the only place that information
+ * exists: the runtime's own snapshot. Absent is absent — an exit nobody
+ * recorded is `unknown`, not "stopped cleanly".
+ */
+export interface SessionExit {
+  code?: number | null
+  signal?: string
+}
+
 export interface StandingInput {
   /** Does this panel run something at all? A note has no standing. */
   agentic: boolean
   /** Main's answer: is there a session for this panel right now? */
   liveSession: boolean
+  /** Main's answer to HOW it ended, when the runtime still holds the record. */
+  exit?: SessionExit
   /** The runtime's last word, if any has arrived this run. */
   agentState?: string
   /**
@@ -91,11 +105,43 @@ export function standingOf(input: StandingInput): Standing {
   if (!input.agentic) return { standing: 'never-started', word: 'idle', detail: '' }
   if (input.liveSession) {
     const s = input.agentState
-    if (s === undefined) return { standing: 'starting', word: 'starting', detail: 'the session is live and has not reported yet' }
-    return { standing: 'live', word: s, detail: '' }
+    /*
+     * MEASURED, M301: a chat's process exits between turns and `--resume`
+     * brings it back, so an ENDED PROCESS on a session the runtime still
+     * holds is ordinary and must not be worded as a loss. The conversation
+     * is there; only the process is not, and the sentence says exactly that.
+     */
+    const resumable = input.exit !== undefined
+      ? 'no process is running for this right now; the conversation resumes on your next message'
+      : ''
+    if (s === undefined) return { standing: 'starting', word: 'starting', detail: resumable === '' ? 'the session is live and has not reported yet' : resumable }
+    return { standing: 'live', word: s, detail: resumable }
   }
   if (!input.hadSession) {
     return { standing: 'never-started', word: 'not started', detail: 'this has not been run yet' }
+  }
+  /*
+   * The runtime no longer holds this session, but it told us how its last
+   * process ended before it forgot — so the app can say HOW rather than only
+   * THAT it is gone. A signal and an exit code are different facts and are
+   * worded differently: a session ended by a signal was stopped by something
+   * outside itself, and a non-zero code is the process's own account.
+   * Neither is called a crash — this app cannot tell a crash from a kill
+   * from a clean stop it did not ask for.
+   */
+  if (input.exit !== undefined) {
+    const { code, signal } = input.exit
+    const how = signal !== undefined && signal !== null && signal !== ''
+      ? `it was stopped by ${signal}`
+      : code === 0 ? 'it ended on its own, exit 0'
+        : typeof code === 'number' ? `it ended on its own, exit ${code}`
+          : 'the runtime did not record how it ended'
+    return {
+      standing: 'ended',
+      word: 'ended',
+      detail: `no session is running for this — ${how}${input.lastSeen === undefined ? '' : `; the record last saw it ${seenWords(input.lastSeen)}`}`,
+      ...(input.lastSeen === undefined ? {} : { lastSeen: input.lastSeen })
+    }
   }
   if (input.lastSeen === undefined) {
     return {
