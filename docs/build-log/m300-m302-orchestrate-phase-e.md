@@ -184,10 +184,26 @@ against that read; the mark on disk is an input to the comparison, never the ans
 
 ## Gate
 
-- [ ] `npm run affected` between steps.
-- [ ] `npm run verify`, new reds listed separately from the pre-existing set and reproduced on
-      the base branch before being called pre-existing.
-- [ ] `verify:panels:orchestrate` watchdog re-measured with a `// measured` comment.
+`npm run verify` on `b051e6b0` (2026-09-20, `/tmp/tc-electron-lock` taken, no stray Electron):
+**52/55 suites in 695.9 s.**
+
+- **New reds: none.** The three failing suites are `verify:ipc` — fixed in the next commit, a
+  PINNED channel count (146 → 148) that this phase's two doors moved, which is the check doing
+  its job — and `verify:panels:agents` + `verify:panels:product`, whose failures are **exactly
+  the nine this track has carried since Phase A, by id**: `detail.1`
+  (`m275-swarm-presets.md:107`) and `workflow.edit.1/.2`, `workflow.lib.1`, `workflow.wire.1`,
+  `workflow.inspect.1`, `workflow.save.1`, `workflow.panel.1e`, `reach.1`
+  (`m277-libraries.md:78`). Same ids, same count, same two suites Phase D's gate names.
+- Every new check passed inside the gate: `orch-timeline.1–.7`, `orch-reconcile.1–.4`,
+  `orch-reuse.1–.4`, `workbench.1`/`1b` (verify:orchestration **110/110**);
+  `orch-reconcile.app.1–.2` beside Phase A–D's (verify:panels:orchestrate **31/31**, 136.3 s);
+  `verify:layout` 271/271, `verify:meta` 51/51, `verify:ipc` 1/1 after the re-pin.
+
+- [x] `npm run affected` between steps.
+- [x] `npm run verify` — above; reds attributed by id to the documented nine, none new.
+- [x] `verify:panels:orchestrate` watchdog re-measured (180000 → **210000**) with the
+      `// measured` comment: 163.9 s against the old pin put `headroom.1` red at 91%; the green
+      runs since are 136–145 s, 65–69%.
 - [ ] `npm run shot` + a fresh-context critic per changed scene, a sentence each.
 - [ ] Goldens NOT written, no merge, no push. Which scenes THIS phase changed, listed.
 
@@ -223,4 +239,37 @@ Out of scope for Phase E by the run prompt, logged here if the run is tempted: C
 adapters and structured check adapters (Phase F), per-command output capture (handed to F
 above), artifact content snapshots, durable checkpoints, cross-provider continuation, rollback.
 
-*(Filled as the run finds things.)*
+**Handed to Phase F, by name and with the reason:**
+
+- **Per-command output capture.** The ledger keeps no output bytes, so a failed check's
+  "output" is still the session's scrollback tail. The references-only policy declines the
+  per-event write; Phase B measured a `git diff --binary` per command end, and a per-event
+  write of that shape needs measuring on a hot session before it is added. Phase F inherits a
+  DECISION, not an oversight.
+- The identity's uncovered inputs (index, a submodule's dirty tree, mode bits, symlink
+  targets), inherited from Phase B and still named on the type.
+
+**Found while building, not this phase's:**
+
+- **`registerIpcHandlers` has THREE call sites, not one** — `main/index.ts`,
+  `scripts/panels-harness.cjs` and `scripts/shot.cjs` — and the two harnesses construct their
+  own. A collaborator appended in main is INERT in both until it is added there too, with
+  nothing red. This run hit it; the next one will. A `createStores`-shaped harness would
+  remove the class, exactly as Phase B said of the engines.
+- **A restored chat auto-creates its runtime session**, so `agentSession.list()` membership is
+  not a test of whether a conversation has been resumed. It is the right test of whether the
+  RUNTIME still holds a session (a relaunch, a dispose), which is what reconciliation needs,
+  but a future "is this conversation actually attached" question needs a different fact.
+- **Terminals are reconciled from `pty.list()` and the record's sighting; chats from the
+  runtime's list.** The two objects genuinely differ (one resumes, one does not), and the
+  asymmetry is deliberate — but it means a terminal that ran before the record's oldest kept
+  row reads `never-started` rather than `unknown`. A gap row is present in that case and the
+  Timeline tab says so; the ROSTER word does not. Small, and worth closing if it is ever seen.
+- **The activity ring and the durable record are two stores with overlapping content.** M300
+  did not merge them, on purpose (one is a live tail, one is history), but nothing yet stops a
+  future event being written to one and not the other.
+- `verify:panels:orchestrate` is at 136 s of a 210 s watchdog; there is room, but Phase F
+  should measure before adding, as Phase C's note says.
+- `orch-parity.app.3` (WebGL denied + reduced motion) went red once in this run's second
+  Electron pass and green in every other, including on the same build. A FLAKE, recorded here
+  so the next red is not mistaken for a regression.

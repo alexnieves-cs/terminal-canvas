@@ -263,7 +263,14 @@ app.whenReady().then(() => {
   // used, a sibling read so spawn:recent keeps its string[] answer.
   // M286 review:identity (146) — the subject's content identity now, a pull
   // like every review:* channel, so a check can be bound to what stands.
-  const EXPECTED_CHANNELS = 146
+  // M300 ledger:timeline (147) — Orchestrate's durable record for one subject,
+  // newest first, merged from command rows, events and the trim's gap; a pull
+  // like every read channel, and read-only by construction so event inspection
+  // cannot re-run anything. ledger:event (148) — the renderer's ONE append
+  // into that record, for the facts main cannot see (a person's answer, a
+  // handoff's outcome, a review mark); main sets the row's `kind`, so the door
+  // cannot be used to write a usage or a gap row.
+  const EXPECTED_CHANNELS = 148
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
