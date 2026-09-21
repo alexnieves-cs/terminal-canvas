@@ -251,7 +251,7 @@ import { TRIGGER_WORDS } from './trigger-words'
 import type { PanelSearchResult } from '@shared/ipc-contract'
 // M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
-import { adoptedRunId, recordOrchEvent } from '../orchestration/orch-record'
+import { adoptedRunId, isSettledHandoff, recordOrchEvent } from '../orchestration/orch-record'
 import { arrangementTemplate } from '../orchestration/orch-arrangement'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
@@ -4157,7 +4157,9 @@ export function Canvas({
           if (e.kind !== 'event' || e.row.event !== 'handoff') continue
           const key = e.row.key
           // Newest first, so the first row for a key is its latest outcome.
-          if (key !== undefined && e.row.detail !== undefined && !seed.has(key)) seed.set(key, e.row.detail)
+          // Belt and braces with the write-side filter above: a row an older
+          // build may already have left on disk is not restored either.
+          if (key !== undefined && e.row.detail !== undefined && isSettledHandoff(e.row.detail) && !seed.has(key)) seed.set(key, e.row.detail)
         }
         if (seed.size === 0) return
         setAutomationResult((current) => {
@@ -4262,15 +4264,29 @@ export function Canvas({
       const key = `${source.rect.id}:${link.to}`
       const target = panelsRef.current.find((panel) => panel.rect.id === link.to)
       const session = target && isTerminalPanel(target) ? registry.get(target.rect.id) : undefined
+      /*
+       * M301 (the critic): these three went STRAIGHT to the map and so were
+       * never recorded — the lens came back from a relaunch showing remembered
+       * handoffs beside forgotten restarts, with nothing saying why. They take
+       * the same funnel as every other outcome now.
+       *
+       * `setHandoffResult` is declared BELOW this callback, and must stay out
+       * of its dependency array: a dep array is evaluated during render, at
+       * this line, where that const is still in its temporal dead zone — the
+       * array would throw where the call does not. The call is safe because it
+       * happens at EVENT time, by which point the render that created this
+       * closure has finished, and because `setHandoffResult` is itself a
+       * `useCallback(…, [])` and so is the same function every render.
+       */
       if (!target || !isTerminalPanel(target) || !session || session.dormant) {
-        setAutomationResult((current) => new Map(current).set(key, 'skipped — target is dormant'))
+        setHandoffResult(key, 'skipped — target is dormant')
         continue
       }
       if (!isRestartable(session.status)) {
-        setAutomationResult((current) => new Map(current).set(key, 'skipped — target has not started'))
+        setHandoffResult(key, 'skipped — target has not started')
         continue
       }
-      setAutomationResult((current) => new Map(current).set(key, `ran after exit ${info.exitCode}`))
+      setHandoffResult(key, `ran after exit ${info.exitCode}`)
       restartWithSpec(target.rect.id, target.spec)
     }
   }), [registry, restartWithSpec])
@@ -4287,6 +4303,12 @@ export function Canvas({
     // durable row is what survives; the lens reads it back in M301.
     // `app` is the honest source: this app ran the automation, and the
     // sentence is its own vocabulary, not an agent's claim.
+    //
+    // M301 (the critic): only a SETTLED outcome is written. `queued — …` and
+    // `waiting for …` describe an in-memory queue and join set that a
+    // relaunch empties, so restoring one would draw a `· waiting` edge for a
+    // join that can never complete.
+    if (!isSettledHandoff(sentence)) return
     const [from, to] = key.split(':')
     void recordOrchEvent({
       runId: adoptedRunId(from ?? key), panelId: from, event: 'handoff', source: 'app',

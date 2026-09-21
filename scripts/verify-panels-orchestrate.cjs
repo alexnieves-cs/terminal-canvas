@@ -1411,8 +1411,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   // ---------------------------------------------------------------------
   {
     const IDS = [
-      'orch-reconcile.app.1 a killed PROCESS is not a gone conversation: the page keeps the session\'s own word, says the process is down and that it resumes on the next message, and never claims there is no session',
-      'orch-reconcile.app.2 a restored agentic TERMINAL with no session — what a relaunch leaves on the one object that has no --resume — reads `no session` rather than `idle`, and carries a sentence saying so with when the record last saw it, without diagnosing a crash or a deadlock'
+      'orch-reconcile.app.1 a killed PROCESS is not a gone conversation: the standing stays live, the word is not `no session`, and the page says the conversation resumes on your next message',
+      'orch-reconcile.app.2 a restored agentic TERMINAL with no session — what a relaunch leaves on the one object that has no --resume — reads `no session` rather than `idle`, and carries a sentence saying so with when the record last saw it, without diagnosing a crash or a deadlock',
+      'orch-reconcile.app.3 the page RE-READ main rather than freezing: a newer sighting appended to main\u2019s own ledger reaches the reconciled sentence after the person presses Refresh, so app.1 and app.2 are answers and not a frozen page',
     ]
     try {
       const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -1448,6 +1449,12 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           sentence: i?.querySelector('[data-orch-reconcile-detail]')?.textContent ?? null
         }
       })()`)
+      // M301 (the critic's finding 1): the workbench's Refresh bumps the
+      // STRIP's own counter AND the view's reconcile tick — it is the one
+      // control that means "ask main again". Before that wiring existed this
+      // helper re-read nothing, and `killed` was byte-identical to `before`:
+      // the check could not have failed, and would have passed against a page
+      // that never re-read main at all.
       const refresh = async () => { await click('[data-orch-bench-refresh]'); await settle() }
       await refresh()
       const before = await readState()
@@ -1462,10 +1469,27 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       }, 8000).catch(() => null)
       await refresh()
       const killed = await readState()
+      /*
+       * MEASURED, and it is why this check is shaped the way it is: the page
+       * cannot observe HOW a chat's process ended, and that is the runtime's
+       * doing rather than a gap here. A `oneProcessPerTurn` backend CLEARS
+       * `exitCode`/`exitSignal` on a clean turn end (`main/agent-session.ts`),
+       * and a kill that lands after the turn finished — which, with a fixture
+       * runner that answers in about 200 ms, is every kill a suite can time —
+       * is a kill of a process that is already gone.
+       *
+       * So the claim proved here is the product one: a killed process leaves
+       * the CONVERSATION live and resumable. The critic's objection to an
+       * earlier version was that a FROZEN page satisfies that too — so app.3
+       * below is part of this check's evidence and not a separate story: it
+       * flips the very same read, through the very same Refresh, to `no
+       * session`, which is only possible if the page re-asked main.
+       */
       ok(IDS[0],
         exited && killed.reconcile === 'live' && before.reconcile === 'live' &&
           killed.state !== 'no session' && typeof killed.sentence === 'string' && /resumes on your next message/.test(killed.sentence),
         JSON.stringify({ before, exited, killed }))
+
 
       // (2) THE RELAUNCH STATE, on the object where it is a real state.
       //
@@ -1480,6 +1504,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // restarted (a suite cannot), but that is exactly the renderer's view of
       // the world after a relaunch.
       const restoredId = 'reconcile-restored'
+      // The direct backend, so app.3 below can actually START this terminal —
+      // the same line orch-dep.app.1 takes before it wakes one.
+      state.backend = createDirectBackend('verify: direct (m301 reconcile)')
       runLedger.append({ panelId: restoredId, command: 'npm test', cwd: repo, startedAt: Date.now() - 60000, endedAt: Date.now() - 59000, exitCode: 0 })
       layoutStore.save({
         panels: fromPanels([{
@@ -1523,6 +1550,45 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           /last saw it/.test(after.sentence) &&
           !/crash|deadlock|stuck|hung/i.test(after.sentence),
         JSON.stringify({ runtimeHasIt, after, probe }))
+
+      /*
+       * app.3 — THE RE-READ, proven with a fact this check owns.
+       *
+       * The critic's objection to app.1 was that a page which never re-asked
+       * main would satisfy it too, and that objection was correct: the
+       * liveness reads used to move only when a chat turn ended. Three ways
+       * to disprove a frozen page were tried and do not exist here —
+       * `dispose` on a live chat is undone at once by the panel re-creating
+       * its session; a mid-turn kill is a race against a fixture runner that
+       * answers in about 200 ms; and the rail's start control needs a real
+       * pointer (the mouse-only class `reach.3` names), so a dispatched click
+       * finds the button and starts nothing.
+       *
+       * What works is to move the DATA the page reads and make the page say
+       * the new value. The restored terminal's sentence above carries when
+       * the record last saw it. Append a newer row through main's own ledger,
+       * press the workbench's Refresh — the person's "look again" — and the
+       * sentence must name the new time. A page that did not re-read keeps
+       * the old one.
+       */
+      const seenAgainAt = Date.now()
+      await runLedger.append({ panelId: restoredId, command: 'npm run build', cwd: repo, startedAt: seenAgainAt - 500, endedAt: seenAgainAt, exitCode: 0 })
+      await click('[data-orch-bench-refresh]')
+      await settle()
+      const reread = await waitUntil(async () => {
+        const r = await wc.executeJavaScript(`(() => {
+          const i = document.querySelector('[data-orch-inspector="${restoredId}"]')
+          return i?.querySelector('[data-orch-reconcile-detail]')?.textContent ?? null
+        })()`)
+        return typeof r === 'string' && r !== (after && after.sentence) ? r : false
+      }, 8000)
+      ok(IDS[2],
+        // The page moved to the newer sighting, so it asked main again; and it
+        // is still the reconciled sentence, not some other line.
+        typeof reread === 'string' && /no session is running for this/.test(reread) &&
+          reread !== (after && after.sentence),
+        JSON.stringify({ was: after && after.sentence, now: reread }))
+
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* scratch */ }
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)

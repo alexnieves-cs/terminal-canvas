@@ -1,3 +1,4 @@
+import { NO_RECENT_EVENTS } from './session-standing'
 /**
  * M177. EMPTY STATES AS PLACES (the brief, rule 5; M127's critic; M149 F.7).
  * Every pane, panel kind and board column with nothing in it says what the
@@ -42,7 +43,7 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'orch-roster', sentence: 'no agents match this filter — start a chat or terminal on the canvas', verb: 'Show Canvas' },
   { id: 'orch-pipeline', sentence: 'no tasks in this stage — start work from the board or palette', verb: 'Show Canvas' },
   { id: 'orch-task', sentence: 'no task is in progress or in review — start work from the board', verb: 'Show Canvas' },
-  { id: 'orch-activity', sentence: 'No recent events \u2014 this feed is this run\u2019s; the durable record is the workbench\u2019s Timeline tab. Live is working panels plus the recent window; Historical is this session' },
+  { id: 'orch-activity', sentence: `${NO_RECENT_EVENTS} \u2014 this feed is this run\u2019s; the durable record is the workbench\u2019s Timeline tab. Live is working panels plus the recent window; Historical is this session` },
   { id: 'orch-terminal', sentence: 'no recorded logs yet — select a panel to read its scrollback or last chat turn', verb: 'Show Canvas' },
   { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' }
 ]

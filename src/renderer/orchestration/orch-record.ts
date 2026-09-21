@@ -71,6 +71,27 @@ export function runOfTask(itemId: string): string | undefined {
   return runOfItem.get(itemId)
 }
 
+/**
+ * M301 (the critic's finding 6). WHICH AUTOMATION OUTCOMES BELONG IN A
+ * DURABLE RECORD: the SETTLED ones, and only those.
+ *
+ * `queued — …` and `waiting for …` are statements about a join set and a
+ * queue that live in memory in `useHandoff`. A relaunch empties both, so a
+ * row restored from disk would draw an edge labelled `· waiting` for a join
+ * that will never complete — fabricated state, which is the one thing this
+ * phase exists to prevent, arriving through the very mechanism built to
+ * prevent it.
+ *
+ * A history records what HAPPENED. "It is waiting" is not something that
+ * happened; it is something that was true for a while, and this record has no
+ * way to say that it stopped being true. So a pending sentence is never
+ * written, and — belt and braces, for rows an older build may already have
+ * left on disk — never seeded back either.
+ */
+export function isSettledHandoff(sentence: string): boolean {
+  return !sentence.startsWith('queued —') && !sentence.startsWith('waiting for')
+}
+
 export interface OrchEventInput {
   runId: string
   event: OrchEventKind

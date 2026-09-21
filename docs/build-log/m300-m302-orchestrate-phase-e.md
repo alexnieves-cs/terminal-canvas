@@ -99,8 +99,11 @@ inherited item closed as a READ rather than a new store.
 
 - [x] On launch and reconnect, reconcile against real sessions BEFORE displaying Running.
 - [x] A stored session that no longer exists reads ended/unknown with when it was last seen.
-- [x] Stopped, interrupted, disconnected, crashed, unknown stay distinguishable from each other
-      and from completed. Silence is **No recent events**.
+- [x] Distinguishable standings, as DELIVERED (the critic's finding 8 — this says what was
+      built, not what the plan's five words hoped for): `ended` by signal ("it was stopped by
+      SIGKILL"), `ended` by code ("it ended on its own, exit 3"), `ended` by date alone,
+      `unknown`, and `never-started`. No arm says crash, deadlock, stuck or hung. Silence is
+      **No recent events**, one imported string.
 - [x] A permission answered elsewhere or auto-resolved while the app was closed cannot be
       answered twice — READ, not built, and the reason is below.
 - [x] Phase B's review identity and Phase C's subject gate hold across a relaunch: a review
@@ -114,7 +117,14 @@ inherited item closed as a READ rather than a new store.
       path and not an OS signal to a real CLI; and `dispose` stands in for what a relaunch
       does to the runtime's record, because main is not restarted inside a suite.
 - [ ] Fresh-context critic on this milestone specifically.
-- [x] `verify:panels:orchestrate` **31/31**, watchdog re-pinned at 210000 (136.3 s, 65%).
+- [x] `verify:panels:orchestrate` **32/32** after the critic's round, watchdog 210000 (137.8 s,
+      66%). `orch-reconcile.app.3` is the critic's finding 1 answered: three ways to disprove a
+      frozen page do not exist in this harness — `dispose` on a live chat is undone at once by
+      the panel re-creating its session, a mid-turn kill is a race against a fixture runner
+      that answers in ~200 ms, and the rail's start control needs a real pointer — so the check
+      moves the DATA instead. A newer sighting appended to main's own ledger reaches the
+      reconciled sentence after the person presses Refresh: measured `10:41 PM` → `10:42 PM`.
+      A page that did not re-read keeps the old one.
 
 ### M301 as built, and the measurement that changed it
 
@@ -204,8 +214,52 @@ against that read; the mark on disk is an input to the comparison, never the ans
 - [x] `verify:panels:orchestrate` watchdog re-measured (180000 → **210000**) with the
       `// measured` comment: 163.9 s against the old pin put `headroom.1` red at 91%; the green
       runs since are 136–145 s, 65–69%.
-- [ ] `npm run shot` + a fresh-context critic per changed scene, a sentence each.
-- [ ] Goldens NOT written, no merge, no push. Which scenes THIS phase changed, listed.
+- [x] `npm run shot` — 64 scenes. `verify:visual` names **exactly three changed scenes**, all
+      Orchestrate, and the pre-existing `starter` red:
+      - **`orchestration`** (light, 0.598%) and **`orchestration-dark`** (0.682%) — the
+        workbench tab row is five tabs, `Save view` has joined the Scene/List row, and the
+        activity feed's empty sentence is the new one. Nothing else in either frame moved:
+        the diff image is three small regions and no scene geometry at all.
+      - **`orchestration-working`** (one 32 px tile, 50%) — the island card's action row gained
+        `Save arrangement`, which is the tile that differs; the rest of the frame is identical.
+      - **`starter`** — the harness could not paint it ("the arrangement is not on screen").
+        Pre-existing (`m279-ui-evolution.md:176`) and left red ON PURPOSE. **Never blind-update
+        it**: `UPDATE_GOLDENS=1` re-baselines it along with everything else.
+      The author's own read of the captures: the five-tab row still fits its strip at every
+      window size in the scenes; `Save view` reads as a control rather than a heading because
+      it sits in the lens group; `Save arrangement` is the fourth action on the island card,
+      which is the most that row has carried.
+- [x] A fresh-context critic on M301 specifically, as the prompt requires — its round is below.
+- [ ] Goldens NOT written, no merge, no push. **This phase changed `orchestration`,
+      `orchestration-dark` and `orchestration-working`** — those three and no others.
+
+## The fresh-context critic's round (M301)
+
+The prompt requires a critic on M301 specifically, "because reconciliation is a boundary and
+'did not fabricate state' is exactly the kind of claim that is easy to self-review wrongly."
+It was, twice over. Ten findings; seven were real, three of them undermined the milestone's
+own thesis, and one showed its headline check could not fail.
+
+| # | Finding | Verdict | What was done |
+|---|---|---|---|
+| 1 | **`orch-reconcile.app.1`'s "after the kill" read was PRE-KILL data.** The workbench's Refresh bumps the strip's own counter; `benchRefresh`, which the liveness reads keyed off, has one writer — `onChatTurnEnd`. The check would have passed against a page that never re-read main after a kill. | **Real, and the worst of the ten** | The reads have their own tick, moved by an agent transition and by the person's Refresh as well as a finished turn. The check now asserts a fact only a post-kill read can carry: the page names the signal that stopped the process. |
+| 2 | **The same wiring makes a FALSE `no session` stick.** Restored chats create their sessions asynchronously; a launch straight onto this page can read the list first, mark every restored conversation `no session`, and never re-ask until somebody sends a message. | **Real, and worse than the bug it replaced** — a confident, dated sentence about a live conversation | Closed by the same tick. An agent transition is what a session starting actually emits. |
+| 3 | **`hadSession` for a terminal was "a sighting in the newest 200 rows"**, so a terminal that ran before the window, or under a shell that emits no OSC 133 marks, read "not started — this has not been run yet". | **Real** | A terminal with no sighting is now left UNRECONCILED — the page keeps its old word rather than swapping one confident wrong answer for another. Absence of a sighting means three different things and only one would justify that sentence. |
+| 4 | **`lastSeen === null` did not gate reconciliation**, so between the two reads (or after a failed one) every agentic terminal was reconciled with a fabricated `hadSession: false`. | **Real** | Same fix as 3; the gate is now on the sighting itself, in both the scene's input and the card's. |
+| 5 | **A permission answer main REFUSED was written into the record as having happened.** `answer` resolves false for a requestId no longer pending; the `.then` ignored the value. Two surfaces answering one request put two "Allowed a request" rows in the record for one decision. | **Real.** Main's enforcement was never wrong; the RECORD of it was, and the record is what this phase asks a person to trust | `.then((accepted) => { if (accepted === false) return … })`. |
+| 6 | **A relaunch restored `waiting for …` and `queued — …` into the dependency lens**, drawing a `· waiting` edge for a join that can never complete — fabricated state arriving through the mechanism built to prevent it. Secondarily, the restart-on-exit arm bypassed the funnel and was never recorded at all. | **Real** | Only SETTLED outcomes are written, and only settled ones seeded back (belt and braces, for rows an older build may have left). The restart arm takes the funnel. A history records what happened; "it is waiting" is not something that happened, and this record has no way to say it stopped being true. |
+| 7 | `countsAsRunning` had no caller (the count goes through `isActiveAgent`, which implements the rule itself) and `NO_RECENT_EVENTS` had none either, with the real sentence a duplicate literal. | **Real, and the right kind of nit** | `countsAsRunning` deleted — a second, unenforced copy of a rule is worse than none. `NO_RECENT_EVENTS` is now imported by the surface that says it. |
+| 9 | **The invented `starting`.** A live session the runtime had not spoken for read "starting — the session is live and has not reported yet"; under the tmux backend that is a detached shell idle since before the app launched, described as spinning up. | **Real** | There is no invented `starting`. With no runtime word the page makes NO claim; the runtime's own `starting` still arrives through `agentState`. |
+| 8 | A failed liveness read reverts to pre-M301 behaviour and says nothing, so "disconnected" has no representation; the checklist should say what was delivered, not tick the plan's five words. | **Fair** | The standings delivered are `ended` (by signal, by code, or by date), `unknown` and `never-started`. Recorded as that, below, instead of as the plan's five. |
+| 10 | A NON-agentic terminal is excluded from reconciliation entirely, so a restored plain shell still reads `idle`. | **Fair, and deliberate** | Kept, and named in Found / deferred. |
+
+**Claims the critic verified and let stand:** review identity IS re-derived across a relaunch
+(`useTaskHandoffs` builds only from a live `review.across` read and `reviewStanding` compares
+the disk mark against it — the mark is an input, never the answer, and the workbench reads the
+same `taskHandoffOf`, so the two surfaces cannot disagree); the permission double-answer cannot
+take EFFECT (main's pending map is the guard); no arm diagnoses a crash, a deadlock or a hang;
+and the ordering rule — liveness asked before the runtime's last word — is the load-bearing
+half and is pinned.
 
 ## The harness trap, in its positional form
 
@@ -265,6 +319,14 @@ above), artifact content snapshots, durable checkpoints, cross-provider continua
   asymmetry is deliberate — but it means a terminal that ran before the record's oldest kept
   row reads `never-started` rather than `unknown`. A gap row is present in that case and the
   Timeline tab says so; the ROSTER word does not. Small, and worth closing if it is ever seen.
+- **A non-agentic terminal is not reconciled at all** (the critic's finding 10): a restored
+  plain shell panel with no PTY still reads `idle`, exactly as before M301. Deliberate — the
+  phase's claim is about work that RUNS — but the plan's sentence is broader than what was
+  built, and this is the gap.
+- **A terminal the record cannot speak for is left unreconciled**, so a terminal that ran
+  before the newest 200 rows, or under a shell that emits no OSC 133 marks, keeps its pre-M301
+  word. Honest, and the alternative (asserting "not started") is worse; closing it properly
+  needs a per-panel sighting that does not depend on a shared window.
 - **The activity ring and the durable record are two stores with overlapping content.** M300
   did not merge them, on purpose (one is a live tail, one is history), but nothing yet stops a
   future event being written to one and not the other.

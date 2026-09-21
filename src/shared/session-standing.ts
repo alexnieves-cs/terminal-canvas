@@ -34,10 +34,8 @@
  * the runtime's words about a turn are a different fact that rides on top.
  */
 export type SessionStanding =
-  /** A live session, and the runtime has spoken for it. */
+  /** A live session. What it is DOING is the runtime's word, carried separately. */
   | 'live'
-  /** A live session that has not spoken yet. */
-  | 'starting'
   /** There was a session; there is not one now, and we know when we last saw it. */
   | 'ended'
   /** There was a session; there is not one now, and we cannot say when. */
@@ -86,6 +84,21 @@ export interface Standing {
   lastSeen?: number
 }
 
+/**
+ * How a process ended, in words, or '' when the runtime recorded nothing. A
+ * signal and an exit code are different facts: a session ended by a signal was
+ * stopped by something outside itself, and a code is the process's own
+ * account. Neither is called a crash — this app cannot tell a crash from a
+ * kill from a stop it did not ask for.
+ */
+function exitWords(exit: SessionExit): string {
+  const { code, signal } = exit
+  if (signal !== undefined && signal !== null && signal !== '') return `it was stopped by ${signal}`
+  if (code === 0) return 'it ended on its own, exit 0'
+  if (typeof code === 'number') return `it ended on its own, exit ${code}`
+  return ''
+}
+
 /** `Mar 4 15:02` — absolute, because a relative age rots on screen while nothing re-reads it. */
 function seenWords(at: number): string {
   const d = new Date(at)
@@ -111,18 +124,27 @@ export function standingOf(input: StandingInput): Standing {
      * holds is ordinary and must not be worded as a loss. The conversation
      * is there; only the process is not, and the sentence says exactly that.
      */
-    const resumable = input.exit !== undefined
-      ? 'no process is running for this right now; the conversation resumes on your next message'
-      : ''
     /*
-     * MEASURED: an idle chat's process has ended and the agent-state store
-     * holds nothing for it, so "no word yet" and "starting" are NOT the same
-     * thing. `starting` is only for a session with a process up that has not
-     * reported; a session whose process has ended is idle and resumable, and
-     * saying it is starting would be a claim that something is happening.
+     * A live session whose PROCESS is down. How it went down is worth a few
+     * words when the runtime recorded it — that is what makes a killed
+     * process observable to a reader — but it is never a loss, because the
+     * conversation resumes.
      */
-    if (s === undefined && input.exit !== undefined) return { standing: 'live', word: 'idle', detail: resumable }
-    if (s === undefined) return { standing: 'starting', word: 'starting', detail: 'the session is live and has not reported yet' }
+    const how = input.exit === undefined ? '' : exitWords(input.exit)
+    const resumable = input.exit === undefined
+      ? ''
+      : `no process is running for this right now${how === '' ? '' : ` (${how})`}; the conversation resumes on your next message`
+    /*
+     * THERE IS NO INVENTED `starting` (the critic's finding 9). An earlier
+     * version read "a live session the runtime has not spoken for" as
+     * starting — which, under the tmux backend, is a DETACHED SHELL that has
+     * been sitting idle since before this app launched, described as spinning
+     * up. The runtime emits `starting` as an agent state when a session really
+     * is starting, and that arrives through `agentState` like every other
+     * word. With no word, this makes no claim at all: the standing is live and
+     * the page keeps whatever it already showed.
+     */
+    if (s === undefined) return { standing: 'live', word: 'idle', detail: resumable }
     return { standing: 'live', word: s, detail: resumable }
   }
   if (!input.hadSession) {
@@ -138,12 +160,7 @@ export function standingOf(input: StandingInput): Standing {
    * from a clean stop it did not ask for.
    */
   if (input.exit !== undefined) {
-    const { code, signal } = input.exit
-    const how = signal !== undefined && signal !== null && signal !== ''
-      ? `it was stopped by ${signal}`
-      : code === 0 ? 'it ended on its own, exit 0'
-        : typeof code === 'number' ? `it ended on its own, exit ${code}`
-          : 'the runtime did not record how it ended'
+    const how = exitWords(input.exit) === '' ? 'the runtime did not record how it ended' : exitWords(input.exit)
     return {
       standing: 'ended',
       word: 'ended',
@@ -169,14 +186,16 @@ export function standingOf(input: StandingInput): Standing {
   }
 }
 
-/** Silence is silence. The plan's words, in one place so no surface invents a deadlock. */
-export const NO_RECENT_EVENTS = 'No recent events'
-
 /**
- * Is this standing one the page may count as work in flight? `unknown` and
- * `ended` are NOT — a count that includes them is how "3 running" survives a
- * relaunch that killed all three.
+ * Silence is silence. The plan's words, in ONE place — and it is imported by
+ * the surface that says it (`shared/empty-states.ts`), not copied there. The
+ * critic's finding 7: an exported constant whose whole purpose is being the
+ * single copy, with a duplicate literal at the only site that needs it, is
+ * two copies with extra steps.
+ *
+ * `countsAsRunning` used to live here too and had no caller — the page's
+ * count goes through `isActiveAgent`, which implements the rule itself. A
+ * second, unenforced copy of a rule is worse than none, so it is gone;
+ * `orch-reconcile.2` pins the behaviour where it actually happens.
  */
-export function countsAsRunning(standing: SessionStanding): boolean {
-  return standing === 'live' || standing === 'starting'
-}
+export const NO_RECENT_EVENTS = 'No recent events'

@@ -594,12 +594,24 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // as present); a scoped answer refreshes the store's grants mirror.
     answerApproval: (id, requestId, allow, scope) => {
       void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
-        .then(() => {
+        .then((accepted) => {
           if (scope !== undefined) refreshChatGrants(id)
-          // M300. The decision is recorded AFTER main accepted it, so the
-          // record holds answers that actually took effect — main is the
-          // source of truth for permission identity, and a row written
-          // before its answer landed would survive a refusal main made.
+          /*
+           * M300, corrected by M301's critic (finding 5). The decision is
+           * recorded only when main ACCEPTED it — `answer` resolves FALSE for
+           * a requestId that is no longer pending, and an earlier version
+           * ignored the resolved value and wrote the row on resolution. Two
+           * surfaces answering one request (the chat card and the Dock, before
+           * the first answer's event clears both) then put TWO "Allowed a
+           * request" rows in the record for one decision, one of which never
+           * reached the agent; so did a stale button for a request the CLI had
+           * already dropped.
+           *
+           * Main's enforcement was never wrong — it refuses the second answer.
+           * The RECORD of it was, and the record is what this phase asks a
+           * person to trust.
+           */
+          if (accepted === false) return
           // The source is `person` because a person decided it here.
           void recordOrchEvent({
             runId: adoptedRunId(id), panelId: id, event: 'permission', source: 'person',

@@ -362,11 +362,20 @@ function panelsToInput(
          * M301. A terminal has no `--resume`: main has a PTY for it or it has
          * none. `hadSession` is the RECORD's evidence that it ran — a ledger
          * sighting — rather than a persisted session id, which the renderer
-         * does not hold for terminals. So a restored agentic terminal that the
-         * record has seen, and that main has no session for, reads as ended
-         * with when it was last seen, instead of `idle`.
+         * does not hold for terminals.
+         *
+         * THE RECORD MUST ACTUALLY SPEAK BEFORE ANYTHING IS CLAIMED (the
+         * critic's findings 3 and 4). A sighting is read from the newest
+         * `LAST_SEEN_ROWS` of one file, so its ABSENCE means one of three
+         * things — it never ran, it ran before the window, or the read has not
+         * landed — and only the first would justify "not started". So a
+         * terminal with no sighting is left UNRECONCILED, exactly as a
+         * pre-M301 build leaves it: the page keeps its old word rather than
+         * swapping one confident wrong answer for another. The same rule makes
+         * a failed or outstanding `lastSeen` read degrade to unreconciled
+         * instead of asserting "never ran" about every terminal at once.
          */
-        ...(live === null || !agentic ? {} : { liveSession: live.get(id)?.live === true, hadSession: lastSeen?.get(id) !== undefined }),
+        ...(live === null || !agentic || lastSeen?.get(id) === undefined ? {} : { liveSession: live.get(id)?.live === true, hadSession: true }),
         ...(lastSeen?.get(id) === undefined ? {} : { lastSeen: lastSeen.get(id) }),
         ...(liveSess?.currentCommand ? { currentCommand: liveSess.currentCommand } : {}),
         ...(liveSess?.cwd ? { cwd: liveSess.cwd } : {}),
@@ -1502,6 +1511,31 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [benchPin, setBenchPin] = useState<{ kind: 'session'; id: string } | { kind: 'task'; itemId: string } | null>(null)
   const [benchRefresh, setBenchRefresh] = useState(0)
   useEffect(() => onChatTurnEnd(() => setBenchRefresh((n) => n + 1)), [])
+  /**
+   * M301 (the critic's finding 1 and 2). RECONCILIATION'S OWN TICK.
+   *
+   * The liveness reads used to key off `benchRefresh`, whose ONLY writer is
+   * `onChatTurnEnd` — so the page re-asked main exactly once per finished chat
+   * turn. Two failures fell out of that, in opposite directions:
+   *
+   * - The Electron check's "after the kill" read was pre-kill data, because
+   *   the workbench's Refresh bumps the STRIP's own counter and never reaches
+   *   here. The check could not have failed.
+   * - Worse in the app: restored chats create their sessions asynchronously,
+   *   so a launch straight onto this page could read `agentSession.list()`
+   *   before they land, mark every restored conversation `no session`, and
+   *   then never re-ask until somebody sent a message. A confident, dated
+   *   sentence about a session that is perfectly alive is the same lie this
+   *   milestone exists to stop, pointed the other way.
+   *
+   * So the reconciliation has its own trigger, and three things move it: a
+   * chat turn ending, any agent STATE transition (which is what a session
+   * starting, dying or changing hands actually emits), and the person's own
+   * Refresh in the workbench.
+   */
+  const [reconcileTick, setReconcileTick] = useState(0)
+  const reconcile = useCallback(() => setReconcileTick((n) => n + 1), [])
+  useEffect(() => onAgentTransition(reconcile), [reconcile])
   useEffect(() => { setOrchPrefs({ workbench: { tab: benchTab, height: benchHeight, open: benchOpen } }) }, [benchTab, benchHeight, benchOpen])
   // M288. Which island the inspector and the workbench are about (null = the
   // canvas's focused task, Phase A's pick), the islands' presentation order
@@ -1618,8 +1652,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // M301. Main's answer to "which agent sessions exist", on the same tick the
   // strip's other reads take. Null until it lands, which keeps pre-M301
   // behaviour rather than flashing `unknown` across the page.
-  const liveSessions = useLiveSessions(benchRefresh)
-  const lastSeen = useLastSeen(benchRefresh)
+  const liveSessions = useLiveSessions(benchRefresh + reconcileTick)
+  const lastSeen = useLastSeen(benchRefresh + reconcileTick)
   /**
    * M301. The selected object's reconciled standing, from the SAME two facts
    * the model uses — main's session list and the record's last sighting — so
@@ -1635,9 +1669,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     // — two answers to one question, from two copies of the rule. It is one
     // rule now, the same `panelsToInput` applies: a chat's persisted session
     // id, or, for a terminal, the record's own sighting that it ever ran.
-    const hadSession = p !== undefined && isChatPanel(p)
-      ? p.chat.sessionId !== undefined
-      : lastSeen?.get(id) !== undefined
+    // The same one rule the scene applies, including its refusal to claim
+    // anything about a terminal the record cannot speak for.
+    const isChat = p !== undefined && isChatPanel(p)
+    const hadSession = isChat ? p.chat.sessionId !== undefined : lastSeen?.get(id) !== undefined
+    if (!isChat && agentic && lastSeen?.get(id) === undefined) return null
     const fact = liveSessions.get(id)
     const state = getAgentState(id)
     return standingOf({
@@ -3053,7 +3089,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         workItems={workItems}
         worktrees={worktrees}
         taskHandoffOf={taskHandoffOf}
-        onRefreshTaskHandoffs={onRefreshTaskHandoffs}
+        // M301. The person's Refresh re-asks MAIN too, not just the strip's
+        // own reads — it is the one control on the page that means "look again".
+        onRefreshTaskHandoffs={() => { reconcile(); onRefreshTaskHandoffs?.() }}
         onPatchWorkItem={onPatchWorkItem}
         onReviewOnCanvas={onReviewOnCanvas}
         {...(onOpenPath === undefined ? {} : { onOpenPath })}

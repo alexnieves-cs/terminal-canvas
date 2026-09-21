@@ -1082,13 +1082,20 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     const cases = {
       // A live session with a word wears the word; a live session without one is starting.
       live: S.standingOf({ ...base, liveSession: true, agentState: 'busy' }).standing === 'live',
-      starting: S.standingOf({ ...base, liveSession: true }).standing === 'starting',
-      // MEASURED: an idle chat's process has ENDED and the state store holds
-      // nothing for it. That is live-and-resumable, not starting — saying
-      // starting would claim something is happening.
+      // NO INVENTED `starting` (the critic's finding 9): a live session the
+      // runtime has not spoken for makes NO claim — under tmux that is a
+      // detached shell idle since before this app launched, and an earlier
+      // version described it as spinning up. The runtime's own `starting`
+      // still arrives through agentState like any other word.
+      noInventedStarting: S.standingOf({ ...base, liveSession: true }).standing === 'live' &&
+        S.standingOf({ ...base, liveSession: true }).word === 'idle' &&
+        S.standingOf({ ...base, liveSession: true }).detail === '' &&
+        S.standingOf({ ...base, liveSession: true, agentState: 'starting' }).word === 'starting',
+      // A live session whose process is down is resumable, and says how it went.
       resumable: S.standingOf({ ...base, liveSession: true, exit: { code: 0 } }).standing === 'live' &&
         S.standingOf({ ...base, liveSession: true, exit: { code: 0 } }).word === 'idle' &&
         /resumes on your next message/.test(S.standingOf({ ...base, liveSession: true, exit: { code: 0 } }).detail),
+      resumableSaysHow: /stopped by SIGTERM/.test(S.standingOf({ ...base, liveSession: true, exit: { signal: 'SIGTERM' } }).detail),
       // How it ended, when the runtime recorded it — a signal and a code are
       // different facts and neither is a crash.
       bySignal: /stopped by SIGKILL/.test(S.standingOf({ ...base, liveSession: false, exit: { signal: 'SIGKILL' } }).detail),
@@ -1107,9 +1114,13 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         const d = S.standingOf({ agentic: true, liveSession: false, hadSession: k !== 'never-started', ...(k === 'ended' ? { lastSeen: 1 } : {}) }).detail
         return !/crash|deadlock|stuck|hung|finished successfully/i.test(d)
       }),
-      counts: S.countsAsRunning('live') && S.countsAsRunning('starting') && !S.countsAsRunning('unknown') && !S.countsAsRunning('ended')
+      // The silence sentence is ONE string, imported by the surface that says
+      // it rather than copied there (the critic's finding 7).
+      oneSilence: typeof S.NO_RECENT_EVENTS === 'string' &&
+        readFileSync(join(root, 'src/shared/empty-states.ts'), 'utf8').includes('NO_RECENT_EVENTS') &&
+        S.countsAsRunning === undefined
     }
-    ok('orch-reconcile.1 a session that is gone is never shown as idle or busy: liveness is asked BEFORE the runtime\'s last word (so a session killed mid-turn does not keep `busy` across a relaunch), a dated sighting reads `ended` and says when, an undated one reads `unknown`, never-started is a different word from gone, no arm diagnoses a crash or a deadlock, and neither `unknown` nor `ended` counts as running',
+    ok('orch-reconcile.1 a session that is gone is never shown as idle or busy: liveness is asked BEFORE the runtime\'s last word (so a session killed mid-turn does not keep `busy` across a relaunch), a dated sighting reads `ended` and says when, an undated one reads `unknown`, never-started is a different word from gone, no arm diagnoses a crash or a deadlock, and the silence sentence is one imported string rather than two copies',
       Object.values(cases).every(Boolean), JSON.stringify(cases))
 
     // The model's arm, and its ORDER, which is the load-bearing half.
@@ -1130,12 +1141,18 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         model.indexOf("p.liveSession === false && p.hadSession === true") < model.indexOf('if (p.agentState !== undefined) return p.agentState'),
       JSON.stringify({ gone: rowOf(gone), alive: rowOf(alive), unreconciled: rowOf(unreconciled) }))
 
-    ok('orch-reconcile.3 the page asks MAIN rather than inferring: the live set comes from agentSession.list and the last sighting from one ledger.timeline read, both are null (not empty) while outstanding or after a failure so an unreconciled page says nothing rather than flashing `unknown`, the reconciled word is not routed through agentWord, and the live activity feed says it is this run\'s and names the durable record',
+    ok('orch-reconcile.3 the page asks MAIN and re-asks it: the live set comes from agentSession.list and the last sighting from one ledger.timeline read; BOTH are null (not empty) while outstanding or after a failure, so an unreconciled page keeps its old words instead of flashing `unknown`; a terminal the record cannot speak for is left unreconciled rather than called "not started"; the reads have their OWN tick, moved by an agent transition and by the person\'s Refresh and not only by a finished chat turn; and the reconciled word is not routed through agentWord',
       /agentSession\.list\(\)/.test(view) && /ledger\.timeline\(\{\}, LAST_SEEN_ROWS\)/.test(view) &&
-        /if \(live === null \? \{\}|live === null \? \{\}/.test(view) &&
+        // Both failure arms set NULL, which is what keeps pre-M301 behaviour.
         /\(\) => \{ if \(alive\) setLive\(null\) \}/.test(view) && /\(\) => \{ if \(alive\) setSeen\(null\) \}/.test(view) &&
-        /if \(row\.state === 'unknown'\) return 'no session'/.test(view) &&
-        /No recent events/.test(readFileSync(join(root, 'src/shared/empty-states.ts'), 'utf8')),
+        // A terminal with no sighting is not reconciled at all — in BOTH the
+        // scene's input and the card's, which is one rule and not two copies.
+        /live === null \|\| !agentic \|\| lastSeen\?\.get\(id\) === undefined \? \{\}/.test(view) &&
+        /if \(!isChat && agentic && lastSeen\?\.get\(id\) === undefined\) return null/.test(view) &&
+        // The reads' own trigger, and its three movers.
+        /useLiveSessions\(benchRefresh \+ reconcileTick\)/.test(view) && /useLastSeen\(benchRefresh \+ reconcileTick\)/.test(view) &&
+        /onAgentTransition\(reconcile\)/.test(view) && /\{ reconcile\(\); onRefreshTaskHandoffs\?\.\(\) \}/.test(view) &&
+        /if \(row\.state === 'unknown'\) return 'no session'/.test(view),
       'reconcile wiring')
   }
 
@@ -1244,6 +1261,27 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         // A nameless save falls back to the goal rather than saving an untitled record.
         A.arrangementTemplate('   ', input).name === 'Make the retry path safe',
       JSON.stringify({ nodes: t.nodes, edges: t.edges, name: t.name }))
+  }
+
+  // M301 (the critic's findings 5 and 6). WHAT MAY BE WRITTEN DOWN AND
+  // RESTORED. A durable record of "it is waiting" is a claim the record has no
+  // way to withdraw, and a record of an answer main refused is a claim that
+  // never happened.
+  {
+    const R = load('src/renderer/orchestration/orch-record.ts', 'orch-record-settled.cjs')
+    const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    const presets = readFileSync(join(root, 'src/renderer/canvas/palette-actions/presets.ts'), 'utf8')
+    ok('orch-reconcile.5 only SETTLED outcomes reach the record, and only ACCEPTED answers: `queued — …` and `waiting for …` describe an in-memory queue and join set a relaunch empties, so they are neither written nor seeded back (a restored one would draw a `· waiting` edge for a join that can never complete); the restart-on-exit arm goes through the same funnel instead of straight to the map; and a permission row is written only when main resolved the answer as accepted, so two surfaces answering one request cannot put two rows in the record for one decision',
+      R.isSettledHandoff('handed off 12 lines to the chat') && R.isSettledHandoff('skipped — target is gone') &&
+        R.isSettledHandoff('ran after exit 1') && R.isSettledHandoff('reloaded the page') &&
+        !R.isSettledHandoff('queued — target starts when it comes on screen') &&
+        !R.isSettledHandoff('waiting for panel-3, panel-4') &&
+        /if \(!isSettledHandoff\(sentence\)\) return/.test(canvasSrc) &&
+        /isSettledHandoff\(e\.row\.detail\)/.test(canvasSrc) &&
+        /setHandoffResult\(key, 'skipped — target is dormant'\)/.test(canvasSrc) &&
+        /setHandoffResult\(key, `ran after exit \$\{info\.exitCode\}`\)/.test(canvasSrc) &&
+        /\.then\(\(accepted\) => \{/.test(presets) && /if \(accepted === false\) return/.test(presets),
+      'settled/accepted')
   }
 
   ok('orch-timeline.1 a durable event row parses field by field: a malformed optional field costs the field and keeps the row, an unknown event kind or source from a later build drops the row rather than being coerced, a row with no run id or no title is not a record, and a gap that dropped nothing is not a gap',
