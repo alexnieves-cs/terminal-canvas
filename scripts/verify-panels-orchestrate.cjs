@@ -1463,7 +1463,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await refresh()
       const killed = await readState()
       ok(IDS[0],
-        exited !== null && killed.reconcile === 'live' && before.reconcile === 'live' &&
+        exited && killed.reconcile === 'live' && before.reconcile === 'live' &&
           killed.state !== 'no session' && typeof killed.sentence === 'string' && /resumes on your next message/.test(killed.sentence),
         JSON.stringify({ before, exited, killed }))
 
@@ -1511,12 +1511,18 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         })()`)
         return r.reconcile === 'ended' || r.reconcile === 'unknown' ? r : false
       }, 8000).catch(() => null)
+      // On a red, say what the page and the record actually held: a check that
+      // reports only `false` sends the next reader back to the beginning.
+      const probe = (after && after.reconcile) ? null : await wc.executeJavaScript(`Promise.all([
+        window.canvas.ledger.timeline({}, 200).then((r) => ({ n: r.entries.length, ids: r.entries.map((e) => e.row.panelId).filter(Boolean).slice(0, 6) })),
+        Promise.resolve((() => { const i = document.querySelector('[data-orch-inspector="${restoredId}"]'); const st = i?.querySelector('[data-orch-inspector-state]'); return { present: i !== null, state: st?.textContent ?? null, reconcile: st?.getAttribute('data-orch-reconcile') ?? null } })())
+      ]).then(([record, dom]) => ({ record, dom }))`).catch((e) => String(e))
       ok(IDS[1],
-        runtimeHasIt === false && after !== null && after.state === 'no session' &&
+        runtimeHasIt === false && after && after.state === 'no session' &&
           typeof after.sentence === 'string' && /cannot see a session|no session is running for this/.test(after.sentence) &&
           /last saw it/.test(after.sentence) &&
           !/crash|deadlock|stuck|hung/i.test(after.sentence),
-        JSON.stringify({ runtimeHasIt, after }))
+        JSON.stringify({ runtimeHasIt, after, probe }))
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* scratch */ }
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)

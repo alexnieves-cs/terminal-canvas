@@ -114,6 +114,7 @@ inherited item closed as a READ rather than a new store.
       path and not an OS signal to a real CLI; and `dispose` stands in for what a relaunch
       does to the runtime's record, because main is not restarted inside a suite.
 - [ ] Fresh-context critic on this milestone specifically.
+- [x] `verify:panels:orchestrate` **31/31**, watchdog re-pinned at 210000 (136.3 s, 65%).
 
 ### M301 as built, and the measurement that changed it
 
@@ -203,6 +204,18 @@ Timeline tab as an unwired build.
 
 Both are wired now, each with a comment at the argument saying why. Any future collaborator
 appended to `registerIpcHandlers` has to be added in three places, not one.
+
+## A fourth measurement: one rule, two copies
+
+`selectedStandingOf` applied the CHAT rule to every object, so a reconciled terminal read
+`no session` in the scene and `never-started` on its card — two answers to one question from
+two copies of one rule. Found by making the red check report what the page and the record
+actually held instead of `false`: the record had the row, the DOM said `no session`, and the
+card's attribute said `never-started`. A check that reports only `false` sends the next
+reader back to the beginning.
+
+(`waitUntil` RESOLVES with the last falsy value rather than throwing, so `!== null` is not the
+test for "it timed out" — that cost one run of its own.)
 
 ## Found / deferred
 

@@ -1630,7 +1630,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const selectedStandingOf = useCallback((id: string, agentic: boolean): Standing | null => {
     if (liveSessions === null) return null
     const p = panels.find((x) => x.rect.id === id)
-    const hadSession = p !== undefined && isChatPanel(p) && p.chat.sessionId !== undefined
+    // MEASURED: this used the CHAT rule for every object, so a reconciled
+    // terminal read `no session` in the scene and `never-started` on its card
+    // — two answers to one question, from two copies of the rule. It is one
+    // rule now, the same `panelsToInput` applies: a chat's persisted session
+    // id, or, for a terminal, the record's own sighting that it ever ran.
+    const hadSession = p !== undefined && isChatPanel(p)
+      ? p.chat.sessionId !== undefined
+      : lastSeen?.get(id) !== undefined
     const fact = liveSessions.get(id)
     const state = getAgentState(id)
     return standingOf({
