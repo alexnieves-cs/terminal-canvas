@@ -1463,7 +1463,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await refresh()
       const killed = await readState()
       ok(IDS[0],
-        exited !== null && killed.reconcile !== null && killed.reconcile !== 'unknown' && killed.reconcile !== 'ended' &&
+        exited !== null && killed.reconcile === 'live' && before.reconcile === 'live' &&
           killed.state !== 'no session' && typeof killed.sentence === 'string' && /resumes on your next message/.test(killed.sentence),
         JSON.stringify({ before, exited, killed }))
 
@@ -1471,9 +1471,14 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // state a relaunch leaves behind: a panel with a session id and a
       // runtime that has never heard of it.
       await wc.executeJavaScript(`window.canvas.agentSession.dispose(${JSON.stringify(chatId)})`)
+      // MEASURED: dispose does NOT remove the row from list() inside one
+      // process — the runtime marks it `disposed` and keeps it. So the check
+      // waits for the STATUS, the same discriminator the page reads, and the
+      // page's verdict must match a relaunch's (where the row is simply absent).
       const forgotten = await waitUntil(async () => {
-        const rows = await wc.executeJavaScript(`window.canvas.agentSession.list().then((r) => r.map((x) => x.id))`)
-        return rows.includes(chatId) ? false : rows
+        const rows = await wc.executeJavaScript(`window.canvas.agentSession.list().then((r) => r.map((x) => ({ id: x.id, status: x.status })))`)
+        const mine = rows.find((r) => r.id === chatId)
+        return mine === undefined || mine.status === 'disposed' ? (mine ?? { id: chatId, status: 'absent' }) : false
       }, 8000).catch(() => null)
       await refresh()
       const after = await waitUntil(async () => {

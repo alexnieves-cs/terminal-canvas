@@ -4937,3 +4937,45 @@ The SVG `<polygon>`, the flat fallback and the pure `orchHitAt` (point-in-polygo
 carries `points`) share the one outline; `orch-iso.1` pins that its tips are the projected
 corners of the mesh's square. Turning the plate in the OUTER group instead of an inner one
 swings it out of the stage's plane and the outline no longer matches.
+
+**Orchestrate's durable record rides the RUN LEDGER's own stream, and the trim spends a
+line of its cap saying what it dropped (`shared/run-ledger.ts`'s `EventRow`/`GapRow`,
+`main/run-ledger.ts`'s `trim`, M300).** A second store would have had to earn the per-file
+write queue, the count-tracked ring trim and the malformed-line rule again — and would have
+had to be mirrored into `scripts/panels-harness.cjs`, the Phase B trap where an optional dep
+`stores.ts` gains and the harness lacks makes the Electron tier prove a different app with
+nothing red. The row is REFERENCES ONLY and the TYPE is the enforcement, exactly as `RunRow`
+has nowhere to put output bytes: `paths` are paths and there is no field a body fits in, so
+the retention bound stays a ROW COUNT rather than a size nobody watches. The gap row exists
+because a trimmed ledger and a quiet one are otherwise the same file, and an empty timeline
+reads as "nothing happened" — the fabrication the whole phase is against; a second trim
+MERGES into the leading gap and inherits its count, or the markers grow one per trim forever.
+A gap passes every subject filter, because it is a fact about the FILE and not about a
+subject. `orch-timeline.1–.5`.
+
+**`agentSession.list()` membership is liveness; a chat's PROCESS exiting is not the
+conversation ending (`shared/session-standing.ts`, `OrchestrationView.tsx`'s
+`useLiveSessions`, M301).** The agent process exits between turns and `--resume` brings it
+back, so `status: 'exited'` is the ORDINARY state of an idle chat. M301's first version read
+liveness off that status and every idle agent on the page began saying `no session`;
+`verify:panels:orchestrate orch-task.2` caught it, and nothing in plain node could have. The
+fact a relaunch destroys is whether the runtime holds a session RECORD at all, so that is
+what liveness means; the status is still read, but for WORDS — a live session whose process
+is down says the conversation resumes on the next message, a gone one says how its last
+process ended, and neither is ever called a crash, because this app cannot tell a crash from
+a kill from a stop it did not ask for. The liveness arm sits ABOVE `rosterState`'s
+`agentState` fallthrough for the other half of the rule: a session killed mid-turn leaves
+`busy` as its last event and no event ever says "and then I was killed". `orch-reconcile.*`.
+
+**A saved view and a saved arrangement are inert because of what their RECORDS hold, not
+because their handlers are careful (`shared/orchestrate-prefs.ts`'s `OrchSavedView`,
+`renderer/orchestration/orch-arrangement.ts`, M302).** `OrchSavedView` has no field naming a
+session, a task, a panel or a command, so "opening a view starts nothing" survives whatever a
+future handler does with it; `orch-reuse.1` checks the TYPE's text for exactly that. An
+arrangement's every node is a `chat`, whose `message` is INSERTED and never sent, and its
+validation commands are PROSE in the description rather than terminal nodes — a terminal node
+spawns its command when the template is instantiated, and a validation command may deploy,
+publish or cost money, which is precisely the "blindly replay side effects" the plan forbids.
+The results never travel with the shape: an old run's diffs, checks and artifacts stay with
+the execution that produced them (M300's run ids), or a rerun would inherit evidence it never
+earned. `orch-reuse.4`.

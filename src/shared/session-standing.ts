@@ -114,7 +114,15 @@ export function standingOf(input: StandingInput): Standing {
     const resumable = input.exit !== undefined
       ? 'no process is running for this right now; the conversation resumes on your next message'
       : ''
-    if (s === undefined) return { standing: 'starting', word: 'starting', detail: resumable === '' ? 'the session is live and has not reported yet' : resumable }
+    /*
+     * MEASURED: an idle chat's process has ended and the agent-state store
+     * holds nothing for it, so "no word yet" and "starting" are NOT the same
+     * thing. `starting` is only for a session with a process up that has not
+     * reported; a session whose process has ended is idle and resumable, and
+     * saying it is starting would be a claim that something is happening.
+     */
+    if (s === undefined && input.exit !== undefined) return { standing: 'live', word: 'idle', detail: resumable }
+    if (s === undefined) return { standing: 'starting', word: 'starting', detail: 'the session is live and has not reported yet' }
     return { standing: 'live', word: s, detail: resumable }
   }
   if (!input.hadSession) {

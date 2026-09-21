@@ -225,14 +225,20 @@ export interface OrchSessionFact {
  * status and made every idle agent on the page say `no session`;
  * `orch-task.2` caught it.
  *
- * So liveness is MEMBERSHIP: does the runtime hold a session record for this
- * panel at all. That is the fact a relaunch destroys and the one the plan
- * means by "reconcile against real sessions" — main has the record or it does
- * not. The status is still read, but for WORDS: an ended process's exit code
- * and signal are what let the card say a session stopped on its own rather
- * than being stopped by something else, without ever calling it a crash.
+ * So liveness is: the runtime holds a session record for this panel and has
+ * not DISPOSED it. Two facts, both measured — a relaunch leaves an empty
+ * runtime, and a dispose leaves a record marked `disposed`, and the page must
+ * reach the same verdict either way. (A second measurement: dispose does not
+ * remove the row from `list()` within a process, so membership alone is not
+ * enough. The status is the discriminator, as it was for the process.)
+ *
+ * The status is also read for WORDS: an ended process's exit code and signal
+ * are what let the card say a session stopped on its own rather than being
+ * stopped by something else, without ever calling it a crash.
  */
 const RUNNING_STATUSES: readonly string[] = ['starting', 'ready', 'streaming']
+/** The runtime tore this session down. Gone, exactly as a relaunch leaves it gone. */
+const GONE_STATUSES: readonly string[] = ['disposed']
 
 function useLiveSessions(refresh: number): ReadonlyMap<string, OrchSessionFact> | null {
   const [live, setLive] = useState<ReadonlyMap<string, OrchSessionFact> | null>(null)
@@ -248,7 +254,7 @@ function useLiveSessions(refresh: number): ReadonlyMap<string, OrchSessionFact> 
           // narrower fact of a process being up right now, which an idle
           // resumable chat does not have and does not need.
           map.set(r.id, {
-            live: true,
+            live: !GONE_STATUSES.includes(r.status),
             running: RUNNING_STATUSES.includes(r.status),
             ...(RUNNING_STATUSES.includes(r.status) ? {} : { exit: { ...(r.exitCode === undefined ? {} : { code: r.exitCode }), ...(r.exitSignal === undefined ? {} : { signal: r.exitSignal }) } })
           })

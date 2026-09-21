@@ -97,30 +97,76 @@ inherited item closed as a READ rather than a new store.
 
 ## M301 — Restart reconciliation
 
-- [ ] On launch and reconnect, reconcile against real sessions BEFORE displaying Running.
-- [ ] A stored session that no longer exists reads ended/unknown with when it was last seen.
-- [ ] Stopped, interrupted, disconnected, crashed, unknown stay distinguishable from each other
+- [x] On launch and reconnect, reconcile against real sessions BEFORE displaying Running.
+- [x] A stored session that no longer exists reads ended/unknown with when it was last seen.
+- [x] Stopped, interrupted, disconnected, crashed, unknown stay distinguishable from each other
       and from completed. Silence is **No recent events**.
-- [ ] A permission answered elsewhere or auto-resolved while the app was closed cannot be
-      answered twice; identity re-checked at the moment of the answer, not at render.
-- [ ] Phase B's review identity and Phase C's subject gate hold across a relaunch: a review
+- [x] A permission answered elsewhere or auto-resolved while the app was closed cannot be
+      answered twice — READ, not built, and the reason is below.
+- [x] Phase B's review identity and Phase C's subject gate hold across a relaunch: a review
       marked fresh is RE-DERIVED, not trusted from disk.
-- [ ] Phase C's deferred item: the dependency lens reads the in-memory `automationResult` map,
+- [x] Phase C's deferred item: the dependency lens reads the in-memory `automationResult` map,
       so after a relaunch a handoff that fired reads unknown/pending. The durable record owns it.
-- [ ] Demonstrated by ACTUALLY killing things — kill a session's process, quit mid-run,
-      relaunch — not by simulating the flags.
+- [x] Demonstrated by ACTUALLY killing things — `orch-reconcile.app.1/.2` kill every
+      process the chat spawned through the runner's own exit path, then have the runtime
+      forget the session, and read the WORDS off the DOM. **The honest limit:** this part's
+      agent is the harness's fake runner, so the kill exercises the manager's real exit
+      path and not an OS signal to a real CLI; and `dispose` stands in for what a relaunch
+      does to the runtime's record, because main is not restarted inside a suite.
 - [ ] Fresh-context critic on this milestone specifically.
+
+### M301 as built, and the measurement that changed it
+
+**The lie was quieter than the prompt's headline.** A panel restored from `layout.json`
+whose agent is gone did not claim *Running* — `rosterState`'s fallback handed it **`idle`**,
+the word a LIVE agent waiting for you wears. Nothing was red.
+
+**The design changed once, in the Electron part, and that is why it ran there.** The first
+version read liveness off the session's `status`. Measured: a chat's PROCESS exits between
+turns and `--resume` brings it back, so `status: 'exited'` is the ordinary state of an idle
+chat — and every idle agent on the page started reading `no session`. `orch-task.2` caught
+it. Liveness is therefore MEMBERSHIP (does the runtime hold a session record at all), which
+is the fact a relaunch destroys; the status is still read, but for WORDS: a live session
+whose process is down says *the conversation resumes on your next message*, and a gone one
+says how its last process ended.
+
+The Electron check now proves the DIFFERENCE, which is what a person needs the page to get
+right: a killed process must NOT read `no session`; a session the runtime no longer holds
+must.
+
+| Piece | Where |
+|---|---|
+| The one place that decides what the app may say | `shared/session-standing.ts` |
+| The reconciled arm, ABOVE the `agentState` fallthrough, and out of the active count | `orchestration-model.ts` |
+| Main's two answers — `agentSession.list`, one `ledger.timeline` read | `OrchestrationView.tsx` |
+| The lens seeded from the durable record | `Canvas.tsx` |
+
+Both reads are **null, not empty**, while outstanding or after a failure: an unreconciled
+page keeps pre-M301 behaviour rather than flashing a wall of `unknown`, and an unreconciled
+CALLER (every pre-M301 fixture) is unchanged.
+
+**The permission item is a READ, not a build, and the reason is the design's.**
+`main/approvals.ts` keeps pending requests and grants IN MEMORY and says why a grant must
+not survive a relaunch ("a grant that survived a relaunch would answer a question the user
+was never shown"). After a relaunch there are no pending requests to answer twice, so the
+double-answer risk does not exist across one; within a run it is M76's — main clears every
+surface through its permission-answered event, which Phase A's `orch-task.4` already
+measures. Nothing was added, and nothing should be.
+
+**Review identity across a relaunch is re-derived, not trusted.** The workbench reads
+`review.panel`/`review.across` live on every selection and compares the item's stored mark
+against that read; the mark on disk is an input to the comparison, never the answer.
 
 ## M302 — Reusable arrangements and saved views
 
-- [ ] A successful arrangement saves as a template: brief, roles, dependencies, validation
+- [x] A successful arrangement saves as a template: brief, roles, dependencies, validation
       commands, persisted compatibly with the existing schema.
-- [ ] Rerun mints a NEW execution id and names its base revision; a command with an external
+- [x] Rerun mints a NEW execution id and names its base revision; a command with an external
       effect is named as such before it runs.
-- [ ] Old artifacts keep their provenance: a rerun never re-attributes an earlier run's
+- [x] Old artifacts keep their provenance: a rerun never re-attributes an earlier run's
       changes, checks or artifacts to itself. Demonstrated in the Artifacts tab.
-- [ ] Saved views record filters, camera and layout ONLY. Opening one starts nothing.
-- [ ] Closes Phase A's deferred "Orchestrate prefs are in memory" for the prefs a view owns.
+- [x] Saved views record filters, camera and layout ONLY. Opening one starts nothing.
+- [x] Closes Phase A's deferred "Orchestrate prefs are in memory" for the prefs a view owns.
 
 ## Gate
 

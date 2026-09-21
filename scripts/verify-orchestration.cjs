@@ -1083,6 +1083,16 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       // A live session with a word wears the word; a live session without one is starting.
       live: S.standingOf({ ...base, liveSession: true, agentState: 'busy' }).standing === 'live',
       starting: S.standingOf({ ...base, liveSession: true }).standing === 'starting',
+      // MEASURED: an idle chat's process has ENDED and the state store holds
+      // nothing for it. That is live-and-resumable, not starting — saying
+      // starting would claim something is happening.
+      resumable: S.standingOf({ ...base, liveSession: true, exit: { code: 0 } }).standing === 'live' &&
+        S.standingOf({ ...base, liveSession: true, exit: { code: 0 } }).word === 'idle' &&
+        /resumes on your next message/.test(S.standingOf({ ...base, liveSession: true, exit: { code: 0 } }).detail),
+      // How it ended, when the runtime recorded it — a signal and a code are
+      // different facts and neither is a crash.
+      bySignal: /stopped by SIGKILL/.test(S.standingOf({ ...base, liveSession: false, exit: { signal: 'SIGKILL' } }).detail),
+      byCode: /ended on its own, exit 3/.test(S.standingOf({ ...base, liveSession: false, exit: { code: 3 } }).detail),
       // The headline: a session that is gone is never idle, and never busy
       // because its LAST event said busy — no event ever says "and then I was killed".
       goneNotIdle: S.standingOf({ ...base, liveSession: false }).word !== 'idle',
