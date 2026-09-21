@@ -121,7 +121,8 @@ inherited item closed as a READ rather than a new store.
 whose agent is gone did not claim *Running* — `rosterState`'s fallback handed it **`idle`**,
 the word a LIVE agent waiting for you wears. Nothing was red.
 
-**The design changed once, in the Electron part, and that is why it ran there.** The first
+**The design changed THREE times, every time in the Electron part, and that is the
+milestone's real story: none of these could go red in plain node.** The first
 version read liveness off the session's `status`. Measured: a chat's PROCESS exits between
 turns and `--resume` brings it back, so `status: 'exited'` is the ordinary state of an idle
 chat — and every idle agent on the page started reading `no session`. `orch-task.2` caught
@@ -130,9 +131,21 @@ is the fact a relaunch destroys; the status is still read, but for WORDS: a live
 whose process is down says *the conversation resumes on your next message*, and a gone one
 says how its last process ended.
 
-The Electron check now proves the DIFFERENCE, which is what a person needs the page to get
-right: a killed process must NOT read `no session`; a session the runtime no longer holds
-must.
+**Second: `dispose` does not leave the runtime's record absent from `list()`** in a way the
+page can observe while the panel is still on the canvas, so dispose could not stand in for a
+relaunch either.
+
+**Third, and it moved the milestone's target: a restored CHAT auto-creates its runtime
+session.** A conversation is therefore never "gone" — it resumes — so a chat's
+reconciliation is only ever about whether a PROCESS is up. The state "this panel had a
+session and has none now" is real on the object that has no `--resume`: an agentic
+**TERMINAL**. Main has a PTY for it or it has none, and until M301 it read `idle` either
+way. That is where the lie actually lived, and the page now reads the terminal's liveness
+from `pty.list()` with the record's own sighting as the evidence it ever ran.
+
+The Electron checks prove the two halves a person needs the page to get right: a killed
+process must NOT read `no session` (the conversation resumes), and a restored agentic
+terminal with no session MUST, with when the record last saw it.
 
 | Piece | Where |
 |---|---|
@@ -176,6 +189,20 @@ against that read; the mark on disk is an input to the comparison, never the ans
 - [ ] `verify:panels:orchestrate` watchdog re-measured with a `// measured` comment.
 - [ ] `npm run shot` + a fresh-context critic per changed scene, a sentence each.
 - [ ] Goldens NOT written, no merge, no push. Which scenes THIS phase changed, listed.
+
+## The harness trap, in its positional form
+
+The prompt's carried trap — *mirror any new `stores.ts` dependency into
+`panels-harness.cjs`* — has a second shape, and this run walked into it: **`panels-harness.cjs`
+and `shot.cjs` construct their OWN `registerIpcHandlers` calls.** `registerIpcHandlers` appends
+new collaborators LAST with inert defaults, so `ledger:timeline` and `ledger:event` were
+silently INERT in both harnesses. The inert read answers "no entries", the page believes the
+record is empty, and the Electron tier proves a different app with nothing red — it cost a red
+`orch-reconcile.app.2` to find, and `npm run shot` would have photographed every Artifacts and
+Timeline tab as an unwired build.
+
+Both are wired now, each with a comment at the argument saying why. Any future collaborator
+appended to `registerIpcHandlers` has to be added in three places, not one.
 
 ## Found / deferred
 

@@ -1412,7 +1412,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   {
     const IDS = [
       'orch-reconcile.app.1 a killed PROCESS is not a gone conversation: the page keeps the session\'s own word, says the process is down and that it resumes on the next message, and never claims there is no session',
-      'orch-reconcile.app.2 a session the runtime no longer holds — what a relaunch leaves — reads `no session`, is dropped from the live word, and carries a sentence saying so without diagnosing a crash or a deadlock'
+      'orch-reconcile.app.2 a restored agentic TERMINAL with no session — what a relaunch leaves on the one object that has no --resume — reads `no session` rather than `idle`, and carries a sentence saying so with when the record last saw it, without diagnosing a crash or a deadlock'
     ]
     try {
       const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -1467,29 +1467,56 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           killed.state !== 'no session' && typeof killed.sentence === 'string' && /resumes on your next message/.test(killed.sentence),
         JSON.stringify({ before, exited, killed }))
 
-      // (2) THE FORGETTING — dispose drops the runtime's record, which is the
-      // state a relaunch leaves behind: a panel with a session id and a
-      // runtime that has never heard of it.
-      await wc.executeJavaScript(`window.canvas.agentSession.dispose(${JSON.stringify(chatId)})`)
-      // MEASURED: dispose does NOT remove the row from list() inside one
-      // process — the runtime marks it `disposed` and keeps it. So the check
-      // waits for the STATUS, the same discriminator the page reads, and the
-      // page's verdict must match a relaunch's (where the row is simply absent).
-      const forgotten = await waitUntil(async () => {
-        const rows = await wc.executeJavaScript(`window.canvas.agentSession.list().then((r) => r.map((x) => ({ id: x.id, status: x.status })))`)
-        const mine = rows.find((r) => r.id === chatId)
-        return mine === undefined || mine.status === 'disposed' ? (mine ?? { id: chatId, status: 'absent' }) : false
-      }, 8000).catch(() => null)
-      await refresh()
+      // (2) THE RELAUNCH STATE, on the object where it is a real state.
+      //
+      // MEASURED, and it moved this check: a restored CHAT auto-creates its
+      // runtime session, so a conversation is never "gone" and a chat's
+      // reconciliation is only ever about whether a process is up — which is
+      // (1). A restored agentic TERMINAL has no `--resume`: main has a PTY for
+      // it or it has none, and until M301 it read `idle` either way.
+      //
+      // So: a terminal panel restored from layout.json, a ledger row so the
+      // record has seen it run, and no session anywhere. Main is not
+      // restarted (a suite cannot), but that is exactly the renderer's view of
+      // the world after a relaunch.
+      const restoredId = 'reconcile-restored'
+      runLedger.append({ panelId: restoredId, command: 'npm test', cwd: repo, startedAt: Date.now() - 60000, endedAt: Date.now() - 59000, exitCode: 0 })
+      layoutStore.save({
+        panels: fromPanels([{
+          kind: 'terminal', rect: { id: restoredId, x: 80, y: 80, w: 360, h: 260 }, z: 1,
+          spec: { panelId: restoredId, cwd: repo, command: '/bin/sh', args: [], agent: 'claude' }
+        }]),
+        camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+      })
+      layoutStore.flushSync()
+      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reloaded
+      await settle()
+      const runtimeHasIt = await wc.executeJavaScript(`Promise.all([window.canvas.agentSession.list(), window.canvas.pty.list()]).then(([a, p]) => a.some((x) => x.id === ${JSON.stringify(restoredId)}) || p.some((x) => x.panelId === ${JSON.stringify(restoredId)}))`)
+      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await waitUntil(orchShown, 3000)
+      await click('[data-orch-lens="list"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${restoredId}"] button') !== null`), 4000)
+      await click(`[data-orch-list-row="${restoredId}"] button`)
+      await settle()
       const after = await waitUntil(async () => {
-        const r = await readState()
+        const r = await wc.executeJavaScript(`(() => {
+          const i = document.querySelector('[data-orch-inspector="${restoredId}"]')
+          const st = i?.querySelector('[data-orch-inspector-state]')
+          return {
+            state: st?.textContent ?? null,
+            reconcile: st?.getAttribute('data-orch-reconcile') ?? null,
+            sentence: i?.querySelector('[data-orch-reconcile-detail]')?.textContent ?? null
+          }
+        })()`)
         return r.reconcile === 'ended' || r.reconcile === 'unknown' ? r : false
       }, 8000).catch(() => null)
       ok(IDS[1],
-        forgotten !== null && after !== null && after.state === 'no session' &&
-          typeof after.sentence === 'string' && /no session is running for this/.test(after.sentence) &&
+        runtimeHasIt === false && after !== null && after.state === 'no session' &&
+          typeof after.sentence === 'string' && /cannot see a session|no session is running for this/.test(after.sentence) &&
+          /last saw it/.test(after.sentence) &&
           !/crash|deadlock|stuck|hung/i.test(after.sentence),
-        JSON.stringify({ forgotten, after }))
+        JSON.stringify({ runtimeHasIt, after }))
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* scratch */ }
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)

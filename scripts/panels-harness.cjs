@@ -1655,7 +1655,18 @@ app.whenReady().then(async () => {
         confirm: async (ask) => { (state.publishAsks = state.publishAsks || []).push(ask); return state.publishAnswer === true }
       }, req)
     }
-  })
+  },
+  // M300. The durable record's two doors, on the harness's OWN run ledger —
+  // the same object its `ledger.list` argument above uses.
+  //
+  // This is the positional form of Phase B's trap, and it cost a red run to
+  // find: `registerIpcHandlers` appends new collaborators LAST with inert
+  // defaults, and this file constructs its own call, so a door added in main
+  // is silently INERT here. The inert timeline answers "no entries", the page
+  // believes the record is empty, and the Electron tier proves a different app
+  // with nothing red. Every future collaborator has to be added here too.
+  (filter, limit) => runLedger.timeline(filter, limit),
+  async (row) => { try { await runLedger.append(row); return true } catch { return false } })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

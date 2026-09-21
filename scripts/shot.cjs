@@ -68,7 +68,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey, createRunLedger
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -1160,6 +1160,9 @@ app.whenReady().then(async () => {
     grants: () => [],
     revokeGrants: () => {}
   }
+  // M300. The shot run's own run ledger, in a temp dir — never the real
+  // userData — so a scene can write the rows its tab is meant to show.
+  const shotLedger = createRunLedger({ file: join(mkdtempSync(join(tmpdir(), 'tc shot ledger ')), 'ledger.jsonl') })
   registerIpcHandlers(
     ptyManager, layoutStore,
     () => { const b = backend(); return { kind: b.kind, reason: b.reason } },
@@ -1280,7 +1283,14 @@ app.whenReady().then(async () => {
       })
       : { kind: 'unreadable', why: 'only the trail scene has a transcript here' }),
     // M123. No harness reaches the network: the third state, by name.
-    { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) }
+    { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) },
+    // M300. The durable record, so the Artifacts and Timeline tabs photograph
+    // what they actually show rather than "the record could not be read". The
+    // rows are the SCENE's own, written by the scene that needs them; an
+    // unwired door here would have made every shot of those two tabs a
+    // picture of an unwired build.
+    (filter, limit) => shotLedger.timeline(filter, limit),
+    async (row) => { try { await shotLedger.append(row); return true } catch { return false } }
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

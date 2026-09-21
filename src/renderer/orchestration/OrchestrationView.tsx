@@ -245,10 +245,18 @@ function useLiveSessions(refresh: number): ReadonlyMap<string, OrchSessionFact> 
   useEffect(() => {
     if (typeof window.canvas?.agentSession?.list !== 'function') return
     let alive = true
-    void window.canvas.agentSession.list().then(
-      (rows) => {
+    // MEASURED, and it is why terminals are here at all: a restored CHAT
+    // auto-creates its runtime session, so a chat's conversation is never
+    // "gone" and its reconciliation is only ever about whether a process is
+    // up. A restored agentic TERMINAL has no such resume — main either has a
+    // PTY for it or does not — so that is where "this panel had a session and
+    // has none now" is a real state, and where the page said `idle` about it.
+    const ptys = typeof window.canvas?.pty?.list === 'function' ? window.canvas.pty.list().catch(() => []) : Promise.resolve([])
+    void Promise.all([window.canvas.agentSession.list(), ptys]).then(
+      ([rows, sessions]) => {
         if (!alive) return
         const map = new Map<string, OrchSessionFact>()
+        for (const s of sessions) map.set(s.panelId, { live: true, running: true })
         for (const r of rows) {
           // Listed at all = the runtime holds this session. `running` is the
           // narrower fact of a process being up right now, which an idle
@@ -344,13 +352,24 @@ function panelsToInput(
       }
     }
     if (isTerminalPanel(p)) {
-      const live = getLiveSession(id)
+      const liveSess = getLiveSession(id)
+      const agentic = p.spec.agent !== undefined
       return {
         id, title, kind: 'terminal' as const,
-        agentic: p.spec.agent !== undefined,
+        agentic,
         agentState: getAgentState(id),
-        ...(live?.currentCommand ? { currentCommand: live.currentCommand } : {}),
-        ...(live?.cwd ? { cwd: live.cwd } : {}),
+        /*
+         * M301. A terminal has no `--resume`: main has a PTY for it or it has
+         * none. `hadSession` is the RECORD's evidence that it ran — a ledger
+         * sighting — rather than a persisted session id, which the renderer
+         * does not hold for terminals. So a restored agentic terminal that the
+         * record has seen, and that main has no session for, reads as ended
+         * with when it was last seen, instead of `idle`.
+         */
+        ...(live === null || !agentic ? {} : { liveSession: live.get(id)?.live === true, hadSession: lastSeen?.get(id) !== undefined }),
+        ...(lastSeen?.get(id) === undefined ? {} : { lastSeen: lastSeen.get(id) }),
+        ...(liveSess?.currentCommand ? { currentCommand: liveSess.currentCommand } : {}),
+        ...(liveSess?.cwd ? { cwd: liveSess.cwd } : {}),
         ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
