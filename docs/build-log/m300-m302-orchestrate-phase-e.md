@@ -194,20 +194,21 @@ against that read; the mark on disk is an input to the comparison, never the ans
 
 ## Gate
 
-`npm run verify` on `b051e6b0` (2026-09-20, `/tmp/tc-electron-lock` taken, no stray Electron):
-**52/55 suites in 695.9 s.**
+`npm run verify` twice. The first, on `b051e6b0`, 52/55 in 695.9 s — `verify:ipc` red on a
+PINNED channel count (146 → 148) that this phase's two doors moved, which is the check doing
+its job, fixed in the commit after. The second, AFTER the critic's round, on `7071ad71`
+(2026-09-20, `/tmp/tc-electron-lock` taken, no stray Electron): **53/55 suites in 698.6 s**,
+and the only two red suites are the pre-existing nine.
 
-- **New reds: none.** The three failing suites are `verify:ipc` — fixed in the next commit, a
-  PINNED channel count (146 → 148) that this phase's two doors moved, which is the check doing
-  its job — and `verify:panels:agents` + `verify:panels:product`, whose failures are **exactly
-  the nine this track has carried since Phase A, by id**: `detail.1`
+- **New reds: none.** `verify:panels:agents` and `verify:panels:product` fail on **exactly the
+  nine this track has carried since Phase A, by id**: `detail.1`
   (`m275-swarm-presets.md:107`) and `workflow.edit.1/.2`, `workflow.lib.1`, `workflow.wire.1`,
   `workflow.inspect.1`, `workflow.save.1`, `workflow.panel.1e`, `reach.1`
   (`m277-libraries.md:78`). Same ids, same count, same two suites Phase D's gate names.
-- Every new check passed inside the gate: `orch-timeline.1–.7`, `orch-reconcile.1–.4`,
-  `orch-reuse.1–.4`, `workbench.1`/`1b` (verify:orchestration **110/110**);
-  `orch-reconcile.app.1–.2` beside Phase A–D's (verify:panels:orchestrate **31/31**, 136.3 s);
-  `verify:layout` 271/271, `verify:meta` 51/51, `verify:ipc` 1/1 after the re-pin.
+- Every new check passed inside the gate: `orch-timeline.1–.7`, `orch-reconcile.1–.5`,
+  `orch-reuse.1–.4`, `workbench.1`/`1b` (verify:orchestration **111/111**);
+  `orch-reconcile.app.1–.3` beside Phase A–D's (verify:panels:orchestrate **32/32**, 137.8 s);
+  `verify:layout` 271/271, `verify:meta` 51/51, `verify:ipc` 1/1 at 148 channels.
 
 - [x] `npm run affected` between steps.
 - [x] `npm run verify` — above; reds attributed by id to the documented nine, none new.
@@ -216,15 +217,16 @@ against that read; the mark on disk is an input to the comparison, never the ans
       runs since are 136–145 s, 65–69%.
 - [x] `npm run shot` — 64 scenes. `verify:visual` names **exactly three changed scenes**, all
       Orchestrate, and the pre-existing `starter` red:
-      - **`orchestration`** (light, 0.598%) and **`orchestration-dark`** (0.682%) — the
+      - **`orchestration`** (light, 0.525%) and **`orchestration-dark`** (0.605%) — the
         workbench tab row is five tabs, `Save view` has joined the Scene/List row, and the
         activity feed's empty sentence is the new one. Nothing else in either frame moved:
         the diff image is three small regions and no scene geometry at all.
       - **`orchestration-working`** (one 32 px tile, 50%) — the island card's action row gained
         `Save arrangement`, which is the tile that differs; the rest of the frame is identical.
-      - **`starter`** — the harness could not paint it ("the arrangement is not on screen").
-        Pre-existing (`m279-ui-evolution.md:176`) and left red ON PURPOSE. **Never blind-update
-        it**: `UPDATE_GOLDENS=1` re-baselines it along with everything else.
+      - **`starter`** — pre-existing (`m279-ui-evolution.md:176`) and left red ON PURPOSE. It
+        failed differently in the two runs (once "the harness could not paint it", once 24.1%
+        of pixels), which is its own known instability. **Never blind-update it**:
+        `UPDATE_GOLDENS=1` re-baselines it along with everything else.
       The author's own read of the captures: the five-tab row still fits its strip at every
       window size in the scenes; `Save view` reads as a control rather than a heading because
       it sits in the lens group; `Save arrangement` is the fourth action on the island card,
