@@ -81,6 +81,8 @@ export interface OrchEventInput {
   panelId?: string
   tested?: ReviewIdentity
   paths?: readonly string[]
+  /** M301. The writer's own key for what this row is about — see EventRow.key. */
+  key?: string
   at?: number
 }
 
@@ -106,7 +108,8 @@ export async function recordOrchEvent(input: OrchEventInput): Promise<boolean> {
     ...(input.itemId === undefined ? {} : { itemId: input.itemId }),
     ...(input.panelId === undefined ? {} : { panelId: input.panelId }),
     ...(input.tested === undefined ? {} : { tested: input.tested }),
-    ...(input.paths === undefined || input.paths.length === 0 ? {} : { paths: [...input.paths] })
+    ...(input.paths === undefined || input.paths.length === 0 ? {} : { paths: [...input.paths] }),
+    ...(input.key === undefined || input.key === '' ? {} : { key: input.key })
   }
   try {
     return await door(row)

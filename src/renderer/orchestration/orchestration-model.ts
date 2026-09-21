@@ -55,6 +55,21 @@ export interface OrchPanelInput {
   /** Terminal started as an agent, or any chat. */
   agentic: boolean
   agentState?: AgentState
+  /**
+   * M301. RECONCILIATION'S TWO FACTS, both of which must be present before
+   * this panel may wear a live word. `liveSession` is MAIN's answer (the
+   * backend's session list, or the agent runtime's), never the renderer's
+   * inference from its own panel record; `hadSession` is whether this panel
+   * ever had one, which is what separates "gone" from "never started";
+   * `lastSeen` is when the durable record last saw it.
+   *
+   * All three ABSENT is every caller that has not reconciled — a fixture, a
+   * check written before M301 — and absence keeps the pre-M301 behaviour
+   * exactly, so nothing silently changes meaning under an old caller.
+   */
+  liveSession?: boolean
+  hadSession?: boolean
+  lastSeen?: number
   /** Chat marks that decide the graph hub. */
   supervisor?: boolean
   orchestrator?: boolean
@@ -100,7 +115,8 @@ export interface OrchRosterRow {
   id: string
   title: string
   kind: OrchPanelKind
-  state: AgentState | 'running' | 'idle' | 'watching' | 'passed' | 'exited' | 'pool'
+  /** M301. `unknown` is "this had a session and this app cannot see one now" — see shared/session-standing.ts. */
+  state: AgentState | 'running' | 'idle' | 'watching' | 'passed' | 'exited' | 'pool' | 'unknown'
   tone: Tone
   agentic: boolean
 }
@@ -213,6 +229,24 @@ function rosterState(p: OrchPanelInput): OrchRosterRow['state'] {
     return 'idle'
   }
   if (p.kind === 'workflow') return p.poolLive ? 'pool' : 'idle'
+  /*
+   * M301. THE RECONCILED ARM, and it comes BEFORE the runtime's word on
+   * purpose. A panel restored from layout.json whose agent is gone used to
+   * fall through to `idle` — the word a LIVE agent waiting for you wears —
+   * and nothing anywhere said otherwise. Worse, a session killed mid-turn
+   * keeps `busy` as its last event forever, because no event says "and then
+   * I was killed": starting from `agentState` would carry that word across
+   * a relaunch. So liveness is asked first, and a runtime word can never
+   * promote a panel that has no session.
+   *
+   * `unknown` covers both standings with no session — one we can date and
+   * one we cannot. They are one WORD here because the page's question is
+   * "may I act on this", whose answer is no either way; the difference is
+   * carried in the sentence `standingOf` returns, which the inspector shows.
+   * A caller that has not reconciled passes none of these and keeps the
+   * pre-M301 behaviour.
+   */
+  if (p.liveSession === false && p.hadSession === true) return 'unknown'
   if (p.agentState !== undefined) return p.agentState
   return 'idle'
 }
@@ -221,12 +255,20 @@ function toneOf(state: OrchRosterRow['state']): Tone {
   if (state === 'wants-you') return TONE_NEEDS_YOU
   if (state === 'busy' || state === 'watching' || state === 'pool') return TONE_WORKING
   if (state === 'starting') return 'starting'
-  if (state === 'exited') return 'exited'
+  // M301. `unknown` wears the `exited` tone — the quiet, finished family —
+  // because the one thing it must NOT look like is a live idle agent. It
+  // keeps its own WORD, so the tone is never the only thing carrying it
+  // (the product rule that every state has words and a shape, not colour).
+  if (state === 'exited' || state === 'unknown') return 'exited'
   return 'idle'
 }
 
 function isActiveAgent(p: OrchPanelInput): boolean {
   if (!p.agentic) return false
+  // M301. A reconciled panel with no session is not active, whatever its last
+  // event said. This is the count that reads "3 running" on the tiles, and it
+  // surviving a relaunch that killed all three is the headline lie of Phase E.
+  if (p.liveSession === false && p.hadSession === true) return false
   const s = p.agentState
   return s === 'busy' || s === 'starting' || s === 'wants-you'
 }

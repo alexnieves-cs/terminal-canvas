@@ -4128,6 +4128,47 @@ export function Canvas({
   // start. The rule graph is cycle-free at creation and load, so one exit can
   // cascade only along a finite directed chain.
   const [automationResult, setAutomationResult] = useState<Map<string, string>>(() => new Map())
+  /**
+   * M301, closing Phase C's deferred item. This map is IN MEMORY, so after a
+   * relaunch a handoff that fired — or was skipped, or was refused — read
+   * `unknown`/`pending` in the dependency lens until the edge happened to fire
+   * again. The only record of it was this Map, and the Map does not survive
+   * quitting.
+   *
+   * It does now: M300 writes a durable row at `setHandoffResult`, the one
+   * funnel every outcome passes through, with the link's own `from:to` key. On
+   * mount the record is read ONCE and the newest row per key seeds the map, so
+   * the lens opens on what actually happened rather than on silence.
+   *
+   * SEEDING, not authority: a row only fills a key this run has not written,
+   * so a live outcome always wins over a remembered one. And a failed read
+   * seeds nothing — the lens then says `unknown`, which is true, rather than
+   * inheriting a stale sentence.
+   */
+  useEffect(() => {
+    if (typeof window.canvas?.ledger?.timeline !== 'function') return
+    let live = true
+    void window.canvas.ledger.timeline({}, 200).then(
+      (read) => {
+        if (!live) return
+        const seed = new Map<string, string>()
+        for (const e of read.entries) {
+          if (e.kind !== 'event' || e.row.event !== 'handoff') continue
+          const key = e.row.key
+          // Newest first, so the first row for a key is its latest outcome.
+          if (key !== undefined && e.row.detail !== undefined && !seed.has(key)) seed.set(key, e.row.detail)
+        }
+        if (seed.size === 0) return
+        setAutomationResult((current) => {
+          const next = new Map(current)
+          for (const [k, v] of seed) if (!next.has(k)) next.set(k, v)
+          return next
+        })
+      },
+      () => { /* a read that failed seeds nothing; `unknown` is the honest word */ }
+    )
+    return () => { live = false }
+  }, [])
   const automationRowsBuilt: AutomationRow[] = panels.flatMap((source) => linksOf(source)
     .filter((link) => link.automation !== undefined)
     .map((link) => {
@@ -4248,7 +4289,10 @@ export function Canvas({
     const [from, to] = key.split(':')
     void recordOrchEvent({
       runId: adoptedRunId(from ?? key), panelId: from, event: 'handoff', source: 'app',
-      title: `Handoff ${from} → ${to}`, detail: sentence
+      title: `Handoff ${from} → ${to}`, detail: sentence,
+      // The link's own key, so the lens can match a row to an edge without
+      // parsing the title — the title is prose and is allowed to change.
+      key
     })
   }, [])
   const scrollbackEnabled = useCallback(() => scrollbackPersistRef.current, [])

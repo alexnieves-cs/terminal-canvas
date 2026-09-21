@@ -168,10 +168,15 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
             continue
           }
           const command = runRowOf(raw)
-          // A command row predates the run id and carries no item, so only a
-          // panel filter can claim it; a run/task-only read leaves it out
-          // rather than guessing which execution ran it.
-          if (command !== null && panels !== null && panels.has(command.panelId)) entries.push({ kind: 'command', row: command })
+          // A command row predates the run id and carries no item, so a panel
+          // filter claims it and a run/task-only read leaves it out rather
+          // than guessing which execution ran it. An EMPTY filter claims it
+          // too — that read asks for the record itself, which is what the
+          // last-seen reconciliation pass wants.
+          const claimed = panels !== null
+            ? panels.has(command?.panelId ?? '')
+            : filter.itemId === undefined && filter.runId === undefined
+          if (command !== null && claimed) entries.push({ kind: 'command', row: command })
         } catch { /* a malformed line costs that line */ }
       }
       return { entries, reachedStart: i < 0 }

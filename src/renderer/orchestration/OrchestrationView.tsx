@@ -93,6 +93,7 @@ import { useRateLimit } from '@renderer/session/rate-limit-store'
 import { BACKENDS, type AgentBackend } from '@shared/agent-backends'
 import type { WorktreeListRow } from '@shared/ipc-contract'
 import type { OrchCubeTone } from './orchestration-cube-motion'
+import { standingOf, type Standing } from '@shared/session-standing'
 
 /**
  * The R3F island is `import()`ed the first time Orchestration paints, never at
@@ -188,7 +189,81 @@ interface OrchWash { at: number; stage: WorkItemState; ids: readonly string[] }
 
 type SideTab = OrchSideTab
 
-function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplateInput[]): OrchPanelInput[] {
+/**
+ * M301. RECONCILIATION, asked of MAIN and not inferred here.
+ *
+ * `agentSession.list()` is the agent runtime's own answer to "which sessions
+ * exist", the same shape of question the orphan sweep asks the terminal
+ * backend at launch. It is asked once when the page mounts and again on every
+ * refresh tick, which is when the page's other reads happen too.
+ *
+ * `null` while the first answer is outstanding, and that is not "none": a
+ * `null` reconciliation leaves every panel's state exactly as it was before
+ * M301, so the page never flashes a wall of `unknown` in the moment between
+ * mounting and hearing back. A read that FAILS also leaves it null — a door
+ * that could not answer is not a door that answered "nothing".
+ */
+function useLiveSessions(refresh: number): ReadonlySet<string> | null {
+  const [live, setLive] = useState<ReadonlySet<string> | null>(null)
+  useEffect(() => {
+    if (typeof window.canvas?.agentSession?.list !== 'function') return
+    let alive = true
+    void window.canvas.agentSession.list().then(
+      (rows) => { if (alive) setLive(new Set(rows.map((r) => r.id))) },
+      () => { if (alive) setLive(null) }
+    )
+    return () => { alive = false }
+  }, [refresh])
+  return live
+}
+
+/**
+ * M301. WHEN THE RECORD LAST SAW EACH PANEL — one read, not one per panel.
+ *
+ * "Unknown since some time" is the kind of sentence that makes a reader
+ * distrust a whole page, so a reconciled panel says WHEN it was last seen
+ * wherever the record can tell us. The durable record is asked once, with an
+ * empty filter, and the newest row per panel is the answer; a panel the
+ * record has never held simply has no date, which `standingOf` words as its
+ * own arm rather than inventing one.
+ *
+ * `null` while the read is outstanding or after it failed, and that is not an
+ * empty map: an empty map would say "the record knows nothing about any of
+ * these", which is a claim, and a failed read is not entitled to make it.
+ */
+const LAST_SEEN_ROWS = 200
+
+function useLastSeen(refresh: number): ReadonlyMap<string, number> | null {
+  const [seen, setSeen] = useState<ReadonlyMap<string, number> | null>(null)
+  useEffect(() => {
+    if (typeof window.canvas?.ledger?.timeline !== 'function') return
+    let alive = true
+    void window.canvas.ledger.timeline({}, LAST_SEEN_ROWS).then(
+      (read) => {
+        if (!alive) return
+        const map = new Map<string, number>()
+        // Newest first, so the FIRST sighting of a panel is its latest.
+        for (const e of read.entries) {
+          if (e.kind === 'gap') continue
+          const id = e.kind === 'command' ? e.row.panelId : e.row.panelId
+          const at = e.kind === 'command' ? e.row.endedAt : e.row.at
+          if (id !== undefined && !map.has(id)) map.set(id, at)
+        }
+        setSeen(map)
+      },
+      () => { if (alive) setSeen(null) }
+    )
+    return () => { alive = false }
+  }, [refresh])
+  return seen
+}
+
+function panelsToInput(
+  panels: readonly Panel[],
+  templates: readonly OrchTemplateInput[],
+  live: ReadonlySet<string> | null,
+  lastSeen: ReadonlyMap<string, number> | null
+): OrchPanelInput[] {
   return panels.map((p) => {
     const id = p.rect.id
     const title = railLabel(p, undefined)
@@ -202,6 +277,16 @@ function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplat
       return {
         id, title, kind: 'chat' as const, agentic: true,
         agentState: getAgentState(id),
+        /*
+         * M301. A chat's `sessionId` is persisted with the panel, so its
+         * presence is exactly "this panel had a session" — the fact that
+         * separates a conversation whose agent is gone from one that was
+         * never started. Reconciliation is applied only while main has
+         * answered (`live !== null`); before that, and for a terminal, the
+         * pre-M301 behaviour stands and is recorded as a limitation.
+         */
+        ...(live === null ? {} : { liveSession: live.has(id), hadSession: p.chat.sessionId !== undefined }),
+        ...(lastSeen?.get(id) === undefined ? {} : { lastSeen: lastSeen.get(id) }),
         supervisor: p.chat.supervisor === true,
         orchestrator: p.chat.orchestrator !== undefined,
         ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
@@ -263,6 +348,11 @@ function stateWord(row: Pick<OrchRosterRow, 'state'>): string {
   if (row.state === 'watching') return agentWord('busy').word
   if (row.state === 'passed') return agentWord('idle').word
   if (row.state === 'running') return agentWord('busy').word
+  // M301. The reconciled word. It is NOT routed through agentWord, because
+  // agentWord answers for a session that exists and this one does not — the
+  // fallback below used to hand `idle` to exactly this case, which is the
+  // lie M301 was written to end.
+  if (row.state === 'unknown') return 'no session'
   return agentWord('idle').word
 }
 
@@ -270,6 +360,8 @@ function toneFromState(state: OrchRosterRow['state']): Tone {
   if (state === 'wants-you') return 'needs-you'
   if (state === 'busy' || state === 'watching' || state === 'pool') return TONE_WORKING
   if (state === 'starting') return 'starting'
+  // M301. Quiet and finished, never the live-idle family. The word carries it too.
+  if (state === 'unknown') return 'exited'
   if (state === 'exited') return 'exited'
   return 'idle'
 }
@@ -1453,8 +1545,29 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     orchActivityEvents
   )
 
+  // M301. Main's answer to "which agent sessions exist", on the same tick the
+  // strip's other reads take. Null until it lands, which keeps pre-M301
+  // behaviour rather than flashing `unknown` across the page.
+  const liveSessions = useLiveSessions(benchRefresh)
+  const lastSeen = useLastSeen(benchRefresh)
+  /**
+   * M301. The selected object's reconciled standing, from the SAME two facts
+   * the model uses — main's session list and the record's last sighting — so
+   * the card's sentence and the scene's word can never disagree. Null while
+   * main has not answered: an unreconciled page says nothing rather than
+   * something it has not checked.
+   */
+  const selectedStandingOf = useCallback((id: string, agentic: boolean): Standing | null => {
+    if (liveSessions === null) return null
+    const p = panels.find((x) => x.rect.id === id)
+    const hadSession = p !== undefined && isChatPanel(p) && p.chat.sessionId !== undefined
+    return standingOf({
+      agentic, liveSession: liveSessions.has(id), hadSession,
+      ...(lastSeen?.get(id) === undefined ? {} : { lastSeen: lastSeen.get(id) })
+    })
+  }, [liveSessions, lastSeen, panels])
   const liveSnap = useMemo(() => buildOrchestrationSnapshot({
-    panels: panelsToInput(panels, templates),
+    panels: panelsToInput(panels, templates, liveSessions, lastSeen),
     workItems: workItems.map((w) => ({
       id: w.id, title: w.title, state: w.state,
       ...(w.panelId !== undefined ? { panelId: w.panelId } : {}),
@@ -1468,7 +1581,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     },
     hour: new Date().getHours(),
     ...(displayName !== undefined ? { displayName } : {})
-  }), [panels, workItems, templates, total.cpuPercent, total.memoryBytes, displayName, tick, now])
+  }), [panels, workItems, templates, liveSessions, lastSeen, total.cpuPercent, total.memoryBytes, displayName, tick, now])
 
   liveEdgesRef.current = liveSnap.graph.edges
 
@@ -1633,6 +1746,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   )
 
   const selectedRow = liveSnap.roster.find((r) => r.id === selectedId) ?? null
+  // Named apart from M299's `selectedStanding`, which is the RUN's standing
+  // (a turn's phase and spend). This one is about whether a session exists at
+  // all — two different facts that the page shows in the same card.
+  const selectedReconcile = selectedRow === null ? null : selectedStandingOf(selectedRow.id, selectedRow.agentic)
   const outputPanelId = selectedRow !== null
     ? selectedRow.id
     : liveSnap.terminalSnippet?.panelId ?? null
@@ -2511,6 +2628,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   </span>
                   <span className="orch__chip" data-orch-selected-chip>Selected</span>
                 </div>
+                {/* M301. The reconciliation's own sentence, and only when it has
+                    one to make: a panel whose session this app cannot see says
+                    so, with when the record last saw it. Never a diagnosis —
+                    "stopped", "crashed" and "finished" are not distinguishable
+                    from here, and the plan forbids guessing between them. */}
+                {selectedReconcile !== null && selectedReconcile.detail !== '' && (
+                  <p className="orch__caption" data-orch-reconcile={selectedReconcile.standing}>{selectedReconcile.detail}</p>
+                )}
                 {island?.memberIds.includes(selectedRow.id) === true ? (
                   <div className="orch__inspector-task">
                     <span className="orch__inspector-task-title">{island.goal}</span>

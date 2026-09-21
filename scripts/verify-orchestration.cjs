@@ -1071,6 +1071,79 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       'checks/watchers')
   }
 
+  // M301 — orch-reconcile.*. WHAT THE APP MAY SAY ABOUT A SESSION. The lie
+  // this closes is quiet: a panel restored from layout.json whose agent is
+  // gone read `idle`, which is the word a LIVE agent waiting for you wears.
+  {
+    const S = load('src/shared/session-standing.ts', 'session-standing.cjs')
+    const model = readFileSync(join(root, 'src/renderer/orchestration/orchestration-model.ts'), 'utf8')
+    const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+    const base = { agentic: true, hadSession: true }
+    const cases = {
+      // A live session with a word wears the word; a live session without one is starting.
+      live: S.standingOf({ ...base, liveSession: true, agentState: 'busy' }).standing === 'live',
+      starting: S.standingOf({ ...base, liveSession: true }).standing === 'starting',
+      // The headline: a session that is gone is never idle, and never busy
+      // because its LAST event said busy — no event ever says "and then I was killed".
+      goneNotIdle: S.standingOf({ ...base, liveSession: false }).word !== 'idle',
+      goneMidTurn: S.standingOf({ ...base, liveSession: false, agentState: 'busy' }).standing === 'unknown',
+      dated: S.standingOf({ ...base, liveSession: false, lastSeen: 1_700_000_000_000 }).standing === 'ended',
+      datedSays: /last saw it/.test(S.standingOf({ ...base, liveSession: false, lastSeen: 1_700_000_000_000 }).detail),
+      // Gone and never-started are different facts and get different words.
+      never: S.standingOf({ agentic: true, liveSession: false, hadSession: false }).standing === 'never-started',
+      neverApart: S.standingOf({ agentic: true, liveSession: false, hadSession: false }).word !== S.standingOf({ ...base, liveSession: false }).word,
+      // No confident diagnosis anywhere in the vocabulary.
+      noDiagnosis: ['unknown', 'ended', 'never-started'].every((k) => {
+        const d = S.standingOf({ agentic: true, liveSession: false, hadSession: k !== 'never-started', ...(k === 'ended' ? { lastSeen: 1 } : {}) }).detail
+        return !/crash|deadlock|stuck|hung|finished successfully/i.test(d)
+      }),
+      counts: S.countsAsRunning('live') && S.countsAsRunning('starting') && !S.countsAsRunning('unknown') && !S.countsAsRunning('ended')
+    }
+    ok('orch-reconcile.1 a session that is gone is never shown as idle or busy: liveness is asked BEFORE the runtime\'s last word (so a session killed mid-turn does not keep `busy` across a relaunch), a dated sighting reads `ended` and says when, an undated one reads `unknown`, never-started is a different word from gone, no arm diagnoses a crash or a deadlock, and neither `unknown` nor `ended` counts as running',
+      Object.values(cases).every(Boolean), JSON.stringify(cases))
+
+    // The model's arm, and its ORDER, which is the load-bearing half.
+    const built = (over) => M.buildOrchestrationSnapshot({
+      panels: [{ id: 'c1', kind: 'chat', title: 'Agent', agentic: true, ...over }],
+      workItems: [], machine: { cpuPercent: 0, memoryBytes: 0 }, hour: 20, displayName: 'A'
+    })
+    const gone = built({ agentState: 'busy', liveSession: false, hadSession: true })
+    const alive = built({ agentState: 'busy', liveSession: true, hadSession: true })
+    const unreconciled = built({ agentState: 'busy' })
+    const rowOf = (snap) => snap.roster.find((r) => r.id === 'c1')
+    ok('orch-reconcile.2 the model applies it: a reconciled panel with no session takes the `unknown` state and drops out of the active-agent count whatever its last event said, a live one is unchanged, an UNRECONCILED caller (no liveSession/hadSession — every pre-M301 fixture) keeps the old behaviour exactly, and `unknown` is never a live roster state',
+      rowOf(gone)?.state === 'unknown' && gone.counts.activeAgents === 0 &&
+        rowOf(alive)?.state === 'busy' && alive.counts.activeAgents === 1 &&
+        rowOf(unreconciled)?.state === 'busy' && unreconciled.counts.activeAgents === 1 &&
+        M.isLiveRosterState('unknown') === false && rowOf(gone)?.tone === 'exited' &&
+        // The order: the liveness arm sits ABOVE the agentState fallthrough.
+        model.indexOf("p.liveSession === false && p.hadSession === true") < model.indexOf('if (p.agentState !== undefined) return p.agentState'),
+      JSON.stringify({ gone: rowOf(gone), alive: rowOf(alive), unreconciled: rowOf(unreconciled) }))
+
+    ok('orch-reconcile.3 the page asks MAIN rather than inferring: the live set comes from agentSession.list and the last sighting from one ledger.timeline read, both are null (not empty) while outstanding or after a failure so an unreconciled page says nothing rather than flashing `unknown`, the reconciled word is not routed through agentWord, and the live activity feed says it is this run\'s and names the durable record',
+      /agentSession\.list\(\)/.test(view) && /ledger\.timeline\(\{\}, LAST_SEEN_ROWS\)/.test(view) &&
+        /if \(live === null \? \{\}|live === null \? \{\}/.test(view) &&
+        /\(\) => \{ if \(alive\) setLive\(null\) \}/.test(view) && /\(\) => \{ if \(alive\) setSeen\(null\) \}/.test(view) &&
+        /if \(row\.state === 'unknown'\) return 'no session'/.test(view) &&
+        /No recent events/.test(readFileSync(join(root, 'src/shared/empty-states.ts'), 'utf8')),
+      'reconcile wiring')
+  }
+
+  // M301 — Phase C's deferred item. The dependency lens read an IN-MEMORY map,
+  // so a handoff that fired before a relaunch read `unknown` until it happened
+  // to fire again. The durable row is what survives; the seeding rule is what
+  // keeps a remembered outcome from overwriting a live one.
+  {
+    const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    const seedStart = canvasSrc.indexOf('M301, closing Phase C')
+    const seed = seedStart === -1 ? '' : canvasSrc.slice(seedStart, seedStart + 2600)
+    ok('orch-reconcile.4 a handoff outcome survives a relaunch: every outcome is written at the ONE funnel that also fills the in-memory map, carrying the link\'s own from:to key so no reader parses a title; on mount the record seeds the map newest-row-per-key, a live outcome always wins (the seed fills only keys this run has not written), and a failed read seeds nothing rather than inheriting a stale sentence',
+      /key\b/.test(canvasSrc.slice(canvasSrc.indexOf('const setHandoffResult'), canvasSrc.indexOf('const setHandoffResult') + 1200)) &&
+        /e\.row\.event !== 'handoff'/.test(seed) && /!seed\.has\(key\)/.test(seed) && /if \(!next\.has\(k\)\) next\.set\(k, v\)/.test(seed) &&
+        /seeds nothing/.test(seed),
+      'lens seeding')
+  }
+
   ok('orch-timeline.1 a durable event row parses field by field: a malformed optional field costs the field and keeps the row, an unknown event kind or source from a later build drops the row rather than being coerced, a row with no run id or no title is not a record, and a gap that dropped nothing is not a gap',
     Object.values(rules).every(Boolean), JSON.stringify(rules))
 

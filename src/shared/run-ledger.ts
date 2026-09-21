@@ -104,6 +104,14 @@ export interface EventRow {
   tested?: ReviewIdentity
   /** REFERENCES. Paths, never content — the reader resolves them live or says it could not. */
   paths?: string[]
+  /**
+   * M301. The row's subject key in the WRITER's own namespace — a handoff's
+   * `from:to`, say. It exists so a reader can match a row to the thing it is
+   * about without parsing `title`, which is prose and is allowed to change.
+   * Opaque to this module: nothing here interprets it, and a reader that does
+   * not know a key's namespace ignores it.
+   */
+  key?: string
 }
 
 /**
@@ -183,7 +191,8 @@ export function parseEventRow(raw: unknown): EventRow | null {
     ...(typeof r.detail === 'string' && r.detail !== '' ? { detail: r.detail } : {}),
     ...(typeof r.itemId === 'string' && r.itemId !== '' ? { itemId: r.itemId } : {}),
     ...(typeof r.panelId === 'string' && r.panelId !== '' ? { panelId: r.panelId } : {}),
-    ...(paths !== undefined && paths.length > 0 ? { paths } : {})
+    ...(paths !== undefined && paths.length > 0 ? { paths } : {}),
+    ...(typeof r.key === 'string' && r.key !== '' ? { key: r.key } : {})
   }
 }
 

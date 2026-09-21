@@ -1390,4 +1390,87 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // M301 — Orchestrate Phase E: reconciliation, driven by a REAL kill.
+  //
+  // The session is killed through the runner's own exit path — the manager
+  // sees the process go, exactly as it does when a real CLI dies — and then
+  // the page is asked what it says. The check is deliberately not written
+  // against the flags it expects to find: it asks main's own session list
+  // and reads the WORDS off the DOM.
+  //
+  // The honest limit, recorded here and in the ledger: this part's agent is
+  // the harness's fake runner, so the kill exercises the manager's real exit
+  // path and not an OS signal to a real CLI. The OS-signal case is the manual
+  // demo in the ledger.
+  // ---------------------------------------------------------------------
+  {
+    const IDS = [
+      'orch-reconcile.app.1 a killed session stops being called live: main\'s session list drops it, the page stops counting it as an active agent, and its word is no longer `idle`',
+      'orch-reconcile.app.2 the page says what it cannot see rather than nothing: the selected object carries a sentence naming that no session is running for it, and never a crash or deadlock diagnosis'
+    ]
+    try {
+      const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+      const repo = mkdtempSync(join(tmpdir(), 'tc panels orch reconcile-'))
+      const g = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+      g('init', '-q', '.'); g('config', 'user.email', 'v@example.com'); g('config', 'user.name', 'v')
+      writeFileSync(join(repo, 'app.txt'), 'first\n'); g('add', '-A'); g('commit', '-qm', 'init')
+      await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(repo)})`)
+      const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
+      const spawnsBefore = chatSpawns.length
+      // A turn, so the session is unambiguously live and has spoken.
+      await waitUntil(() => wc.executeJavaScript(`(() => {
+        const ta = document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-input]'); if (!ta || ta.disabled) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, 'work'); ta.dispatchEvent(new Event('input', { bubbles: true }))
+        const b = document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-send]'); if (!b || b.disabled) return false
+        b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 8000)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-state]')?.textContent === 'idle' || false`), 8000)
+
+      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await waitUntil(orchShown, 3000)
+      await click('[data-orch-lens="list"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${chatId}"] button') !== null`), 3000)
+      await click(`[data-orch-list-row="${chatId}"] button`)
+      await settle()
+      const readState = () => wc.executeJavaScript(`(() => {
+        const i = document.querySelector('[data-orch-inspector="${chatId}"]')
+        return {
+          state: i?.querySelector('[data-orch-inspector-state]')?.textContent ?? null,
+          reconcile: i?.querySelector('[data-orch-reconcile]')?.getAttribute('data-orch-reconcile') ?? null,
+          sentence: i?.querySelector('[data-orch-reconcile]')?.textContent ?? null,
+          agents: document.querySelector('[data-orch-tile="agents"] [data-orch-tile-count]')?.textContent ?? null
+        }
+      })()`)
+      const before = await readState()
+      // THE KILL. Every process this chat has spawned, through the runner's
+      // own exit path — not a flag set on the view model.
+      for (const sp of chatSpawns.slice(spawnsBefore)) sp.proc.kill()
+      // Main's own answer first: the check must not read the page for a fact
+      // main is the source of truth for.
+      const gone = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`window.canvas.agentSession.list().then((r) => r.map((x) => x.id))`)
+        return rows.includes(chatId) ? false : rows
+      }, 8000).catch(() => null)
+      // The page re-reads on its refresh tick; Refresh is the person's door to it.
+      await click('[data-orch-bench-refresh]')
+      await settle()
+      const after = await waitUntil(async () => {
+        const r = await readState()
+        return r.state !== null && r.state !== before.state ? r : false
+      }, 8000).catch(() => null)
+      ok(IDS[0],
+        before.state === 'idle' && gone !== null && after !== null && after.state !== 'idle' && after.state === 'no session',
+        JSON.stringify({ before, after, gone }))
+      ok(IDS[1],
+        after !== null && after.reconcile !== null && typeof after.sentence === 'string' && after.sentence.length > 10 &&
+          !/crash|deadlock|stuck|hung/i.test(after.sentence),
+        JSON.stringify({ reconcile: after && after.reconcile, sentence: after && after.sentence }))
+      try { rmSync(repo, { recursive: true, force: true }) } catch { /* scratch */ }
+    } catch (error) {
+      for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
+    }
+  }
+
 })
