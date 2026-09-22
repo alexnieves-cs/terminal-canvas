@@ -784,7 +784,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                           <ul>
                             {files.map((f) => (
                               <li key={f.path}>
-                                <button type="button" className={`orch__activity-row${changes.diff.kind !== 'none' && changes.diff.key === `${benchSubjectKey(subject)}:${f.path}` ? ' orch__roster-row--on' : ''}`}
+                                <button type="button" className={`orch__activity-row${changes.diff.kind !== 'none' && changes.diff.key === `${benchSubjectKey(subject)}:${f.path}` ? ' orch__bench-file--on' : ''}`}
                                   data-orch-review-file={f.path} {...shellControl(() => changes.openFile(f))}>
                                   <span className="orch__roster-kind" aria-hidden="true"><KindFile /></span>
                                   <span className="orch__activity-title">{f.path.slice(dir === '' ? 0 : dir.length + 1)}</span>

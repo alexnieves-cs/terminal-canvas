@@ -7472,7 +7472,11 @@ body {
   background: var(--s-3);
   border-color: var(--line);
 }
-.orch__roster-row--on { background: var(--iris-dim); border-color: color-mix(in srgb, var(--iris) 40%, var(--line)); }
+.orch__roster-row--on,
+/* M305. The workbench's open file wears the roster's selected look under its OWN class:
+   `.orch__roster-row--on` is counted as "the roster's selection" (orch-task.2), and the
+   Changes tab now opens its first file by itself. */
+.orch__bench-file--on { background: var(--iris-dim); border-color: color-mix(in srgb, var(--iris) 40%, var(--line)); }
 .orch__roster-kind { display: inline-flex; color: var(--fg-3); }
 .orch__roster-label, .orch__activity-title, .orch__float-title, .orch__selected-title, .orch__pipeline-item-title {
   font-size: var(--t-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -8352,7 +8356,8 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   border-color: color-mix(in srgb, var(--iris) 18%, var(--line));
   box-shadow: inset 0 1px 0 var(--edge-light);
 }
-[data-theme="dark"] .orch .orch__roster-row--on {
+[data-theme="dark"] .orch .orch__roster-row--on,
+[data-theme="dark"] .orch .orch__bench-file--on {
   background: linear-gradient(90deg, var(--iris-dim), transparent);
   border-color: color-mix(in srgb, var(--iris) 42%, var(--line));
 }

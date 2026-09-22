@@ -620,7 +620,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           new RegExp(`^${A.lane.branch === undefined ? '' : ''}`).test('') && cardA.place.includes(A.lane.branch) && cardB.place.includes(B.lane.branch) && /1 session/.test(cardA.state) &&
           isl1.groups.length === 1 && isl1.groups[0].n >= 2 && isl1.groups[0].label.startsWith(repoName) && /not a supervisor/.test(String(isl1.grouping)) &&
           a1 && a1.files.join() === 'a.txt' && consistent(a1) && a2 && consistent(a2) && a2.diffKey === `${keyA}:a.txt` &&
-          b1 && b1.files.join() === 'b.txt' && consistent(b1) && b2 && consistent(b2) && b2.subject === keyB && !/A changed/.test(b2.text) && b2.diffKey === null,
+          b1 && b1.files.join() === 'b.txt' && consistent(b1) && // M305: the Changes tab opens its subject's FIRST file by itself, so after the switch the
+          // diff is either not open yet or B's own — never A's (the check's point is unchanged).
+          b2 && consistent(b2) && b2.subject === keyB && !/A changed/.test(b2.text) && (b2.diffKey === null || b2.diffKey === `${keyB}:b.txt`),
         JSON.stringify({ folded, plates, isl1, a1: a1 && { subject: a1.subject, files: a1.files, controls: a1.controls, diffSubject: a1.diffSubject }, a2: a2 && { diffKey: a2.diffKey }, b1: b1 && { subject: b1.subject, files: b1.files }, b2: b2 && { subject: b2.subject, diffKey: b2.diffKey, hasA: /A changed/.test(b2.text) }, log: cLog.slice(-3) }))
 
       // orch-islands.app.2 — rapid selection and out-of-order answers, sampled.
@@ -642,7 +644,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await demo('m288-4-after-rapid')
       const mismatches = samples.filter((b) => !consistent(b) || (b && b.subject === keyB && /A changed|a\.txt/.test(b.text)) || (b && b.subject === keyA && /B changed|b\.txt/.test(b.text)))
       ok(IDS[1],
-        rapid && consistent(rapid) && late && consistent(late) && lateAfter && lateAfter.subject === keyB && lateAfter.diffKey === null && !/A changed/.test(lateAfter.text) &&
+        rapid && consistent(rapid) && late && consistent(late) && lateAfter && lateAfter.subject === keyB && (lateAfter.diffKey === null || lateAfter.diffKey === `${keyB}:b.txt`) && !/A changed/.test(lateAfter.text) &&
           twice && consistent(twice) && samples.length >= 30 && mismatches.length === 0,
         JSON.stringify({ samples: samples.length, mismatches: mismatches.slice(0, 3).map((b) => b && { subject: b.subject, controls: b.controls, diffSubject: b.diffSubject, diffKey: b.diffKey }), lateAfter: lateAfter && { subject: lateAfter.subject, diffKey: lateAfter.diffKey } }))
 
