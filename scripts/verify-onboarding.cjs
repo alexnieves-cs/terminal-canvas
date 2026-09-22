@@ -153,9 +153,11 @@ intent('onboarding.intent.1 an empty sentence, an empty folder and a relative pa
     relative.kind === 'refused' && relative.field === 'folder' && /full path/.test(relative.reason) &&
     noFolder.reason !== relative.reason, detail: { noWords, noFolder, relative } }
 })
-intent('onboarding.intent.2 no engine and Codex-only are refused by name — the second pointing at the no-folder alternative — and Claude starts', () => {
+intent('onboarding.intent.2 no engine is refused by name, Codex-only resolves to a Codex conversation in the folder (sentence and folder still refused first), and Claude starts', () => {
   const none = plan({ intention: 'x', folder: '/code/app' }, [], {})
   const codex = plan({ intention: 'x', folder: '/code/app' }, [], { preferred: 'codex' })
+  const codexNoWords = plan({ intention: ' ', folder: '/code/app' }, [], { preferred: 'codex' })
+  const codexRelative = plan({ intention: 'x', folder: 'app' }, [], { preferred: 'codex' })
   const claude = plan({ intention: 'x', folder: '/code/app' })
   // M205 critic: an UNANSWERED lane engine is not a missing one — telling a
   // person to install what they have is the wrong fix. With Codex found and
@@ -163,10 +165,11 @@ intent('onboarding.intent.2 no engine and Codex-only are refused by name — the
   const unanswered = plan({ intention: 'x', folder: '/code/app' }, [], { preferred: 'codex', rows: [{ backend: 'claude', discovery: 'unknown' }, { backend: 'codex', discovery: 'installed' }] })
   const silent = plan({ intention: 'x', folder: '/code/app' }, [], { rows: [{ backend: 'claude', discovery: 'unknown' }, { backend: 'codex', discovery: 'unknown' }] })
   return { pass: none.kind === 'refused' && none.field === 'engine' && /Check again/.test(none.reason) &&
-    codex.kind === 'refused' && codex.field === 'engine' && /without a folder/.test(codex.reason) &&
+    codex.kind === 'chat' && codex.engine === 'codex' && codex.folder === '/code/app' && /Codex/.test(codex.summary) && /no task branch/.test(codex.summary) &&
+    codexNoWords.kind === 'refused' && codexNoWords.field === 'intention' && codexRelative.kind === 'refused' && codexRelative.field === 'folder' &&
     claude.kind === 'start' &&
     unanswered.kind === 'refused' && /not answered/.test(unanswered.reason) && !/install/i.test(unanswered.reason) &&
-    silent.kind === 'refused' && /not answered/.test(silent.reason), detail: { none, codex, claude, unanswered, silent } }
+    silent.kind === 'refused' && /not answered/.test(silent.reason), detail: { none, codex, codexNoWords, codexRelative, claude, unanswered, silent } }
 })
 intent('onboarding.intent.3 a teammate is reused only when a place CONTAINS the folder by path segment; otherwise one is minted with exactly that folder and nothing wider', () => {
   const inside = plan({ intention: 'x', folder: '/code/app/' }, [mate('tA', ['/code/'])])
@@ -243,8 +246,11 @@ try {
   const more = html.match(/<details\b[^>]*\bdata-launcher-more[^>]*>[\s\S]*<\/details>/)?.[0] ?? ''
   const moreOpen = /<details\b[^>]*\bopen\b/.test(more)
   const legacy = ['data-launcher-sheet', 'data-launcher-open-file', 'data-launcher-new-chat', 'data-launcher-new-codex', 'data-launcher-starter', 'data-launcher-new-note'].map((a) => [a, buttonTag(more, a) !== undefined])
-  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Start a general chat is live, and every legacy door is inside the closed disclosure',
-    Boolean(start && disabled(start) && /Claude Code/.test(start) && ask && !disabled(ask) && !moreOpen &&
+  // 2.1: Codex-only is no longer a wall — Start work waits on the sentence
+  // like any other start, never on an engine, and the agent step says the
+  // start becomes a conversation in the folder.
+  ok('onboarding.markup.1 with Codex alone Start work waits only on the sentence (no engine wall), the agent step names the in-folder conversation, Ask is live, and every legacy door is inside the closed disclosure',
+    Boolean(start && disabled(start) && /say what you want/.test(start) && !/not found/.test(start) && /conversation in the folder/.test(html) && ask && !disabled(ask) && !moreOpen &&
       legacy.every(([, found]) => found) && disabled(buttonTag(more, 'data-launcher-new-chat')) && !disabled(buttonTag(more, 'data-launcher-new-codex'))),
     JSON.stringify({ start: start ?? null, ask: ask ?? null, moreOpen, legacy }))
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in',
@@ -272,7 +278,7 @@ try {
       /optional/.test(claudeOnly.match(/<button\b[^>]*\bdata-launcher-starter[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '')),
     JSON.stringify({ summary: summary ? summary.slice(1) : null }))
 } catch (error) {
-  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Start a general chat is live, and every legacy door is inside the closed disclosure', false, error.message)
+  ok('onboarding.markup.1 with Codex alone Start work waits only on the sentence (no engine wall), the agent step names the in-folder conversation, Ask is live, and every legacy door is inside the closed disclosure', false, error.message)
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in', false, error.message)
   ok('onboarding.markup.3 readiness appears only as needed — one row with an engine found, every row and Check again with none — and no copy says process-per-turn', false, error.message)
   ok('onboarding.markup.4 at rest the primary is disabled and the summary names the sentence as the one missing thing; the starter line reads as optional', false, error.message)

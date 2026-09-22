@@ -91,6 +91,13 @@ export type FirstWorkPlan =
     /** What will happen, in the person's words, before anything does. */
     summary: string
   }
+  /**
+   * The lane engine is MISSING but another engine is installed (Codex-only).
+   * A lane cannot run it, so Start work opens a conversation IN the folder on
+   * that engine instead — the M205 "chat in this folder" door, reached on day
+   * one rather than behind a refusal. No teammate, no grant, no branch.
+   */
+  | { kind: 'chat'; engine: 'claude' | 'codex'; folder: string; summary: string }
 
 /**
  * What the launcher's Start work answers. `not-a-repository` is its own arm
@@ -153,12 +160,6 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   if (ctx.readiness.preferred === undefined) {
     return { kind: 'refused', field: 'engine', reason: 'no conversation engine has been discovered — install Claude Code, then Check again' }
   }
-  // A teammate carries no backend, so D05's dispatch always creates a Claude
-  // conversation. Codex alone cannot start a lane — say so, and name the door
-  // that does take Codex, rather than minting a grant for a start that fails.
-  if (ctx.readiness.preferred !== LANE_ENGINE) {
-    return { kind: 'refused', field: 'engine', reason: 'work in a repository runs Claude Code, which was not found — Ask without a folder uses Codex' }
-  }
   const sentence = req.intention.trim()
   if (sentence === '') return { kind: 'refused', field: 'intention', reason: 'say what you want to work on, in a sentence' }
   const raw = req.folder.trim()
@@ -168,6 +169,18 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // absolute folder or it is refused by main one step later with less to say.
   if (!raw.startsWith('/')) return { kind: 'refused', field: 'folder', reason: 'type the folder as a full path starting with / — or use Choose…' }
   const folder = trimSeparators(raw)
+  // A teammate carries no backend, so D05's dispatch always creates a Claude
+  // conversation: Codex alone cannot start a LANE. Rather than a wall on day
+  // one (the README sells Codex), the start resolves to what the installed
+  // engine CAN do — a conversation in the folder — and says so before it
+  // happens. Checked after the sentence and folder, so their refusals stay named.
+  const preferred = ctx.readiness.preferred
+  if (preferred !== LANE_ENGINE) {
+    return {
+      kind: 'chat', engine: preferred, folder,
+      summary: `${FIRST_LAUNCH_ENGINES[preferred].name} opens a conversation in ${shortPath(folder)}, your sentence in its composer — no task branch; that needs ${FIRST_LAUNCH_ENGINES[LANE_ENGINE].name}`
+    }
+  }
   const [first = '', ...more] = sentence.split('\n')
   const line = first.trim()
   const cut = line.length > FIRST_WORK_TITLE_MAX

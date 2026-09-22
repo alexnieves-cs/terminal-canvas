@@ -7,7 +7,7 @@
  * (the gestures) and the launcher (the tmux notice, a first-run banner) — and
  * a seen id never comes back. Pure; `verify:rail hints.1`.
  */
-export type HintId = 'pan' | 'zoom' | 'palette' | 'new-panel' | 'tmux'
+export type HintId = 'pan' | 'zoom' | 'palette' | 'new-panel' | 'tmux' | 'starter'
 export interface Hint { id: HintId; text: string; where: 'rail' | 'launcher' }
 
 export const HINTS: ReadonlyArray<Hint> = [
@@ -15,7 +15,13 @@ export const HINTS: ReadonlyArray<Hint> = [
   { id: 'zoom', text: 'A pinch, or ⌘= and ⌘−, zooms it.', where: 'rail' },
   { id: 'palette', text: '⌘K opens the palette with every verb.', where: 'rail' },
   { id: 'new-panel', text: '⌘N starts a panel where the camera is.', where: 'rail' },
-  { id: 'tmux', text: 'No tmux was found, so sessions end when the app reloads — install tmux to keep agents running across a relaunch.', where: 'launcher' }
+  { id: 'tmux', text: 'No tmux was found, so sessions end when the app reloads — install tmux to keep agents running across a relaunch.', where: 'launcher' },
+  // M205 critic 2.4: the starter canvas lives inside the closed "More ways to
+  // start" disclosure on purpose (D09's header — a tour is not the primary),
+  // but that leaves it with no door a first-time person would ever open. One
+  // sentence, pointing at exactly where it is, shown until dismissed like the
+  // tmux notice beside it.
+  { id: 'starter', text: 'New to terminal canvas? A starter canvas — under More ways to start, below — walks through one example of every kind of object.', where: 'launcher' }
 ]
 
 /** `where` narrows to one surface's hints; both surfaces read this one list (the Act III critic: two readers of one list had drifted). */
@@ -25,6 +31,8 @@ export function hintsLeft(seen: ReadonlySet<string>, where?: Hint['where']): Hin
 
 /** The tmux notice's own sentence, the launcher's banner text. A dismissal outlives an install: the Environment report still states the backend, and a notice that came back after every relaunch would be a strip again. */
 export const TMUX_HINT: Hint = HINTS[4]
+/** The starter-canvas discoverability line, the same "shown until dismissed" shape as `TMUX_HINT`. */
+export const STARTER_HINT: Hint = HINTS[5]
 
 /**
  * M262. TAUGHT AFTER AN ATTEMPT, ONE AT A TIME. Four sentences at rest were

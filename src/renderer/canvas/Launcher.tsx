@@ -37,6 +37,9 @@ export interface LauncherProps {
   /** M173. The tmux notice as a first-run banner: the backend's reason, or null once seen or when tmux is there. */
   tmux?: string | null
   onDismissTmux?: () => void
+  /** M205 critic 2.4. The starter-canvas discoverability line: the hint's own sentence, or null once dismissed or when there is no starter door to point at. */
+  starterHint?: string | null
+  onDismissStarterHint?: () => void
   /** M174. The last folders panels were started in (`spawn:recent`), newest first. M205: a chip FILLS the folder field. */
   recents?: string[]
   /** M262. When each recent folder was last used (`spawn:recent-used`); a folder with no entry shows no time. */
@@ -104,7 +107,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, starterHint, onDismissStarterHint, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
   const readiness = onboardingReadiness(report)
   const unanswered = readiness.rows.some((row) => row.discovery === 'unknown')
   const [intention, setIntention] = useState('')
@@ -313,7 +316,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
             <span className="launcher__step-num" aria-hidden="true">{step()}</span>
             <div className="launcher__field">
               <span className="launcher__label">Choose an agent</span>
-              <span className="launcher__step-why">A task runs in Claude Code, and it is not ready yet{readiness.preferred !== undefined ? ' — a general chat can still use the engine that is' : ''}.</span>
+              <span className="launcher__step-why">A task lane runs in Claude Code, and it is not ready yet{readiness.preferred !== undefined ? ' — Start work opens a conversation in the folder with the engine that is' : ''}.</span>
               <div className="launcher__readiness" aria-label="Conversation engines">{engineRows}</div>
             </div>
           </li>
@@ -323,8 +326,8 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <div className="launcher__field">
             {/* What will happen — the grant included — before anything does; or the
                 one thing still missing. One sentence, never a list of three. */}
-            <p className="launcher__summary" data-onboarding-summary={plan.kind === 'start' ? 'start' : plan.field} title={plan.kind === 'start' ? plan.folder : undefined}>
-              {plan.kind === 'start' ? plan.summary : plan.reason}
+            <p className="launcher__summary" data-onboarding-summary={plan.kind === 'refused' ? plan.field : plan.kind} title={plan.kind === 'refused' ? undefined : plan.folder}>
+              {plan.kind === 'refused' ? plan.reason : plan.summary}
             </p>
             {answer !== null && (
               <p className="launcher__refusal" data-onboarding-refusal={answer.kind} role="alert">
@@ -340,9 +343,9 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
               {/* M263. Composed next step: Start work · Ask · Create… — not nine
                   equal creatable-kind pills. Create opens the shared sheet. */}
               <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
-                disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'start' ? plan.summary : '')}
+                disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'refused' ? '' : plan.summary)}
                 {...shellControl(start)}>
-                <span className="launcher__verb-name">{busy ? 'Making the lane…' : 'Start work'}</span>
+                <span className="launcher__verb-name">{busy ? (plan.kind === 'chat' ? 'Opening the conversation…' : 'Making the lane…') : 'Start work'}</span>
                 {!busy && <kbd className="launcher__kbd" aria-hidden="true">↵</kbd>}
               </button>
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null}
@@ -372,6 +375,16 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           </p>
         )}
       </div>
+      {/* M205 critic 2.4. ONE calm line pointing at the disclosure below,
+          shown until dismissed like the tmux notice — the starter stays an
+          OPTIONAL door inside "More ways to start" (never laid out beside
+          the primary), but undiscoverable otherwise had no fix but this. */}
+      {starterHint !== undefined && starterHint !== null && (
+        <p className="launcher__banner" data-launcher-starter-hint role="status">
+          {starterHint}
+          <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-starter-hint-dismiss title="Dismiss this notice" {...shellControl(() => onDismissStarterHint?.())}>Got it</button>
+        </p>
+      )}
       {/* M205. EVERY OTHER DOOR, one closed disclosure: progressive, never
           removed. A native <details> so the keyboard reaches its summary and
           the rows inside stay in the DOM for the reach checks. */}

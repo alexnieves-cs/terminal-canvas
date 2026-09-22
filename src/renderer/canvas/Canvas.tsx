@@ -29,7 +29,7 @@ import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
 import { snapRect, SNAP_PX, type SnapGuide } from './placement'
-import { attemptOf, contextualHint, hintsLeft, type HintId } from './hints'
+import { attemptOf, contextualHint, hintsLeft, STARTER_HINT, type HintId } from './hints'
 import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
@@ -184,7 +184,7 @@ import { buildPortable, exportSentence, remapPortable, type parsePortable } from
 import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
+import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -6429,13 +6429,30 @@ export function Canvas({
    *
    * A retry of the same sentence in the same folder resumes the SAME item
    * (M198's recovery journal lives on it): the launcher stays up after a
-   * refused lane, and a second press must not mint a twin card.
+   * refusal BEFORE any mint (`firstWorkPlan`'s own refusals, `not-a-repository`
+   * — nothing named above is on the canvas yet, so there is nothing to show
+   * but the launcher's own line), and a second press must not mint a twin
+   * card. A refusal AFTER the mint (`startWork` itself failing) instead puts
+   * the teammate's card on the canvas — the critic's "orphans" finding
+   * (M205 2.5): without a panel, a real teammate and a real `todo` item would
+   * sit invisibly in the store with only `dispatchWorkItemAttempt`'s own
+   * `note` recording why, findable by nobody who does not go looking. The
+   * card surfaces that same note and offers the same dispatch retry every
+   * other work item already does, so this failure reads and recovers exactly
+   * like any other rather than needing a launcher-only special case.
    */
   const firstWorkItemRef = useRef<{ key: string; itemId: string } | null>(null)
   const startFirstWork = useCallback(async (req: FirstWorkRequest): Promise<FirstWorkOutcome> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const plan = firstWorkPlan(req, { teammates: teammatesRef.current, readiness: onboardingReadiness(envReportRef.current) })
     if (plan.kind === 'refused') return { kind: 'refused', reason: plan.reason }
+    // Codex-only: no lane, so no repository question — a conversation in the
+    // folder needs no branch. Inserted, never sent (M80), like chatInFolder.
+    if (plan.kind === 'chat') {
+      const message = req.intention.trim()
+      const r = await beginNewChat({ cwd: plan.folder, ...(plan.engine === LANE_ENGINE ? {} : { backend: plan.engine }), ...(message === '' ? {} : { message }) })
+      return r.kind === 'refused' ? { kind: 'refused', reason: r.reason } : { kind: 'started' }
+    }
     const repo = firstWorkRepoAnswer(await window.canvas.git.status(plan.folder), plan.folder)
     if (repo.kind !== 'repository') return repo
     const actions = paletteActionsRef.current
@@ -6457,7 +6474,25 @@ export function Canvas({
     firstWorkItemRef.current = { key, itemId }
     if (teammateId === undefined) return { kind: 'refused', reason: 'no teammate was chosen for this folder' }
     const outcome = await actions.startWork(itemId, teammateId, plan.folder)
-    if (outcome.kind !== 'started') return { kind: 'refused', reason: outcome.reason }
+    if (outcome.kind !== 'started') {
+      // The critic's finding (M205 2.5): a failure at THIS stage has already
+      // minted a teammate and a work item — `dispatchWorkItemAttempt` already
+      // wrote the reason into the item's own `note` — but with no panel
+      // neither is visible, so if the launcher is later put away the two
+      // records sit invisibly in the store, looking orphaned. A card makes
+      // the failure and its retry findable: the note renders on it
+      // (WorkNode's `data-work-note`) and `Start work again…` is the SAME
+      // dispatch path a second press of Start work above already takes, so
+      // there are two doors to one retry, never two retries. Guarded so a
+      // second failed attempt at the same item never mints a twin card.
+      const failedItem = workItemsRef.current.find((i) => i.id === itemId)
+      if (failedItem !== undefined && !panelsRef.current.some((p) => workCardItemId(p) === itemId)) {
+        const cardId = `k${nextIdRef.current++}`
+        const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+        setPanels((current) => { const next = [...current, makeWorkPanel(cardId, cascadeCentre(centre, current), nextZ(current), failedItem.id, failedItem.title)]; commitHistory(next); return next })
+      }
+      return { kind: 'refused', reason: outcome.reason }
+    }
     // The keyboard follows the work: the sentence was SENT, so the next thing
     // a person types is the follow-up. An empty insert through the store's
     // own bus is what places the composer's caret (ChatNode's `insertAtCaret`
@@ -6475,7 +6510,7 @@ export function Canvas({
     // would fold the second start into the first (the M205 critic).
     firstWorkItemRef.current = null
     return { kind: 'started' }
-  }, [reloadTeammates, fitAll])
+  }, [reloadTeammates, fitAll, beginNewChat])
   /** M205. The ONE alternative: M120's no-folder conversation, on the engine readiness found, the sentence in its composer — inserted, never sent (M80). */
   const askWithoutFolder = useCallback((intention: string): void => {
     const preferred = onboardingReadiness(envReportRef.current).preferred
@@ -8090,7 +8125,14 @@ export function Canvas({
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}
-        {panels.length === 0 && !merged && !launcherPutAway && (
+        {panels.length === 0 && !merged && !launcherPutAway && (() => {
+          // Computed once so the tmux/starter notices and the starter door's
+          // own disabled reason read the SAME facts — two separate ternaries
+          // over the same inputs had already drifted once (the Act III
+          // critic, hints.ts's header).
+          const launcherHintsLeft = hintsLoaded ? hintsLeft(hintsSeen, 'launcher') : []
+          const starterReasonForLauncher = starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent; install one and Check again' : null
+          return (
           <Launcher
             presets={presetRows}
             onImportCanvas={() => { void importCanvas() }}
@@ -8104,8 +8146,13 @@ export function Canvas({
             onChatHere={chatInFolder}
             onChooseFolder={() => window.canvas.teammate.choosePlace()}
             teammates={teammates ?? []}
-            tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}
+            tmux={backendInfo?.kind === 'direct' && launcherHintsLeft.some((h) => h.id === 'tmux') ? backendInfo.reason : null}
             onDismissTmux={() => markHint('tmux')}
+            // M205 critic 2.4. Only worth pointing at when the door itself
+            // would work — a hint aimed at a disabled starter reads as a
+            // broken promise the moment someone follows it.
+            starterHint={starterReasonForLauncher === null && launcherHintsLeft.some((h) => h.id === 'starter') ? STARTER_HINT.text : null}
+            onDismissStarterHint={() => markHint('starter')}
             report={envReport}
             onOpenSetup={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
             onCheckAgain={() => { void paletteActions.checkReadiness() }}
@@ -8117,14 +8164,15 @@ export function Canvas({
             onNewChat={paletteActions.newChat}
             // M205. The starter is an OPTIONAL line; the primary never lays it out.
             onOpenStarter={() => { void paletteActions.openStarter() }}
-            starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent; install one and Check again' : null}
+            starterReason={starterReasonForLauncher}
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             onNewCodexChat={() => paletteActions.newChat('codex')}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
             update={updateState}
             onOpenRelease={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
           />
-        )}
+          )
+        })()}
         {resumeSummary !== null && panels.length > 0 && (
           <ResumeBanner
             summary={resumeSummary}

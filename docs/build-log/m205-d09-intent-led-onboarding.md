@@ -181,8 +181,25 @@ A fresh-context critic read the diff (no suites run) and returned fifteen findin
 - **Codex-only** machines cannot Start work (no teammate backend); refused by name, pointing at the
   alternative. A teammate backend is a later milestone's, not a widening here. They also have no
   launcher door to a conversation IN a folder (critic 14) — `Chat with Codex…` opens in home.
+  **Closed 2026-09-21:** `firstWorkPlan` now resolves the start from readiness — with the lane
+  engine missing and Codex installed it returns a `chat` arm, and Start work opens a Codex
+  conversation IN the folder (sentence inserted, never sent; no teammate, grant or branch),
+  saying so in the summary before it happens. Sentence/folder refusals stay named and come first;
+  an UNANSWERED Claude is still refused, not routed. Pinned by `onboarding.intent.2` and `markup.1`.
 - **Not checked end to end**: Enter on a focused button inside the form (critic 1's fix is read,
-  not driven), and a refusal AFTER the lane step leaving the teammate and card for M198's retry.
+  not driven).
+  **Closed 2026-09-21** (a later critic pass, 2.4/2.5): a refusal AFTER the lane step already left
+  `dispatchWorkItemAttempt`'s own reason on the item's `note` (critic 2's disposition above), but
+  with no panel minted for it neither the teammate nor the item was ON the canvas — invisible
+  orphans if the launcher was later put away or a relaunch reset it. `startFirstWork` now puts the
+  item's card on the canvas the moment `startWork` itself fails post-mint (guarded so a second
+  failed retry of the same item never mints a twin), so the note and `Start work again…` — the
+  SAME dispatch path every other work item already retries through — are where a person can find
+  them, rather than a launcher-only special case. Separately, critic 15's "intended" stays intended
+  — the starter is still never laid out beside the primary — but a one-time line now names exactly
+  where it is ("under More ways to start"), dismissed and remembered the same way the tmux notice
+  is (`hints.ts`'s `starter` id). Both `onboarding.intent.e2e.1/.2` still pass; the new card path
+  has no automated check (still nothing drives a post-mint `startWork` failure end to end).
 - **`verify:visual` and `verify:packaged`**, and the `launcher` golden's re-baseline after a person
   looks — §6. Then the full `npm run verify` on a machine that is not under the load §6 records,
   for the shell and agents reds the base commit shares.

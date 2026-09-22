@@ -2551,17 +2551,18 @@ const session = (id, over = {}) => ({
 }
 
 // M173 — hints.1. THE HINTS AS DATA: the four gesture hints (pan, zoom,
-//     palette, new-panel) and the tmux notice are one list with ids, each a
-//     SENTENCE; `hintsLeft(seen)` is what the empty state and the launcher
-//     render — a seen id never comes back, an unknown id in `seen` is ignored.
+//     palette, new-panel) and the two launcher notices (tmux, starter) are
+//     one list with ids, each a SENTENCE; `hintsLeft(seen)` is what the empty
+//     state and the launcher render — a seen id never comes back, an unknown
+//     id in `seen` is ignored.
 {
   const hints = Array.isArray(R.HINTS) ? R.HINTS : null
   const left = typeof R.hintsLeft === 'function' ? R.hintsLeft : () => null
   const ids = hints ? hints.map((h) => h.id).join(',') : null
-  ok('hints.1 the hints are data — four gestures and the tmux notice, each a sentence — and hintsLeft filters the seen ones',
-    ids === 'pan,zoom,palette,new-panel,tmux' && hints.every((h) => typeof h.text === 'string' && h.text.length > 8) &&
-      left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux' && left(new Set(['nope'])).length === 5 &&
-      left(new Set(), 'rail').length === 4 && left(new Set(), 'launcher').map((h) => h.id).join(',') === 'tmux' && hints.every((h) => h.where === 'rail' || h.where === 'launcher'),
+  ok('hints.1 the hints are data — four gestures and the two launcher notices, each a sentence — and hintsLeft filters the seen ones',
+    ids === 'pan,zoom,palette,new-panel,tmux,starter' && hints.every((h) => typeof h.text === 'string' && h.text.length > 8) &&
+      left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux,starter' && left(new Set(['nope'])).length === 6 &&
+      left(new Set(), 'rail').length === 4 && left(new Set(), 'launcher').map((h) => h.id).join(',') === 'tmux,starter' && hints.every((h) => h.where === 'rail' || h.where === 'launcher'),
     JSON.stringify({ ids }))
 }
 
