@@ -211,6 +211,18 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
       () => { if (keyRef.current === asked && diffGate.lands(ticket)) setDiff({ kind: 'diff', key: dkey, diff: { kind: 'unavailable' } }) }
     )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // M305. A read with changes opens its FIRST file's diff, so the pane is never an
+  // empty middle that says "choose a file". It goes through openFile — the same
+  // gate a click uses — so a subject that moves on drops the answer as before, and
+  // a person's own click on another file simply replaces it.
+  useEffect(() => {
+    if (read.kind !== 'result' || read.key !== key || diff.kind !== 'none') return
+    const r = read.result
+    if ((r.kind === 'changes' || r.kind === 'shared') && r.files.length > 0) {
+      const first = fileTree(r.files)[0]?.files[0]
+      if (first !== undefined) openFile(first)
+    }
+  }, [read, key]) // eslint-disable-line react-hooks/exhaustive-deps
   // The render-time guard: a read or a diff that is not about THIS subject is
   // shown as nothing at all, whatever state still holds it.
   const bound: ChangesRead = read.kind !== 'idle' && read.key !== key ? { kind: 'loading', key } : read

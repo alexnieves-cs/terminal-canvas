@@ -676,6 +676,26 @@ function SelectedChatPhase({ panelId }: { panelId: string }): JSX.Element | null
   return phase ? <span className="orch__phase" data-phase={found.kind} title={phase}>{phase}</span> : null
 }
 
+/**
+ * M305. The roster's state groups, in scan order. Pure over the rows; the group
+ * ids are the product's own state words, and `metric` names the lens a group's
+ * header applies (null: no lens for that group).
+ */
+function orchRosterGroups<R extends { state: string }>(rows: readonly R[]): { id: 'working' | 'needs-you' | 'idle' | 'ended'; label: string; metric: OrchMetricId | null; rows: R[] }[] {
+  const of = (st: string): 'working' | 'needs-you' | 'idle' | 'ended' =>
+    st === 'wants-you' ? 'needs-you'
+      : st === 'busy' || st === 'starting' || st === 'running' || st === 'watching' || st === 'pool' ? 'working'
+        : st === 'exited' || st === 'unknown' ? 'ended' : 'idle'
+  const groups = [
+    { id: 'working' as const, label: 'Working', metric: 'agents' as OrchMetricId | null, rows: [] as R[] },
+    { id: 'needs-you' as const, label: 'Needs you', metric: 'waiting' as OrchMetricId | null, rows: [] as R[] },
+    { id: 'idle' as const, label: 'Idle', metric: null, rows: [] as R[] },
+    { id: 'ended' as const, label: 'Ended', metric: null, rows: [] as R[] }
+  ]
+  for (const r of rows) groups.find((g) => g.id === of(r.state))!.rows.push(r)
+  return groups.filter((g) => g.rows.length > 0)
+}
+
 /** Cards share the projected cube anchor but never inherit its face rotation. */
 function CubeCallout({ node, offsetX, offsetY = 0, below, drift, band, expanded, task, onSelect, onJump, onInterrupt }: {
   node: OrchGraphNode; offsetX: number; expanded: boolean; task?: string
@@ -2438,68 +2458,56 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   return (
     <div className="orch" role="region" aria-label="Orchestration">
       <header className="orch__header">
-        {/* M299. The title row: the page and its scope, then the focused task's context
-            (goal · repository · branch · placement) from the real island. No mark and no
-            product name (the top bar says both); no greeting (its task count is the tile's);
-            no clock and no view-open timer (M269's HUD — the menu bar has the clock, and
-            how long this page has been open is not a fact about the work). */}
-        <div className="orch__title-row">
-          <h1 className="orch__title">
-            Orchestrate
-            {workspaceName !== undefined && workspaceName !== '' && <span className="orch__title-scope"> / {workspaceName}</span>}
-          </h1>
-          {island !== null && (
-            <p className="orch__context" data-orch-context={island.placement.kind}>
-              <span className="orch__context-goal">{island.goal}</span>
-              <span className="orch__context-place"> · {orchPlacementLine(island)}</span>
-            </p>
+        {/* M305. The TASK HEADER replaces M299's title row, its four count tiles, the
+            blocker strip and the loose command row. One object: what the task is (its
+            goal, as the page's title), where it runs, how far along it is (the board's
+            own four words as a rail — never a fifth), what blocks it, and what to do.
+            The counts did not vanish: they are the roster's group headers now, where
+            each one sits beside the sessions it counts, and a group with nothing in it
+            is not drawn (a rest fact is never a zero-value statement). */}
+        <div className="orch__task-head">
+          <div className="orch__task-id">
+            <span className="orch__eyebrow">
+              Orchestrate{workspaceName !== undefined && workspaceName !== '' && <span className="orch__title-scope"> / {workspaceName}</span>}
+              {island !== null && <> · {island.source === 'work-item' ? 'Task' : 'Session · no task yet'}{island.repository !== null ? ` · ${island.repository}` : ''}</>}
+            </span>
+            <h1 className="orch__title" data-orch-title>{island !== null ? island.goal : 'Orchestrate'}</h1>
+            {island !== null && (
+              <p className="orch__context" data-orch-context={island.placement.kind}>
+                <span className="orch__context-place">{orchPlacementLine(island)}</span>
+                {/* The textual truth. It reads liveSnap — never the lens, frame or ring
+                    cap — so the scene below may illustrate it but can never hide it. */}
+                {blocker !== null && <span id="orch-blocker" className="orch__blocker" data-orch-blocker={blocker.kind} data-orch-density="contextual">{blocker.line}</span>}
+              </p>
+            )}
+            {island === null && blocker !== null && (
+              <p className="orch__context"><span id="orch-blocker" className="orch__blocker" data-orch-blocker={blocker.kind} data-orch-density="contextual">{blocker.line}</span></p>
+            )}
+          </div>
+          {island !== null && island.source === 'work-item' && (
+            <ol className="orch__phases" aria-label="Task stage" data-orch-phase={island.state}>
+              {WORK_ITEM_STATES.map((st, i) => {
+                const at = WORK_ITEM_STATES.indexOf(island.state as WorkItemState)
+                const place = at < 0 ? 'next' : i < at ? 'done' : i === at ? 'now' : 'next'
+                return (
+                  <li key={st} className="orch__phase" data-place={place} aria-current={place === 'now' ? 'step' : undefined}>
+                    <span className="orch__phase-dot" aria-hidden="true" />{st === 'todo' ? 'To do' : st.charAt(0).toUpperCase() + st.slice(1)}
+                  </li>
+                )
+              })}
+            </ol>
           )}
-        </div>
-        {/* M299. Each tile is its honest count and ONE next action, wired to a door that
-            exists: the lens (the tile's click since M269), the first waiting row, the review
-            workbench. At zero the tile is quiet — a count, no action, no state word — because
-            a rest fact is never a zero-value statement (`Watchers 0 idle` was one). */}
-        <div className="orch__metrics" data-orch-density="rest">
-          {([
-            { id: 'agents', label: 'Active agents', n: liveSnap.counts.activeAgents, tone: TONE_WORKING, action: 'View agents',
-              go: () => applyMetric('agents') },
-            { id: 'tasks', label: 'Tasks in progress', n: liveSnap.counts.tasksInProgress, tone: TONE_WORKING, action: reviewSubjectId !== null ? 'Review changes' : 'View tasks',
-              go: () => { applyMetric('tasks'); if (reviewSubjectId !== null) openBench('changes') } },
-            { id: 'watchers', label: 'Watchers', n: liveSnap.counts.watchersRunning, tone: TONE_WORKING, action: 'View watchers',
-              go: () => applyMetric('watchers') },
-            { id: 'waiting', label: 'Waiting on you', n: liveSnap.counts.waiting, tone: 'needs-you', action: 'Inspect',
-              go: () => { applyMetric('waiting'); const first = attentionRows[0]?.id ?? waitingOnly[0]?.id; if (first !== undefined) select(first) } }
-          ] as const).map((t) => (
-            <button key={t.id} type="button" className="orch__metric" data-orch-metric={t.id} data-tone={t.n > 0 ? t.tone : 'idle'} data-empty={t.n === 0 || undefined} aria-pressed={metric === t.id} {...shellControl(t.go)}>
-              <span className="orch__metric-label">{t.label}</span>
-              <span className="orch__metric-line">
-                <span className="orch__metric-value">{t.n}</span>
-                {t.n > 0 && <span className="orch__metric-action" data-orch-metric-action>{t.action}</span>}
-              </span>
-            </button>
-          ))}
-        </div>
-        {/* The textual truth. It reads liveSnap — never the lens, frame or ring
-            cap — so the scene below may illustrate it but can never hide it. */}
-        {blocker !== null && (
-          <p id="orch-blocker" className="orch__blocker" data-orch-blocker={blocker.kind} data-orch-density="contextual">{blocker.line}</p>
-        )}
-        {commands.length > 0 && (
-          <div className="orch__commands" data-orch-commands data-orch-density="contextual" role="toolbar" aria-label="Selection commands">
+          <div className="orch__task-actions" data-orch-commands={commands.length > 0 ? '' : undefined} role="toolbar" aria-label="Task and selection commands">
             {commands.map((cmd) => (
-              <button
-                key={cmd.id}
-                type="button"
-                className="orch__command"
-                data-orch-command={cmd.id}
-                title={cmd.label}
-                {...shellControl(() => runCommand(cmd.id))}
-              >
+              <button key={cmd.id} type="button" className="orch__command" data-orch-command={cmd.id} title={cmd.label} {...shellControl(() => runCommand(cmd.id))}>
                 {cmd.label}
               </button>
             ))}
+            {reviewSubjectId !== null && (
+              <button type="button" className="orch__command is-primary" data-orch-review-primary {...shellControl(() => openBench('changes'))}>Review changes</button>
+            )}
           </div>
-        )}
+        </div>
       </header>
 
       <div className="orch__body">
@@ -2538,30 +2546,48 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           {visibleRoster.length === 0 ? (
             <EmptyState id="orch-roster" onVerb={onShowCanvas} />
           ) : (
-            <ul className="orch__roster-list" data-orch-roster>
-              {visibleRoster.map((row) => (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    className={`orch__roster-row${selectedIds.includes(row.id) ? ' orch__roster-row--on' : ''}`}
-                    data-tone={row.tone}
-                    data-attention-new={freshNeeds.has(row.id) ? '' : undefined}
-                    aria-pressed={selectedIds.includes(row.id)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      select(row.id, { additive: e.metaKey || e.ctrlKey, range: e.shiftKey })
-                    }}
-                    onDoubleClick={() => jump(row.id)}
-                  >
-                    <span className="orch__dot status-dot" data-tone={row.tone} aria-hidden="true" />
-                    <span className="orch__roster-kind" aria-hidden="true">{kindGlyph(row.kind)}</span>
-                    <span className="orch__roster-label">{row.title}</span>
-                    <span className="orch__roster-state">{stateWord(row)}</span>
-                  </button>
-                </li>
+            // M305. Grouped by STATE, in the order a person scans: what is working, what
+            // waits on them, what is idle, what has ended. A group with nothing in it is
+            // not drawn, and its count is the header — the tiles' counts, beside the
+            // sessions they count. Working and Needs you headers are the metric lens's
+            // door (the tiles' click since M269): press to light those in the scene.
+            <div className="orch__roster-groups" data-orch-roster>
+              {orchRosterGroups(visibleRoster).map((g) => (
+                <section key={g.id} className="orch__roster-group" data-orch-roster-group={g.id}>
+                  {g.metric !== null ? (
+                    <button type="button" className="orch__group-head" aria-pressed={metric === g.metric} title={`Light the ${g.label.toLowerCase()} sessions in the scene`} {...shellControl(() => applyMetric(g.metric!))}>
+                      <span>{g.label}</span><span className="orch__group-count">{g.rows.length}</span>
+                    </button>
+                  ) : (
+                    <div className="orch__group-head"><span>{g.label}</span><span className="orch__group-count">{g.rows.length}</span></div>
+                  )}
+                  <ul className="orch__roster-list">
+                    {g.rows.map((row) => (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      className={`orch__roster-row${selectedIds.includes(row.id) ? ' orch__roster-row--on' : ''}`}
+                      data-tone={row.tone}
+                      data-attention-new={freshNeeds.has(row.id) ? '' : undefined}
+                      aria-pressed={selectedIds.includes(row.id)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        select(row.id, { additive: e.metaKey || e.ctrlKey, range: e.shiftKey })
+                      }}
+                      onDoubleClick={() => jump(row.id)}
+                    >
+                      <span className="orch__dot status-dot" data-tone={row.tone} aria-hidden="true" />
+                      <span className="orch__roster-kind" aria-hidden="true">{kindGlyph(row.kind)}</span>
+                      <span className="orch__roster-label">{row.title}</span>
+                      <span className="orch__roster-state">{stateWord(row)}</span>
+                    </button>
+                  </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
           {selectedRow !== null && (
             <div className="orch__roster-actions">
@@ -2801,12 +2827,15 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         <MotionSurface open enter><aside className="orch__side" aria-label="Decisions and inspector">
           {/* M284. Needs attention — a pending permission is answered HERE through the
               existing identity, and leaves the moment it is answered anywhere. */}
-          <section className="orch__needs" aria-label="Needs attention" data-orch-needs>
+          {/* M305. A CARD, and only when something needs the person: `Nothing needs you`
+              was a zero-value statement at rest, and the dock's bell already says it. */}
+          {(attentionRows.length > 0 || waitingOnly.length > 0) && (
+          <section className="orch__needs orch__needs--card" aria-label="Needs you" data-orch-needs>
             <div className="orch__section-head">
-              <div className="orch__section-title">Needs attention</div>
-              <span className="orch__caption">{attentionRows.length + waitingOnly.length === 0 ? 'Nothing needs you' : `${attentionRows.length + waitingOnly.length} decision${attentionRows.length + waitingOnly.length === 1 ? '' : 's'}`}</span>
+              <div className="orch__needs-eyebrow">Needs you</div>
+              <span className="orch__caption">{`${attentionRows.length + waitingOnly.length} decision${attentionRows.length + waitingOnly.length === 1 ? '' : 's'}`}</span>
             </div>
-            {(attentionRows.length > 0 || waitingOnly.length > 0) && (
+            {(
               <ul className="orch__needs-list">
                 {attentionRows.map((row) => (
                   <li key={orchAnswerKey(row.id, row.requestId)} className="orch__needs-row" data-orch-needs-row={row.id} data-orch-request={row.requestId} data-sent={row.sent || undefined}>
@@ -2838,6 +2867,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </ul>
             )}
           </section>
+          )}
 
           {/* M290. Run limits: each says whether main ENFORCES it or it is advisory, and
               what it covers. Unknown spend reads Unknown; no cap is implied across

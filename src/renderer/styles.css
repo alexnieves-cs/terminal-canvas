@@ -7414,59 +7414,15 @@ body {
     radial-gradient(ellipse at 50% 44%, color-mix(in srgb, var(--iris) 10%, transparent), transparent 58%),
     var(--deck-ground);
 }
-.orch__header { display: flex; flex-direction: column; gap: var(--sp-4); flex-shrink: 0; }
-.orch__blocker {
-  margin: 0;
-  font-size: var(--t-sm);
-  color: var(--fg);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--glass-1);
-}
-.orch__blocker[data-orch-blocker="waiting-on-you"] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, var(--line)); }
-.orch__metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-3);
-}
-.orch__metric {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  padding: var(--sp-4);
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: var(--glass-1);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  box-shadow: inset 0 1px 0 var(--edge-light);
-  color: var(--fg);
-  font-family: var(--font-ui);
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-}
-.orch__metric:hover { border-color: color-mix(in srgb, var(--tone, var(--iris)) 45%, var(--line)); }
-.orch__metric[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--tone, var(--iris)) 55%, var(--line));
-  background: var(--iris-dim);
-}
-/* M299. Mixed-case tiles: a label, then the count with its ONE next action on the same
-   line. `data-empty` (count 0) is quiet — no action, a dimmed count — the rest rule. */
-.orch__metric-label { font-size: var(--t-sm); color: var(--fg-2); }
-.orch__metric-line { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
-.orch__metric-value { font-size: var(--t-xl); font-weight: 600; color: var(--fg); line-height: 1.1; font-variant-numeric: tabular-nums; }
-.orch__metric-action { font-size: var(--t-xs); color: var(--tone, var(--iris)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.orch__metric[data-empty] { cursor: default; }
-.orch__metric[data-empty] .orch__metric-value { color: var(--fg-4); }
-.orch__metric:not([data-empty]) { border-color: color-mix(in srgb, var(--tone, var(--line)) 40%, var(--line)); }
-/* The title row: the page and its scope, one line; the focused task's context under it. */
-.orch__title-row { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
-.orch__title { margin: 0; font-size: var(--t-xl); font-weight: 600; letter-spacing: -0.01em; color: var(--fg); line-height: 1.2; }
+.orch__header { display: flex; flex-direction: column; gap: var(--sp-2); flex-shrink: 0; }
+.orch__blocker { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg-2); }
+.orch__blocker::before { content: "·"; margin-right: var(--sp-3); color: var(--fg-4); }
+.orch__blocker[data-orch-blocker="waiting-on-you"] { color: var(--amber); }
+/* M305. The task header's title: the goal, in the display serif. */
+.orch__title { margin: 0; font-family: var(--font-display); font-size: var(--t-2xl); font-weight: 400; letter-spacing: 0; color: var(--fg); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orch__title-scope { font-size: var(--t-sm); font-weight: 500; color: var(--fg-3); font-family: var(--font-mono); letter-spacing: 0; }
-.orch__context { margin: 0; font-size: var(--t-sm); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__context { margin: 0; display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; font-size: var(--t-sm); color: var(--fg-3); overflow: hidden; white-space: nowrap; }
+.orch__context-place { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .orch__context-goal { color: var(--iris); }
 .orch__body {
   flex: 1;
@@ -7911,7 +7867,6 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   .orch__side { grid-column: 1 / -1; max-height: 16rem; }
   .orch__bench-changes { grid-template-columns: minmax(0, 1fr); }
   .orch__bench[data-orch-bench-open] { max-height: 40vh; }
-  .orch__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* M270–M273. Calm shell, HUD v2, motion, resume — paint-only, tokens only. */
@@ -8274,9 +8229,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__cube--needs .orch__plate-bg { stroke: color-mix(in srgb, var(--amber) 70%, transparent); }
 .orch__cube[data-depth="far"] .orch__plate-bg { fill: color-mix(in srgb, var(--deck-surface) 72%, transparent); }
 .orch__cube--synthetic .orch__plate-bg, .orch__cube--overflow .orch__plate-bg { stroke-dasharray: 3 3; }
-.orch__metric { position: relative; overflow: hidden; padding: var(--sp-3) var(--sp-4); background: var(--deck-surface); }
 /* M299: no underline bar — the tile's tone is its border and its action word (the reference). */
-.orch__metric-value { font-size: var(--t-xl); font-variant-numeric: tabular-nums; }
 .orch__side { background: var(--deck-surface); }
 .orch__event-chip { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--r-md); color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, transparent); grid-row: 1 / span 2; }
 
@@ -8384,14 +8337,14 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 }
 
 /* M281: dark HUD glass stays local to Orchestrate; live edges retain M280's recipe. */
-[data-theme="dark"] .orch :is(.orch__metric, .orch__roster, .orch__side, .orch__float, .orch__callout-card) {
+[data-theme="dark"] .orch :is(.orch__roster, .orch__side, .orch__float, .orch__callout-card) {
   background: linear-gradient(145deg, color-mix(in srgb, var(--iris) 9%, transparent), transparent 58%), color-mix(in srgb, var(--deck-surface) 88%, transparent);
   border-color: color-mix(in srgb, var(--iris) 28%, var(--line));
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--iris) 18%, transparent), var(--e-2), 0 0 18px color-mix(in srgb, var(--iris) 5%, transparent);
 }
-[data-theme="dark"] .orch :is(.orch__metric:hover, .orch__metric[aria-pressed="true"], .orch__float:hover, .orch__callout-card[data-expanded]) {
+[data-theme="dark"] .orch :is(.orch__float:hover, .orch__callout-card[data-expanded]) {
   border-color: color-mix(in srgb, var(--iris) 58%, var(--line));
 }
 [data-theme="dark"] .orch .orch__callout-card[data-needs] { border-color: var(--amber); }
@@ -8590,3 +8543,40 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 @media (prefers-reduced-motion: reduce) {
   .orch-live__typing { animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   M305. The task header (the goal as the page's title, in the display serif —
+   the one place outside a note's headings it appears, because a task's goal is
+   the page's subject the way a heading is a note's), the stage rail, and the
+   roster's state groups.
+   --------------------------------------------------------------------------- */
+.orch__task-head { display: flex; align-items: flex-end; gap: var(--sp-6); min-width: 0; padding-bottom: var(--sp-2); }
+.orch__task-id { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; flex: 1 1 auto; }
+.orch__eyebrow { font: var(--t-xs) var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--iris); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__eyebrow .orch__title-scope { font-size: inherit; text-transform: none; letter-spacing: 0; color: var(--fg-3); }
+.orch__phases { display: flex; align-items: center; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; flex: none; }
+.orch__phase { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-4); white-space: nowrap; }
+.orch__phase + .orch__phase::before { content: ""; width: 1.75rem; height: 1px; background: var(--line-strong); margin-right: var(--sp-1); }
+.orch__phase-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line-strong); box-sizing: border-box; }
+.orch__phase[data-place="done"] { color: var(--fg-3); }
+.orch__phase[data-place="done"] .orch__phase-dot { background: var(--fg-4); border-color: var(--fg-4); }
+.orch__phase[data-place="now"] { color: var(--fg); font-weight: 500; }
+.orch__phase[data-place="now"] .orch__phase-dot { background: var(--iris); border-color: var(--iris); box-shadow: 0 0 0 4px color-mix(in srgb, var(--iris) 18%, transparent); }
+.orch__task-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); flex: none; max-width: 40%; }
+.orch__roster-groups { display: flex; flex-direction: column; gap: var(--sp-4); overflow: auto; min-height: 0; }
+.orch__roster-group { display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__group-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 var(--sp-2); border: 0; background: transparent; font: var(--t-xs) var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-4); text-align: left; }
+button.orch__group-head { cursor: pointer; }
+button.orch__group-head:hover { color: var(--fg-2); }
+button.orch__group-head[aria-pressed="true"] { color: var(--iris); }
+button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-offset: 1px; border-radius: var(--r-sm); }
+.orch__roster-group[data-orch-roster-group="needs-you"] .orch__group-head { color: var(--amber); }
+.orch__group-count { font-variant-numeric: tabular-nums; }
+@media (max-width: 1100px) {
+  .orch__task-head { flex-wrap: wrap; align-items: flex-start; }
+  .orch__task-actions { max-width: none; justify-content: flex-start; }
+}
+.orch__needs--card { padding: var(--sp-4); border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line)); border-radius: var(--r-lg); background: var(--s-1); }
+.orch__needs--card > .orch__section-head { margin-bottom: var(--sp-3); }
+.orch__needs-eyebrow { font: var(--t-xs) var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); }
+.orch__command.is-primary { background: var(--iris); color: var(--on-iris); border-color: transparent; font-weight: 600; }
