@@ -608,10 +608,10 @@ function CameraRig({ bounds, autoRotate, follow, reset }: { bounds: { x: number;
     const cam = camera as THREE.PerspectiveCamera
     const vfov = (cam.fov * Math.PI) / 180
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * Math.max(0.5, size.width / Math.max(1, size.height)))
-    // 0.5, not 1: the scene is a flat disc seen from above at a slant, so its
+    // 0.56, not 1: the scene is a flat disc seen from above at a slant, so its
     // silhouette is far smaller than the bounding SPHERE a strict fit assumes —
     // measured, the strict fit left the platforms a speck in the middle of the well.
-    const dist = (bounds.r * 0.5) / Math.sin(Math.min(vfov, hfov) / 2)
+    const dist = (bounds.r * 0.56) / Math.sin(Math.min(vfov, hfov) / 2)
     return new THREE.Vector3(0.58, 0.6, 0.55).normalize().multiplyScalar(dist).add(centre)
   }, [camera, bounds.r, centre, size.width, size.height])
   const radius = home.distanceTo(centre)
