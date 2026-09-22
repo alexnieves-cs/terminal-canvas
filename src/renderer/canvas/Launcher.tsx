@@ -13,8 +13,8 @@ import { firstWorkPlan, onboardingReadiness, LANE_ENGINE, type FirstWorkContext,
 export interface LauncherProps {
   presets: PresetRow[]
   report: EnvReport | null
-  /** M107. Ask the login shell again; absent hides the control (a fixture). */
-  onCheckAgain?: () => void
+  /** M107. Ask the login shell again; absent hides the control (a fixture). A returned promise drives the "Checking again…" state. */
+  onCheckAgain?: () => void | Promise<unknown>
   onOpenSetup?: (url: string) => void
   /**
    * M205 (D09). THE PRIMARY: a sentence and a folder, run through D05's Start
@@ -102,6 +102,18 @@ export interface LauncherProps {
  *
  * Inside .canvas and outside .world, so it never scales with the camera.
  */
+/** How long discovery may stay silent before the status line offers Try again. */
+const DISCOVERY_SLOW_MS = 8000
+type StartupState = 'finding' | 'slow' | 'rechecking' | 'ready' | 'not-found' | 'no-answer'
+const STARTUP_LINE: Record<StartupState, string> = {
+  finding: 'Finding installed agents…',
+  slow: 'Still finding installed agents — this is taking longer than usual',
+  rechecking: 'Checking again…',
+  ready: 'Ready',
+  'not-found': 'We couldn’t find your installed agents',
+  'no-answer': 'We couldn’t find your installed agents — your shell didn’t answer'
+}
+
 const INSTALL: Record<string, string> = {
   claude: 'install the Claude Code CLI so `claude` is on your PATH',
   codex: 'install the Codex CLI so `codex` is on your PATH'
@@ -117,6 +129,22 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
   // the input it was about would describe a start nobody is asking for.
   const [answer, setAnswer] = useState<Exclude<FirstWorkOutcome, { kind: 'started' }> | null>(null)
   const intentRef = useRef<HTMLTextAreaElement | null>(null)
+  // The startup status line reads REAL loading states: a null report is
+  // discovery still running, `rechecking` is a Check again in flight, and
+  // `slow` flips once discovery has been silent past its budget — so a slow
+  // shell reads as "taking longer", never as "nothing installed".
+  const [rechecking, setRechecking] = useState(false)
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (report !== null) { setSlow(false); return }
+    const t = setTimeout(() => setSlow(true), DISCOVERY_SLOW_MS)
+    return () => clearTimeout(t)
+  }, [report])
+  const checkAgain = (): void => {
+    if (onCheckAgain === undefined || rechecking) return
+    setRechecking(true)
+    void Promise.resolve(onCheckAgain()).catch(() => {}).finally(() => setRechecking(false))
+  }
   const folderRef = useRef<HTMLInputElement | null>(null)
 
   const plan = firstWorkPlan({ intention, folder }, { teammates: teammates ?? [], readiness })
@@ -241,8 +269,8 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
       </div>)}
       {onCheckAgain !== undefined && needsCheck && (
         <div className="launcher__engine launcher__engine--check">
-          <span>{unanswered ? 'The login shell did not answer in time — a slow ~/.zshrc; put PATH in ~/.zprofile.' : 'Installed something? Ask the login shell again.'}</span>
-          <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>
+          <span>{unanswered ? 'Your shell took too long to answer — see Troubleshooting below.' : 'Installed something? Ask the login shell again.'}</span>
+          <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again disabled={rechecking} title="Ask the login shell again and report what it finds" {...shellControl(checkAgain)}>{rechecking ? 'Checking…' : 'Check again'}</button>
         </div>
       )}
     </>
@@ -480,15 +508,34 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         </button>
       </div>
       </details>
-      {report !== null && (() => {
-        // M107. THREE STATES: found, not found, and "the shell didn't answer" —
-        // the last with its fix and a way to ask again, never read as not installed.
-        const outcome = probeOutcome(report)
+      {/* M107 + startup status. ONE line driven by the actual loading state:
+          finding → (slow) → ready | couldn't find | shell didn't answer. A
+          found engine is Ready even when another CLI is missing — that row is
+          Environment…'s, not a setup failure. The shell-config fix lives in
+          a closed Troubleshooting disclosure, never in the status itself. */}
+      {(() => {
+        const outcome = report === null ? null : probeOutcome(report)
+        const state: StartupState = rechecking ? 'rechecking' : report === null ? (slow ? 'slow' : 'finding')
+          : readiness.preferred !== undefined ? 'ready' : outcome?.kind === 'no-answer' ? 'no-answer' : 'not-found'
+        const trouble = state === 'slow' || state === 'no-answer' || state === 'not-found'
         return (
-          <p className="launcher__env" data-launcher-env data-launcher-env-kind={outcome.kind}>
-            <span data-tone={outcome.kind === 'found' ? 'idle' : outcome.kind === 'no-answer' ? 'needs-you' : 'exited'} title={outcome.sentence}>{outcome.kind === 'no-answer' ? 'The shell did not answer' : outcome.kind === 'found' ? 'Discovery done' : 'Some engines are missing'}</span>
-            {' — '}<span className="launcher__env-hint">the full report is Environment… in ⌘K</span>
-          </p>
+          <div className="launcher__env" data-launcher-env data-launcher-env-kind={outcome?.kind ?? 'pending'} data-launcher-startup={state} role="status" aria-live="polite">
+            <p className="launcher__env-line">
+              <span data-tone={state === 'ready' ? 'idle' : trouble ? 'needs-you' : 'running'} title={outcome?.sentence}>{STARTUP_LINE[state]}</span>
+              {state === 'ready' && <>{' — '}<span className="launcher__env-hint">the full report is Environment… in ⌘K</span></>}
+              {trouble && onCheckAgain !== undefined && (
+                <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-try-again title="Ask the login shell again and report what it finds" {...shellControl(checkAgain)}>Try again</button>
+              )}
+            </p>
+            {trouble && (
+              <details className="launcher__trouble" data-launcher-troubleshooting>
+                <summary>Troubleshooting</summary>
+                <p>Agents are found through your login shell&rsquo;s PATH. If your shell is slow or asks a question when it starts (a slow or prompting <code>~/.zshrc</code>), move PATH edits into <code>~/.zprofile</code>, then Try again.</p>
+                {outcome !== null && <p className="launcher__trouble-detail">{outcome.sentence}</p>}
+                <p>The full report is Environment… in ⌘K.</p>
+              </details>
+            )}
+          </div>
         )
       })()}
       {/* M123. A second footer line ONLY when the last check said `newer`. A

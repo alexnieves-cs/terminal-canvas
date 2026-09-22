@@ -3634,6 +3634,11 @@ body {
 .launcher__verb--door:disabled { background: var(--s-2); border-style: dashed; }
 .launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-ui); }
 .launcher__env-hint { color: var(--iris); }
+.launcher__env-line { margin: 0; display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.launcher__trouble { margin-top: var(--sp-2); }
+.launcher__trouble > summary { cursor: pointer; color: var(--fg-2); }
+.launcher__trouble p { margin: var(--sp-2) 0 0; line-height: 1.5; }
+.launcher__trouble-detail { color: var(--fg-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
 .launcher__check { margin-left: var(--sp-3); }
 
 

@@ -8155,7 +8155,7 @@ export function Canvas({
             onDismissStarterHint={() => markHint('starter')}
             report={envReport}
             onOpenSetup={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
-            onCheckAgain={() => { void paletteActions.checkReadiness() }}
+            onCheckAgain={() => paletteActions.checkReadiness()}
             onSpawnPreset={paletteActions.spawnPreset}
             onOpenSheet={paletteActions.beginSpawnSheet}
             onOpenFile={paletteActions.openFile}
