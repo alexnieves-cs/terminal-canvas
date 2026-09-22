@@ -644,12 +644,16 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M180 adds the launcher's one start (`.launcher__start`): its fill and ink
   // come from THIS rule, never a second iris/ink pair the generic verb hover
   // could repaint (the M180 critic).
-  const SITES = ['.shell__spawn', '.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.jira-node__connect', '.launcher__start']
+  // The title bar's Create LEFT this list (repeated entry points): it is the
+  // global door, present on every screen, so filling it would give every screen
+  // two dominant actions. It is refused here the way Commit is.
+  const SITES = ['.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.jira-node__connect', '.launcher__start']
   const sel = rule ? rule.sel.replace(/\s+/g, ' ') : ''
   const missing = SITES.filter((s) => !sel.includes(s))
   const commit = sel.includes('.review-node__commit')
-  ok('primary.1', 'the .is-primary rule fills with --iris, inks with --on-iris, and names its sites (the launcher start among them) and never Commit',
-    rule !== undefined && missing.length === 0 && !commit, JSON.stringify({ sel: sel.slice(0, 200), missing, commit }))
+  const spawn = all.some((r) => r.sel.includes('.shell__spawn') && /background:\s*var\(--iris\)/.test(r.body))
+  ok('primary.1', 'the .is-primary rule fills with --iris, inks with --on-iris, and names its sites (the launcher start among them), never Commit, and never the global Create',
+    rule !== undefined && missing.length === 0 && !commit && !spawn, JSON.stringify({ sel: sel.slice(0, 200), missing, commit, spawn }))
 }
 
 // M227 — depth.1. ELEVATION IS MONOTONIC. The glass ramp is four levels and
@@ -1092,7 +1096,8 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 {
   const label = all.some((r) => /(^|,)\s*\.dock__label\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
   const reveal = all.some((r) => /\.dock__button:hover \.dock__label/.test(r.sel) && /\.dock__button:focus-visible \.dock__label/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
-  const wide = all.some((r) => /\.shell\[data-bp="wide"\]/.test(r.sel) && /--shell-dock-w:\s*156px/.test(r.body)) && all.some((r) => /\.shell\[data-bp="wide"\] \.dock__label/.test(r.sel) && /position:\s*static/.test(r.body) && /opacity:\s*1/.test(r.body))
+  // Backlog #13: the labelled rail keys on the dock's own mode; Wide is only its default.
+  const wide = all.some((r) => /\.shell\[data-dock="expanded"\]/.test(r.sel) && /--shell-dock-w:\s*156px/.test(r.body)) && all.some((r) => /\.shell\[data-dock="expanded"\] \.dock__label/.test(r.sel) && /position:\s*static/.test(r.body) && /opacity:\s*1/.test(r.body))
   const on = all.some((r) => /(^|,)\s*\.dock__button--on\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
   const noCapsule = !all.some((r) => /\.dock__capsule/.test(r.sel))
   const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
@@ -1100,6 +1105,20 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const search = all.some((r) => /\.shell__top \.shell__search\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body) && /border:\s*1px solid var\(--line\)/.test(r.body)) // (0,2,0): the bar's generic button rule must not win
   ok('dock.1', 'the dock buttons carry tooltip labels, Wide expands them into a persistent grouped rail, the current place is filled, capsules stay gone, and Search is field-shaped',
     label && reveal && wide && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, wide, on, noCapsule, noCapsuleDom, search }))
+}
+
+// Backlog #13 — dock-expand.1. "Expand navigation" is a real control whose
+// choice outlives a reload, and the shell stamps the mode the CSS keys on. A
+// hook that forgot the store would pass every style check and reset on launch.
+{
+  const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
+  const hook = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'useDockExpanded.ts'), 'utf8')
+  const canvasSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  const control = /data-dock="expand"/.test(dockSrc) && /aria-label="Expand navigation"/.test(dockSrc) && /aria-pressed=\{expanded\}/.test(dockSrc)
+  const remembered = /localStorage\.getItem\(KEY\)/.test(hook) && /localStorage\.setItem\(KEY/.test(hook) && /pref \?\? bp === 'wide'/.test(hook)
+  const stamped = /data-dock=\{dock\.expanded \? 'expanded' : 'icons'\}/.test(canvasSrc)
+  const shortcuts = /aria-keyshortcuts/.test(dockSrc)
+  ok('dock-expand.1', 'the dock has a remembered Expand navigation control, the shell stamps its mode, and shortcuts are announced', control && remembered && stamped && shortcuts, JSON.stringify({ control, remembered, stamped, shortcuts }))
 }
 
 // M257 — the recommendations are a connected shell contract, not independent copy edits.

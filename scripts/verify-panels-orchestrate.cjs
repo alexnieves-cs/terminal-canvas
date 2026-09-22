@@ -25,6 +25,15 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   // main/index.ts wires it, or a fixture that expects a dormant panel after a
   // reload finds it live. Installed once, at this part's start.
   attachPtyLifecycle(win, () => ptyManager.detachAll())
+  // Navigation hierarchy: Canvas and Orchestrate are views of the same work, so the
+  // canvas's selection ARRIVES selected on Orchestrate, and a List row click TOGGLES.
+  // A fixture that means "select this row" must not assume the page opened empty —
+  // clicking an arrived row would deselect it and every read after it goes blank.
+  const rowSelected = (id) => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${id}"]')?.hasAttribute('data-selected') === true`)
+  const selectRow = async (id) => {
+    if (await rowSelected(id)) return
+    await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-orch-list-row="${id}"] button'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) })()`)
+  }
 
   // ---------------------------------------------------------------------
   // M284 — Orchestrate Phase A: one real task island and its actions
@@ -99,6 +108,14 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // The List lens, then select the chat there.
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${chatId}"] button') !== null`), 3000)
+      const arrived = { selected: await rowSelected(chatId), crumb: await wc.executeJavaScript(`document.querySelector('.shell__workspace .shell__crumb')?.textContent ?? null`) }
+      ok('nav.handoff.1 the chat selected on the canvas arrives selected on Orchestrate, and the title bar\'s workspace crumb stays on the page',
+        arrived.selected === true && typeof arrived.crumb === 'string' && arrived.crumb !== '', JSON.stringify(arrived))
+      // The List's own selection is still driven, never assumed from arrival: off, then on.
+      if (arrived.selected) {
+        await click(`[data-orch-list-row="${chatId}"] button`)
+        await waitUntil(async () => !(await rowSelected(chatId)), 3000)
+      }
       await click(`[data-orch-list-row="${chatId}"] button`)
       const inspected = await waitUntil(() => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="${chatId}"]'); if (!i) return false; return { title: i.querySelector('[data-orch-inspector-title]')?.textContent ?? null, state: i.querySelector('[data-orch-inspector-state]')?.textContent ?? null, next: i.querySelector('[data-orch-next]')?.getAttribute('data-orch-next') ?? null, open: i.querySelector('[data-orch-open]')?.textContent ?? null, rowOn: document.querySelector('[data-orch-list-row="${chatId}"]')?.hasAttribute('data-selected') === true, rosterOn: [...document.querySelectorAll('.orch__roster-row--on')].length } })()`), 3000)
       await demo('m284-2-list-inspector')
@@ -166,7 +183,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       ok(IDS[6], kb.rows >= 2 && kbAfter !== false && kbAfter !== null && tabbable === true, JSON.stringify({ kb, kbAfter, tabbable }))
 
       // Open on canvas: re-select the chat, then the inspector's labelled action.
-      await click(`[data-orch-list-row="${chatId}"] button`)
+      await selectRow(chatId)
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-inspector="${chatId}"] [data-orch-open]') !== null`), 3000)
       await click(`[data-orch-inspector="${chatId}"] [data-orch-open]`)
       const leftOrch = await waitUntil(async () => !(await orchShown()), 3000)
@@ -257,6 +274,10 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         return { tabs: [...b.querySelectorAll('[role="tab"]')].map((t) => t.textContent.trim()), tab: b.getAttribute('data-orch-bench-tab'), subject: b.getAttribute('data-orch-bench-subject'),
           bound: b.querySelector('[data-orch-bench-bound]')?.textContent ?? null, boundKind: b.querySelector('[data-orch-bench-bound]')?.getAttribute('data-orch-bench-bound') ?? null,
           height: b.getBoundingClientRect().height, open: b.hasAttribute('data-orch-bench-open'), benches: document.querySelectorAll('[data-orch-workbench]').length } })()`)
+      // Navigation hierarchy: the dispatch left its chat selected on the canvas, so it
+      // ARRIVES selected here. This block measures the page at REST — nothing selected,
+      // the bench on the task — so it clears through the page's own key, Escape.
+      await wc.executeJavaScript(`document.querySelector('.orch')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
       const island = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-island="${itemId}"]') !== null`), 6000)
       // M299: OPEN at rest, at its height (M287 rested it closed under five bottom tiles; the
       // tiles are gone). The inspector's Review changes lands it on Changes.
@@ -352,7 +373,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await click('[data-orch-lens="list"]')
       const plainRow = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${plainChatId}"] button') !== null`), 6000)
       if (!plainRow) throw new Error('orch-bench: the plain-folder chat never appeared in the List')
-      await click(`[data-orch-list-row="${plainChatId}"] button`)
+      await selectRow(plainChatId)
       await click('[data-orch-workbench] [data-orch-bench-tab-button="changes"]')
       const notRepo = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-workbench] [data-orch-review="${plainChatId}"] [data-orch-review-kind]'); return r ? { kind: r.getAttribute('data-orch-review-kind'), words: r.textContent } : false })()`), 8000)
       await click('[data-orch-workbench] [data-orch-bench-tab-button="checks"]')
@@ -703,7 +724,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${chatA}"] button') !== null`), 6000)
-      await click(`[data-orch-list-row="${chatA}"] button`)
+      await selectRow(chatA)
       const ctlRead = () => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="${chatA}"]'); if (!i) return null
         return { controls: [...i.querySelectorAll('[data-orch-control]')].map((b) => ({ id: b.getAttribute('data-orch-control'), title: b.getAttribute('title') })), absent: i.querySelector('[data-orch-control-absent]')?.getAttribute('data-orch-control-absent') ?? null, absentText: i.querySelector('[data-orch-control-absent]')?.textContent ?? null,
           standing: i.querySelector('[data-orch-standing]')?.getAttribute('data-orch-standing') ?? null, standingWord: i.querySelector('[data-orch-standing]')?.textContent ?? null, spend: i.querySelector('[data-orch-spend]')?.getAttribute('data-orch-spend') ?? null, spendWord: i.querySelector('[data-orch-spend]')?.textContent ?? null } })()`)
@@ -752,9 +773,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await demo('m290-3-limits')
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${plainId}"] button') !== null`), 6000)
-      await click(`[data-orch-list-row="${plainId}"] button`)
+      await selectRow(plainId)
       const unknownSpend = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('[data-orch-inspector="${plainId}"] [data-orch-spend]'); return p ? { kind: p.getAttribute('data-orch-spend'), word: p.textContent } : false })()`), 6000)
-      await click(`[data-orch-list-row="${chatB}"] button`)
+      await selectRow(chatB)
       const knownSpend = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('[data-orch-inspector="${chatB}"] [data-orch-spend]'); return p && p.getAttribute('data-orch-spend') === 'known' ? { kind: 'known', word: p.textContent } : false })()`), 6000)
       // A killed session: stopped, and said as such.
       const same = (a, b) => { try { return realpathSync(a) === realpathSync(b) } catch { return false } }
@@ -1438,7 +1459,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await waitUntil(orchShown, 3000)
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${chatId}"] button') !== null`), 3000)
-      await click(`[data-orch-list-row="${chatId}"] button`)
+      await selectRow(chatId)
       await settle()
       const readState = () => wc.executeJavaScript(`(() => {
         const i = document.querySelector('[data-orch-inspector="${chatId}"]')
@@ -1524,7 +1545,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await waitUntil(orchShown, 3000)
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${restoredId}"] button') !== null`), 4000)
-      await click(`[data-orch-list-row="${restoredId}"] button`)
+      await selectRow(restoredId)
       await settle()
       const after = await waitUntil(async () => {
         const r = await wc.executeJavaScript(`(() => {

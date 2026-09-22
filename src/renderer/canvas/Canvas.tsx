@@ -240,7 +240,8 @@ import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
 import { buildInspectorContext } from '../shell/inspector-context'
-import { useShellChrome } from '../shell/useShellChrome'
+import { useShellChrome, type CenterView } from '../shell/useShellChrome'
+import { useDockExpanded } from '../shell/useDockExpanded'
 import { useAttentionAnnouncer } from '../shell/useAttentionAnnouncer'
 import { useShellBreakpoint } from '../shell/useShellBreakpoint'
 import { Dock } from '../shell/Dock'
@@ -3349,6 +3350,8 @@ export function Canvas({
     // disagree about whether this is a first workspace.
     firstWorkspace: panels.length === 0 && !merged
   })
+  // Backlog #13. The dock's labelled mode: remembered, else Wide's default.
+  const dock = useDockExpanded(shellBp)
   // The quiet shell ending opens the rail (and at Wide the inspector) in the
   // SAME commit that adds the first object — which was
   // placed in the wider, rail-less host. Without this the object jumps
@@ -3460,7 +3463,36 @@ export function Canvas({
   // text field eating keystrokes. Its verbs are the canvas's, so opening it is a return
   // to the Canvas page. A palette `say()` does this too, which is why Orchestrate's own
   // refusals are said on Orchestrate, never through the palette.
-  const setCenterView = chrome.setCenterView
+  //
+  // Navigation hierarchy: Canvas and Orchestrate are two VIEWS of the same work, so one
+  // selection crosses the switch. Going in, Orchestrate seeds from the canvas's selection
+  // (`initialSelectedId`); coming back, whatever Orchestrate had selected is selected here.
+  // Handed over INSIDE the setter, synchronously — never an effect on centerView — so a
+  // labelled jump (`leaveForCanvas(); goToPanel(id)`) still selects ITS target last.
+  // Orchestrate having nothing selected leaves the canvas's selection alone: the canvas
+  // may have held a note or terminal Orchestrate has no row for.
+  const [orchSelectedId, setOrchSelectedId] = useState<string | null>(null)
+  const orchSelectedRef = useRef<string | null>(null)
+  orchSelectedRef.current = orchSelectedId
+  const chromeSetCenterView = chrome.setCenterView
+  const centerViewNow = chrome.centerView
+  const setCenterView = useCallback((view: CenterView): void => {
+    if (view === centerViewNow) return
+    if (view === 'orchestration') {
+      const cur = selectedIdsRef.current
+      setOrchSelectedId(cur.size === 1 ? [...cur][0]! : null)
+    } else {
+      const id = orchSelectedRef.current
+      const cur = selectedIdsRef.current
+      if (id !== null && !(cur.size === 1 && cur.has(id)) && panelsRef.current.some((p) => p.rect.id === id)) {
+        selectOnly(id)
+        // The focus a plain return restores belongs to the OLD selection — typing would
+        // land in a session that is no longer the selected one (the M284 hazard below).
+        lastHostFocusRef.current = null
+      }
+    }
+    chromeSetCenterView(view)
+  }, [centerViewNow, chromeSetCenterView, selectOnly])
   // M284. Every labelled "Open on canvas" from Orchestrate names its OWN target, so the
   // focus a plain return would restore (above) belongs to a panel the user did not ask
   // for — typing would land in that session. The target's own selection decides instead.
@@ -6623,7 +6655,7 @@ export function Canvas({
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput, openBrowserPanel, openSkillPanel,
-    teammatesRef, chooseNavigator: chrome.chooseNavigator, setCenterView: chrome.setCenterView, toggleFlip: () => setFlipped((v) => !v),
+    teammatesRef, chooseNavigator: chrome.chooseNavigator, setCenterView, toggleFlip: () => setFlipped((v) => !v),
     workItemsRef, setWorkItems, boardVerbsRef
   })
   sayRef.current = paletteActions.say
@@ -6886,6 +6918,19 @@ export function Canvas({
       return carryWorkItem({ ...i, state, ...(laneOpen ? { note: 'lane still open — close the chat to stop it' } : {}), updatedAt: Date.now() })
     }))
   }, [markDone])
+  // Frame a panel's one task on the canvas, or say why not — Orchestrate's "focus
+  // related" and the title bar's task crumb are the same verb, so one body.
+  const frameTaskOf = useCallback((panelId: string): void => {
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const target = showTaskTarget(panelId, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
+    if (target.kind === 'refused') {
+      paletteActionsRef.current?.say(target.reason)
+      return
+    }
+    setRelatedItemId(target.itemId)
+    frameRects(target.rects)
+  }, [frameRects])
   const goToWorkItem = useCallback((itemId: string): void => {
     const card = panelsRef.current.find((p): p is WorkPanelModel => isWorkPanel(p) && p.work.itemId === itemId)
     if (card !== undefined) centreOn(card.rect)
@@ -7298,6 +7343,7 @@ export function Canvas({
         ...((chrome.bp !== 'compact' && chrome.navVisible) ? { '--shell-nav-w': `${navWidth}px` } : {})
       } as CSSProperties}
       data-bp={chrome.bp}
+      data-dock={dock.expanded ? 'expanded' : 'icons'}
       onMouseDownCapture={(event) => {
         onMouseDownCapture(event)
         // A transient surface is dismissed by a mousedown OUTSIDE it — the
@@ -7337,19 +7383,29 @@ export function Canvas({
         navVisible={chrome.navVisible}
         onChoose={chrome.chooseNavigator}
         centerView={chrome.centerView}
-        onSetCenterView={chrome.setCenterView}
+        onSetCenterView={setCenterView}
         attention={railAttention}
         attentionOpen={chrome.attentionOpen}
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
         onSettings={openSettingsScope}
+        expanded={dock.expanded}
+        onToggleExpanded={dock.toggle}
       />
       <TopBar
         presets={presetRows}
         onOpenSheet={paletteActions.beginSpawnSheet}
         workspaceName={workspaceRows.find((w) => w.active)?.name}
-        taskName={selectedId === null ? undefined : (() => { const task = taskMenuRef.current(selectedId); return task.kind === 'one' ? task.title : undefined })()}
+        onShowWorkspaces={() => chrome.chooseNavigator('workspaces')}
+        // The crumb names the task of what is selected on the page SHOWING — the
+        // canvas's selection, or Orchestrate's — so it always says what an action affects.
+        {...(() => {
+          const id = chrome.centerView === 'orchestration' ? orchSelectedId : selectedId
+          if (id === null) return {}
+          const task = taskMenuRef.current(id)
+          return task.kind === 'one' ? { taskName: task.title, onShowTask: () => { leaveForCanvas(); frameTaskOf(id) } } : {}
+        })()}
         onSearch={palette.openPalette}
         theme={(() => { const value = settingRows.find((row) => row.id === 'appearance.theme')?.value; return value === 'light' || value === 'dark' ? value : 'system' })()}
         onSetTheme={(value) => { void window.canvas.settings.set('appearance.theme', value) }}
@@ -7360,7 +7416,7 @@ export function Canvas({
         inspectorPinned={inspectorPinned}
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}
-        onSetCenterView={chrome.setCenterView}
+        onSetCenterView={setCenterView}
         running={inspectorSummary.running}
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
@@ -7453,15 +7509,7 @@ export function Canvas({
             onMarkDone={markDone}
             onFocusRelated={(id) => {
               leaveForCanvas()
-              const shown = displayPanelsRef.current
-              const items = workItemsRef.current
-              const target = showTaskTarget(id, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
-              if (target.kind === 'refused') {
-                paletteActionsRef.current?.say(target.reason)
-                return
-              }
-              setRelatedItemId(target.itemId)
-              frameRects(target.rects)
+              frameTaskOf(id)
             }}
             onOpenFiles={() => {
               leaveForCanvas()
@@ -7478,7 +7526,7 @@ export function Canvas({
               leaveForCanvas()
               openFileAtCentre(path)
             }}
-            onShowCanvas={() => chrome.setCenterView('canvas')}
+            onShowCanvas={() => setCenterView('canvas')}
             // M284. The Dock's, the palette's and the inspector's executor — one permission path.
             onAnswer={paletteActions.answerApproval}
             onReviewOnCanvas={(id) => {
@@ -7505,6 +7553,9 @@ export function Canvas({
             // the same agentSession.send a chat's composer uses, its answer read by the
             // one sentence-maker, so a refusal reads the same on both pages.
             workspaceName={workspaceRows.find((w) => w.active)?.name}
+            // Navigation hierarchy: the canvas's selection goes in, Orchestrate's comes out.
+            initialSelectedId={selectedId}
+            onSelectionChange={setOrchSelectedId}
             onSend={async (id, text) => sendRefusalSentence(await window.canvas.agentSession.send(id, text, []))}
             /*
              * M302. SAVE AN ARRANGEMENT. The shape is built here, where the

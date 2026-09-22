@@ -73,6 +73,10 @@ export interface ShellChrome {
  * writing shell.railOpen / shell.inspectorOpen — so returning to the canvas
  * restores the user's prefs as they were.
  */
+type LayoutStash = 'unset' | 'none' | 'rail' | 'inspector' | 'both'
+const asStash = (v: unknown): LayoutStash =>
+  v === 'none' || v === 'rail' || v === 'inspector' || v === 'both' ? v : 'unset'
+
 export function useShellChrome(deps: {
   paletteIsOpen: () => boolean
   /** Change signal, compared by identity; see the note above. */
@@ -112,6 +116,14 @@ export function useShellChrome(deps: {
   const [navDrawer, setNavDrawer] = useState(false)
   const [ctxDrawer, setCtxDrawer] = useState(false)
   const [attentionOpen, setAttentionOpen] = useState(false)
+  // The last arrangement each window class parked (see the class effect below).
+  const stashRef = useRef<{ wide: LayoutStash; narrow: LayoutStash }>({ wide: 'unset', narrow: 'unset' })
+  // Crossings are counted only once the stashes have been READ: the
+  // breakpoint's first value is a placeholder ('standard') replaced by a
+  // measurement a frame later, and that is not a person resizing a window —
+  // on a wide screen it would re-park the narrow arrangement every launch.
+  // The settings read is an IPC round trip, so it always lands after that.
+  const [layoutLoaded, setLayoutLoaded] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -124,6 +136,11 @@ export function useShellChrome(deps: {
         const nav = rows.find((r) => r.id === 'shell.navigator')
         const tab = rows.find((r) => r.id === 'shell.contextTab')
         const center = rows.find((r) => r.id === 'shell.centerView')
+        const wide = rows.find((r) => r.id === 'shell.layout.wide')
+        const narrow = rows.find((r) => r.id === 'shell.layout.narrow')
+        if (wide) stashRef.current.wide = asStash(wide.value)
+        if (narrow) stashRef.current.narrow = asStash(narrow.value)
+        setLayoutLoaded(true)
         if (rail) setRailPref(rail.persisted ? rail.value === true : null)
         if (ctx) setCtxPref(ctx.persisted ? ctx.value === true : null)
         if (tree) setTreeOpen(tree.value === true)
@@ -148,6 +165,44 @@ export function useShellChrome(deps: {
   useEffect(() => {
     if (bp !== 'compact') { setNavDrawer(false); setCtxDrawer(false) }
   }, [bp])
+
+  // Wide and narrower windows are DIFFERENT layouts, and each keeps its own
+  // arrangement: closing the inspector on a laptop screen must not close it
+  // on the monitor. The two booleans stay the arrangement IN FORCE — every
+  // reader and writer of them (the palette's rows, the harness, shot.cjs)
+  // keeps its meaning inside one class — and this effect only acts on a
+  // CROSSING: park the outgoing class's arrangement, restore the incoming
+  // one's if it ever had one. What parks is what was ON SCREEN — an absent
+  // pref resolves by the outgoing class's own default first. A class never
+  // left inherits, since the store has no way to write an absence back. The
+  // first workspace is left alone: its closed panes are a framing, not a choice.
+  const wideClass = bp === 'wide'
+  const prevClassRef = useRef<boolean | null>(null)
+  const prefsRef = useRef({ railPref, ctxPref, firstWorkspace })
+  prefsRef.current = { railPref, ctxPref, firstWorkspace }
+  useEffect(() => {
+    if (!layoutLoaded) return
+    const prev = prevClassRef.current
+    prevClassRef.current = wideClass
+    if (prev === null || prev === wideClass) return
+    const { railPref: rp, ctxPref: cp, firstWorkspace: first } = prefsRef.current
+    if (first) return
+    {
+      // The same defaults as the breakpoint rule below, evaluated at `prev`.
+      const r = rp ?? true
+      const c = cp ?? prev
+      const out: LayoutStash = r && c ? 'both' : r ? 'rail' : c ? 'inspector' : 'none'
+      stashRef.current[prev ? 'wide' : 'narrow'] = out
+      void window.canvas.settings.set(prev ? 'shell.layout.wide' : 'shell.layout.narrow', out)
+    }
+    const incoming = stashRef.current[wideClass ? 'wide' : 'narrow']
+    if (incoming === 'unset') return
+    const rail = incoming === 'both' || incoming === 'rail'
+    const ctx = incoming === 'both' || incoming === 'inspector'
+    setRailPref(rail); setCtxPref(ctx)
+    void window.canvas.settings.set('shell.railOpen', rail)
+    void window.canvas.settings.set('shell.inspectorOpen', ctx)
+  }, [wideClass, layoutLoaded])
 
   // The breakpoint rule, in one place.
   const railOpen = railPref ?? !firstWorkspace

@@ -188,6 +188,15 @@ export interface OrchestrationViewProps {
    * looks live and does nothing is the defect class M195 named.
    */
   onSaveArrangement?: (islandId: string) => Promise<string | null>
+  /**
+   * Navigation hierarchy. The canvas's selection at the moment this page
+   * mounted — Canvas and Orchestrate are two views of the same work, so the
+   * panel the person was looking at stays selected across the switch. Taken
+   * only when it names a roster row; anything else starts unselected.
+   */
+  initialSelectedId?: string | null
+  /** The page's one selected session (null for none or many), for the title bar's crumb and the return handoff. */
+  onSelectionChange?: (panelId: string | null) => void
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
@@ -1482,7 +1491,7 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend, onSaveArrangement } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -1493,6 +1502,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // The SELECTION is not a layout pref and is not kept: a selection surviving the page
   // toggle re-aimed the pool, the commands and the feed at a session the user was no longer
   // looking at (the golden critic caught it), which is the plan's stale-target hazard.
+  // What IS carried is the selection on screen a moment ago — the canvas's, handed in
+  // as `initialSelectedId` and seeded below once the roster exists — never this page's
+  // own from an earlier visit, so the target is always the one being looked at.
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [tab, setTab] = useState<SideTab>(() => getOrchPrefs().tab)
   const [mode, setMode] = useState<OrchMode>(() => getOrchPrefs().mode)
@@ -1705,6 +1717,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     hour: new Date().getHours(),
     ...(displayName !== undefined ? { displayName } : {})
   }), [panels, workItems, templates, liveSessions, lastSeen, total.cpuPercent, total.memoryBytes, displayName, tick, now])
+
+  // Navigation hierarchy: seed ONCE per mount from the canvas's selection, and only a
+  // roster row — a canvas note or terminal has no session here to aim commands at.
+  const seededRef = useRef(false)
+  useEffect(() => {
+    if (seededRef.current) return
+    seededRef.current = true
+    if (initialSelectedId != null && liveSnap.roster.some((r) => r.id === initialSelectedId)) setSelectedIds([initialSelectedId])
+  }, [initialSelectedId, liveSnap.roster])
+  // Reported back so the title bar names the task of what is selected HERE, and the
+  // return to the canvas can keep it. A ref: the caller passes a fresh arrow each render.
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  onSelectionChangeRef.current = onSelectionChange
+  useEffect(() => {
+    onSelectionChangeRef.current?.(selectedIds.length === 1 ? selectedIds[0]! : null)
+  }, [selectedIds])
 
   liveEdgesRef.current = liveSnap.graph.edges
 

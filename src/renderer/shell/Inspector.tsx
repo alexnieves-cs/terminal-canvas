@@ -596,6 +596,29 @@ function InspectorPanel({
           {contextBand.blocker !== undefined && (
             <p className="inspector__context-blocker" data-inspector-blocker role="status">{contextBand.blocker}</p>
           )}
+          {/* The resolution sits WITH the request it resolves, at the top of
+              the pane, whenever one is pending — the actions grid below keeps
+              its own Allow/Deny for reach.1's walk, but in a short drawer that
+              grid is a scroll away, and a pending approval is the one thing
+              that must be answerable without looking for it. A second
+              attribute, never `data-inspector-action`, so a selector for the
+              grid's button still finds exactly one. */}
+          {model.kind === 'chat' && model.approval !== undefined && (
+            <div className="inspector__context-resolve" data-inspector-resolve>
+              {(['allow', 'deny'] as const).map((verb) => (
+                <button
+                  key={verb}
+                  type="button"
+                  className={`inspector__action${verb === 'deny' ? ' inspector__action--secondary' : ''}`}
+                  data-inspector-resolve-verb={verb}
+                  title={`${verb === 'allow' ? 'Allow' : 'Deny'} ${model.approval!.toolName} — ${model.approval!.argument}`}
+                  {...shellControl(() => { if (model.approval !== undefined) onAnswer(model.id, model.approval.requestId, verb === 'allow') })}
+                >
+                  {verb === 'allow' ? `Allow ${model.approval!.toolName}` : 'Deny'}
+                </button>
+              ))}
+            </div>
+          )}
           {contextBand.related !== undefined && (
             <div className="inspector__context-related" data-inspector-related>
               <span>{contextBand.related.title} · {contextBand.related.memberCount} related</span>

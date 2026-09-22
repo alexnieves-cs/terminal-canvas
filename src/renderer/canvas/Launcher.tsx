@@ -383,7 +383,10 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null} aria-describedby={askReason !== null ? 'launcher-summary' : undefined}
                 title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
                 {...shellControl(() => { if (askReason === null) onAsk?.(intention) })}>
-                <span className="launcher__verb-name">Ask</span>
+                {/* The hint is visible, not only on the title: beside Start work
+                    and Create…, a bare "Ask" did not say it has no folder. */}
+                <span className="launcher__verb-name">Ask a question</span>
+                <span className="launcher__verb-hint">Start a conversation without a repository.</span>
               </button>
               <button type="button" className="launcher__verb launcher__create" data-onboarding-create
                 title="Open the create sheet — Task or Panel"

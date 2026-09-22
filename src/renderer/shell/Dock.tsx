@@ -3,7 +3,7 @@ import type { RailAttention } from './rail-sections'
 import type { CenterView, NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
-import { Bell, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Layers, Link, Orbit, People, ProductMark } from '@renderer/icons'
+import { Bell, ChevronLeft, ChevronRight, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Layers, Link, Orbit, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 
 export interface DockProps {
@@ -23,6 +23,9 @@ export interface DockProps {
   /** M76. Answer a chat's pending request from the popover, without going to it. */
   onAnswer: (id: string, requestId: string, allow: boolean) => void
   onSettings: () => void
+  /** Backlog #13. The labelled rail is showing — a remembered choice, else Wide's default. */
+  expanded: boolean
+  onToggleExpanded: () => void
 }
 
 /**
@@ -46,7 +49,8 @@ export interface DockProps {
  */
 function DockImpl({
   navigator, navVisible, onChoose, centerView, onSetCenterView,
-  attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onSettings
+  attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onSettings,
+  expanded, onToggleExpanded
 }: DockProps): JSX.Element {
   const groups: Array<{ label: string; entries: Array<{ id: NavigatorPane; label: string; shortcut?: string; icon: JSX.Element }> }> = [
     { label: 'Work', entries: [
@@ -84,6 +88,7 @@ function DockImpl({
             data-dock={e.id}
             aria-pressed={pressed}
             aria-label={e.label}
+            aria-keyshortcuts={e.shortcut === undefined ? undefined : e.shortcut.replace('⌘', 'Meta+')}
             title={`${pressed ? 'Hide' : 'Show'} ${e.label}${e.shortcut === undefined ? '' : ` (${e.shortcut})`}`}
             {...shellControl(() => {
               if (isCanvas) {
@@ -124,6 +129,7 @@ function DockImpl({
           data-dock="attention"
           aria-pressed={attentionOpen}
           aria-label={attention.length === 0 ? 'Attention: nothing waiting' : `Attention: ${attention.length} waiting`}
+          aria-keyshortcuts="Meta+J"
           title="Notifications: panels that need you (⌘J)"
           {...shellControl(onToggleAttention)}
         >
@@ -183,6 +189,16 @@ function DockImpl({
       </div>
         <button type="button" className="dock__button shell__settings icon-button" data-dock="settings"
           aria-label="Settings" title="Settings" {...shellControl(onSettings)}><Gear /><span className="dock__label" aria-hidden="true">Settings</span></button>
+        {/* Backlog #13. A new person should not have to hover every icon to
+            learn the app's shape: this puts every name on screen at once, and
+            the choice is remembered. Its own label names what it WILL do. */}
+        <button type="button" className="dock__button dock__expand icon-button" data-dock="expand"
+          aria-pressed={expanded} aria-label="Expand navigation"
+          title={expanded ? 'Collapse navigation to icons' : 'Expand navigation to show names'}
+          {...shellControl(onToggleExpanded)}>
+          {expanded ? <ChevronLeft /> : <ChevronRight />}
+          <span className="dock__label" aria-hidden="true">{expanded ? 'Collapse navigation' : 'Expand navigation'}</span>
+        </button>
       </div>
       {/* M172. The `N live / N quiet` capsules left the dock (the metrics rule): the count is the rail's `Agents · N` heading. */}
     </nav>

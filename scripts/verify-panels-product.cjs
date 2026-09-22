@@ -279,7 +279,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // M263 renamed this door "Ask" (Start work, Ask, Create...); its title
         // still promises a conversation with no folder, which is the property.
         const b = document.querySelector('[data-onboarding-ask]')
-        return b && !b.disabled && b.querySelector('.launcher__verb-name')?.textContent === 'Ask' ? true : false
+        return b && !b.disabled && b.querySelector('.launcher__verb-name')?.textContent === 'Ask a question' ? true : false
       })()`), 1500)
       const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
       const started = primary === true && await clickVisible('[data-onboarding-ask]')

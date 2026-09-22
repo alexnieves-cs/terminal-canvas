@@ -322,6 +322,31 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
+    // The wide window and the narrower one each REMEMBER their own panel
+    // arrangement. `shell.railOpen`/`shell.inspectorOpen` above stay the
+    // arrangement in force; these two are where useShellChrome parks it when
+    // the window crosses into the other class, and what it restores from on
+    // the way back. `unset` = this class has never been left: inherit.
+    id: 'shell.layout.wide',
+    label: 'Wide-window panel arrangement',
+    description: 'which side panes the wide window had open when it last narrowed — restored when it is wide again',
+    keywords: ['layout', 'arrangement', 'wide', 'window', 'rail', 'inspector', 'remember', 'shell'],
+    type: 'enum',
+    values: ['unset', 'none', 'rail', 'inspector', 'both'],
+    default: 'unset',
+    category: SHELL_CATEGORY
+  },
+  {
+    id: 'shell.layout.narrow',
+    label: 'Narrow-window panel arrangement',
+    description: 'which side panes a narrower window had open when it last widened — restored when it narrows again',
+    keywords: ['layout', 'arrangement', 'narrow', 'compact', 'small', 'window', 'rail', 'inspector', 'remember', 'shell'],
+    type: 'enum',
+    values: ['unset', 'none', 'rail', 'inspector', 'both'],
+    default: 'unset',
+    category: SHELL_CATEGORY
+  },
+  {
     id: 'shell.navigator',
     label: 'Navigator pane',
     description: 'show your panels, your workspaces, your vault, your integrations, your teammates, the board or your skills in the navigator; the Files pane is its own toggle (⌘B)',

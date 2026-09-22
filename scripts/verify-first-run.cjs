@@ -102,14 +102,14 @@ check(LAUNCHER, 'fr.launcher.1 a numbered sequence — intent, repository, start
   return { pass: steps(ready) === 'intent,folder,start' && steps(missing) === 'intent,folder,agent,start' &&
     /What are you working on\?/.test(ready) && /Pick or drop a repository/.test(ready), detail: { ready: steps(ready), missing: steps(missing) } }
 })
-check(LAUNCHER, 'fr.launcher.2 the composed next step is Start work · Ask · Create… — primary filled, no Ask without a folder, no creatable-kind pills', (m) => {
+check(LAUNCHER, 'fr.launcher.2 the composed next step is Start task · Ask a question · Create… — primary filled, no Ask without a folder, no creatable-kind pills', (m) => {
   const html = launcher(m, { claude: '/b/claude' })
   const start = tag(html, 'data-onboarding-start') ?? ''
   const ask = tag(html, 'data-onboarding-ask') ?? ''
   const create = tag(html, 'data-onboarding-create') ?? ''
-  return { pass: /is-primary/.test(start) && />Start work</.test(start) && />Ask</.test(ask) && />Create…</.test(create) &&
+  return { pass: /is-primary/.test(start) && />Start task</.test(start) && />Ask a question</.test(ask) && /Start a conversation without a repository/.test(ask) && />Create…</.test(create) &&
     /data-create-face="empty-strip"/.test(html) && !/data-create-object=/.test(html) && !/Ask without a folder/.test(html) &&
-    !/>Start a general chat</.test(html) && !/>Start task</.test(start), detail: { start, ask, create } }
+    !/>Start a general chat</.test(html), detail: { start, ask, create } }
 })
 check(LAUNCHER, 'fr.launcher.3 the tmux notice and the engine status sit BELOW the action — after the start step in document order', (m) => {
   const html = launcher(m, { claude: '/b/claude' }, { tmux: 'no tmux', onDismissTmux: noop })

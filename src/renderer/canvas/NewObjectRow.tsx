@@ -8,6 +8,9 @@ import { shellControl } from '@renderer/shell/shell-control'
  * creatable-kind pill band is gone — kinds stay reachable via the sheet,
  * palette, agent line and workflow (four doors), not nine equal canvas pills.
  *
+ * It REPEATS the title bar's Create (the global door), so it is styled as a
+ * quiet text button — never a second dominant action on the surface.
+ *
  * Empty canvas: this component is not mounted; the launcher owns the composed
  * Start work · Ask · Create… strip.
  */

@@ -13,8 +13,12 @@ export interface TopBarProps {
   /** M66. The active workspace's name, for the merged toggle's "back to …". */
   workspaceName?: string
   onSearch: () => void
-  /** M257. The selected object's one task, when its ownership is unambiguous. */
+  /** M257. The selected object's one task, when its ownership is unambiguous — on whichever center view is showing. */
   taskName?: string
+  /** Navigation hierarchy. The workspace crumb's door: the navigator's Workspaces pane. */
+  onShowWorkspaces?: () => void
+  /** Navigation hierarchy. The task crumb's door: frame the task on the canvas. Absent = the crumb is plain text. */
+  onShowTask?: () => void
   theme: 'system' | 'light' | 'dark'
   onSetTheme: (theme: 'system' | 'light' | 'dark') => void
   /** Whether M14's merged view is currently showing. */
@@ -55,7 +59,7 @@ export interface TopBarProps {
  */
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
-  workspaceName, taskName, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
+  workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
   centerView, onSetCenterView, running, waiting, onJumpWaiting
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
@@ -108,10 +112,21 @@ export function TopBar({
         <span>+ Create</span> <kbd>⌘⇧N</kbd>
       </button>
 
-      <div className="shell__workspace" title={taskName === undefined ? workspaceName : `${workspaceName} / ${taskName}`}>
-        <span>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span>
-        {taskName !== undefined && <><span className="shell__breadcrumb-separator">/</span><span className="shell__task">{taskName}</span></>}
-      </div>
+      {/* Navigation hierarchy: workspace → selected task, persistent across BOTH center
+          views (the task follows the selection on the page showing). Each crumb is a
+          door to the thing it names — the Workspaces pane, the task framed on the canvas
+          — so the bar answers "what am I looking at" and "what will this affect". The
+          task crumb is absent, not "No task", when there is none: a rest-layer fact is
+          never a zero-value statement. */}
+      <nav className="shell__workspace" aria-label="Location" title={taskName === undefined ? workspaceName : `${workspaceName} / ${taskName}`}>
+        {onShowWorkspaces === undefined
+          ? <span>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span>
+          : <button type="button" className="shell__crumb" title="Workspaces" {...shellControl(onShowWorkspaces)}>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</button>}
+        {taskName !== undefined && <><span className="shell__breadcrumb-separator" aria-hidden="true">/</span>
+          {onShowTask === undefined
+            ? <span className="shell__task" aria-current="location">{taskName}</span>
+            : <button type="button" className="shell__crumb shell__task" aria-current="location" title={`Show ${taskName} on the canvas`} {...shellControl(onShowTask)}>{taskName}</button>}</>}
+      </nav>
 
       <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
         {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
