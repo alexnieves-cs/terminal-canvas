@@ -54,7 +54,7 @@ export const WORKBENCH_DEFAULT_HEIGHT = 200
 export interface OrchSavedView {
   id: string
   name: string
-  lens?: 'scene' | 'list'
+  lens?: 'scene' | 'list' | 'watch'
   mode?: 'dev' | 'pipeline'
   sideTab?: 'activity' | 'files'
   camera?: { x: number; y: number; k: number }
@@ -73,7 +73,7 @@ export interface PersistedOrchestrate {
    * A pre-M299 record's `open: true` still parses; its absence now reads open.
    */
   workbench?: { height: number; tab: WorkbenchTab; open?: boolean }
-  lens?: 'scene' | 'list'
+  lens?: 'scene' | 'list' | 'watch'
   mode?: 'dev' | 'pipeline'
   sideTab?: 'activity' | 'files'
   camera?: { x: number; y: number; k: number }
@@ -117,7 +117,7 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
   if (isRecord(wb) && isNum(wb.height) && WORKBENCH_TABS.includes(wb.tab as WorkbenchTab)) {
     out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab, ...(typeof wb.open === 'boolean' ? { open: wb.open } : {}) }
   } else if (wb !== undefined) warnings.push('dropped a malformed orchestrate workbench')
-  if (raw.lens === 'scene' || raw.lens === 'list') out.lens = raw.lens
+  if (raw.lens === 'scene' || raw.lens === 'list' || raw.lens === 'watch') out.lens = raw.lens
   if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode
   if (raw.sideTab === 'activity' || raw.sideTab === 'files') out.sideTab = raw.sideTab
   const c = raw.camera
@@ -150,7 +150,7 @@ function parseSavedView(raw: unknown): OrchSavedView | null {
   if (typeof raw.id !== 'string' || raw.id === '') return null
   if (typeof raw.name !== 'string' || raw.name.trim() === '') return null
   const out: OrchSavedView = { id: raw.id, name: raw.name }
-  if (raw.lens === 'scene' || raw.lens === 'list') out.lens = raw.lens
+  if (raw.lens === 'scene' || raw.lens === 'list' || raw.lens === 'watch') out.lens = raw.lens
   if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode
   if (raw.sideTab === 'activity' || raw.sideTab === 'files') out.sideTab = raw.sideTab
   const c = raw.camera

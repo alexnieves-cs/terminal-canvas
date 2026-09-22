@@ -17,7 +17,7 @@
 import type { OrchMode } from './orchestration-model'
 import { ORCH_VIEWS_MAX, WORKBENCH_DEFAULT_HEIGHT, type OrchSavedView, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
 
-export type OrchLens = 'scene' | 'list'
+export type OrchLens = 'scene' | 'list' | 'watch'
 /** M287. Output and Review left the side column for the workbench; the side keeps Activity and Files. */
 export type OrchSideTab = 'activity' | 'files'
 

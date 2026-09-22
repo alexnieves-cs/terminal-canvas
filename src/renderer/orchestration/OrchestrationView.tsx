@@ -14,7 +14,7 @@ import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-
 import { getMachineCostSampledAt, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
-import { useChat, getChat, lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
+import { useChat, getChat, lastAssistantText, useApprovals, useChatsVersion } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { edgeFiredAt, useEdgeActivityVersion } from '@renderer/canvas/useEdgeActivity'
@@ -74,6 +74,7 @@ import {
 } from './orchestration-activity'
 import { ORCH_COS_TILT, ORCH_FIT_FLOOR, ORCH_SIN_TILT, ORCH_ZOOM_RANGE, orchDepthBand, orchFitCamera, orchProjectWorld, type OrchCamera, type OrchDepthBand } from './orchestration-depth'
 import type { OrchCubeSpec, OrchPlatformSpec } from './OrchestrationCubes'
+import { buildOrchLive, type OrchLiveSessionInput, type OrchLiveState } from './orchestration-live'
 import {
   ORCH_PLATE_LABEL, ORCH_PLATE_MORE, ORCH_PLATFORM, ORCH_SELECT_LIFT, ORCH_WORKSPACE_PLATFORM, orchConnectors, orchHiddenLine, orchHitOrder, orchLabelBudget, orchLabelMargins, orchNameTier, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchPlatformHitPolygon, orchPolygonBounds, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSegmentBetween, orchSortRows, orchSpatialStep, orchZoomLevel,
   type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchNameTier, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
@@ -116,6 +117,12 @@ const ORCH_WAITING_CARDS = 3
 const ORCH_CONNECTOR_LIT_MS = 1400
 
 const OrchestrationCubes = lazy(async () => ({ default: (await import('./OrchestrationCubes')).OrchestrationCubes }))
+/**
+ * M304. The Watch lens — the same deferred-chunk rule as the cubes above: a
+ * perspective three.js scene, `import()`ed the first time Watch opens and never
+ * reached statically (`orch-live.door.1`). Only its TYPES are imported above.
+ */
+const OrchestrationLive = lazy(async () => ({ default: (await import('./OrchestrationLive')).OrchestrationLive }))
 
 export interface OrchTemplateInput {
   id: string
@@ -1914,6 +1921,29 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   useEffect(() => { setOrchPrefs({ lens }) }, [lens])
   const lensRef = useRef(lens)
   lensRef.current = lens
+  // M304. The Watch lens's model, built only while Watch is showing: every roster
+  // session's tool calls (chats) or live command (terminals), scrubbed through
+  // outward() before a single character can reach a texture (orchestration-live.ts's
+  // header). Re-derived when any chat changes (useChatsVersion) or the clock ticks
+  // (a terminal's command has no store version of its own here).
+  const chatsVersion = useChatsVersion()
+  const liveIslands = useMemo(() => islands.map((i) => ({ id: i.id, label: i.goal })), [islands])
+  const liveModel = useMemo(() => {
+    if (lens !== 'watch') return null
+    const islandOf = (id: string): string | null => islands.find((i) => i.memberIds.includes(id))?.id ?? null
+    const stateOf = (state: string): OrchLiveState => state === 'busy' || state === 'starting' || state === 'running' || state === 'watching' ? 'working'
+      : state === 'wants-you' ? 'needs-you' : state === 'exited' || state === 'unknown' ? 'exited' : 'idle'
+    const inputs: OrchLiveSessionInput[] = liveSnap.roster
+      .filter((r) => r.kind !== 'file' && r.kind !== 'work')
+      .map((r) => {
+        const chat = r.kind === 'chat' ? getChat(r.id) : null
+        const blocks = chat === null ? [] : [...chat.turns.flatMap((t) => t.blocks), ...(chat.live?.blocks.map((b) => b.block) ?? [])]
+        const command = r.kind === 'chat' ? undefined : getLiveSession(r.id)?.currentCommand
+        return { id: r.id, title: r.title, state: stateOf(r.state), islandId: islandOf(r.id), blocks, ...(command ? { command } : {}) }
+      })
+    return buildOrchLive(inputs, (text, id) => outward(text, `panel ${id}`).text)
+    // `now` re-reads terminal commands on the view's clock; chatsVersion is every chat's change.
+  }, [lens, liveSnap.roster, islands, chatsVersion, now])
   // M287. Every pref, to the workspace record — coalesced, because the camera
   // moves at pointer speed and each write is a layout save. Skipped when the
   // record already says the same, so mounting the page writes nothing.
@@ -2559,10 +2589,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               >{m.label}</button>
             ))}
           </div>
-            <span className="orch__lens" role="group" aria-label="Scene or list">
-              {(['scene', 'list'] as const).map((l) => (
+            <span className="orch__lens" role="group" aria-label="Scene, watch or list">
+              {(['scene', 'watch', 'list'] as const).map((l) => (
                 <button key={l} type="button" className={`orch__tab${lens === l ? ' orch__tab--on' : ''}`} aria-pressed={lens === l}
-                  data-orch-lens={l} {...shellControl(() => setLens(l))}>{l === 'scene' ? 'Scene' : 'List'}</button>
+                  data-orch-lens={l} title={l === 'watch' ? 'Watch the sessions work — files as towers, writes and commands as they happen' : undefined}
+                  {...shellControl(() => setLens(l))}>{l === 'scene' ? 'Scene' : l === 'watch' ? 'Watch' : 'List'}</button>
               ))}
             </span>
             {/* M302. SAVED VIEWS — filters, camera and layout, and nothing else.
@@ -2643,6 +2674,19 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 </table>
                 {visibleRoster.length === 0 && <EmptyState id="orch-roster" onVerb={onShowCanvas} />}
               </div>
+            ) : lens === 'watch' && liveModel !== null ? (
+              webgl === 'ready' ? (
+                <Suspense fallback={<div className="orch-live orch-live--loading" data-orch-live-loading />}>
+                  <OrchestrationLive model={liveModel} islands={liveIslands} primaryIslandId={island?.id ?? null}
+                    selectedId={selectedId} quality={quality} onSelect={(id) => select(id)} onJump={jump} />
+                </Suspense>
+              ) : (
+                // Watch is three.js or nothing; without WebGL the List is the same sessions, by name.
+                <div className="orch-live orch-live--fallback" data-orch-live-fallback>
+                  <p>Watch needs WebGL, which this window can't use. The List shows the same sessions and their state.</p>
+                  <button type="button" className="orch__mini" {...shellControl(() => setLens('list'))}>Show the List</button>
+                </div>
+              )
             ) : mode === 'dev' ? (
               <GraphBoard
                 platforms={platforms}

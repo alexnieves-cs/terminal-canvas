@@ -8538,3 +8538,55 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__limit-value { grid-column: 1 / -1; color: var(--fg); white-space: normal; overflow-wrap: anywhere; }
 .orch__limit-coverage { grid-column: 1 / -1; margin: 0; display: none; }
 .orch__bench-write { margin-top: var(--sp-2); display: flex; flex-direction: column; gap: var(--sp-1); }
+
+/* ---------------------------------------------------------------------------
+   M304. The Watch lens (OrchestrationLive.tsx): a perspective three.js scene
+   filling the graph well, with DOM labels projected over it every rendered
+   frame. The labels take no pointer — the scene's meshes are the targets — and
+   the HUD, tools and legend sit on the well's corners like the Scene's own.
+   --------------------------------------------------------------------------- */
+.orch-live { position: absolute; inset: 0; overflow: hidden; border-radius: var(--r-md); }
+.orch-live canvas { display: block; cursor: grab; touch-action: none; }
+.orch-live canvas:active { cursor: grabbing; }
+.orch-live--loading { background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--iris) 10%, transparent), transparent 60%); }
+.orch-live--fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); color: var(--fg-2); font: var(--t-sm) var(--font-ui); text-align: center; padding: var(--sp-6); }
+.orch-live__labels { position: absolute; inset: 0; pointer-events: none; }
+.orch-live__label { position: absolute; left: 0; top: 0; visibility: hidden; white-space: nowrap; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: color-mix(in srgb, var(--s-1) 84%, transparent); backdrop-filter: blur(8px); color: var(--fg-2); font: var(--t-xs) var(--font-mono); will-change: transform; }
+.orch-live__label em { font-style: normal; color: var(--green); margin-left: var(--sp-2); }
+.orch-live__label--session { color: var(--fg); font-family: var(--font-ui); }
+.orch-live__label--dim { color: var(--fg-3); }
+.orch-live__label--plate { border-style: dashed; color: var(--fg-3); background: transparent; backdrop-filter: none; }
+.orch-live__label--warn { border-color: var(--amber); color: var(--amber); }
+.orch-live__callout { position: absolute; left: 0; top: 0; visibility: hidden; width: 16rem; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: color-mix(in srgb, var(--s-1) 92%, transparent); backdrop-filter: blur(16px); color: var(--fg); font: var(--t-sm) var(--font-ui); }
+.orch-live__callout[data-state="needs-you"] { border-color: var(--amber); }
+.orch-live__callout > strong { display: flex; align-items: center; gap: var(--sp-2); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.orch-live__say { color: var(--fg-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* The typed line: the token revealed character by character, once. Its width and step
+   count are inline (OrchestrationLive sets them from the token's length). */
+.orch-live__typing { display: block; margin-top: var(--sp-1); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--s-2); color: var(--green); font: var(--t-xs) var(--font-mono); white-space: nowrap; overflow: hidden; max-width: 100%; box-sizing: border-box; animation: orch-live-type var(--dur-2) both; }
+.orch-live__typing[data-kind="del"] { color: var(--red); }
+.orch-live__typing[data-kind="run"] { color: var(--fg-2); }
+@keyframes orch-live-type { from { width: 2ch; } }
+.orch-live__pip { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--fg-4); }
+.orch-live__pip[data-state="working"] { background: var(--iris); box-shadow: 0 0 0 3px color-mix(in srgb, var(--iris) 22%, transparent); }
+.orch-live__pip[data-state="needs-you"] { background: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent); }
+.orch-live__hud { position: absolute; top: var(--sp-3); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) var(--sp-4); border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--s-1) 86%, transparent); backdrop-filter: blur(8px); color: var(--fg-3); font: var(--t-xs) var(--font-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.orch-live__live { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--fg-3); font-weight: 600; }
+.orch-live__live[data-on] { color: var(--iris); }
+.orch-live__tools { position: absolute; top: var(--sp-3); left: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--s-1) 86%, transparent); backdrop-filter: blur(8px); }
+.orch-live__tool { border: 0; background: transparent; color: var(--fg-3); font: var(--t-xs) var(--font-ui); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; cursor: pointer; }
+.orch-live__tool:hover { color: var(--fg); background: var(--s-3); }
+.orch-live__tool[aria-pressed="true"] { color: var(--fg); background: var(--s-3); }
+.orch-live__tool:focus-visible { outline: 2px solid var(--iris); outline-offset: 1px; }
+.orch-live__legend { position: absolute; left: var(--sp-3); right: var(--sp-3); bottom: var(--sp-3); display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); color: var(--fg-3); font: var(--t-xs) var(--font-ui); pointer-events: none; }
+.orch-live__legend span { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.orch-live__legend i { width: 8px; height: 8px; border-radius: var(--r-sm); background: var(--fg-4); }
+.orch-live__legend i[data-k="working"] { background: var(--iris); }
+.orch-live__legend i[data-k="needs-you"] { background: var(--amber); }
+.orch-live__legend i[data-k="add"] { background: var(--green); }
+.orch-live__legend i[data-k="del"] { background: var(--red); }
+.orch-live__note { color: var(--fg-4); }
+.orch-live__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; margin: 0; color: var(--fg-3); font: var(--t-sm) var(--font-ui); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .orch-live__typing { animation: none; }
+}

@@ -539,12 +539,12 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
 // island; a third importer anywhere Canvas.tsx reaches puts the +2.2MB chunk
 // into startup with no error and every suite green. The check reads the source
 // AND the built chunks: the first chunk must not carry three's renderer.
-ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx and orchestration-bloom.tsx, and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
+ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304) and orchestration-bloom.tsx, and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
   (() => {
     const { execFileSync } = require('node:child_process')
     const hits = execFileSync('grep', ['-rlE', "from '(three|@react-three/fiber)'", join(root, 'src')], { encoding: 'utf8' })
       .trim().split('\n').filter(Boolean).map((x) => x.replace(join(root, 'src/'), '')).sort()
-    const allowed = ['renderer/orchestration/OrchestrationCubes.tsx', 'renderer/orchestration/orchestration-bloom.tsx']
+    const allowed = ['renderer/orchestration/OrchestrationCubes.tsx', 'renderer/orchestration/OrchestrationLive.tsx', 'renderer/orchestration/orchestration-bloom.tsx']
     if (hits.join() !== allowed.join()) return false
     const assets = join(root, 'out/renderer/assets')
     if (!existsSync(assets)) return true // no build yet: the source half stands alone (verify-all builds before the Electron tier, not before this suite)
@@ -552,6 +552,85 @@ ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationC
     return first.length > 0 && first.every((f) => !readFileSync(join(assets, f), 'utf8').includes('WebGLRenderer'))
   })(),
   'three belongs behind the lazily-loaded island and its bloom door')
+
+// M304 — the Watch lens. The model is pure (orchestration-live.ts); the scene is
+// a third three.js importer, behind its own lazy(), and every string it paints
+// came through outward() in the view.
+{
+  const L = load('src/renderer/orchestration/orchestration-live.ts', 'orchestration-live.cjs')
+  const t = (name, input) => L.orchLiveTool(name, input)
+  const edit = t('Edit', { file_path: 'src/a.ts', old_string: 'x\ny', new_string: 'a\nb\nc' })
+  const multi = t('MultiEdit', { file_path: 'src/b.ts', edits: [{ old_string: 'q', new_string: 'r\ns' }, { old_string: 'u\nv', new_string: 'w' }] })
+  const patch = t('apply_patch', { input: '*** Begin Patch\n*** Update File: src/c.ts\n@@\n-old\n+new one\n+new two\n*** End Patch' })
+  ok('orch-live.1 tool calls map to read/write/run by name across engines, with line counts from the input — Edit, MultiEdit, codex apply_patch, Bash, ACP read, an unknown tool as other',
+    edit.kind === 'write' && edit.path === 'src/a.ts' && edit.added === 3 && edit.removed === 2 && edit.rawToken === 'a' &&
+      multi.added === 3 && multi.removed === 3 &&
+      patch.kind === 'write' && patch.path === 'src/c.ts' && patch.added === 2 && patch.removed === 1 && patch.rawToken === 'new one' &&
+      t('Bash', { command: 'npm test' }).kind === 'run' && t('Bash', { command: 'npm test' }).command === 'npm test' &&
+      t('read', { locations: [{ path: '/r/x.md' }] }).path === '/r/x.md' &&
+      t('SomethingNew', {}).kind === 'other',
+    JSON.stringify({ edit, multi, patch }))
+  const blocks1 = [
+    { type: 'tool_use', id: 'u1', name: 'Read', input: { file_path: 'src/s.ts' } },
+    { type: 'tool_use', id: 'u2', name: 'Write', input: { file_path: 'src/s.ts', content: 'const token = "sk-ant-api03-' + 'A'.repeat(90) + '"\nline2' } },
+    { type: 'tool_use', id: 'u3', name: 'Bash', input: { command: 'npm test' } },
+    { type: 'tool_result', toolUseId: 'u3', content: 'fail', isError: true }
+  ]
+  const blocks2 = [{ type: 'tool_use', id: 'v1', name: 'Edit', input: { file_path: 'src/s.ts', old_string: 'a', new_string: 'b' } }]
+  let scrubbed = 0
+  const scrub = (text) => { scrubbed++; return text.replace(/sk-ant-[\w-]+/g, '[redacted]') }
+  const m = L.buildOrchLive([
+    { id: 'c1', title: 'claude', state: 'working', islandId: 'i1', blocks: blocks1 },
+    { id: 'c2', title: 'codex', state: 'idle', islandId: 'i1', blocks: blocks2 },
+    { id: 't1', title: 'tests', state: 'working', islandId: null, blocks: [], command: 'npm run watch' }
+  ], scrub)
+  const s = m.files.find((f) => f.path === 'src/s.ts')
+  const write = m.events.find((e) => e.key === 'c1:u2')
+  ok('orch-live.2 events are keyed by session and tool-call id (never position), a run takes its outcome from its tool_result, and a terminal\'s live command is one run event',
+    m.events.map((e) => e.key).join() === 'c1:u1,c1:u2,c1:u3,c2:v1,t1:cmd:npm run watch' &&
+      m.events.find((e) => e.key === 'c1:u3').ok === false && m.events.find((e) => e.key === 't1:cmd:npm run watch').ok === null &&
+      m.sessions.find((x) => x.id === 'c1').latest.key === 'c1:u3',
+    JSON.stringify(m.events.map((e) => [e.key, e.ok])))
+  ok('orch-live.3 a file two sessions wrote is contended; its tower counts the lines written and its reads; a file lives on the island its writes came from',
+    s !== undefined && s.contended === true && s.writers.join() === 'c1,c2' && s.added === 3 && s.removed === 1 && s.reads === 1 && s.islandId === 'i1',
+    JSON.stringify(s))
+  ok('orch-live.4 every agent string crosses the caller\'s scrub before it is in the model — a planted token never reaches a painted token or command — and the view passes outward() as that scrub',
+    scrubbed >= 4 && write.token !== undefined && !/sk-ant/.test(JSON.stringify(m)) && write.token.length <= L.ORCH_LIVE_TOKEN_MAX &&
+      /buildOrchLive\(inputs, \(text, id\) => outward\(text, `panel \$\{id\}`\)\.text\)/.test(viewSrc),
+    JSON.stringify({ token: write.token, scrubbed }))
+  const first = L.orchLiveFresh(m.events, null)
+  const later = L.orchLiveFresh([...m.events, { key: 'c1:u9', sessionId: 'c1', kind: 'other', ok: null, added: 0, removed: 0, say: 'Using X' }], first.seen)
+  ok('orch-live.5 history is never replayed: the first read animates nothing, a later read animates only the new key',
+    first.fresh.length === 0 && later.fresh.map((e) => e.key).join() === 'c1:u9', JSON.stringify(later.fresh.map((e) => e.key)))
+  const plates = L.orchLiveLayout(m, [{ id: 'i1', label: 'Task one' }], 'i1')
+  const placed = plates.flatMap((p) => p.sessions.map((x) => x.id)).sort().join()
+  ok('orch-live.6 the layout puts the focused island at the centre, every session on exactly one platform (a session in no task on "Not in a task", never dropped), and is deterministic',
+    plates[0].id === 'i1' && plates[0].primary && plates[0].x === 0 && placed === 'c1,c2,t1' &&
+      plates.some((p) => p.id === null && p.label === 'Not in a task' && p.sessions.some((x) => x.id === 't1')) &&
+      JSON.stringify(L.orchLiveLayout(m, [{ id: 'i1', label: 'Task one' }], 'i1')) === JSON.stringify(plates),
+    JSON.stringify(plates.map((p) => [p.id, p.sessions.map((x) => x.id)])))
+  ok('orch-live.7 a tower is one slab per 4 written lines, at least one once written, capped, and a file only read stands no slab',
+    JSON.stringify(L.orchLiveSlabs({ added: 1, removed: 0 })) === '{"added":1,"removed":0}' &&
+      JSON.stringify(L.orchLiveSlabs({ added: 9, removed: 4 })) === '{"added":3,"removed":1}' &&
+      (() => { const c = L.orchLiveSlabs({ added: 400, removed: 400 }); return c.added + c.removed === L.ORCH_LIVE_SLAB_CAP })() &&
+      JSON.stringify(L.orchLiveSlabs({ added: 0, removed: 0 })) === '{"added":0,"removed":0}')
+}
+ok('orch-live.door.1 OrchestrationLive is reached only through lazy() — nothing imports it for a value — and it reuses the one bloom door rather than importing postprocessing',
+  (() => {
+    const { execFileSync } = require('node:child_process')
+    let hits = []
+    try { hits = execFileSync('grep', ['-rn', "from './OrchestrationLive'", join(root, 'src')], { encoding: 'utf8' }).trim().split('\n').filter(Boolean) } catch { hits = [] }
+    const live = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationLive.tsx'), 'utf8')
+    return hits.every((line) => /import type \{/.test(line)) &&
+      /lazy\(async \(\) => \(\{ default: \(await import\('\.\/OrchestrationLive'\)\)\.OrchestrationLive \}\)\)/.test(viewSrc) &&
+      /from '\.\/orchestration-bloom'/.test(live) && !/from 'postprocessing'/.test(live)
+  })(),
+  'the Watch scene must stay behind lazy()')
+ok('orch-live.frame.1 the Watch scene keeps the demand frameloop and asks for frames only from motion — no frameloop="always" and no requestAnimationFrame of its own',
+  (() => {
+    const live = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationLive.tsx'), 'utf8')
+    return /frameloop="demand"/.test(live) && !/frameloop="always"/.test(live) && !/requestAnimationFrame/.test(live)
+  })())
 
 // M284 — Orchestrate Phase A's task island, inspector verb and decision queue
 // (orchestration-island.ts), pure: the island is derived from a persisted work item

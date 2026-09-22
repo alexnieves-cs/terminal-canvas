@@ -817,6 +817,60 @@ const SCENES = [
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },
+  { name: 'orchestration-watch', intent: 'M304. The Watch lens with work ACTUALLY HAPPENING: the dark theme, every roster session on its island platform — the focused task centre, the rest ringing it — two chats working (spinning iris cores with orbit rings), the files they touched standing as towers of green (added) and red (removed) slabs labelled with the lines written, the file both chats wrote wearing an amber ring, a write in flight as a light arc carrying its real code token, and the working chat\'s callout typing that token. Seeded through real `agent:event` turns — the same door a live session uses — and captured mid-flight WITHOUT reduced motion, so the one thing this image cannot pin is the exact frame of the arc; the towers, labels, callout and HUD are the regression surface.', size: [1800, 1000],
+    run: async (k) => {
+      const turn = (panelId, id, blocks) => k.wc.send('agent:event', { id: panelId, type: 'turn', turn: { id, role: 'assistant', blocks, at: Date.now() } })
+      const result = (panelId, id, toolUseId, isError) => k.wc.send('agent:event', { id: panelId, type: 'turn', turn: { id, role: 'user', blocks: [{ type: 'tool_result', toolUseId, content: '', isError }], at: Date.now() } })
+      const f = (name) => join(REPO, 'src', name)
+      let opened = false
+      try {
+        // The chat store only takes events for panels a mounted panel has seeded
+        // (chat-store's recycled-id door), so the fixture canvas has to have been
+        // on screen first — the `orchestration` scene loads it the same way.
+        await k.loadMain()
+        for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-panel-id="chat"], .chat')`)); i++) await sleep(100)
+        await sleep(400)
+        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        opened = true
+        for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-orch-lens="watch"]')`)); i++) await sleep(100)
+        await k.theme('dark')
+        await k.js(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        k.wc.send('agent:state', { panelId: 'chat', state: 'busy' })
+        k.wc.send('agent:state', { panelId: 'codex', state: 'busy' })
+        // History first: what happened before Watch opened stands as towers and never flies.
+        turn('chat', 'w-h1', [
+          { type: 'tool_use', id: 'wh1', name: 'Read', input: { file_path: f('config.ts') } },
+          { type: 'tool_use', id: 'wh2', name: 'Write', input: { file_path: f('health.ts'), content: 'export function watchdogBudget(load: number): number {\n  // back off under load instead of firing on a fixed 2s tick\n  const base = config.watchdogMs ?? 2000\n  return Math.min(8000, base * Math.max(1, load / 0.75))\n}\n' } }
+        ])
+        turn('codex', 'w-h2', [{ type: 'tool_use', id: 'wh3', name: 'Edit', input: { file_path: f('config.ts'), old_string: '', new_string: 'watchdogMs: 2000,\nwatchdogMaxMs: 8000' } }])
+        await sleep(400)
+        await k.js(`(() => { const b = document.querySelector('[data-orch-lens="watch"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        for (let i = 0; i < 40 && !(await k.js(`!!document.querySelector('[data-orch-live] canvas')`)); i++) await sleep(100)
+        if (!(await k.js(`!!document.querySelector('[data-orch-live] canvas')`))) throw new Error('orchestration-watch: the Watch scene did not paint')
+        await sleep(900)
+        // Live: these arrive while the lens is open, so they fly.
+        turn('codex', 'w-l1', [{ type: 'tool_use', id: 'wl1', name: 'Edit', input: { file_path: f('server.ts'), old_string: 'setInterval(tick, 2000)\nconst fixed = true', new_string: 'scheduleWatchdog(watchdogBudget(load))' } }])
+        turn('chat', 'w-l2', [{ type: 'tool_use', id: 'wl2', name: 'Bash', input: { command: 'npm test -- health' } }])
+        result('chat', 'w-r2', 'wl2', false)
+        await sleep(500)
+        turn('chat', 'w-l3', [{ type: 'tool_use', id: 'wl3', name: 'Edit', input: { file_path: f('server.ts'), old_string: 'const tick = 2000', new_string: 'const tick = watchdogBudget(load)\nlog.debug(tick)' } }])
+        await sleep(1150)
+        const painted = await k.js(`(() => { const r = document.querySelector('[data-orch-live]'); return r ? { towers: r.dataset.orchLiveTowers, events: r.dataset.orchLiveEvents } : null })()`)
+        if (!painted || Number(painted.towers) < 3) throw new Error(`orchestration-watch: expected at least 3 towers, got ${JSON.stringify(painted)}`)
+        await k.shot('orchestration-watch')
+      } finally {
+        k.wc.send('agent:state', { panelId: 'chat', state: 'idle' })
+        k.wc.send('agent:state', { panelId: 'codex', state: 'idle' })
+        // The lens is a PERSISTED preference: leave it on Watch and every later
+        // Orchestrate scene (and golden) opens on Watch instead of the Scene.
+        await k.js(`(() => { const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await k.theme('light')
+        if (opened) {
+          await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+          for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
+        }
+      }
+    } },
   { name: 'file-missing', intent: 'M149. A file panel whose file was deleted from disk under it: the watcher\'s push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body.', size: [1440, 900],
     run: async (k) => {
       // Last, on purpose: the file stays gone for every scene after it.
