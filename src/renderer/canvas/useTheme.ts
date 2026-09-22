@@ -41,16 +41,16 @@ const HIGH_CONTRAST: Record<ResolvedTheme, Record<string, string>> = {
     '--glass-3': '#ffffff'
   },
   dark: {
-    '--line': '#4a5670',
-    '--line-strong': '#7f8fb5',
-    '--frame-line': '#7f8fb5',
-    '--fg-4': '#a7b2c8',
+    '--line': '#4f5663',
+    '--line-strong': '#858c9a',
+    '--frame-line': '#858c9a',
+    '--fg-4': '#aab0bc',
     '--blur': 'none',
-    // M279: the opaque stand-ins follow the navy ramp (--s-0/--s-1/--s-2/--s-3).
-    '--glass-0': '#080c16',
-    '--glass-1': '#121a2a',
-    '--glass-2': '#0d1322',
-    '--glass-3': '#1a2336'
+    // M303: the opaque stand-ins follow the graphite ramp (--s-0/--s-1/--s-2/--s-3).
+    '--glass-0': '#0b0d11',
+    '--glass-1': '#161a21',
+    '--glass-2': '#111419',
+    '--glass-3': '#1d222b'
   }
 }
 

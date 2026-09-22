@@ -594,9 +594,9 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         }
         ok(IDS[0],
           vAWoke === true && stamped && after.attr === 'dark' && before.attr === 'light' &&
-            // M109: the Obsidian well; themes.ts and --well move together. M279 re-valued it navy.
-            before.a === '#ffffff' && after.a === '#0a0e19' &&
-            before.b === '#ffffff' && after.b === '#0a0e19' &&
+            // M109: the Obsidian well; themes.ts and --well move together. M279 re-valued it navy, M303 graphite.
+            before.a === '#ffffff' && after.a === '#0a0c10' &&
+            before.b === '#ffffff' && after.b === '#0a0c10' &&
             before.card.got === before.card.want && after.card.got === after.card.want &&
             before.card.got !== after.card.got,
           JSON.stringify({ before, after }))

@@ -65,7 +65,14 @@
      a bundled marketing face. ONE face for values: the mono stack, and
      create-terminal.ts names the SAME list so a value in the inspector and
      the terminal it describes resolve to the same glyphs. */
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  /* M303 (Quiet instrument). The chrome face is Geist, bundled in
+     fonts/fonts.css — a face the product owns reads as one designed object
+     where the system face read as a default. The system stack stays as the
+     fallback for the frame before the font decodes (font-display: swap).
+     --font-mono deliberately does NOT move: xterm measures its cell grid
+     when a terminal opens, and a face that swaps in afterwards would leave
+     every open terminal on a stale cell width, silently. */
+  --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
   /* Motion. 90ms is below the threshold at which a change reads as waiting
@@ -121,6 +128,10 @@
      own reading serif, local, so the CSP's default-src 'self' is untouched. */
   --measure-read: 66ch;
   --font-read: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  /* M303. The display serif for a note's HEADINGS only — Instrument Serif is
+     a condensed display cut and reads cramped at body size, so running prose
+     stays on --font-read. */
+  --font-display: "Instrument Serif", ui-serif, "New York", Georgia, serif;
   /* M258. The HUD pill's height, so the minimap can stack directly above it
      as ONE navigation cluster on a wide window. */
   --nav-hud-h: 34px;
@@ -321,51 +332,56 @@
      than grey. Every value re-derived against check 11. */
   --deck-violet: #b59af8;
   --deck-steel: #8fb2d6;
-  --deck-ground: #070b14;
-  --deck-surface: #0d1420;
+  --deck-ground: #0b0d11;
+  --deck-surface: #161a21;
   /* M279. NAVY, not black. The ramp keeps M109's twenty-point span and moves
      every step a few degrees toward blue, so the ground reads as a deep
      material rather than an absence — the dark theme was measured at
      #070910, a hue nobody can name. Every value re-derived against check 11
      (the contrast script in the ledger); --s-4/--s-5 keep their roles as
      hover and pressed tints. */
-  --s-0: #080c16;
-  --s-1: #121a2a;
-  --s-2: #0d1322;
-  --s-3: #1a2336;
-  --s-4: #222d43;
-  --s-5: #2b3850;
+  /* M303 (Quiet instrument). GRAPHITE, not navy: the M279 ramp's blue made
+     the whole room one colour, so the accent had nothing to stand against.
+     Neutrals keep a few degrees of cool bias toward --iris so they read as
+     chosen, and the two auras drop to a whisper — the canvas is lit by its
+     panels now, not by the ground. Re-derived against check 11. */
+  --s-0: #0b0d11;
+  --s-1: #161a21;
+  --s-2: #111419;
+  --s-3: #1d222b;
+  --s-4: #262c36;
+  --s-5: #303743;
 
   /* terminal/themes.ts's dark `background`: a half-step below the glass so
      the well reads as a screen set into the frame. The sixteen ANSI colours
      did not move (they are the agent's, not the app's). */
-  --well: #0a0e19;
+  --well: #0a0c10;
 
-  --fg:   #e8edf7;
-  --fg-2: #b7c1d4;
-  --fg-3: #94a1b8;
-  --fg-4: #7684a0;
+  --fg:   #e7e9ee;
+  --fg-2: #b3b9c4;
+  --fg-3: #959cab;
+  --fg-4: #7b8292;
 
   /* Hairlines carry a little of the ground's blue so a boundary reads as
      part of the material rather than a grey ruled over it. */
-  --line:        #243047;
-  --line-strong: #394764;
+  --line:        #252a33;
+  --line-strong: #363d49;
   --frame-line: var(--line-strong);
 
   /* M279. Electric blue for work, mint for idle: the working hue is the one
      the eye meets most, so it sits nearest the identity cyan without
      becoming it (selection is cyan; work is blue — M63's rule survives). */
-  --blue:  #6ea8ff;  --blue-dim:  rgba(110, 168, 255, .16);
-  --green: #7fdba0;  --green-dim: rgba(127, 219, 160, .16);
-  --amber: #e5b467;  --amber-dim: rgba(229, 180, 103, .18);
-  --red:   #ff7b8e;  --red-dim:   rgba(255, 123, 142, .16);
+  --blue:  #7aa7e8;  --blue-dim:  rgba(122, 167, 232, .14);
+  --green: #6fcf8a;  --green-dim: rgba(111, 207, 138, .14);
+  --amber: #e8b44c;  --amber-dim: rgba(232, 180, 76, .16);
+  --red:   #ef7a7a;  --red-dim:   rgba(239, 122, 122, .14);
 
-  --iris: #5fe3ff;  --iris-dim: rgba(95, 227, 255, .14);
-  --violet: #b39dff;  --violet-dim: rgba(179, 157, 255, .16);
+  --iris: #5ec4d4;  --iris-dim: rgba(94, 196, 212, .14);
+  --violet: #a894f0;  --violet-dim: rgba(168, 148, 240, .14);
   --focus: var(--iris);
   --nav-moat: var(--s-0);
-  --grid-line: rgba(232, 237, 247, .05);
-  --lane-line: rgba(232, 237, 247, .07);
+  --grid-line: rgba(231, 233, 238, .045);
+  --lane-line: rgba(231, 233, 238, .065);
 
   --e-1: 0 1px 2px rgba(0, 0, 0, .35);
   --e-2: 0 2px 8px rgba(0, 0, 0, .40);
@@ -377,20 +393,20 @@
      from --s-0, the chrome a half-step darker than the panel). The lit edge
      is CYAN-TINTED white now rather than white: the top light on every
      surface says, quietly, what colour the room's light is. */
-  --glass-1:    rgba(18, 26, 42, .88);
-  --glass-2:    rgba(13, 19, 34, .82);
-  --edge-light: rgba(170, 225, 255, .13);
+  --glass-1:    rgba(22, 26, 33, .90);
+  --glass-2:    rgba(17, 20, 25, .86);
+  --edge-light: rgba(255, 255, 255, .09);
   --bezel:      rgba(0, 0, 0, .45);
   --lift:       0 24px 48px -20px rgba(0, 0, 0, .8); /* M163: the lift present, not implied; was 0 20px 40px -22px .75 */
   /* The ground's light: electric blue at the centre, cyan in the diagonal —
      the two illumination hues the brief names, at the alphas M109 chose for
      indigo and teal. */
-  --aura-1:     rgba(56, 130, 255, .28);
-  --aura-2:     rgba(95, 227, 255, .16);
-  --aura-working:   rgba(110, 168, 255, .20);
-  --aura-needs-you: rgba(229, 180, 103, .18);
-  --on-iris:    #06111a;
-  --bubble:     #1a2436;
+  --aura-1:     rgba(94, 196, 212, .07);
+  --aura-2:     rgba(140, 150, 175, .05);
+  --aura-working:   rgba(122, 167, 232, .10);
+  --aura-needs-you: rgba(232, 180, 76, .12);
+  --on-iris:    #06222a;
+  --bubble:     #1f242d;
   --blur:       blur(14px) saturate(140%);
 
   /* M227. The depth tokens, DARK. --glass-0 sits BELOW --s-0 in lightness so a
@@ -404,8 +420,8 @@
      eye finds. This is M163's --edge-light finding (.06 was invisible at the
      golden's scale, .11 was not) met a second time, and answered before the
      milestone shipped rather than two versions later. */
-  --glass-0:    rgba(8, 12, 22, .92);
-  --glass-3:    rgba(30, 40, 60, .94);
+  --glass-0:    rgba(9, 11, 14, .92);
+  --glass-3:    rgba(32, 37, 46, .95);
   --rim-inner:  inset 0 2px 3px rgba(0, 0, 0, .9);
 
   --text:      var(--fg);
@@ -420,7 +436,7 @@
   /* M187. The four sticky tints, DARK theme: the same four hues at the dark
      ground's own lightness, so a note reads as paper without becoming a lamp. */
   --tint-yellow: #2e2a1c;
-  --tint-blue:   #1c2634;
+  --tint-blue:   #1d232c;
   --tint-green:  #1b2a20;
   --tint-pink:   #2f1e26;
 }
@@ -6133,6 +6149,12 @@ body {
 .md__h { margin: var(--sp-5) 0 var(--sp-3); font-weight: 600; color: var(--fg); }
 .md__h--1 { font-size: var(--t-lg); }
 .md__h--2, .md__h--3 { font-size: var(--t-base); }
+/* M303. In a note (not a chat), the top two headings take the display serif
+   one step larger — a note is a page someone wrote, and its title should read
+   as one. Chat headings stay the UI face: a turn is talk, not a document. */
+.file-node__prose :is(.md__h--1, .md__h--2) { font-family: var(--font-display); font-weight: 400; letter-spacing: 0; }
+.file-node__prose .md__h--1 { font-size: var(--t-2xl); line-height: var(--lh-tight); }
+.file-node__prose .md__h--2 { font-size: var(--t-xl); }
 .md__list { margin: 0 0 var(--sp-4); padding-left: var(--sp-7); }
 .md__list li { margin: 0 0 var(--sp-1); }
 .md__fence { position: relative; margin: 0 0 var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }

@@ -25,11 +25,11 @@ import type { ITheme } from '@xterm/xterm'
  */
 export const DARK_TERMINAL_THEME: ITheme = {
   // M109. The Obsidian well: a half-step below the glass, --well in styles.css.
-  background: '#0a0e19',
+  background: '#0a0c10',
   foreground: '#d8dae5',
-  cursor: '#6ea8ff',
-  cursorAccent: '#0a0e19',
-  selectionBackground: '#2a3a5c',
+  cursor: '#5ec4d4',
+  cursorAccent: '#0a0c10',
+  selectionBackground: '#27414a',
   black: '#15161e',
   red: '#f7768e',
   green: '#9ece6a',
