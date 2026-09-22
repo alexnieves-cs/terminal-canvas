@@ -154,6 +154,38 @@ check(START, 'fr.sheet.3 Start work has plain labels, its runtime said, and Canc
     /is-primary/.test(submit) && /\bdisabled=""/.test(submit) && />Start task</.test(submit) && /data-start-cancel/.test(html) && /data-sheet-switch-to="panel"/.test(html), detail: { submit } }
 })
 
+// Starting the first task, #8: optional setup is grouped and phrased as a benefit, never the amber banner.
+check(LAUNCHER, 'fr.setup.1 persistence is an OPTIONAL improvement — inside a closed "Improve your setup", named "Keep agents running between sessions", tmux only in its How, and no amber banner', (m) => {
+  const html = launcher(m, { claude: '/b/claude' }, { tmux: 'no tmux', onDismissTmux: noop })
+  const at = html.indexOf('data-launcher-improve')
+  const group = at === -1 ? '' : html.slice(html.lastIndexOf('<details', at), html.indexOf('data-launcher-more', at))
+  const how = group.match(/<details\b[^>]*data-launcher-tmux-details[\s\S]*?<\/details>/)?.[0] ?? ''
+  const outsideHow = group.replace(how, '')
+  const none = launcher(m, { claude: '/b/claude' })
+  return { pass: !/\bopen\b[^>]*data-launcher-improve|data-launcher-improve[^>]*\bopen\b/.test(html) && />Improve your setup</.test(group) &&
+    /Keep agents running between sessions/.test(group) && /tmux/.test(how) && !/tmux/.test(outsideHow.replace(/<[^>]*>/g, '')) &&
+    /data-launcher-tmux-dismiss/.test(group) && !/launcher__banner"[^>]*data-launcher-tmux/.test(html) && !/data-launcher-improve/.test(none),
+  detail: { group: group.slice(0, 300) } }
+})
+
+// Starting the first task, #9: the handoff hint follows the conversation's real state.
+check(HINTS, 'fr.handoff.1 the first-task hint is worded from the live state — starting, working, answered, or "send your first message" only when nothing was sent — and says nothing once the session ended', (m) => {
+  const h = m.firstTaskHint
+  const got = [h(undefined, 0, true), h('starting', 0, true), h('streaming', 1, true), h('ready', 2, true), h('ready', 0, false), h('exited', 2, true)]
+  return { pass: /starting/.test(got[0]) && got[0] === got[1] && /working/.test(got[2]) && /answered/.test(got[3]) && /Send your first message/.test(got[4]) &&
+    got[5] === null && !/Send your first message/.test(h('ready', 0, true)), detail: got }
+})
+const VP = load('src/renderer/canvas/viewport.ts', 'first-run-viewport.cjs')
+check(VP, 'fr.handoff.2 the first start frames the new task readably — never above 100% for a lone pair, and the conversation alone when the pair would fall below READABLE_SCALE', (m) => {
+  const size = { width: 1400, height: 900 }
+  const card = { x: 0, y: 0, w: 300, h: 200 }, chat = { x: 340, y: 0, w: 420, h: 520 }
+  const small = m.fitReadable([card, chat], chat, size)
+  const farCard = { x: -4000, y: -3000, w: 300, h: 200 }
+  const spread = m.fitReadable([farCard, chat], chat, size)
+  const chatOnly = m.fitTo([chat], size)
+  return { pass: small.scale === 1 && spread.scale >= m.READABLE_SCALE && Math.min(1, chatOnly.scale) === spread.scale, detail: { small, spread } }
+})
+
 // M263. Occupied create face: one +, never a band of data-create-object pills.
 const CREATE = load('src/renderer/canvas/NewObjectRow.tsx', 'first-run-create-face.cjs', true)
 check(CREATE, 'create-face.1 occupied canvas shows a single Create + (data-create-open), never data-create-object pills', (m) => {

@@ -7,7 +7,7 @@
  * (the gestures) and the launcher (the tmux notice, a first-run banner) — and
  * a seen id never comes back. Pure; `verify:rail hints.1`.
  */
-export type HintId = 'pan' | 'zoom' | 'palette' | 'new-panel' | 'tmux' | 'starter'
+export type HintId = 'pan' | 'zoom' | 'palette' | 'new-panel' | 'tmux' | 'starter' | 'first-task'
 export interface Hint { id: HintId; text: string; where: 'rail' | 'launcher' }
 
 export const HINTS: ReadonlyArray<Hint> = [
@@ -15,7 +15,9 @@ export const HINTS: ReadonlyArray<Hint> = [
   { id: 'zoom', text: 'A pinch, or ⌘= and ⌘−, zooms it.', where: 'rail' },
   { id: 'palette', text: '⌘K opens the palette with every verb.', where: 'rail' },
   { id: 'new-panel', text: '⌘N starts a panel where the camera is.', where: 'rail' },
-  { id: 'tmux', text: 'No tmux was found, so sessions end when the app reloads — install tmux to keep agents running across a relaunch.', where: 'launcher' },
+  // The launcher's "Keep agents running between sessions" row states the
+  // benefit; this is its "How" disclosure, so the mechanism is named here.
+  { id: 'tmux', text: 'Sessions stay alive across a reload or relaunch when tmux is installed — without it, each one ends with the app. Install tmux (for example, brew install tmux), then relaunch.', where: 'launcher' },
   // M205 critic 2.4: the starter canvas lives inside the closed "More ways to
   // start" disclosure on purpose (D09's header — a tour is not the primary),
   // but that leaves it with no door a first-time person would ever open. One
@@ -55,4 +57,22 @@ export function attemptOf(e: { type: string; button?: number; deltaMode?: number
   if (e.type === 'dblclick') return 'new-panel'
   if (e.type === 'keydown' && e.metaKey !== true && e.ctrlKey !== true && typeof e.key === 'string' && e.key.length === 1) return 'palette'
   return null
+}
+
+/**
+ * THE FIRST START'S HANDOFF. One dismissible line after the first task is made,
+ * worded from the conversation's ACTUAL state rather than a tour's script:
+ * what is happening now, and what the person can do next. `sent` is whether
+ * the sentence went to the agent (Start task sends it; a conversation-only
+ * start inserts it and waits). Null when there is nothing to hand off — the
+ * session ended, and the panel says so itself. Not in HINTS: it has no surface
+ * of its own before a start, only a `hints.seen` id so it is shown once.
+ */
+export type FirstTaskStatus = 'not-started' | 'starting' | 'ready' | 'streaming' | 'exited' | 'disposed'
+export function firstTaskHint(status: FirstTaskStatus | undefined, turns: number, sent: boolean): string | null {
+  if (status === 'exited' || status === 'disposed') return null
+  if (status === undefined || status === 'not-started' || status === 'starting') return 'Your agent is starting.'
+  if (status === 'streaming') return 'Your agent is working on it. Anything you type now is a follow-up.'
+  if (turns === 0 && !sent) return 'Send your first message — your sentence is already in the composer.'
+  return 'Your agent answered. Read it in the conversation, or type a follow-up.'
 }

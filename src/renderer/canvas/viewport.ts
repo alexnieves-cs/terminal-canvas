@@ -257,6 +257,29 @@ export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
   }
 }
 
+/** Below this, a panel's body text is no longer comfortably read. */
+export const READABLE_SCALE = 0.8
+
+/**
+ * The first start's framing: the new task, never the whole canvas, and READABLE.
+ * `fitTo` alone zooms a lone card past 100% and, on a busy canvas or a small
+ * window, below the point where the chat can be read. So: never above 1, and
+ * when the rects together would need less than READABLE_SCALE, frame only
+ * `focus` (the conversation the caret was just put in).
+ */
+export function fitReadable(rects: WorldRect[], focus: WorldRect | undefined, size: Size, margin = 64): Viewport {
+  const atMost1 = (vp: Viewport, box: WorldRect[]): Viewport => vp.scale <= 1 ? vp : centreAt(box, size, 1)
+  const all = fitTo(rects, size, margin)
+  if (all.scale >= READABLE_SCALE || focus === undefined) return atMost1(all, rects)
+  return atMost1(fitTo([focus], size, margin), [focus])
+}
+
+function centreAt(rects: WorldRect[], size: Size, scale: number): Viewport {
+  const minX = Math.min(...rects.map((r) => r.x)); const maxX = Math.max(...rects.map((r) => r.x + r.w))
+  const minY = Math.min(...rects.map((r) => r.y)); const maxY = Math.max(...rects.map((r) => r.y + r.h))
+  return { scale, x: size.width / 2 - ((minX + maxX) / 2) * scale, y: size.height / 2 - ((minY + maxY) / 2) * scale }
+}
+
 /**
  * M149. What `Zoom to fit` frames, as a pure decision over the SELECTION and
  * the canvas: the selected rects when any, every panel otherwise, and a reset

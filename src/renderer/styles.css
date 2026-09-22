@@ -7138,6 +7138,20 @@ body {
 .launcher__notices .launcher__readiness { margin: 0; }
 .launcher__notices .launcher__banner { margin: 0; }
 .launcher__more { margin-top: var(--sp-5); }
+/* THE FIRST START'S HANDOFF: one line, bottom-centre over the canvas, in the
+   neutral surface — a status, not an alert. */
+.first-task-hint { position: absolute; left: 50%; bottom: var(--sp-8); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: var(--sp-4); margin: 0; padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); max-width: min(560px, calc(100% - 32px)); }
+/* OPTIONAL SETUP: a closed group in the neutral tone — an improvement, never
+   styled like the amber banner or a refusal, because nothing here blocks. */
+.launcher__improve { font-size: var(--t-sm); color: var(--fg-3); }
+.launcher__improve-toggle { cursor: pointer; color: var(--fg-3); }
+.launcher__improve[open] > .launcher__improve-toggle { margin-bottom: var(--sp-3); }
+.launcher__improve-row { display: flex; align-items: flex-start; gap: var(--sp-4); padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
+.launcher__improve-body { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.launcher__improve-name { color: var(--fg-2); }
+.launcher__improve-hint { color: var(--fg-3); }
+.launcher__improve-details > summary { cursor: pointer; color: var(--fg-4); }
+.launcher__improve-details p { margin: var(--sp-2) 0 0; color: var(--fg-3); }
 
 /* M262. THE STARTER CLUSTER. For one arrival the new panels rise from
    further and in turn — never scaled: the keyframe runs on `.pf__motion`,

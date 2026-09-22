@@ -358,7 +358,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <div className="launcher__field">
             {/* What will happen — the grant included — before anything does; or the
                 one thing still missing. One sentence, never a list of three. */}
-            <p className="launcher__summary" data-onboarding-summary={plan.kind === 'refused' ? plan.field : plan.kind} title={plan.kind === 'refused' ? undefined : plan.folder}>
+            <p className="launcher__summary" id="launcher-summary" data-onboarding-summary={plan.kind === 'refused' ? plan.field : plan.kind} title={plan.kind === 'refused' ? undefined : plan.folder}>
               {plan.kind === 'refused' ? plan.reason : plan.summary}
             </p>
             {answer !== null && (
@@ -375,12 +375,12 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
               {/* M263. Composed next step: Start work · Ask · Create… — not nine
                   equal creatable-kind pills. Create opens the shared sheet. */}
               <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
-                disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'refused' ? '' : plan.summary)}
+                disabled={startReason !== null || busy} aria-describedby={startReason !== null ? 'launcher-summary' : undefined} title={startReason ?? (plan.kind === 'refused' ? '' : plan.summary)}
                 {...shellControl(start)}>
                 <span className="launcher__verb-name">{busy ? (opensChat ? 'Opening the conversation…' : 'Making the lane…') : opensChat ? 'Open conversation' : 'Start task'}</span>
                 {!busy && <kbd className="launcher__kbd" aria-hidden="true">↵</kbd>}
               </button>
-              <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null}
+              <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null} aria-describedby={askReason !== null ? 'launcher-summary' : undefined}
                 title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
                 {...shellControl(() => { if (askReason === null) onAsk?.(intention) })}>
                 <span className="launcher__verb-name">Ask</span>
@@ -400,11 +400,27 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           is read before the question is. A blocking engine is step 3 above. */}
       <div className="launcher__notices" data-launcher-notices>
         {!agentStep && <div className="launcher__readiness" aria-label="Conversation engines">{engineRows}</div>}
+        {/* BLOCKING vs OPTIONAL. Nothing in here stops a start (a blocking
+            engine is step 3 above), so none of it may look like an error: an
+            improvement sits in one closed "Improve your setup" group, in the
+            neutral tone, never the amber banner. The persistence line says what a person GETS; tmux is the how, one
+            disclosure deeper. The rows stay in the DOM while closed, so the
+            dismiss and the reach checks still find them. */}
         {tmux !== undefined && tmux !== null && (
-          <p className="launcher__banner" data-launcher-tmux role="status" title={tmux}>
-            {TMUX_HINT.text}
-            <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-tmux-dismiss title="Dismiss this notice" {...shellControl(() => onDismissTmux?.())}>Got it</button>
-          </p>
+          <details className="launcher__improve" data-launcher-improve>
+            <summary className="launcher__improve-toggle">Improve your setup</summary>
+            <div className="launcher__improve-row" data-launcher-tmux title={tmux}>
+              <div className="launcher__improve-body">
+                <span className="launcher__improve-name">Keep agents running between sessions</span>
+                <span className="launcher__improve-hint">Right now an agent stops when the app reloads or quits.</span>
+                <details className="launcher__improve-details" data-launcher-tmux-details>
+                  <summary>How</summary>
+                  <p>{TMUX_HINT.text}</p>
+                </details>
+              </div>
+              <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-tmux-dismiss title="Hide this suggestion" {...shellControl(() => onDismissTmux?.())}>Got it</button>
+            </div>
+          </details>
         )}
       </div>
       {/* M205 critic 2.4. ONE calm line pointing at the disclosure below,

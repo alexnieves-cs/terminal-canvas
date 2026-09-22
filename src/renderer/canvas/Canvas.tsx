@@ -30,6 +30,7 @@ import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
 import { snapRect, SNAP_PX, type SnapGuide } from './placement'
 import { attemptOf, contextualHint, hintsLeft, STARTER_HINT, type HintId } from './hints'
+import { FirstTaskHint } from './FirstTaskHint'
 import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
@@ -1359,7 +1360,7 @@ export function Canvas({
   )
 
   const {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects, frameReadable,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying, landing
   } = useViewport(
@@ -3206,6 +3207,9 @@ export function Canvas({
   // would need a hook into every input path for a fact the state already
   // carries.
   const [hintsSeen, setHintsSeen] = useState<ReadonlySet<string>>(() => new Set())
+  // Read by startFirstWork at press time, so the callback need not re-create on every hint.
+  const hintsSeenRef = useRef(hintsSeen)
+  hintsSeenRef.current = hintsSeen
   const hintsLoadedRef = useRef(false)
   // M173 (the Act III critic): a STATE beside the ref, so the banner and the rail's hints render only once `hints.seen` has been read — the banner painted and vanished on every launch when the backend probe answered first.
   const [hintsLoaded, setHintsLoaded] = useState(false)
@@ -3260,6 +3264,9 @@ export function Canvas({
   // one arrival they rise in turn and the camera frames them TOGETHER, so the
   // first thing a person sees is the pair, never one panel alone on a void.
   const [clusterArrival, setClusterArrival] = useState(false)
+  // The first start's handoff hint: which conversation it reads, and whether
+  // the sentence was sent (Start task) or only inserted (a conversation).
+  const [firstTask, setFirstTask] = useState<{ panelId: string; sent: boolean } | null>(null)
   // M262. The gesture a person last reached for on the EMPTY canvas — read
   // by a passive capture listener that never prevents or stops anything, so
   // no gesture handler below it changes. Only a background target counts: a
@@ -6483,7 +6490,9 @@ export function Canvas({
     if (plan.kind === 'chat') {
       const message = req.intention.trim()
       const r = await beginNewChat({ cwd: plan.folder, ...(plan.engine === LANE_ENGINE ? {} : { backend: plan.engine }), ...(message === '' ? {} : { message }) })
-      return r.kind === 'refused' ? { kind: 'refused', reason: r.reason } : { kind: 'started' }
+      if (r.kind === 'refused') return { kind: 'refused', reason: r.reason }
+      if (r.id !== undefined && !hintsSeenRef.current.has('first-task')) setFirstTask({ panelId: r.id, sent: false })
+      return { kind: 'started' }
     }
     const repo = firstWorkRepoAnswer(await window.canvas.git.status(plan.folder), plan.folder)
     if (repo.kind !== 'repository') return repo
@@ -6535,14 +6544,22 @@ export function Canvas({
     // the card and the chat land in separate commits), then the flag clears
     // so a later mint rises alone, as it always has.
     setClusterArrival(true)
-    requestAnimationFrame(() => requestAnimationFrame(() => { fitAll() }))
+    // The NEW task, not the whole canvas, at a scale its chat can be read at
+    // (`fitReadable`): fitAll zoomed a lone card past 100% and a busy canvas
+    // below reading size. Looked up at frame time — both have mounted by then.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const mine = panelsRef.current.filter((p) => p.rect.id === outcome.panelId || workCardItemId(p) === outcome.itemId)
+      const chat = mine.find((p) => p.rect.id === outcome.panelId)
+      if (mine.length === 0) fitAll(); else frameReadable(mine.map((p) => p.rect), chat?.rect)
+    }))
+    if (!hintsSeenRef.current.has('first-task')) setFirstTask({ panelId: outcome.panelId, sent: true })
     window.setTimeout(() => setClusterArrival(false), 1200)
     // A later start of the same words in the same folder is a NEW task: the
     // conversation this one made may be closed by then, and reusing its item
     // would fold the second start into the first (the M205 critic).
     firstWorkItemRef.current = null
     return { kind: 'started' }
-  }, [reloadTeammates, fitAll, beginNewChat])
+  }, [reloadTeammates, fitAll, frameReadable, beginNewChat])
   /** M205. The ONE alternative: M120's no-folder conversation, on the engine readiness found, the sentence in its composer — inserted, never sent (M80). */
   const askWithoutFolder = useCallback((intention: string): void => {
     const preferred = onboardingReadiness(envReportRef.current).preferred
@@ -8159,6 +8176,10 @@ export function Canvas({
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}
+        {/* The first start's one handoff hint — gone once dismissed, and with its panel. */}
+        {firstTask !== null && !hintsSeen.has('first-task') && panels.some((p) => p.rect.id === firstTask.panelId) && (
+          <FirstTaskHint panelId={firstTask.panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }} />
+        )}
         {panels.length === 0 && !merged && !launcherPutAway && (() => {
           // Computed once so the tmux/starter notices and the starter door's
           // own disabled reason read the SAME facts — two separate ternaries

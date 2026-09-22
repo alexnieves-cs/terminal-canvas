@@ -3,6 +3,7 @@ import { normalizeWheel } from './canvas-input'
 import {
   centreOn as centreOnRect,
   fitTo,
+  fitReadable,
   clampScale,
   panBy,
   restoreCamera as restoreCameraExact,
@@ -101,6 +102,8 @@ export interface ViewportControls {
    * me the task" that could not be undone would strand the person.
    */
   frameRects: (rects: WorldRect[]) => void
+  /** The first start's framing: the new task at a readable scale, `focus` alone when the pair would be too small. */
+  frameReadable: (rects: WorldRect[], focus?: WorldRect) => void
   /**
    * M56. The named verbs behind bookmarks and the trail. Same stability
    * requirement as every verb above: each sits in Canvas.tsx's paletteActions
@@ -438,6 +441,14 @@ export function useViewport(
     jump(fitTo(rects, { width: bounds.width, height: bounds.height }))
   }, [hostRef, jump])
 
+  /** The first start's framing — `fitReadable`: the new task at a scale its text can be read at. */
+  const frameReadable = useCallback((rects: WorldRect[], focus?: WorldRect) => {
+    const host = hostRef.current
+    if (!host || rects.length === 0) return
+    const bounds = host.getBoundingClientRect()
+    jump(fitReadable(rects, focus, { width: bounds.width, height: bounds.height }))
+  }, [hostRef, jump])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Cmd is required for every canvas shortcut. Agent TUIs claim essentially
@@ -686,7 +697,7 @@ export function useViewport(
   }, [])
 
   return {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects, frameReadable,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying, landing
   }
