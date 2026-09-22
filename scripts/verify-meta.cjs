@@ -1034,7 +1034,8 @@ console.log('\n' + '='.repeat(60))
   }
   const brief = /^## The critic and the reference/m.test(rules) && /deliberately (NOT|not) copied/.test(rules) && /vs-reference\.png/.test(rules)
   ok('critic.reference.1 every orchestration* shot scene names a reference PNG that exists and is tracked, the harness writes the composite, and product-rules.md carries the critic brief with its excluded features',
-    orch.length === 3 && problems.length === 0 && tracked !== null && composite !== null &&
+    // Four since M304: the Watch lens is its own Orchestrate scene (orchestration-watch).
+    orch.length === 4 && problems.length === 0 && tracked !== null && composite !== null &&
       /require\('\.\/shot-composite\.cjs'\)/.test(shot) && /composeManifest\(OUT, manifest\)/.test(shot) && brief,
     JSON.stringify({ orchestration: orch.map((m) => m[1]), problems, git: tracked !== null, composite: composite !== null, brief }))
 }

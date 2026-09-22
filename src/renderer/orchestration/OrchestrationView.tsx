@@ -681,13 +681,14 @@ function SelectedChatPhase({ panelId }: { panelId: string }): JSX.Element | null
  * ids are the product's own state words, and `metric` names the lens a group's
  * header applies (null: no lens for that group).
  */
-function orchRosterGroups<R extends { state: string }>(rows: readonly R[]): { id: 'working' | 'needs-you' | 'idle' | 'ended'; label: string; metric: OrchMetricId | null; rows: R[] }[] {
-  const of = (st: string): 'working' | 'needs-you' | 'idle' | 'ended' =>
+type OrchRosterGroupId = typeof TONE_WORKING | 'needs-you' | 'idle' | 'ended'
+function orchRosterGroups<R extends { state: string }>(rows: readonly R[]): { id: OrchRosterGroupId; label: string; metric: OrchMetricId | null; rows: R[] }[] {
+  const of = (st: string): OrchRosterGroupId =>
     st === 'wants-you' ? 'needs-you'
-      : st === 'busy' || st === 'starting' || st === 'running' || st === 'watching' || st === 'pool' ? 'working'
+      : st === 'busy' || st === 'starting' || st === 'running' || st === 'watching' || st === 'pool' ? TONE_WORKING
         : st === 'exited' || st === 'unknown' ? 'ended' : 'idle'
   const groups = [
-    { id: 'working' as const, label: 'Working', metric: 'agents' as OrchMetricId | null, rows: [] as R[] },
+    { id: TONE_WORKING, label: 'Working', metric: 'agents' as OrchMetricId | null, rows: [] as R[] },
     { id: 'needs-you' as const, label: 'Needs you', metric: 'waiting' as OrchMetricId | null, rows: [] as R[] },
     { id: 'idle' as const, label: 'Idle', metric: null, rows: [] as R[] },
     { id: 'ended' as const, label: 'Ended', metric: null, rows: [] as R[] }
@@ -1951,7 +1952,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const liveModel = useMemo(() => {
     if (lens !== 'watch') return null
     const islandOf = (id: string): string | null => islands.find((i) => i.memberIds.includes(id))?.id ?? null
-    const stateOf = (state: string): OrchLiveState => state === 'busy' || state === 'starting' || state === 'running' || state === 'watching' ? 'working'
+    const stateOf = (state: string): OrchLiveState => state === 'busy' || state === 'starting' || state === 'running' || state === 'watching' ? TONE_WORKING
       : state === 'wants-you' ? 'needs-you' : state === 'exited' || state === 'unknown' ? 'exited' : 'idle'
     const inputs: OrchLiveSessionInput[] = liveSnap.roster
       .filter((r) => r.kind !== 'file' && r.kind !== 'work')

@@ -24,6 +24,7 @@
  */
 
 import type { ContentBlock } from '@shared/transcript'
+import { TONE_NEEDS_YOU, TONE_WORKING } from '@renderer/panels/panel-state'
 
 export type OrchLiveKind = 'read' | 'write' | 'run' | 'other'
 
@@ -39,7 +40,9 @@ export interface OrchLiveTool {
   command?: string
 }
 
-export type OrchLiveState = 'working' | 'needs-you' | 'idle' | 'exited'
+/** The panel-state tones (state.2: the words live in panel-state.ts), narrowed to the four Watch draws. */
+export type OrchLiveState = typeof TONE_WORKING | 'needs-you' | 'idle' | 'exited'
+export const ORCH_LIVE_NEEDS_YOU = TONE_NEEDS_YOU as 'needs-you'
 
 export interface OrchLiveSessionInput {
   id: string
@@ -203,11 +206,17 @@ export function orchLiveClip(text: string, max = ORCH_LIVE_TOKEN_MAX): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`
 }
 
+/** A path as a sentence shows it: its last two segments, `…/src/health.ts` — the full path is the workbench's. */
+export function orchLiveShortPath(path: string): string {
+  const parts = path.split('/').filter((p) => p !== '')
+  return parts.length <= 2 ? path : `…/${parts.slice(-2).join('/')}`
+}
+
 function sentence(tool: OrchLiveTool, name: string): string {
-  if (tool.kind === 'read') return tool.path !== undefined ? `Reading ${tool.path}` : `Searching with ${name}`
+  if (tool.kind === 'read') return tool.path !== undefined ? `Reading ${orchLiveShortPath(tool.path)}` : `Searching with ${name}`
   if (tool.kind === 'write') {
     if (tool.path === undefined) return `Writing with ${name}`
-    return tool.added === 0 && tool.removed > 0 ? `Removing lines from ${tool.path}` : `Writing ${tool.path}`
+    return tool.added === 0 && tool.removed > 0 ? `Removing lines from ${orchLiveShortPath(tool.path)}` : `Writing ${orchLiveShortPath(tool.path)}`
   }
   if (tool.kind === 'run') return tool.command !== undefined ? `Running ${orchLiveClip(tool.command, 48)}` : 'Running a command'
   return `Using ${name}`

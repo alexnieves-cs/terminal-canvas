@@ -36,6 +36,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { OrchestrationBloom } from './orchestration-bloom'
 import { shellControl } from '@renderer/shell/shell-control'
+import { agentWord, TONE_WORKING } from '@renderer/panels/panel-state'
 import {
   orchLiveFresh,
   orchLiveLayout,
@@ -203,7 +204,8 @@ function Platform({ plate, p, shadows }: { plate: OrchLivePlatform; p: Palette; 
     })
   }, [plate.size])
   useEffect(() => () => { for (const t of tiers) { t.body.dispose(); t.edges.dispose() } }, [tiers])
-  const accent = plate.primary ? p.iris : plate.id === null ? p.steel : p.iris
+  // Only the focused task's platform is lit; the rest are the floor the eye passes over.
+  const accent = plate.primary ? p.iris : p.steel
   return (
     <group position={[plate.x, 0, plate.z]} rotation={[0, Math.PI / 4, 0]}>
       {tiers.map((t, i) => {
@@ -212,10 +214,10 @@ function Platform({ plate, p, shadows }: { plate: OrchLivePlatform; p: Palette; 
           <group key={i} position={[0, t.y, 0]}>
             <mesh geometry={t.body} receiveShadow={shadows} castShadow={shadows && i === 0}>
               <meshPhysicalMaterial color={p.surface} roughness={0.55} metalness={0.25} clearcoat={0.4} clearcoatRoughness={0.35}
-                emissive={accent} emissiveIntensity={deck ? (plate.primary ? 0.16 : 0.07) : 0.03} />
+                emissive={accent} emissiveIntensity={deck ? (plate.primary ? 0.16 : 0.02) : 0.02} />
             </mesh>
             <lineSegments geometry={t.edges}>
-              <lineBasicMaterial color={deck ? accent : p.line} transparent opacity={deck ? (plate.primary ? 1 : 0.6) : 0.4} toneMapped={!deck} />
+              <lineBasicMaterial color={deck ? accent : p.line} transparent opacity={deck ? (plate.primary ? 1 : 0.35) : 0.3} toneMapped={!(deck && plate.primary)} />
             </lineSegments>
           </group>
         )
@@ -250,10 +252,12 @@ function Session({ s, x, z, selected, p, tex, reducedMotion, shadows, handles, o
   const [hover, setHover] = useState(false)
   const hoverRef = useRef(false)
   hoverRef.current = hover
-  const working = s.state === 'working'
+  const working = s.state === TONE_WORKING
   const needs = s.state === 'needs-you'
   const lit = working || needs
   const color = needs ? p.amber : working ? p.iris : p.idle
+  // An idle cube is the surface lifted a little toward the idle grey — present, never a light.
+  const idleBody = useMemo(() => p.surface.clone().lerp(p.idle, 0.45), [p.surface, p.idle])
   useEffect(() => {
     if (!lit) return
     const g = glowSprite(tex, color, 1.9, 0.5, p.dark)
@@ -338,7 +342,7 @@ function Session({ s, x, z, selected, p, tex, reducedMotion, shadows, handles, o
         // Idle is a settled cube with no light; exited is the same cube, darker and see-through.
         <mesh ref={core} position={[0, 0.3, 0]} castShadow={shadows}>
           <boxGeometry args={[0.48, 0.48, 0.48]} />
-          <meshStandardMaterial color={p.idle} roughness={0.7} transparent opacity={s.state === 'exited' ? 0.4 : 1} emissive={p.idle} emissiveIntensity={0} />
+          <meshStandardMaterial color={idleBody} roughness={0.75} transparent opacity={s.state === 'exited' ? 0.4 : 1} />
         </mesh>
       )}
       {/* An invisible, generous hit volume: the core is small and moving. */}
@@ -590,12 +594,27 @@ function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, versi
 // Camera: orbit, damped, with an optional follow of the active session
 // ---------------------------------------------------------------------------
 
-function CameraRig({ radius, autoRotate, follow, reset }: { radius: number; autoRotate: boolean; follow: THREE.Vector3 | null; reset: number }): null {
+function CameraRig({ bounds, autoRotate, follow, reset }: { bounds: { x: number; z: number; r: number }; autoRotate: boolean; follow: THREE.Vector3 | null; reset: number }): null {
   const camera = useThree((s) => s.camera)
   const dom = useThree((s) => s.gl.domElement)
   const invalidate = useThree((s) => s.invalidate)
   const controls = useRef<OrbitControls | null>(null)
-  const home = useMemo(() => new THREE.Vector3(radius * 0.62, radius * 0.62, radius * 0.72), [radius])
+  const size = useThree((s) => s.size)
+  // FIT, not a fixed radius: the distance at which a sphere around every platform
+  // fills the narrower of the two fields of view, seen from the same three-quarter
+  // angle every time — so one platform is not a speck and seven are not cropped.
+  const centre = useMemo(() => new THREE.Vector3(bounds.x, 0.4, bounds.z), [bounds.x, bounds.z])
+  const home = useMemo(() => {
+    const cam = camera as THREE.PerspectiveCamera
+    const vfov = (cam.fov * Math.PI) / 180
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * Math.max(0.5, size.width / Math.max(1, size.height)))
+    // 0.5, not 1: the scene is a flat disc seen from above at a slant, so its
+    // silhouette is far smaller than the bounding SPHERE a strict fit assumes —
+    // measured, the strict fit left the platforms a speck in the middle of the well.
+    const dist = (bounds.r * 0.5) / Math.sin(Math.min(vfov, hfov) / 2)
+    return new THREE.Vector3(0.58, 0.6, 0.55).normalize().multiplyScalar(dist).add(centre)
+  }, [camera, bounds.r, centre, size.width, size.height])
+  const radius = home.distanceTo(centre)
   useEffect(() => {
     const c = new OrbitControls(camera, dom)
     c.enableDamping = true
@@ -604,26 +623,27 @@ function CameraRig({ radius, autoRotate, follow, reset }: { radius: number; auto
     c.maxDistance = Math.max(60, radius * 2.4)
     c.maxPolarAngle = Math.PI * 0.44
     c.minPolarAngle = Math.PI * 0.12
-    c.target.set(0, 1, 0)
+    c.target.copy(centre)
     c.addEventListener('change', () => invalidate())
     controls.current = c
     camera.position.copy(home)
     c.update()
     return () => { c.dispose(); controls.current = null }
-  }, [camera, dom, invalidate, radius, home])
+  }, [camera, dom, invalidate, radius, home, centre])
   useEffect(() => {
     if (reset === 0 || !controls.current) return
     camera.position.copy(home)
-    controls.current.target.set(0, 1, 0)
+    controls.current.target.copy(centre)
     controls.current.update()
-  }, [reset, camera, home])
+  }, [reset, camera, home, centre])
   useFrame((state, delta) => {
     const c = controls.current
     if (!c) return
     c.autoRotate = autoRotate
     c.autoRotateSpeed = 0.35
     if (follow) {
-      const goal = new THREE.Vector3(follow.x * 0.35, 1, follow.z * 0.35)
+      // A nudge toward the active session, never a re-centre: the fit stays the frame.
+      const goal = new THREE.Vector3(centre.x + (follow.x - centre.x) * 0.25, 0.4, centre.z + (follow.z - centre.z) * 0.25)
       if (c.target.distanceToSquared(goal) > 0.0004) { c.target.lerp(goal, 1 - Math.pow(0.02, delta)); state.invalidate() }
     }
     // update() returns true while damping has motion left; keep asking until it settles.
@@ -636,24 +656,38 @@ function CameraRig({ radius, autoRotate, follow, reset }: { radius: number; auto
 // Labels: DOM, projected on every rendered frame
 // ---------------------------------------------------------------------------
 
-interface LabelSpec { key: string; text: string; extra?: string; cls: string; at: () => THREE.Vector3 | null; show?: () => boolean }
+/** `rank`: lower wins a collision — the callout, then files, then lit sessions, idle names, plates. */
+interface LabelSpec { key: string; text: string; extra?: string; cls: string; rank: number; at: () => THREE.Vector3 | null; show?: () => boolean }
 
 function LabelProjector({ specs, host }: { specs: readonly LabelSpec[]; host: RefObject<HTMLDivElement | null> }): null {
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   const v = useMemo(() => new THREE.Vector3(), [])
+  const ordered = useMemo(() => [...specs].sort((a, b) => a.rank - b.rank), [specs])
   useFrame(() => {
     const el = host.current
     if (!el) return
-    for (const spec of specs) {
+    // A collision pass in screen space, in rank order: a label that would overlap
+    // one already placed is hidden rather than drawn over it — every name hidden
+    // here is still in the roster, and a file's name is on its hover in the List.
+    const placed: { l: number; t: number; r: number; b: number }[] = []
+    for (const spec of ordered) {
       const node = el.querySelector<HTMLElement>(`[data-orch-live-label="${CSS.escape(spec.key)}"]`)
       if (!node) continue
       const at = spec.show === undefined || spec.show() ? spec.at() : null
       if (at === null) { node.style.visibility = 'hidden'; continue }
       v.copy(at).project(camera)
-      const visible = v.z < 1 && v.x > -1.1 && v.x < 1.1 && v.y > -1.1 && v.y < 1.1
+      const x = ((v.x + 1) / 2) * size.width
+      const y = ((1 - v.y) / 2) * size.height
+      const w = node.offsetWidth
+      const h = node.offsetHeight
+      const box = { l: x - w / 2 - 3, t: y - h - 3, r: x + w / 2 + 3, b: y + 3 }
+      const onScreen = v.z < 1 && box.l > -w && box.r < size.width + w && box.t > -h && box.b < size.height + h
+      const clash = placed.some((p) => box.l < p.r && box.r > p.l && box.t < p.b && box.b > p.t)
+      const visible = onScreen && !clash
       node.style.visibility = visible ? 'visible' : 'hidden'
-      node.style.transform = `translate(${((v.x + 1) / 2) * size.width}px, ${((1 - v.y) / 2) * size.height}px) translate(-50%, -100%)`
+      if (visible) placed.push(box)
+      node.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`
     }
   })
   return null
@@ -681,9 +715,17 @@ function LiveScene({ model, plates, selectedId, quality, p, reducedMotion, pause
   towerHandlesRef.current = towerHandles
   const shadows = quality !== 'flat'
   const extent = plates.reduce((m, pl) => Math.max(m, Math.hypot(pl.x, pl.z) + pl.size), 10)
+  // The fit sphere: the platforms' own centre and the farthest diamond corner from it.
+  const bounds = useMemo(() => {
+    if (plates.length === 0) return { x: 0, z: 0, r: 8 }
+    const x = plates.reduce((a, pl) => a + pl.x, 0) / plates.length
+    const z = plates.reduce((a, pl) => a + pl.z, 0) / plates.length
+    const r = plates.reduce((m, pl) => Math.max(m, Math.hypot(pl.x - x, pl.z - z) + (pl.size + 0.9) / Math.SQRT2), 4)
+    return { x, z, r }
+  }, [plates])
   const byId = new Map(model.sessions.map((s) => [s.id, s]))
   const byPath = new Map(model.files.map((f) => [f.path, f]))
-  const anyWorking = model.sessions.some((s) => s.state === 'working')
+  const anyWorking = model.sessions.some((s) => s.state === TONE_WORKING)
   const followAt = useMemo(() => {
     if (!follow || active === null) return null
     for (const pl of plates) { const s = pl.sessions.find((x) => x.id === active); if (s) return new THREE.Vector3(s.x, 0, s.z) }
@@ -715,7 +757,7 @@ function LiveScene({ model, plates, selectedId, quality, p, reducedMotion, pause
         return s ? <Session key={s.id} s={s} x={st.x} z={st.z} selected={s.id === selectedId} p={p} tex={tex} reducedMotion={reducedMotion} shadows={shadows} handles={sessionHandles} onSelect={onSelect} onJump={onJump} /> : null
       }))}
       <Effects queue={queue} towers={towerHandles} sessions={sessionHandles} p={p} tex={tex} reducedMotion={reducedMotion} paused={paused} version={version} />
-      <CameraRig radius={Math.max(12, extent * 1.15)} autoRotate={anyWorking && !paused && !reducedMotion} follow={followAt} reset={reset} />
+      <CameraRig bounds={bounds} autoRotate={anyWorking && !paused && !reducedMotion} follow={followAt} reset={reset} />
       <LabelProjector specs={labels} host={labelHost} />
     </>
   )
@@ -752,37 +794,42 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
     setLatest(fresh[fresh.length - 1]!)
     setCount((c) => c + fresh.length)
   }, [model.events])
-  const active = selectedId !== null && model.sessions.some((s) => s.id === selectedId) ? selectedId : latest?.sessionId ?? model.sessions.find((s) => s.state === 'working')?.id ?? null
+  // The callout follows the WORK: the selection only when it is itself doing
+  // something (working or waiting on the person), else the latest event's session,
+  // else any working one. A selected idle terminal is not what Watch is for.
+  const selectedLit = model.sessions.find((s) => s.id === selectedId && (s.state === TONE_WORKING || s.state === 'needs-you'))
+  const latestLive = latest !== null ? model.sessions.find((s) => s.id === latest.sessionId && s.state !== 'exited') : undefined
+  const active = selectedLit?.id ?? latestLive?.id ?? model.sessions.find((s) => s.state === TONE_WORKING)?.id ?? model.sessions.find((s) => s.state === 'needs-you')?.id ?? null
   const activeSession = model.sessions.find((s) => s.id === active) ?? null
   const shownEvent = activeSession !== null ? (latest?.sessionId === activeSession.id ? latest : activeSession.latest) : null
-  const working = model.sessions.filter((s) => s.state === 'working').length
+  const working = model.sessions.filter((s) => s.state === TONE_WORKING).length
 
   const labels = useMemo<LabelSpec[]>(() => {
     const out: LabelSpec[] = []
     const byPath = new Map(model.files.map((f) => [f.path, f]))
     for (const pl of plates) {
-      out.push({ key: `plate:${pl.id ?? ''}`, text: pl.label, cls: 'orch-live__label orch-live__label--plate', at: () => new THREE.Vector3(pl.x, 0.1, pl.z + pl.size * 0.72) })
+      out.push({ key: `plate:${pl.id ?? ''}`, rank: 5, text: pl.label, cls: 'orch-live__label orch-live__label--plate', at: () => new THREE.Vector3(pl.x, 0.1, pl.z + pl.size * 0.72) })
       for (const ft of pl.files) {
         const f = byPath.get(ft.path)
         if (!f) continue
         const n = f.added || f.removed ? `+${f.added}${f.removed ? ` −${f.removed}` : ''}` : `${f.reads} read${f.reads === 1 ? '' : 's'}`
-        out.push({ key: `file:${f.path}`, text: f.name, extra: n, cls: `orch-live__label orch-live__label--file${f.contended ? ' orch-live__label--warn' : ''}`,
+        out.push({ key: `file:${f.path}`, rank: f.contended ? 1 : 2, text: f.name, extra: n, cls: `orch-live__label orch-live__label--file${f.contended ? ' orch-live__label--warn' : ''}`,
           at: () => { const h = towerHandlesRef.current?.get(f.path); return h ? new THREE.Vector3(ft.x, DECK_Y + h.top() + 0.1, ft.z) : null } })
       }
       for (const st of pl.sessions) {
         const s = model.sessions.find((x) => x.id === st.id)
         if (!s || s.id === active) continue
-        const lit = s.state === 'working' || s.state === 'needs-you'
+        const lit = s.state === TONE_WORKING || s.state === 'needs-you'
         // Rest density: a lit session is named; an idle one is a settled cube whose
         // name appears on hover or selection (the roster names every one of them).
-        out.push({ key: `session:${s.id}`, text: s.title, cls: `orch-live__label orch-live__label--session${lit ? '' : ' orch-live__label--dim'}`, at: () => new THREE.Vector3(st.x, DECK_Y + (lit ? 2.05 : 1.0), st.z),
+        out.push({ key: `session:${s.id}`, rank: lit ? 3 : 4, text: s.title, cls: `orch-live__label orch-live__label--session${lit ? '' : ' orch-live__label--dim'}`, at: () => new THREE.Vector3(st.x, DECK_Y + (lit ? 2.05 : 1.0), st.z),
           ...(lit ? {} : { show: () => s.id === selectedId || sessionHandlesRef.current?.get(s.id)?.hovered() === true }) })
       }
     }
     if (active !== null) {
       for (const pl of plates) {
         const st = pl.sessions.find((x) => x.id === active)
-        if (st) out.push({ key: 'callout', text: '', cls: '', at: () => new THREE.Vector3(st.x, DECK_Y + 2.1, st.z) })
+        if (st) out.push({ key: 'callout', rank: 0, text: '', cls: '', at: () => new THREE.Vector3(st.x, DECK_Y + 2.1, st.z) })
       }
     }
     return out
@@ -809,7 +856,7 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
         {activeSession !== null && (
           <div className="orch-live__callout" data-orch-live-label="callout" data-orch-live-callout={activeSession.id} data-state={activeSession.state}>
             <strong><span className="orch-live__pip" data-state={activeSession.state} />{activeSession.title}</strong>
-            <span className="orch-live__say">{shownEvent?.say ?? (activeSession.state === 'working' ? 'Working' : activeSession.state === 'needs-you' ? 'Waiting on you' : 'Idle')}</span>
+            <span className="orch-live__say">{shownEvent?.say ?? (activeSession.state === TONE_WORKING ? 'Working' : activeSession.state === 'needs-you' ? 'Waiting on you' : 'Idle')}</span>
             {shownEvent?.token !== undefined && (
               <code key={shownEvent.key} className="orch-live__typing" style={typedStyle(shownEvent.token.length + 2)} data-kind={shownEvent.added === 0 && shownEvent.removed > 0 ? 'del' : 'add'}>
                 {shownEvent.added === 0 && shownEvent.removed > 0 ? '− ' : '+ '}{shownEvent.token}
@@ -822,7 +869,7 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
         )}
       </div>
       <div className="orch-live__hud" role="status" aria-live="polite">
-        <span className="orch-live__live" data-on={working > 0 || undefined}><span className="orch-live__pip" data-state={working > 0 ? 'working' : 'idle'} />{working > 0 ? 'Live' : 'Quiet'}</span>
+        <span className="orch-live__live" data-on={working > 0 || undefined}><span className="orch-live__pip" data-state={working > 0 ? TONE_WORKING : 'idle'} />{working > 0 ? 'Live' : 'Quiet'}</span>
         <span>{`${working} working · ${count} ${count === 1 ? 'event' : 'events'} since you opened Watch`}</span>
       </div>
       <div className="orch-live__tools" role="toolbar" aria-label="Watch controls">
@@ -831,8 +878,8 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
         <button type="button" className="orch-live__tool" data-orch-live-reset title="Reset the camera" {...shellControl(() => setReset((n) => n + 1))}>Reset</button>
       </div>
       <div className="orch-live__legend">
-        <span><i data-k="working" />working</span>
-        <span><i data-k="needs-you" />needs you</span>
+        <span><i data-k="working" />{agentWord('busy').word}</span>
+        <span><i data-k="needs-you" />{agentWord('wants-you').word}</span>
         <span><i data-k="add" />lines added</span>
         <span><i data-k="del" />removed</span>
         <span><i data-k="idle" />idle</span>

@@ -8512,6 +8512,8 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch-live__label--warn { border-color: var(--amber); color: var(--amber); }
 .orch-live__callout { position: absolute; left: 0; top: 0; visibility: hidden; width: 16rem; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: color-mix(in srgb, var(--s-1) 92%, transparent); backdrop-filter: blur(16px); color: var(--fg); font: var(--t-sm) var(--font-ui); }
 .orch-live__callout[data-state="needs-you"] { border-color: var(--amber); }
+/* The stem: the card hangs over its session's core, and says so. */
+.orch-live__callout::after { content: ""; position: absolute; left: 50%; bottom: calc(-1 * var(--sp-4)); width: 1px; height: var(--sp-4); background: var(--line-strong); }
 .orch-live__callout > strong { display: flex; align-items: center; gap: var(--sp-2); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .orch-live__say { color: var(--fg-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The typed line: the token revealed character by character, once. Its width and step
@@ -8527,7 +8529,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch-live__live { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--fg-3); font-weight: 600; }
 .orch-live__live[data-on] { color: var(--iris); }
 .orch-live__tools { position: absolute; top: var(--sp-3); left: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--s-1) 86%, transparent); backdrop-filter: blur(8px); }
-.orch-live__tool { border: 0; background: transparent; color: var(--fg-3); font: var(--t-xs) var(--font-ui); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; cursor: pointer; }
+.orch-live__tool { border: 1px solid var(--line); background: var(--s-2); color: var(--fg-2); font: var(--t-xs) var(--font-ui); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; cursor: pointer; }
 .orch-live__tool:hover { color: var(--fg); background: var(--s-3); }
 .orch-live__tool[aria-pressed="true"] { color: var(--fg); background: var(--s-3); }
 .orch-live__tool:focus-visible { outline: 2px solid var(--iris); outline-offset: 1px; }
