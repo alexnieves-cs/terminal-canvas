@@ -2610,9 +2610,8 @@ console.log('\n' + '='.repeat(60))
     off: m({ enabled: false, lastVersion: null }), harness: m({ harnessOff: true, lastVersion: null }),
     reduced: m({ reducedMotion: true }), reload: m({ playedThisSession: true, lastVersion: null }), merged: m({ merged: true })
   }
-  ok('splash.1 splashMode: first launch and a new version play field, an ordinary launch plays ghost, an empty canvas or an unknown version never replays field, and setting/harness/reduced-motion/reload/merged each force none',
-    table.ordinary === 'ghost' && table.first === 'field' && table.updated === 'field' && table.emptyCanvas === 'none' &&
-      table.firstEmpty === 'field' && table.unknownVersion === 'ghost' &&
+  ok('splash.1 splashMode: every launch plays the APEX field — first, updated, ordinary, empty canvas, unknown version alike — and setting/harness/reduced-motion/reload/merged each force none',
+    ['ordinary', 'first', 'updated', 'emptyCanvas', 'firstEmpty', 'unknownVersion'].every((k) => table[k] === 'field') &&
       ['off', 'harness', 'reduced', 'reload', 'merged'].every((k) => table[k] === 'none'),
     JSON.stringify(table))
 

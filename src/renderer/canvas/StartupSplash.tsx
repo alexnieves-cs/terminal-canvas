@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
 import type { Viewport } from './viewport'
 import { worldToScreen } from './viewport'
 import {
-  type SplashMode, type Pole, FIELD_MS, GHOST_MS, SKIP_FADE_MS,
-  clamp, lerp, easeOut, easeInOut, seg, hash, fieldAt, filingAngle
+  type SplashMode, FIELD_MS, GHOST_MS, SKIP_FADE_MS,
+  clamp, lerp, easeOut, easeInOut, seg, hash, filingAngle
 } from './splash'
 
 /* The startup splash: one <canvas>, one rAF loop, gone in under three seconds.
@@ -13,13 +14,15 @@ import {
    under it — no panel, no session, no camera — so an early unmount (a skip,
    a workspace switch) can cost a frame of motion and never a process.
 
-   Input is watched in CAPTURE and never prevented or stopped: a key pressed
-   during the splash both ends it and reaches whatever it was aimed at. */
+   Input is watched in CAPTURE. A pointer or wheel skip passes through, but a
+   plain key is CONSUMED for as long as the splash is up (the fade included):
+   the first keystroke is almost always "get me past this", and forwarding it
+   typed a stray character into the first-run launcher's field underneath.
+   A chord (Cmd/Ctrl/Alt) still passes, so Cmd+Q or the palette never go dead. */
 
 interface Rect { x: number; y: number; w: number; h: number }
 interface Colors { ground: string; surface: string; fg: string; fg3: string; fg4: string; line: string; lineS: string; iris: string; blue: string }
 
-const MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace'
 const UI = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif'
 const GHOST_CAP = 60
 
@@ -52,15 +55,29 @@ export function StartupSplash({ mode, rects, viewport, onDone }: {
     const t0 = performance.now()
     const resize = (): void => {
       const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1)
-      w = r.width; h = r.height; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr)
+      const pw = Math.round(r.width * dpr), ph = Math.round(r.height * dpr)
+      w = r.width; h = r.height
+      // Assigning width/height CLEARS the bitmap even at the same size, and
+      // the observer's first callback lands after the first draw — once the
+      // CSS ground has gone transparent — so an unconditional reset showed
+      // the app for one frame before the splash.
+      if (cv.width === pw && cv.height === ph) return
+      cv.width = pw; cv.height = ph
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
     resize()
     const ro = new ResizeObserver(resize)
     ro.observe(cv)
     const skip = (): void => { if (skipAt === null) skipAt = performance.now() }
+    const skipKey = (e: KeyboardEvent): void => {
+      skip()
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+    }
     const opts = { capture: true, passive: true } as const
-    window.addEventListener('keydown', skip, opts)
+    const keyOpts = { capture: true } as const
+    window.addEventListener('keydown', skipKey, keyOpts)
     window.addEventListener('pointerdown', skip, opts)
     window.addEventListener('wheel', skip, opts)
 
@@ -76,7 +93,7 @@ export function StartupSplash({ mode, rects, viewport, onDone }: {
       if (mode === 'field') drawField(ctx, t, w, h, col, fade)
       else drawGhost(ctx, t, w, h, col, fade, start.current.rects, start.current.viewport)
       // The inline ground covered the frames before this one; the scene paints its own from here.
-      if (frame === 1) cv.style.background = 'transparent'
+      if (frame === 3) cv.style.background = 'transparent'
       if (fade <= 0 || now - t0 >= dur) { done = true; start.current.onDone(); return }
       raf = requestAnimationFrame(loop)
     }
@@ -85,17 +102,21 @@ export function StartupSplash({ mode, rects, viewport, onDone }: {
       done = true
       cancelAnimationFrame(raf)
       ro.disconnect()
-      window.removeEventListener('keydown', skip, opts)
+      window.removeEventListener('keydown', skipKey, keyOpts)
       window.removeEventListener('pointerdown', skip, opts)
       window.removeEventListener('wheel', skip, opts)
     }
   }, [mode])
 
-  return (
+  // PORTALLED to <body> and fixed to the window: mounted inside the canvas
+  // host it covered only the canvas region, so the title bar and rails were
+  // on screen before the splash and APEX centred on the canvas, not the window.
+  return createPortal(
     <canvas ref={ref} className="startup-splash" aria-hidden="true"
       // An opaque ground until the first rAF draw: a transparent canvas would
       // show the very canvas it covers for a frame — possibly the ready-to-show one.
-      style={{ pointerEvents: mode === 'field' ? 'auto' : 'none', background: 'var(--s-0)' }} />
+      style={{ pointerEvents: mode === 'field' ? 'auto' : 'none', background: 'var(--s-0)' }} />,
+    document.body
   )
 }
 
@@ -129,116 +150,89 @@ function drawGhost(ctx: CanvasRenderingContext2D, t: number, w: number, h: numbe
   ctx.setLineDash([])
 }
 
-// ---- Field Lines: filings align to two poles that unfold into a connected pair. ----
-// Meta words are tool names, never state words: panel-state.ts owns those (verify:rail state.2).
-const PANEL_A = { title: 'agent', meta: 'claude', lines: ['> migrate auth to sessions', 'reading src/auth/*.ts', 'planned 4 edits'] }
-const PANEL_B = { title: 'terminal', meta: 'zsh', lines: ['$ npm test', '  ✓ 128 passing', '$ git status'] }
+// ---- Field Lines: the filing lattice magnetises into the word APEX, then lets go. ----
+// The word is rasterised once per size into a coarse mask. Its BLURRED copy is
+// a soft potential: the gradient points across a stroke, so a filing turned 90°
+// from it lies ALONG the stroke inside a letter and wraps the letter outside
+// it, the way iron filings trace a magnet's contour.
+const WORD = 'APEX'
+const DS = 4 // mask cell, px — coarse enough to build in a frame, fine enough for 12px filings
+
+interface WordMap { w: number; h: number; mw: number; mh: number; ink: Float32Array; soft: Float32Array; left: number; right: number }
+let wordCache: WordMap | null = null
+
+function wordMap(w: number, h: number): WordMap | null {
+  if (wordCache && wordCache.w === w && wordCache.h === h) return wordCache
+  const mw = Math.max(1, Math.ceil(w / DS)), mh = Math.max(1, Math.ceil(h / DS))
+  const oc = document.createElement('canvas')
+  oc.width = mw; oc.height = mh
+  const o = oc.getContext('2d', { willReadFrequently: true })
+  if (!o) return null
+  let size = Math.min(h * 0.3, 260) / DS
+  o.font = `800 ${size}px ${UI}`
+  const fit = (w * 0.62 / DS) / Math.max(1, o.measureText(WORD).width)
+  if (fit < 1) { size *= fit; o.font = `800 ${size}px ${UI}` }
+  o.textAlign = 'center'; o.textBaseline = 'middle'
+  const tw = o.measureText(WORD).width
+  const draw = (blur: number): Float32Array => {
+    o.clearRect(0, 0, mw, mh)
+    o.filter = blur > 0 ? `blur(${blur}px)` : 'none'
+    o.fillStyle = '#fff'
+    o.fillText(WORD, mw / 2, mh / 2)
+    const d = o.getImageData(0, 0, mw, mh).data, out = new Float32Array(mw * mh)
+    for (let i = 0; i < out.length; i++) out[i] = d[i * 4 + 3] / 255
+    return out
+  }
+  const ink = draw(0), soft = draw(Math.max(2, size * 0.09))
+  wordCache = { w, h, mw, mh, ink, soft, left: (mw / 2 - tw / 2) * DS, right: (mw / 2 + tw / 2) * DS }
+  return wordCache
+}
+
+const at = (m: WordMap, a: Float32Array, x: number, y: number): number => {
+  const i = Math.min(m.mw - 1, Math.max(0, Math.floor(x / DS))), j = Math.min(m.mh - 1, Math.max(0, Math.floor(y / DS)))
+  return a[j * m.mw + i]
+}
 
 function drawField(ctx: CanvasRenderingContext2D, t: number, w: number, h: number, col: Colors, fade: number): void {
-  // The canvas is FLAT (M67) — no dot grid — so the scene does not end on
-  // one: the ground is laid over the aura and lifts with the release.
-  const release = easeInOut(seg(t, 2.1, 2.8))
+  const m = wordMap(w, h)
+  // The canvas is FLAT (M67) — no dot grid — so the scene does not end on one:
+  // the ground lifts WITH the filings, and the app is simply what was under it.
+  const release = easeInOut(seg(t, 2.05, 2.8))
   ctx.globalAlpha = fade * (1 - release)
   ctx.fillStyle = col.ground
   ctx.fillRect(0, 0, w, h)
+  if (!m) return
 
-  const pw = Math.min(w * 0.26, 360), ph = Math.min(h * 0.34, 240)
-  const A: Pole = { x: lerp(-w * 0.15, w * 0.3, easeInOut(seg(t, 0.1, 1.0))), y: h * 0.47, q: 1 }
-  const B: Pole = { x: lerp(w * 1.15, w * 0.7, easeInOut(seg(t, 0.2, 1.1))), y: h * 0.53, q: -1 }
-  const poles = [A, B]
-  const unfold = easeOut(seg(t, 1.2, 1.75))
-  const r0 = w * 0.11, sp = 22
-
+  const sp = 12
+  const settle = 1 - easeOut(seg(t, 0.2, 1.3))
   ctx.lineCap = 'round'
-  const settle = 1 - easeOut(seg(t, 0.4, 1.6))
   for (let gx = sp / 2, ix = 0; gx < w; gx += sp, ix++) {
     for (let gy = sp / 2, iy = 0; gy < h; gy += sp, iy++) {
       const s = ix * 13.1 + iy * 7.7
-      const x = gx + (hash(s + 1) - 0.5) * 14 * settle, y = gy + (hash(s + 2) - 0.5) * 14 * settle
-      if (unfold > 0 && (inside(x, y, A, pw * unfold, ph * unfold) || inside(x, y, B, pw * unfold, ph * unfold))) continue
-      const f = fieldAt(poles, x, y, r0)
-      const mag = Math.hypot(f.x, f.y)
-      const dist = Math.hypot(x - w / 2, y - h / 2) / w
+      const x = gx + (hash(s + 1) - 0.5) * 10 * settle, y = gy + (hash(s + 2) - 0.5) * 10 * settle
+      const ink = at(m, m.ink, x, y), pot = at(m, m.soft, x, y)
+      // Gradient of the soft mask; the filing lies perpendicular to it.
+      const gxv = at(m, m.soft, x + DS, y) - at(m, m.soft, x - DS, y)
+      const gyv = at(m, m.soft, x, y + DS) - at(m, m.soft, x, y - DS)
+      const grad = Math.hypot(gxv, gyv)
+      const field = grad > 1e-3 ? Math.atan2(gyv, gxv) + Math.PI / 2 : hash(s) * Math.PI
+      // Alignment sweeps out from the word, so the letters read first.
+      const dist = Math.hypot(x - w / 2, (y - h / 2) * 1.6) / w
       const d = hash(s + 3)
-      const k = easeOut(seg(t, 0.25 + dist * 0.7 + d * 0.12, 0.8 + dist * 0.7 + d * 0.12))
-      const a = filingAngle(hash(s) * Math.PI, Math.atan2(f.y, f.x), k)
-      const len = lerp(6, clamp(3 + mag * 5, 3, 15), k)
-      const strength = clamp(mag / 1.4) * k
-      ctx.globalAlpha = fade * (1 - release) * lerp(0.28, 0.95, strength)
-      ctx.strokeStyle = strength > 0.45 ? col.iris : col.fg3
-      ctx.lineWidth = lerp(1, 1.6, strength)
+      const k = easeOut(seg(t, 0.15 + dist * 0.8 + d * 0.1, 0.75 + dist * 0.8 + d * 0.1))
+      const a = filingAngle(hash(s) * Math.PI, field, k * (grad > 1e-3 ? 1 : 0))
+      // The letters light left to right; everything else stays a quiet field.
+      const lit = ink > 0.5 ? easeOut(seg(t, 0.55 + clamp((x - m.left) / Math.max(1, m.right - m.left)) * 0.5, 1.15 + clamp((x - m.left) / Math.max(1, m.right - m.left)) * 0.5)) : 0
+      const near = clamp(pot * 1.8) * k
+      // On release the letters' filings shorten into points last, so APEX is the final thing seen.
+      const out = ink > 0.5 ? easeInOut(seg(t, 2.2, 2.75)) : easeInOut(seg(t, 1.95, 2.45))
+      const len = lerp(5, lerp(4 + near * 7, 10, lit), k) * (1 - out)
+      if (len < 0.4) continue
+      ctx.globalAlpha = fade * (1 - out) * lerp(lerp(0.16, 0.5, near), 1, lit)
+      ctx.strokeStyle = lit > 0.35 ? col.iris : col.fg3
+      ctx.lineWidth = lerp(1, 1.8, lit)
       const cx = Math.cos(a) * len / 2, cy = Math.sin(a) * len / 2
       ctx.beginPath(); ctx.moveTo(x - cx, y - cy); ctx.lineTo(x + cx, y + cy); ctx.stroke()
     }
-  }
-
-  // The poles glow until they unfold.
-  const glow = (1 - unfold) * easeOut(seg(t, 0.1, 0.6))
-  for (const [p, c] of [[A, col.iris], [B, col.blue]] as const) {
-    if (glow <= 0) break
-    ctx.globalAlpha = fade * glow
-    ctx.fillStyle = c
-    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill()
-  }
-
-  if (unfold > 0) {
-    const panelAlpha = fade * clamp(unfold * 1.4) * (1 - release)
-    miniPanel(ctx, A, pw * unfold, ph * unfold, PANEL_A, col, panelAlpha, seg(t, 1.6, 2.2), true)
-    miniPanel(ctx, B, pw * unfold, ph * unfold, PANEL_B, col, panelAlpha, seg(t, 1.6, 2.2), false)
-    wire(ctx, { x: A.x + pw / 2, y: A.y + 20 }, { x: B.x - pw / 2, y: B.y - 10 },
-      easeOut(seg(t, 1.7, 2.05)), seg(t, 1.95, 2.4), col, panelAlpha)
-  }
-}
-
-function inside(x: number, y: number, c: Pole, pw: number, ph: number): boolean {
-  return Math.abs(x - c.x) < pw / 2 + 8 && Math.abs(y - c.y) < ph / 2 + 8
-}
-
-function miniPanel(ctx: CanvasRenderingContext2D, c: Pole, pw: number, ph: number,
-  p: { title: string; meta: string; lines: string[] }, col: Colors, alpha: number, type: number, working: boolean): void {
-  if (alpha <= 0 || pw < 4) return
-  const x = c.x - pw / 2, y = c.y - ph / 2, hh = 26
-  ctx.globalAlpha = alpha
-  ctx.beginPath()
-  ctx.roundRect(x, y, pw, ph, 9)
-  ctx.fillStyle = col.surface; ctx.fill()
-  ctx.lineWidth = 1; ctx.strokeStyle = col.lineS; ctx.stroke()
-  if (ph < hh + 10) return
-  ctx.beginPath(); ctx.moveTo(x, y + hh); ctx.lineTo(x + pw, y + hh); ctx.strokeStyle = col.line; ctx.stroke()
-  ctx.fillStyle = working ? col.iris : col.fg4
-  ctx.beginPath(); ctx.arc(x + 13, y + hh / 2, 3.5, 0, Math.PI * 2); ctx.fill()
-  if (pw < 150) return
-  ctx.textBaseline = 'middle'
-  ctx.font = `600 11.5px ${UI}`; ctx.fillStyle = col.fg; ctx.fillText(p.title, x + 24, y + hh / 2)
-  ctx.font = `11px ${MONO}`; ctx.fillStyle = col.fg4; ctx.textAlign = 'right'
-  ctx.fillText(p.meta, x + pw - 10, y + hh / 2); ctx.textAlign = 'left'
-  ctx.font = `11.5px ${MONO}`
-  p.lines.forEach((line, i) => {
-    const reveal = clamp(type * p.lines.length - i)
-    const ly = y + hh + 16 + i * 17
-    if (reveal <= 0 || ly > y + ph - 8) return
-    ctx.fillStyle = /^[>$]/.test(line) ? col.fg : col.fg3
-    ctx.fillText(line.slice(0, Math.ceil(line.length * reveal)), x + 12, ly)
-  })
-}
-
-function wire(ctx: CanvasRenderingContext2D, a: { x: number; y: number }, b: { x: number; y: number },
-  k: number, pulse: number, col: Colors, alpha: number): void {
-  if (k <= 0 || alpha <= 0) return
-  const mx = (a.x + b.x) / 2
-  const at = (u: number): [number, number] => {
-    const iu = 1 - u
-    return [iu * iu * iu * a.x + 3 * iu * iu * u * mx + 3 * iu * u * u * mx + u * u * u * b.x,
-      iu * iu * iu * a.y + 3 * iu * iu * u * a.y + 3 * iu * u * u * b.y + u * u * u * b.y]
-  }
-  ctx.globalAlpha = alpha
-  ctx.strokeStyle = col.iris; ctx.lineWidth = 2; ctx.lineCap = 'round'
-  ctx.beginPath()
-  for (let i = 0; i <= 40; i++) { const [x, y] = at((i / 40) * k); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) }
-  ctx.stroke()
-  if (pulse > 0 && pulse < 1) {
-    const [x, y] = at(pulse)
-    ctx.fillStyle = col.iris
-    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill()
   }
 }

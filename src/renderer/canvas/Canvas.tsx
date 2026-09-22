@@ -3331,7 +3331,14 @@ export function Canvas({
   // persisted booleans into what they mean at this width.
   const shellRef = useRef<HTMLDivElement>(null)
   const shellBp = useShellBreakpoint(shellRef)
-  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows, bp: shellBp })
+  const chrome = useShellChrome({
+    paletteIsOpen: palette.isOpen,
+    settingsSignal: settingRows,
+    bp: shellBp,
+    // The splash is a canvas affordance; a persisted centerView of
+    // 'orchestration' would restore straight over it with nothing shown.
+    suppressOrchestrationOnBoot: splash !== 'none'
+  })
   // A transient surface (a Compact drawer, the Attention popover) stands the
   // canvas's shortcuts down exactly as the palette does — ONE predicate,
   // composed below, never a copy (spec §7.6). Read through a ref so

@@ -27,16 +27,15 @@ export interface SplashInput {
 }
 
 /**
- * Field Lines on a first launch or the first launch of a new version; the
- * ghost of your own layout on every other launch; nothing when there is
- * nothing to trace or anyone asked for stillness. An unknown version never
- * reads as "updated" — it would replay the long scene on every launch.
+ * The APEX field plays on EVERY launch of the app (a product decision, not an
+ * accident: it is the brand's front door). Stillness still wins — the setting,
+ * the harness, reduced motion — and a Cmd+R or reset is not a launch, so
+ * `playedThisSession` keeps it from replaying inside one window's life.
+ * `ghost` survives as a mode StartupSplash can draw; nothing selects it now.
  */
 export function splashMode(i: SplashInput): SplashMode {
   if (!i.enabled || i.harnessOff || i.reducedMotion || i.playedThisSession || i.merged) return 'none'
-  if (i.lastVersion === null) return 'field'
-  if (i.version !== '' && i.lastVersion !== i.version) return 'field'
-  return i.panelCount > 0 ? 'ghost' : 'none'
+  return 'field'
 }
 
 /** localStorage: the version that last played a splash. Written when one STARTS, so a crash mid-scene cannot replay Field Lines forever. */

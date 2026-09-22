@@ -7,6 +7,7 @@ import { DEFAULT_CAMERA } from '@shared/layout-schema'
 import { App } from './App'
 import { installDropGuard } from './drop-guard'
 import { LAST_VERSION_KEY, type StartupInput } from './canvas/splash'
+import { stampBootTheme } from './canvas/useTheme'
 
 // Installed before React mounts, and never uninstalled: an unhandled file drop
 // navigates the renderer, which kills every PTY in the window. Nothing about
@@ -51,6 +52,12 @@ window.canvas.preset.onDefault((template) => {
 // The side benefit outlives the reason: a Canvas that RECEIVES its starting
 // state can be mounted by verify:panels against a known layout, instead of
 // against whatever a hardcoded constant happens to say.
+// The theme is stamped BEFORE the first await: the window shows on its first
+// paint, which is long before React, and an unstamped root is the LIGHT theme
+// — a pale frame ahead of a dark splash. The OS preference is the first guess;
+// the setting refines it below, still ahead of the first render.
+stampBootTheme('system')
+
 async function boot(): Promise<void> {
   // M112. The renderer's Sentry, gated on the bridge field main stamped. Off
   // (the default) installs nothing — no global handlers, no console patching
@@ -145,8 +152,10 @@ async function boot(): Promise<void> {
   // history — the harness flag, not a failed read, is what keeps suites still.
   let startupEnabled = true
   try {
-    const row = (await window.canvas.settings.list()).find((r) => r.id === 'appearance.startupAnimation')
+    const rows = await window.canvas.settings.list()
+    const row = rows.find((r) => r.id === 'appearance.startupAnimation')
     if (row !== undefined && row.value === false) startupEnabled = false
+    stampBootTheme(rows.find((r) => r.id === 'appearance.theme')?.value)
   } catch { /* the default stands */ }
   let lastVersion: string | null = null
   try { lastVersion = window.localStorage.getItem(LAST_VERSION_KEY) } catch { /* storage unavailable */ }

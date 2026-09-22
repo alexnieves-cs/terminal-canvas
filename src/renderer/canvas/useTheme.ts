@@ -54,8 +54,20 @@ const HIGH_CONTRAST: Record<ResolvedTheme, Record<string, string>> = {
   }
 }
 
+type ThemeSetting = 'system' | 'light' | 'dark'
+/** Resolved by main.tsx before first render, so the hook's FIRST stamp is the
+ *  right theme — starting from 'system' repainted the splash's ground in the
+ *  wrong theme for a frame whenever the setting and the OS disagreed. */
+let bootSetting: ThemeSetting = 'system'
+export function stampBootTheme(v: unknown): void {
+  bootSetting = v === 'light' || v === 'dark' ? v : 'system'
+  const dark = bootSetting === 'dark' || (bootSetting === 'system' &&
+    typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+}
+
 export function useTheme(settingsSignal: unknown): ResolvedTheme {
-  const [setting, setSetting] = useState<'system' | 'light' | 'dark'>('system')
+  const [setting, setSetting] = useState<ThemeSetting>(() => bootSetting)
   const [systemDark, setSystemDark] = useState<boolean>(() =>
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   // M256. `accessibility.highContrast` — a SEPARATE axis from light/dark

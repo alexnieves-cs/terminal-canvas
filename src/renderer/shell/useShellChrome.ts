@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ShellBreakpoint } from './useShellBreakpoint'
 
 export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board' | 'skills'
@@ -78,8 +78,20 @@ export function useShellChrome(deps: {
   /** Change signal, compared by identity; see the note above. */
   settingsSignal: unknown
   bp: ShellBreakpoint
+  /**
+   * The startup splash is about to play. It is a canvas affordance — the
+   * canvas host stays mounted behind Orchestration (M268) but is visually
+   * covered by it — so a persisted `shell.centerView: 'orchestration'`
+   * would restore straight over the splash and no one would ever see it.
+   * Consulted ONLY on the very first settings read this hook ever makes
+   * (see `bootRef` below); a later switch to Orchestration, by the user or
+   * by settings, is never overridden, and the persisted value itself is
+   * never rewritten — this is a one-time READ suppression, not a write.
+   */
+  suppressOrchestrationOnBoot?: boolean
 }): ShellChrome {
   const { paletteIsOpen, settingsSignal, bp } = deps
+  const bootRef = useRef(deps.suppressOrchestrationOnBoot === true)
   // null = absent from the map: the breakpoint decides.
   const [railPref, setRailPref] = useState<boolean | null>(null)
   const [ctxPref, setCtxPref] = useState<boolean | null>(null)
@@ -109,7 +121,11 @@ export function useShellChrome(deps: {
         // rather than leaving the navigator on a pane that does not exist.
         if (nav) setNavigatorPref(nav.value === 'workspaces' || nav.value === 'vault' || nav.value === 'integrations' || nav.value === 'teammates' || nav.value === 'board' || nav.value === 'skills' ? nav.value : 'panels')
         if (tab) setContextTabState(tab.value === 'work' || tab.value === 'tools' || tab.value === 'activity' ? tab.value : 'detail')
-        if (center) setCenterViewState(center.value === 'orchestration' ? 'orchestration' : 'canvas')
+        if (center) {
+          const suppress = bootRef.current
+          bootRef.current = false
+          setCenterViewState(center.value === 'orchestration' && !suppress ? 'orchestration' : 'canvas')
+        }
       })
     }
     read()

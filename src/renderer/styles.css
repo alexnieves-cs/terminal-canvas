@@ -3662,9 +3662,9 @@ body {
    Launcher it hides); the ghost is pointer-events:none, so a click during it
    lands on the panel it is tracing. */
 .startup-splash {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: 2147483000; /* over every shell layer: the splash is the whole window */
   display: block;
   width: 100%;
   height: 100%;
