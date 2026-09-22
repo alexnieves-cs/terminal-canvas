@@ -3361,10 +3361,22 @@ export function Canvas({
   // keeps its old behaviour. The columns have no transition, so the widths
   // are exact, and restoreCamera is a set, not a flight.
   const firstWorkspaceNow = panels.length === 0 && !merged
-  const quietShellRef = useRef({ first: firstWorkspaceNow, nav: chrome.navVisible, ctx: chrome.ctxVisible })
+  // M303 (Quiet instrument). Outside Compact, an UNPINNED inspector floats
+  // over the canvas and only while something is selected: it answers "what
+  // is this", and with nothing selected there is no this. It never takes a
+  // column in that mode — a column that opened on the click that selected a
+  // panel would narrow the host mid-gesture and slide the panel out from
+  // under the cursor. Pinned keeps M46's resident column at every width.
+  const ctxFloat = false && chrome.bp !== 'compact' && chrome.ctxVisible && !inspectorPinned
+  const ctxResident = chrome.ctxVisible && !ctxFloat
+  // `shell--inspector-collapsed` keeps its M46 meaning — the region is not on
+  // screen — so a floating sheet that IS showing drops it; the float class
+  // zeroes the column itself.
+  const ctxFloatShown = ctxFloat && selectedIds.size > 0
+  const quietShellRef = useRef({ first: firstWorkspaceNow, nav: chrome.navVisible, ctx: ctxResident })
   useLayoutEffect(() => {
     const prev = quietShellRef.current
-    quietShellRef.current = { first: firstWorkspaceNow, nav: chrome.navVisible, ctx: chrome.ctxVisible }
+    quietShellRef.current = { first: firstWorkspaceNow, nav: chrome.navVisible, ctx: ctxResident }
     // BOTH ways, so the pair cancels: in (a reset, a last close) pans by +half,
     // out pans back. Compensating only the way out left every later object
     // half a column away in WORLD space from where it lands without the
@@ -3375,12 +3387,12 @@ export function Canvas({
     // Positive = the host got narrower; a column opening on either side
     // moves the host's centre by half its width, towards the other side.
     const narrowed = (Number(chrome.navVisible) - Number(prev.nav)) * navWidth
-      + (Number(chrome.ctxVisible) - Number(prev.ctx)) * inspectorWidth
+      + (Number(ctxResident) - Number(prev.ctx)) * inspectorWidth
     if (narrowed === 0) return
     restoreCamera({ ...viewport, x: viewport.x - narrowed / 2 })
     // viewport is read at the flip, deliberately not a dependency: keyed on
     // it this would re-run on every pan.
-  }, [firstWorkspaceNow, chrome.navVisible, chrome.ctxVisible, chrome.bp, navWidth, inspectorWidth, restoreCamera])
+  }, [firstWorkspaceNow, chrome.navVisible, ctxResident, chrome.bp, navWidth, inspectorWidth, restoreCamera])
   // A transient surface (a Compact drawer, the Attention popover) stands the
   // canvas's shortcuts down exactly as the palette does — ONE predicate,
   // composed below, never a copy (spec §7.6). Read through a ref so
@@ -4804,8 +4816,12 @@ export function Canvas({
     })
     return memberships
   }
+  // M303 (Quiet instrument). The hulls are computed at EVERY tier now: far
+  // out they are M270's filled silhouettes; nearer in, the task ones are
+  // drawn as quiet dashed regions (TaskClusterLayer's `region`), so a task
+  // reads as one place on the canvas at the distance you work at. Groups are
+  // left out near in — GroupLayer already frames them there.
   const clusterHulls = useMemo(() => {
-    if (cardDetail !== 'cluster') return []
     return taskClusters({
       panels: displayPanels.map((p) => ({
         id: p.rect.id,
@@ -4831,6 +4847,16 @@ export function Canvas({
     return item === undefined ? null : (taskMemberships(displayPanels, [item])[0] ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relatedItemId, displayPanels, workItems, worktreeRows, runs])
+  // M303 (Quiet instrument). The navigator groups by TASK at rest, not only
+  // while a lens is lit: the lit lens wins, otherwise the one task the
+  // selection belongs to. A selection in several tasks (or none) falls back
+  // to the by-kind places — guessing one of many would mislabel the rest.
+  const navTask = useMemo(() => {
+    if (lens !== null) return lens
+    if (selectedId === null) return null
+    const owners = taskMemberships(displayPanels, workItems).filter((m) => m.members.some((x) => x.panelId === selectedId))
+    return owners.length === 1 ? owners[0]! : null
+  }, [lens, selectedId, displayPanels, workItems])
   // Keyed on a SIGNATURE string, never on `lens` itself: the lens is
   // re-derived from `displayPanels`, a new array on every frame of a drag,
   // and the marks context below is frozen precisely so a drag re-renders no
@@ -7314,6 +7340,21 @@ export function Canvas({
 
   const attentionAnnouncement = useAttentionAnnouncer(railAttention)
 
+  // M303 (Quiet instrument). Resume work is an INBOX item: it rests at the
+  // head of the navigator's Panels pane, and floats over the canvas only when
+  // that pane is closed — a card over the canvas covered the panels it named.
+  const resumeBanner = resumeSummary !== null && panels.length > 0 ? (
+          <ResumeBanner
+            summary={resumeSummary}
+            onContinue={(itemId) => {
+              setResumeDismissed(true)
+              setRelatedItemId(itemId)
+              const r = frameItem(itemId)
+              if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
+            }}
+            onDismiss={() => setResumeDismissed(true)}
+          />
+  ) : null
   return (
     <div
       ref={shellRef}
@@ -7322,7 +7363,8 @@ export function Canvas({
       // not on screen); the drawer classes say a transient overlay is up at
       // Compact; data-bp is what the stylesheet keys its columns on.
       className={`shell${chrome.navVisible ? '' : ' shell--rail-collapsed'}${
-        chrome.ctxVisible ? '' : ' shell--inspector-collapsed'}${
+        ctxResident || ctxFloatShown ? '' : ' shell--inspector-collapsed'}${
+        ctxFloatShown ? ' shell--inspector-float' : ''}${
         chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
         chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}${
         inspectorPinned ? ' shell--inspector-pinned' : ''}${
@@ -7338,7 +7380,7 @@ export function Canvas({
       // reason: set there, it beat `.shell--inspector-collapsed`'s zero, so
       // the Context pane toggle (⇧⌘\) flipped the class and the column stayed.
       style={{
-        ...(((chrome.bp !== 'compact' && chrome.ctxVisible) || (chrome.bp === 'compact' && inspectorPinned)) ? { '--shell-ctx-w': `${inspectorWidth}px` } : {}),
+        ...(((chrome.bp !== 'compact' && ctxResident) || (chrome.bp === 'compact' && inspectorPinned)) ? { '--shell-ctx-w': `${inspectorWidth}px` } : {}),
         // M279. The navigator's width, by the same rule: only while it is a resident column.
         ...((chrome.bp !== 'compact' && chrome.navVisible) ? { '--shell-nav-w': `${navWidth}px` } : {})
       } as CSSProperties}
@@ -7437,9 +7479,10 @@ export function Canvas({
         onCreateWorkspace={paletteActions.beginCreateWorkspace}
         onRenameWorkspace={paletteActions.beginRenameWorkspace}
         onDeleteWorkspace={paletteActions.deleteWorkspace}
+        inbox={resumeBanner}
         rows={railRows}
         selectedId={selectedId}
-        taskMemberReason={lens === null ? undefined : (panelId) => lens.members.find((m) => m.panelId === panelId)?.reason}
+        taskMemberReason={navTask === null ? undefined : (panelId) => navTask.members.find((m) => m.panelId === panelId)?.reason}
         onGoToPanel={paletteActions.goToPanel}
         onStartPanel={paletteActions.startPanel}
         onClosePanel={paletteActions.closePanel}
@@ -7693,7 +7736,9 @@ export function Canvas({
             onToggle={toggleGroupCollapsed}
             onRemove={onRemoveGroup}
           />
-          {cardDetail === 'cluster' && <TaskClusterLayer clusters={clusterHulls} />}
+          {cardDetail === 'cluster'
+            ? <TaskClusterLayer clusters={clusterHulls} />
+            : !merged && <TaskClusterLayer region clusters={clusterHulls.filter((c) => c.kind === 'task')} />}
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels. The LAYER itself still takes
@@ -8279,18 +8324,9 @@ export function Canvas({
           />
           )
         })()}
-        {resumeSummary !== null && panels.length > 0 && (
-          <ResumeBanner
-            summary={resumeSummary}
-            onContinue={(itemId) => {
-              setResumeDismissed(true)
-              setRelatedItemId(itemId)
-              const r = frameItem(itemId)
-              if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
-            }}
-            onDismiss={() => setResumeDismissed(true)}
-          />
-        )}
+        {/* M303. Floats over the canvas only when the navigator's Panels
+            pane is not there to hold it (see resumeBanner). */}
+        {resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed

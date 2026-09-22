@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { RailRow } from './rail-rows'
 import type { RailWorkspace } from './rail-sections'
 import type { FileRow } from './file-tree-model'
@@ -21,6 +21,9 @@ import { PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
 
 export interface NavigatorProps {
   navigator: NavigatorPane
+  /** M303. The inbox: what is waiting on the person (Resume work today),
+   *  at the head of the Panels pane rather than floating over the canvas. */
+  inbox?: ReactNode
   onToggle: () => void
   /** M279. Mousedown on the pane's right-edge handle; Canvas owns the drag (it holds `shellRef`). */
   onResizeHandleDown?: (event: ReactMouseEvent) => void
@@ -260,6 +263,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
             </ul>
           ) : (
             <>
+            {props.inbox}
             <div className="navigator__filters" role="group" aria-label="Filter panels">
               {PANEL_FILTERS.map(({ id, label }) => (
                 <button key={id} type="button" className={filter === id ? 'navigator__filter navigator__filter--on' : 'navigator__filter'}

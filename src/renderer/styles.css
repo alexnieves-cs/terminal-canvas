@@ -562,6 +562,28 @@ body {
    pane is absolutely positioned at its final 300px from the first frame, so
    nothing measures a moving box (the canvas inset identity above is
    untouched). The global reduced-motion block collapses both to one frame. */
+/* M303 (Quiet instrument). The inspector as a sheet over the canvas: shown
+   only while something is selected and the inspector is not pinned (Canvas
+   stamps the class; the column stays 0 via --inspector-collapsed, so no
+   world coordinate moves when it appears). --glass-3: an overlay is nearer
+   than the panels it covers. Its own resize handle stays hidden — a floating
+   sheet's width is the sheet's, not a column's. */
+.shell--inspector-float { --shell-ctx-w: 0px; }
+.shell--inspector-float .shell__inspector {
+  position: absolute;
+  top: calc(var(--shell-top-h) + var(--sp-5));
+  right: var(--sp-5);
+  bottom: auto;
+  max-height: calc(100% - var(--shell-top-h) - 2 * var(--sp-5) - 64px);
+  width: 300px;
+  z-index: 900;
+  background: var(--glass-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--rim-top), var(--e-4);
+  overflow: auto;
+  animation: drawer-in-right var(--dur-drawer) var(--ease) both;
+}
 @keyframes drawer-in-left { from { transform: translateX(-100%); } to { transform: none; } }
 @keyframes drawer-in-right { from { transform: translateX(100%); } to { transform: none; } }
 /* The scrim: a dim over the canvas behind an open drawer, fading in with it.
@@ -6966,6 +6988,10 @@ body {
    unless the scale differs from 100% by more than 5% (zoomReadoutShown);
    its box stays, so the buttons never move under a cursor mid-zoom. */
 .canvas-hud { border-color: var(--line-strong); box-shadow: var(--e-3), var(--rim-top); outline: 3px solid var(--nav-moat); }
+/* M303 (Quiet instrument). The HUD takes the floating sheets' shape — a
+   rounded rectangle at --r-lg, not a capsule — so every surface that floats
+   over the canvas (inspector sheet, minimap, HUD) reads as one family. */
+.canvas-hud { border-radius: var(--r-lg); padding: var(--sp-2) var(--sp-4); }
 .canvas-hud__readout { transition: opacity var(--dur-1) var(--ease); }
 .canvas-hud__readout[data-hud-readout="rest"] { opacity: 0; }
 .canvas-hud [data-hud-fit-task] { display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1); min-width: 24px; padding: 0 var(--sp-2); }
@@ -7924,6 +7950,26 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
 }
+/* M303 (Quiet instrument). A task as a PLACE at the working tiers: a dashed
+   hairline around its members, no fill (the panels inside are readable), the
+   title sitting ON the edge on a ground-coloured chip so the line breaks for
+   it. The tone survives only in the line's hue, at low weight — the panels
+   carry their own state. */
+.task-clusters--region .task-cluster {
+  border: 1px dashed color-mix(in srgb, var(--tone, var(--line-strong)) 30%, var(--line-strong));
+  background: transparent;
+  box-shadow: none;
+}
+.task-clusters--region .task-cluster__title,
+.task-clusters--region .task-cluster__count {
+  top: 0;
+  transform: translateY(-50%);
+  padding: 0 var(--sp-3);
+  background: var(--s-0);
+  border-radius: var(--r-sm);
+  font-weight: 500;
+  color: var(--fg-2);
+}
 .world[data-detail="cluster"] .panel__card-cluster {
   width: 100%;
   height: 100%;
@@ -7972,6 +8018,26 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   cursor: pointer;
 }
 .resume-banner__go { border-color: var(--iris); color: var(--iris); }
+/* M303 (Quiet instrument). In the navigator the card is an INBOX row, not an
+   overlay: in flow at the pane's head, full width, no elevation (it is not
+   above anything), a tint of iris rather than a lit glass, and the verbs in a
+   row under the copy so a 300px column is not split in two. Continue is the
+   filled control: it is the one thing the card exists to offer. */
+.shell__rail .resume-banner {
+  position: static;
+  transform: none;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-width: none;
+  margin: var(--sp-4) var(--sp-4) var(--sp-2);
+  border-color: color-mix(in srgb, var(--iris) 35%, var(--line));
+  background: var(--iris-dim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.shell__rail .resume-banner__verbs { flex-direction: row; }
+.shell__rail .resume-banner__go { background: var(--iris); color: var(--on-iris); font-weight: 500; }
 
 .inspector__context { padding: 0 var(--sp-4) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
 .inspector__context-next { margin: 0; font-size: var(--t-sm); color: var(--fg); }

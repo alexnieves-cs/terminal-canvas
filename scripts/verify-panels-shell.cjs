@@ -5091,7 +5091,9 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
               treeWidth: tree.getBoundingClientRect().width,
               dockWidth: dock.getBoundingClientRect().width,
               railWidth: rail.getBoundingClientRect().width,
-              inspectorWidth: inspector.getBoundingClientRect().width
+              // M303: an unpinned inspector FLOATS over the canvas while a
+              // panel is selected — a sheet, not a column, so it insets nothing.
+              inspectorWidth: document.querySelector('.shell').classList.contains('shell--inspector-float') ? 0 : inspector.getBoundingClientRect().width
             }
           })()`)
           // M46: the tree is INSIDE the navigator column, so it is not a

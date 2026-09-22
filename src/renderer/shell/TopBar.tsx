@@ -84,7 +84,10 @@ export function TopBar({
         pays for itself, so it occupies space that was previously dead).
         aria-hidden: it is decoration, and the window already has a title.
       */}
-      <span className="shell__mark" aria-hidden="true"><ProductMark /><span>Terminal Canvas</span></span>
+      {/* M303 (Quiet instrument). The mark alone: the name was the bar's
+          loudest text and said nothing the window title does not — the bar
+          now leads with WHERE you are (the crumb), not what the app is. */}
+      <span className="shell__mark" aria-hidden="true"><ProductMark /></span>
 
       {/* M268. Center-page swap: reachable without opening dock labels.
           M279: the segmented primitive; `.shell__center-toggle` / `.shell__center-btn`
