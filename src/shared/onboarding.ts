@@ -160,27 +160,36 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   if (ctx.readiness.preferred === undefined) {
     return { kind: 'refused', field: 'engine', reason: 'no conversation engine has been discovered — install Claude Code, then Check again' }
   }
+  const preferred = ctx.readiness.preferred
   const sentence = req.intention.trim()
-  if (sentence === '') return { kind: 'refused', field: 'intention', reason: 'say what you want to work on, in a sentence' }
   const raw = req.folder.trim()
-  if (raw === '') return { kind: 'refused', field: 'folder', reason: 'choose the repository folder to work in' }
   // The renderer cannot expand `~` (it has no process.env — CLAUDE.md), and a
   // relative path is relative to nothing the person can see; a place is an
   // absolute folder or it is refused by main one step later with less to say.
-  if (!raw.startsWith('/')) return { kind: 'refused', field: 'folder', reason: 'type the folder as a full path starting with / — or use Choose…' }
-  const folder = trimSeparators(raw)
+  const folder = raw.startsWith('/') ? trimSeparators(raw) : null
+  const where = folder === null ? '' : shortPath(folder)
+  const standing = folder === null ? undefined : ctx.teammates.find((t) => t.places.some((place) => placeContains(place, folder)))
+  const standingName = standing === undefined ? undefined : standing.name.trim() === '' ? standing.id : standing.name
+  // The OUTCOME, stated as soon as the folder allows it — agent, repository,
+  // branch, in that order — so the line above Start work previews what the
+  // press will do while the sentence is still being typed, not only after.
+  const lane = FIRST_LAUNCH_ENGINES[LANE_ENGINE].name
+  const outcome = preferred !== LANE_ENGINE
+    ? `${FIRST_LAUNCH_ENGINES[preferred].name} will open a conversation in ${where}. Your message will open in the composer, not sent — no task branch; that needs ${lane}`
+    : standingName !== undefined
+      ? `${standingName} (${lane}) will work in ${where} on a separate branch`
+      : `${lane} will work in ${where} on a separate branch — as a new teammate, Claude · ${folderBase(folder ?? '')}, that may work only in ${where}`
+  if (sentence === '') {
+    return { kind: 'refused', field: 'intention', reason: folder === null ? 'say what you want to work on, in a sentence' : `say what you want to work on — then ${outcome}` }
+  }
+  if (raw === '') return { kind: 'refused', field: 'folder', reason: 'choose the repository folder to work in' }
+  if (folder === null) return { kind: 'refused', field: 'folder', reason: 'type the folder as a full path starting with / — or use Choose…' }
   // A teammate carries no backend, so D05's dispatch always creates a Claude
   // conversation: Codex alone cannot start a LANE. Rather than a wall on day
   // one (the README sells Codex), the start resolves to what the installed
   // engine CAN do — a conversation in the folder — and says so before it
   // happens. Checked after the sentence and folder, so their refusals stay named.
-  const preferred = ctx.readiness.preferred
-  if (preferred !== LANE_ENGINE) {
-    return {
-      kind: 'chat', engine: preferred, folder,
-      summary: `${FIRST_LAUNCH_ENGINES[preferred].name} opens a conversation in ${shortPath(folder)}, your sentence in its composer — no task branch; that needs ${FIRST_LAUNCH_ENGINES[LANE_ENGINE].name}`
-    }
-  }
+  if (preferred !== LANE_ENGINE) return { kind: 'chat', engine: preferred, folder, summary: outcome }
   const [first = '', ...more] = sentence.split('\n')
   const line = first.trim()
   const cut = line.length > FIRST_WORK_TITLE_MAX
@@ -191,23 +200,22 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // the first line to the agent (the M205 critic).
   const rest = more.join('\n').trim()
   const description = cut ? sentence : rest === '' ? undefined : rest
-  const where = shortPath(folder)
-  const standing = ctx.teammates.find((t) => t.places.some((place) => placeContains(place, folder)))
   if (standing !== undefined) {
-    const who = standing.name.trim() === '' ? standing.id : standing.name
     return {
       kind: 'start', title, ...(description === undefined ? {} : { description }), folder,
       teammate: { reuse: standing.id },
-      summary: `${who} works on ${where}, on its own branch`
+      summary: outcome
     }
   }
-  const base = folder.split('/').filter((s) => s !== '').pop() ?? folder
-  const name = `Claude · ${base}`
   return {
     kind: 'start', title, ...(description === undefined ? {} : { description }), folder,
-    teammate: { mint: { name, places: [folder] } },
-    summary: `a new teammate, ${name}, may work only in ${where} — the work happens on its own branch`
+    teammate: { mint: { name: `Claude · ${folderBase(folder)}`, places: [folder] } },
+    summary: outcome
   }
+}
+
+function folderBase(folder: string): string {
+  return folder.split('/').filter((s) => s !== '').pop() ?? folder
 }
 
 /**

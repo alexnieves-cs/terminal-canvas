@@ -3337,8 +3337,40 @@ export function Canvas({
     bp: shellBp,
     // The splash is a canvas affordance; a persisted centerView of
     // 'orchestration' would restore straight over it with nothing shown.
-    suppressOrchestrationOnBoot: splash !== 'none'
+    suppressOrchestrationOnBoot: splash !== 'none',
+    // The launcher's own key, so the quiet shell and the launcher can never
+    // disagree about whether this is a first workspace.
+    firstWorkspace: panels.length === 0 && !merged
   })
+  // The quiet shell ending opens the rail (and at Wide the inspector) in the
+  // SAME commit that adds the first object — which was
+  // placed in the wider, rail-less host. Without this the object jumps
+  // sideways by half a column the moment the normal layout returns (and the
+  // next spawn lands on top of it: verify:panels:shell 107 found it as a
+  // click on the wrong panel). Only the flip is compensated; a ⌘\ toggle
+  // keeps its old behaviour. The columns have no transition, so the widths
+  // are exact, and restoreCamera is a set, not a flight.
+  const firstWorkspaceNow = panels.length === 0 && !merged
+  const quietShellRef = useRef({ first: firstWorkspaceNow, nav: chrome.navVisible, ctx: chrome.ctxVisible })
+  useLayoutEffect(() => {
+    const prev = quietShellRef.current
+    quietShellRef.current = { first: firstWorkspaceNow, nav: chrome.navVisible, ctx: chrome.ctxVisible }
+    // BOTH ways, so the pair cancels: in (a reset, a last close) pans by +half,
+    // out pans back. Compensating only the way out left every later object
+    // half a column away in WORLD space from where it lands without the
+    // quiet shell — verify:panels:shell 107 again. So on an empty canvas the
+    // camera reads INITIAL plus that half (verify:panels:core 23 says so),
+    // which is INITIAL's picture in the wider host.
+    if (prev.first === firstWorkspaceNow || chrome.bp === 'compact') return
+    // Positive = the host got narrower; a column opening on either side
+    // moves the host's centre by half its width, towards the other side.
+    const narrowed = (Number(chrome.navVisible) - Number(prev.nav)) * navWidth
+      + (Number(chrome.ctxVisible) - Number(prev.ctx)) * inspectorWidth
+    if (narrowed === 0) return
+    restoreCamera({ ...viewport, x: viewport.x - narrowed / 2 })
+    // viewport is read at the flip, deliberately not a dependency: keyed on
+    // it this would re-run on every pan.
+  }, [firstWorkspaceNow, chrome.navVisible, chrome.ctxVisible, chrome.bp, navWidth, inspectorWidth, restoreCamera])
   // A transient surface (a Compact drawer, the Attention popover) stands the
   // canvas's shortcuts down exactly as the palette does — ONE predicate,
   // composed below, never a copy (spec §7.6). Read through a ref so
@@ -8047,7 +8079,9 @@ export function Canvas({
         {/* M69. The overview: outside .world like the pips, in the top-right
             corner, hidden while merged (the merged view's geometry is not this
             canvas's) and by `canvas.minimap`. */}
-        {minimapEnabled && !merged && (
+        {/* An overview of nothing is noise beside the launcher: it appears
+            with the first object. */}
+        {minimapEnabled && !merged && panels.length > 0 && (
           <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane

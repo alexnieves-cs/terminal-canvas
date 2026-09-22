@@ -148,6 +148,10 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
   const folderRef = useRef<HTMLInputElement | null>(null)
 
   const plan = firstWorkPlan({ intention, folder }, { teammates: teammates ?? [], readiness })
+  // The primary's LABEL names the outcome before the press. A refused plan
+  // still resolves by engine — firstWorkPlan's own rule — so the button does
+  // not read "Start task" while the sentence is typed and then flip.
+  const opensChat = plan.kind === 'chat' || (plan.kind === 'refused' && readiness.preferred !== undefined && readiness.preferred !== LANE_ENGINE)
   const startReason = onStartWork === undefined ? 'Start work is unavailable in this view' : plan.kind === 'refused' ? plan.reason : null
   const askReason = onAsk === undefined ? 'a conversation is unavailable in this view'
     : readiness.preferred === undefined ? (unanswered ? 'discovery has not answered yet — Check again' : 'install Claude Code or Codex, then Check again') : null
@@ -373,7 +377,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
               <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
                 disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'refused' ? '' : plan.summary)}
                 {...shellControl(start)}>
-                <span className="launcher__verb-name">{busy ? (plan.kind === 'chat' ? 'Opening the conversation…' : 'Making the lane…') : 'Start work'}</span>
+                <span className="launcher__verb-name">{busy ? (opensChat ? 'Opening the conversation…' : 'Making the lane…') : opensChat ? 'Open conversation' : 'Start task'}</span>
                 {!busy && <kbd className="launcher__kbd" aria-hidden="true">↵</kbd>}
               </button>
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null}

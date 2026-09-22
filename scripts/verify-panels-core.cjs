@@ -1250,13 +1250,26 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // and the launcher, made of the real create verbs, stands in for the
       // placeholder firstRunPanels() used to mint.
       const launcherAfter = await wc.executeJavaScript(`!!document.querySelector('[data-launcher]')`)
+      // The quiet first-workspace shell collapses the columns whose prefs were
+      // never set, and pans by half of what it closed so INITIAL's picture
+      // stays put in the wider host (Canvas.tsx, quietShellRef). The shift is
+      // derived from the column widths, never pinned as a number here.
+      const quietShift = await wc.executeJavaScript(`window.canvas.settings.list().then((rows) => {
+        const v = (id) => rows.find((r) => r.id === id)
+        const shell = document.querySelector('.shell')
+        if (shell.dataset.bp === 'compact') return 0
+        const rail = v('shell.railOpen'), ctx = v('shell.inspectorOpen')
+        const nav = rail && rail.persisted ? 0 : v('shell.navWidth').value
+        const insp = ctx && ctx.persisted ? 0 : (shell.dataset.bp === 'wide' ? v('shell.inspectorWidth').value : 0)
+        return (nav + insp) / 2
+      })`)
 
       ok('23 reset returns an empty canvas with the launcher up, the camera to INITIAL, and kills every pre-reset PTY',
         countAfter === 0 && launcherAfter === true &&
-          vpAfter.x === DEFAULT_CAMERA.x && vpAfter.y === DEFAULT_CAMERA.y &&
+          vpAfter.x === DEFAULT_CAMERA.x + quietShift && vpAfter.y === DEFAULT_CAMERA.y &&
           vpAfter.scale === DEFAULT_CAMERA.scale &&
           survivors.length === 0,
-        `vpBefore=${JSON.stringify(vpBefore)} vpAfter=${JSON.stringify(vpAfter)} ` +
+        `vpBefore=${JSON.stringify(vpBefore)} vpAfter=${JSON.stringify(vpAfter)} quietShift=${quietShift} ` +
         `panels=${countAfter} launcher=${launcherAfter} preResetSessions=${sessionsBeforeReset.size} survivors=${survivors.length}`)
     }
 

@@ -89,8 +89,18 @@ export function useShellChrome(deps: {
    * never rewritten — this is a one-time READ suppression, not a write.
    */
   suppressOrchestrationOnBoot?: boolean
+  /**
+   * The canvas has no objects yet (the launcher's own `panels.length === 0`
+   * key). An ABSENT rail/inspector pref then resolves to closed, so the
+   * first task is not framed by an empty navigator and an empty inspector.
+   * A PRESENT pref still wins — the same rule as the breakpoint default —
+   * so the Dock and ⌘\ open the rail exactly as before (the toggle writes
+   * the pref), and the normal layout returns once the first object exists.
+   */
+  firstWorkspace?: boolean
 }): ShellChrome {
   const { paletteIsOpen, settingsSignal, bp } = deps
+  const firstWorkspace = deps.firstWorkspace === true
   const bootRef = useRef(deps.suppressOrchestrationOnBoot === true)
   // null = absent from the map: the breakpoint decides.
   const [railPref, setRailPref] = useState<boolean | null>(null)
@@ -140,8 +150,8 @@ export function useShellChrome(deps: {
   }, [bp])
 
   // The breakpoint rule, in one place.
-  const railOpen = railPref ?? true
-  const inspectorOpen = ctxPref ?? (bp === 'wide')
+  const railOpen = railPref ?? !firstWorkspace
+  const inspectorOpen = ctxPref ?? (!firstWorkspace && bp === 'wide')
   const orchestration = centerView === 'orchestration'
   // M268. Orchestration takes the center full-bleed: hide rail/inspector for
   // room without rewriting their persisted prefs.
