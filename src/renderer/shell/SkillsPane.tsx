@@ -157,7 +157,9 @@ const WHY_WORD: Readonly<Record<SkillCard['why'], string>> = {
  */
 function resourceWord(card: SkillCard): string {
   const r = card.resources
-  if (r.kind === 'none') return 'no bundled files'
+  // M315. Nothing at rest states a zero: a card for a skill with no bundled
+  // files says nothing about files (the product rules' rest rule).
+  if (r.kind === 'none') return ''
   if (r.kind === 'some') return `${r.n} bundled file${r.n === 1 ? '' : 's'}`
   return `bundled files not counted — ${r.why}`
 }
@@ -411,7 +413,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                       <span className="skill-card__facts" data-skill-facts>
                         {[WHY_WORD[card.why], card.pluginId].filter((x) => x !== undefined).join(' · ')}
                       </span>
-                      <span className="skill-card__resources" data-skill-resources>{resourceWord(card)}</span>
+                      {resourceWord(card) !== '' && <span className="skill-card__resources" data-skill-resources>{resourceWord(card)}</span>}
                       {!card.installed && (
                         <span className="skill-card__note" data-skill-gone>not installed — the shelf kept its slot</span>
                       )}

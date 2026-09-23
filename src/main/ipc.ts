@@ -561,6 +561,12 @@ export function registerIpcHandlers(
     const r = req as { root?: unknown; lanes?: unknown } | null
     return typeof r?.root === 'string' && Array.isArray(r.lanes) ? kit.combine({ root: r.root, lanes: r.lanes.filter((l): l is string => typeof l === 'string') }) : { kind: 'unreadable', detail: 'a combine names a repository and its lanes' }
   })
+  // M315. Shape-checked here; the merger re-reads the repository itself.
+  ipcMain.handle(IPC.LANE_MERGE, (_event, req: unknown) => {
+    const r = req as { lane?: unknown; title?: unknown; dryRun?: unknown; expectHead?: unknown } | null
+    if (typeof r?.lane !== 'string' || !r.lane.startsWith('/')) return { kind: 'refused', reason: 'an accept names the lane it merges' }
+    return kit.laneMerge({ lane: r.lane, title: typeof r.title === 'string' ? r.title : '', ...(r.dryRun === true ? { dryRun: true } : {}), ...(typeof r.expectHead === 'string' ? { expectHead: r.expectHead } : {}) })
+  })
   ipcMain.handle(IPC.SETUP_READ, (_event, cwd: unknown) => (typeof cwd === 'string' ? kit.setupRead(cwd) : { kind: 'not-a-repo' as const }))
   ipcMain.handle(IPC.SETUP_SAVE, (_event, setup: unknown) => kit.setupSave(setup))
   ipcMain.handle(IPC.SETUP_PREPARE, (_event, req: unknown) => {

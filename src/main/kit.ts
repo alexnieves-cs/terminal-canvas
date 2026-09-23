@@ -1,3 +1,4 @@
+import type { LaneMergeRequest, LaneMergeResult } from '../shared/lane-merge'
 import type { CombineRunResult } from '../shared/combine'
 import type { PrepareResult } from '../shared/repo-setup'
 import type { Recipe } from '../shared/recipes'
@@ -22,6 +23,8 @@ export interface KitHandlers {
   recipeList: () => Promise<Recipe[]>
   recipeSave: (raw: unknown) => Promise<{ ok: true; recipe: Recipe } | { ok: false; reason: string }>
   recipeDelete: (id: string) => Promise<boolean>
+  /** M315. Accept a task by merging its lane (shared/lane-merge.ts). */
+  laneMerge: (req: LaneMergeRequest) => Promise<LaneMergeResult>
 }
 
 const off = 'not wired in this process'
@@ -34,7 +37,8 @@ export const INERT_KIT: KitHandlers = {
   editorOpen: async () => ({ kind: 'refused', reason: `the editor is ${off}` }),
   recipeList: async () => [],
   recipeSave: async () => ({ ok: false, reason: `recipes are ${off}` }),
-  recipeDelete: async () => false
+  recipeDelete: async () => false,
+  laneMerge: async () => ({ kind: 'refused', reason: `accepting is ${off}` })
 }
 
 /** What the editor opener needs from the OS — injected, so the harness never launches an editor. */

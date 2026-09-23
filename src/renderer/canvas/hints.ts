@@ -108,7 +108,10 @@ export function firstTaskRail(status: FirstTaskStatus | undefined, turns: number
  * the rail and the step after. The action is always the REVIEW: that is where
  * checks run and the PR opens, so the guide sends a person to one place.
  */
-export type FlagshipStep = 'start' | 'work' | 'review' | 'checks' | 'pr'
+// M315. A task with no GitHub issue ends in `accept` — the lane merged into the
+// main branch — where it used to end at "ready" with the work still on a side
+// branch; a GitHub task keeps `pr`.
+export type FlagshipStep = 'start' | 'work' | 'review' | 'checks' | 'pr' | 'accept'
 export interface FlagshipGuideFacts {
   status: FirstTaskStatus | undefined
   turns: number
@@ -123,6 +126,8 @@ export interface FlagshipGuideFacts {
   checksPassed: boolean
   github: boolean
   pr: boolean
+  /** M315. The person accepted the task — its lane was merged. */
+  merged?: boolean
 }
 export interface FlagshipGuide {
   steps: { step: FlagshipStep; label: string; state: 'done' | 'current' | 'todo' }[]
@@ -136,7 +141,7 @@ export interface FlagshipGuide {
 // ready to review — in the participle, because each step names what is
 // happening NOW, not a menu of stages. `work` is relabelled "Needs your input"
 // while the agent waits on the person (flagshipLabel below).
-const FLAGSHIP_LABELS: Record<FlagshipStep, string> = { start: 'Starting', work: 'Working', review: 'Ready to review', checks: 'Checks', pr: 'Pull request' }
+const FLAGSHIP_LABELS: Record<FlagshipStep, string> = { start: 'Starting', work: 'Working', review: 'Ready to review', checks: 'Checks', pr: 'Pull request', accept: 'Accept' }
 function flagshipLabel(step: FlagshipStep, needsInput: boolean): string {
   return step === 'work' && needsInput ? 'Needs your input' : FLAGSHIP_LABELS[step]
 }
@@ -144,22 +149,26 @@ export function flagshipGuide(f: FlagshipGuideFacts): FlagshipGuide | null {
   const needsInput = f.needsInput === true
   const first = firstTaskHint(f.status, f.turns, f.sent, needsInput)
   if (first === null) return null
+  const last: FlagshipStep = f.github ? 'pr' : 'accept'
+  const order: FlagshipStep[] = ['start', 'work', 'review', 'checks', last]
   if (needsInput && f.status !== undefined && f.status !== 'not-started' && f.status !== 'starting') {
-    const order: FlagshipStep[] = ['start', 'work', 'review', 'checks', 'pr']
     return { steps: order.map((step, i) => ({ step, label: flagshipLabel(step, true), state: i < 1 ? 'done' : i === 1 ? 'current' : 'todo' })), sentence: first, needsInput: true }
   }
   const answered = f.status !== 'streaming' && f.status !== 'starting' && f.status !== 'not-started' && f.status !== undefined && (f.turns > 0 || f.sent)
   let current: FlagshipStep
   let sentence: string
   let action: string | undefined
+  if (f.merged === true) {
+    return { steps: order.map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: 'Accepted — the task is merged into your main branch.' }
+  }
   if (f.status === undefined || f.status === 'not-started' || f.status === 'starting') { current = 'start'; sentence = first }
   else if (!answered) { current = 'work'; sentence = first }
   else if (!f.hasChanges) { current = 'work'; sentence = 'Your agent answered, and its lane holds no changes yet — reply in the conversation to keep it going.' }
   else if (f.standing !== 'current') { current = 'review'; sentence = f.standing === 'stale' ? 'The changes moved since you reviewed — look again.' : 'Your agent finished a turn. Review what it changed — comment on any line and send the comments back.'; action = 'Review changes' }
-  else if (!f.checksPassed) { current = 'checks'; sentence = 'Reviewed. Now run the lane\'s checks — each run keeps its own output.'; action = 'Run checks' }
+  else if (!f.checksPassed) { current = 'checks'; sentence = f.github ? 'Reviewed. Now run the lane\'s checks — each run keeps its own output.' : 'Reviewed. Run the lane\'s checks — or accept it as it is; the review says it is not verified.'; action = 'Run checks' }
   else if (f.github && !f.pr) { current = 'pr'; sentence = 'Reviewed and checked. Open the pull request — its body carries the outcome and the checks.'; action = 'Open pull request' }
-  else { return { steps: (['start', 'work', 'review', 'checks', 'pr'] as FlagshipStep[]).map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: f.pr ? 'The whole flow, done: reviewed, checked and a pull request open.' : 'Reviewed and checked — this task is ready.' } }
-  const order: FlagshipStep[] = ['start', 'work', 'review', 'checks', 'pr']
+  else if (!f.github) { current = 'accept'; sentence = 'Reviewed and checked. Accept it to merge the branch into your main branch — you see the plan first.'; action = 'Accept…' }
+  else { return { steps: order.map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: 'The whole flow, done: reviewed, checked and a pull request open.' } }
   const at = order.indexOf(current)
   return {
     steps: order.map((step, i) => ({ step, label: FLAGSHIP_LABELS[step], state: i < at ? 'done' : i === at ? 'current' : 'todo' })),

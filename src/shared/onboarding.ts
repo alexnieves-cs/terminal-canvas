@@ -178,7 +178,10 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
     ? `${FIRST_LAUNCH_ENGINES[preferred].name} will open a conversation in ${where}. Your message will open in the composer, not sent — no task branch; that needs ${lane}`
     : standingName !== undefined
       ? `${standingName} (${lane}) will work in ${where} on a separate branch`
-      : `${lane} will work in ${where} on a separate branch — as a new teammate, Claude · ${folderBase(folder ?? '')}, that may work only in ${where}`
+      // M315. The scope promise stays ("may work only in" is D04's policy,
+      // stated before it binds); the internal teammate name and the path said
+      // twice went — a new user read three identifiers for one folder.
+      : `${lane} will work on its own branch of ${folderBase(folder ?? '')}, and may work only in ${where}`
   if (sentence === '') {
     return { kind: 'refused', field: 'intention', reason: folder === null ? 'say what you want to work on, in a sentence' : `say what you want to work on — then ${outcome}` }
   }

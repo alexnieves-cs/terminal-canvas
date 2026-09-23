@@ -19,7 +19,8 @@ import type { RunRow } from '@shared/run-ledger'
 import type { CheckRecord } from '@shared/check-evidence'
 import { agentWorkingOf, commentAnchorOf, commentPlace, REVIEW_COMMENT_BODY_MAX, type ReviewComment } from '@shared/review-comments'
 import { useLaneChecks, type LaneWatcher } from '@renderer/checks/useLaneChecks'
-import { TaskReviewPanel } from './TaskReviewPanel'
+import { TaskReviewPanel, TaskVerdict } from './TaskReviewPanel'
+import { laneMergeOutcome, laneMergePlanSentence, type LaneMergeResult } from '@shared/lane-merge'
 import type { PrEvidence } from '@shared/task-flow'
 
 const NO_WATCHERS: readonly LaneWatcher[] = []
@@ -96,6 +97,8 @@ export interface ReviewTaskContext {
   /** M314. The task's deliverables, and the door that saves it as a recipe. */
   deliverables?: readonly string[]
   onSaveRecipe?: (itemId: string, name: string, passedChecks: string[]) => Promise<string | null>
+  /** M315. The lane was merged — the board records the outcome. Absent: no Accept control. */
+  onAccepted?: (itemId: string, merged: Extract<LaneMergeResult, { kind: 'merged' }>) => void
 }
 
 /**
@@ -324,6 +327,33 @@ const LEDGER_ROWS_PER_PANEL = 40
  * answer. Nothing here decides that a command was a "test": see
  * `review-readiness.ts`'s header for why that guess is not made.
  */
+/**
+ * M315. What the decision bar's Accept control needs from the node: its own
+ * armed state and the press handlers. Built by the component (it holds the
+ * state); rendered by `renderTask` beside Mark reviewed.
+ */
+interface AcceptUi {
+  /** Why Accept cannot run now, or null when it can. */
+  blocked: string | null
+  /** `null` at rest; the plan sentence while armed. */
+  armed: string | null
+  busy: boolean
+  outcome: string | null
+  onArm: () => void
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+/**
+ * M315. The task review in THREE parts, placed around the diff by the node:
+ * the HEAD (what the task is, and the verdict), the DECISION (mark reviewed,
+ * accept, or send it back), and the DETAILS (checks, comments, follow-up, the
+ * agent's own account, what ran). Before this every one of them sat ABOVE the
+ * diff at one weight, so the changes a person came to read were the last
+ * thing in the node and the actions were small ghost words among a dozen
+ * labels. Nothing inside a part changed: every hook the checks select on is
+ * the same element with the same attribute, only its position moved.
+ */
 function renderTask(
   task: ReviewTaskContext,
   evidence: ReviewEvidence | undefined,
@@ -331,27 +361,141 @@ function renderTask(
   signature: string | undefined,
   readOnly: boolean,
   press: (run: () => void) => (e: ReactMouseEvent) => void,
-  laneChecks: readonly CheckRecord[] | null = null
-): JSX.Element {
+  laneChecks: readonly CheckRecord[] | null = null,
+  accept: AcceptUi | null = null
+): { head: JSX.Element; decision: JSX.Element; details: JSX.Element } {
   const h = task.handoff
   // `shared` is markable too: a person CAN read a shared diff, and the
   // section's own sentence tells them what they are reading. Excluding it
   // would make the module's promise ("still reviewable") false at the
   // surface, which is where it matters.
   const markable = signature !== undefined && (h.state === 'ready' || h.state === 'shared') && !readOnly
-  return (
-    <section className="review-node__task" data-review-task={task.itemId}>
+  // ONE filled primary per surface (the material rule): Mark reviewed until
+  // the person has read the current changes, then Accept.
+  const reviewedNow = h.standing === 'current'
+  // M315. An accepted task has no next step here: no primary, and no talk of a
+  // mark going stale — its lane is measured against a main that now holds it.
+  const accepted = h.state === 'accepted'
+  const head = (
+    <div className="review-node__task-head">
       <h4 className="review-node__section-head">
         <span className="review-node__section-label">{task.title}</span>
         <span className="review-node__section-count" data-review-task-word={h.state} data-review-task-standing={h.standing} data-tone={h.tone}>{h.word}</span>
       </h4>
       <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>
+      {h.state === 'accepted' ? (
+        // M315. Accepted is the task's LAST word: the review conditions below it
+        // described a lane that has since landed, and read as a warning.
+        <div className="task-review__verdict" data-task-verification="accepted" data-tone="green">
+          <span className="task-review__word">{h.word}</span>
+          <ul className="task-review__conditions"><li className="task-review__holds" data-task-holds>{h.detail}</li></ul>
+        </div>
+      ) : task.onComments !== undefined && (
+        <TaskVerdict
+          standing={h.standing}
+          agentWorking={agentWorkingOf(h.state)}
+          checks={laneChecks}
+          {...(task.comments === undefined ? {} : { comments: task.comments })}
+          {...(task.criteria === undefined ? {} : { criteria: task.criteria })}
+          {...(task.criteriaMet === undefined ? {} : { criteriaMet: task.criteriaMet })}
+        />
+      )}
+      {/* D07 step 2's "unresolved questions". The blocker is M199's, projected
+          by the same table the card and the workflow diagram read, so all
+          three name the same question. It is stated and NOT answerable here:
+          a permission prompt is answered at the conversation or in Attention,
+          which is where the person can see what they are agreeing to. */}
+      {h.blocker !== undefined && (
+        <p className="pf__note review-node__note" data-review-task-blocker={h.blocker.kind} role="status">
+          unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard — ${h.blocker.subject}`} — answer it in the conversation, then review
+        </p>
+      )}
+    </div>
+  )
 
-      {/* M307. The review, together: outcome, verdict, criteria, checks with
-          their own output, comments and the follow-up. Only when the caller
-          wired the comment door — an older caller keeps the section as it was. */}
+  const decision = (
+    <div className="review-node__decide" data-review-decide>
+      {task.reviewed !== undefined && !accepted && (
+        <p className="pf__note review-node__note" data-review-task-mark={h.standing}>
+          {h.standing === 'stale'
+            ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here, and the lane has changed since`
+            // M285. A mark with no content identity was recorded by a build
+            // that could see only the diff's shape; it is not called current.
+            : h.standing === 'unknown'
+              ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here before this canvas recorded what it read — mark again to make the review checkable`
+              : `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here`}
+        </p>
+      )}
+      {accept !== null && accept.armed !== null ? (
+        <div className="review-node__accept-armed" data-review-accept-armed role="alertdialog" aria-label="Confirm accept">
+          <p className="review-node__accept-sentence">{accept.armed}</p>
+          <div className="review-node__task-verbs">
+            <button type="button" className="pf__verb pf__verb--word review-node__primary" data-review-accept-confirm
+              disabled={accept.busy} onMouseDown={press(accept.onConfirm)}>{accept.busy ? 'merging…' : 'Merge'}</button>
+            <button type="button" className="pf__verb pf__verb--word" data-review-accept-cancel
+              disabled={accept.busy} onMouseDown={press(accept.onCancel)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+      <div className="review-node__task-verbs">
+        {/* Marking a review done is a PERSON's act and has no verb, no palette
+            row and no agent line, on purpose: a plan asserting that somebody
+            reviewed something is the false claim this whole phase removes. It
+            sits beside Commit, which is a node control for the same family of
+            reason. Present at rest and disabled by name, never absent. */}
+        <button type="button" className={`pf__verb pf__verb--word${reviewedNow || accepted ? '' : ' review-node__primary'}`} data-review-task-verb="mark"
+          disabled={!markable}
+          title={markable ? 'record that you have read these changes' : readOnly ? 'leave merged view to act on this review' : (h.state === 'ready' || h.state === 'shared') ? 'the changes are still being read' : h.detail}
+          onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length, h.changes?.identity); task.onRefresh() }) : undefined}>
+          {task.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}
+        </button>
+        {/* M315. ACCEPT — the lane merged into the main tree's branch, after a
+            plan naming both. Enabled only once the CURRENT changes are marked
+            reviewed: what lands is what the person read, never a diff that
+            moved after they looked. Disabled by name otherwise, never absent. */}
+        {accept !== null && (
+          <button type="button" className={`pf__verb pf__verb--word${reviewedNow && !accepted ? ' review-node__primary' : ''}`} data-review-task-verb="accept"
+            disabled={accept.blocked !== null || accept.busy}
+            title={accept.blocked ?? 'merge this task\'s branch into your main branch — you see the plan first'}
+            onMouseDown={accept.blocked === null && !accept.busy ? press(accept.onArm) : undefined}>
+            {accept.busy ? 'reading…' : 'Accept…'}
+          </button>
+        )}
+        {/* INSERTED into the composer, never sent — M80's rule for every
+            template message, and the only version that leaves the person in
+            charge of what their agent is told. */}
+        {/* 5.3. ONE button, two arms, never a dead end: an open conversation
+            takes a drafted message; a closed one opens Start work for this
+            item. Either way the next press after reviewing is right here. */}
+        {task.chatPanelId !== undefined || task.onStartAgain === undefined ? (
+          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="continue"
+            disabled={readOnly || task.chatPanelId === undefined}
+            title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
+            onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => task.onContinue(task.itemId, paths))}>
+            Continue the conversation
+          </button>
+        ) : (
+          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="start-again"
+            disabled={readOnly}
+            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed — open Start work for this task to continue it in a new conversation; nothing starts until you confirm'}
+            onMouseDown={readOnly ? undefined : press(() => task.onStartAgain?.(task.itemId))}>
+            Continue in a new conversation…
+          </button>
+        )}
+      </div>
+      )}
+      {accept?.outcome != null && <p className="pf__note review-node__note" data-review-accept-outcome role="status">{accept.outcome}</p>}
+    </div>
+  )
+
+  const details = (
+    <section className="review-node__task" data-review-task-details={task.itemId}>
+      {/* M307. The review, together: checks with their own output, comments
+          and the follow-up. Only when the caller wired the comment door — an
+          older caller keeps the section as it was. */}
       {task.onComments !== undefined && (
         <TaskReviewPanel
+          hideVerdict
           itemId={task.itemId}
           title={task.title}
           {...(task.brief === undefined ? {} : { brief: task.brief })}
@@ -377,17 +521,6 @@ function renderTask(
           {...(task.onSaveRecipe === undefined ? {} : { onSaveRecipe: task.onSaveRecipe })}
           reviewedFiles={task.reviewed?.files}
         />
-      )}
-
-      {/* D07 step 2's "unresolved questions". The blocker is M199's, projected
-          by the same table the card and the workflow diagram read, so all
-          three name the same question. It is stated and NOT answerable here:
-          a permission prompt is answered at the conversation or in Attention,
-          which is where the person can see what they are agreeing to. */}
-      {h.blocker !== undefined && (
-        <p className="pf__note review-node__note" data-review-task-blocker={h.blocker.kind} role="status">
-          unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard — ${h.blocker.subject}`} — answer it in the conversation, then review
-        </p>
       )}
 
       {/* D07 step 2's "agent explanation", labelled as what it is. It is the
@@ -423,55 +556,9 @@ function renderTask(
           {evidence.more > 0 && <li className="review-node__evidence-more" data-review-evidence-more={String(evidence.more)}>{evidence.more} more</li>}
         </ul>
       )}
-
-      {task.reviewed !== undefined && (
-        <p className="pf__note review-node__note" data-review-task-mark={h.standing}>
-          {h.standing === 'stale'
-            ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here, and the lane has changed since`
-            // M285. A mark with no content identity was recorded by a build
-            // that could see only the diff's shape; it is not called current.
-            : h.standing === 'unknown'
-              ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here before this canvas recorded what it read — mark again to make the review checkable`
-              : `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here`}
-        </p>
-      )}
-
-      <div className="review-node__task-verbs">
-        {/* Marking a review done is a PERSON's act and has no verb, no palette
-            row and no agent line, on purpose: a plan asserting that somebody
-            reviewed something is the false claim this whole phase removes. It
-            sits beside Commit, which is a node control for the same family of
-            reason. Present at rest and disabled by name, never absent. */}
-        <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="mark"
-          disabled={!markable}
-          title={markable ? 'record that you have read these changes' : readOnly ? 'leave merged view to act on this review' : (h.state === 'ready' || h.state === 'shared') ? 'the changes are still being read' : h.detail}
-          onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length, h.changes?.identity); task.onRefresh() }) : undefined}>
-          {task.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}
-        </button>
-        {/* INSERTED into the composer, never sent — M80's rule for every
-            template message, and the only version that leaves the person in
-            charge of what their agent is told. */}
-        {/* 5.3. ONE button, two arms, never a dead end: an open conversation
-            takes a drafted message; a closed one opens Start work for this
-            item. Either way the next press after reviewing is right here. */}
-        {task.chatPanelId !== undefined || task.onStartAgain === undefined ? (
-          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="continue"
-            disabled={readOnly || task.chatPanelId === undefined}
-            title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
-            onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => task.onContinue(task.itemId, paths))}>
-            Continue the conversation
-          </button>
-        ) : (
-          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="start-again"
-            disabled={readOnly}
-            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed — open Start work for this task to continue it in a new conversation; nothing starts until you confirm'}
-            onMouseDown={readOnly ? undefined : press(() => task.onStartAgain?.(task.itemId))}>
-            Continue in a new conversation…
-          </button>
-        )}
-      </div>
     </section>
   )
+  return { head, decision, details }
 }
 
 function ReviewNodeImpl({
@@ -786,6 +873,55 @@ function ReviewNodeImpl({
   // enough for a rail and a diff to both read as themselves.
   const railLayout = model.files.length > 1 && rect.w >= RAIL_MIN_W
 
+  // M315. A TASK's review opens on its first changed file's diff: the diff is
+  // what the person came to read, and "select a file to see its diff" was one
+  // more step between the press and the thing it promised. Once per node, so
+  // a person who closes the file is not overruled.
+  const autoOpenedRef = useRef(false)
+  useEffect(() => {
+    if (autoOpenedRef.current || task === undefined || expandedPath !== null || model.files.length === 0) return
+    autoOpenedRef.current = true
+    setExpandedPath((model.files[0] as { path: string }).path)
+  }, [task, expandedPath, model.files])
+
+  // M315. ACCEPT: plan (a dry run that refuses by name), confirm, merge.
+  const [acceptPlan, setAcceptPlan] = useState<Extract<LaneMergeResult, { kind: 'ready' }> | null>(null)
+  const [acceptBusy, setAcceptBusy] = useState(false)
+  const [acceptOutcome, setAcceptOutcome] = useState<string | null>(null)
+  const accept: AcceptUi | null = task === undefined || task.onAccepted === undefined ? null : {
+    blocked: readOnly ? 'leave merged view to act on this review'
+      : task.handoff.state === 'accepted' ? task.handoff.detail
+      : task.handoff.standing !== 'current' ? 'mark the current changes reviewed first — Accept merges what you read'
+      : null,
+    armed: acceptPlan === null ? null : laneMergePlanSentence(acceptPlan),
+    busy: acceptBusy,
+    outcome: acceptOutcome,
+    onArm: () => {
+      setAcceptBusy(true)
+      setAcceptOutcome(null)
+      void window.canvas.lane.merge({ lane: task.lanePath, title: task.title, dryRun: true })
+        .then((r) => { setAcceptBusy(false); if (r.kind === 'ready') setAcceptPlan(r); else setAcceptOutcome(laneMergeOutcome(r)) },
+          (e: unknown) => { setAcceptBusy(false); setAcceptOutcome(`could not read the lane — ${String(e)}`) })
+    },
+    onConfirm: () => {
+      if (acceptPlan === null) return
+      const plan = acceptPlan
+      setAcceptBusy(true)
+      // expectHead: the lane must still be at the commit the plan named.
+      void window.canvas.lane.merge({ lane: task.lanePath, title: task.title, expectHead: plan.head })
+        .then((r) => {
+          setAcceptBusy(false)
+          setAcceptPlan(null)
+          setAcceptOutcome(laneMergeOutcome(r))
+          if (r.kind === 'merged') task.onAccepted?.(task.itemId, r)
+          setRefreshToken((n) => n + 1)
+          task.onRefresh()
+        }, (e: unknown) => { setAcceptBusy(false); setAcceptPlan(null); setAcceptOutcome(`nothing was merged — ${String(e)}`) })
+    },
+    onCancel: () => setAcceptPlan(null)
+  }
+  const taskParts = task === undefined ? undefined : renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks, accept)
+
   // M260. Prune `locallyReviewed` to whatever the current result still
   // lists: a discarded or reverted file must not keep inflating "N of M
   // reviewed" for a file that is no longer in M.
@@ -955,7 +1091,12 @@ function ReviewNodeImpl({
         // between the query and the click — the agent reverted its own work —
         // and reads as a bug unless it says so.
         setOutcome(
-          r.kind === 'refused' ? `refused — ${r.detail}`
+          // M315. A task review diffs the lane against its FORK, so it lists
+          // work the agent already committed; git's own "nothing to commit"
+          // is then the right answer in the wrong words.
+          r.kind === 'refused' && task !== undefined && /nothing to commit|no changes added to commit/i.test(r.detail)
+            ? 'already committed — these changes are on the lane\'s branch; Accept merges them'
+            : r.kind === 'refused' ? `refused — ${r.detail}`
             : r.kind === 'failed' ? `could not commit — ${r.detail}`
             // Its own sentence, and it names the fix rather than the fault:
             // the repository gained a commit while this one was being
@@ -1127,6 +1268,10 @@ function ReviewNodeImpl({
 
       <div
         className="pf__body pf__body--text review-node__body"
+        // M315. The task hook rides the BODY: the task's head, decision and
+        // details now sit around the diff rather than in one block above it,
+        // and every one of them is still inside the element that names it.
+        {...(task === undefined ? {} : { 'data-review-task': task.itemId })}
         // The marker shouldYieldWheel looks for. It is an ATTRIBUTE on the
         // element that actually scrolls, so "does this panel own its wheel"
         // is answered by what the KIND renders rather than by a branch inside
@@ -1135,6 +1280,19 @@ function ReviewNodeImpl({
         onMouseDown={(event) => {
           event.stopPropagation()
           onFocus(rect.id)
+        }}
+        // M315. THE KEYBOARD ARM of every control in this node. Its verbs act on
+        // MOUSEDOWN (`press`, so a press never moves focus or starts a drag), and
+        // Enter or Space on a focused button fires only a CLICK — so Mark
+        // reviewed, Accept, Merge and Send to agent were unreachable without a
+        // mouse. A keyboard click (detail 0) is re-sent as the mousedown the
+        // button already handles; a mouse click (detail ≥ 1) has already run on
+        // its mousedown and is left alone.
+        onClick={(event) => {
+          if (event.detail !== 0) return
+          const target = event.target instanceof Element ? event.target.closest('button') : null
+          if (target === null || target.disabled) return
+          target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
         }}
       >
         {draft !== null && (
@@ -1185,11 +1343,14 @@ function ReviewNodeImpl({
             question a person came with is "what should I do with this?", and
             the file list is the evidence for the answer rather than the
             answer. Absent entirely for a review opened by any other door. */}
-        {task !== undefined && renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks)}
+        {taskParts?.head}
         {subject.across === true ? renderAcross(across, sectionLabel) : (<>
-        <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
+        <p className="pf__summary review-node__summary" data-review-node-summary title={model.root}>{model.summary}</p>
         {/* M164. The path rule: the repository's basename at rest, the full path on hover. */}
-        <p className="review-node__root" title={model.root}>{displayPath(model.root, model.root).short}</p>
+        {/* M315. Not in a task review: its root is the lane's worktree folder
+            (`tc-c1-…`), a name nobody chose, and the head already says what
+            is being reviewed. The full path stays on the summary's title. */}
+        {task === undefined && <p className="review-node__root" title={model.root}>{displayPath(model.root, model.root).short}</p>}
         </>)}
         {/* M260. THE WARNING BANNER: `shared`'s note is the one case this note
             slot carries an actual EXPLANATION (which tool calls can and
@@ -1263,6 +1424,8 @@ function ReviewNodeImpl({
         )}
         </div>
         {model.more > 0 && <p className="pf__more review-node__more">+{model.more} more files</p>}
+        {taskParts?.decision}
+        {taskParts?.details}
         {/* M260. THE STICKY FOOTER: the two REAL, always-applicable actions —
             Commit (moved here from the chrome) and Discard, now also
             available as one bulk verb — plus the session's own progress. No

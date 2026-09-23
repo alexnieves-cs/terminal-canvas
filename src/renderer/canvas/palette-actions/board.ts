@@ -223,7 +223,14 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       const item = opts?.itemId === undefined ? undefined : (workItemsRef.current ?? []).find((i) => i.id === opts.itemId)
       const title = item?.title ?? opts?.title ?? ''
       const wanted = item?.key === undefined ? null : repoOfKey(item.key)
-      const teammateId = opts?.teammateId
+      // M315. The TYPED door (no card) opens on the teammate the person's most
+      // recent task used, when it still exists: a second task on the same
+      // repository asked them to choose agent and repository again from blank
+      // selects. A card keeps its own rule (its teammate, or the question).
+      const recentTeammate = item !== undefined ? undefined : [...(workItemsRef.current ?? [])]
+        .filter((i) => i.teammateId !== undefined && (teammatesRef.current ?? []).some((t) => t.id === i.teammateId))
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0]?.teammateId
+      const teammateId = opts?.teammateId ?? recentTeammate
       // With no teammate chosen there is nothing to read and nothing to
       // derive: the sheet opens on the question it can answer.
       // M275. An ARRANGEMENT always opens the sheet, even when the triple is

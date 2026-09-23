@@ -8941,9 +8941,13 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .first-task-hint--guide { flex-wrap: wrap; }
 .flagship__steps { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--sp-3); flex-basis: 100%; font-size: var(--t-xs); }
 .flagship__step { color: var(--fg-4); }
-.flagship__step[data-flagship-state='done'] { color: var(--fg-3); text-decoration: line-through; }
+.flagship__step[data-flagship-state='done'] { color: var(--fg-3); }
+/* M315. Done reads as DONE: a struck-through step read as cancelled. */
+.flagship__step[data-flagship-state='done']::after { content: ' ✓'; color: var(--green); }
 .flagship__step[data-flagship-state='current'] { color: var(--iris); font-weight: 600; }
-.flagship__go { color: var(--iris); }
+/* M315. The guide's one verb is the surface's one filled primary. */
+.flagship__go { background: var(--iris); color: var(--on-iris); border-color: transparent; font-weight: 600; min-height: 28px; padding: 0 var(--sp-3); }
+.flagship__go:hover:not(:disabled) { background: color-mix(in srgb, var(--iris) 86%, var(--fg)); color: var(--on-iris); }
 /* The rail's separators: the sequence reads left to right as one path. */
 .flagship__step + .flagship__step::before { content: "›"; margin-right: var(--sp-3); color: var(--fg-4); text-decoration: none; display: inline-block; }
 /* The agent is waiting on the PERSON: the current step takes the attention
@@ -9078,3 +9082,67 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .pf__menu-advanced { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
 .pf__menu-door { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; white-space: normal; }
 .pf__menu-benefit { color: var(--fg-3); font-size: var(--t-xs); line-height: 1.35; max-width: 18rem; }
+
+/* M315. THE TASK REVIEW'S ORDER — head (what the task is, and the verdict),
+   the changes, then the decision, then the details. The decision bar is the
+   one place on the review where the person acts on the whole task, so it is
+   the one surface here with a filled primary (the material rule: one per
+   surface) — Mark reviewed until the current changes are read, then Accept.
+   Existing tokens only; no name is declared here. */
+.review-node__task-head { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0 0 var(--sp-3); }
+.review-node__task-head .review-node__section-label { font-size: var(--t-md); font-weight: 600; }
+.review-node__task-head .review-node__section-count { font-size: var(--t-sm); }
+.review-node__decide { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3) 0; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
+.review-node__decide .review-node__task-verbs { margin-top: 0; flex-wrap: wrap; }
+.review-node__decide .pf__verb--word { min-height: 32px; padding: 0 var(--sp-3); font-size: var(--t-sm); color: var(--fg); }
+.pf__verb--word.review-node__primary { background: var(--iris); color: var(--on-iris); border-color: transparent; font-weight: 600; }
+.pf__verb--word.review-node__primary:hover:not(:disabled) { background: color-mix(in srgb, var(--iris) 86%, var(--fg)); color: var(--on-iris); }
+.review-node__decide .pf__verb--word:disabled { color: var(--fg-3); }
+.review-node__accept-sentence { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); color: var(--fg); }
+.task-review__more > summary { cursor: pointer; list-style: revert; }
+/* M315. "remember" is a CONTEXTUAL verb (the rest rule): it sized itself to
+   the whole row and sat, at full strength, under every answer in every
+   conversation. Opacity 0 → 1 on the answer's hover or focus, never display —
+   the box and the tab order stay, and a keyboard focus reveals it. */
+.chat__remember { align-self: flex-start; width: auto; margin-top: var(--sp-1); opacity: 0; transition: opacity var(--dur-1); }
+.chat__row--assistant:hover .chat__remember, .chat__remember:focus-visible { opacity: 1; }
+/* M315. The WORKSPACE crumb keeps its word; the task title takes the ellipsis.
+   Shrinking both equally read "Canva/ Make slugify…" — the short, fixed name
+   losing letters to the long one. */
+.shell__workspace > :first-child { flex: 0 0 auto; }
+.shell__workspace > .shell__task { flex: 1 1 auto; }
+/* M315. In a TASK review the diff is followed by the decision and the details,
+   so the body scrolls and nothing shrinks: the rail+diff split was built to be
+   the last child and claim what was left, which squeezed it to two lines once
+   anything sat below it. It gets its own height; the diff pane scrolls inside. */
+.pf--kind-review .pf__body--text[data-review-task] > * { flex-shrink: 0; }
+.pf--kind-review .pf__body--text[data-review-task] > .review-node__layout { flex: 0 0 auto; }
+.pf--kind-review .pf__body--text[data-review-task] > .review-node__layout[data-review-layout="rail"] { height: 420px; }
+/* M315. The engine word when the teammate's name already says it (ChatNode). */
+.chat__backend--echo { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* M315. A primary that cannot run is not a primary: a disabled filled button
+   read as dark text on the accent, illegible and still claiming the eye. */
+.pf__verb--word.review-node__primary:disabled { background: transparent; color: var(--fg-3); border-color: var(--line); font-weight: 400; }
+/* M315. The canvas's Create sits ABOVE the panels (z 20) at the world's top-left
+   corner, so a box-less text button printed straight onto whatever panel was
+   framed there — "claude—Create" over a title, "Create" through a review's
+   header. It keeps its quiet weight but gets a surface at rest, so it reads as
+   a control over a panel, never as text on text. */
+.new-object-row__plus { background: var(--s-1); border-color: var(--line); padding: var(--sp-2) var(--sp-4); }
+/* M315. The Needs-you popover scrolls inside its 50vh, and its Notify / Sound
+   footer is the LAST child — so with an approval expanded the footer sat at
+   the scroll edge, sliced in half, reading as broken. It belongs to the whole
+   popover, so it stays pinned while the list scrolls above it. */
+.dock__popover-foot { position: sticky; bottom: calc(-1 * var(--sp-2)); background: var(--s-3); z-index: 1; }
+/* M315. The dim behind the palette and the New task / New panel sheets covers
+   the whole window's work area. Absolute inside the canvas host, it stopped at
+   the host's right edge (short of the drawer margin) and left the Resume strip
+   — with its filled Continue — bright above the modal it belongs under. */
+.palette__scrim { position: fixed; }
+/* M315. The Runtime row WRAPS: its defaults sentence is `flex: 1 1 100%` so it
+   takes a line of its own, but the row never wrapped, so the mode, effort and
+   model selects beside it shrank to bare chevrons whose values could not be read. */
+.sheet__field--how .sheet__how { flex-wrap: wrap; row-gap: var(--sp-2); }
+.sheet__field--how .sheet__how > .sheet__select, .sheet__field--how .sheet__how > .sheet__input { min-width: 9em; }
+/* M315. The Lanes row's checkbox sits beside its words, not a row-width apart. */
+.sheet__check { display: inline-flex; align-items: center; gap: var(--sp-2); }

@@ -119,6 +119,13 @@ export interface ReviewSection {
   result: ReviewResult
   /** Why this section could not be read as a diff, when its result is `baseline-lost`: no longer a worktree, or no common history. */
   note?: string
+  /**
+   * M315. The commit this section is measured against — the lane's fork from
+   * the main tree — so a caller can open a review of THIS worktree alone
+   * (`review:at` with this as its baseline) instead of the whole census.
+   * Absent for the main tree's own section and wherever the fork was not found.
+   */
+  base?: string
 }
 
 export type ReviewAcross =

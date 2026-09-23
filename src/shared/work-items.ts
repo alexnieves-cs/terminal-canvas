@@ -71,6 +71,12 @@ export interface PersistedWorkItem {
   panelId?: string
   worktreeId?: string
   pr?: { number: number; url: string }
+  /**
+   * M315. ACCEPTED — the lane's branch was merged into the main tree's branch
+   * by the person's Accept. The fact a done task's review reads, so the moment
+   * after a merge says "merged" rather than "the lane holds no changes".
+   */
+  merged?: { into: string; sha: string; at: number }
   /** M114. `lane closed`, or a dispatch's refusal. Cleared by a new dispatch. */
   note?: string
   /**
@@ -160,6 +166,7 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.panelId === undefined ? {} : { panelId: item.panelId }),
     ...(item.worktreeId === undefined ? {} : { worktreeId: item.worktreeId }),
     ...(item.pr === undefined ? {} : { pr: { number: item.pr.number, url: item.pr.url } }),
+    ...(item.merged === undefined ? {} : { merged: { into: item.merged.into, sha: item.merged.sha, at: item.merged.at } }),
     ...(item.note === undefined ? {} : { note: item.note }),
     ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files, ...(item.reviewed.identity === undefined ? {} : { identity: carryReviewIdentity(item.reviewed.identity) }) } }),
     ...(item.anchor === undefined ? {} : { anchor: { panelId: item.anchor.panelId, dx: item.anchor.dx, dy: item.anchor.dy } }),
@@ -197,6 +204,9 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
   const reviewed = isRecord(rv) && isNum(rv.at) && isStr(rv.signature) && isNum(rv.files)
     ? { at: rv.at, signature: rv.signature, files: rv.files, ...(identity === undefined ? {} : { identity }) }
     : undefined
+  // M315. Field-level, the anchor's rule: a malformed merge record costs the field.
+  const m = raw.merged
+  const merged = isRecord(m) && isStr(m.into) && isStr(m.sha) && isNum(m.at) ? { into: m.into, sha: m.sha, at: m.at } : undefined
   const a = raw.anchor
   const anchor = isRecord(a) && isStr(a.panelId) && isNum(a.dx) && isNum(a.dy) ? { panelId: a.panelId, dx: a.dx, dy: a.dy } : undefined
   const opt = (v: unknown): string | undefined => (isStr(v) ? v : undefined)
@@ -226,6 +236,7 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       panelId: opt(raw.panelId),
       worktreeId: opt(raw.worktreeId),
       pr,
+      merged,
       note: opt(raw.note),
       reviewed,
       anchor,
@@ -343,5 +354,6 @@ export function teammateRefusal(mate: { name: string; places: readonly string[] 
 
 /** The typed door's one refusal. */
 export function workItemRefusal(title: string): string | null {
-  return title.trim() === '' ? 'a work item needs a title' : null
+  // M315. In the person's words: "work item" is this module's name for a task.
+  return title.trim() === '' ? 'give the task a title — say in a line what needs doing' : null
 }

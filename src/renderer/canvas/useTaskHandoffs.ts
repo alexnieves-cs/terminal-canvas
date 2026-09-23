@@ -62,6 +62,13 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
   /** The lane's changed paths, from the SAME read the handoff was judged against. */
   pathsOf: (itemId: string) => readonly string[] | undefined
   refresh: () => void
+  /**
+   * M315. Changes identity whenever the handoffs were rebuilt. `handoffOf` is
+   * stable by design (it reads a ref), so an effect that DERIVES from it —
+   * the resume summary — names this in its dependencies, or it keeps the
+   * answer it computed before the first git read landed.
+   */
+  handoffsVersion: object
 } {
   const { workItems, liveFacts } = deps
   const [acrossByRoot, setAcrossByRoot] = useState<Readonly<Record<string, ReviewAcross>>>({})
@@ -189,5 +196,5 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
   const handoffOf = useCallback((itemId: string) => handoffsRef.current[itemId], [])
   const laneOf = useCallback((itemId: string) => lanesRef.current[itemId], [])
   const pathsOf = useCallback((itemId: string) => pathsRef.current[itemId], [])
-  return { handoffOf, laneOf, pathsOf, refresh }
+  return { handoffOf, laneOf, pathsOf, refresh, handoffsVersion: built }
 }

@@ -19,6 +19,9 @@ module.exports = {
   // platform:'node'. If this ever needs external:['node-pty'], something has
   // leaked that belongs elsewhere.
   ...require('../src/main/git-runner'),
+  // M315. Accept: the lane merged into the main tree. Pure over an injected runner.
+  ...require('../src/main/lane-merge'),
+  ...require('../src/shared/lane-merge'),
   // Task 6's fix round: the once-only capture guard main/index.ts wires up.
   // Pure — no electron, no node-pty — so the epoch race that let a killed
   // panel's in-flight capture write a stale baseline can be driven here

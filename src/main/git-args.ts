@@ -530,3 +530,43 @@ export function buildLsTreeArgs(root: string, baseline: string, paths: string[])
 export function buildRestoreArgs(root: string, baseline: string, paths: string[]): string[] {
   return ['-C', root, 'restore', `--source=${baseline}`, '--worktree', '--', ...paths]
 }
+
+/**
+ * M315. Tracked changes only (`-uno`): an untracked file does not stop a merge
+ * unless the merge would overwrite it, and git refuses that case itself with
+ * its own sentence. What must stop a merge is an edit a person has not
+ * committed, because a merge on top of it mixes their work into the task's.
+ */
+export function buildTrackedStatusArgs(root: string): string[] {
+  return ['-C', root, 'status', '--porcelain', '--untracked-files=no']
+}
+
+/** M315. Everything, untracked included — a lane with work not yet committed is not ready to land. */
+export function buildFullStatusArgs(root: string): string[] {
+  return ['-C', root, 'status', '--porcelain']
+}
+
+/**
+ * M315. The one merge this app builds: the lane's branch into whatever the main
+ * tree has checked out, `--no-ff` so the task stays one visible unit in the
+ * history, `--no-edit` because the message is given. No `--no-verify`, for
+ * buildCommitArgs' reason — a repository's own hooks are not skipped quietly.
+ */
+export function buildMergeArgs(root: string, branch: string, message: string): string[] {
+  return ['-C', root, 'merge', '--no-ff', '--no-edit', '-m', message, branch]
+}
+
+/** M315. Put the main tree back exactly as it was when a merge stopped on conflicts. */
+export function buildMergeAbortArgs(root: string): string[] {
+  return ['-C', root, 'merge', '--abort']
+}
+
+/** M315. The paths a stopped merge left unmerged, NUL-separated. */
+export function buildUnmergedArgs(root: string): string[] {
+  return ['-C', root, 'diff', '--name-only', '-z', '--diff-filter=U']
+}
+
+/** M315. How many commits `branch` has that `base` does not, read in the main tree. */
+export function buildCountAheadArgs(root: string, base: string, branch: string): string[] {
+  return ['-C', root, 'rev-list', '--count', `${base}..${branch}`]
+}

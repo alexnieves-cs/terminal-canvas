@@ -679,12 +679,27 @@ const SLOT = { left: 300, top: 200 }
   let worst = 0
   const size = { width: 1200, height: 800 }
   const rect = { id: 'n1', x: 3000, y: -1500, w: 480, h: 320 }
+  // M315: at every scale where the rect FITS the canvas. A rect larger than
+  // the canvas aligns to its leading edge instead (centre.oversize.1 below).
+  const fits = (vp) => rect.w * vp.scale <= size.width - 2 * V.CENTRE_MARGIN && rect.h * vp.scale <= size.height - 2 * V.CENTRE_MARGIN
+  let fitting = 0
   for (const vp of VIEWPORTS) {
+    if (!fits(vp)) continue
+    fitting++
     const next = V.centreOn(vp, rect, size)
     const centre = V.worldToScreen({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, next)
     worst = Math.max(worst, Math.abs(centre.x - size.width / 2), Math.abs(centre.y - size.height / 2))
   }
-  ok('49 centreOn centres the rect at every scale', worst < EPS, `worst drift ${worst}`)
+  ok('49 centreOn centres the rect at every scale where it fits the canvas', fitting > 0 && worst < EPS, `worst drift ${worst} over ${fitting} scales`)
+  // M315. centre.oversize.1 — a panel taller (or wider) than the canvas puts
+  // its top-left corner a margin in, so its header is on screen; the axis
+  // that fits is still centred.
+  const tall = { id: 't', x: 100, y: 200, w: 400, h: 1400 }
+  const at = V.centreOn({ x: 0, y: 0, scale: 1 }, tall, size)
+  const topLeft = V.worldToScreen({ x: tall.x, y: tall.y }, at)
+  const mid = V.worldToScreen({ x: tall.x + tall.w / 2, y: 0 }, at)
+  ok('centre.oversize.1 a panel taller than the canvas is framed with its HEADER on screen — its top a margin below the canvas top — while the axis that fits stays centred',
+    Math.abs(topLeft.y - V.CENTRE_MARGIN) < EPS && Math.abs(mid.x - size.width / 2) < EPS, JSON.stringify({ topLeft, mid }))
 }
 
 // 50. centreOn does NOT change the scale. Framing a panel by zooming to it

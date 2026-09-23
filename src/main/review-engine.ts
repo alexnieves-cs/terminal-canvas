@@ -509,6 +509,7 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
         label: record.panelTitle ?? record.branch,
         panelId: record.panelId,
         result,
+        ...(forkSha === null ? {} : { base: forkSha }),
         ...(forkSha === null ? { note: fork.code === 1 ? 'no common history with the main tree' : `git could not read it — ${firstLine(fork.stderr)}` } : {})
       })
     }

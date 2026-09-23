@@ -111,12 +111,16 @@ export function TopBar({
         type="button"
         className="shell__spawn"
         // M65. The button is the considered door (the sheet); ⌘N — the menu's
-        // accelerator — stays the instant default. Never disabled: the sheet
-        // can always take a typed command.
-        title={preferred ? `Create… (⌘⇧N) — start a task or add an object; ⌘N starts ${preferred.name} at once` : 'Create… (⌘⇧N) — start a task or add an object'}
+        // accelerator — stays the instant default. Never disabled.
+        // M315. It opens the TASK sheet: the header's one creation button is
+        // the primary journey's front door, and the sheet's own header already
+        // called Task "the primary route" while this button landed on Panel.
+        // ⌘⇧N stays the expert door to a raw panel, so the button no longer
+        // shows it as its own shortcut.
+        title={preferred ? `Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N; ⌘N starts ${preferred.name} at once` : 'Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N'}
         {...shellControl(onOpenSheet)}
       >
-        <span>+ Create</span> <kbd>⌘⇧N</kbd>
+        <span>+ New task</span>
       </button>
 
       {/* Navigation hierarchy: workspace → selected task, persistent across BOTH center

@@ -21,6 +21,12 @@ export interface ResumeSummary {
   blocker?: string
   /** One next action, derived — never a plan. */
   nextAction: string
+  /**
+   * M315. What Continue DOES, when the handoff decided the next action: open
+   * the review, go to the question, resume the conversation, or start work.
+   * Absent when the action came from anywhere else — Continue then frames.
+   */
+  action?: 'review' | 'answer' | 'resume' | 'start'
   /** Which facts produced this summary, so a surface can say so. */
   sources: readonly string[]
 }
@@ -35,7 +41,7 @@ export interface ResumeSummaryInput {
   }
   retained?: Pick<RetainedOutcome, 'execution' | 'state' | 'refs'>
   execution?: { word: string; detail: string; blocker?: { kind: string; subject: string } }
-  handoff?: { actionLabel: string; detail: string; blocker?: { kind: string; subject: string } }
+  handoff?: { actionLabel: string; detail: string; blocker?: { kind: string; subject: string }; word?: string; action?: 'review' | 'answer' | 'resume' | 'start' }
 }
 
 function firstLine(text: string): string {
@@ -73,9 +79,15 @@ export function buildResumeSummary(input: ResumeSummaryInput): ResumeSummary {
   if (retained !== undefined) {
     lastOutcome = retained.execution.replace(/-/g, ' ')
     sources.push('retained-outcome')
-  } else if (execution !== undefined) {
+  } else if (execution !== undefined && !(execution.word === 'not started' && handoff?.word !== undefined)) {
     lastOutcome = execution.word
     sources.push('execution')
+  } else if (handoff?.word !== undefined) {
+    // M315. A session that is not running in THIS process (the app was
+    // closed) reads "not started" — a fact about the process, not the task.
+    // The lane's own word ("ready to review") is what happened to the work.
+    lastOutcome = handoff.word
+    sources.push('review-word')
   } else {
     lastOutcome = item.state
     sources.push('board-state')
@@ -94,9 +106,11 @@ export function buildResumeSummary(input: ResumeSummaryInput): ResumeSummary {
   }
 
   let nextAction: string
+  let action: ResumeSummary['action']
   if (handoff !== undefined && handoff.actionLabel.trim() !== '') {
     nextAction = handoff.actionLabel
     sources.push('review-action')
+    if (handoff.action !== undefined) action = handoff.action
   } else if (retained !== undefined) {
     nextAction = retainedNextAction(retained)
     sources.push('retained-next')
@@ -121,6 +135,7 @@ export function buildResumeSummary(input: ResumeSummaryInput): ResumeSummary {
     ...(lastOutcome !== undefined ? { lastOutcome } : {}),
     ...(blocker !== undefined ? { blocker } : {}),
     nextAction,
+    ...(action === undefined ? {} : { action }),
     sources
   }
 }

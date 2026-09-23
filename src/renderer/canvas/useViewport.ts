@@ -315,10 +315,13 @@ export function useViewport(
     const here = viewportRef.current
     // Already there still counts as arriving: a person who asks to be taken
     // to a panel that is on screen must still be shown which one it is.
-    if (here.x === target.x && here.y === target.y && here.scale === target.scale) { settle(true); return }
+    // M315. …and it STOPS a flight still under way: the camera asked to stay
+    // here must stay. Returning early left the earlier flight panning on, so a
+    // Fill view pressed mid-flight sized its panel for a camera that then moved.
+    if (here.x === target.x && here.y === target.y && here.scale === target.scale) { cancelFlight(true); settle(true); return }
     syncTrail(pushHistory({ ...trailRef.current, present: here }, target))
     flyTo(target)
-  }, [flyTo, syncTrail, settle])
+  }, [flyTo, syncTrail, settle, cancelFlight])
   const cameraBack = useCallback(() => {
     if (!canUndo(trailRef.current)) return
     const h = undoHistory(trailRef.current)

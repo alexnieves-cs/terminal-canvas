@@ -814,6 +814,14 @@ export function raisePanel(panels: Panel[], id: string): Panel[] {
  */
 export const REVIEW_W = 640
 export const REVIEW_H = 520
+/**
+ * M315. A TASK's review is where a person reads the agent's diff and comments
+ * on its lines, so it opens wide enough for the file list AND the diff side by
+ * side (the node's rail layout starts at 520px) — the portrait box above was
+ * sized for a file list with inline diffs, and left a two-file task's diff a
+ * scroll away under every other section.
+ */
+export const TASK_REVIEW_SIZE = { w: 960, h: 760 } as const
 
 /** World units between a subject's right edge and its review node's left. */
 export const REVIEW_GAP = 40

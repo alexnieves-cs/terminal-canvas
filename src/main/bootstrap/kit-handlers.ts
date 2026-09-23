@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { app, shell } from 'electron'
 import { whichFromEnv } from '../shell-env'
 import { createCombineRunner } from '../combine-runner'
+import { createLaneMerger } from '../lane-merge'
 import { createRepoSetupStore } from '../repo-setup-store'
 import { createRecipeStore } from '../recipe-store'
 import { createEditorOpener, type KitHandlers } from '../kit'
@@ -35,6 +36,7 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
     outputs: checkOutputs
   })
   const recipes = createRecipeStore({ dir: userData })
+  const laneMerge = createLaneMerger({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
   const editorOpen = createEditorOpener({
     pref: () => String(layoutStore.getSetting('files.editor') ?? 'auto'),
     which: (bin) => whichFromEnv(bin, state.loginEnv),
@@ -63,6 +65,7 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
     editorOpen,
     recipeList: () => recipes.list(),
     recipeSave: (raw) => recipes.save(raw),
-    recipeDelete: (id) => recipes.remove(id)
+    recipeDelete: (id) => recipes.remove(id),
+    laneMerge
   }
 }

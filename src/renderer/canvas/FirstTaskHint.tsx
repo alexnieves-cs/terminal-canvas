@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties, type JSX } from 'react'
 import { useChat } from '@renderer/chat/chat-store'
 import { shellControl } from '@renderer/shell/shell-control'
 import type { Point } from './viewport'
@@ -20,14 +20,28 @@ import { firstTaskHint, firstTaskRail, flagshipGuide, type FlagshipGuideFacts } 
  * task's review, where checks run and the PR opens. Without them it is the
  * conversation's three-step rail (starting → working → answered).
  */
-export function FirstTaskHint({ panelId, sent, onDismiss, facts, onReview, anchor }: {
+export function FirstTaskHint({ panelId, sent, onDismiss, facts, onReview, anchor, above }: {
   panelId: string
   sent: boolean
   onDismiss: () => void
   facts?: Omit<FlagshipGuideFacts, 'status' | 'turns' | 'sent' | 'needsInput'>
   onReview?: () => void
   anchor?: Point
+  /** M315. The panel's TOP-centre, for when there is no room under it. */
+  above?: Point
 }): JSX.Element | null {
+  // M315. Measured, so the hint can move ABOVE its panel when the panel runs
+  // to the foot of the canvas. Clamped up instead, it lay over the panel's
+  // composer — the one place the hint was telling the person to type.
+  const hintRef = useRef<HTMLDivElement | null>(null)
+  const [room, setRoom] = useState<{ host: number; own: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = hintRef.current
+    const host = el?.parentElement?.clientHeight
+    if (el === null || host === undefined) return
+    const own = el.offsetHeight
+    setRoom((r) => (r !== null && r.host === host && r.own === own ? r : { host, own }))
+  })
   const chat = useChat(panelId)
   const status = chat.snapshot?.status
   const needsInput = (chat.snapshot?.pending.length ?? 0) > 0
@@ -37,7 +51,16 @@ export function FirstTaskHint({ panelId, sent, onDismiss, facts, onReview, ancho
   // A 12px gap under the panel; the horizontal clamp keeps a 560px-max hint
   // (centred on its anchor by `translate`) inside the host, and the vertical
   // one keeps it above the host's foot when the panel runs off the bottom.
-  const style: CSSProperties | undefined = anchor === undefined ? undefined : {
+  const flip = anchor !== undefined && above !== undefined && room !== null &&
+    // Exactly where the clamp below would start lifting the hint onto its
+    // panel (its ceiling is 100% − 132px), or where it would not fit at all.
+    anchor.y + 12 > room.host - Math.max(132, room.own + 16) && above.y - 12 - room.own >= 48
+  const style: CSSProperties | undefined = anchor === undefined ? undefined : flip && above !== undefined ? {
+    left: `clamp(min(296px, 50%), ${Math.round(above.x)}px, max(calc(100% - 296px), 50%))`,
+    top: `${Math.round(above.y - 12)}px`,
+    bottom: 'auto',
+    translate: '-50% -100%'
+  } : {
     left: `clamp(min(296px, 50%), ${Math.round(anchor.x)}px, max(calc(100% - 296px), 50%))`,
     top: `clamp(48px, ${Math.round(anchor.y + 12)}px, calc(100% - 132px))`,
     bottom: 'auto'
@@ -53,7 +76,7 @@ export function FirstTaskHint({ panelId, sent, onDismiss, facts, onReview, ancho
     const steps = firstTaskRail(status, chat.turns.length, sent, needsInput)
     if (text === null || steps === null) return null
     return (
-      <div className="first-task-hint first-task-hint--guide" data-first-task-hint={stateWord} data-first-task-attached={attached} style={style} role="status" aria-live="polite">
+      <div ref={hintRef} className="first-task-hint first-task-hint--guide" data-first-task-hint={stateWord} data-first-task-attached={attached} data-first-task-flip={flip ? '' : undefined} style={style} role="status" aria-live="polite">
         {rail(steps, 'Your first conversation, step by step')}
         <span>{text}</span>
         <button type="button" className="pf__verb pf__verb--word" data-first-task-hint-dismiss title="Hide this hint" {...shellControl(onDismiss)}>Got it</button>
@@ -64,7 +87,7 @@ export function FirstTaskHint({ panelId, sent, onDismiss, facts, onReview, ancho
   if (guide === null) return null
   const current = guide.steps.find((s) => s.state === 'current')?.step ?? 'done'
   return (
-    <div className="first-task-hint first-task-hint--guide" data-first-task-hint={stateWord} data-flagship-step={current} data-first-task-attached={attached} style={style} role="status" aria-live="polite">
+    <div ref={hintRef} className="first-task-hint first-task-hint--guide" data-first-task-hint={stateWord} data-flagship-step={current} data-first-task-attached={attached} data-first-task-flip={flip ? '' : undefined} style={style} role="status" aria-live="polite">
       {rail(guide.steps, 'Your first task, step by step')}
       <span>{guide.sentence}</span>
       {guide.action !== undefined && onReview !== undefined && (

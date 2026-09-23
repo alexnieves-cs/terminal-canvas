@@ -60,6 +60,8 @@ import { sameReviewIdentity, type ReviewIdentity } from './review-identity'
 /** What is true of the task now, in the priority order `reviewHandoff` applies. */
 export type ReviewHandoffState =
   | 'no-lane' | 'lane-missing' | 'unreadable' | 'blocked' | 'working' | 'empty' | 'shared' | 'ready'
+  /** M315. The person accepted it: the lane was merged into the main tree's branch. */
+  | 'accepted'
 
 /**
  * What the person already did about it — a SECOND axis, never folded into
@@ -119,7 +121,7 @@ export interface ReviewHandoff {
 export interface ReviewMark { at: number; signature: string; files: number; identity?: ReviewIdentity }
 
 export interface ReviewHandoffInput {
-  item: { panelId?: string; worktreeId?: string; reviewed?: ReviewMark }
+  item: { panelId?: string; worktreeId?: string; reviewed?: ReviewMark; merged?: { into: string; sha: string } }
   /** The lane's own section from `reviewAcross` — the FORK diff, which survives its chat being closed. */
   section: ReviewSection | undefined
   /** M199's projection of the linked conversation; absent when there is no live session at all. */
@@ -247,6 +249,14 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   // attributing somebody else's files to it.
   if (item.panelId === undefined || item.worktreeId === undefined) {
     return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start work…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' }
+  }
+
+  // M315. ACCEPTED outranks what the lane's diff now says. After a merge the
+  // lane is measured against a main tree that already holds its commits, so
+  // its section reads "no changes" and the mark reads "changed since" — the
+  // moment of success reported as a warning. The merge record is the fact.
+  if (item.merged !== undefined) {
+    return carry({ state: 'accepted', word: `merged into ${item.merged.into}`, tone: 'idle', action: 'review', actionLabel: 'Review', detail: `you accepted it — merged into ${item.merged.into} as ${item.merged.sha.slice(0, 7)}; the lane stays until you remove it` })
   }
 
   // The lane is gone, or was never readable. Never review a DIFFERENT

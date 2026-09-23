@@ -1835,6 +1835,18 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const primaryItem = useMemo(() => orchPickIslandItem(workItems.map((w) => ({ id: w.id, title: w.title, state: w.state }))), [workItems])
   const primaryIsland: TaskIsland | null = (primaryItem !== null ? islands.find((i) => i.itemId === primaryItem.id) : undefined) ?? islands.find((i) => i.source === 'session') ?? null
   const island: TaskIsland | null = (focusIslandId === null ? undefined : islands.find((i) => i.id === focusIslandId)) ?? primaryIsland
+  // M315. The task's JOURNEY stage, not only the board's column. The board's
+  // `review` means a pull request exists, so a local task whose agent had
+  // finished read "Working" here while the canvas's guide said "Ready to
+  // review" about the same lane. Settled changes in the lane are the review
+  // step; an accepted (merged) task is done.
+  const islandStage = ((): string | undefined => {
+    if (island === null) return undefined
+    const h = island.itemId === undefined ? undefined : taskHandoffOf?.(island.itemId)
+    if (h?.state === 'accepted') return WORK_ITEM_STATES[3]
+    if ((island.state === WORK_ITEM_STATES[0] || island.state === WORK_ITEM_STATES[1]) && (h?.state === 'ready' || h?.state === 'shared')) return WORK_ITEM_STATES[2]
+    return island.state
+  })()
   const islandIds = useMemo(() => islands.map((i) => i.id), [islands])
   const orderedIds = useMemo(() => orchIslandOrder(islandOrder, islandIds), [islandOrder, islandIds])
   // Append-only: the order state learns new ids and forgets gone ones, never re-sorts.
@@ -2598,9 +2610,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             )}
           </div>
           {island !== null && island.source === 'work-item' && (
-            <ol className="orch__phases" aria-label="Task stage" data-orch-phase={island.state}>
+            <ol className="orch__phases" aria-label="Task stage" data-orch-phase={islandStage}>
               {WORK_ITEM_STATES.map((st, i) => {
-                const at = WORK_ITEM_STATES.indexOf(island.state as WorkItemState)
+                const at = WORK_ITEM_STATES.indexOf(islandStage as WorkItemState)
                 const place = at < 0 ? 'next' : i < at ? 'done' : i === at ? 'now' : 'next'
                 return (
                   <li key={st} className="orch__phase" data-place={place} aria-current={place === 'now' ? 'step' : undefined}>
@@ -2634,7 +2646,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               <div><dt>Checks</dt><dd data-orch-handoff-checks>{completion.checks}</dd></div>
               <div><dt>Open</dt><dd data-orch-handoff-open={completion.unresolved.length}>{completion.unresolved.length === 0 ? 'Nothing unresolved' : completion.unresolved.join(' · ')}</dd></div>
             </dl>
-            {completion.next.action !== 'none' && (
+            {/* M315. Not a second "review the changes" beside the header's filled
+                Review changes — the page offered the same verb four times. */}
+            {completion.next.action !== 'none' && !(completion.next.action === 'review' && completion.next.label === 'Review the changes' && reviewSubjectId !== null) && (
               (completion.next.action !== 'mark-done' || onMarkDone !== undefined) && (
                 <button type="button" className="orch__command" data-orch-handoff-next={completion.next.action} {...shellControl(() => runCompletion(completion))}>{completion.next.label}</button>
               )
@@ -3203,8 +3217,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     Shared directory — {island.writers} sessions write here; a change cannot be attributed to this task alone
                   </p>
                 )}
-                <p className="orch__inspector-next" data-orch-next={islandWaiting !== undefined ? 'answer' : island.state === WORK_ITEM_STATES[2] ? 'review' : 'watch'}>
-                  Next: {islandWaiting !== undefined ? `Answer ${islandWaiting.title}'s ${islandWaiting.toolName} request` : island.state === WORK_ITEM_STATES[2] ? 'Review its changes' : 'Watch its sessions work'}
+                <p className="orch__inspector-next" data-orch-next={islandWaiting !== undefined ? 'answer' : islandStage === WORK_ITEM_STATES[2] ? 'review' : 'watch'}>
+                  Next: {islandWaiting !== undefined ? `Answer ${islandWaiting.title}'s ${islandWaiting.toolName} request` : islandStage === WORK_ITEM_STATES[2] ? 'Review its changes' : 'Watch its sessions work'}
                 </p>
                 {islandCriteria.length > 0 && <OrchCriteria criteria={islandCriteria} />}
                 <div className="orch__roster-actions">

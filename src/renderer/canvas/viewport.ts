@@ -93,12 +93,20 @@ export function hitTest(rects: WorldRect[], world: Point): string | null {
  */
 export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
   const world = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
+  // M315. A panel LARGER than the canvas on an axis is aligned to its leading
+  // edge (a margin in), never centred: centring a chat taller than the window
+  // put its header — the title, the state, every control — off the top, so a
+  // jump to it landed on a panel you could not identify or act on.
+  const fitsX = rect.w * vp.scale <= size.width - CENTRE_MARGIN * 2
+  const fitsY = rect.h * vp.scale <= size.height - CENTRE_MARGIN * 2
   return {
     scale: vp.scale,
-    x: size.width / 2 - world.x * vp.scale,
-    y: size.height / 2 - world.y * vp.scale
+    x: fitsX ? size.width / 2 - world.x * vp.scale : CENTRE_MARGIN - rect.x * vp.scale,
+    y: fitsY ? size.height / 2 - world.y * vp.scale : CENTRE_MARGIN - rect.y * vp.scale
   }
 }
+/** M315. Screen pixels kept between the canvas edge and a panel too large to centre. */
+export const CENTRE_MARGIN = 16
 
 /** A canvas-local pixel rect — something painted OVER the canvas, not in the world. */
 export interface ScreenRect {

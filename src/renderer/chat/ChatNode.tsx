@@ -639,7 +639,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             line is configuration a person looks up, not reads at rest — it
             moved to the ⋯ menu (`menuDetail`) and the pane's Detail, and the
             title it was crowding gets the width back. */}
-        <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
+        {/* M315. When the teammate's name already begins with the engine
+            ("Claude · demo2" beside "claude") the word is an echo: kept in the
+            DOM for the screen reader and the checks, not painted twice in a
+            header that was clipping its own close control. */}
+        <span className={`pf__kind chat__backend${props.teammateName !== undefined && props.teammateName.toLowerCase().startsWith(backend.toLowerCase()) ? ' chat__backend--echo' : ''}`} data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M279. The phase, a SIBLING of the pill: the pill's text is the
             state word alone (the suites read it byte for byte), and the
@@ -872,6 +876,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               {(() => {
                 const st = composerStatus({
                   live: composerLive(snapshot),
+                  waiting: (snapshot?.pending.length ?? 0) > 0,
                   sending,
                   sendEnabled: composer.send.enabled,
                   ...(composer.send.reason === undefined ? {} : { sendReason: composer.send.reason }),

@@ -334,7 +334,9 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       {parseLineupWhatId(whatId) !== null && (
         <label className="sheet__field sheet__field--how">
           <span className="sheet__label">Lanes</span>
-          <span className="sheet__how"><input type="checkbox" data-sheet-worktree checked={worktree} onChange={(e) => setWorktree(e.target.checked)} /> agents in their own worktrees</span>
+          {/* M315. The checkbox and its words are ONE flex child: `.sheet__how > *` grows
+              every child, so a bare checkbox took the row and pushed its words to the far edge. */}
+          <span className="sheet__how"><span className="sheet__check"><input type="checkbox" data-sheet-worktree checked={worktree} onChange={(e) => setWorktree(e.target.checked)} /> agents in their own worktrees</span></span>
         </label>
       )}
       {isAgent && (
@@ -374,7 +376,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       )}
 
       <div className="sheet__foot">
-        <span className="sheet__preview" data-sheet-preview>{what}{chosenTemplate !== undefined ? '' : ` · ${request.cwd ? shortPath(request.cwd, 3) : '—'}`}</span>
+        <span className="sheet__preview" data-sheet-preview>{what}{chosenTemplate !== undefined || !request.cwd ? '' : ` · ${shortPath(request.cwd, 3)}`}</span>
         {/* M104. THE LINEUP PREVIEW: every seat, its kind and lane, the session
             count, and — against the live ceiling — how many will queue, said
             BEFORE Enter mints anything. */}

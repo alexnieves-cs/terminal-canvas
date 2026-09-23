@@ -197,7 +197,10 @@ check(HINTS, 'fr.flagship.1 the first-task guide walks start → agent works →
   const checks = g({ standing: 'current' })
   const pr = g({ standing: 'current', checksPassed: true })
   const done = g({ standing: 'current', checksPassed: true, pr: true })
-  const typedDone = g({ standing: 'current', checksPassed: true, github: false })
+  // M315. A typed (non-GitHub) task ends in ACCEPT, not at "ready" with the
+  // work still on a side branch; it is done only once merged.
+  const typedAccept = g({ standing: 'current', checksPassed: true, github: false })
+  const typedDone = g({ standing: 'current', checksPassed: true, github: false, merged: true })
   return { pass: cur(starting) === 'start' && cur(working) === 'work' && working.action === undefined &&
     cur(noChanges) === 'work' && /no changes/.test(noChanges.sentence) &&
     cur(review) === 'review' && review.action === 'Review changes' && review.steps[0].state === 'done' &&
@@ -205,7 +208,8 @@ check(HINTS, 'fr.flagship.1 the first-task guide walks start → agent works →
     cur(checks) === 'checks' && checks.action === 'Run checks' &&
     cur(pr) === 'pr' && pr.action === 'Open pull request' &&
     done.steps.every((s) => s.state === 'done') && /pull request open/.test(done.sentence) &&
-    typedDone.steps.every((s) => s.state === 'done') &&
+    cur(typedAccept) === 'accept' && typedAccept.action === 'Accept…' && typedAccept.steps[4].label === 'Accept' &&
+    typedDone.steps.every((s) => s.state === 'done') && /merged/.test(typedDone.sentence) &&
     g({ status: 'exited' }) === null, detail: { review, checks, pr, done: done.sentence } }
 })
 // The first start's continuity: the rail is the sequence a person lives

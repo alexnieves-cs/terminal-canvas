@@ -288,7 +288,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
       <div className="launcher__well">
       <div className="launcher__hero" aria-hidden="true">
         <span className="launcher__wordmark">terminal canvas</span>
-        <span className="launcher__tagline">every agent on one canvas, one person at the desk</span>
+        <span className="launcher__tagline">Hand a coding task to an agent, steer it, and review what comes back</span>
       </div>
       <div className="launcher__onboarding launcher__intent" data-onboarding role="form" aria-label="Start work" onKeyDown={onKey}>
         <ol className="launcher__steps">
@@ -358,7 +358,11 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <div className="launcher__field">
             {/* What will happen — the grant included — before anything does; or the
                 one thing still missing. One sentence, never a list of three. */}
-            <p className="launcher__summary" id="launcher-summary" data-onboarding-summary={plan.kind === 'refused' ? plan.field : plan.kind} title={plan.kind === 'refused' ? undefined : plan.folder}>
+            {/* M315. Hidden while the last press's refusal stands: "Claude Code will
+                work on its own branch of nothing" above "…/nothing does not exist"
+                promised what the line below it refused. */}
+            <p className="launcher__summary" id="launcher-summary" data-onboarding-summary={plan.kind === 'refused' ? plan.field : plan.kind} title={plan.kind === 'refused' ? undefined : plan.folder}
+              hidden={answer !== null && plan.kind !== 'refused'}>
               {plan.kind === 'refused' ? plan.reason : plan.summary}
             </p>
             {answer !== null && (

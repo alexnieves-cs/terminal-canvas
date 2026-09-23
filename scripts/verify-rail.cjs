@@ -3632,6 +3632,19 @@ console.log('\n' + '='.repeat(60))
   ok('m273.resume.1 pick prefers the working item; an empty board is not a resume; purpose is the first description line, never invented narrative',
     subject?.itemId === 'b' && none === null && summary?.purpose === 'first line' && summary?.title === 'B' && summary?.nextAction === 'open the lane and continue' && !/refactor|finished/i.test(JSON.stringify(summary)),
     JSON.stringify({ subject, none, summary }))
+  // M315. After a restart the lane's session reads "not started" — a fact
+  // about the process. The lane's word is the task's outcome, and Continue
+  // carries the handoff's action so it can DO the step it names.
+  const reopened = build({
+    item: { id: 'r', title: 'R', state: 'working' },
+    execution: { word: 'not started', detail: 'no session' },
+    handoff: { actionLabel: 'Review', detail: 'the lane holds 2 changed files', word: 'ready to review', action: 'review' }
+  })
+  const running = build({ item: { id: 'w', title: 'W', state: 'working' }, execution: { word: 'working', detail: 'streaming' }, handoff: { actionLabel: 'Resume', detail: 'moving', word: 'working', action: 'resume' } })
+  ok('resume.reopen.1 a session that is not running is never reported as the task\'s last outcome when the lane says what happened; the next action carries the handoff\'s verb for Continue',
+    reopened?.lastOutcome === 'ready to review' && reopened?.nextAction === 'Review' && reopened?.action === 'review' &&
+      running?.lastOutcome === 'working' && running?.action === 'resume' && summary?.action === undefined,
+    JSON.stringify({ reopened, running }))
   const ctx = typeof R.buildInspectorContext === 'function' ? R.buildInspectorContext({ panel: { kind: 'chat', rect: { id: 'c', x: 0, y: 0, w: 1, h: 1 } }, agentState: 'wants-you' }) : null
   const applies = typeof R.inspectorPrimaryApplies === 'function' ? R.inspectorPrimaryApplies({ kind: 'file' }) : null
   ok('m270.inspector.1 context band names the next action from facts; Restart does not apply to a file',

@@ -1,5 +1,6 @@
 import { mkdirSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, extname, resolve, sep } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, extname, join, resolve, sep } from 'node:path'
 import type { FileCreateResult } from '@shared/file-panel'
 
 export type { FileCreateResult }
@@ -44,7 +45,11 @@ export function createFile(root: string, name: string, seed: string): FileCreate
   // user asked for and reads as the app not listening to them.
   const withExt = extname(trimmed) === '' ? trimmed + DEFAULT_EXT : trimmed
 
-  const base = resolve(root)
+  // M315. A terminal's cwd is recorded UNEXPANDED (`~`) until the shell
+  // reports its real directory, and `resolve('~')` is `<main's cwd>/~` — a
+  // literal directory named tilde. A sheet created from a fresh terminal
+  // landed in `<app launch dir>/~/sheets/`, where nobody would look for it.
+  const base = resolve(root === '~' ? homedir() : root.startsWith('~/') ? join(homedir(), root.slice(2)) : root)
   const target = resolve(base, withExt)
   // Not a security boundary — the user has a shell one panel over, and this
   // refuses nothing they could not do there. It stops a `../` typo dropping a

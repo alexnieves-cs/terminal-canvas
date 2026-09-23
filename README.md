@@ -386,7 +386,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
                        env:report / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
-                       check:output / combine:run
+                       check:output / combine:run / lane:merge
                        setup:read / setup:save / setup:prepare
                        editor:open / recipe:list / recipe:save / recipe:delete
                        spawn:sheet / spawn:recent / spawn:recent-used
@@ -1091,6 +1091,7 @@ price of not killing something.
 | M312 | Repository setup, saved once — install, services, checks, ports and preview per repository (`setup:*`), detected as a draft nothing runs, and run in each new lane BEFORE its agent starts; a failed step stops the start with its output kept, each lane gets its own port span, and the agent is told its environment. [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
 | M313 | Meet the editor and the shell — a file at a line or a worktree in the person's editor (`editor:open`, Settings ▸ Open files in; ⌘⇧E; a double-clicked diff line; a Cmd-clicked `path:line`), and `tc task` / `terminal-canvas://task` open Start work filled in, starting nothing. [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
 | M314 | Workflow recipes — Fix a failing test, Implement an issue, Review a change, Investigate a bug, each carrying context, checks and deliverables onto the task and into the first message; a task is saved as the person's own recipe with the checks that passed (`recipe:*`). [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
+| M315 | Shippable pass on the primary journey — delegate, steer, review, accept: a task's review is the lane's own diff (file list beside the diff, line comments) and opens in view; Accept merges the lane into the main tree's branch after a plan naming both branches, refusing by name on dirty trees and aborting on conflicts (`lane:merge`). [Ledger](docs/build-log/m315-shippable-pass.md). |
 
 ### What's next — the v10 run (D01–D20)
 

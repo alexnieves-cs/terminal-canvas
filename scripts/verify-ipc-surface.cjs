@@ -281,7 +281,9 @@ app.whenReady().then(() => {
   // recipe:list / recipe:save / recipe:delete (the person's own recipes).
   // Brief #20 session:last-exit (159) — which panels had a session when the
   // window last went away, handed out once; the reopen notice's evidence.
-  const EXPECTED_CHANNELS = 159
+  // M315 lane:merge (160) — accept a task: the lane's branch merged into the
+  // main tree's, with a dry-run plan first and every refusal named.
+  const EXPECTED_CHANNELS = 160
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

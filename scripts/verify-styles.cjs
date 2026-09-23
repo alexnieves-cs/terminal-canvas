@@ -1130,7 +1130,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const nav = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Navigator.tsx'), 'utf8')
   const row = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'RailPanelRow.tsx'), 'utf8')
   const settings = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'settings-schema.ts'), 'utf8')
-  const topOk = /\+ Create/.test(top) && /Search panels, files, tasks, commands/.test(top) && /shell__workspace/.test(top) && /shell__view-menu/.test(top) && /onSetTheme/.test(top)
+  // M315: the header's creation button is `+ New task` — it opens the Task
+  // sheet, the primary journey's front door (a raw panel is the sheet's switch).
+  const topOk = /\+ New task/.test(top) && /Search panels, files, tasks, commands/.test(top) && /shell__workspace/.test(top) && /shell__view-menu/.test(top) && /onSetTheme/.test(top)
   const dockOk = ['Work', 'Content', 'Connections', 'System', 'Canvas', 'Tasks', 'Notes', 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
   const state = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'panels', 'panel-state.ts'), 'utf8')
   const filters = ['All', 'Running', 'Needs you', 'Changed', 'Asleep'].every((word) => state.includes(word)) && /PANEL_FILTERS/.test(nav) && /data-rail-filter/.test(nav)

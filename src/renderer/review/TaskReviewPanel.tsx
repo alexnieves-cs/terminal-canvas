@@ -57,6 +57,37 @@ export interface TaskReviewPanelProps {
   deliverables?: readonly string[]
   /** M314. Save this task as a recipe; resolves null when saved, or the reason it was not. */
   onSaveRecipe?: (itemId: string, name: string, passedChecks: string[]) => Promise<string | null>
+  /** M315. The verdict is rendered at the TOP of the review by `TaskVerdict`; this panel then starts at the evidence. */
+  hideVerdict?: boolean
+}
+
+/**
+ * M315. The verdict alone — "agent finished — not verified" and what is
+ * missing — so the review can open on it, ABOVE the diff, while the checks,
+ * comments and follow-up sit below the changes they are about. The same
+ * `verificationOf` call the panel makes, over the same props, so the two can
+ * never disagree.
+ */
+export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'standing' | 'checks' | 'comments' | 'criteria' | 'criteriaMet'>): JSX.Element {
+  const verification = verificationOf({
+    agentWorking: p.agentWorking,
+    standing: p.standing,
+    checks: p.checks ?? [],
+    ...(p.comments === undefined ? {} : { comments: p.comments }),
+    ...(p.criteria === undefined ? {} : { criteria: p.criteria }),
+    ...(p.criteriaMet === undefined ? {} : { criteriaMet: p.criteriaMet })
+  })
+  return (
+    <div className="task-review__verdict" data-task-verification={verification.stage} data-tone={verification.tone}>
+      <span className="task-review__word">{verification.word}</span>
+      {(verification.holds.length > 0 || verification.missing.length > 0) && (
+        <ul className="task-review__conditions">
+          {verification.holds.map((h) => <li key={`h:${h}`} className="task-review__holds" data-task-holds>{h}</li>)}
+          {verification.missing.map((m) => <li key={`m:${m}`} className="task-review__missing" data-task-missing>{m}</li>)}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 const LAST_LINES = 12
@@ -93,10 +124,14 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
     ended: checkWords(c),
     ...(lastLines.get(c.key) === undefined ? {} : { lastLines: lastLines.get(c.key) })
   }))
+  // M315. A comment already SENT is not a new follow-up: sending again repeated
+  // it word for word to an agent that had already acted on it. Sent comments
+  // stay open (the person resolves them); only unsent ones compose.
+  const unsent = open.filter((c) => c.sentAt === undefined)
   const followUp = composeFollowUp({
     title: p.title,
     ...(p.brief === undefined ? {} : { brief: p.brief }),
-    comments: open,
+    comments: unsent,
     failing: followUpChecks,
     unmet
   })
@@ -106,7 +141,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
     if (!canSend || p.onSendFollowUp === undefined) return
     setSending(true)
     setSendNote(null)
-    const ids = new Set(open.map((c) => c.id))
+    const ids = new Set(unsent.map((c) => c.id))
     void p.onSendFollowUp(p.itemId, followUp).then((refusal) => {
       setSending(false)
       if (refusal !== null) { setSendNote(refusal); return }
@@ -144,7 +179,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
 
   return (
     <div className="task-review" data-task-review={p.itemId}>
-      <div className="task-review__verdict" data-task-verification={verification.stage} data-tone={verification.tone}>
+      {p.hideVerdict !== true && <div className="task-review__verdict" data-task-verification={verification.stage} data-tone={verification.tone}>
         <span className="task-review__word">{verification.word}</span>
         {(verification.holds.length > 0 || verification.missing.length > 0) && (
           <ul className="task-review__conditions">
@@ -152,7 +187,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
             {verification.missing.map((m) => <li key={`m:${m}`} className="task-review__missing" data-task-missing>{m}</li>)}
           </ul>
         )}
-      </div>
+      </div>}
 
       {p.brief !== undefined && p.brief.trim() !== '' && (
         <div className="task-review__block">
@@ -249,7 +284,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       <div className="task-review__block">
         <span className="task-review__label">Comments · {open.length} open{(p.comments ?? []).length > open.length ? `, ${(p.comments ?? []).length - open.length} resolved` : ''}</span>
         {(p.comments ?? []).length === 0 ? (
-          <p className="pf__note" data-task-comments="none">none — press + beside a line in the diff below to comment on it</p>
+          <p className="pf__note" data-task-comments="none">none — press + beside a line in the diff above to comment on it</p>
         ) : (
           <ul className="task-review__comments">
             {(p.comments ?? []).map((c) => (
@@ -277,11 +312,13 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       <div className="task-review__block task-review__followup">
         <span className="task-review__label">Follow-up for the agent</span>
         {followUp === '' ? (
-          <p className="pf__note" data-task-followup="empty">nothing to send — no open comments and no failing checks</p>
+          <p className="pf__note" data-task-followup="empty">{open.length > unsent.length
+            ? `nothing new to send — ${open.length - unsent.length} comment${open.length - unsent.length === 1 ? '' : 's'} already sent; resolve ${open.length - unsent.length === 1 ? 'it' : 'them'} once the change is right`
+            : 'nothing to send — no open comments and no failing checks'}</p>
         ) : (
           <>
             <p className="pf__note" data-task-followup="ready">
-              {open.length} comment{open.length === 1 ? '' : 's'}{failing.length > 0 ? `, ${failing.length} failing check${failing.length === 1 ? '' : 's'}` : ''}{unmet.length > 0 ? `, ${unmet.length} criteria not confirmed` : ''} — read it before it goes
+              {unsent.length} comment{unsent.length === 1 ? '' : 's'}{failing.length > 0 ? `, ${failing.length} failing check${failing.length === 1 ? '' : 's'}` : ''}{unmet.length > 0 ? `, ${unmet.length} criteria not confirmed` : ''} — read it before it goes
             </p>
             <button type="button" className="pf__verb pf__verb--word" aria-expanded={previewOpen} data-task-followup-verb="preview"
               onMouseDown={p.press(() => setPreviewOpen((v) => !v))}>{previewOpen ? 'Hide the message' : 'Show the message'}</button>
@@ -333,8 +370,10 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
           any time, and the line says whether it was verified — a recipe saved
           from an unverified task is the person's call, stated, not hidden. */}
       {p.onSaveRecipe !== undefined && !p.readOnly && (
-        <div className="task-review__block" data-task-save-recipe>
-          <span className="task-review__label">Recipe</span>
+        <details className="task-review__block task-review__more" data-task-save-recipe>
+          {/* M315. Behind a disclosure: a recipe is about the NEXT task, and at
+              rest it competed with the decisions this one is waiting on. */}
+          <summary className="task-review__label">Save as a recipe for next time</summary>
           {recipeName === null ? (
             <>
               <p className="pf__note">{verification.stage === 'verified' ? 'verified — save how this was done to start the next one the same way' : 'not verified yet — a recipe saved now keeps checks that have not passed out of it'}{passedChecks.length > 0 ? ` · keeps ${passedChecks.map((c) => `\`${c}\``).join(', ')}` : ''}</p>
@@ -358,7 +397,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
             </div>
           )}
           {recipeNote !== null && <p className="pf__note" data-task-recipe-note role="status">{recipeNote}</p>}
-        </div>
+        </details>
       )}
     </div>
   )

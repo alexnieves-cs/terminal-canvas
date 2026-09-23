@@ -230,6 +230,8 @@ export function composerStatus(input: {
   sendReason?: string
   interruptEnabled: boolean
   interruptReason?: string
+  /** M315. The agent is waiting on the person (a permission question) — not answering. */
+  waiting?: boolean
   attachments: number
   memory?: string
   memoryUnresolved?: string
@@ -237,6 +239,9 @@ export function composerStatus(input: {
 }): { kind: ComposerStatusKind; text: string } {
   const attached = input.attachments === 0 ? '' : `${input.attachments} attachment${input.attachments === 1 ? '' : 's'} ready`
   if (input.live) {
+    // M315. A turn that is waiting on the PERSON is not "answering": the
+    // footer said the agent was busy while it was blocked on them.
+    if (input.waiting === true) return { kind: 'answering', text: 'Waiting for your answer above' + (attached === '' ? '' : ` · ${attached}, sent with your next message`) }
     const stop = input.interruptEnabled ? 'Answering — Stop interrupts' : `Answering — ${input.interruptReason ?? 'it cannot be interrupted from here'}`
     return { kind: 'answering', text: attached === '' ? stop : `${stop} · ${attached}, sent with your next message` }
   }

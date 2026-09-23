@@ -116,7 +116,7 @@ function resolve(name: string, inventory: LaneInventory | undefined, shelf: Shel
   return { kind: 'one', scope: one.scope, description: one.description, column: columnWord(shelf, one.scope, one.name) }
 }
 
-export function SkillTrailLane({ panel, selected, cwd, shelf, onOpenSkill }: SkillTrailLaneProps): JSX.Element | null {
+export function SkillTrailLane({ panel, cwd, shelf, onOpenSkill }: SkillTrailLaneProps): JSX.Element | null {
   const trail = useTrailFor(panel.rect.id, panel.kind)
   const [inventory, setInventory] = useState<LaneInventory | undefined>(undefined)
 
@@ -146,14 +146,13 @@ export function SkillTrailLane({ panel, selected, cwd, shelf, onOpenSkill }: Ski
   // session's skills" are different sentences, and printing the first for the
   // second lies about what the agent did.
   if (trail.kind !== 'entries') {
-    if (!selected) return null
-    return (
-      <div className="trail-lane" data-skill-trail-lane={panel.rect.id} style={style} aria-hidden="true">
-        <div className="trail-lane__note" data-skill-trail-note={trail.kind}>
-          {trail.kind === 'none' ? 'no skills used' : trail.why}
-        </div>
-      </div>
-    )
+    // M315. Neither note paints on the canvas. `none` ("no skills used") is a
+    // zero-value statement at rest — the product rules name this exact
+    // sentence. `unreadable` is a fact about what this app cannot see: it is
+    // inspector material (the density layers), and painted beside the selected
+    // panel it landed on the NEIGHBOUR's header, hiding that panel's title.
+    // A trail WITH entries is the lane's whole reason to paint, and still does.
+    return null
   }
 
   return (

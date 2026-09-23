@@ -298,7 +298,11 @@ export function PanelFrame({
           <button type="button" ref={menuButtonRef} className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
             {...shellControl(() => setMenuOpen((v) => !v))}>⋯</button>
           {menuOpen && (
-            <div className="pf__menu" role="menu" ref={menuRef} data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={onMenuKey}>
+            <div className="pf__menu" role="menu" ref={menuRef} data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={onMenuKey}
+              // M315. Bounded by its own panel: the menu grows down from the
+              // header, and on a short panel near the window's foot its last
+              // rows (Verbs in ⌘K, close) ran off-screen. It scrolls instead.
+              style={{ maxHeight: Math.max(160, rect.h - 40), overflowY: 'auto' }}>
               <div className="pf__menu-title" data-panel-menu-title>{title}</div>
               <div className="pf__note">{kind}</div>
               {menuDetail !== undefined && <div className="pf__note pf__menu-detail" data-panel-menu-detail>{menuDetail}</div>}

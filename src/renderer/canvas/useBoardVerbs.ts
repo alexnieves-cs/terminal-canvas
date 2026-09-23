@@ -738,6 +738,12 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         const r = await window.canvas.recipes.save(recipe)
         return r.ok ? null : r.reason
       },
+      // M315. ACCEPTED: the lane landed in the main tree's branch. The task is
+      // done — the person's own state to set, and merging is that act — and
+      // the note says where it went, so the board card carries the outcome.
+      onAccepted: (id, merged) => {
+        patchWorkItem(id, { state: 'done', merged: { into: merged.into, sha: merged.sha, at: Date.now() } })
+      },
       onDraftFollowUp: (id, text) => {
         const it = workItemsRef.current.find((i) => i.id === id)
         if (it?.panelId === undefined) return

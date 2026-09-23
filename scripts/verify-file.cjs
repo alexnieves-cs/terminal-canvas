@@ -324,6 +324,27 @@ const p = (name) => join(DIR, name)
     `18 — a null token overwrites deliberately: kind=${w18.kind}`)
 
 
+  // ── M315. tilde.1: a `~` root is the HOME directory, never `<cwd>/~` ─────
+  // A fresh terminal's cwd is recorded unexpanded, and a sheet created from
+  // it landed in a literal `~` directory under wherever the app was launched.
+  // HOME is pointed at this suite's own directory, so nothing is written to
+  // the real home.
+  {
+    const realHome = process.env.HOME
+    const cwdTilde = join(process.cwd(), '~', 'tilde-probe')
+    process.env.HOME = DIR
+    try {
+      const res = F.createFile('~', 'tilde-probe/s.csv', '')
+      const nested = F.createFile('~/tilde-probe', 'n.csv', '')
+      ok('tilde.1 createFile resolves a `~` root (and `~/x`) against the home directory, never as a literal directory under the process cwd',
+        res.kind === 'created' && res.path === join(DIR, 'tilde-probe', 's.csv') &&
+          nested.kind === 'created' && nested.path === join(DIR, 'tilde-probe', 'n.csv') && !existsSync(cwdTilde),
+        JSON.stringify({ res, nested }))
+    } finally {
+      process.env.HOME = realHome
+    }
+  }
+
   // ── M27. createFile: the note's creation verb. ─────────────────────────
   //
   // These five join this suite rather than getting one of their own for

@@ -1964,6 +1964,19 @@ if (GIT) {
   const queued = { execution: 'queued', result: 'none', word: 'queued', tone: 'idle', detail: 'behind the current turn', queueReason: 'in-flight' }
   const blocked = { execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', detail: 'asking about Bash', blocker: { kind: 'approval', subject: 'Bash' } }
 
+  // M315. accepted.1 — a merged task reads as merged, whatever its lane's diff
+  // says now: after a merge the lane is compared against a main tree that
+  // already holds its commits, so the section reads clean and the mark stale.
+  {
+    const mark = { at: 1, signature: 'deadbeef', files: 2 }
+    const merged = R.reviewHandoff({ item: laned({ reviewed: mark, merged: { into: 'main', sha: 'ef90985abcdef' } }), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+    const unmerged = R.reviewHandoff({ item: laned({ reviewed: mark }), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+    ok('accepted.1 a task the person merged is `accepted`, names the branch and the commit, and outranks the clean lane its merge produced; without the record the same lane is the ordinary clean arm',
+      merged.state === 'accepted' && merged.word === 'merged into main' && /ef90985/.test(merged.detail) && !/ef90985a/.test(merged.detail) &&
+        unmerged.state !== 'accepted',
+      JSON.stringify({ merged, unmerged }))
+  }
+
   {
     const NAME = 'readiness.1 the eight handoff states each come from their own input and the priority holds — no lane outranks everything, execution outranks the diff, a clean lane is `empty` rather than a green completion, a SHARED repository is its own state and is never called `ready to review`, and no arm names a door that does not exist'
     try {
@@ -2628,8 +2641,14 @@ if (GIT) {
   ok('flow.1 the first message a lane\'s agent receives carries the issue, its description, the intended outcome and every acceptance criterion; a typed task with none sends only its title',
     msg.startsWith('Dispatched work item\nacme/app#12\nFix login\nhttps://x/12') && msg.includes('SSO fails') &&
       msg.includes('Intended outcome:\nSSO users can log in') && msg.includes('Done when:\n- 401 is gone\n- a test covers it') &&
-      bare === 'Dispatched work item\n(typed)\nTyped',
+      // M315: a typed task opens with its own words, not the tracker header.
+      bare === 'Typed',
     msg)
+  // M315. A typed title cut to fit the board is not sent beside the whole line.
+  const cut = R.dispatchMessage({ title: 'Make slugify collapse…', description: 'Make slugify collapse repeated spaces and trim' })
+  const whole = R.dispatchMessage({ title: 'Fix the login', description: 'SSO users see a 401' })
+  ok('flow.cut.1 a typed task whose title was cut sends its whole sentence once — never the cut title above it — while an uncut title still leads its description',
+    cut === 'Make slugify collapse repeated spaces and trim' && whole === 'Fix the login\n\nSSO users see a 401', JSON.stringify({ cut, whole }))
   const pkg = JSON.stringify({ scripts: { test: 'vitest', build: 'tsc' } })
   ok('flow.2 Run checks suggests only what the lane declares — its package.json test/check/verify script under the lockfile\'s runner, else Cargo, Go, Python or make — and nothing when it declares none',
     R.suggestCheckCommand(['package.json', 'pnpm-lock.yaml'], pkg) === 'pnpm test' &&
@@ -2796,7 +2815,7 @@ if (GIT) {
   const mine = R.recipeFromTask({ id: 'wi1', title: 'login 401', brief: 'Fix login 401 for SSO', criteria: ['401 gone'], checks: ['npm test', 'npm run e2e'], deliverables: ['the fix'], recipeId: 'recipe-fix-test' }, { name: 'SSO login fix', passedChecks: ['npm test', 'npm test'], now: 1000 })
   ok('recipe.2 the first message gains how to gather context, the checks that must pass and what to hand back — and a task with none sends exactly the M310 message; a saved recipe keeps the checks that PASSED (deduped), templates the brief on the task\'s own title, keeps its recipe\'s ask and context, and records where it came from',
     /Before you start:\n- Run the failing check first/.test(msg) && /Checks that must pass:\n- `npm test`/.test(msg) && /Hand back:\n- the fix/.test(msg) &&
-      plain === 'Dispatched work item\n(typed)\nT' &&
+      plain === 'T' &&
       mine.checks.join() === 'npm test' && mine.brief === 'Fix {input} for SSO' && mine.ask.label === 'Which test is failing?' &&
       mine.context.includes('failing-output') && mine.savedFrom.taskId === 'wi1' && /^mine-sso-login-fix-/.test(mine.id),
     JSON.stringify({ msg, mine }))
@@ -2848,6 +2867,76 @@ if (GIT) {
     opened.kind === 'opened' && opened.editor === 'VS Code' && launched[0].join(' ') === '/usr/local/bin/code -g /r/src/a.ts:7' &&
       missing.kind === 'refused' && relative.kind === 'refused' && bogusLine.kind === 'opened' && launched[1].join(' ') === '/usr/local/bin/code /r/src/a.ts',
     JSON.stringify({ launched, missing, relative }))
+}
+
+// ── M315. ACCEPT: the lane's branch merged into the main tree ─────────────
+// Against REAL git, in a spaced temp directory with a real worktree, because
+// every refusal here is about repository state no fake runner can model
+// honestly (a dirty main tree, an unmerged path, a MERGE_HEAD left behind).
+{
+  const { execFileSync } = require('node:child_process')
+  const { mkdtempSync, writeFileSync: wf, rmSync: rm, existsSync: ex } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const base = mkdtempSync(join(tmpdir(), 'tc merge '))
+  const root = join(base, 'repo')
+  const lane = join(base, 'lane one')
+  const g = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } })
+  try {
+    mkdirSync(root)
+    g(root, 'init', '-q', '-b', 'main')
+    wf(join(root, 'a.txt'), 'one\n'); g(root, 'add', '-A'); g(root, 'commit', '-qm', 'init')
+    g(root, 'worktree', 'add', '-q', '-b', 'tc/lane', lane)
+    const runner = R.createGitRunner({ gitPath: () => 'git', env: () => ({ ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }), timeoutMs: () => 20000 })
+    const engine = R.createReviewEngine({ run: runner, baselineOf: () => undefined })
+    const merge = R.createLaneMerger({ run: runner, commonRootOf: (p) => engine.commonRootOf(p) })
+
+    const empty = await merge({ lane, title: 't', dryRun: true })
+    wf(join(lane, 'a.txt'), 'one\ntwo\n')
+    const laneDirty = await merge({ lane, title: 't', dryRun: true })
+    g(lane, 'commit', '-qam', 'agent: two')
+    wf(join(root, 'a.txt'), 'mine\n')
+    const mainDirty = await merge({ lane, title: 't', dryRun: true })
+    g(root, 'checkout', '-q', '--', 'a.txt')
+    const plan = await merge({ lane, title: 'Add two', dryRun: true })
+    const headBefore = g(root, 'rev-parse', 'HEAD').trim()
+    const moved = await merge({ lane, title: 'Add two', expectHead: '0'.repeat(40) })
+    const unmoved = g(root, 'rev-parse', 'HEAD').trim() === headBefore
+    const merged = await merge({ lane, title: 'Add two', expectHead: plan.head })
+    const landed = g(root, 'show', 'HEAD:a.txt') === 'one\ntwo\n' && g(root, 'log', '-1', '--format=%s').trim() === 'Merge tc/lane: Add two'
+    const again = await merge({ lane, title: 'Add two', dryRun: true })
+    ok('merge.1 accept refuses BY NAME before any write — nothing ahead, uncommitted lane work, edits in the main tree — plans with both branch names and the count, refuses a lane that moved after the plan without touching the main tree, merges --no-ff with the task in the message, and then has nothing left to merge',
+      empty.kind === 'refused' && /nothing to merge/.test(empty.reason) &&
+        laneDirty.kind === 'refused' && /not committed/.test(laneDirty.reason) &&
+        mainDirty.kind === 'refused' && /uncommitted edits in the main tree/.test(mainDirty.reason) &&
+        plan.kind === 'ready' && plan.branch === 'tc/lane' && plan.into === 'main' && plan.commits === 1 &&
+        /Merge 1 commit from tc\/lane into main/.test(R.laneMergePlanSentence(plan)) &&
+        moved.kind === 'moved' && unmoved &&
+        merged.kind === 'merged' && merged.commits === 1 && merged.sha.length === 40 && landed &&
+        again.kind === 'refused' && /nothing to merge/.test(again.reason),
+      JSON.stringify({ empty, laneDirty, mainDirty, plan, moved, merged, again }))
+
+    // A conflict is ABORTED, never left half-done in the person's checkout.
+    wf(join(lane, 'a.txt'), 'lane side\n'); g(lane, 'commit', '-qam', 'agent: lane side')
+    wf(join(root, 'a.txt'), 'main side\n'); g(root, 'commit', '-qam', 'person: main side')
+    const conflict = await merge({ lane, title: 'Clash' })
+    const clean = g(root, 'status', '--porcelain').trim() === '' && !ex(join(root, '.git', 'MERGE_HEAD'))
+    ok('merge.2 a conflicting accept is aborted — the main tree is clean with no MERGE_HEAD — and names the conflicting file and the branch it would have changed',
+      conflict.kind === 'conflict' && conflict.files.includes('a.txt') && conflict.into === 'main' && clean &&
+        /conflicted in a\.txt/.test(R.laneMergeOutcome(conflict)),
+      JSON.stringify({ conflict, clean }))
+
+    const detachedAt = g(root, 'rev-parse', 'HEAD').trim()
+    g(root, 'checkout', '-q', detachedAt)
+    const detached = await merge({ lane, title: 't', dryRun: true })
+    const fromMain = await merge({ lane: root, title: 't', dryRun: true })
+    ok('merge.3 a detached main tree and the main tree itself are refused by name',
+      detached.kind === 'refused' && /detached/.test(detached.reason) && fromMain.kind === 'refused',
+      JSON.stringify({ detached, fromMain }))
+  } catch (e) {
+    ok('merge.1 accept against real git', false, 'threw: ' + String(e && e.stack || e))
+  } finally {
+    try { rm(base, { recursive: true, force: true }) } catch { /* best effort */ }
+  }
 }
 
 const failed = results.filter((r) => !r.pass)

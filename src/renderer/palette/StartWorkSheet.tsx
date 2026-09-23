@@ -188,8 +188,11 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         const prefer = model.preferRoot
         if (prefer !== undefined) {
           const hit = [...answer.repos].filter((r) => prefer === r.path || prefer.startsWith(`${r.path}/`)).sort((a, b) => b.path.length - a.path.length)[0]
-          if (hit !== undefined) setRoot(hit.path)
+          if (hit !== undefined) { setRoot(hit.path); return }
         }
+        // M315. One repository this teammate may work in is the answer, not a
+        // question: selected, and still changeable.
+        if (answer.repos.length === 1) setRoot((cur) => (cur === '' ? (answer.repos[0] as { path: string }).path : cur))
         return
       }
       if (answer.kind === 'no-places') { setRepos([]); setNoPlaces(answer.reason); return }
@@ -450,7 +453,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
 
       <div className="sheet__foot">
         {/* The triple, before anything is minted. */}
-        <span className="sheet__preview" data-start-summary title={chosenRoot ?? undefined}>{summary === '' ? 'a task, a teammate and a repository' : summary}</span>
+        <span className="sheet__preview" data-start-summary title={chosenRoot ?? undefined}>{summary === '' ? 'a task, the agent to do it and its repository' : summary}</span>
         {/* What is still missing — one sentence, the first need's, because a
             list of three would state two questions the flow has not reached. */}
         {needs.length > 0 && blocking === null && (

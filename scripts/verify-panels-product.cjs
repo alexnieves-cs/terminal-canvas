@@ -3840,6 +3840,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           const ev = t.querySelector('[data-review-evidence]')
           const mark = t.querySelector('[data-review-task-verb="mark"]')
           const cont = t.querySelector('[data-review-task-verb="continue"]')
+          const again = t.querySelector('[data-review-task-verb="start-again"]')
           return {
             itemId: t.getAttribute('data-review-task'),
             state: w ? w.getAttribute('data-review-task-word') : null, standing: w ? w.getAttribute('data-review-task-standing') : null, word: w ? w.textContent : null,
@@ -3853,6 +3854,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             })),
             markDisabled: mark ? mark.disabled : null, markLabel: mark ? mark.textContent : null,
             contDisabled: cont ? cont.disabled : null, contTitle: cont ? cont.getAttribute('title') : null,
+            againTitle: again ? again.getAttribute('title') : null, againDisabled: again ? again.disabled : null,
             panelId: t.closest('.panel').getAttribute('data-panel-id')
           }
         })()`)
@@ -3927,7 +3929,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // for anything but a chat, so the route back is refused BY NAME
             // rather than left enabled and silently doing nothing — which is
             // what it did until this check was written.
-            opened.contDisabled === true && (opened.contTitle || '').length > 20 &&
+            // 5.3 (finish-work): over a lane that is not a conversation the
+            // route back is either refused by name OR the named door that opens
+            // Start work for the task again — never absent, never silent.
+            ((opened.contDisabled === true && (opened.contTitle || '').length > 20) ||
+              (opened.againDisabled === false && /start work|new conversation/i.test(opened.againTitle || ''))) &&
             typeof marked.signature === 'string' && marked.signature.length === 8 && marked.files === 1 && typeof marked.at === 'number' &&
             afterMark.standing === 'current' && /reviewed/.test(afterMark.word) &&
             stale.standing === 'stale' && /changed since/.test(stale.word) &&

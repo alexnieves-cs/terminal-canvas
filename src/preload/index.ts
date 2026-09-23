@@ -225,6 +225,9 @@ const bridge: CanvasBridge = {
   combine: {
     run: (req: { root: string; lanes: string[] }) => ipcRenderer.invoke(IPC.COMBINE_RUN, req)
   },
+  lane: {
+    merge: (req: unknown) => ipcRenderer.invoke(IPC.LANE_MERGE, req)
+  },
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
     save: (setup: unknown) => ipcRenderer.invoke(IPC.SETUP_SAVE, setup),

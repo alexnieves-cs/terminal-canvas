@@ -33,8 +33,18 @@ import type { PersistedWorkItem } from './work-items'
  * M310 message.
  */
 export function dispatchMessage(item: Pick<PersistedWorkItem, 'key' | 'title' | 'url' | 'description' | 'brief' | 'criteria'>, extras: readonly string[] = []): string {
-  const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
-  const parts = [header]
+  // M315. A task the person TYPED opens with its own words. The tracker
+  // header ("Dispatched work item / (typed)") was the first line of the first
+  // bubble in every conversation a new user started, in this app's internal
+  // vocabulary; it identifies an issue, and a typed task has none.
+  const header = item.key === undefined
+    ? item.title
+    : ['Dispatched work item', item.key, item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
+  // A typed title cut to fit the board ends in `…` and the description then
+  // carries the whole line — sending both showed the sentence twice, the first
+  // time cut off mid-word. The whole line is enough.
+  const cutTitle = item.key === undefined && item.title.endsWith('…') && item.description !== undefined && item.description.startsWith(item.title.slice(0, -1).trimEnd())
+  const parts = cutTitle ? [] : [header]
   if (item.description !== undefined && item.description !== '') parts.push(item.description)
   if (item.brief !== undefined && item.brief.trim() !== '') parts.push(`Intended outcome:\n${item.brief.trim()}`)
   if (item.criteria !== undefined && item.criteria.length > 0) parts.push(`Done when:\n${item.criteria.map((c) => `- ${c}`).join('\n')}`)

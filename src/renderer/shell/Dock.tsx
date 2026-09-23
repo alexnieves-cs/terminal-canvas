@@ -93,7 +93,9 @@ function DockImpl({
   const shownRequest = openRequest !== undefined ? openRequest : (focusLive ? attentionFocus : acknowledging ? null : firstRequest)
   const groups: Array<{ label: string; entries: Array<{ id: NavigatorPane; label: string; shortcut?: string; icon: JSX.Element }> }> = [
     { label: 'Work', entries: [
-      { id: 'panels', label: 'Canvas', shortcut: '⌘\\', icon: <Grid /> },
+      // M315. Named for what it opens — the Panels pane — not "Canvas", which is
+      // also the view switch beside it and the default workspace's name.
+      { id: 'panels', label: 'Panels', shortcut: '⌘\\', icon: <Grid /> },
       { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
       { id: 'board', label: 'Tasks', icon: <KindWork /> }
     ] },

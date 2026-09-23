@@ -2,6 +2,7 @@ import type { AgentPlanReply, AgentPlanRequest } from './plan'
 import type { LastExit } from './persistence'
 import type { CheckOutputRead } from './check-output'
 import type { CombineRunResult } from './combine'
+import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
 import type { Recipe } from './recipes'
@@ -600,6 +601,12 @@ export const IPC = {
    * is an ordinary watcher in the scratch path.
    */
   COMBINE_RUN: 'combine:run',
+  /**
+   * M315. Accept a task: merge its lane's branch into the main tree's branch.
+   * `dryRun` reads and refuses by name; the real call re-reads, refuses the
+   * same way, and writes only if the lane is still at the HEAD the person saw.
+   */
+  LANE_MERGE: 'lane:merge',
   /**
    * M312. The repository setup: `read` answers the saved record or a DRAFT
    * detected from the repository's own files; `save` writes one (re-resolved
@@ -1723,6 +1730,10 @@ export interface CanvasBridge {
   /** M311. See COMBINE_RUN. */
   combine: {
     run(req: { root: string; lanes: string[] }): Promise<CombineRunResult>
+  }
+  /** M315. See LANE_MERGE. */
+  lane: {
+    merge(req: LaneMergeRequest): Promise<LaneMergeResult>
   }
   /** M312. See SETUP_READ. */
   setup: {

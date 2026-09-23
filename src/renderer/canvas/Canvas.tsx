@@ -131,7 +131,7 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
+  makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE,
   addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
@@ -167,6 +167,8 @@ import { WorkNode, WORK_ITEM_GONE } from '@renderer/work/WorkNode'
 // faded, and under reduced motion (animation forced off) it is the whole
 // signal — a still ring shown for this long, then gone.
 const LANDING_LIT_MS = 900
+/** M315. When this window's renderer started — a task created after it is not a RESUME. */
+const APP_OPENED_AT = Date.now()
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
@@ -226,7 +228,7 @@ import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusalSync, teammateRefusal, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
-import { ACROSS_BASELINE } from '@shared/review'
+import { ACROSS_BASELINE, type ReviewSubject } from '@shared/review'
 import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
 import { useBoardVerbs, type BoardVerbs } from './useBoardVerbs'
 import type { StartWorkOutcome } from '@renderer/palette/start-work'
@@ -388,7 +390,7 @@ export function Canvas({
   const [resumeDismissed, setResumeDismissed] = useState(false)
   const [resumeSummary, setResumeSummary] = useState<ResumeSummary | null>(null)
   // #10. The resumed task's next action, shown in its lens bar after Continue — the summary's collapsed form.
-  const [resumedNext, setResumedNext] = useState<{ itemId: string; text: string } | null>(null)
+  const [resumedNext, setResumedNext] = useState<{ itemId: string; text: string; action?: ResumeSummary['action'] } | null>(null)
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
   const boardVerbsRef = useRef<BoardVerbs>({})
   const markLaneClosed = useCallback((chatId: string) => {
@@ -3689,7 +3691,7 @@ export function Canvas({
   // REPOSITORY on a chat turn ending — never per card and never on a timer —
   // and answers `undefined` until the first read lands, so a card says
   // nothing about review rather than guessing.
-  const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
+  const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs, handoffsVersion } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
   const activeWorkspaceId = workspaceRows.find((w) => w.active)?.id
   useEffect(() => { setResumeDismissed(false) }, [activeWorkspaceId])
   useEffect(() => {
@@ -3698,6 +3700,10 @@ export function Canvas({
     if (subject === null) { setResumeSummary(null); return }
     const item = workItems.find((i) => i.id === subject.itemId)
     if (item === undefined) { setResumeSummary(null); return }
+    // M315. Resume is for RETURNING. A task created since this window opened
+    // is the one the person is looking at: a "Resume work" card for it, seconds
+    // after pressing Start, read as if they had been away and lost their place.
+    if (item.createdAt >= APP_OPENED_AT) { setResumeSummary(null); return }
     const retained = retainedOutcomes.find((o) => o.itemId === item.id)
     const laneId = item.panelId
     const execution = laneId === undefined || liveRunFacts[laneId] === undefined ? undefined : projectSession(laneId, liveRunFacts[laneId])
@@ -3712,9 +3718,9 @@ export function Canvas({
       },
       ...(retained !== undefined ? { retained: { execution: retained.execution, state: retained.state, ...(retained.refs === undefined ? {} : { refs: retained.refs }) } } : {}),
       ...(execution !== undefined ? { execution: { word: execution.word, detail: execution.detail, ...(execution.blocker !== undefined ? { blocker: execution.blocker } : {}) } } : {}),
-      ...(handoff !== undefined ? { handoff: { actionLabel: handoff.actionLabel, detail: handoff.detail, ...(handoff.blocker !== undefined ? { blocker: handoff.blocker } : {}) } } : {})
+      ...(handoff !== undefined ? { handoff: { actionLabel: handoff.actionLabel, detail: handoff.detail, word: handoff.word, action: handoff.action, ...(handoff.blocker !== undefined ? { blocker: handoff.blocker } : {}) } } : {})
     }))
-  }, [workItems, retainedOutcomes, resumeDismissed, liveRunFacts, taskHandoffOf, activeWorkspaceId])
+  }, [workItems, retainedOutcomes, resumeDismissed, liveRunFacts, taskHandoffOf, handoffsVersion, activeWorkspaceId])
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
     return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
@@ -3851,29 +3857,61 @@ export function Canvas({
     // Never fall back to another root: reviewing a different repository under
     // this task's name is the substitution the guide forbids by name.
     if (record === undefined) return { kind: 'refused', reason: 'the worktree this task was started in is not listed any more — start work again to give it a fresh lane' }
-    const id = `r${nextIdRef.current++}`
-    setPanels((existing) => {
-      const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
-      const centre = cascadeCentre(anchorPanel === undefined ? { x: 0, y: 0 } : reviewCentre(anchorPanel.rect), existing)
-      const next = [
-        ...existing,
-        makeReviewPanel(id, centre, nextZ(existing), {
-          subjectId: item.panelId ?? itemId,
-          repoRoot: record.root,
-          // Never sent to git: an across node asks `review:across` with its
-          // root alone and each section compares against its own fork.
-          baselineSha: ACROSS_BASELINE,
-          label: item.title,
-          across: true,
-          workItemId: itemId
-        })
-      ]
-      commitHistory(next)
-      return next
-    })
-    selectOnly(id)
+    // M315. One review per task. A second press used to stack a second node
+    // beside the first, off-screen, and the person saw nothing happen. The
+    // existing one is brought into view instead — the press always LANDS.
+    // A census node a canvas saved before M315 is REPLACED by the lane's own
+    // review below rather than landed on — it cannot show the diff.
+    const isLaneReview = (p: Panel): boolean => isReviewPanel(p) && p.subject.workItemId === itemId && p.subject.across !== true
+    const already = panelsRef.current.find(isLaneReview)
+    if (already !== undefined) { jumpToAttention(already.rect.id); return { kind: 'ran' } }
+    const mint = (subject: ReviewSubject): void => {
+      if (panelsRef.current.some(isLaneReview)) return
+      const census = subject.across === true ? panelsRef.current.find((p) => isReviewPanel(p) && p.subject.workItemId === itemId) : undefined
+      if (census !== undefined) { jumpToAttention(census.rect.id); return }
+      const id = `r${nextIdRef.current++}`
+      setPanels((current) => {
+        const existing = subject.across === true ? current : current.filter((p) => !(isReviewPanel(p) && p.subject.workItemId === itemId))
+        const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
+        const centre = cascadeCentre(anchorPanel === undefined ? { x: 0, y: 0 } : reviewCentre(anchorPanel.rect, TASK_REVIEW_SIZE.w, TASK_REVIEW_SIZE.h), existing)
+        const next = [...existing, makeReviewPanel(id, centre, nextZ(existing), subject, TASK_REVIEW_SIZE)]
+        commitHistory(next)
+        return next
+      })
+      selectOnly(id)
+      // The review opens where the person can SEE it: minted beside the
+      // conversation it was otherwise placed off-screen with no camera move,
+      // and the press looked like it did nothing. `pendingJumpRef` waits for
+      // the panel to be rendered before framing it, and lands with the
+      // arrival glow the attention jump already has.
+      pendingJumpRef.current = id
+    }
+    const across: ReviewSubject = {
+      subjectId: item.panelId ?? itemId,
+      repoRoot: record.root,
+      // Never sent to git: an across node asks `review:across` with its
+      // root alone and each section compares against its own fork.
+      baselineSha: ACROSS_BASELINE,
+      label: item.title,
+      across: true,
+      workItemId: itemId
+    }
+    // M315. THE LANE, not the census. An across node lists every worktree of
+    // the repository with no diff, no line comments and a blocked commit —
+    // so the review a task's "Review changes" opened could not show what the
+    // agent changed, and the comment loop the guide promised had no gutter to
+    // start from. The lane's own section carries its fork point; a review of
+    // the WORKTREE against that fork is an ordinary `review:at` node, the
+    // most-exercised review there is. The census is the fallback only when
+    // the fork cannot be read, never a silent substitute for another root.
+    void window.canvas.review.across(record.root).then((answer) => {
+      const section = answer.kind === 'across' ? answer.sections.find((s) => s.path === record.path || (s.path !== answer.root && s.panelId === record.panelId)) : undefined
+      mint(section?.base === undefined
+        ? across
+        : { subjectId: item.panelId ?? itemId, repoRoot: section.path, baselineSha: section.base, label: item.title, workItemId: itemId })
+    }).catch(() => mint(across))
     return { kind: 'ran' }
-  }, [commitHistory, taskLaneOf])
+  }, [commitHistory, taskLaneOf, jumpToAttention])
 
   /**
    * M86. A review of EVERY worktree of the subject's repository: the same mint
@@ -4879,10 +4917,26 @@ export function Canvas({
     const host = hostRef.current
     if (!host) return
     const bounds = host.getBoundingClientRect()
-    const rect = maximiseRect(viewportRef.current, { width: bounds.width, height: bounds.height }, MAXIMISE_MARGIN)
+    // M315. Fill view is for READING, so it fills at 100%. Computed against the
+    // camera as it stood, a Fill view from a zoomed-out canvas (43% after Fit
+    // all) filled the window with 43%-size text. The camera goes to 100% with
+    // the world point under the canvas centre held still, and the rect is
+    // sized for THAT camera; within 2% of 100% nothing moves.
+    const now = viewportRef.current
+    const target = Math.abs(now.scale - 1) <= 0.02 ? now : (() => {
+      const cx = bounds.width / 2
+      const cy = bounds.height / 2
+      const wx = (cx - now.x) / now.scale
+      const wy = (cy - now.y) / now.scale
+      return { x: cx - wx, y: cy - wy, scale: 1 }
+    })()
+    // Always: at 100% already, this still stops a flight in progress — the rect
+    // below is sized for THIS camera, and a camera still moving would carry it off.
+    goToViewport(target)
+    const rect = maximiseRect(target, { width: bounds.width, height: bounds.height }, MAXIMISE_MARGIN)
     // The raise rides the same patch (one history entry, one setState).
     setPanelFlag(id, (p) => (p.maximised !== undefined ? null : { ...p, maximised: { restore: p.rect }, rect: { ...rect, id }, z: nextZ(panelsRef.current) }))
-  }, [setPanelFlag])
+  }, [setPanelFlag, goToViewport])
   const restorePanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.maximised === undefined ? null : { ...strip(p, 'maximised'), rect: p.maximised.restore })), [setPanelFlag])
   // M130. The fourth layout mark, through the same one-history-entry door the
   // other three take. Absent stays absent: expanding DELETES the key rather
@@ -7553,6 +7607,18 @@ export function Canvas({
   // that pane is closed — a card over the canvas covered the panels it named.
   // M309. While there is a return to brief, the briefing takes the banner's
   // slot: the banner is one task's resume, the briefing every task's.
+  // M315. The step a resume names, performed: review opens the lane's review
+  // in view, answer goes to the waiting conversation. Resume and start keep
+  // the frame Continue already did — the conversation is what they open.
+  const runResumeAction = (itemId: string, action: ResumeSummary['action']): void => {
+    if (action === 'review') {
+      const r = boardVerbsRef.current.review?.(itemId)
+      if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
+    } else if (action === 'answer') {
+      const panelId = workItemsRef.current.find((i) => i.id === itemId)?.panelId
+      if (panelId !== undefined) jumpToAttention(panelId)
+    }
+  }
   const resumeOf = (shape: 'card' | 'strip'): JSX.Element | null => resumeSummary === null ? null : (
     <ResumeBanner
       summary={resumeSummary}
@@ -7562,9 +7628,13 @@ export function Canvas({
         setRelatedItemId(itemId)
         // #10. Continuing collapses the summary into the task's normal status:
         // the lens bar it opens carries the next action until the lens closes.
-        setResumedNext({ itemId, text: resumeSummary.blocker !== undefined ? `open blocker — ${resumeSummary.blocker}` : resumeSummary.nextAction })
+        setResumedNext({ itemId, text: resumeSummary.blocker !== undefined ? `open blocker — ${resumeSummary.blocker}` : resumeSummary.nextAction, ...(resumeSummary.action === undefined ? {} : { action: resumeSummary.action }) })
         const r = frameItem(itemId)
         if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
+        // M315. Continue DOES the step it names. It framed the task and left
+        // "Review" as a label, so the one press a returning person makes
+        // brought them back to the conversation and no further.
+        else runResumeAction(itemId, resumeSummary.action)
       }}
       onDismiss={() => setResumeDismissed(true)}
     />
@@ -7674,7 +7744,7 @@ export function Canvas({
       />
       <TopBar
         presets={presetRows}
-        onOpenSheet={paletteActions.beginSpawnSheet}
+        onOpenSheet={() => paletteActions.beginStartWork()}
         workspaceName={workspaceRows.find((w) => w.active)?.name}
         onShowWorkspaces={() => chrome.chooseNavigator('workspaces')}
         // The crumb names the task of what is selected on the page SHOWING — the
@@ -8520,11 +8590,16 @@ export function Canvas({
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}
         {/* The first start's one handoff hint — gone once dismissed, and with its panel. */}
-        {firstTask !== null && !hintsSeen.has('first-task') && panels.some((p) => p.rect.id === firstTask.panelId) && (
+        {/* M315. The guide is its conversation's caption: it steps aside while
+            the person has another panel selected — the review it opened sat
+            UNDER it, the guide floating over the diff it had just sent them to. */}
+        {firstTask !== null && !hintsSeen.has('first-task') && panels.some((p) => p.rect.id === firstTask.panelId) &&
+          (selectedIds.size === 0 || selectedIds.has(firstTask.panelId)) && (
           <FirstTaskHint panelId={firstTask.panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }}
             // Attached to its conversation: the panel's bottom-centre through
             // the viewport, so the hint rides a pan like the lane headers do.
             anchor={(() => { const r = panels.find((p) => p.rect.id === firstTask.panelId)?.rect; return r === undefined ? undefined : worldToScreen({ x: r.x + r.w / 2, y: r.y + r.h }, viewport) })()}
+            above={(() => { const r = panels.find((p) => p.rect.id === firstTask.panelId)?.rect; return r === undefined ? undefined : worldToScreen({ x: r.x + r.w / 2, y: r.y }, viewport) })()}
             {...(() => {
               // M310. The flagship guide's facts, read off the task as it stands.
               const itemId = firstTask.itemId
@@ -8539,7 +8614,8 @@ export function Canvas({
                   hasChanges: handoff?.changes !== undefined && handoff.changes.files > 0,
                   checksPassed: laneWatchers.some((p) => getWatch(p.rect.id).status === 'passed'),
                   github: item.source === 'github',
-                  pr: item.pr !== undefined
+                  pr: item.pr !== undefined,
+                  merged: item.merged !== undefined
                 },
                 onReview: () => { const r = boardVerbsRef.current.review?.(itemId); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }
               }
@@ -8626,7 +8702,11 @@ export function Canvas({
               <span className="task-lens__title">{title}</span>
               <span className="task-lens__count" data-task-lens-count>{lens.members.length} related</span>
               {gone !== '' && <span className="task-lens__missing" data-task-lens-missing>{gone}</span>}
-              {resumedNext !== null && resumedNext.itemId === lens.itemId && <span className="task-lens__next" data-task-lens-next title={resumedNext.text}>{resumedNext.text}</span>}
+              {resumedNext !== null && resumedNext.itemId === lens.itemId && (resumedNext.action === 'review' || resumedNext.action === 'answer'
+                // M315. A next action with a door is a BUTTON — as a label it
+                // was the one word on the bar that looked pressable and was not.
+                ? <button type="button" className="pf__verb pf__verb--word task-lens__next task-lens__next--go" data-task-lens-next title={resumedNext.text} {...shellControl(() => runResumeAction(resumedNext.itemId, resumedNext.action))}>{resumedNext.text}</button>
+                : <span className="task-lens__next" data-task-lens-next title={resumedNext.text}>{resumedNext.text}</span>)}
               <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="frame" title="Frame every panel of this task"
                 {...shellControl(() => act(frameItem(lens.itemId)))}>Frame</button>
               <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="arrange" disabled={merged}

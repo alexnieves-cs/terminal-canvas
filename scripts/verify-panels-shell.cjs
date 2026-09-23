@@ -807,11 +807,14 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         document.querySelector('.shell__spawn').dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
-      const sheetShown = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`), 3000)
+      // M315. The button opens the TASK sheet; a raw panel is its switch away.
+      const taskShown = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-start-sheet]') !== null`), 3000)
+      await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-sheet-switch-to="panel"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
+      const sheetShown = taskShown === true && await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`), 3000)
       await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return !!w })()`)
       await sleep(600)
       const after = await wc.executeJavaScript(`window.__m4aSessions().length`)
-      ok('76 the New panel button opens the sheet, and Enter in it spawns exactly one panel',
+      ok('76 the New task button opens the Task sheet, its Panel switch opens the panel sheet, and Enter in it spawns exactly one panel',
         sheetShown === true && after === before + 1, `sheet=${sheetShown} ${before} -> ${after}`)
     }
 
