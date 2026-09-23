@@ -24,8 +24,14 @@
  * record existed to fill them. The order is the plan's: what changed, what
  * validated it, what it printed, what it produced, what happened.
  */
-export type WorkbenchTab = 'changes' | 'checks' | 'output' | 'artifacts' | 'timeline'
-export const WORKBENCH_TABS: readonly WorkbenchTab[] = ['changes', 'checks', 'output', 'artifacts', 'timeline']
+export type WorkbenchTab = 'changes' | 'checks' | 'output' | 'artifacts' | 'timeline' | 'combine'
+/**
+ * M311. A SIXTH, with its reader: Combine (OrchCombine.tsx) answers whether
+ * the repository's lanes are safe to put together — overlaps, same-checkout
+ * contention, a proposed order, and a check on the combined tree. Last,
+ * because it is about every lane, not the subject.
+ */
+export const WORKBENCH_TABS: readonly WorkbenchTab[] = ['changes', 'checks', 'output', 'artifacts', 'timeline', 'combine']
 
 /** The workbench cannot be dragged shut, and cannot swallow the scene. */
 export const WORKBENCH_MIN_HEIGHT = 120

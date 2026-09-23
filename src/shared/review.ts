@@ -172,6 +172,14 @@ export type ReviewResult =
 export interface DiffLine {
   kind: 'add' | 'del' | 'context' | 'hunk' | 'meta'
   text: string
+  /**
+   * M307. The line's number in the OLD file (del, context) and the NEW file
+   * (add, context), counted from the enclosing hunk header — the address a
+   * review comment is written against. Absent on hunk and meta lines, and on
+   * any line before the first well-formed hunk header, never guessed.
+   */
+  oldNo?: number
+  newNo?: number
 }
 
 /**

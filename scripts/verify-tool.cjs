@@ -28,7 +28,8 @@ buildSync({
 const T = require(OUT)
 
 // The CLI's --output-format json envelope, in both shapes the parser accepts:
-// the schema-validated object beside the text, or the object AS the text.
+// the schema-validated object beside the text, and the object only AS the text
+// (which the parser refuses: only the schema-validated object is data).
 const envelope = (obj, asText = false) => JSON.stringify(asText
   ? { type: 'result', subtype: 'success', is_error: false, result: '```json\n' + JSON.stringify(obj) + '\n```' }
   : { type: 'result', subtype: 'success', is_error: false, result: 'done', structured_output: obj })
@@ -78,8 +79,8 @@ function fakeRunner(stdout, opts = {}) {
     // --- the reply ---------------------------------------------------------
     const wf = T.parseToolReply?.(envelope(WORKFLOW), folder)
     const wfText = T.parseToolReply?.(envelope(WORKFLOW, true), folder)
-    ok('tool.parse.1 a workflow reply parses from the schema object AND from a fenced JSON result, through the real template parser, with every node given the tool\'s folder as its cwd',
-      wf?.kind === 'workflow' && wfText?.kind === 'workflow' && wf.name === 'Nightly check' &&
+    ok('tool.parse.1 a workflow reply parses from the schema object (a fenced JSON result with no structured_output is refused), through the real template parser, with every node given the tool\'s folder as its cwd',
+      wf?.kind === 'workflow' && wfText?.kind === 'refused' && wf.name === 'Nightly check' &&
         JSON.stringify(wf.nodes.map((n) => n.kind)) === JSON.stringify(['http', 'terminal', 'action']) &&
         wf.nodes.every((n) => n.cwd === folder),
       JSON.stringify({ wf, wfText: wfText?.kind }))

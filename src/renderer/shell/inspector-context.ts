@@ -19,7 +19,53 @@ const WORK_DONE = WORK_ITEM_STATES[3]
 export interface InspectorContextBand {
   nextAction?: string
   blocker?: string
-  related?: { itemId: string; title: string; memberCount: number }
+  related?: { itemId: string; title: string; memberCount: number; chain?: TaskChainStep[] }
+}
+
+/**
+ * M310. THE FLAGSHIP FLOW, AS ONE STRIP — issue → conversation → preview →
+ * review → checks → pull request, for whichever panel of the task is
+ * selected. Each step is present (a panel to go to, a link to open) or
+ * ABSENT with the words for what would make it — so the strip is also the
+ * flow's next step, and a missing review reads as "not opened yet" rather
+ * than as a flow that has no review.
+ *
+ * Built from the task's membership (M203's reasons) and the card's own
+ * record; a panel's KIND decides its step, the membership decides that it
+ * belongs. Pure.
+ */
+export type TaskChainStepKind = 'issue' | 'conversation' | 'preview' | 'review' | 'checks' | 'pr'
+
+export interface TaskChainStep {
+  step: TaskChainStepKind
+  label: string
+  /** Where the step is, when it exists. */
+  panelIds: string[]
+  url?: string
+  present: boolean
+}
+
+export function taskChain(input: {
+  item: { key?: string; url?: string; source: string; panelId?: string; pr?: { number: number; url: string } }
+  members: readonly { panelId: string; kind: string }[]
+}): TaskChainStep[] {
+  const of = (kind: string): string[] => input.members.filter((m) => m.kind === kind).map((m) => m.panelId)
+  const chat = input.item.panelId !== undefined && input.members.some((m) => m.panelId === input.item.panelId) ? [input.item.panelId] : of('chat')
+  const previews = of('browser')
+  const reviews = of('review')
+  const checks = of('watcher')
+  return [
+    input.item.source === 'typed'
+      ? { step: 'issue', label: 'typed task — no issue', panelIds: [], present: false }
+      : { step: 'issue', label: input.item.key ?? 'issue', panelIds: [], ...(input.item.url === undefined ? {} : { url: input.item.url }), present: input.item.url !== undefined },
+    { step: 'conversation', label: chat.length > 0 ? 'conversation' : 'no conversation — start work', panelIds: chat, present: chat.length > 0 },
+    { step: 'preview', label: previews.length > 0 ? `preview${previews.length > 1 ? ` ×${previews.length}` : ''}` : 'no preview', panelIds: previews, present: previews.length > 0 },
+    { step: 'review', label: reviews.length > 0 ? 'review' : 'not reviewed on the canvas', panelIds: reviews, present: reviews.length > 0 },
+    { step: 'checks', label: checks.length > 0 ? `checks${checks.length > 1 ? ` ×${checks.length}` : ''}` : 'no checks — run them from the review', panelIds: checks, present: checks.length > 0 },
+    input.item.pr !== undefined
+      ? { step: 'pr', label: `PR #${input.item.pr.number}`, panelIds: [], url: input.item.pr.url, present: true }
+      : { step: 'pr', label: input.item.source === 'github' ? 'no pull request yet' : 'no pull request (not a GitHub task)', panelIds: [], present: false }
+  ]
 }
 
 export interface InspectorContextInput {
@@ -31,7 +77,7 @@ export interface InspectorContextInput {
   workItem?: { id: string; title: string; state: WorkItemState; note?: string }
   execution?: { detail: string; blocker?: { kind: string; subject: string } }
   handoff?: { actionLabel: string; detail: string; blocker?: { kind: string; subject: string } }
-  related?: { itemId: string; title: string; memberCount: number }
+  related?: { itemId: string; title: string; memberCount: number; chain?: TaskChainStep[] }
 }
 
 /**

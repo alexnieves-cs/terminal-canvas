@@ -4064,6 +4064,60 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ absent, malformed, malformedWarnings, cap: many.length, old: Object.keys(old.snapshot.workspaces[0]), captured }))
 }
 
+// 6.1 (D11). A retained outcome keeps what the work LEFT — the PR, the lane's
+// worktree, the size of its review — as references, and the next action names
+// the PR. A malformed refs field costs itself, never the record.
+{
+  const item = { id: 'wi2', source: 'github', title: 'Ship it', state: 'review', panelId: 'chat2', worktreeId: 'wt2', pr: { number: 7, url: 'https://x/pr/7' }, reviewed: { at: 1, signature: 'abcd1234', files: 3 }, createdAt: 1, updatedAt: 2 }
+  const captured = L.retainOutcome(item, [], 20)
+  const warnings = []
+  const parsed = L.parseRetainedOutcomes([captured, { ...captured, id: 'o2', refs: { pr: 'nope' } }], warnings)
+  ok('outcome.refs.1 capture keeps the PR, worktree and reviewed-file count as references; the next action names the PR; malformed refs drop with a warning and keep the record; the refs read as words',
+    captured.refs?.pr?.number === 7 && captured.refs.worktreeId === 'wt2' && captured.refs.reviewedFiles === 3 && captured.execution === 'not-recorded' &&
+      L.retainedNextAction(captured) === 'check pull request #7' &&
+      parsed.length === 2 && parsed.find((o) => o.id === 'o2').refs === undefined && warnings.some((w) => w.includes('malformed result references')) &&
+      L.retainedRefsWord(captured.refs) === 'pull request #7 · worktree wt2 · a review of 3 files',
+    JSON.stringify({ captured, warnings }))
+}
+
+// 6.3 (D12). A capture keeps the task and pane it was OF as references; a
+// malformed one costs only itself; old captures parse as before.
+{
+  const base = { kind: 'capture', id: 'cap1', url: 'http://localhost:5173/', capturedAt: 5 }
+  const full = L.parseArtifactReference({ ...base, taskId: 'wi1', sourcePanelId: 'b1' })
+  const old = L.parseArtifactReference(base)
+  const bad = L.parseArtifactReference({ ...base, taskId: 3, sourcePanelId: '' })
+  ok('artifact.capture-refs.1 a capture keeps taskId and sourcePanelId; an old capture has neither; malformed references drop and keep the capture',
+    full?.taskId === 'wi1' && full.sourcePanelId === 'b1' && old !== undefined && !('taskId' in old) && !('sourcePanelId' in old) &&
+      bad?.url === base.url && !('taskId' in bad) && !('sourcePanelId' in bad),
+    JSON.stringify({ full, old, bad }))
+}
+
+// 6.2 (D13). Search over the work's MEANING: one row per task, the matching
+// field named; retained outcomes after; secrets redacted and counted; the cap
+// stated; a hit with no card on the canvas carries none; an empty query reads nothing.
+{
+  const items = [
+    { id: 'a', source: 'typed', title: 'Fix login', brief: 'the login token ghp_' + 'A'.repeat(36) + ' leaks', state: 'working', createdAt: 1, updatedAt: 1 },
+    { id: 'b', source: 'typed', title: 'Other', description: 'nothing', state: 'todo', createdAt: 1, updatedAt: 1 }
+  ]
+  const retained = [{ id: 'o1', itemId: 'gone', title: 'Old login work', state: 'done', capturedAt: 1, execution: 'failed', sourcePanelId: 'x' }]
+  const cards = { a: 'card-a' }
+  const r = L.searchWork('login', items, retained, (id) => cards[id])
+  const capped = L.searchWork('login', items, retained, (id) => cards[id], 1)
+  const empty = L.searchWork('  ', items, retained, () => undefined)
+  ok('work-search.1 one row per task naming the first matching field; retained outcomes follow with their execution; a missing card is absent; secrets redacted and counted; cap stated; empty query reads nothing',
+    r.hits.length === 2 && r.hits[0].source === 'task' && r.hits[0].field === 'title' && r.hits[0].cardPanelId === 'card-a' &&
+      r.hits[1].source === 'retained' && r.hits[1].outcomeId === 'o1' && !('cardPanelId' in r.hits[1]) && r.hits[1].line.startsWith('failed') &&
+      r.searched.tasks === 2 && r.searched.retained === 1 && !r.capped &&
+      capped.hits.length === 1 && capped.capped && empty.hits.length === 0 && !empty.capped,
+    JSON.stringify(r))
+  const brief = L.searchWork('leaks', items, [], () => undefined)
+  ok('work-search.2 a matching brief line leaves redacted, with the count carried',
+    brief.hits.length === 1 && brief.hits[0].field === 'brief' && !brief.hits[0].line.includes('ghp_A') && brief.redacted >= 1,
+    JSON.stringify(brief))
+}
+
 // M115 — work.4. THE PR DOOR'S REFUSALS, as data. `prRefusal` is the ONE
 // function every Open PR button and the palette row read, so the five arms
 // are named once: no lane, nothing ahead, a source with no repository, GitHub
@@ -5156,6 +5210,73 @@ try {
         upserted[0].title === 'renamed upstream' && upserted[0].brief === 'keep me' && JSON.stringify(upserted[0].criteria) === JSON.stringify(['and me']),
       JSON.stringify({ old: by('old'), both: by('both'), bad: by('bad'), empty: by('empty'), carried, upserted }))
   } catch (e) { ok('work.brief.1 (threw)', false, String(e)) }
+}
+
+// Brief #20 — persist.*. On reopening, a reattached session, a kept session
+// that died, and a process the quit stopped by design are THREE answers, and
+// the one that is a problem needs evidence: main's record of what was running
+// when the window went away. No record is no claim.
+{
+  const P = L
+  try {
+    const good = { at: 5, how: 'quit', kept: true, running: ['t1', 't2'] }
+    ok('persist.1 the last-exit record parses whole or not at all: absent, a wrong field, or a half-typed running list is null',
+      P.parseLastExit(undefined) === null && P.parseLastExit(null) === null &&
+      P.parseLastExit({ ...good, how: 'crash' }) === null && P.parseLastExit({ ...good, kept: 'yes' }) === null &&
+      P.parseLastExit({ ...good, running: ['t1', 3] }) === null && P.parseLastExit({ ...good, at: Infinity }) === null &&
+      JSON.stringify(P.parseLastExit(good)) === JSON.stringify(good),
+      JSON.stringify(P.parseLastExit(good)))
+  } catch (e) { ok('persist.1 (threw)', false, String(e)) }
+  try {
+    const panels = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }, { id: 'd', label: 'D' }]
+    const live = new Set(['a'])
+    const kept = P.reopenSummary({ panels, live, lastExit: { at: 1, how: 'quit', kept: true, running: ['a', 'b'] } })
+    const quit = P.reopenSummary({ panels, live, lastExit: { at: 1, how: 'quit', kept: false, running: ['a', 'b', 'c'] } })
+    const none = P.reopenSummary({ panels, live, lastExit: null })
+    const ids = (list) => list.map((p) => p.id).join('')
+    ok('persist.2 the reopen partition asks the live session first, calls a kept-but-gone session ended, a quit-stopped one stopped, and makes no claim without a record',
+      ids(kept.reconnected) === 'a' && ids(kept.ended) === 'b' && ids(kept.stopped) === '' && ids(kept.waiting) === 'cd' &&
+      ids(quit.reconnected) === 'a' && ids(quit.ended) === '' && ids(quit.stopped) === 'bc' && ids(quit.waiting) === 'd' &&
+      ids(none.reconnected) === 'a' && ids(none.ended) === '' && ids(none.stopped) === '' && ids(none.waiting) === 'bcd',
+      JSON.stringify({ kept, quit, none }))
+    const lines = P.reopenLines({ ...kept, stopped: [{ id: 'c', label: 'C' }], issues: ['x'] })
+    const win = P.reopenLines({ reconnected: [], ended: [], stopped: [{ id: 'c', label: 'C' }], issues: [], lastExit: { at: 1, how: 'window', kept: false, running: ['c'] } })
+    ok('persist.3 only an ended session and a boot issue are problems, the ended line leads, and the words say whether a quit or a closed window stopped it',
+      lines[0].group === 'ended' && lines[0].tone === 'problem' && lines.find((l) => l.group === 'issue')?.tone === 'problem' &&
+      lines.find((l) => l.group === 'reconnected')?.tone === 'info' && lines.find((l) => l.group === 'stopped')?.tone === 'info' &&
+      /you quit/.test(lines.find((l) => l.group === 'stopped').text) && /window closed/.test(win[0].text) &&
+      !lines.some((l) => l.text.includes('D')),
+      JSON.stringify({ lines, win }))
+  } catch (e) { ok('persist.2/3 (threw)', false, String(e)) }
+  try {
+    const f = (backend, keepOnQuit) => P.lifecycleFacts({ backend, keepOnQuit })
+    ok('persist.4 the lifecycle facts follow quit.ts and window-lifecycle.ts: tmux keeps across a closed window, only tmux AND the setting keep across a quit, and chats always resume',
+      /keeps terminals running/.test(f('tmux', true).quit) && /needs tmux/.test(f('direct', true).quit) && /ends every terminal/.test(f('tmux', false).quit) &&
+      /keeps terminals running/.test(f('tmux', false).closeWindow) && /ends every terminal/.test(f('direct', false).closeWindow) &&
+      [f('tmux', true), f('direct', true), f('tmux', false)].every((x) => /resume on your next message/.test(x.quit)) &&
+      f(null, true).quit === '' && f(null, true).closeWindow === '' && f('tmux', true).closePanel === P.CLOSE_PANEL_FACT,
+      JSON.stringify([f('tmux', true), f('direct', false)]))
+  } catch (e) { ok('persist.4 (threw)', false, String(e)) }
+  try {
+    const { mkdtempSync, existsSync } = require('node:fs')
+    const { tmpdir } = require('node:os')
+    const file = join(mkdtempSync(join(tmpdir(), 'tc-last-exit-')), 'last-exit.json')
+    const first = P.createLastExitStore({ file, now: () => 7 })
+    const emptyTake = first.take()
+    first.record('window', true, ['w1'])
+    const windowOnDisk = existsSync(file)
+    const windowTake = first.take()
+    first.record('quit', false, ['q1', 'q2'])
+    first.record('window', false, [])
+    const second = P.createLastExitStore({ file })
+    const deleted = !existsSync(file)
+    const quitTake = second.take()
+    const again = second.take()
+    ok('persist.5 the last-exit store: a window close stays in memory, a quit writes and SEALS (the window close after it is ignored), and the next launch reads, deletes and hands it out once',
+      emptyTake === null && !windowOnDisk && windowTake?.how === 'window' && windowTake.running[0] === 'w1' &&
+      deleted && quitTake?.how === 'quit' && quitTake.kept === false && quitTake.running.join() === 'q1,q2' && quitTake.at === 7 && again === null,
+      JSON.stringify({ emptyTake, windowOnDisk, windowTake, deleted, quitTake, again }))
+  } catch (e) { ok('persist.5 (threw)', false, String(e)) }
 }
 
 const failed = results.filter((r) => !r.pass)

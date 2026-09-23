@@ -1,4 +1,10 @@
 import type { AgentPlanReply, AgentPlanRequest } from './plan'
+import type { LastExit } from './persistence'
+import type { CheckOutputRead } from './check-output'
+import type { CombineRunResult } from './combine'
+import type { PrepareResult, RepoSetup } from './repo-setup'
+import type { EditorOpenResult, EditorTarget } from './editor-open'
+import type { Recipe } from './recipes'
 import type { ImageResult, StarterFiles } from './starter'
 import type { TemplateSaveResult } from './templates'
 import type { WatchTrigger } from './watch-trigger'
@@ -93,6 +99,8 @@ export interface WatcherStateEvent {
   disarmed?: string
   /** M286. What the last run tested — the tree's content identity against its HEAD as the run ended. Absent when unreadable. */
   tested?: ReviewIdentity
+  /** M306. The run's exact-output record id (`check:output`), set as the run starts. */
+  outputId?: string
 }
 
 export interface MemoryEntryRow {
@@ -155,6 +163,8 @@ export const IPC = {
    * they are not.
    */
   SESSION_BACKEND: 'session:backend',
+  /** Brief #20. Which panels had a session when the window last went away — once. */
+  SESSION_LAST_EXIT: 'session:last-exit',
   /**
    * The preset list as the PALETTE needs it — names, availability, which is
    * default, and which are built-in. Availability is main's alone: it is
@@ -369,6 +379,8 @@ export const IPC = {
   REVIEW_DIFF: 'review:diff',
   /** M86. Where a branch stands against its tracking ref — from the local ref; never a fetch. */
   GIT_STATUS: 'git:status',
+  /** Backlog #86. The repository root a directory is inside, or null — so a file or toolbox header reads `repo/src`, not the last two segments. */
+  GIT_ROOT: 'git:root',
   /** M86. The main tree, then every worktree this app created for the root, each with its own diff since its fork. */
   REVIEW_ACROSS: 'review:across',
   /**
@@ -575,6 +587,34 @@ export const IPC = {
    * infers.
    */
   LEDGER_EVENT: 'ledger:event',
+  /**
+   * M306. ONE check run's exact output record, by the `outputId` its ledger
+   * row or watcher state carries. A pull, read-only, and the id is validated
+   * against a closed alphabet before main turns it into a path.
+   */
+  CHECK_OUTPUT: 'check:output',
+  /**
+   * M311. Apply the named lanes, in order, into ONE scratch checkout beside
+   * the repository's worktrees — the combined tree two passing lanes may fail
+   * together in. Never touches a lane or the main tree; the check that follows
+   * is an ordinary watcher in the scratch path.
+   */
+  COMBINE_RUN: 'combine:run',
+  /**
+   * M312. The repository setup: `read` answers the saved record or a DRAFT
+   * detected from the repository's own files; `save` writes one (re-resolved
+   * to the main tree); `prepare` runs a SAVED record's install steps in a lane
+   * before its agent starts, each step's output kept as a check-output record.
+   */
+  SETUP_READ: 'setup:read',
+  SETUP_SAVE: 'setup:save',
+  SETUP_PREPARE: 'setup:prepare',
+  /** M313. A file at a line, or a worktree, in the person's own editor (`files.editor`). */
+  EDITOR_OPEN: 'editor:open',
+  /** M314. The person's own recipes; the built-ins are code in `shared/recipes.ts`. */
+  RECIPE_LIST: 'recipe:list',
+  RECIPE_SAVE: 'recipe:save',
+  RECIPE_DELETE: 'recipe:delete',
   /**
    * M65. The spawn sheet: main resolves a preset (absent command included)
    * or a typed command into a template, refuses a directory that does not
@@ -814,7 +854,11 @@ export type BoardCommentResult =
   | { kind: 'no-credential' | 'rejected' | 'unavailable' | 'malformed' | 'refused'; reason: string }
 
 /** M113. What `tc board` asks the renderer, and what it answers. */
-export type BoardControlRequest = { op: 'add'; title: string } | { op: 'done'; id: string }
+export type BoardControlRequest =
+  | { op: 'add'; title: string }
+  | { op: 'done'; id: string }
+  /** M313. `tc task` / `terminal-canvas://task`: open Start work filled in; the answer's id is the sheet's, nothing was added. */
+  | { op: 'propose'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string }
 export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
 
 /** M138. See AGENT_POOL_START. */
@@ -1318,6 +1362,12 @@ export interface MergedWorkspace {
   panels: PersistedPanel[]
 }
 
+/** M312. What `setup:read` answers: the saved record, a detected draft nothing has run, or no repository. */
+export type SetupReadResult =
+  | { kind: 'saved'; setup: RepoSetup }
+  | { kind: 'draft'; setup: RepoSetup }
+  | { kind: 'not-a-repo' }
+
 /** Mirrors CredentialStore's SetResult / credential-verify's VerifyResult — never a cipher, never a token. */
 export type CredentialSetResult =
   | { ok: true; meta: CredentialMeta }
@@ -1670,6 +1720,26 @@ export interface CanvasBridge {
     /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
     list: (path: string) => Promise<DirResult>
   }
+  /** M311. See COMBINE_RUN. */
+  combine: {
+    run(req: { root: string; lanes: string[] }): Promise<CombineRunResult>
+  }
+  /** M312. See SETUP_READ. */
+  setup: {
+    read(cwd: string): Promise<SetupReadResult>
+    save(setup: RepoSetup): Promise<{ ok: true; setup: RepoSetup } | { ok: false; reason: string }>
+    prepare(req: { lane: string }): Promise<PrepareResult>
+  }
+  /** M313. See EDITOR_OPEN. */
+  editor: {
+    open(target: EditorTarget): Promise<EditorOpenResult>
+  }
+  /** M314. See RECIPE_LIST. */
+  recipes: {
+    list(): Promise<Recipe[]>
+    save(recipe: Recipe): Promise<{ ok: true; recipe: Recipe } | { ok: false; reason: string }>
+    remove(id: string): Promise<boolean>
+  }
   ledger: {
     /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
     list(panelId: string, limit: number): Promise<RunRow[]>
@@ -1687,6 +1757,8 @@ export interface CanvasBridge {
      * refused — the caller says so rather than assuming it landed.
      */
     event(row: Omit<EventRow, 'kind'>): Promise<boolean>
+    /** M306. One check run's exact output, command, cwd, times and tested revision. `missing` when pruned or never written. */
+    output(runId: string): Promise<CheckOutputRead>
   }
   /** M73. The agent-session runtime. `agent` below is the older agent-STATE surface (M6c/M6d); the two are different facts. */
   agentSession: {
@@ -1791,6 +1863,12 @@ export interface CanvasBridge {
   session: {
     info(): Promise<SessionBackendInfo>
     /**
+     * Brief #20. Main's record of the running sessions when the window last
+     * went away (a quit, or a closed window on macOS). Null after the first
+     * ask, after a crash, or on a first launch — and null makes no claim.
+     */
+    lastExit(): Promise<LastExit | null>
+    /**
      * Live cwd/command updates. Each subscribe returns its own unsubscribe, so
      * a React effect can clean up without stacking listeners.
      */
@@ -1857,6 +1935,8 @@ export interface CanvasBridge {
   /** M86. See GIT_STATUS. */
   git: {
     status(root: string): Promise<RepoStatus>
+    /** Backlog #86. See GIT_ROOT. */
+    root(dir: string): Promise<string | null>
   }
   /**
    * Metadata only. Deliberately no `get` here — there is no channel that

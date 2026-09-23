@@ -3,7 +3,13 @@
  * the artifact's title, a capability, or permission to re-read its source.
  */
 export type ArtifactReference =
-  | { kind: 'capture'; id: string; url: string; capturedAt: number }
+  /**
+   * `taskId` and `sourcePanelId` are what the capture was OF when it was
+   * taken — references, not copies. Either may dangle later (the task
+   * closed, the pane was tidied away), and that is rendered as gone rather
+   * than repaired or dropped: the URL and the time are still true.
+   */
+  | { kind: 'capture'; id: string; url: string; capturedAt: number; taskId?: string; sourcePanelId?: string }
   | { kind: 'file'; path: string }
   | { kind: 'tool'; conversationId: string; turnId: string; toolId: string }
 
@@ -15,7 +21,8 @@ const at = (value: unknown): value is number => typeof value === 'number' && Num
 export function parseArtifactReference(raw: unknown): ArtifactReference | undefined {
   if (!record(raw) || !text(raw.kind)) return undefined
   if (raw.kind === 'capture' && text(raw.id) && text(raw.url) && at(raw.capturedAt)) {
-    return { kind: 'capture', id: raw.id, url: raw.url, capturedAt: raw.capturedAt }
+    return { kind: 'capture', id: raw.id, url: raw.url, capturedAt: raw.capturedAt,
+      ...(text(raw.taskId) ? { taskId: raw.taskId } : {}), ...(text(raw.sourcePanelId) ? { sourcePanelId: raw.sourcePanelId } : {}) }
   }
   if (raw.kind === 'file' && text(raw.path)) return { kind: 'file', path: raw.path }
   if (raw.kind === 'tool' && text(raw.conversationId) && text(raw.turnId) && text(raw.toolId)) {

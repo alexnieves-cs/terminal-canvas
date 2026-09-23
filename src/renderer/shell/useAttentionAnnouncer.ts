@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RailAttention } from './rail-sections'
+import { needsYouCount, needsYouNamed } from '@shared/attention-words'
 
 /**
  * M256 (spec §19). A polite live region's TEXT, for the panels that just
@@ -26,8 +27,8 @@ export function useAttentionAnnouncer(rows: readonly RailAttention[]): string {
     seenRef.current = new Set(rows.map((r) => r.id))
     if (arrived.length === 0) return
     setMessage(arrived.length === 1
-      ? `${arrived[0].label} needs you`
-      : `${arrived.length} panels need you: ${arrived.map((r) => r.label).join(', ')}`)
+      ? needsYouNamed(arrived[0].label)
+      : `${needsYouCount(arrived.length)}: ${arrived.map((r) => r.label).join(', ')}`)
   }, [rows])
 
   return message

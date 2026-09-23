@@ -270,7 +270,18 @@ app.whenReady().then(() => {
   // into that record, for the facts main cannot see (a person's answer, a
   // handoff's outcome, a review mark); main sets the row's `kind`, so the door
   // cannot be used to write a usage or a gap row.
-  const EXPECTED_CHANNELS = 148
+  // Backlog #86 git:root (149) — the repository a file or toolbox directory is
+  // inside, read-only, so its header reads `repo/src` and not two segments.
+  // M306 check:output (150) — one check run's exact output record by the
+  // opaque id its ledger row carries; a pull, and read-only.
+  // M311–M314, the workflow kit, eight (158): combine:run (lanes applied into
+  // a scratch checkout, no lane touched), setup:read / setup:save /
+  // setup:prepare (the repository setup, and the install steps run in a lane
+  // before its agent), editor:open (the person's own editor, at a line), and
+  // recipe:list / recipe:save / recipe:delete (the person's own recipes).
+  // Brief #20 session:last-exit (159) — which panels had a session when the
+  // window last went away, handed out once; the reopen notice's evidence.
+  const EXPECTED_CHANNELS = 159
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

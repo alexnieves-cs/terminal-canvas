@@ -21,6 +21,8 @@ export interface ShellChrome {
   ctxDrawer: boolean
   /** The Attention popover is up. */
   attentionOpen: boolean
+  /** #16. The request a shortcut opened the queue on; null when the bell opened it. */
+  attentionFocus: string | null
   contextTab: ContextTab
   /** M268. Canvas vs Orchestration in the center column. */
   centerView: CenterView
@@ -32,6 +34,8 @@ export interface ShellChrome {
   toggleContext: () => void
   toggleTree: () => void
   toggleAttention: () => void
+  /** #16. Open the queue with this request's detail expanded — the navigation every other indicator makes. */
+  openAttentionAt: (requestId: string) => void
   setContextTab: (tab: ContextTab) => void
   /** Close every transient surface (drawers, the popover): Escape and the outside click. */
   dismissTransient: () => void
@@ -274,8 +278,17 @@ export function useShellChrome(deps: {
     }
   }, [treeOpen, chooseNavigator])
 
+  const [attentionFocus, setAttentionFocus] = useState<string | null>(null)
   const toggleAttention = useCallback(() => {
     setAttentionOpen((o) => !o)
+    setAttentionFocus(null)
+  }, [])
+  const openAttentionAt = useCallback((requestId: string) => {
+    setAttentionFocus(requestId)
+    setAttentionOpen(true)
+    // The shortcut in a Compact drawer: the drawer and the popover are both
+    // transient, and the popover is where the person was sent.
+    setCtxDrawer(false)
   }, [])
 
   const setContextTab = useCallback((tab: ContextTab) => {
@@ -328,8 +341,8 @@ export function useShellChrome(deps: {
   }, [paletteIsOpen, toggleNavigator, toggleContext, toggleTree, dismissTransient, navDrawer, ctxDrawer, attentionOpen])
 
   return {
-    bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, contextTab, centerView,
-    chooseNavigator, setCenterView, toggleNavigator, toggleContext, toggleTree, toggleAttention, setContextTab, dismissTransient,
+    bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, attentionFocus, contextTab, centerView,
+    chooseNavigator, setCenterView, toggleNavigator, toggleContext, toggleTree, toggleAttention, openAttentionAt, setContextTab, dismissTransient,
     railOpen: navVisible, inspectorOpen: ctxVisible, treeOpen,
     toggleRail: toggleNavigator, toggleInspector: toggleContext
   }

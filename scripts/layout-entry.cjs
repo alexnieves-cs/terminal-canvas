@@ -2,12 +2,19 @@
    its file path as a parameter, so neither needs Electron or a DOM — which is
    what keeps this suite in the cheap plain-node tier. */
 module.exports = {
+  /* Brief #20. What survives a quit or a closed window, in words: the reopen
+     partition and the lifecycle facts are pure, and the last-exit store takes
+     its file as a parameter — all three belong in this cheap tier. */
+  ...require('../src/shared/persistence'),
+  ...require('../src/main/last-exit'),
   /* M93. The snapshot ring: injected dir/now, plain node. */
   ...require('../src/main/layout-snapshots'),
   ...require('../src/shared/annotations'),
   /* M113. The board's record: pure data and rules. */
   ...require('../src/shared/work-items'),
   ...require('../src/shared/retained-outcomes'),
+  ...require('../src/shared/work-search'),
+  ...require('../src/shared/artifact-reference'),
   /* M120. The chat record's marks (dispatch, sandbox) and their carry. */
   ...require('../src/shared/chat-panel'),
   ...require('../src/shared/layout-schema'),

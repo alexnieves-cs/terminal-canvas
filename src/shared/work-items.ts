@@ -25,6 +25,7 @@
  */
 
 import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
+import { carryReviewComment, parseReviewComments, type ReviewComment } from './review-comments'
 
 export type WorkItemState = 'todo' | 'working' | 'review' | 'done'
 export const WORK_ITEM_STATES: readonly WorkItemState[] = ['todo', 'working', 'review', 'done']
@@ -102,6 +103,25 @@ export interface PersistedWorkItem {
     identity?: ReviewIdentity
   }
   anchor?: WorkItemAnchor
+  /**
+   * M307. The reviewer's line comments on this task's diff — the USER's, like
+   * `reviewed`: a provider re-add keeps them. Absent until the first comment.
+   */
+  comments?: ReviewComment[]
+  /**
+   * M307. The acceptance criteria the person has CONFIRMED, by their text —
+   * an edited criterion no longer matches, so it reads unconfirmed again.
+   */
+  criteriaMet?: string[]
+  /**
+   * M314. The recipe the task was started from (`recipes.ts`), its checks —
+   * the commands that decide "done", offered first by Run checks and told to
+   * the agent — and its deliverables, what the person expects to receive.
+   * The USER's fields, like the brief; field-level parse, the criteria rule.
+   */
+  recipeId?: string
+  checks?: string[]
+  deliverables?: string[]
   createdAt: number
   updatedAt: number
 }
@@ -142,7 +162,12 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.pr === undefined ? {} : { pr: { number: item.pr.number, url: item.pr.url } }),
     ...(item.note === undefined ? {} : { note: item.note }),
     ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files, ...(item.reviewed.identity === undefined ? {} : { identity: carryReviewIdentity(item.reviewed.identity) }) } }),
-    ...(item.anchor === undefined ? {} : { anchor: { panelId: item.anchor.panelId, dx: item.anchor.dx, dy: item.anchor.dy } })
+    ...(item.anchor === undefined ? {} : { anchor: { panelId: item.anchor.panelId, dx: item.anchor.dx, dy: item.anchor.dy } }),
+    ...(item.comments === undefined || item.comments.length === 0 ? {} : { comments: item.comments.map(carryReviewComment) }),
+    ...(item.criteriaMet === undefined || item.criteriaMet.length === 0 ? {} : { criteriaMet: item.criteriaMet.filter((c) => c !== '') }),
+    ...(item.recipeId === undefined || item.recipeId === '' ? {} : { recipeId: item.recipeId }),
+    ...(item.checks === undefined || item.checks.length === 0 ? {} : { checks: item.checks.filter((c) => c !== '') }),
+    ...(item.deliverables === undefined || item.deliverables.length === 0 ? {} : { deliverables: item.deliverables.filter((c) => c !== '') })
   }
 }
 
@@ -178,6 +203,11 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
   // M287. Field-level, like the anchor: a criteria list that is not a list
   // of strings costs the list, never the card.
   const criteria = Array.isArray(raw.criteria) && raw.criteria.every((c) => typeof c === 'string') ? (raw.criteria as string[]).filter((c) => c !== '') : undefined
+  // M307. Field-level, the same rule: a bad comment costs itself, a bad list costs the list.
+  const comments = parseReviewComments(raw.comments)
+  const criteriaMet = Array.isArray(raw.criteriaMet) && raw.criteriaMet.every((c) => typeof c === 'string') ? (raw.criteriaMet as string[]).filter((c) => c !== '') : undefined
+  // M314. The criteria rule again: a list that is not strings costs the list.
+  const strings = (v: unknown): string[] | undefined => (Array.isArray(v) && v.every((c) => typeof c === 'string') ? (v as string[]).filter((c) => c !== '') : undefined)
   return {
     item: carryWorkItem({
       id: raw.id,
@@ -198,7 +228,12 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       pr,
       note: opt(raw.note),
       reviewed,
-      anchor
+      anchor,
+      comments,
+      criteriaMet,
+      recipeId: opt(raw.recipeId),
+      checks: strings(raw.checks),
+      deliverables: strings(raw.deliverables)
     })
   }
 }

@@ -1,5 +1,5 @@
 import type { TokenTotals } from './cost'
-import type { ReviewIdentity } from './review-identity'
+import { parseReviewIdentity, type ReviewIdentity } from './review-identity'
 /**
  * M52. One row of the run ledger — what a panel ran and how it ended. Shared
  * so the contract can name it; the writer is main/run-ledger.ts. No output
@@ -20,6 +20,13 @@ export interface RunRow {
    * `unknown`, never into "current".
    */
   tested?: ReviewIdentity
+  /**
+   * M306. A REFERENCE to this run's exact output in `check-output/`, never the
+   * output itself — the row stays metadata, so the rule above still holds.
+   * Absent for every row before M306, for an agent CLI's commands (no marks)
+   * and when capture was not wired; a reader then says it has no record.
+   */
+  outputId?: string
 }
 
 /**
@@ -181,6 +188,9 @@ export function parseEventRow(raw: unknown): EventRow | null {
   if (typeof r.event !== 'string' || !ORCH_EVENT_KINDS.includes(r.event)) return null
   if (typeof r.source !== 'string' || !ORCH_EVENT_SOURCES.includes(r.source)) return null
   const paths = Array.isArray(r.paths) ? r.paths.filter((p): p is string => typeof p === 'string' && p !== '') : undefined
+  // M306. `tested` was written and never read back, so every event's revision
+  // came home as `unknown`. A malformed stamp costs the field, like `list()`.
+  const tested = parseReviewIdentity(r.tested)
   return {
     kind: 'event',
     runId: r.runId,
@@ -191,6 +201,7 @@ export function parseEventRow(raw: unknown): EventRow | null {
     ...(typeof r.detail === 'string' && r.detail !== '' ? { detail: r.detail } : {}),
     ...(typeof r.itemId === 'string' && r.itemId !== '' ? { itemId: r.itemId } : {}),
     ...(typeof r.panelId === 'string' && r.panelId !== '' ? { panelId: r.panelId } : {}),
+    ...(tested === undefined ? {} : { tested }),
     ...(paths !== undefined && paths.length > 0 ? { paths } : {}),
     ...(typeof r.key === 'string' && r.key !== '' ? { key: r.key } : {})
   }

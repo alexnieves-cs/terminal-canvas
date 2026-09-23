@@ -96,14 +96,20 @@ function markOf(body: string): OscMark | null {
  * marks too. Runs on every chunk at the choke point and must never bump
  * anything higher-frequency than the per-command events it yields.
  */
-export function scanChunk(pos: ScanPos, chunk: string): { pos: ScanPos; bells: number; marks: OscMark[] } {
+export function scanChunk(pos: ScanPos, chunk: string): { pos: ScanPos; bells: number; marks: OscMark[]; ends: number[] } {
   let bells = 0
   let s = pos.state
   let osc = pos.osc
   const marks: OscMark[] = []
+  // M306. Where each mark's terminator ENDS in this chunk, parallel to
+  // `marks` — a separate array so a mark's own shape (which verifiers compare
+  // whole) is unchanged. It is what lets a command's captured output be the
+  // bytes between C and D rather than whole chunks with the prompt attached.
+  const ends: number[] = []
+  let i = 0
   const endOsc = (): void => {
     const mark = markOf(osc)
-    if (mark) marks.push(mark)
+    if (mark) { marks.push(mark); ends.push(i + 1) }
     osc = ''
   }
   const take = (c: number): void => {
@@ -112,7 +118,7 @@ export function scanChunk(pos: ScanPos, chunk: string): { pos: ScanPos; bells: n
     if (osc.length < OSC_MAX && (osc.length >= OSC_PREFIX.length ? osc.startsWith(OSC_PREFIX) : OSC_PREFIX.startsWith(osc + String.fromCharCode(c)) || osc.startsWith(OSC_PREFIX))) osc += String.fromCharCode(c)
     else if (osc.length < OSC_PREFIX.length) osc = '\u0000' // poisoned: cannot become a mark, and never matches the prefix
   }
-  for (let i = 0; i < chunk.length; i += 1) {
+  for (i = 0; i < chunk.length; i += 1) {
     const c = chunk.charCodeAt(i)
     switch (s) {
       case 'text':
@@ -154,7 +160,7 @@ export function scanChunk(pos: ScanPos, chunk: string): { pos: ScanPos; bells: n
         break
     }
   }
-  return { pos: { state: s, osc }, bells, marks }
+  return { pos: { state: s, osc }, bells, marks, ends }
 }
 
 /**

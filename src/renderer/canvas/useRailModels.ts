@@ -9,7 +9,7 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel, isWorkPanel } from '@renderer/panels/panels'
+import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel, isWorkPanel, isImagePanel } from '@renderer/panels/panels'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { watchStateInput } from '@renderer/watcher/watcher-store'
@@ -20,7 +20,7 @@ import type { WorkspaceRow } from '@shared/ipc-contract'
 import type { WorkItemState } from '@shared/work-items'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
 import {
-  attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature, type PendingApproval
+  attentionSignature, buildAttentionRows, buildElsewhereRows, buildWorkspaceRows, workspaceSignature, type PendingApproval
 } from '../shell/rail-sections'
 import { useApprovals } from '@renderer/chat/chat-store'
 import {
@@ -301,6 +301,12 @@ export function useRailModels(deps: RailModelsDeps) {
   const attentionSig = attentionSignature(attentionBuilt)
   const railAttention = useMemo(() => attentionBuilt, [attentionSig])
 
+  // D17 / 4.4. The other workspaces' waiting panels, frozen by value like
+  // every list here (JSON: a workspace name is user text).
+  const elsewhereBuilt = buildElsewhereRows(workspaceRows, waitingIds)
+  const elsewhereSig = JSON.stringify(elsewhereBuilt)
+  const railElsewhere = useMemo(() => elsewhereBuilt, [elsewhereSig])
+
   /**
    * The inspector's model, frozen the same way the rail's rows are and for the
    * same reason: the selected panel comes straight out of `panels`, a fresh
@@ -381,7 +387,10 @@ export function useRailModels(deps: RailModelsDeps) {
           }
         })(),
         // M116. The work card's record, for its word and its five facts.
-        isWorkPanel(selectedPanel) ? deps.workItemOf?.(selectedPanel.work.itemId) : undefined,
+        // D12. A capture's task, by the id it recorded — absent from the store reads as gone, not as never.
+        isWorkPanel(selectedPanel) ? deps.workItemOf?.(selectedPanel.work.itemId)
+          : isImagePanel(selectedPanel) && selectedPanel.image.artifact?.kind === 'capture' && selectedPanel.image.artifact.taskId !== undefined
+            ? deps.workItemOf?.(selectedPanel.image.artifact.taskId) : undefined,
         // M133. A workflow trigger's template name, so the `runs` field says
         // the workflow rather than `/usr/bin/true`.
         deps.templateNameOf,
@@ -408,7 +417,7 @@ export function useRailModels(deps: RailModelsDeps) {
   const selectedIsSessionless = selectedPanel !== undefined && !isTerminalPanel(selectedPanel) && !isChatPanel(selectedPanel)
 
   return {
-    panelRows, railRows, railWorkspaces, railAttention,
+    panelRows, railRows, railWorkspaces, railAttention, railElsewhere,
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   }
 }

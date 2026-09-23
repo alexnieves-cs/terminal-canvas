@@ -1,4 +1,6 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
+import type { CheckOutputRead } from '../shared/check-output'
+import type { LastExit } from '../shared/persistence'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
 import type { PreviewCaptureResult, AssetPutResult, NodeFetchResult, PortableWriteResult, PortableReadResult } from '@shared/ipc-contract'
@@ -68,6 +70,8 @@ import { sampleMachineCosts } from './machine-cost'
 import type { MachineCostTarget } from '../shared/machine-cost'
 import { writeDiagnosticsBundle } from './diagnostics-export'
 import type { DiagnosticsSnapshot } from '../shared/ipc-contract'
+import { INERT_KIT, type KitHandlers } from './kit'
+import type { EditorTarget } from '../shared/editor-open'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -532,8 +536,41 @@ export function registerIpcHandlers(
    * false, so a caller reports that its row did not land.
    */
   ledgerTimeline: (filter: TimelineFilter, limit: number) => Promise<TimelineRead> = async () => ({ entries: [], reachedStart: false }),
-  ledgerEvent: (row: EventRow) => Promise<boolean> = async () => false
+  ledgerEvent: (row: EventRow) => Promise<boolean> = async () => false,
+  /**
+   * M306. One check run's exact output, appended last so no positional call
+   * site shifts. The inert default is the HONEST one: `unreadable` with a
+   * reason, never `missing` — an unwired store is not a pruned record.
+   */
+  checkOutput: (runId: string) => Promise<CheckOutputRead> = async () => ({ kind: 'unreadable', why: 'check output is not wired' }),
+  /**
+   * M311–M314. The workflow kit — combine, repository setup, the editor,
+   * recipes — as ONE collaborator appended last (kit.ts's header): eight
+   * channels, one positional parameter, one harness mirror.
+   */
+  kit: KitHandlers = INERT_KIT,
+  /**
+   * Brief #20. What had a session when the window last went away, handed out
+   * once (main/last-exit.ts). Appended last so no positional call site
+   * shifts; the inert default is the honest one — no record, no claim.
+   */
+  lastExit: () => LastExit | null = () => null
 ): void {
+  // M311–M314. Shapes are checked here; each store validates its own fields again.
+  ipcMain.handle(IPC.COMBINE_RUN, (_event, req: unknown) => {
+    const r = req as { root?: unknown; lanes?: unknown } | null
+    return typeof r?.root === 'string' && Array.isArray(r.lanes) ? kit.combine({ root: r.root, lanes: r.lanes.filter((l): l is string => typeof l === 'string') }) : { kind: 'unreadable', detail: 'a combine names a repository and its lanes' }
+  })
+  ipcMain.handle(IPC.SETUP_READ, (_event, cwd: unknown) => (typeof cwd === 'string' ? kit.setupRead(cwd) : { kind: 'not-a-repo' as const }))
+  ipcMain.handle(IPC.SETUP_SAVE, (_event, setup: unknown) => kit.setupSave(setup))
+  ipcMain.handle(IPC.SETUP_PREPARE, (_event, req: unknown) => {
+    const lane = (req as { lane?: unknown } | null)?.lane
+    return typeof lane === 'string' ? kit.setupPrepare({ lane }) : { kind: 'unreadable', detail: 'a preparation names its lane' }
+  })
+  ipcMain.handle(IPC.EDITOR_OPEN, (_event, target: unknown) => kit.editorOpen(target as EditorTarget))
+  ipcMain.handle(IPC.RECIPE_LIST, () => kit.recipeList())
+  ipcMain.handle(IPC.RECIPE_SAVE, (_event, recipe: unknown) => kit.recipeSave(recipe))
+  ipcMain.handle(IPC.RECIPE_DELETE, (_event, id: unknown) => (typeof id === 'string' ? kit.recipeDelete(id) : false))
   ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M250. The renderer names a path (or none, for the chooser) and nothing
@@ -562,6 +599,12 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_POOL_START, (_event, req: PoolStartRequest) => agents.poolStart(req))
   ipcMain.handle(IPC.AGENT_POOL_STOP, (_event, req: { templateId: string; key: string }) => agents.poolStop(req))
   ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
+  // Backlog #86. null for not-a-repo AND unreadable: the caller's fallback is the same short path either way.
+  ipcMain.handle(IPC.GIT_ROOT, async (_event, dir: string) => {
+    if (typeof dir !== 'string' || dir === '') return null
+    const repo = await reviewEngine.resolveRepo(dir)
+    return repo.kind === 'root' ? repo.root : null
+  })
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   // M286. `undefined` does not survive an invoke as a distinct answer; null does.
   ipcMain.handle(IPC.REVIEW_IDENTITY, async (_event, req: { root: string; base: string }) => (await reviewEngine.identityOf(req.root, req.base)) ?? null)
@@ -693,6 +736,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
+  ipcMain.handle(IPC.SESSION_LAST_EXIT, () => lastExit())
 
   ipcMain.handle(IPC.ENV_REPORT, (_event, again?: boolean) => envReport(again === true))
   ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, req: PanelTextExportRequest) => exporters.panelText(req))
@@ -707,6 +751,8 @@ export function registerIpcHandlers(
   // The `kind` is MAIN's, never the caller's: a door that took the discriminant
   // from the renderer could write a usage or a gap row through the event door.
   ipcMain.handle(IPC.LEDGER_EVENT, (_event, row: Omit<EventRow, 'kind'>) => ledgerEvent({ ...row, kind: 'event' }))
+  // M306. A non-string is not an id; the store validates the alphabet again.
+  ipcMain.handle(IPC.CHECK_OUTPUT, (_event, runId: unknown) => (typeof runId === 'string' ? checkOutput(runId) : { kind: 'missing' as const }))
   ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))
   ipcMain.handle(IPC.DIAGNOSTICS_SAMPLE, () => ({
     ipcMessagesPerSecond: ptyManager.ipcMessageRate()

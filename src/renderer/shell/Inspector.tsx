@@ -4,7 +4,7 @@ import { formatCpu, formatMemory, useMachineCost, useMachineSeries } from '@rend
 import { MachineChart } from './MachineChart'
 import { UsageChart } from './UsageChart'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import type { InspectorContextBand } from './inspector-context'
+import type { InspectorContextBand, TaskChainStep } from './inspector-context'
 import { agentStateLabel, formatRateLimitGauge, formatRateLimitReset, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
 import { panelState } from '@renderer/panels/panel-state'
@@ -100,8 +100,12 @@ export interface InspectorProps {
   pinnedCount?: number
   /** M74. The panel's front-end verb (open as chat / open in terminal). */
   onFrontEnd: (id: string) => void
-  /** M76. Answer the chat's pending permission request. */
-  onAnswer: (id: string, requestId: string, allow: boolean) => void
+  /**
+   * #16. Open the Needs-you queue on the chat's pending request. The pane
+   * NAVIGATES to the one surface that explains and resolves a request; it no
+   * longer answers one itself (M76's Allow/Deny lived here, a third copy).
+   */
+  onReviewApproval: (requestId: string) => void
   /** M98. Drop every session grant for the chat; absent leaves the Revoke control disabled by name. */
   onRevokeGrants?: (id: string) => void
   onOpenReview: (id: string) => void
@@ -148,6 +152,8 @@ export interface InspectorProps {
   contextBand?: InspectorContextBand
   onShowRelated?: (itemId: string) => void
   onShowTask?: (panelId: string) => void
+  /** M310. A step of the task strip was pressed: go to it, open it, or go where it is made. */
+  onChainStep?: (itemId: string, step: TaskChainStep) => void
   /** (this redesign) Mousedown on the pane's own left-edge handle; Canvas owns the drag itself (it holds `shellRef`), this only starts it. */
   onResizeHandleDown: (event: ReactMouseEvent) => void
   /** M279. The canvas-wide activity list's one verb: fly to the row's panel. */
@@ -174,9 +180,9 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
+  onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown,
-  contextBand, onShowRelated, onShowTask, onGoToPanel
+  contextBand, onShowRelated, onShowTask, onChainStep, onGoToPanel
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
@@ -208,13 +214,14 @@ function InspectorImpl({
             contextBand={contextBand}
             onShowRelated={onShowRelated}
             onShowTask={onShowTask}
+            onChainStep={onChainStep}
             onRename={onRename}
             onClose={onClose}
             onSavePreset={onSavePreset}
             onRestart={onRestart}
             onLock={onLock} onUnlock={onUnlock} onPin={onPin} onUnpin={onUnpin} onMaximise={onMaximise} onRestore={onRestore} pinnedCount={pinnedCount}
             onFrontEnd={onFrontEnd}
-            onAnswer={onAnswer}
+            onReviewApproval={onReviewApproval}
             onRevokeGrants={onRevokeGrants}
             panelRun={panelRun ?? null}
             onRunAgain={onRunAgain ?? (() => {})}
@@ -483,7 +490,7 @@ function InspectorEmpty({ summary, onGoToPanel }: { summary: InspectorSummary; o
  */
 function InspectorPanel({
   tab, onSelectTab, automations, templateOf, onTestNode,
-  model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
+  model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onChainStep, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   templateOf?: (id: string) => PersistedTemplate | undefined
@@ -502,6 +509,7 @@ function InspectorPanel({
   contextBand?: InspectorContextBand
   onShowRelated?: (itemId: string) => void
   onShowTask?: (panelId: string) => void
+  onChainStep?: (itemId: string, step: TaskChainStep) => void
   onRename: (id: string, title: string) => void
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
@@ -516,7 +524,7 @@ function InspectorPanel({
   /** M92. The canvas's pin count — the pane's Pin refuses by the same sentence the palette does. */
   pinnedCount?: number
   onFrontEnd: (id: string) => void
-  onAnswer: (id: string, requestId: string, allow: boolean) => void
+  onReviewApproval: (requestId: string) => void
   onRevokeGrants?: (id: string) => void
   panelRun: PanelRunLine | null
   onRunAgain: (id: string) => void
@@ -596,27 +604,25 @@ function InspectorPanel({
           {contextBand.blocker !== undefined && (
             <p className="inspector__context-blocker" data-inspector-blocker role="status">{contextBand.blocker}</p>
           )}
-          {/* The resolution sits WITH the request it resolves, at the top of
-              the pane, whenever one is pending — the actions grid below keeps
-              its own Allow/Deny for reach.1's walk, but in a short drawer that
-              grid is a scroll away, and a pending approval is the one thing
-              that must be answerable without looking for it. A second
-              attribute, never `data-inspector-action`, so a selector for the
-              grid's button still finds exactly one. */}
+          {/* #16. The request is NAMED with its context, at the top of the
+              pane, and the one verb here opens the Needs-you queue on it —
+              where it is explained in full and answered. The pane used to
+              answer too (a band here and a pair in the grid below), three
+              copies of one decision with the queue; now it navigates. A
+              second attribute, never `data-inspector-action`, so a selector
+              for the grid's button still finds exactly one. */}
           {model.kind === 'chat' && model.approval !== undefined && (
             <div className="inspector__context-resolve" data-inspector-resolve>
-              {(['allow', 'deny'] as const).map((verb) => (
-                <button
-                  key={verb}
-                  type="button"
-                  className={`inspector__action${verb === 'deny' ? ' inspector__action--secondary' : ''}`}
-                  data-inspector-resolve-verb={verb}
-                  title={`${verb === 'allow' ? 'Allow' : 'Deny'} ${model.approval!.toolName} — ${model.approval!.argument}`}
-                  {...shellControl(() => { if (model.approval !== undefined) onAnswer(model.id, model.approval.requestId, verb === 'allow') })}
-                >
-                  {verb === 'allow' ? `Allow ${model.approval!.toolName}` : 'Deny'}
-                </button>
-              ))}
+              <span className="inspector__context-request">Waiting on you: {model.approval.toolName} · <code>{model.approval.argument}</code></span>
+              <button
+                type="button"
+                className="inspector__action"
+                data-inspector-resolve-verb="review"
+                title={`Open Needs you on ${model.approval.toolName} — ${model.approval.argument}`}
+                {...shellControl(() => { if (model.approval !== undefined) onReviewApproval(model.approval.requestId) })}
+              >
+                Review request
+              </button>
             </div>
           )}
           {contextBand.related !== undefined && (
@@ -643,6 +649,21 @@ function InspectorPanel({
                 </button>
               )}
             </div>
+          )}
+          {/* M310. The task's chain — issue → conversation → preview → review
+              → checks → PR — each step a place to go, or the words for what
+              would make it. The flagship flow, readable from any of its panels. */}
+          {contextBand.related?.chain !== undefined && (
+            <ol className="inspector__chain" data-inspector-chain aria-label="This task, step by step">
+              {contextBand.related.chain.map((c) => (
+                <li key={c.step} className="inspector__chain-step" data-chain-step={c.step} data-chain-present={c.present ? '' : undefined}>
+                  <button type="button" className="inspector__chain-button"
+                    disabled={onChainStep === undefined || (!c.present && c.step === 'issue')}
+                    title={c.present ? (c.url ?? `Go to the ${c.step}`) : c.label}
+                    {...shellControl(() => onChainStep?.(contextBand.related!.itemId, c))}>{c.label}</button>
+                </li>
+              ))}
+            </ol>
           )}
         </div>
       )}
@@ -1077,7 +1098,7 @@ function InspectorPanel({
       {/*
         (this redesign) ONE primary button plus a ⋯ menu, replacing the persistent
         two-column matrix: the single most relevant action stays in the bar
-        (Allow/Deny on a pending chat, otherwise Restart), and every other
+        (Review request on a pending chat, otherwise Restart), and every other
         verb — layout, naming, linking — lives in the dropdown, Close last
         and set off by a divider as its own destructive footer. Every verb
         still MOUNTS unconditionally and disables by name rather than
@@ -1086,26 +1107,24 @@ function InspectorPanel({
         verify:panels `reach.1` still walks every action in DOM order.
       */}
       <div className="inspector__actions context__actions">
-        {/* M76. On a chat, Allow and Deny lead — the only two verbs whose delay
-            costs something — enabled while a request is pending and disabled
-            by name otherwise. Present only on the chat kind, the rule the
-            front-end verb set. */}
-        {model.kind === 'chat' && (['allow', 'deny'] as const).map((verb) => (
+        {/* #16. On a chat, the pending request leads — as a NAVIGATION to the
+            queue that resolves it, never a second Allow/Deny. It still MOUNTS
+            unconditionally and disables by name (M207's rule). */}
+        {model.kind === 'chat' && (
           <button
-            key={verb}
             type="button"
             className="inspector__action"
-            data-inspector-action={verb}
+            data-inspector-action="review-request"
             hidden={model.approval === undefined}
             disabled={model.approval === undefined}
             title={model.approval === undefined
               ? 'nothing is waiting for an answer'
-              : `${verb === 'allow' ? 'Allow' : 'Deny'} ${model.approval.toolName} — ${model.approval.argument}`}
-            {...shellControl(() => { if (model.approval !== undefined) onAnswer(model.id, model.approval.requestId, verb === 'allow') })}
+              : `Open Needs you on ${model.approval.toolName} — ${model.approval.argument}`}
+            {...shellControl(() => { if (model.approval !== undefined) onReviewApproval(model.approval.requestId) })}
           >
-            {verb === 'allow' ? (model.approval === undefined ? 'Allow' : `Allow ${model.approval.toolName}`) : 'Deny'}
+            {model.approval === undefined ? 'Review request' : `Review ${model.approval.toolName} request`}
           </button>
-        ))}
+        )}
         {/*
           FIRST among the rest, and DISABLED rather than absent when the panel never started:
           a control that vanished would read as a feature that was never

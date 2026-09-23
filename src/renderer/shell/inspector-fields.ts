@@ -1,5 +1,6 @@
 import { laneOfPath, type LaneRecord } from '@shared/work-scope'
 import type { PersistedWorkItem } from '@shared/work-items'
+import type { ArtifactReference } from '@shared/artifact-reference'
 import { previewSourceLine } from '@shared/preview'
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
 import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_CHAT_NO_BASELINE, REASON_NOT_CLAUDE_SESSION, REASON_NOT_STARTED, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
@@ -580,6 +581,29 @@ export interface ChatInspectorInput {
   grants?: string[]
 }
 
+/**
+ * D12. Where a capture came from, answered from its recorded references and
+ * never from its title (a person may rename it). A reference that no longer
+ * resolves says so in words — the page URL and the time stay true when the
+ * pane and the task have both been tidied away.
+ */
+export function captureProvenanceFields(
+  artifact: Extract<ArtifactReference, { kind: 'capture' }>,
+  panels: readonly Panel[],
+  task: PersistedWorkItem | undefined
+): InspectorField[] {
+  const pane = artifact.sourcePanelId === undefined ? undefined : panels.find((p) => p.rect.id === artifact.sourcePanelId)
+  return [
+    { key: 'artifact-source', label: 'captured from', value: artifact.url },
+    { key: 'artifact-at', label: 'captured', value: new Date(artifact.capturedAt).toLocaleString() },
+    ...(artifact.taskId === undefined ? []
+      : [{ key: 'artifact-task', label: 'task', value: task?.title ?? 'no longer on this canvas — the capture keeps its page and time' }]),
+    ...(artifact.sourcePanelId === undefined ? []
+      : [{ key: 'artifact-pane', label: 'preview pane', value: pane === undefined ? 'closed since the capture' : railLabel(pane, undefined) }]),
+    { key: 'artifact-id', label: 'capture', value: artifact.id }
+  ]
+}
+
 export function buildInspectorModelBare(
   panel: Panel,
   status: PanelStatus | undefined,
@@ -897,7 +921,7 @@ export function buildInspectorModelBare(
   if (isImagePanel(panel)) {
     return { kind: 'image', reviewable: false, state: { kind: 'image', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
       { key: 'image-path', label: 'file', value: panel.image.path },
-      ...(panel.image.artifact?.kind === 'capture' ? [{ key: 'artifact-source', label: 'captured from', value: panel.image.artifact.url }, { key: 'artifact-id', label: 'capture', value: panel.image.artifact.id }] : [])
+      ...(panel.image.artifact?.kind === 'capture' ? captureProvenanceFields(panel.image.artifact, panels ?? [], workItem) : [])
     ] }
   }
   if (isBrowserPanel(panel)) {

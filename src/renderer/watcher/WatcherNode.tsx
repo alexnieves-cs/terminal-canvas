@@ -1,4 +1,4 @@
-import { memo, useEffect, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { WatcherPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
@@ -6,6 +6,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { triggerWord } from '@shared/watch-trigger'
 import { panelState } from '@renderer/panels/panel-state'
 import { useWatch, watchStateInput, setDisarmed, clearDisarmed } from './watcher-store'
+import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
 import { workflowWatchLabel, workflowWatchWord } from '@renderer/workflow/workflow-diagram'
 
 /**
@@ -66,6 +67,11 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
   const state = panelState({ kind: 'watcher', status: undefined, dormant: false, watch: watchStateInput(id) }, undefined)
   const running = snapshot.status === 'running'
   const armed = panel.watch.armed !== false
+  // M306. The whole run, opened in place of the tail. Keyed to the run: a new
+  // run closes it, so the body never shows the previous run under this one's word.
+  const [wholeFor, setWholeFor] = useState<string | null>(null)
+  const recordId = !running && snapshot.status !== 'not-started' ? snapshot.outputId : undefined
+  const whole = recordId !== undefined && wholeFor === recordId
 
   // Arming is idempotent at an id in main, which is what makes this safe to
   // run on every mount: a workspace switch back, a React re-key and a reload
@@ -163,6 +169,8 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
           <p className="pf__note" data-watcher-arm="never">{armed ? `has not run yet — it runs ${when}, or press Run now` : 'not watching — press Arm to watch again, or Run now to run it once'}</p>
         ) : snapshot.tail === '' ? (
           <p className="pf__note" data-watcher-arm="quiet">{running ? 'running — nothing printed yet' : 'that run printed nothing'}</p>
+        ) : whole ? (
+          <CheckRunOutput outputId={recordId} subject={`panel ${id}`} />
         ) : (
           <pre className="watcher-node__tail" data-watcher-tail>{snapshot.tail}</pre>
         )}
@@ -177,6 +185,12 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
               : snapshot.status === 'passed' ? 'last run passed'
                 : snapshot.signal !== undefined && snapshot.signal !== null ? `last run was stopped (${snapshot.signal})`
                   : `last run failed — exit ${snapshot.exitCode ?? 0}`}
+            {recordId !== undefined && (
+              <button type="button" className="pf__verb pf__verb--word watcher-node__whole" data-watcher-whole
+                aria-pressed={whole}
+                title={whole ? 'Back to the last lines' : 'Open this run\'s whole output, with what it tested'}
+                {...shellControl(() => setWholeFor(whole ? null : recordId))}>{whole ? 'Last lines' : 'Whole output'}</button>
+            )}
           </p>
         )}
       </div>

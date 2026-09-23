@@ -16,6 +16,8 @@ import { getLiveSession, useLiveSession } from '@renderer/session/live-session-s
 import { getWatch } from '@renderer/watcher/watcher-store'
 import { useChat, getChat, lastAssistantText, useApprovals, useChatsVersion } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
+import { ApprovalAcks, ApprovalDetail } from '@renderer/shell/ApprovalDetail'
+import { useApprovalOutcomes } from '@renderer/shell/approval-outcome'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { edgeFiredAt, useEdgeActivityVersion } from '@renderer/canvas/useEdgeActivity'
 import { useLastLine } from '@renderer/session/last-line-store'
@@ -80,7 +82,10 @@ import {
   type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchNameTier, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
 } from './orchestration-platforms'
 import { getOrchPrefs, persistedOrchPrefs, prefsFromView, seedOrchPrefs, setOrchPrefs, viewFromPrefs, withSavedView, type OrchLens, type OrchSideTab } from './orchestration-prefs'
-import { OrchWorkbench, type BenchSubject } from './OrchWorkbench'
+import { OrchWorkbench, benchSubjectKey, type BenchSubject } from './OrchWorkbench'
+import { completionOf, type Completion } from '@shared/completion'
+import { agentWorkingOf, verificationOf } from '@shared/review-comments'
+import type { CheckRecord } from '@shared/check-evidence'
 import { sameOrchestrate, type OrchSavedView, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
 import type { ReviewHandoff } from '@shared/review-readiness'
 import { onChatTurnEnd } from '@renderer/chat/chat-store'
@@ -157,7 +162,7 @@ export interface OrchestrationViewProps {
    * palette and the inspector use (`answerApproval` → `agent:answer`), keyed by the
    * request's own `(panel id, requestId)` — never a second permission state.
    */
-  onAnswer?: (id: string, requestId: string, allow: boolean) => void
+  onAnswer?: (id: string, requestId: string, allow: boolean, scope?: 'session') => void
   /** M284. The existing review node for this panel, on the canvas (openReview) — a labelled page change. */
   onReviewOnCanvas?: (panelId: string) => void
   /** M287. This workspace's persisted Orchestrate layout, and where a change goes (the workspace record, saved by the canvas). */
@@ -493,9 +498,11 @@ const PLATE_MAX_CHARS = 20
  * character count (the name is mono, so the estimate is close) — measuring
  * text would be a layout read per node per camera frame.
  */
-function NodePlate({ node, synthetic, overflow, x, y, sub: subOverride, compact }: { node: OrchGraphNode; synthetic: boolean; overflow: boolean; x: number; y: number; sub?: string
+function NodePlate({ node, synthetic, overflow, x, y, sub: subOverride, compact, selected = false }: { node: OrchGraphNode; synthetic: boolean; overflow: boolean; x: number; y: number; sub?: string
   /** M294. The compact tier: name and state word in two short lines, cut to this width (the station pitch on screen). */
-  compact?: number }): JSX.Element {
+  compact?: number
+  /** #11. The selected station is never cut: it takes the full plate with its whole name, whatever the tier. Truncation is for the periphery. */
+  selected?: boolean }): JSX.Element {
   const role = node.hub ? (synthetic ? 'Workspace hub' : 'Orchestrator') : overflow ? 'Other' : node.kind
   // A placeholder has no process, so it has no state to say: the role stands alone.
   //
@@ -507,7 +514,7 @@ function NodePlate({ node, synthetic, overflow, x, y, sub: subOverride, compact 
   // M291. A checkpoint's plate says `check · <result>` and an artifact's says
   // `file`: the kind is in the word as well as in the shape.
   const sub = subOverride ?? (synthetic ? role : node.hub || overflow ? `${stateWord(node)} · ${role}` : stateWord(node))
-  if (compact !== undefined) {
+  if (compact !== undefined && !selected) {
     // The compact plate is cut to the pitch: at most `compact - 6` px wide, the
     // name and the word each truncated to what that width holds. No glyph — the
     // shape under it already says the kind — and the state dot stays, so the
@@ -524,8 +531,11 @@ function NodePlate({ node, synthetic, overflow, x, y, sub: subOverride, compact 
       </g>
     )
   }
-  const name = node.title.length > PLATE_MAX_CHARS ? `${node.title.slice(0, PLATE_MAX_CHARS - 1).trimEnd()}…` : node.title
-  const w = Math.max(92, Math.min(176, Math.max(name.length * 6.7, sub.length * 5.6) + 40))
+  // #11. The name is set at --t-sm (12px mono, ~7.3px a character) and the
+  // state line at --t-xs (~5.9px); the estimates follow the type. Selected, the
+  // plate grows to the whole name — capped only where a name is a paragraph.
+  const name = !selected && node.title.length > PLATE_MAX_CHARS ? `${node.title.slice(0, PLATE_MAX_CHARS - 1).trimEnd()}…` : node.title
+  const w = Math.max(92, Math.min(selected ? 420 : 196, Math.max(name.length * 7.3, sub.length * 5.9) + 40))
   return (
     <g className="orch__plate" transform={`translate(${x - w / 2}, ${y})`} aria-hidden="true" data-orch-name-tier="full">
       <title>{node.title}</title>
@@ -614,7 +624,8 @@ function IsoCube(props: {
       {/* Needs-you beacon: a small amber point above the cube. It stops the moment the
           cube is selected — the person has looked, so the graph stops calling. */}
       {attention ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
-      {(props.nameTier ?? 'full') !== 'none' && <NodePlate node={node} synthetic={synthetic} overflow={overflow} x={props.labelOffset.x} y={node.size * PLATE_DROP_K + props.labelOffset.y}
+      {((props.nameTier ?? 'full') !== 'none' || selected) && <NodePlate node={node} synthetic={synthetic} overflow={overflow} x={props.labelOffset.x} y={node.size * PLATE_DROP_K + props.labelOffset.y}
+        selected={selected}
         {...(props.nameTier === 'compact' ? { compact: props.pitchPx ?? 80 } : {})}
         {...(objectKind === 'checkpoint' ? { sub: `check · ${stateWord(node)}` } : objectKind === 'artifact' ? { sub: 'file' } : {})} />}
     </g>
@@ -1546,6 +1557,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // clipped the card row). A tab, Review changes, a terminal card or a drag opens it.
   const [benchOpen, setBenchOpen] = useState<boolean>(() => getOrchPrefs().workbench.open)
   const openBench = useCallback((t: WorkbenchTab): void => { setBenchTab(t); setBenchOpen(true) }, [])
+  // Brief #17. Reading mode: the workbench takes the working area. In memory
+  // only — a relaunch returns to the scene, which is where the page starts.
+  const [benchReading, setBenchReading] = useState(false)
+  useEffect(() => { if (!benchOpen) setBenchReading(false) }, [benchOpen])
+  useEffect(() => {
+    if (!benchReading) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const t = e.target as HTMLElement | null
+      // Esc in a field (a commit message) is the field's; leaving the mode waits for it.
+      if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      setBenchReading(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [benchReading])
   // The pin is a DESCRIPTOR (which session, which task), never a frozen subject: a task
   // pinned before its lane existed must read the lane once it does (the critic).
   const [benchPin, setBenchPin] = useState<{ kind: 'session'; id: string } | { kind: 'task'; itemId: string } | null>(null)
@@ -1583,6 +1610,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // presentation moves — a move changes this array and nothing else.
   const [focusIslandId, setFocusIslandId] = useState<string | null>(null)
   const [islandsOpen, setIslandsOpen] = useState(false)
+  // #18. The secondary sections fold; the task, the scene and the workbench do not.
+  const [poolOpen, setPoolOpenState] = useState(() => getOrchPrefs().poolOpen)
+  const [feedOpen, setFeedOpenState] = useState(() => getOrchPrefs().feedOpen)
+  const setPoolOpen = (open: boolean): void => { setOrchPrefs({ poolOpen: open }); setPoolOpenState(open) }
+  const setFeedOpen = (open: boolean): void => { setOrchPrefs({ feedOpen: open }); setFeedOpenState(open) }
   const [islandOrder, setIslandOrder] = useState<readonly string[]>(() => getOrchPrefs().islands)
   const [orderHistory, setOrderHistory] = useState<readonly (readonly string[])[]>([])
   useEffect(() => { setOrchPrefs({ islands: islandOrder }) }, [islandOrder])
@@ -1747,13 +1779,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   }), [panels, workItems, templates, liveSessions, lastSeen, total.cpuPercent, total.memoryBytes, displayName, tick, now])
 
   // Navigation hierarchy: seed ONCE per mount from the canvas's selection, and only a
-  // roster row — a canvas note or terminal has no session here to aim commands at.
+  // roster row — a canvas note or terminal has no session here to aim commands at, so
+  // one that belongs to a task hands over that task's session instead.
   const seededRef = useRef(false)
   useEffect(() => {
     if (seededRef.current) return
     seededRef.current = true
-    if (initialSelectedId != null && liveSnap.roster.some((r) => r.id === initialSelectedId)) setSelectedIds([initialSelectedId])
-  }, [initialSelectedId, liveSnap.roster])
+    if (initialSelectedId == null) return
+    if (liveSnap.roster.some((r) => r.id === initialSelectedId)) { setSelectedIds([initialSelectedId]); return }
+    // The TASK carries even when the selection itself has no row here: a
+    // task's card, note or file selected on the canvas opens Orchestrate on
+    // that task's first session, not on nothing — switching places must not
+    // cost a person the task they were in. One task only; a member of two is
+    // ambiguous, and a guess would aim commands at the wrong one.
+    const owners = workItems.filter((w) => (taskMembersOf?.(w.id) ?? []).includes(initialSelectedId))
+    if (owners.length !== 1) return
+    const session = (taskMembersOf?.(owners[0]!.id) ?? []).find((id) => liveSnap.roster.some((r) => r.id === id))
+    if (session !== undefined) setSelectedIds([session])
+  }, [initialSelectedId, liveSnap.roster, workItems, taskMembersOf])
   // Reported back so the title bar names the task of what is selected HERE, and the
   // return to the canvas can keep it. A ref: the caller passes a fresh arrow each render.
   const onSelectionChangeRef = useRef(onSelectionChange)
@@ -1960,7 +2003,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         const chat = r.kind === 'chat' ? getChat(r.id) : null
         const blocks = chat === null ? [] : [...chat.turns.flatMap((t) => t.blocks), ...(chat.live?.blocks.map((b) => b.block) ?? [])]
         const command = r.kind === 'chat' ? undefined : getLiveSession(r.id)?.currentCommand
-        return { id: r.id, title: r.title, state: stateOf(r.state), islandId: islandOf(r.id), blocks, ...(command ? { command } : {}) }
+        // M311. The checkout the session works in, so Watch keys files by checkout
+        // and tells a shared checkout (contention) from separate lanes (overlap).
+        const checkout = chat?.snapshot?.cwd ?? getLiveSession(r.id)?.cwd
+        return { id: r.id, title: r.title, state: stateOf(r.state), islandId: islandOf(r.id), blocks, ...(command ? { command } : {}), ...(checkout !== undefined && checkout.startsWith('/') ? { checkout } : {}) }
       })
     return buildOrchLive(inputs, (text, id) => outward(text, `panel ${id}`).text)
     // `now` re-reads terminal commands on the view's clock; chatsVersion is every chat's change.
@@ -2050,20 +2096,36 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     setSent((cur) => { const next = orchPruneSent(cur, pending); return next.size === cur.size ? cur : next })
   }, [pending])
   const titleOf = useCallback((id: string): string => liveSnap.roster.find((r) => r.id === id)?.title ?? id, [liveSnap.roster])
+  // #17. The detail shows the action IN FULL and the rest of the input, so
+  // both pass the page's gate beside the argument (orch.gate.3) — this page
+  // shows nothing a reader here has not scrubbed.
+  const islandMemberIds = island?.memberIds
   const attentionRows = useMemo(
-    () => orchAttentionRows(pending.map((p) => ({ ...p, argument: outward(p.argument, `panel ${p.id}`).text })), titleOf, sent),
-    [pending, titleOf, sent]
+    () => orchAttentionRows(pending.map((p) => ({
+      ...p,
+      argument: outward(p.argument, `panel ${p.id}`).text,
+      ...(p.action === undefined ? {} : { action: outward(p.action, `panel ${p.id}`).text }),
+      ...(p.rest === undefined ? {} : { rest: outward(p.rest, `panel ${p.id}`).text }),
+      ...(p.description === undefined ? {} : { description: outward(p.description, `panel ${p.id}`).text })
+    })), titleOf, sent, islandMemberIds ?? []),
+    [pending, titleOf, sent, islandMemberIds]
   )
+  // #18. One request's detail open at a time, the queue's rule: the person's
+  // choice, else the first (the selected task's, by the sort above).
+  const [openNeed, setOpenNeed] = useState<string | null | undefined>(undefined)
+  // #14. The Dock's rule: while an answer is acknowledged, the next request waits folded.
+  const acknowledging = useApprovalOutcomes().length > 0
+  const shownNeed = openNeed !== undefined ? openNeed : (acknowledging || attentionRows[0] === undefined ? null : orchAnswerKey(attentionRows[0].id, attentionRows[0].requestId))
   // A session waiting on the user with NO permission pending asked a question: it is
   // answered in its own conversation, so the row says so and opens it.
   const waitingOnly = liveSnap.roster.filter((r) => r.state === 'wants-you' && !pending.some((p) => p.id === r.id))
-  const answer = (row: OrchAttentionRow, allow: boolean): void => {
+  const answer = (row: OrchAttentionRow, allow: boolean, scope?: 'session'): void => {
     const key = orchAnswerKey(row.id, row.requestId)
     // Re-read the LIVE queue, not the row: a request answered elsewhere between render
     // and click is gone, and main's own guard would refuse it — say nothing, send nothing.
     if (onAnswer === undefined || sent.has(key) || !pending.some((p) => p.id === row.id && p.requestId === row.requestId)) return
     setSent((cur) => new Set(cur).add(key))
-    onAnswer(row.id, row.requestId, allow)
+    onAnswer(row.id, row.requestId, allow, scope)
   }
 
   // M284. The inspector's subject: the selected session, else the island's task.
@@ -2116,6 +2178,56 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     setBenchPin(s === null ? null : s.kind === 'session' ? { kind: 'session', id: s.id } : { kind: 'task', itemId: s.itemId })
   }, [])
   const benchSubject = benchPinned ?? benchCurrent
+
+  /*
+   * Brief #18. The focused task's COMPLETION HANDOFF — idle, run ended,
+   * reviewed and done kept apart (shared/completion.ts), with what changed,
+   * which checks ran, what is open and the next action. Its checks are the
+   * workbench's own read for this task, handed up (`onChecks`): when the strip
+   * is on another subject they are "not read", said, never re-read here.
+   */
+  const [benchChecks, setBenchChecks] = useState<{ key: string; checks: readonly CheckRecord[] | null } | null>(null)
+  const onBenchChecks = useCallback((key: string, checks: readonly CheckRecord[] | null): void => setBenchChecks({ key, checks }), [])
+  const completion: Completion | null = useMemo(() => {
+    if (island === null || island.source !== 'work-item' || island.itemId === undefined) return null
+    const item = workItems.find((w) => w.id === island.itemId)
+    if (item === undefined) return null
+    const counts = { active: 0, needsYou: 0, idle: 0, ended: 0 }
+    for (const g of orchRosterGroups(liveSnap.roster.filter((r) => island.memberIds.includes(r.id)))) {
+      if (g.id === TONE_WORKING) counts.active += g.rows.length
+      else if (g.id === 'needs-you') counts.needsYou += g.rows.length
+      else if (g.id === 'idle') counts.idle += g.rows.length
+      else counts.ended += g.rows.length
+    }
+    const handoff = taskHandoffOf?.(item.id)
+    const taskKey = benchSubjectKey(subjectOfTask(item.id) ?? null)
+    const checks = benchChecks !== null && taskKey !== '' && benchChecks.key === taskKey ? benchChecks.checks : null
+    const changes = handoff === undefined ? undefined
+      : handoff.changes !== undefined ? { files: handoff.changes.files, added: handoff.changes.added, removed: handoff.changes.removed, ...(handoff.changes.shared ? { shared: true } : {}) }
+        : handoff.state === 'empty' ? { files: 0, added: 0, removed: 0 } : undefined
+    const verification = handoff !== undefined && checks !== null
+      ? verificationOf({
+        agentWorking: agentWorkingOf(handoff.state), standing: handoff.standing, checks,
+        ...(item.comments === undefined ? {} : { comments: item.comments }),
+        ...(item.criteria === undefined ? {} : { criteria: item.criteria }),
+        ...(item.criteriaMet === undefined ? {} : { criteriaMet: item.criteriaMet })
+      })
+      : null
+    return completionOf({
+      board: item.state, sessions: counts, checks, verification,
+      reviewedNow: handoff?.standing === 'current',
+      ...(changes === undefined ? {} : { changes })
+    })
+  }, [island, workItems, liveSnap.roster, taskHandoffOf, benchChecks, subjectOfTask])
+  const runCompletion = (c: Completion): void => {
+    if (island === null) return
+    const n = c.next
+    if (n.action === 'review') { openBench('changes'); return }
+    if (n.action === 'checks') { openBench('checks'); return }
+    if (n.action === 'mark-done') { if (island.itemId !== undefined) onMarkDone?.(island.itemId); return }
+    const target = island.subjectId ?? island.memberIds[0]
+    if (target !== undefined && target !== null) jump(target)
+  }
 
   const stageItems = useMemo(
     () => filterWorkItems(workItems.map((w) => ({
@@ -2457,7 +2569,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   }
 
   return (
-    <div className="orch" role="region" aria-label="Orchestration">
+    <div className="orch" role="region" aria-label="Orchestration" data-orch-reading={benchReading || undefined}>
       <header className="orch__header">
         {/* M305. The TASK HEADER replaces M299's title row, its four count tiles, the
             blocker strip and the loose command row. One object: what the task is (its
@@ -2509,12 +2621,36 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             )}
           </div>
         </div>
+        {/* Brief #18. The handoff: a small state change, not a celebration — its
+            outcome word, what it means, the four facts, and the one next verb. */}
+        {completion !== null && (
+          <section className="orch__handoff" data-orch-completion={completion.outcome} aria-label="Where this task stands" aria-live="polite">
+            <div className="orch__handoff-head">
+              <strong className="orch__handoff-word">{completion.word}</strong>
+              <span className="orch__handoff-meaning">{completion.meaning}</span>
+            </div>
+            <dl className="orch__handoff-facts">
+              <div><dt>Changed</dt><dd data-orch-handoff-changed>{completion.changed}</dd></div>
+              <div><dt>Checks</dt><dd data-orch-handoff-checks>{completion.checks}</dd></div>
+              <div><dt>Open</dt><dd data-orch-handoff-open={completion.unresolved.length}>{completion.unresolved.length === 0 ? 'Nothing unresolved' : completion.unresolved.join(' · ')}</dd></div>
+            </dl>
+            {completion.next.action !== 'none' && (
+              (completion.next.action !== 'mark-done' || onMarkDone !== undefined) && (
+                <button type="button" className="orch__command" data-orch-handoff-next={completion.next.action} {...shellControl(() => runCompletion(completion))}>{completion.next.label}</button>
+              )
+            )}
+          </section>
+        )}
       </header>
 
-      <div className="orch__body">
-        <aside className="orch__roster" aria-label="Agent pool">
+      <div className={`orch__body${poolOpen ? '' : ' orch__body--pool-closed'}`}>
+        <aside className="orch__roster" aria-label="Agent pool" data-orch-pool-open={poolOpen ? '' : undefined}>
           <div className="orch__section-head">
-            <div className="orch__section-title">Agent pool</div>
+            <button type="button" className="orch__section-title orch__fold" data-orch-pool-toggle aria-expanded={poolOpen}
+              title={poolOpen ? 'Fold the agent pool away' : 'Show the agent pool'}
+              {...shellControl(() => setPoolOpen(!poolOpen))}>
+              {poolOpen ? 'Agent pool' : `Pool · ${liveSnap.roster.length}`}
+            </button>
             {taskMemberIds !== undefined && taskMemberIds.length > 0 && (
               <button type="button" className="orch__mini" {...shellControl(() => setFrameTask((v) => !v))}>
                 {frameTask ? 'Show all' : 'This task'}
@@ -2705,7 +2841,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               webgl === 'ready' ? (
                 <Suspense fallback={<div className="orch-live orch-live--loading" data-orch-live-loading />}>
                   <OrchestrationLive model={liveModel} islands={liveIslands} primaryIslandId={island?.id ?? null}
-                    selectedId={selectedId} quality={quality} onSelect={(id) => select(id)} onJump={jump} />
+                    selectedId={selectedId} quality={quality} onSelect={(id) => select(id)} onJump={jump}
+                    // M311. A shared write's review path: a contended file selects
+                    // its first writer and opens Changes; an overlap opens Combine.
+                    onFileAction={(kind, f) => {
+                      if (kind === 'contended' && f.writers[0] !== undefined) { select(f.writers[0]); setBenchTab('changes') } else setBenchTab('combine')
+                      setBenchOpen(true)
+                    }} />
                 </Suspense>
               ) : (
                 // Watch is three.js or nothing; without WebGL the List is the same sessions, by name.
@@ -2830,35 +2972,46 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               existing identity, and leaves the moment it is answered anywhere. */}
           {/* M305. A CARD, and only when something needs the person: `Nothing needs you`
               was a zero-value statement at rest, and the dock's bell already says it. */}
-          {(attentionRows.length > 0 || waitingOnly.length > 0) && (
+          {(attentionRows.length > 0 || waitingOnly.length > 0 || acknowledging) && (
           <section className="orch__needs orch__needs--card" aria-label="Needs you" data-orch-needs>
             <div className="orch__section-head">
               <div className="orch__needs-eyebrow">Needs you</div>
               <span className="orch__caption">{`${attentionRows.length + waitingOnly.length} decision${attentionRows.length + waitingOnly.length === 1 ? '' : 's'}`}</span>
             </div>
+            {/* #14. The last answer, in words, before the next request opens. The card
+                stays up for it even when that answer was the last one waiting. */}
+            <ApprovalAcks />
             {(
               <ul className="orch__needs-list">
-                {attentionRows.map((row) => (
-                  <li key={orchAnswerKey(row.id, row.requestId)} className="orch__needs-row" data-orch-needs-row={row.id} data-orch-request={row.requestId} data-sent={row.sent || undefined}>
-                    <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
-                      <span className="orch__needs-title"><span className="orch__dot status-dot" data-tone="needs-you" aria-hidden="true" />{row.title}</span>
+                {attentionRows.map((row) => {
+                  const key = orchAnswerKey(row.id, row.requestId)
+                  const open = shownNeed === key
+                  return (
+                  <li key={key} className="orch__needs-row" data-orch-needs-row={row.id} data-orch-request={row.requestId} data-sent={row.sent || undefined} data-orch-in-task={row.inTask ? '' : undefined}>
+                    <button type="button" className="orch__needs-main" aria-expanded={open} {...shellControl(() => { select(row.id); setOpenNeed(open ? null : key) })}>
+                      <span className="orch__needs-title"><span className="orch__dot status-dot" data-tone="needs-you" aria-hidden="true" />{row.title}{row.inTask && <span className="orch__list-tag">this task</span>}</span>
                       <span className="orch__needs-ask">wants to use <strong>{row.toolName}</strong>{row.argument !== '' ? ` · ${row.argument}` : ''}</span>
                     </button>
-                    {row.sent ? (
-                      <span className="orch__caption" role="status">Answer sent — waiting for the agent</span>
-                    ) : (
-                      <span className="orch__needs-actions">
-                        <button type="button" className="orch__mini" data-orch-allow disabled={onAnswer === undefined} {...shellControl(() => answer(row, true))}>Allow</button>
-                        <button type="button" className="orch__mini orch__mini--stop" data-orch-deny disabled={onAnswer === undefined} {...shellControl(() => answer(row, false))}>Deny</button>
-                      </span>
+                    {/* #17. The same detail the Needs-you queue shows — context,
+                        the action in full, scoped verbs — so a request reads the
+                        same wherever it is answered. */}
+                    {open && onAnswer !== undefined && (
+                      <ApprovalDetail
+                        approval={row}
+                        agent={row.title}
+                        {...(row.inTask && island !== null ? { task: island.goal } : {})}
+                        sent={row.sent}
+                        onAnswer={(allow, scope) => answer(row, allow, scope)}
+                      />
                     )}
                   </li>
-                ))}
+                  )
+                })}
                 {waitingOnly.map((row) => (
                   <li key={row.id} className="orch__needs-row" data-orch-needs-row={row.id}>
                     <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
                       <span className="orch__needs-title"><span className="orch__dot status-dot" data-tone="needs-you" aria-hidden="true" />{row.title}</span>
-                      <span className="orch__needs-ask">is waiting on you — reply in its conversation</span>
+                      <span className="orch__needs-ask">needs you — reply in its conversation</span>
                     </button>
                     <span className="orch__needs-actions">
                       <button type="button" className="orch__mini" {...shellControl(() => jump(row.id))}>Open on canvas</button>
@@ -3096,7 +3249,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             )}
           </section>
 
-          <div className="orch__tabs" role="tablist">
+          <div className="orch__tabs orch__tabs--fold" role="tablist">
                 {(['activity', 'files'] as const).map((t) => (
                 <button
                   key={t}
@@ -3107,8 +3260,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   {...shellControl(() => setTab(t))}
                 >{t === 'activity' ? 'Activity' : 'Files'}</button>
               ))}
+              <button type="button" className="orch__mini orch__fold-end" data-orch-feed-toggle aria-expanded={feedOpen}
+                title={feedOpen ? 'Fold the activity feed away' : 'Show the activity feed'}
+                {...shellControl(() => setFeedOpen(!feedOpen))}>{feedOpen ? 'Hide' : 'Show'}</button>
           </div>
-          {tab === 'activity' && (
+          {feedOpen && tab === 'activity' && (
             <>
               <label className="orch__filter orch__filter--block">
                 <span className="orch__sr">Activity scope</span>
@@ -3148,7 +3304,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </ul>
             </>
           )}
-          {tab === 'files' && (
+          {feedOpen && tab === 'files' && (
             <>
               <p className="orch__caption">{orchFilesCoverage()}</p>
             <ul className="orch__activity">
@@ -3188,6 +3344,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         onHeight={setBenchHeight}
         open={benchOpen}
         onOpen={setBenchOpen}
+        reading={benchReading}
+        onReading={setBenchReading}
+        onChecks={onBenchChecks}
         panels={panels}
         workItems={workItems}
         worktrees={worktrees}
@@ -3202,6 +3361,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         onShowCanvas={onShowCanvas}
         output={{ panelId: outputPanelId, title: selectedRow?.title ?? liveSnap.terminalSnippet?.title, command: outputCommand, lines: outputLines }}
         refresh={benchRefresh}
+        edges={depEdges}
       />
     </div>
   )
@@ -3253,6 +3413,7 @@ function OrchFollowUp({ panelId, title, onSend }: { panelId: string; title: stri
     <form className="orch__followup" data-orch-followup={panelId} onSubmit={(e) => { e.preventDefault(); send() }}>
       <input
         ref={inputRef}
+        data-edit-owner
         type="text"
         className="orch__followup-input"
         data-orch-followup-input

@@ -18,5 +18,7 @@ module.exports = {
   /* M104. The lineups and their preview plan — pure. */
   ...require('../src/shared/lineups'),
   /* M66. The settings definitions, for the voice check. */
-  ...require('../src/shared/settings-schema')
+  ...require('../src/shared/settings-schema'),
+  /* Brief #19. Which advanced features a panel's ⋯ menu offers — pure. */
+  ...require('../src/renderer/canvas/advanced-doors')
 }

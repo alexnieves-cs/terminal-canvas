@@ -54,6 +54,8 @@ const ACCEPTED = [
     why: 'the link:open door — main decides after resolveOpen, the renderer opens nothing' },
   { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/panel-handlers.ts', sample: 'shell.openExternal(r.url)',
     why: "the browser pane's Open in browser; the url is the guest's own getURL()" },
+  { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/kit-handlers.ts', sample: 'shell.openExternal(url)',
+    why: "M313's Open in editor: an editor's own URL scheme from a fixed table, on a path main checked exists — the renderer never supplies the URL" },
   { check: 'PROTOCOL_HANDLER_JS_CHECK', file: 'src/main/index.ts', sample: 'app.setAsDefaultProtocolClient(CONTROL_SCHEME)',
     why: 'the tc:// URL door, restricted to open (M54)' }
 ]

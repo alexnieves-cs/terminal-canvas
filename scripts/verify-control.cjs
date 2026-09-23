@@ -414,6 +414,40 @@ const ok = (n, pass, detail = '') => {
       JSON.stringify({ add, done, empty, badOp, url, cliAdd, cliDone, cliNoTitle, answered, noWindow }))
   }
 
+  // M313 — task.1. BRING A TASK INTO THE CANVAS. `tc task` and
+  // `terminal-canvas://task` PROPOSE: the renderer opens Start work filled in
+  // and a person presses Start. It is the one other verb the URL door may
+  // carry, because it cannot act — the handler asks for a proposal (never an
+  // add), spawns nothing, refuses a directory that is not there, and a
+  // command key is refused here as everywhere.
+  {
+    let sock, url, bad, cmd, cli, cliEnv, cliNoTitle, answered, missingDir
+    const asked = []
+    const spawns = []
+    try {
+      sock = C.parseControlLine(JSON.stringify({ verb: 'task', title: 'Fix login', brief: 'SSO works', criteria: ['401 gone', ''], cwd: '/repo', recipe: 'recipe-fix-test' }))
+      url = C.parseControlUrl('terminal-canvas://task?title=Fix%20login&criteria=a%0Ab&cwd=%2Frepo')
+      bad = C.parseControlUrl('terminal-canvas://task?title=x&cwd=relative')
+      cmd = C.parseControlLine(JSON.stringify({ verb: 'task', title: 'x', command: 'rm -rf /' }))
+      const line = (argv, env = {}) => { const b = C.buildRequest(argv, env); return b.kind === 'ok' ? JSON.parse(b.line) : b }
+      cli = line(['task', 'Fix', 'login', '--brief', 'SSO works', '--criterion', 'a', '--criterion', 'b', '--recipe', 'recipe-fix-test', '--cwd', '/repo'])
+      cliEnv = line(['task', 'Fix', 'it'], { TC_PANEL_CWD: '/lane' })
+      cliNoTitle = line(['task', '--brief', 'x'])
+      const handler = C.createControlHandler({ presets: () => [], defaultId: () => null, exists: (p) => p === '/repo', spawn: (p) => spawns.push(p), list: () => [], focus: () => true, board: async (req) => { asked.push(req); return { kind: 'ok', id: 'start-work' } } })
+      answered = await handler(sock.req)
+      missingDir = await handler({ verb: 'task', title: 'x', cwd: '/nope' })
+    } catch (e) { answered = { threw: String(e) } }
+    ok('task.1 a task parses from the socket and from a task:// URL (criteria one per line there), a relative cwd and a command key are refused by name; the CLI builds it from argv, defaulting --cwd to the panel\'s own directory; the handler asks the renderer to PROPOSE (never add), spawns nothing, and refuses a cwd that does not exist',
+      sock && sock.kind === 'ok' && sock.req.verb === 'task' && sock.req.criteria.join() === '401 gone' && sock.req.recipe === 'recipe-fix-test' &&
+        url && url.kind === 'ok' && url.req.title === 'Fix login' && url.req.criteria.join() === 'a,b' && url.req.cwd === '/repo' &&
+        bad && bad.kind === 'bad' && /absolute/.test(bad.error) && cmd && cmd.kind === 'bad' && /command is never accepted/.test(cmd.error) &&
+        cli && cli.verb === 'task' && cli.title === 'Fix login' && cli.brief === 'SSO works' && cli.criteria.join() === 'a,b' && cli.recipe === 'recipe-fix-test' && cli.cwd === '/repo' &&
+        cliEnv && cliEnv.cwd === '/lane' && cliNoTitle && cliNoTitle.kind === 'usage' &&
+        answered && answered.ok === true && asked.length === 1 && asked[0].op === 'propose' && asked[0].title === 'Fix login' && spawns.length === 0 &&
+        missingDir && missingDir.ok === false && /does not exist/.test(missingDir.error),
+      JSON.stringify({ sock, url, bad, cmd, cli, cliEnv, cliNoTitle, answered, asked, missingDir }))
+  }
+
   // M83 — memory.1. THE MEMORY VERBS. `list` reads and `add` writes — the
   //      first control verb that writes anything, and it writes ONLY into the
   //      store: a command key is refused here as everywhere, an unusable op

@@ -54,6 +54,18 @@ export function createWindow(state: MainState, stores: Stores): void {
     // lands, and clearing unconditionally would null out the LIVE window.
     if (state.window === window) state.window = null
   })
+  // Brief #20. A window closing while the app stays up (macOS) is a return
+  // too: record what had a session BEFORE attachPtyLifecycle's `closed`
+  // below detaches it — on the direct backend that detach empties the list.
+  // Registered first so it runs first; a quit has already sealed the store,
+  // so this is a no-op on Cmd+Q.
+  window.on('closed', () => {
+    try {
+      stores.lastExit.record('window', state.backend.kind === 'tmux', stores.ptyManager.list().map((s) => s.panelId))
+    } catch (error) {
+      console.warn('[last-exit] could not record the window close', error)
+    }
+  })
 
   // Cmd+R and Cmd+W destroy the renderer without running React cleanup, so no
   // pty:kill is ever sent. detachAll — not killAll — frees the local handles

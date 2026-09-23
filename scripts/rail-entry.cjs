@@ -7,6 +7,10 @@ module.exports = {
   ...require('../src/renderer/shell/rail-rows'),
   ...require('../src/renderer/shell/inspector-fields'),
   ...require('../src/renderer/shell/rail-sections'),
+  /* M308. The decision inbox — pure over the attention rows, this suite's tier. */
+  ...require('../src/renderer/shell/decision-inbox'),
+  /* M309. Presence's pure rule (the listeners install only on first use). */
+  ...require('../src/renderer/shell/presence'),
   /* M9b: the review node's model is a canvas module rather than a shell one,
      and it joins this bundle anyway for the reason M8c's inspector fields and
      M8d's rail sections both did — it is pure (no React, no DOM, type-only

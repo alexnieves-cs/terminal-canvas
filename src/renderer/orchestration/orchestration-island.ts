@@ -264,7 +264,7 @@ export function orchNextAction(input: {
   pendingTool?: string
 }): OrchNextAction {
   if (input.pendingTool !== undefined) return { verb: 'answer', label: `Answer the ${input.pendingTool} request` }
-  if (input.state === 'wants-you') return { verb: 'reply', label: 'Reply on canvas — it is waiting on you' }
+  if (input.state === 'wants-you') return { verb: 'reply', label: 'Reply on canvas — it needs you' }
   if (input.state === 'busy' || input.state === 'starting' || input.state === 'running' || input.state === 'watching') return { verb: 'watch', label: 'Watch its output' }
   if (input.state === 'exited') return { verb: 'open', label: 'Open on canvas to restart or read it' }
   if (input.kind === 'chat' || input.kind === 'terminal') return { verb: 'review', label: 'Review its changes' }
@@ -280,6 +280,8 @@ export interface OrchAttentionInput {
 
 export interface OrchAttentionRow extends OrchAttentionInput {
   title: string
+  /** #18. The request belongs to the selected task. */
+  inTask?: boolean
   /** An answer for this exact request has been sent from this page; the row is inert until the store drops it. */
   sent: boolean
 }
@@ -292,12 +294,19 @@ export interface OrchAttentionRow extends OrchAttentionInput {
  * `permission-answered` arriving: the key is `id:requestId`, never the selection, so
  * a re-filtered or re-selected page cannot aim an answer at another session.
  */
-export function orchAttentionRows(
-  pending: readonly OrchAttentionInput[],
+export function orchAttentionRows<T extends OrchAttentionInput>(
+  pending: readonly T[],
   titleOf: (panelId: string) => string,
-  sent: ReadonlySet<string>
-): OrchAttentionRow[] {
-  return pending.map((p) => ({ ...p, title: titleOf(p.id), sent: sent.has(orchAnswerKey(p.id, p.requestId)) }))
+  sent: ReadonlySet<string>,
+  /**
+   * #18. The selected task's member ids: its requests come FIRST, stably, so
+   * the decision that blocks the task on screen is the one beside it. Absent
+   * or empty keeps arrival order.
+   */
+  taskMemberIds: readonly string[] = []
+): Array<T & { title: string; sent: boolean; inTask: boolean }> {
+  const rows = pending.map((p) => ({ ...p, title: titleOf(p.id), sent: sent.has(orchAnswerKey(p.id, p.requestId)), inTask: taskMemberIds.includes(p.id) }))
+  return [...rows.filter((r) => r.inTask), ...rows.filter((r) => !r.inTask)]
 }
 
 export function orchAnswerKey(panelId: string, requestId: string): string {

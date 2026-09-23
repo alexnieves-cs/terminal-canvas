@@ -12,6 +12,8 @@
  * attention → task → running → selected → empty.
  */
 
+import { isNeedsYouCount, needsYouCount } from '@shared/attention-words'
+
 export interface PillFacts {
   /** The attention set's size (the wants-you queue Cmd+J cycles). */
   attention: number
@@ -46,7 +48,9 @@ const count = (n: number): number => (Number.isFinite(n) && n > 0 ? Math.floor(n
  */
 export function pillRestState(facts: PillFacts): PillRest {
   const attention = count(facts.attention)
-  if (attention > 0) return { kind: 'attention', text: attention === 1 ? '1 chat needs you' : `${attention} chats need you` }
+  // The queue is terminals AND chats: `panels`, from the one vocabulary
+  // (shared/attention-words.ts), never `chats` over a waiting terminal.
+  if (attention > 0) return { kind: 'attention', text: needsYouCount(attention) }
   const task = typeof facts.taskTitle === 'string' ? facts.taskTitle.trim() : ''
   if (task !== '') return { kind: 'task', text: task }
   const running = count(facts.running)
@@ -69,7 +73,24 @@ export function shouldAnnounceAttentionQueue(restKind: PillRest['kind']): boolea
 
 /** True when `text` is a queue-count restatement the pill already owns. */
 export function isAttentionQueueRestatement(text: string): boolean {
-  return /^\d+ chats? needs? you\b/i.test(text.trim()) || /^\d+ agents? needs? you\b/i.test(text.trim())
+  return isNeedsYouCount(text)
+}
+
+/**
+ * Daily loop 4.3. The pill teaches Cmd+J ONCE: the first time the attention
+ * sentence is at rest, it carries the key beside it; once the person has seen
+ * it there and the queue has emptied (they dealt with it, by whatever route),
+ * it never shows again. A hint that reappears on every arrival is chrome the
+ * person learns to ignore. Text only — the pill never takes the keyboard to
+ * teach (M249's contract): the terminal keeps focus.
+ */
+export function showJumpHint(taught: boolean, restKind: PillRest['kind']): boolean {
+  return !taught && restKind === 'attention'
+}
+
+/** Whether this render retires the hint: it has been shown, and the queue is empty. */
+export function retiresJumpHint(shown: boolean, restKind: PillRest['kind']): boolean {
+  return shown && restKind !== 'attention'
 }
 
 export interface OrchestratorCandidate {

@@ -222,10 +222,27 @@ const bridge: CanvasBridge = {
   env: {
     report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true)
   },
+  combine: {
+    run: (req: { root: string; lanes: string[] }) => ipcRenderer.invoke(IPC.COMBINE_RUN, req)
+  },
+  setup: {
+    read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
+    save: (setup: unknown) => ipcRenderer.invoke(IPC.SETUP_SAVE, setup),
+    prepare: (req: { lane: string }) => ipcRenderer.invoke(IPC.SETUP_PREPARE, req)
+  },
+  editor: {
+    open: (target: unknown) => ipcRenderer.invoke(IPC.EDITOR_OPEN, target)
+  },
+  recipes: {
+    list: () => ipcRenderer.invoke(IPC.RECIPE_LIST),
+    save: (recipe: unknown) => ipcRenderer.invoke(IPC.RECIPE_SAVE, recipe),
+    remove: (id: string) => ipcRenderer.invoke(IPC.RECIPE_DELETE, id)
+  },
   ledger: {
     list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit),
     timeline: (filter: TimelineFilter, limit: number) => ipcRenderer.invoke(IPC.LEDGER_TIMELINE, filter, limit),
     event: (row: Omit<EventRow, 'kind'>) => ipcRenderer.invoke(IPC.LEDGER_EVENT, row),
+    output: (runId: string) => ipcRenderer.invoke(IPC.CHECK_OUTPUT, runId),
     usage: (since: number) => ipcRenderer.invoke(IPC.LEDGER_USAGE, since)
   },
   agentSession: {
@@ -292,6 +309,7 @@ const bridge: CanvasBridge = {
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
+    lastExit: () => ipcRenderer.invoke(IPC.SESSION_LAST_EXIT),
     onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener),
     onRecover: (listener) => subscribe<OrphanRow[]>(IPC_EVENTS.SESSION_RECOVER, listener),
     onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener),
@@ -331,7 +349,8 @@ const bridge: CanvasBridge = {
     identity: (req: { root: string; base: string }) => ipcRenderer.invoke(IPC.REVIEW_IDENTITY, req)
   },
   git: {
-    status: (root: string) => ipcRenderer.invoke(IPC.GIT_STATUS, root)
+    status: (root: string) => ipcRenderer.invoke(IPC.GIT_STATUS, root),
+    root: (dir: string) => ipcRenderer.invoke(IPC.GIT_ROOT, dir)
   },
   scrollback: {
     tail: (req: { panelId: string; lines: number }) => ipcRenderer.invoke(IPC.SCROLLBACK_TAIL, req),

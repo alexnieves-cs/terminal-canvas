@@ -111,6 +111,13 @@ check(LAUNCHER, 'fr.launcher.2 the composed next step is Start task · Ask a que
     /data-create-face="empty-strip"/.test(html) && !/data-create-object=/.test(html) && !/Ask without a folder/.test(html) &&
     !/>Start a general chat</.test(html), detail: { start, ask, create } }
 })
+check(LAUNCHER, 'fr.launcher.5 each of the three verbs says its OUTCOME — Start makes a task, Ask opens a conversation, Create adds an object — and the plan summary still names what Start will use', (m) => {
+  const html = launcher(m, { claude: '/b/claude' })
+  const start = html.match(/<button\b[^>]*data-onboarding-start[\s\S]*?<\/button>/)?.[0] ?? ''
+  const create = html.match(/<button\b[^>]*data-onboarding-create[\s\S]*?<\/button>/)?.[0] ?? ''
+  return { pass: /data-launcher-verb-hint="start"[^>]*>An agent works on it/.test(start) && /data-launcher-verb-hint="create"[^>]*>Add an object/.test(create) &&
+    /data-onboarding-summary=/.test(html), detail: { start: start.slice(0, 400), create } }
+})
 check(LAUNCHER, 'fr.launcher.3 the tmux notice and the engine status sit BELOW the action — after the start step in document order', (m) => {
   const html = launcher(m, { claude: '/b/claude' }, { tmux: 'no tmux', onDismissTmux: noop })
   const at = (s) => html.indexOf(s)
@@ -174,6 +181,51 @@ check(HINTS, 'fr.handoff.1 the first-task hint is worded from the live state —
   const got = [h(undefined, 0, true), h('starting', 0, true), h('streaming', 1, true), h('ready', 2, true), h('ready', 0, false), h('exited', 2, true)]
   return { pass: /starting/.test(got[0]) && got[0] === got[1] && /working/.test(got[2]) && /answered/.test(got[3]) && /Send your first message/.test(got[4]) &&
     got[5] === null && !/Send your first message/.test(h('ready', 0, true)), detail: got }
+})
+// M310. The first task is the FLAGSHIP walk: after the agent answers, the
+// guide moves on to review, checks and the pull request, read off the task's
+// real state — never stopping at "answered", and never skipping a step the
+// state has not reached.
+check(HINTS, 'fr.flagship.1 the first-task guide walks start → agent works → review → checks → pull request from the task\'s own facts, the one verb always opens the review, a lane with no changes keeps it at the agent, and a finished flow says so', (m) => {
+  const g = (over) => m.flagshipGuide({ status: 'ready', turns: 2, sent: true, hasChanges: true, checksPassed: false, github: true, pr: false, ...over })
+  const cur = (x) => x.steps.find((s) => s.state === 'current')?.step
+  const starting = g({ status: 'starting', turns: 0 })
+  const working = g({ status: 'streaming' })
+  const noChanges = g({ hasChanges: false })
+  const review = g({ standing: 'none' })
+  const stale = g({ standing: 'stale' })
+  const checks = g({ standing: 'current' })
+  const pr = g({ standing: 'current', checksPassed: true })
+  const done = g({ standing: 'current', checksPassed: true, pr: true })
+  const typedDone = g({ standing: 'current', checksPassed: true, github: false })
+  return { pass: cur(starting) === 'start' && cur(working) === 'work' && working.action === undefined &&
+    cur(noChanges) === 'work' && /no changes/.test(noChanges.sentence) &&
+    cur(review) === 'review' && review.action === 'Review changes' && review.steps[0].state === 'done' &&
+    /moved since you reviewed/.test(stale.sentence) &&
+    cur(checks) === 'checks' && checks.action === 'Run checks' &&
+    cur(pr) === 'pr' && pr.action === 'Open pull request' &&
+    done.steps.every((s) => s.state === 'done') && /pull request open/.test(done.sentence) &&
+    typedDone.steps.every((s) => s.state === 'done') &&
+    g({ status: 'exited' }) === null, detail: { review, checks, pr, done: done.sentence } }
+})
+// The first start's continuity: the rail is the sequence a person lives
+// through — starting, working, needs your input, ready to review — and a
+// pending permission request outranks "working" (the session still streams
+// while it waits on the PERSON, so the status alone would say "wait").
+check(HINTS, 'fr.handoff.3 a waiting agent says "needs your input" over "working", in the sentence and on both rails; the task rail reads Starting › Working › Ready to review', (m) => {
+  const needs = m.firstTaskHint('streaming', 1, true, true)
+  const rail = m.firstTaskRail('streaming', 1, true, true)
+  const calm = m.firstTaskRail('ready', 2, true)
+  const g = (over) => m.flagshipGuide({ status: 'streaming', turns: 1, sent: true, hasChanges: true, checksPassed: false, github: true, pr: false, ...over })
+  const waiting = g({ needsInput: true })
+  const review = g({ status: 'ready', turns: 2, standing: 'none' })
+  const cur = (x) => x.steps.find((s) => s.state === 'current')
+  return { pass: /needs your input/.test(needs) && !/working/.test(needs) &&
+    rail.find((s) => s.state === 'current')?.label === 'Needs your input' && calm.every((s) => s.state === 'done' || s.step === 'answered') &&
+    waiting.needsInput === true && cur(waiting)?.label === 'Needs your input' && waiting.action === undefined &&
+    review.steps.map((s) => s.label).slice(0, 3).join(' › ') === 'Starting › Working › Ready to review' && cur(review)?.step === 'review' &&
+    m.firstTaskRail('exited', 1, true, true) === null && m.firstTaskHint('starting', 0, true, true) === 'Your agent is starting.',
+  detail: { needs, rail, waiting: waiting.steps, review: review.steps } }
 })
 const VP = load('src/renderer/canvas/viewport.ts', 'first-run-viewport.cjs')
 check(VP, 'fr.handoff.2 the first start frames the new task readably — never above 100% for a lone pair, and the conversation alone when the pair would fall below READABLE_SCALE', (m) => {

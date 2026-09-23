@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'motion/react'
+import { MOTION_EASE, MOTION_SURFACE_MS } from '../motion'
 import { isValidElement, useEffect, useMemo, useState, type ComponentType, type ElementType, type ReactElement, type ReactNode } from 'react'
 
 /**
@@ -36,7 +37,9 @@ export function MotionSurface({ open, enter = false, onExitComplete, children }:
     if (open) setVisible(true)
   }, [open])
 
-  const transition = reduced ? { duration: 0 } : { duration: 0.14, ease: [0.22, 1, 0.36, 1] }
+  // Brief #21. An overlay arriving or leaving is the SURFACE tier, on the
+  // stylesheet's own curve — it was 140ms on a curve of its own.
+  const transition = reduced ? { duration: 0 } : { duration: MOTION_SURFACE_MS / 1000, ease: MOTION_EASE }
   return (
     <MotionElement
       {...child.props}

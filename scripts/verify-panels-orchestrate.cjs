@@ -127,16 +127,16 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // The chat's composer lives on the covered canvas: sent through its own API, the
       // way the canvas would, with the page left on Orchestrate.
       await wc.executeJavaScript(`window.canvas.agentSession.send(${JSON.stringify(chatId)}, 'ask: list the repository')`).catch(() => null)
-      const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]'); return r ? { request: r.getAttribute('data-orch-request'), ask: r.querySelector('.orch__needs-ask')?.textContent ?? null, allow: !!r.querySelector('[data-orch-allow]') } : false })()`), 8000)
+      const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]'); return r ? { request: r.getAttribute('data-orch-request'), ask: r.querySelector('.orch__needs-ask')?.textContent ?? null, allow: !!r.querySelector('[data-approval-verb="once"]'), action: r.querySelector('[data-approval-action]')?.textContent ?? null } : false })()`), 8000)
       await demo('m284-3-needs-attention')
       const nextWhilePending = await wc.executeJavaScript(`document.querySelector('[data-orch-inspector="${chatId}"] [data-orch-next]')?.getAttribute('data-orch-next') ?? null`)
-      await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-orch-needs-row="${chatId}"] [data-orch-allow]'); if (!a) return false; a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-orch-needs-row="${chatId}"] [data-approval-verb="once"]'); if (!a) return false; a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
       const rowGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]') === null`), 6000)
       await idle()
       const wire1 = wire()
       const stillOrch = await orchShown()
       ok(IDS[2],
-        row && /Bash/.test(row.ask) && /ls -la/.test(row.ask) && row.allow === true && nextWhilePending === 'answer' &&
+        row && /Bash/.test(row.ask) && /ls -la/.test(row.ask) && row.allow === true && row.action === 'ls -la' && nextWhilePending === 'answer' &&
           rowGone === true && wire1.filter((w) => JSON.stringify(w).includes(row.request)).length === 1 && /allow/.test(JSON.stringify(wire1.find((w) => JSON.stringify(w).includes(row.request)))) && stillOrch === true,
         JSON.stringify({ row, nextWhilePending, rowGone, wire1, stillOrch, log: oLog.slice(-3) }))
 
@@ -144,8 +144,8 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`window.canvas.agentSession.send(${JSON.stringify(chatId)}, 'ask: again')`).catch(() => null)
       const row2 = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]')?.getAttribute('data-orch-request') ?? false`), 8000)
       await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
-      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-attention="${chatId}"] [data-rail-allow]') !== null`), 4000)
-      await click(`[data-rail-attention="${chatId}"] [data-rail-allow]`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-attention="${chatId}"] [data-approval-verb="once"]') !== null`), 4000)
+      await click(`[data-rail-attention="${chatId}"] [data-approval-verb="once"]`)
       const row2Gone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]') === null`), 6000)
       await idle()
       const wire2 = wire()
@@ -230,10 +230,11 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
       setter.call(el, ${JSON.stringify(text)}); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); return true })()`)
     const IDS = [
-      'orch-bench.1 the workbench is ONE strip with exactly Changes · Checks · Output · Artifacts · Timeline (M300 — the last two arrived WITH their readers), bound to the selection by name, pinnable and unpinnable by name, and resizable by its top edge with the height and the tab persisted per workspace on disk',
+      'orch-bench.1 the workbench is ONE strip with exactly Changes · Checks · Output · Artifacts · Timeline · Combine (M300 — Artifacts and Timeline arrived WITH their readers; M311 — Combine with OrchCombine), bound to the selection by name, pinnable and unpinnable by name, and resizable by its top edge with the height and the tab persisted per workspace on disk',
       'orch-bench.2 a task with a real lane: Changes shows the lane\'s fork diff (a file tree and a readable diff), and a brief and criteria typed in the inspector persist on the work item and show beside the changes — launching nothing (no new chat, no new lane)',
       'orch-bench.3 a SAME-SIZE edit invalidates the prior review: Mark reviewed reads current and writes the identity on disk; one line replaced by another of the same length leaves the shape signature identical, and after Refresh the mark reads stale because the content identity moved',
-      'orch-bench.4 a changed revision makes check evidence stale, and unavailable data is explicit: a watcher run in the lane reads exit 0 with the identity it tested; an edit to the lane makes it stale after Refresh; a failed run reads exit 1 and opens its command, context and output; a session in a plain folder says it is not in a git repository and that no checks have run'
+      'orch-bench.4 a changed revision makes check evidence stale, and unavailable data is explicit: a watcher run in the lane reads exit 0 with the identity it tested; an edit to the lane makes it stale after Refresh; a failed run reads exit 1 and opens its command, context and output; a session in a plain folder says it is not in a git repository and that no checks have run',
+      'orch-bench.5 (brief #17) review has a reading mode: the diff carries its context line (the open file, the subject and its branch, the review and check freshness); Read full view hides the scene and gives the strip the working area, and Esc brings the scene back at the strip\'s own height'
     ]
     let repo = null, plain = null, itemId = null, chatId = null, plainChatId = null
     try {
@@ -303,6 +304,22 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           // Editing the brief launched nothing.
           chatSpawns.length === spawnsAfterDispatch && layoutStore.worktrees().length === lanesAfterDispatch && spawnsAfterDispatch === spawnsBefore + 1 && lanesAfterDispatch === lanesBefore + 1,
         JSON.stringify({ recorded: { panelId: recorded.panelId, worktreeId: recorded.worktreeId }, lane: lane && lane.path, files, diff, typedBrief, typedCriteria, briefOnDisk, briefShown, spawns: [spawnsBefore, spawnsAfterDispatch, chatSpawns.length], lanes: [lanesBefore, lanesAfterDispatch, layoutStore.worktrees().length], log: bLog.slice(-3) }))
+
+      // orch-bench.5 — the reading mode and the diff's context line.
+      const benchH = () => wc.executeJavaScript(`Math.round(document.querySelector('[data-orch-workbench]').getBoundingClientRect().height)`)
+      const context = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('[data-orch-workbench] [data-orch-diff-context]'); return c && /app\\.txt/.test(c.textContent) ? { text: c.textContent, review: c.querySelector('[data-orch-diff-review]')?.getAttribute('data-orch-diff-review') ?? null, checks: c.querySelector('[data-orch-diff-checks]') !== null, where: c.querySelector('[data-orch-diff-where]')?.textContent ?? '' } : false })()`), 6000)
+      const restH = await benchH()
+      await click('[data-orch-workbench] [data-orch-bench-reading="off"]')
+      const reading = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('.orch[data-orch-reading]'); const b = document.querySelector('.orch__body'); return o && b && b.getBoundingClientRect().height === 0 ? true : false })()`), 4000)
+      const readH = await benchH()
+      const readDiff = await wc.executeJavaScript(`document.querySelector('[data-orch-workbench] [data-orch-diff]') !== null`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
+      const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
+      const backH = await benchH()
+      ok(IDS[4],
+        context && context.review === 'none' && context.checks === true && lane !== undefined && context.where.includes(lane.branch) &&
+          reading === true && readDiff === true && readH > restH + 150 && back === true && Math.abs(backH - restH) <= 2,
+        JSON.stringify({ context, restH, readH, backH, reading, back }))
 
       // orch-bench.3 — the exit criterion's first sentence.
       await click('[data-orch-workbench] [data-orch-bench-mark]')
@@ -408,7 +425,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await demo('m287-9-workbench-resized')
       ok(IDS[0],
         closedRead && closedRead.open === true && closedRead.height >= 180 &&
-          b0 && b0.open === true && b0.height >= 180 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output,Artifacts,Timeline' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
+          b0 && b0.open === true && b0.height >= 180 && b0.benches === 1 && b0.tabs.join(',') === 'Changes,Checks,Output,Artifacts,Timeline,Combine' && b0.boundKind === 'selection' && /Bound to the selection · Make two loud/.test(b0.bound) &&
           boundToChat && boundToChat.boundKind === 'selection' && boundToChat.subject === 'session:' + plainChatId &&
           pinnedRead && /^Pinned to /.test(pinnedRead.bound) && pinnedRead.subject === 'session:' + plainChatId &&
           stillPinned && stillPinned.boundKind === 'pinned' && stillPinned.subject === 'session:' + plainChatId &&

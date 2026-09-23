@@ -15,8 +15,9 @@ import { inspectionDirectory } from '../inspection-directory'
 import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
 import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
-import { reportedModels, scrollToTurn } from '@renderer/chat/chat-store'
+import { isAnswered, markAnswered, reportedModels, scrollToTurn, unmarkAnswered } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
+import { withdrawApprovalOutcome } from '@renderer/shell/approval-outcome'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import type { SpawnResult } from '@shared/ipc-contract'
@@ -592,9 +593,17 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // message the agent reads.
     // M98. `scope` rides only when given (an `undefined` key crosses IPC
     // as present); a scoped answer refreshes the store's grants mirror.
+    // #16. Marked answered first, so every surface that shows this request
+    // (the queue, Orchestrate, the chat card, the palette row) drops it in
+    // the same frame rather than on main's round trip — and a second click in
+    // that gap sends nothing. A rejected call puts it back.
     answerApproval: (id, requestId, allow, scope) => {
+      if (isAnswered(id, requestId)) return
+      markAnswered(id, requestId)
       void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
+        .catch(() => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId); return undefined })
         .then((accepted) => {
+          if (accepted === undefined) return
           if (scope !== undefined) refreshChatGrants(id)
           /*
            * M300, corrected by M301's critic (finding 5). The decision is
@@ -611,6 +620,8 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
            * The RECORD of it was, and the record is what this phase asks a
            * person to trust.
            */
+          // #14. Main refused it (no longer pending): the acknowledgment would claim a decision that did not land.
+          if (accepted === false) withdrawApprovalOutcome(requestId)
           if (accepted === false) return
           // The source is `person` because a person decided it here.
           void recordOrchEvent({

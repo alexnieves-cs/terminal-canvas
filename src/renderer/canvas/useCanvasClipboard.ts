@@ -3,6 +3,7 @@ import type { Registry } from '@renderer/session/session-registry'
 import { isChatPanel, type Panel } from '@renderer/panels/panels'
 import { shellQuote } from '@renderer/shell/file-tree-model'
 import { REASON_NOT_STARTED } from '@renderer/palette/commands'
+import { serveDraftEdit } from './draft-focus'
 
 export interface CanvasClipboardDeps {
   registry: Registry
@@ -47,6 +48,8 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       // holding Cmd, which makes a stray Cmd+C the most plausible chord in
       // the app, aimed at a selection an opaque overlay is covering.
       if (shouldIgnoreKeys()) return
+      // A text draft has the keyboard: its selection, not the terminal's.
+      if (serveDraftEdit('copy')) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
@@ -58,6 +61,9 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
       // switch that follows on release takes the evidence off screen.
       if (shouldIgnoreKeys()) return
+      // A text draft has the keyboard (draft-focus.ts): the paste is the
+      // field's, never the running agent's behind it.
+      if (serveDraftEdit('paste', text)) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       if (text) { session?.handle.paste(text); return }

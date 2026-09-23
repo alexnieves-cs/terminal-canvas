@@ -66,6 +66,8 @@ export interface CheckRecord {
   tested?: ReviewIdentity
   /** Why `outcome` is what it is when it is not simply `observed`, in words a surface can show. */
   note?: string
+  /** M306. This run's exact-output record (`check:output`). Absent before M306 and when capture was not wired. */
+  outputId?: string
 }
 
 /** A command the agent ASKED FOR, as its CLI reported it. Not a result; labelled as a claim wherever it is shown. */
@@ -123,7 +125,8 @@ export function checksFromLedger(
       outcome: observed,
       exitCode: row.exitCode,
       at: row.endedAt === 0 ? row.startedAt : row.endedAt,
-      ...(row.tested === undefined ? {} : { tested: row.tested })
+      ...(row.tested === undefined ? {} : { tested: row.tested }),
+      ...(row.outputId === undefined ? {} : { outputId: row.outputId })
     })
   }
   return out
@@ -141,6 +144,8 @@ export interface WatcherCheckInput {
   startedAt?: number
   endedAt?: number
   tested?: ReviewIdentity
+  /** M306. The last run's exact-output record. */
+  outputId?: string
 }
 
 /**
@@ -175,7 +180,9 @@ export function checksFromWatchers(
       outcome: observed,
       ...(w.exitCode === undefined ? {} : { exitCode: w.exitCode }),
       at: w.endedAt ?? w.startedAt ?? 0,
-      ...(w.tested === undefined ? {} : { tested: w.tested })
+      ...(w.tested === undefined ? {} : { tested: w.tested }),
+      // A running watcher's id names a record not written yet; only a finished run links one.
+      ...(w.outputId === undefined || w.status === 'running' || w.status === 'not-started' ? {} : { outputId: w.outputId })
     })
   }
   return out

@@ -35,6 +35,11 @@ module.exports = {
   ...require('../src/main/vault-read.ts'),
   ...require('../src/shared/watch-trigger.ts'),
   ...require('../src/main/watch-runner.ts'),
+  /* M306. A check run's exact output: the pure capture and record rules, and
+     the one-file-per-run store — node:fs, the same tier as the ledger. */
+  ...require('../src/shared/check-output.ts'),
+  ...require('../src/main/check-output-store.ts'),
+  ...require('../src/shared/run-ledger.ts'),
   ...require('../src/shared/redact.ts'),
   /* M103. The browser pane's read, over injected getUrl/evaluate: the scheme
      check and the cap and the outward gate, with no webview in earshot. */

@@ -25,6 +25,12 @@ export const CLAUDE_HEADLESS_ARGS: readonly string[] = [
   'stdio'
 ]
 
+/** The opening every no-publish prompt shares (`DISPATCH_PROMPT`, `SWARM_BRIEFS`). */
+export const NO_PUBLISH_SENTENCE = 'Never push, never merge'
+
+/** What that sentence forbids, as the CLI's tool-deny patterns (claude 2.1.280 `--disallowed-tools`). */
+export const NO_PUBLISH_TOOLS: readonly string[] = ['Bash(git push:*)', 'Bash(git merge:*)', 'Bash(gh pr create:*)', 'Bash(gh pr merge:*)']
+
 export interface HeadlessArgsInput {
   /**
    * M81. Text appended to the CLI's own system prompt (`--append-system-prompt`)
@@ -54,7 +60,14 @@ export interface HeadlessArgsInput {
  */
 export function headlessArgs(input: HeadlessArgsInput): string[] {
   const base = [...CLAUDE_HEADLESS_ARGS]
-  if (input.appendSystemPrompt !== undefined && input.appendSystemPrompt !== '') base.push('--append-system-prompt', input.appendSystemPrompt)
+  if (input.appendSystemPrompt !== undefined && input.appendSystemPrompt !== '') {
+    base.push('--append-system-prompt', input.appendSystemPrompt)
+    // A prompt that says "never push" is only a request; the CLI's deny list
+    // makes it a fact. Keyed on the sentence itself, so the enforcement rides
+    // exactly the prompts that state the rule (DISPATCH_PROMPT and the swarm
+    // seats) and cannot drift from them.
+    if (input.appendSystemPrompt.includes(NO_PUBLISH_SENTENCE)) base.push('--disallowed-tools', ...NO_PUBLISH_TOOLS)
+  }
   if (input.resume) {
     base.push('--resume', input.sessionId)
     // sessionId '' makes agentArgs skip its --session-id pin.

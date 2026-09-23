@@ -1,6 +1,7 @@
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { SpawnSheet, type SpawnSheetModel } from './SpawnSheet'
 import { StartWorkSheet, type StartWorkSheetModel } from './StartWorkSheet'
+import { SetupSheet, type SetupSheetModel } from './SetupSheet'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import {
   Fragment,
@@ -31,6 +32,7 @@ import { type ApprovalRow,
   type PromptRow
 } from './commands'
 import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } from '@shared/ipc-contract'
+import type { WorkSearchResult } from '@shared/work-search'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
@@ -38,6 +40,7 @@ import { ChevronRight, Lock } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import type { EnvReport } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
+import { needsYouCount } from '@shared/attention-words'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -87,7 +90,7 @@ export interface InputMode {
    * because the two answer different questions and share no field — folding
    * them would make every field of each optional on the other's model.
    */
-  kind: 'text' | 'confirm' | 'number' | 'secret' | 'sheet' | 'start'
+  kind: 'text' | 'confirm' | 'number' | 'secret' | 'sheet' | 'start' | 'setup'
   label: string
   /**
    * M96. What Enter DOES in this mode, for the footer: `run` for the verb
@@ -114,6 +117,8 @@ export interface InputMode {
   sheet?: SpawnSheetModel
   /** M197. Present when kind is 'start'. */
   start?: StartWorkSheetModel
+  /** M312. Present when kind is 'setup': the repository setup sheet. */
+  setup?: SetupSheetModel
 }
 
 export interface PaletteProps {
@@ -166,6 +171,8 @@ export interface PaletteProps {
   inputMode: InputMode | null
   /** M42. Hits from main for the current search query; null before the first answer. */
   searchResults: PanelSearchResult | null
+  /** D13. See the context's own. */
+  workSearch?: WorkSearchResult | null
   /** M42. scrollback.persist — decides the "search is off" empty state. */
   scrollbackEnabled: boolean
   /** M42. Called with the live query WHILE the scope is `search`, so Canvas can ask main. */
@@ -255,13 +262,14 @@ export function Palette(props: PaletteProps): JSX.Element {
         // "no matches" row names it, so it must be the palette's own query.
         searchQuery: scope === 'search' ? query : '',
         searchResults: props.searchResults,
+        ...(props.workSearch === undefined ? {} : { workSearch: props.workSearch }),
         scrollbackEnabled: props.scrollbackEnabled,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
      props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
-     query, scope, props.searchResults, props.scrollbackEnabled]
+     query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 
@@ -569,6 +577,7 @@ export function Palette(props: PaletteProps): JSX.Element {
   const confirming = inputMode?.kind === 'confirm'
   const sheet = inputMode?.kind === 'sheet' ? inputMode.sheet ?? null : null
   const startSheet = inputMode?.kind === 'start' ? inputMode.start ?? null : null
+  const setupSheet = inputMode?.kind === 'setup' ? inputMode.setup ?? null : null
   const footer = inputMode
     ? confirming
       ? '↵ confirm · esc cancel'
@@ -607,7 +616,9 @@ export function Palette(props: PaletteProps): JSX.Element {
           to one preset. Rendering the bar anyway left the scope chip stranded
           above a border with an empty field beside it, which reads as a
           half-drawn overlay rather than as a question. */}
-      {startSheet !== null ? (
+      {setupSheet !== null ? (
+        <SetupSheet model={setupSheet} onDone={() => controller.closePalette()} onCancel={() => controller.closePalette()} />
+      ) : startSheet !== null ? (
         // M197. The start sheet owns the keyboard the way the spawn sheet
         // does: its first unanswered field takes focus on mount.
         <StartWorkSheet model={startSheet} onDone={() => controller.closePalette()} onCancel={() => controller.closePalette()} />
@@ -750,7 +761,7 @@ export function Palette(props: PaletteProps): JSX.Element {
                         transient state (agents finish, it changes), and
                         row.title feeds haystack() unconditionally — see
                         Command.waiting's doc comment in palette-model.ts. */}
-                    {row.waiting !== undefined && ` · ${row.waiting} waiting`}
+                    {row.waiting !== undefined && row.waiting > 0 && ` · ${needsYouCount(row.waiting)}`}
                   </span>
                   {/* Says WHY it is disabled. A greyed-out row with no reason
                       is a bug report — the same rule menuLabel() states for
@@ -785,7 +796,7 @@ export function Palette(props: PaletteProps): JSX.Element {
           question, differing only in the last word. Caught by the golden —
           both checks over this surface read values, and a doubled line is not
           a value. */}
-      {sheet === null && startSheet === null && <div className="palette__footer">{footer}</div>}
+      {sheet === null && startSheet === null && setupSheet === null && <div className="palette__footer">{footer}</div>}
     </div>
   )
 }

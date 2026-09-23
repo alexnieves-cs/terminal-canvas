@@ -2317,6 +2317,22 @@ const session = (id, over = {}) => ({
     JSON.stringify(got))
 }
 
+// Backlog #90 — exit-tone.1. A clean exit is FINISHED, not failed: `exited 0`
+// keeps its word and takes the `done` tone on every process kind, while a
+// non-zero code and a signal stay `exited` (red). Before, all three shared red.
+{
+  const term = (code) => R.panelState({ kind: 'terminal', status: { kind: 'exited', code }, dormant: false }, undefined)
+  const chat = (exitCode) => R.panelState({ kind: 'chat', status: undefined, dormant: false, chat: { status: 'exited', pending: 0, exitCode } }, undefined)
+  const watch = (exitCode, signal) => R.panelState({ kind: 'watcher', status: undefined, dormant: false, watch: { status: 'exited', exitCode, signal } }, undefined)
+  const got = { t0: term(0), t1: term(1), c0: chat(0), c1: chat(2), cSig: chat(null), w0: watch(0), w1: watch(1), wSig: watch(null, 'SIGTERM') }
+  ok('exit-tone.1 exited 0 reads `done` on terminal, chat and watcher; a non-zero code or a signal stays `exited`',
+    R.TONES.includes('done') &&
+      got.t0.word === 'exited 0' && got.t0.tone === 'done' && got.t1.tone === 'exited' &&
+      got.c0.tone === 'done' && got.c1.tone === 'exited' && got.cSig.tone === 'exited' &&
+      got.w0.tone === 'done' && got.w1.tone === 'exited' && got.wSig.tone === 'exited',
+    JSON.stringify(got))
+}
+
 // M73 — chat-model.1–.4. The chat panel's pure model: rows from turns, the
 //     live-block merge that keeps a token from rendering twice, the
 //     composer's arms with their reasons, and the snapshot → state input.
@@ -2409,6 +2425,59 @@ const session = (id, over = {}) => ({
     isCode({ file_path: '/x/y.ts' }) === true && isCode({ command: 'ls' }) === true && isCode({ pattern: '*.ts' }) === true && isCode({ url: 'https://a' }) === true &&
       isCode({ description: 'Find the failing test' }) === false && isCode({ query: 'electron work area' }) === false && isCode({}) === false,
     JSON.stringify([isCode({ file_path: '/x/y.ts' }), isCode({ description: 'a' }), isCode({})]))
+
+  // #17 — approval-action.1. The approval detail shows the action IN FULL: a
+  //     command past toolArgument's 96-character cut keeps its tail, a path
+  //     keeps its checkout, and every other key of the input is inspectable
+  //     as `rest` — absent when the action was the whole input, so a plain
+  //     Bash call does not print its command twice.
+  const fullOf = typeof R.approvalAction === 'function' ? R.approvalAction : () => null
+  const longCmd = 'npm run build && ' + 'x'.repeat(120) + ' && rm -rf ./out'
+  const bash = fullOf({ command: longCmd, description: 'Build it' })
+  const edit = fullOf({ file_path: '/Users/a/repo/src/deep/file.ts', old_string: 'a', new_string: 'b' })
+  const bare = fullOf({ foo: 1 })
+  ok('approval-action.1 an approval\'s action is the input\'s primary value in full (a long command keeps its tail, a path is not shortened), the rest of the input is pretty-printed beside it, and the request\'s own description is context, never "rest"',
+    bash !== null && bash.action === longCmd && bash.code === true && bash.rest === undefined &&
+      edit !== null && edit.action === '/Users/a/repo/src/deep/file.ts' && typeof edit.rest === 'string' && /"old_string": "a"/.test(edit.rest) && !/file_path/.test(edit.rest) &&
+      bare !== null && /"foo": 1/.test(bare.action) && bare.rest === undefined,
+    JSON.stringify({ bash, edit, bare }))
+
+  // #14 — approval-headline.1. A decision opens on one sentence of what will
+  //     happen: the verb comes from the tool, so a person reads "run a
+  //     command" before the command; a tool this table does not know says its
+  //     own name, never a guessed verb.
+  const head = typeof R.approvalHeadline === 'function' ? R.approvalHeadline : () => null
+  ok('approval-headline.1 an approval\'s headline verb is the tool\'s action in words (Bash runs a command, Edit edits a file, WebFetch fetches a page) and an unknown tool is named, not guessed',
+    head('Bash') === 'run a command' && head('Edit') === 'edit a file' && head('Write') === 'write a file' && head('WebFetch') === 'fetch a web page' && head('mcp__jira__create') === 'use mcp__jira__create',
+    JSON.stringify([head('Bash'), head('Edit'), head('mcp__x')]))
+}
+
+// #13 — composer-status.1. The composer's ONE status line, by priority: the
+//     turn in flight says what Stop does (and still counts what is attached),
+//     a send in flight says Sending, an unusable composer says why, then
+//     attachments, the first message's memories, a session grant, and Ready.
+//     One line whatever the state is what keeps the well from growing and
+//     shrinking as a turn runs, so a lower fact must never displace a higher.
+{
+  const st = typeof R.composerStatus === 'function' ? R.composerStatus : () => ({ kind: null, text: '' })
+  const base = { live: false, sending: false, sendEnabled: true, interruptEnabled: false, attachments: 0 }
+  const answering = st({ ...base, live: true, interruptEnabled: true, attachments: 2, memory: 'm', grant: 'g' })
+  const noStop = st({ ...base, live: true, interruptReason: 'codex cannot be interrupted' })
+  const sending = st({ ...base, sending: true, attachments: 1 })
+  const off = st({ ...base, sendEnabled: false, sendReason: 'claude was not found' })
+  const attached = st({ ...base, attachments: 1, memory: 'm' })
+  const memory = st({ ...base, memory: '3 memories will go', grant: 'g' })
+  const unresolved = st({ ...base, memoryUnresolved: 'no repository', memory: 'm' })
+  const grant = st({ ...base, grant: 'Bash ran under a session grant' })
+  const ready = st(base)
+  ok('composer-status.1 the composer status line is one fact by priority — answering (with what Stop does and what is attached), sending, why it cannot send, attachments ready, the first message\'s memories, a grant in use, then ready',
+    answering.kind === 'answering' && /Stop interrupts/.test(answering.text) && /2 attachments ready/.test(answering.text) &&
+      noStop.kind === 'answering' && /codex cannot be interrupted/.test(noStop.text) &&
+      sending.kind === 'sending' && off.kind === 'unavailable' && off.text === 'claude was not found' &&
+      attached.kind === 'attached' && /^1 attachment ready/.test(attached.text) &&
+      memory.kind === 'memory' && memory.text === '3 memories will go' && unresolved.kind === 'memory-unresolved' &&
+      grant.kind === 'grant' && ready.kind === 'ready',
+    JSON.stringify({ answering, noStop, sending, off, attached, memory, unresolved, grant, ready }))
 }
 
 // M164 — path.1. THE PATH RULE's one helper. `displayPath(path, root)`:
@@ -3620,6 +3689,107 @@ try {
     JSON.stringify({ fresh, mins, old, never }))
 } catch (e) {
   ok('boardx (threw)', false, String(e && e.stack || e))
+}
+
+// D17 / daily loop 4.4 — the cross-workspace projection: hidden workspaces
+// only, ordered by their longest-waiting panel, ids in queue order, and a
+// hidden workspace with nothing waiting (or only phantoms) has no row.
+{
+  const W = (id, name, panelIds, active) => ({ id, name, panelIds, active })
+  const rows = typeof R.buildElsewhereRows === 'function' ? R.buildElsewhereRows([
+    W('a', 'Here', ['n1', 'n2'], true),
+    W('b', 'Later', ['n5', 'n6'], false),
+    W('c', 'Oldest', ['n7', 'n8'], false),
+    W('d', 'Quiet', ['n9'], false)
+  ], ['n1', 'n8', 'n6', 'n5', 'n7', 'gone']) : undefined
+  ok('elsewhere.1 hidden workspaces only, oldest waiter first, ids in queue order, none for a quiet one',
+    JSON.stringify(rows) === JSON.stringify([
+      { workspaceId: 'c', name: 'Oldest', panelIds: ['n8', 'n7'] },
+      { workspaceId: 'b', name: 'Later', panelIds: ['n6', 'n5'] }
+    ]), JSON.stringify(rows))
+}
+
+
+// M308 — inbox.1–.4. THE NEEDS-YOU QUEUE AS DECISIONS. Each fails quietly:
+//      an inbox that reordered a plain queue would move every existing
+//      jump; one that ranked by the wrong edges would put a bare link's
+//      source ahead of a real hand-off's; grouping that answered one request
+//      for many agents, or that dropped a panel's further requests from view,
+//      hides decisions; and a snooze that deleted an item instead of setting
+//      it aside would be an agent nobody is told is waiting.
+{
+  const I = R
+  const appr = (id, requestId, action, cwd = '/r') => ({ id, requestId, toolName: 'Bash', argument: action, action, cwd })
+  const rows = [
+    { id: 'a', label: 'alpha' },
+    { id: 'b', label: 'beta', approval: appr('b', 'rb', 'npm install') },
+    { id: 'c', label: 'gamma' }
+  ]
+  const plain = I.buildInbox({ now: 1000, rows, approvals: [appr('b', 'rb', 'npm install')], kindOf: (id) => (id === 'a' ? 'terminal' : 'chat') })
+  ok('inbox.1 with no hand-offs the inbox keeps the queue\'s own arrival order, names each item\'s kind and blocker, and a terminal\'s question carries its last line as context',
+    JSON.stringify(plain.items.map((i) => i.panelId)) === JSON.stringify(['a', 'b', 'c']) &&
+      plain.items[0].kind === 'question' && /rang for you/.test(plain.items[0].blocker) &&
+      plain.items[1].kind === 'permission' && /wants to use Bash — npm install/.test(plain.items[1].blocker) && plain.items[1].context === '/r' &&
+      plain.items[2].blocker === 'is waiting for your reply' &&
+      I.buildInbox({ now: 1, rows: [rows[0]], approvals: [], kindOf: () => 'terminal', lastLineOf: () => 'Continue? [y/N]' }).items[0].context === 'Continue? [y/N]',
+    JSON.stringify(plain.items.map((i) => [i.panelId, i.kind, i.blocker, i.context])))
+
+  const ranked = I.buildInbox({ now: 1000, rows, approvals: [appr('b', 'rb', 'npm install')], kindOf: () => 'chat',
+    handoffs: [{ from: 'c', to: 'x' }, { from: 'x', to: 'y' }, { from: 'y', to: 'c' }, { from: 'b', to: 'z' }] })
+  ok('inbox.2 decisions rank by how much they unblock — transitively over hand-offs, a cycle counted once and never the item itself — then by waiting time',
+    JSON.stringify(ranked.items.map((i) => [i.panelId, i.unblocks])) === JSON.stringify([['c', 2], ['b', 1], ['a', 0]]) &&
+      I.downstreamOf('c', [{ from: 'c', to: 'x' }, { from: 'x', to: 'c' }]).size === 1,
+    JSON.stringify(ranked.items.map((i) => [i.panelId, i.unblocks])))
+
+  const dupRows = [
+    { id: 'p1', label: 'one', approval: appr('p1', 'r1', 'rm -rf build') },
+    { id: 'p2', label: 'two', approval: appr('p2', 'r2', 'rm -rf build') },
+    { id: 'p3', label: 'three', approval: appr('p3', 'r3', 'rm -rf build', '/elsewhere') }
+  ]
+  const dups = I.buildInbox({ now: 5, rows: dupRows, approvals: [appr('p1', 'r1', 'rm -rf build'), appr('p1', 'r1b', 'ls'), appr('p2', 'r2', 'rm -rf build'), appr('p3', 'r3', 'rm -rf build', '/elsewhere')], kindOf: () => 'chat' })
+  ok('inbox.3 the identical request from two agents is ONE decision naming both members with each request id kept to answer individually; the same action in another directory is a different decision; a panel\'s further requests are counted, not hidden',
+    dups.items.length === 2 &&
+      JSON.stringify(dups.items[0].members.map((m) => [m.panelId, m.requestId])) === JSON.stringify([['p1', 'r1'], ['p2', 'r2']]) &&
+      dups.items[0].moreFromPanel === 1 && dups.items[1].panelId === 'p3',
+    JSON.stringify(dups.items.map((i) => ({ p: i.panelId, members: i.members, more: i.moreFromPanel }))))
+
+  const snoozes = new Map([['q:a', 5000], ['p:rb', 500]])
+  const sz = I.buildInbox({ now: 1000, rows, approvals: [appr('b', 'rb', 'npm install')], kindOf: () => 'chat', snoozes })
+  const order = I.jumpOrder(['a', 'b', 'c', 'new'], sz)
+  ok('inbox.4 a snoozed decision leaves the list but is kept, with its end, among the snoozed; an expired snooze is back; the jump order follows the inbox, skips the snoozed and keeps an id the inbox has not built yet',
+    JSON.stringify(sz.items.map((i) => i.key)) === JSON.stringify(['p:rb', 'q:c']) &&
+      sz.snoozed.length === 1 && sz.snoozed[0].key === 'q:a' && sz.snoozed[0].until === 5000 &&
+      JSON.stringify(order) === JSON.stringify(['b', 'c', 'new']) &&
+      I.waitedWords(0, 30_000) === 'just now' && I.waitedWords(0, 4 * 60_000) === '4m' && I.waitedWords(0, 3 * 3600_000) === '3h',
+    JSON.stringify({ items: sz.items.map((i) => i.key), snoozed: sz.snoozed, order }))
+}
+
+
+// M309 — presence.1. A return is briefed only after a REAL absence: a glance at
+//      another app must not raise a briefing (a nag, not a recovery), and a
+//      missing stamp — storage empty or unavailable — must yield none rather
+//      than "everything since the beginning of time".
+ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the briefing\'s since; a shorter one, or no stamp at all, briefs nothing',
+  R.awayFrom(1000, 1000 + R.AWAY_MS) === 1000 && R.awayFrom(1000, 1000 + R.AWAY_MS - 1) === null && R.awayFrom(null, 9e12) === null,
+  JSON.stringify({ away: R.AWAY_MS }))
+
+
+// M310 — chain.1. The task's chain names every step, present or not: a flow
+//      that dropped an absent step would read as a flow without it, and the
+//      absent words are where the next step is made.
+{
+  const chain = R.taskChain({
+    item: { source: 'github', key: 'acme/app#3', url: 'https://x/3', panelId: 'c1', pr: { number: 9, url: 'https://x/pr/9' } },
+    members: [{ panelId: 'c1', kind: 'chat' }, { panelId: 'b1', kind: 'browser' }, { panelId: 'w1', kind: 'watcher' }, { panelId: 'w2', kind: 'watcher' }]
+  })
+  const typed = R.taskChain({ item: { source: 'typed' }, members: [] })
+  const by = (c, s) => c.find((x) => x.step === s)
+  ok('chain.1 the task chain is issue → conversation → preview → review → checks → PR, each step present with where it is or absent with the words for what would make it',
+    JSON.stringify(chain.map((c) => c.step)) === JSON.stringify(['issue', 'conversation', 'preview', 'review', 'checks', 'pr']) &&
+      by(chain, 'issue').url === 'https://x/3' && by(chain, 'conversation').panelIds[0] === 'c1' && by(chain, 'checks').label === 'checks ×2' &&
+      by(chain, 'review').present === false && /not reviewed/.test(by(chain, 'review').label) && by(chain, 'pr').label === 'PR #9' &&
+      typed.every((c) => !c.present) && /typed task/.test(by(typed, 'issue').label) && /not a GitHub task/.test(by(typed, 'pr').label),
+    JSON.stringify(chain))
 }
 
 const failed = results.filter((r) => !r.pass)

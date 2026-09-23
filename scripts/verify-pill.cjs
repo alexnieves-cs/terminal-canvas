@@ -20,7 +20,7 @@ const rest = (facts) => (typeof P.pillRestState === 'function' ? P.pillRestState
 // One check per priority. Each fixture carries every LOWER-priority fact too,
 // so a rule that checked them in the wrong order would pick the wrong one.
 const a = rest({ attention: 2, running: 3, selected: 4 })
-ok('pill.rest.1 attention outranks running and selection, and is plural-correct', a?.kind === 'attention' && a.text === '2 chats need you' && rest({ attention: 1, running: 0, selected: 0 })?.text === '1 chat needs you')
+ok('pill.rest.1 attention outranks running and selection, and is plural-correct', a?.kind === 'attention' && a.text === '2 panels need you' && rest({ attention: 1, running: 0, selected: 0 })?.text === '1 panel needs you')
 const taskBeat = rest({ attention: 0, running: 3, selected: 4, taskTitle: 'Ship the API' })
 ok('pill.rest.task.1 with the lens on, the task title outranks running and selection; attention still wins',
   taskBeat?.kind === 'task' && taskBeat.text === 'Ship the API' &&
@@ -74,8 +74,24 @@ ok('pill.running.1 running agents are starting/streaming chats and busy AGENT te
 ok('pill.rest.silhouette.1 rest copy never says N agents for the queue or running face',
   !/agents? need/.test(rest({ attention: 2, running: 0, selected: 0 })?.text ?? '') &&
   !/agents? running/.test(rest({ attention: 0, running: 2, selected: 0 })?.text ?? '') &&
-  /chats need you/.test(rest({ attention: 2, running: 0, selected: 0 })?.text ?? '') &&
+  /panels need you/.test(rest({ attention: 2, running: 0, selected: 0 })?.text ?? '') &&
   /sessions running/.test(rest({ attention: 0, running: 2, selected: 0 })?.text ?? ''))
+
+// Daily loop 4.1 — one vocabulary: the queue holds terminals AND chats, so the
+// sentence never says `chats`; the old spellings still count as restatements.
+ok('attention-words.1 the rest sentence never names chats over a mixed queue, and all three spellings are restatements',
+  !/chat/.test(rest({ attention: 3, running: 0, selected: 0 })?.text ?? 'chat') &&
+  typeof P.isAttentionQueueRestatement === 'function' &&
+  ['3 panels need you', '1 panel needs you', '2 chats need you', '1 agent needs you'].every((t) => P.isAttentionQueueRestatement(t)) &&
+  P.isAttentionQueueRestatement('the review chat needs you') === false)
+// Daily loop 4.3 — the Cmd+J lesson shows once, only beside the attention
+// sentence, and retires only after it was shown and the queue emptied.
+ok('pill.hint.1 the jump hint shows untaught at attention only, and retires only after being shown',
+  typeof P.showJumpHint === 'function' && typeof P.retiresJumpHint === 'function' &&
+  P.showJumpHint(false, 'attention') === true && P.showJumpHint(true, 'attention') === false &&
+  P.showJumpHint(false, 'running') === false &&
+  P.retiresJumpHint(true, 'empty') === true && P.retiresJumpHint(true, 'attention') === false &&
+  P.retiresJumpHint(false, 'empty') === false)
 
 const failed = results.filter((x) => !x.pass)
 console.log(`[verify:pill] ${results.length - failed.length}/${results.length} passed`)

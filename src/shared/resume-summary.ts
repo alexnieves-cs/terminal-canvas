@@ -33,7 +33,7 @@ export interface ResumeSummaryInput {
     state: WorkItemState
     note?: string
   }
-  retained?: Pick<RetainedOutcome, 'execution' | 'state'>
+  retained?: Pick<RetainedOutcome, 'execution' | 'state' | 'refs'>
   execution?: { word: string; detail: string; blocker?: { kind: string; subject: string } }
   handoff?: { actionLabel: string; detail: string; blocker?: { kind: string; subject: string } }
 }
@@ -98,7 +98,7 @@ export function buildResumeSummary(input: ResumeSummaryInput): ResumeSummary {
     nextAction = handoff.actionLabel
     sources.push('review-action')
   } else if (retained !== undefined) {
-    nextAction = retainedNextAction({ ...retained, id: 'x', itemId: item.id, title: item.title, capturedAt: 0, sourcePanelId: 'x', execution: retained.execution, state: retained.state })
+    nextAction = retainedNextAction(retained)
     sources.push('retained-next')
   } else if (item.state === 'review') {
     nextAction = 'review the lane changes'

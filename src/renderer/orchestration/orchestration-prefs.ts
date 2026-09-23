@@ -36,6 +36,14 @@ export interface OrchPrefs {
    * named and kept — and they persist through the same one write.
    */
   views: readonly OrchSavedView[]
+  /**
+   * #18. The agent pool and the activity feed are SECONDARY to the task, the
+   * scene and the workbench, so each folds away. In memory for the session
+   * (like the camera between page switches), deliberately not in the
+   * workspace record: a fold is a glance-level choice, not a view to restore.
+   */
+  poolOpen: boolean
+  feedOpen: boolean
 }
 
 const DEFAULTS: OrchPrefs = {
@@ -45,7 +53,9 @@ const DEFAULTS: OrchPrefs = {
   tab: 'activity',
   workbench: { height: WORKBENCH_DEFAULT_HEIGHT, tab: 'changes', open: true },
   islands: [],
-  views: []
+  views: [],
+  poolOpen: true,
+  feedOpen: true
 }
 
 /**

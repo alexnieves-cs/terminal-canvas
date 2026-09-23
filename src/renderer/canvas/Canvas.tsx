@@ -57,6 +57,7 @@ import { useViewport, prefersReducedMotion } from './useViewport'
 import { StartupSplash } from './StartupSplash'
 import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, type SplashMode, type StartupInput } from './splash'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
+import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advanced-doors'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { taskClusters } from './task-clusters'
@@ -74,6 +75,11 @@ import { applyGroupDrag, expandGroup, groupDragState, pruneGroups, raiseGroup, r
 import { useGroupDrag } from '@renderer/groups/useGroupDrag'
 import { applyDrag, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
+import { jumpOrder, type Inbox } from '@renderer/shell/decision-inbox'
+import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
+import { taskChain } from '@renderer/shell/inspector-context'
+import { useAwaySince } from '@renderer/shell/presence'
+import { ReturnBriefingCard, useReturnBriefing } from '@renderer/shell/ReturnBriefing'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
 import { ReviewNode } from '@renderer/review/ReviewNode'
@@ -89,6 +95,7 @@ import { DeckNode } from '@renderer/file/DeckNode'
 import { deckFocused } from '@renderer/file/deck-controllers'
 import { SheetNode } from '@renderer/file/SheetNode'
 import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
+import { serveDraftEdit } from './draft-focus'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -109,6 +116,7 @@ import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
 import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
+import { searchWork } from '@shared/work-search'
 import { buildResumeSummary, pickResumeSubject, type ResumeSummary } from '@shared/resume-summary'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
@@ -144,7 +152,7 @@ import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
-import { useApprovals } from '@renderer/chat/chat-store'
+import { approvals, useApprovals } from '@renderer/chat/chat-store'
 import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { activityNow, forgetAllEdges, forgetEdgesFor, freezeEdgeClock, noteEdgeArrived, noteEdgeFired, noteEdgeWaiting, setEdgeContext } from './useEdgeActivity'
 import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
@@ -162,7 +170,7 @@ const LANDING_LIT_MS = 900
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
-import { setDisarmed, clearDisarmed } from '@renderer/watcher/watcher-store'
+import { setDisarmed, clearDisarmed, getWatch } from '@renderer/watcher/watcher-store'
 import { setWatcherFiredHandler } from '@renderer/watcher/useWatchers'
 import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
@@ -239,6 +247,7 @@ import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
+import { ReopenNotice, useReopenNotice } from '../shell/ReopenNotice'
 import { buildInspectorContext } from '../shell/inspector-context'
 import { useShellChrome, type CenterView } from '../shell/useShellChrome'
 import { useDockExpanded } from '../shell/useDockExpanded'
@@ -338,6 +347,10 @@ export function Canvas({
   const [panels, setPanels] = useState<Panel[]>(() =>
     initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
   )
+  // Brief #20. The terminals that came back from disk, fixed at mount — the
+  // reopen notice's subject. Read from the first `panels` value, never from a
+  // later one: a panel spawned after launch was not restored.
+  const [restoredTerminals] = useState(() => (initial.panels.length > 0 ? panels.filter(isTerminalPanel).map((p) => ({ id: p.rect.id, label: panelLabel(p) })) : []))
   const [groups, setGroups] = useState<CanvasGroup[]>(() => initial.groups ?? [])
   // M56. Bookmarks: places, persisted beside the camera, per workspace.
   const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
@@ -374,6 +387,8 @@ export function Canvas({
   retainedOutcomesRef.current = retainedOutcomes
   const [resumeDismissed, setResumeDismissed] = useState(false)
   const [resumeSummary, setResumeSummary] = useState<ResumeSummary | null>(null)
+  // #10. The resumed task's next action, shown in its lens bar after Continue — the summary's collapsed form.
+  const [resumedNext, setResumedNext] = useState<{ itemId: string; text: string } | null>(null)
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
   const boardVerbsRef = useRef<BoardVerbs>({})
   const markLaneClosed = useCallback((chatId: string) => {
@@ -1383,6 +1398,22 @@ export function Canvas({
   useEffect(() => window.canvas.canvas.onFlip(() => setFlipped((v) => !v)), [])
   // `paletteActionsRef` is the existing ref, assigned after the actions are built; read inside the listener only.
   useEffect(() => window.canvas.canvas.onTidy(() => paletteActionsRef.current?.tidyPanels(panelsRef.current.map((p) => p.rect.id))), [])
+  // M313. ⌘⇧E — the focused panel in the person's own editor (the palette
+  // row's chord). Meta-only, so a terminal's own keys (all Ctrl/Alt) pass
+  // through untouched; a field that owns its keys (Monaco, a draft) is left alone.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.metaKey || !e.shiftKey || e.altKey || e.ctrlKey || (e.key !== 'e' && e.key !== 'E')) return
+      const t = e.target as HTMLElement | null
+      if (t?.closest('.monaco-editor, [contenteditable="true"]') != null) return
+      const id = focusedIdRef.current
+      if (id === null || id === undefined) return
+      e.preventDefault()
+      paletteActionsRef.current?.openInEditor(undefined, id)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // M113. `tc board add/done`: the renderer answers because it OWNS the
   // workspace it renders — a main-side write would be overwritten by the next
   // coalesced save. Answered synchronously from refs, like the model.
@@ -1390,6 +1421,19 @@ export function Canvas({
     const actions = paletteActionsRef.current
     if (actions === null || actions === undefined) return { kind: 'refused', reason: 'the canvas is still starting' }
     if (req.op === 'add') return { kind: 'ok', id: actions.addWorkItem({ source: 'typed', title: req.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] }) }
+    // M313. `tc task` / `terminal-canvas://task`: Start work opens FILLED IN,
+    // and a person presses Start — nothing is added or run by the request
+    // (control-protocol.ts's rule for the one verb the URL door may propose).
+    if (req.op === 'propose') {
+      actions.beginStartWork({
+        title: req.title,
+        ...(req.brief === undefined ? {} : { brief: req.brief }),
+        ...(req.criteria === undefined ? {} : { criteria: req.criteria }),
+        ...(req.recipe === undefined ? {} : { recipeId: req.recipe }),
+        ...(req.cwd === undefined ? {} : { preferRoot: req.cwd })
+      })
+      return { kind: 'ok', id: 'start-work' }
+    }
     const item = workItemsRef.current.find((i) => i.id === req.id)
     if (item === undefined) return { kind: 'refused', reason: `no work item is called ${req.id} — tc status lists the board` }
     actions.markDone(req.id)
@@ -1611,7 +1655,12 @@ export function Canvas({
     const timer = setTimeout(() => setLandingLit(null), LANDING_LIT_MS)
     return () => clearTimeout(timer)
   }, [landingLit])
-  useEffect(() => window.canvas.agent.onAttentionJump(jumpToAttention), [jumpToAttention])
+  // D17 / 4.4. A notification click can name a panel in a HIDDEN workspace —
+  // main keeps those sessions running and notifies for them. Read through a
+  // ref assigned below, once workspaceRows and switchWorkspace exist, so a
+  // click there switches first instead of framing an id this canvas lacks.
+  const attentionJumpRef = useRef<(panelId: string) => void>(jumpToAttention)
+  useEffect(() => window.canvas.agent.onAttentionJump((id) => attentionJumpRef.current(id)), [])
 
   // One subscription for the whole canvas, like agent.onState above and for the
   // same reason: the store fans out per panel id, so a per-panel subscription
@@ -1789,10 +1838,13 @@ export function Canvas({
     // verify:panels 123.
     const offUndo = window.canvas.edit.onUndo(() => {
       if (shouldIgnoreKeys()) return
+      // A draft's ⌘Z undoes its TYPING, never a panel spawn behind it.
+      if (serveDraftEdit('undo')) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
       if (shouldIgnoreKeys()) return
+      if (serveDraftEdit('redo')) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
@@ -2448,6 +2500,8 @@ export function Canvas({
   // for a keydown handler and nothing renders from it, so putting it in state
   // would re-render the canvas on every press for no visible reason.
   const jumpCursorRef = useRef<string | null>(null)
+  // M308. Assigned below, where the inbox is built; read at press time.
+  const inboxRef = useRef<Inbox | null>(null)
 
   /**
    * Cmd+J. centreOn + selectAndRaise, and deliberately NOTHING ELSE — no
@@ -2483,7 +2537,8 @@ export function Canvas({
     // framable, and a queue narrowed to `panels` would skip it while its row
     // sat visible one column to the left.
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
-    const queue = reachableQueue(attentionIds(), known)
+    // M308. The inbox's order — most unblocked first, snoozed skipped.
+    const queue = jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current)
     const id = nextAttentionId(queue, jumpCursorRef.current, direction)
     // Nothing is waiting: the key does nothing at all. Moving the camera
     // "somewhere" would be worse than silence — the user asked to be taken to
@@ -2507,10 +2562,15 @@ export function Canvas({
   // does nothing, for Cmd+J's reason.
   const pillJump = useCallback(() => {
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
-    const id = nextAttentionId(reachableQueue(attentionIds(), known), jumpCursorRef.current, 1)
+    const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), jumpCursorRef.current, 1)
     if (id === null) return
     jumpCursorRef.current = id
     jumpToAttention(id)
+    // #16. A chat waiting on a PERMISSION is resolved in the Needs-you queue,
+    // so the pill's shortcut lands there too — on that request — beside the
+    // agent it flew to. A terminal's bell has no request and only flies.
+    const request = approvals().find((a) => a.id === id)
+    if (request !== undefined) chromeRef.current.openAttentionAt(request.requestId)
   }, [jumpToAttention])
   // Filled by CommandPill with its "expand and take the keyboard"; a ref so
   // useKeyboardNav's listener installs once (openPill's identity is fixed).
@@ -2865,6 +2925,32 @@ export function Canvas({
   // Keeps reloadWorkspacesRef current for switchWorkspace, declared earlier
   // in this component — see that ref's own comment for why.
   useEffect(() => { reloadWorkspacesRef.current = reloadWorkspaces }, [reloadWorkspaces])
+
+  /**
+   * D17 / 4.4. Go to a waiting panel WHEREVER it lives: on this canvas, the
+   * notification click's own landing; in a hidden workspace, the existing
+   * activation first, then the same landing once that canvas has rendered.
+   * The landing waits on `displayPanels` holding the id rather than on the
+   * switch's promise, because the promise resolves before React has
+   * committed the incoming panels, and goToPanel on an id not yet rendered
+   * frames nothing. A refused switch (another transition in flight) drops
+   * the jump — the same answer a second press gets from Cmd+J.
+   */
+  const pendingJumpRef = useRef<string | null>(null)
+  const jumpAnywhere = useCallback((panelId: string) => {
+    if (displayPanelsRef.current.some((p) => p.rect.id === panelId)) { jumpToAttention(panelId); return }
+    const owner = workspaceRows.find((w) => !w.active && w.panelIds.includes(panelId))
+    if (owner === undefined) return
+    pendingJumpRef.current = panelId
+    void switchWorkspace(owner.id).then((ok) => { if (!ok) pendingJumpRef.current = null })
+  }, [workspaceRows, switchWorkspace, jumpToAttention])
+  useEffect(() => { attentionJumpRef.current = jumpAnywhere }, [jumpAnywhere])
+  useEffect(() => {
+    const id = pendingJumpRef.current
+    if (id === null || !displayPanels.some((p) => p.rect.id === id)) return
+    pendingJumpRef.current = null
+    jumpToAttention(id)
+  }, [displayPanels, jumpToAttention])
 
   /**
    * Cmd+Shift+] and Cmd+Shift+[: the next or previous workspace, WRAPPING.
@@ -3267,7 +3353,8 @@ export function Canvas({
   const [clusterArrival, setClusterArrival] = useState(false)
   // The first start's handoff hint: which conversation it reads, and whether
   // the sentence was sent (Start task) or only inserted (a conversation).
-  const [firstTask, setFirstTask] = useState<{ panelId: string; sent: boolean } | null>(null)
+  // M310. `itemId` makes the hint the flagship guide: the task it follows.
+  const [firstTask, setFirstTask] = useState<{ panelId: string; sent: boolean; itemId?: string } | null>(null)
   // M262. The gesture a person last reached for on the EMPTY canvas — read
   // by a passive capture listener that never prevents or stops anything, so
   // no gesture handler below it changes. Only a background target counts: a
@@ -3492,7 +3579,12 @@ export function Canvas({
     if (view === centerViewNow) return
     if (view === 'orchestration') {
       const cur = selectedIdsRef.current
-      setOrchSelectedId(cur.size === 1 ? [...cur][0]! : null)
+      // One selected object carries itself; several carry their TASK when they
+      // are all one task's (Orchestrate resolves a non-session member to the
+      // task's session), so a lassoed task survives the switch too.
+      const ids = [...cur]
+      const shared = ids.length > 1 ? taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => ids.every((id) => m.members.some((x) => x.panelId === id))) : []
+      setOrchSelectedId(ids.length === 1 ? ids[0]! : shared.length === 1 ? ids[0]! : null)
     } else {
       const id = orchSelectedRef.current
       const cur = selectedIdsRef.current
@@ -3618,7 +3710,7 @@ export function Canvas({
         ...(item.description !== undefined ? { description: item.description } : {}),
         ...(item.note !== undefined ? { note: item.note } : {})
       },
-      ...(retained !== undefined ? { retained: { execution: retained.execution, state: retained.state } } : {}),
+      ...(retained !== undefined ? { retained: { execution: retained.execution, state: retained.state, ...(retained.refs === undefined ? {} : { refs: retained.refs }) } } : {}),
       ...(execution !== undefined ? { execution: { word: execution.word, detail: execution.detail, ...(execution.blocker !== undefined ? { blocker: execution.blocker } : {}) } } : {}),
       ...(handoff !== undefined ? { handoff: { actionLabel: handoff.actionLabel, detail: handoff.detail, ...(handoff.blocker !== undefined ? { blocker: handoff.blocker } : {}) } } : {})
     }))
@@ -4418,8 +4510,12 @@ export function Canvas({
   const [searchResults, setSearchResults] = useState<PanelSearchResult | null>(null)
   const searchQueryRef = useRef('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // D13. The query as STATE too, for the renderer-side half (tasks and
+  // retained outcomes) — the ref stays the stale-reply guard for main's half.
+  const [workSearchQuery, setWorkSearchQuery] = useState('')
   const onSearchQuery = useCallback((query: string) => {
     searchQueryRef.current = query
+    setWorkSearchQuery(query)
     if (searchTimerRef.current !== null) clearTimeout(searchTimerRef.current)
     if (query.trim() === '') {
       // An empty box is "no answer yet" (null), NOT "no matches" ([]): the
@@ -4433,14 +4529,28 @@ export function Canvas({
         // Ignore an answer that arrived after the user typed on — only the
         // latest query's result may land.
         if (searchQueryRef.current === q) setSearchResults(hits)
+      }, (err: unknown) => {
+        // D13. The invoke ITSELF failing is a failure, never "no matches":
+        // the row names it, and the tasks half still answers beneath it.
+        if (searchQueryRef.current !== q) return
+        // Electron's own rejection text, never pane content — main already scrubbed any reader's reason.
+        const reason = err instanceof Error ? err.message : 'the search did not answer'
+        setSearchResults({ hits: [], capped: false, cap: 0, redacted: 0, failures: [{ source: 'terminal and chat logs', reason }] })
       })
     }, 120)
   }, [])
+  const workSearch = useMemo(() => {
+    if (workSearchQuery.trim() === '') return null
+    const cards = new Map<string, string>()
+    for (const p of panels) if (isWorkPanel(p)) cards.set(p.work.itemId, p.rect.id)
+    return searchWork(workSearchQuery, workItems, retainedOutcomes, (itemId) => cards.get(itemId))
+  }, [workSearchQuery, workItems, retainedOutcomes, panels])
   // Leaving the search scope drops the answer, so the next open starts clean.
   useEffect(() => {
     if (palette.scope !== 'search') {
       if (searchTimerRef.current !== null) clearTimeout(searchTimerRef.current)
       searchQueryRef.current = ''
+      setWorkSearchQuery('')
       setSearchResults(null)
     }
   }, [palette.scope])
@@ -4841,6 +4951,8 @@ export function Canvas({
   // task leaves the board — which includes switching to a workspace whose
   // board does not hold it, since Canvas is not remounted per workspace.
   const [relatedItemId, setRelatedItemId] = useState<string | null>(null)
+  // #10. The collapsed resume line lives exactly as long as the lens it rides.
+  useEffect(() => { if (relatedItemId === null) setResumedNext(null) }, [relatedItemId])
   const lens = useMemo(() => {
     if (relatedItemId === null) return null
     const item = workItems.find((i) => i.id === relatedItemId)
@@ -4895,6 +5007,47 @@ export function Canvas({
     if (owners.length > 1) return { kind: 'many', titles: owners.map(title) }
     return { kind: 'one', title: title(owners[0]!), related: owners[0]!.itemId === relatedItemId }
   }
+  // Brief #19. The ⋯ menu's advanced doors: what is true of this panel, asked
+  // when the menu opens (a ref, the task section's reason), and the palette
+  // verb each door runs — no new action, only a new moment to offer it.
+  const advancedRef = useRef<(id: string) => AdvancedDoor[]>(() => [])
+  advancedRef.current = (id) => {
+    const all = displayPanelsRef.current
+    const p = all.find((x) => x.rect.id === id)
+    if (p === undefined) return []
+    const cwd = isTerminalPanel(p) ? p.spec.cwd : isChatPanel(p) ? p.chat.cwd : undefined
+    const owners = taskMemberships(all, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === id))
+    return advancedDoors({
+      kind: p.kind,
+      agentic: isChatPanel(p) || (isTerminalPanel(p) && p.spec.agent !== undefined),
+      hasCwd: cwd !== undefined && cwd !== '',
+      teammate: isChatPanel(p) && p.chat.teammateId !== undefined,
+      taskMembers: owners.length === 1 ? owners[0]!.members.length : 0,
+      watched: cwd !== undefined && all.some((x) => isWatcherPanel(x) && x.watch.cwd === cwd)
+    })
+  }
+  const advancedVerbs = useMemo(() => ({
+    of: (id: string) => advancedRef.current(id),
+    run: (id: string, door: AdvancedDoorId) => {
+      const a = paletteActionsRef.current
+      if (a === null || a === undefined) return
+      if (door === 'teammate') a.openTeammates()
+      else if (door === 'skill') a.openToolbox(id)
+      else if (door === 'workflow') void a.createObject('workflow')
+      else if (door === 'watcher') { onFocusPanel(id); focusedIdRef.current = id; a.beginWatcher() }
+      else {
+        const owner = taskMemberships(displayPanelsRef.current, workItemsRef.current).find((m) => m.members.some((x) => x.panelId === id))
+        a.beginSaveTemplate(owner === undefined ? [id] : owner.members.map((x) => x.panelId))
+      }
+    }
+  }), [onFocusPanel])
+  // #17. The approval detail's Task line — the same membership the ⋯ menu
+  // reads, through its ref, so the Dock's memo sees ONE function for the life
+  // of the canvas.
+  const approvalTaskOf = useCallback((panelId: string): string | undefined => {
+    const fact = taskMenuRef.current(panelId)
+    return fact.kind === 'one' ? fact.title : fact.kind === 'many' ? fact.titles.join(', ') : undefined
+  }, [])
   const taskVerbs = useMemo(() => {
     const speak = (r: { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string } | undefined): void => {
       if (r !== undefined && (r.kind === 'refused' || ('partial' in r && r.partial === true))) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))
@@ -4925,8 +5078,9 @@ export function Canvas({
     // M204 (D08). The lens rides the one context every kind's frame reads, so
     // a terminal, a chat and a card dim on ONE rule.
     lens: lensMap,
-    task: taskVerbs
-  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs])
+    task: taskVerbs,
+    advanced: advancedVerbs
+  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs, advancedVerbs])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
@@ -5137,7 +5291,7 @@ export function Canvas({
     viewportRef, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
-    relatedItemId, setRelatedItemId
+    startWorkRef: paletteActionsRef, relatedItemId, setRelatedItemId
   })
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
@@ -6196,8 +6350,13 @@ export function Canvas({
     // page it is of so its provenance is on screen rather than in a log.
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const imageId = `img${nextIdRef.current++}`
+    // D12. The task is the one whose lane the pane previews, found through the
+    // binding's source panel — never guessed from the camera or the title.
+    const boundTo = pane.preview?.sourcePanelId
+    const task = boundTo === undefined ? undefined : workItemsRef.current.find((item) => item.panelId === boundTo)
+    const artifact = { kind: 'capture' as const, id: shot.id, url: shot.url, capturedAt: shot.capturedAt, sourcePanelId: pane.rect.id, ...(task === undefined ? {} : { taskId: task.id }) }
     setPanels((current) => {
-      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`, undefined, { kind: 'capture', id: shot.id, url: shot.url, capturedAt: shot.capturedAt })]
+      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`, undefined, artifact)]
       commitHistory(next)
       return next
     })
@@ -6550,6 +6709,10 @@ export function Canvas({
       const r = await beginNewChat({ cwd: plan.folder, ...(plan.engine === LANE_ENGINE ? {} : { backend: plan.engine }), ...(message === '' ? {} : { message }) })
       if (r.kind === 'refused') return { kind: 'refused', reason: r.reason }
       if (r.id !== undefined && !hintsSeenRef.current.has('first-task')) setFirstTask({ panelId: r.id, sent: false })
+      // The same one restrained arrival a task start gets (M262's flag, below):
+      // every first start places its object the same way.
+      setClusterArrival(true)
+      window.setTimeout(() => setClusterArrival(false), 1200)
       return { kind: 'started' }
     }
     const repo = firstWorkRepoAnswer(await window.canvas.git.status(plan.folder), plan.folder)
@@ -6610,7 +6773,7 @@ export function Canvas({
       const chat = mine.find((p) => p.rect.id === outcome.panelId)
       if (mine.length === 0) fitAll(); else frameReadable(mine.map((p) => p.rect), chat?.rect)
     }))
-    if (!hintsSeenRef.current.has('first-task')) setFirstTask({ panelId: outcome.panelId, sent: true })
+    if (!hintsSeenRef.current.has('first-task')) setFirstTask({ panelId: outcome.panelId, sent: true, itemId: outcome.itemId })
     window.setTimeout(() => setClusterArrival(false), 1200)
     // A later start of the same words in the same folder is a NEW task: the
     // conversation this one made may be closed by then, and reusing its item
@@ -6793,7 +6956,7 @@ export function Canvas({
   // Each is frozen on a signature string so a drag's 60Hz rect churn cannot
   // re-render panes that render nothing about a rect.
   const {
-    panelRows, railRows, railWorkspaces, railAttention,
+    panelRows, railRows, railWorkspaces, railAttention, railElsewhere,
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   } = useRailModels({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
@@ -6835,7 +6998,20 @@ export function Canvas({
       ...(workItem !== undefined ? { workItem: { id: workItem.id, title: workItem.title, state: workItem.state, ...(workItem.note !== undefined ? { note: workItem.note } : {}) } } : {}),
       ...(execution !== undefined ? { execution: { detail: execution.detail, ...(execution.blocker !== undefined ? { blocker: execution.blocker } : {}) } } : {}),
       ...(handoff !== undefined ? { handoff: { actionLabel: handoff.actionLabel, detail: handoff.detail, ...(handoff.blocker !== undefined ? { blocker: handoff.blocker } : {}) } } : {}),
-      ...(membership !== undefined && relatedItem !== undefined ? { related: { itemId: relatedItem.id, title: relatedItem.title, memberCount: membership.members.length } } : {})
+      ...(membership !== undefined && relatedItem !== undefined ? { related: {
+        itemId: relatedItem.id, title: relatedItem.title, memberCount: membership.members.length,
+        // M310. The flagship flow as one strip, from this task's own members.
+        chain: taskChain({
+          item: {
+            source: relatedItem.source,
+            ...(relatedItem.key === undefined ? {} : { key: relatedItem.key }),
+            ...(relatedItem.url === undefined ? {} : { url: relatedItem.url }),
+            ...(relatedItem.panelId === undefined ? {} : { panelId: relatedItem.panelId }),
+            ...(relatedItem.pr === undefined ? {} : { pr: relatedItem.pr })
+          },
+          members: membership.members.map((m) => ({ panelId: m.panelId, kind: displayPanels.find((p) => p.rect.id === m.panelId)?.kind ?? 'other' }))
+        })
+      } } : {})
     })
   }, [selectedPanel, inspectorModel, pendingApprovals, displayPanels, workItems, liveRunFacts, taskHandoffOf])
 
@@ -7339,22 +7515,77 @@ export function Canvas({
   })
 
   const attentionAnnouncement = useAttentionAnnouncer(railAttention)
+  // M308. The Needs-you queue as decisions: ranked by what each unblocks,
+  // duplicates grouped, snoozes applied. The ref is ⌘J's and the pill's —
+  // their handlers are declared above this line and read it at press time.
+  const inbox = useDecisionInbox({ rows: railAttention, panels: displayPanels, taskOf: approvalTaskOf })
+  inboxRef.current = inbox
+
+  // M309. The return briefing: every task that moved while the person was
+  // away, from the durable record, measured from when they were last here.
+  const awaySince = useAwaySince()
+  const briefing = useReturnBriefing({
+    since: awaySince,
+    workItems,
+    membersOf: (itemId) => {
+      const item = workItems.find((w) => w.id === itemId)
+      if (item === undefined) return []
+      return taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
+    },
+    handoffOf: taskHandoffOf,
+    inbox,
+    labelOf: (panelId) => { const p = displayPanels.find((q) => q.rect.id === panelId); return p === undefined ? 'a closed panel' : panelLabel(p) }
+  })
+
+  // Brief #20. What came back running, what came back stopped, and what was
+  // lost while the app was closed — kept until each is dealt with.
+  const presentIds = useMemo(() => new Set(displayPanels.map((p) => p.rect.id)), [displayPanels])
+  const reopen = useReopenNotice({
+    restored: restoredTerminals,
+    liveAtBoot: liveSessionIds,
+    present: presentIds,
+    dormant: dormantIds,
+    backend: backendInfo?.kind ?? null
+  })
 
   // M303 (Quiet instrument). Resume work is an INBOX item: it rests at the
   // head of the navigator's Panels pane, and floats over the canvas only when
   // that pane is closed — a card over the canvas covered the panels it named.
-  const resumeBanner = resumeSummary !== null && panels.length > 0 ? (
-          <ResumeBanner
-            summary={resumeSummary}
-            onContinue={(itemId) => {
-              setResumeDismissed(true)
-              setRelatedItemId(itemId)
-              const r = frameItem(itemId)
-              if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
-            }}
-            onDismiss={() => setResumeDismissed(true)}
-          />
-  ) : null
+  // M309. While there is a return to brief, the briefing takes the banner's
+  // slot: the banner is one task's resume, the briefing every task's.
+  const resumeOf = (shape: 'card' | 'strip'): JSX.Element | null => resumeSummary === null ? null : (
+    <ResumeBanner
+      summary={resumeSummary}
+      shape={shape}
+      onContinue={(itemId) => {
+        setResumeDismissed(true)
+        setRelatedItemId(itemId)
+        // #10. Continuing collapses the summary into the task's normal status:
+        // the lens bar it opens carries the next action until the lens closes.
+        setResumedNext({ itemId, text: resumeSummary.blocker !== undefined ? `open blocker — ${resumeSummary.blocker}` : resumeSummary.nextAction })
+        const r = frameItem(itemId)
+        if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
+      }}
+      onDismiss={() => setResumeDismissed(true)}
+    />
+  )
+  const resumeBanner = briefing !== null ? (
+    <ReturnBriefingCard
+      briefing={briefing}
+      onGoToPanel={paletteActions.goToPanel}
+      onReview={(itemId) => { boardVerbsRef.current.review?.(itemId) }}
+      onDecision={(panelId, requestId) => {
+        jumpToAttention(panelId)
+        if (requestId !== undefined) chromeRef.current.openAttentionAt(requestId)
+      }}
+    />
+  ) : resumeSummary !== null && panels.length > 0 ? resumeOf('card') : null
+  // #10. Outside the navigator, Resume is a one-line STRIP in its own grid row
+  // above the center column — outside the canvas's content, so it covers
+  // nothing — and only while the Panels pane is not already holding the card.
+  // The briefing keeps its floating slot: it is a list, not a line.
+  const resumeStrip = briefing === null && resumeSummary !== null && panels.length > 0 && !(chrome.navVisible && chrome.navigator === 'panels')
+    ? resumeOf('strip') : null
   return (
     <div
       ref={shellRef}
@@ -7368,7 +7599,8 @@ export function Canvas({
         chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
         chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}${
         inspectorPinned ? ' shell--inspector-pinned' : ''}${
-        chrome.centerView === 'orchestration' ? ' shell--center-orch' : ''}`}
+        chrome.centerView === 'orchestration' ? ' shell--center-orch' : ''}${
+        resumeStrip !== null ? ' shell--strip' : ''}`}
       // (this redesign) The resize handle sets this same custom property live, imperatively,
       // during a drag; this inline value is only what REACT last committed —
       // the source of truth between drags, not during one. Set ONLY outside
@@ -7427,10 +7659,15 @@ export function Canvas({
         centerView={chrome.centerView}
         onSetCenterView={setCenterView}
         attention={railAttention}
+        elsewhere={railElsewhere}
+        onJumpElsewhere={jumpAnywhere}
         attentionOpen={chrome.attentionOpen}
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
+        attentionFocus={chrome.attentionFocus}
+        taskTitleOf={approvalTaskOf}
+        inbox={inbox}
         onSettings={openSettingsScope}
         expanded={dock.expanded}
         onToggleExpanded={dock.toggle}
@@ -7463,6 +7700,7 @@ export function Canvas({
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
       />
+      {resumeStrip}
       <Navigator
         onResizeHandleDown={onNavResizeDown}
         hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
@@ -7994,6 +8232,15 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
+                  // 5.2 (D12). A camera and focus move onto the decision's
+                  // source conversation — never a reopen: a closed chat is
+                  // said to be closed, and the entry keeps its ids regardless.
+                  onShowSource={(conversationId) => {
+                    if (!panelsRef.current.some((p) => p.rect.id === conversationId)) return 'the conversation this was accepted from is closed — the decision keeps its source, but the transcript is not open on this canvas'
+                    selectOnly(conversationId)
+                    onFocusPanel(conversationId)
+                    return null
+                  }}
                 />
               )
             }
@@ -8274,7 +8521,29 @@ export function Canvas({
             read-only). A sibling of .world, so it never scales. */}
         {/* The first start's one handoff hint — gone once dismissed, and with its panel. */}
         {firstTask !== null && !hintsSeen.has('first-task') && panels.some((p) => p.rect.id === firstTask.panelId) && (
-          <FirstTaskHint panelId={firstTask.panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }} />
+          <FirstTaskHint panelId={firstTask.panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }}
+            // Attached to its conversation: the panel's bottom-centre through
+            // the viewport, so the hint rides a pan like the lane headers do.
+            anchor={(() => { const r = panels.find((p) => p.rect.id === firstTask.panelId)?.rect; return r === undefined ? undefined : worldToScreen({ x: r.x + r.w / 2, y: r.y + r.h }, viewport) })()}
+            {...(() => {
+              // M310. The flagship guide's facts, read off the task as it stands.
+              const itemId = firstTask.itemId
+              const item = itemId === undefined ? undefined : workItems.find((w) => w.id === itemId)
+              if (item === undefined || itemId === undefined) return {}
+              const handoff = taskHandoffOf(itemId)
+              const lane = taskLaneOf(itemId)
+              const laneWatchers = lane === undefined ? [] : displayPanels.filter(isWatcherPanel).filter((p) => p.watch.cwd === lane.path || p.watch.cwd.startsWith(`${lane.path}/`))
+              return {
+                facts: {
+                  ...(handoff === undefined ? {} : { standing: handoff.standing }),
+                  hasChanges: handoff?.changes !== undefined && handoff.changes.files > 0,
+                  checksPassed: laneWatchers.some((p) => getWatch(p.rect.id).status === 'passed'),
+                  github: item.source === 'github',
+                  pr: item.pr !== undefined
+                },
+                onReview: () => { const r = boardVerbsRef.current.review?.(itemId); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }
+              }
+            })()} />
         )}
         {panels.length === 0 && !merged && !launcherPutAway && (() => {
           // Computed once so the tmux/starter notices and the starter door's
@@ -8324,9 +8593,17 @@ export function Canvas({
           />
           )
         })()}
-        {/* M303. Floats over the canvas only when the navigator's Panels
-            pane is not there to hold it (see resumeBanner). */}
-        {resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
+        {/* M309. The return briefing floats over the canvas only when the
+            navigator's Panels pane is not there to hold it. Resume alone
+            never floats here any more — it is the strip (see resumeStrip). */}
+        {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
+        {reopen !== null && (
+          <ReopenNotice
+            model={reopen}
+            onGo={paletteActions.goToPanel}
+            onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
+          />
+        )}
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
@@ -8349,6 +8626,7 @@ export function Canvas({
               <span className="task-lens__title">{title}</span>
               <span className="task-lens__count" data-task-lens-count>{lens.members.length} related</span>
               {gone !== '' && <span className="task-lens__missing" data-task-lens-missing>{gone}</span>}
+              {resumedNext !== null && resumedNext.itemId === lens.itemId && <span className="task-lens__next" data-task-lens-next title={resumedNext.text}>{resumedNext.text}</span>}
               <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="frame" title="Frame every panel of this task"
                 {...shellControl(() => act(frameItem(lens.itemId)))}>Frame</button>
               <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="arrange" disabled={merged}
@@ -8412,6 +8690,7 @@ export function Canvas({
             broadcastActive={broadcastInput}
             inputMode={inputMode}
             searchResults={searchResults}
+            workSearch={workSearch}
             scrollbackEnabled={scrollbackPersist}
             onSearchQuery={onSearchQuery}
           />
@@ -8427,6 +8706,18 @@ export function Canvas({
         summary={inspectorSummary}
         contextBand={inspectorContextBand}
         onShowRelated={(itemId) => { setRelatedItemId(itemId); const r = frameItem(itemId); if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }}
+        // M310. A step that exists is gone to (a panel) or opened (a link, by
+        // main's own door); one that does not leads to where it is MADE — the
+        // review for a review, checks or a PR, Start work for a conversation.
+        onChainStep={(itemId, step) => {
+          if (step.present && step.panelIds[0] !== undefined) { paletteActions.goToPanel(step.panelIds[0]); return }
+          if (step.present && step.url !== undefined) { void window.canvas.links.open({ panelId: selectedIdRef.current ?? '', target: step.url }); return }
+          if (step.step === 'conversation') { paletteActions.beginStartWork({ itemId }); return }
+          if (step.step === 'review' || step.step === 'checks' || step.step === 'pr') {
+            const r = boardVerbsRef.current.review?.(itemId)
+            if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
+          }
+        }}
         onShowTask={(panelId) => { const r = boardVerbsRef.current.show?.(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
         onRename={paletteActions.beginRenamePanel}
         onClose={paletteActions.closePanel}
@@ -8434,7 +8725,7 @@ export function Canvas({
         onRestart={paletteActions.restartPanel}
         onLock={paletteActions.lockPanel} onUnlock={paletteActions.unlockPanel} onPin={paletteActions.pinPanel} onUnpin={paletteActions.unpinPanel} onMaximise={paletteActions.maximisePanel} onRestore={paletteActions.restorePanel} pinnedCount={pinCount(panels)}
         onFrontEnd={onFrontEnd}
-        onAnswer={paletteActions.answerApproval}
+        onReviewApproval={chrome.openAttentionAt}
         onRevokeGrants={revokeChatGrants}
         onOpenReview={paletteActions.openReview}
         onLink={paletteActions.beginLink}

@@ -1660,8 +1660,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
     // -------------------------------------------------------------------
     {
       const IDS = [
-        'approve.1 a permission request puts the chat in needs you on the pill, the rail row and the dock badge; the popover row names the tool and argument; Allow there answers on the wire without moving the camera, and every surface clears',
-        'approve.2 the palette\'s Deny row puts a deny with a message on the wire; focusing the chat does not clear its needs-you; the context pane\'s Allow leads the action bar, answers, and is disabled by name after'
+        'approve.1 a permission request puts the chat in needs you on the pill, the rail row and the dock badge; the queue opens on it with its context (agent, tool) and the action in full, and scoped verbs (Allow once, Allow for session, Deny); Allow once answers on the wire without moving the camera, and every surface clears',
+        'approve.2 the palette\'s Deny row puts a deny with a message on the wire; focusing the chat does not clear its needs-you; the context pane answers nothing itself — its Review request leads the action bar, opens the queue on that request, the queue answers, and the pane\'s verb is disabled by name after'
       ]
       const aLog = []
       const onA = (_e, level, m) => { if (level >= 2) aLog.push(String(m).slice(0, 200)) }
@@ -1697,7 +1697,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const inQueue = await wc.executeJavaScript(`window.__m4aAttention ? window.__m4aAttention() : 'no-hook'`)
         const vpBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
-        const popRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-attention="${chatId}"]'); if (!r) return false; const a = r.querySelector('[data-rail-allow]'); return a ? { allow: a.textContent, title: a.title, arg: r.querySelector('.rail-attention__argument')?.textContent ?? null, deny: !!r.querySelector('[data-rail-deny]') } : false })()`), 4000)
+        const popRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-attention="${chatId}"]'); if (!r) return false; const a = r.querySelector('[data-approval-verb="once"]'); return a ? { allow: a.textContent, title: a.title, arg: r.querySelector('[data-approval-action]')?.textContent ?? null, tool: r.querySelector('[data-approval-tool]')?.textContent ?? null, agent: r.querySelector('[data-approval-agent]')?.textContent ?? null, session: !!r.querySelector('[data-approval-verb="session"]'), deny: !!r.querySelector('[data-approval-verb="deny"]') } : false })()`), 4000)
         // M149 — popover.paint.1 (audit F.14). The popover must be the element
         // under its own title's centre — PAINTED over the navigator, not merely
         // in the DOM: M109's glass blur made the dock a stacking context that the
@@ -1709,7 +1709,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           const hit = top ? (top.closest('.dock__popover') !== null ? true : (top.className || top.tagName)) : 'nothing'
           return hit === true ? true : { hit, at: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)], popover: cs('.dock__popover'), dock: cs('.shell__dock'), rail: cs('.shell__rail'), attention: cs('.dock__attention'), navigator: cs('.navigator') } })()`)
         ok('popover.paint.1 the attention popover, open, is the element under its own title\'s centre — painted above the navigator column, not merely present in the DOM', popPaint === true, JSON.stringify({ popPaint }))
-        await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-rail-attention="${chatId}"] [data-rail-allow]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
+        await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-rail-attention="${chatId}"] [data-approval-verb="once"]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
         const cleared = await pendingIs(0)
         const rowGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-attention="${chatId}"]') === null`), 4000)
         const badgeGone = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock-badge]'); return b ? b.hidden : false })()`), 4000)
@@ -1718,7 +1718,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const wire1 = wireResponses()
         ok(IDS[0],
           minted && minted.kind === 'spawned' && sent1 === true && pending1 === true && pill === true && railWord === true && badge === '1' &&
-            popRow && /Allow Bash/.test(popRow.allow) && popRow.arg === 'ls -la' && popRow.deny === true &&
+            popRow && popRow.allow === 'Allow once' && popRow.arg === 'ls -la' && popRow.tool === 'Bash' && typeof popRow.agent === 'string' && popRow.agent !== '' && popRow.session === true && popRow.deny === true &&
             wire1.length === 1 && /allow/.test(JSON.stringify(wire1[0])) && !/deny/.test(JSON.stringify(wire1[0])) &&
             cleared === true && rowGone === true && badgeGone === true && idleAgain === true &&
             vpBefore.x === vpAfter.x && vpBefore.y === vpAfter.y && vpBefore.scale === vpAfter.scale,
@@ -1750,17 +1750,20 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // Focus is the terminal's acknowledgement; a chat's needs-you is a
         // question, not a bell, and the badge must still say one.
         const badgeAfterFocus = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock-badge]'); return b && !b.hidden ? b.textContent : 'hidden' })()`)
-        const paneAllow = await waitUntil(() => wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="allow"]'); const acts = [...document.querySelectorAll('[data-inspector-action]')].map((b) => b.getAttribute('data-inspector-action')); return a && !a.disabled ? { text: a.textContent, title: a.title, first: acts[0], deny: !!document.querySelector('[data-inspector-action="deny"]') } : false })()`), 5000)
-        await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="allow"]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
+        const paneAllow = await waitUntil(() => wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="review-request"]'); const acts = [...document.querySelectorAll('[data-inspector-action]')].map((b) => b.getAttribute('data-inspector-action')); return a && !a.disabled ? { text: a.textContent, title: a.title, first: acts[0], deny: !!document.querySelector('[data-inspector-action="allow"], [data-inspector-action="deny"]') } : false })()`), 5000)
+        await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="review-request"]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
+        // #16. The pane navigated: the queue is open, on THIS request, and answers it.
+        const queueOpened = await waitUntil(() => wc.executeJavaScript(`(() => { const d = document.querySelector('.dock__popover [data-rail-attention="${chatId}"] [data-rail-approval-open] [data-approval-verb="once"]'); if (!d) return false; d.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 4000)
         const cleared3 = await pendingIs(0)
-        const paneAfter = await waitUntil(() => wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="allow"]'); return a && a.disabled ? { text: a.textContent, title: a.title } : false })()`), 5000)
+        const paneAfter = await waitUntil(() => wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="review-request"]'); return a && a.disabled ? { text: a.textContent, title: a.title } : false })()`), 5000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') === 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         const wire3 = wireResponses()
         ok(IDS[1],
           sent2 === true && pending2 === true && /Deny Bash/.test(String(denyRow)) && denied === true &&
             wire2.length === 2 && /deny/.test(JSON.stringify(wire2[1])) && /denied from the canvas/.test(JSON.stringify(wire2[1])) && idle2 === true &&
-            sent3 === true && pending3 === true && paneAllow && /Allow Bash/.test(paneAllow.text) && paneAllow.first === 'allow' && paneAllow.deny === true &&
+            sent3 === true && pending3 === true && paneAllow && /Review Bash request/.test(paneAllow.text) && paneAllow.first === 'review-request' && paneAllow.deny === false && queueOpened === true &&
             badgeAfterFocus === '1' && cleared3 === true && paneAfter && /nothing is waiting/.test(paneAfter.title) && wire3.length === 3 && /allow/.test(JSON.stringify(wire3[2])),
-          JSON.stringify({ sent2, pending2, denyRow, denied, wire2: wire2.slice(1), idle2, sent3, pending3, badgeAfterFocus, paneAllow, cleared3, paneAfter, wire3: wire3.slice(2), log: aLog.slice(-3) }))
+          JSON.stringify({ sent2, pending2, denyRow, denied, wire2: wire2.slice(1), idle2, sent3, pending3, badgeAfterFocus, paneAllow, queueOpened, cleared3, paneAfter, wire3: wire3.slice(2), log: aLog.slice(-3) }))
         await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 8000)
         await clickPanelClose(wc, chatId)
         await settle()

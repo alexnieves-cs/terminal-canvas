@@ -2577,6 +2577,103 @@ await (async () => {
   }
 }
 
+// M306 — check-output.1–.5. A CHECK RUN KEEPS ITS OWN EXACT OUTPUT. Each
+//      property fails silently in production: a capture that keeps only the
+//      head throws away the failure; a store read that trusts the id reads
+//      outside its directory; a record that lands after the renderer asks
+//      reads `missing`; a runner that never names the record leaves every
+//      check on the old scrollback-tail fallback; and a ledger row that
+//      INLINED the output would put it in the file people paste.
+{
+  // .1 the capture: small output whole; big output keeps head AND tail and counts the seam.
+  const small = F.createOutputCapture(8, 16)
+  small.push('abc'); small.push('def')
+  const s1 = small.snapshot()
+  const big = F.createOutputCapture(8, 16)
+  big.push('HEADHEAD'); for (let i = 0; i < 200; i += 1) big.push('middle-'); big.push('...FAILED: why')
+  const b1 = big.snapshot()
+  const shown = F.checkOutputDisplay({ head: 'x\x1b[31mred\x1b[0m\n10%\r50%\r100%\n', tail: '', elided: 0 })
+  ok('check-output.1 a capture keeps a small run whole, and a large one keeps its head and its END with the elided count exact; the display strips escapes and collapses a carriage-return redraw',
+    s1.head + s1.tail === 'abcdef' && s1.elided === 0 && s1.chars === 6 &&
+      b1.head === 'HEADHEAD' && b1.tail.endsWith('FAILED: why') && b1.tail.length === 16 &&
+      b1.chars === 8 + 200 * 7 + 14 && b1.elided === b1.chars - 8 - 16 &&
+      /not kept between here and the end/.test(F.checkOutputText({ head: 'a', tail: 'b', elided: 5 })) &&
+      shown === 'xred\n100%\n',
+    JSON.stringify({ s1, b1: { head: b1.head, tail: b1.tail, chars: b1.chars, elided: b1.elided }, shown }))
+}
+{
+  // .2 the store: memory before the disk, disk after, the alphabet before any path, and the prune.
+  const dir = mkdtempSync(join(tmpdir(), 'tc check-output '))
+  const store = F.createCheckOutputStore({ dir, maxRecords: 3 })
+  const rec = (id, t) => ({ v: 1, runId: id, panelId: 'w1', source: 'watcher', command: 'npm test', cwd: '/repo', startedAt: t, endedAt: t + 5, exitCode: 1, signal: null, chars: 3, head: 'out', tail: '', elided: 0 })
+  store.put(rec('run-a', 1))
+  const early = await store.read('run-a')
+  await store.flush()
+  const late = await store.read('run-a')
+  const onDisk = existsSync(join(dir, 'run-a.json'))
+  const escape = await store.read('../../etc/passwd')
+  const unknown = await store.read('never-written')
+  for (const [i, id] of ['run-b', 'run-c', 'run-d'].entries()) { store.put(rec(id, 10 + i)); await store.flush(); await new Promise((r) => setTimeout(r, 5)) }
+  const pruned = await store.read('run-a')
+  const kept = await store.read('run-d')
+  const files = readdirSync(dir).filter((n) => n.endsWith('.json')).sort()
+  writeFileSync(join(dir, 'bad-one.json'), '{not json')
+  const bad = await store.read('bad-one')
+  ok('check-output.2 the store serves a record from memory before its write lands and from disk after, refuses an id outside the closed alphabet before it becomes a path, answers missing for an unknown id, prunes the oldest past its count, and says unreadable for a corrupt file',
+    early.kind === 'ok' && late.kind === 'ok' && late.record.head === 'out' && onDisk &&
+      escape.kind === 'missing' && unknown.kind === 'missing' &&
+      pruned.kind === 'missing' && kept.kind === 'ok' && JSON.stringify(files) === JSON.stringify(['run-b.json', 'run-c.json', 'run-d.json']) &&
+      bad.kind === 'unreadable',
+    JSON.stringify({ early: early.kind, late: late.kind, onDisk, escape: escape.kind, unknown: unknown.kind, pruned: pruned.kind, kept: kept.kind, files, bad: bad.kind }))
+  rmSync(dir, { recursive: true, force: true })
+}
+{
+  // .3 the runner names the record at START, and the record holds what the 8K tail cannot.
+  const rows = [], puts = [], states = []
+  let live = null
+  const runner = F.createWatchRunner({
+    spawn: (spec, handlers) => { live = { handlers, kill() {} }; return live },
+    now: (() => { let t = 5000; return () => (t += 7) })(),
+    ledger: { append: (row) => rows.push(row) },
+    onState: (id, st) => states.push({ id, ...st }),
+    identityOf: async () => ({ base: 'b'.repeat(40), content: 'c'.repeat(32) }),
+    outputs: { put: (r) => puts.push(r) }
+  })
+  runner.add({ id: 'w9', cwd: '/repo', command: 'npm', args: ['test'], trigger: { kind: 'path', path: '/repo' } })
+  runner.fire('w9')
+  const runningId = runner.stateOf('w9').outputId
+  live.handlers.onData('FIRST LINE\n')
+  live.handlers.onData('y'.repeat(F.WATCH_TAIL_BYTES * 2))
+  live.handlers.onData('\nAssertionError: expected 2\n')
+  live.handlers.onExit(1, null)
+  await new Promise((r) => setTimeout(r, 0))
+  const put = puts[0]
+  const row = rows[0]
+  const tail = runner.stateOf('w9').tail
+  ok('check-output.3 a watcher run is named at its START and, as it ends, writes ONE record holding the whole output (head the 8K tail lost, and the end) with the command, cwd, times, exit and tested revision — and the ledger row carries only the id',
+    typeof runningId === 'string' && F.isCheckRunId(runningId) &&
+      puts.length === 1 && put.runId === runningId && put.source === 'watcher' && put.command === 'npm test' && put.cwd === '/repo' &&
+      put.exitCode === 1 && put.signal === null && put.tested && put.tested.base === 'b'.repeat(40) &&
+      put.head.startsWith('FIRST LINE') && F.checkOutputText(put).endsWith('AssertionError: expected 2\n') && !tail.includes('FIRST LINE') &&
+      rows.length === 1 && row.outputId === runningId && !('head' in row) && !('tail' in row) && !('output' in row) && row.tested,
+    JSON.stringify({ runningId, puts: puts.map((p) => ({ runId: p.runId, head: p.head.slice(0, 12), chars: p.chars })), row }))
+}
+{
+  // .4 the ledger reads a reference back, and only a well-formed one; an event keeps its revision.
+  const dir = mkdtempSync(join(tmpdir(), 'tc ledger outputId '))
+  const ledger = F.createRunLedger({ file: join(dir, 'runs.jsonl') })
+  await ledger.append({ panelId: 'p1', command: 'ls', cwd: '/', startedAt: 1, endedAt: 2, exitCode: 0, outputId: 'p1-a-1' })
+  await ledger.append({ panelId: 'p1', command: 'ls', cwd: '/', startedAt: 3, endedAt: 4, exitCode: 0, outputId: '../escape' })
+  const listed = await ledger.list('p1', 10)
+  const tested = { base: 'a'.repeat(40), content: 'd'.repeat(32) }
+  const ev = F.parseEventRow({ kind: 'event', runId: 'r', at: 1, event: 'check', source: 'watcher', title: 't', tested })
+  ok('check-output.4 a ledger row reads its output reference back and drops a malformed one; an event row keeps the revision it was written with',
+    listed.length === 2 && listed[1].outputId === 'p1-a-1' && !('outputId' in listed[0]) &&
+      ev !== null && ev.tested && ev.tested.base === tested.base,
+    JSON.stringify({ listed, ev }))
+  rmSync(dir, { recursive: true, force: true })
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

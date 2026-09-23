@@ -321,6 +321,28 @@ const ctx = (over = {}) => ({
 
 const byId = (list, id) => list.find((c) => c.id === id)
 
+// 6.2 (D13). Tasks and retained outcomes ride the search scope: a task with a
+// card frames it through showTask; one with no card is a DISABLED row with its
+// reason (nothing reopens); the scope row names tasks and this workspace; and
+// "no matches" is not said while tasks matched.
+{
+  const shown = []
+  const actions = { ...spyActions(), showTask: (id) => { shown.push(id); return { kind: 'ran' } } }
+  const workSearch = { hits: [
+    { source: 'task', itemId: 'a', title: 'Fix login', field: 'title', line: 'Fix login', cardPanelId: 'card-a' },
+    { source: 'retained', itemId: 'gone', outcomeId: 'o1', title: 'Old login', field: 'outcome', line: 'failed · Old login' }
+  ], capped: false, cap: 30, redacted: 0, searched: { tasks: 2, retained: 1 } }
+  const rows = P.buildCommands(ctx({ actions, searchQuery: 'login', searchResults: { hits: [], capped: false, cap: 50, redacted: 0, failures: [], searched: { terminals: 1, chats: 0 } }, workSearch })).filter((r) => r.scope === 'search')
+  const task = byId(rows, 'search.task.a'), kept = byId(rows, 'search.retained.o1'), scope = byId(rows, 'search.scope')
+  if (task !== undefined) task.run()
+  ok('work-search.rows.1 a task hit frames its card; a card-less retained hit is disabled by name; the scope names tasks and this workspace; no-match is not said over task hits',
+    task !== undefined && task.disabledReason === undefined && shown[0] === 'card-a' &&
+      kept !== undefined && /no longer on the canvas/.test(kept.disabledReason || '') &&
+      scope !== undefined && /2 tasks/.test(scope.title) && /this workspace/.test(scope.title) &&
+      byId(rows, 'search.none') === undefined,
+    JSON.stringify(rows.map((r) => [r.id, r.title, r.disabledReason])))
+}
+
 const SHELL = { id: 'shell', name: 'Login shell', available: true, builtIn: true, isDefault: true, subtitle: '~' }
 const CLAUDE = { id: 'claude', name: 'Claude', available: false, builtIn: true, isDefault: false, subtitle: '~' }
 const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: false, isDefault: false, subtitle: '~/work' }
@@ -757,8 +779,9 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   // M146/M149: `Zoom to fit` carries NO chord hint — ⌘1 runs useViewport's
   // fitAll (every panel), not the selection-aware verb, and a hint naming it
   // lied when a selection existed (the Act II critic); still one ⌘N.
+  // M313: Open in editor carries its own chord (⌘⇧E), a different key again.
   ok('48 only the default preset advertises Cmd+N',
-    withHint.sort().join(',') === 'canvas.fit=\u23180,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
+    withHint.sort().join(',') === 'canvas.fit=\u23180,editor.open=\u2318\u21e7E,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
     withHint.join(','))
 }
 
@@ -2684,6 +2707,36 @@ const WS = [
     typeof noMates === 'string' && /teammate/i.test(noMates) && typeof placeless === 'string' && /place/i.test(placeless) && /Teammates pane/.test(placeless) &&
       fine === null && typeof summary === 'string' && /fix the parser/.test(summary) && /work\/api/.test(summary) && /ada/.test(summary),
     JSON.stringify({ noMates, placeless, fine, summary }))
+}
+
+// Brief #19 — the advanced features, where they become relevant. From what is
+// true of ONE panel: at most three doors, each said as its benefit, none where
+// it does not apply, and each running a verb the palette already holds.
+{
+  const doors = (f) => P.advancedDoors({ kind: 'chat', agentic: true, hasCwd: true, teammate: false, taskMembers: 0, watched: false, ...f }).map((d) => d.id)
+  ok('advanced.1 a door appears where it applies — a free agent chat is offered a teammate, a watcher and a skill; a plain terminal a watcher and a workflow; a panel in a task of several its arrangement first',
+    doors({}).join() === 'teammate,watcher,skill' &&
+      doors({ kind: 'terminal', agentic: false }).join() === 'watcher,workflow' &&
+      doors({ taskMembers: 3 })[0] === 'arrangement',
+    JSON.stringify([doors({}), doors({ kind: 'terminal', agentic: false }), doors({ taskMembers: 3 })]))
+  ok('advanced.2 never where it does not apply — a teammate chat is not offered a teammate, a watched directory not a watcher, a note nothing — and never more than three',
+    !doors({ teammate: true }).includes('teammate') && !doors({ watched: true }).includes('watcher') &&
+      doors({ kind: 'note', agentic: false, hasCwd: false }).length === 0 &&
+      doors({ taskMembers: 2 }).length === P.ADVANCED_DOOR_CAP,
+    JSON.stringify(doors({ taskMembers: 2 })))
+  ok('advanced.3 each door says what it GIVES, and runs a verb the palette already holds (no new action)',
+    Object.values(P.ADVANCED_DOORS).every((d) => d.benefit.length > 30 && !/^(a|an|the) /i.test(d.benefit)) &&
+      (() => {
+        const canvas = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+        return /a\.openTeammates\(\)/.test(canvas) && /a\.openToolbox\(id\)/.test(canvas) && /a\.createObject\('workflow'\)/.test(canvas) && /a\.beginWatcher\(\)/.test(canvas) && /a\.beginSaveTemplate\(/.test(canvas)
+      })())
+  ok('advanced.4 the workflow editor has an obvious expanded view — a labelled toolbar verb over the frame\'s own maximise, and the diagram refits to it',
+    (() => {
+      const fs = require('node:fs')
+      const node = fs.readFileSync(join(__dirname, '..', 'src', 'renderer', 'workflow', 'WorkflowNode.tsx'), 'utf8')
+      const flow = fs.readFileSync(join(__dirname, '..', 'src', 'renderer', 'workflow', 'WorkflowFlow.tsx'), 'utf8')
+      return /data-workflow-expand=/.test(node) && /'Expand editor'/.test(node) && /marks\.maximise/.test(node) && /fitKey=\{expanded \? 1 : 0\}/.test(node) && /flow\.fitView\(/.test(flow)
+    })())
 }
 
 const failed = results.filter((r) => !r.pass)

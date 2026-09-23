@@ -3,7 +3,7 @@ import { addTotals } from '@shared/cost'
 import type { AgentSessionEvent, AgentSessionSnapshot } from '@shared/agent-session'
 import type { TranscriptTurn } from '@shared/transcript'
 import type { AutoStatus } from '@shared/auto'
-import { toolArgument, type LiveMessage } from './chat-model'
+import { approvalAction, toolArgument, type LiveMessage } from './chat-model'
 import type { PendingApproval } from '@renderer/shell/rail-sections'
 
 /**
@@ -103,11 +103,53 @@ function update(id: string, next: ChatState): void {
 let approvalSnapshot: PendingApproval[] = []
 let approvalKey = ''
 const approvalListeners = new Set<() => void>()
+/**
+ * #16. Requests a person has ANSWERED on this renderer whose
+ * `permission-answered` has not arrived yet, keyed `id/requestId`. Without
+ * it each surface cleared on main's round trip, and the three that showed a
+ * request (the queue, the chat card, Orchestrate) let a second click land in
+ * the gap — main refused it, but the person saw a button that looked live.
+ * Marked here, every surface drops the request in the same frame. An entry
+ * leaves when main's snapshot no longer holds the request (the normal path)
+ * or when the answer failed (`unmarkAnswered`), so the set cannot grow.
+ */
+const answered = new Set<string>()
+// The chat card reads its pending list off its own snapshot, which a mark
+// does not replace — so it subscribes through `useApprovals` (whose snapshot
+// a mark DOES replace) and filters with `isAnswered`.
+export function markAnswered(id: string, requestId: string): void {
+  answered.add(`${id}/${requestId}`)
+  approvalKey = '\0'
+  syncApprovals()
+}
+export function unmarkAnswered(id: string, requestId: string): void {
+  if (!answered.delete(`${id}/${requestId}`)) return
+  approvalKey = '\0'
+  syncApprovals()
+}
+/** Whether this request was answered here and main has not confirmed it yet — the chat card's filter. */
+export function isAnswered(id: string, requestId: string): boolean {
+  return answered.has(`${id}/${requestId}`)
+}
 function syncApprovals(): void {
   const next: PendingApproval[] = []
+  const live = new Set<string>()
   for (const [id, state] of states) {
-    for (const p of state.snapshot?.pending ?? []) next.push({ id, requestId: p.requestId, toolName: p.toolName, argument: toolArgument(p.input) })
+    for (const p of state.snapshot?.pending ?? []) {
+      const key = `${id}/${p.requestId}`
+      live.add(key)
+      if (answered.has(key)) continue
+      const full = approvalAction(p.input)
+      next.push({
+        id, requestId: p.requestId, toolName: p.toolName, argument: toolArgument(p.input),
+        action: full.action, actionIsCode: full.code,
+        ...(full.rest === undefined ? {} : { rest: full.rest }),
+        ...(p.description === undefined || p.description === '' ? {} : { description: p.description }),
+        ...(state.snapshot?.cwd === undefined || state.snapshot.cwd === '' ? {} : { cwd: state.snapshot.cwd })
+      })
+    }
   }
+  for (const k of answered) if (!live.has(k)) answered.delete(k)
   const key = next.map((a) => `${a.id}/${a.requestId}`).join('\n')
   if (key === approvalKey) return
   approvalKey = key

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, type JSX } from 'react'
 import '@xyflow/react/dist/style.css'
-import { Background, Controls, Handle, MiniMap, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
+import { Background, Controls, Handle, MiniMap, Position, ReactFlow, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import { useStore as useZustandStore } from 'zustand'
 import { motion, useReducedMotion } from 'motion/react'
 import type { StoreApi } from 'zustand/vanilla'
@@ -15,11 +15,20 @@ const FAMILY: Record<string, FlowBlock['family']> = { chat: 'agent', orchestrato
 /** Above this many blocks `fitView` stops being legible and the map starts paying. */
 const MINIMAP_FROM = 12
 
+/*
+ * Brief #21. NO `layout` on the block. React Flow moves a node by writing
+ * its wrapper's transform on every pointer move; Motion's layout projection
+ * reads any position change it sees on a re-render as something to spring
+ * TOWARDS, so a drag that re-rendered the block (a selection landing
+ * mid-drag, an issue badge appearing) trailed the pointer instead of sitting
+ * under it. Dragging tracks input directly; only the block's own states
+ * (arrival, selection, hover, press) animate.
+ */
 function WorkflowBlock({ data, selected }: NodeProps<Node<FlowBlock>>): JSX.Element {
   const reduced = useReducedMotion()
   return <motion.div className={`workflow-flow__block${selected ? ' workflow-flow__block--selected' : ''}`} data-workflow-block={data.key} data-workflow-block-kind={data.kind} data-family={data.family} data-workflow-issue={data.issue?.length ? 'true' : undefined}
     initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: selected ? 1.025 : 1 }} whileHover={reduced ? undefined : { y: -2 }} whileTap={reduced ? undefined : { scale: 0.985 }}
-    transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 30, mass: 0.45 }} layout>
+    transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 30, mass: 0.45 }}>
     <Handle type="target" position={Position.Left} className="workflow-flow__handle" />
     <span className="workflow-flow__kind">{data.sublabel}</span>
     <strong className="workflow-flow__label">{data.label}</strong>
@@ -38,6 +47,24 @@ export interface WorkflowFlowProps {
   onSelect: (key: string | null) => void
   onMove: (key: string, x: number, y: number) => void
   onConnect: (from: string, to: string) => void
+  /** Brief #19. Changes when the panel is expanded or restored: the diagram refits to the new size. */
+  fitKey?: number
+}
+
+/**
+ * Refit when `fitKey` changes — never on mount (ReactFlow's own `fitView`
+ * does that) and after the frame has taken its new size, which lands a
+ * render or two after the maximise that changed it.
+ */
+function RefitOn({ fitKey }: { fitKey: number }): null {
+  const flow = useReactFlow()
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) { first.current = false; return }
+    const t = window.setTimeout(() => { void flow.fitView({ padding: 0.12 }) }, 90)
+    return () => window.clearTimeout(t)
+  }, [fitKey, flow])
+  return null
 }
 
 /** A self-contained React Flow island: it owns its camera and transient gestures only. */
@@ -67,6 +94,7 @@ export function WorkflowFlow(props: WorkflowFlowProps): JSX.Element {
       onConnect={(connection) => { if (connection.source !== null && connection.target !== null) props.onConnect(connection.source, connection.target) }}>
       <Background gap={16} size={1} />
       <Controls showInteractive={false} />
+      <RefitOn fitKey={props.fitKey ?? 0} />
       {/* M279 (polish). A map earns its corner only when the flow cannot be seen
           whole: on a four-block flow it covered the fourth block, inside a panel
           that already sits on a canvas with a map of its own. */}

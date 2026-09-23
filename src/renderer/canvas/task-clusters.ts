@@ -34,6 +34,7 @@ const TONE_RANK: Record<Tone, number> = {
   starting: 3,
   exited: 2,
   idle: 1,
+  done: 1,
   asleep: 1,
   none: 0,
   kind: 0

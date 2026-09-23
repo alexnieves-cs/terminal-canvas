@@ -22,6 +22,7 @@ import {
   type GapRow, type LedgerRow, type TimelineEntry, type TimelineFilter, type TimelineRead, type UsageRow
 } from '../shared/run-ledger'
 import { parseReviewIdentity } from '../shared/review-identity'
+import { isCheckRunId } from '../shared/check-output'
 
 export interface RunLedger {
   append(row: LedgerRow): Promise<void>
@@ -58,7 +59,8 @@ function runRowOf(raw: unknown): RunRow | null {
     startedAt: typeof r.startedAt === 'number' ? r.startedAt : 0,
     endedAt: typeof r.endedAt === 'number' ? r.endedAt : 0,
     exitCode: typeof r.exitCode === 'number' ? r.exitCode : null,
-    ...(tested === undefined ? {} : { tested })
+    ...(tested === undefined ? {} : { tested }),
+    ...(typeof r.outputId === 'string' && isCheckRunId(r.outputId) ? { outputId: r.outputId } : {})
   }
 }
 

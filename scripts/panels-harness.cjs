@@ -98,6 +98,8 @@ const {
   createBoardLane, repositoriesAnswer, createPlacesGate,
   createScrollbackLog,
   createRunLedger,
+  createCheckOutputStore,
+  createCombineRunner, createRepoSetupStore, createRecipeStore, createEditorOpener,
   createBaselineCapture,
   createReviewCommitter,
   createReviewDiscarder,
@@ -543,6 +545,8 @@ app.whenReady().then(async () => {
   // hold, not a getter, and a const below it is a TDZ throw at construction
   // (watched: the whole suite hung before its first check).
   const runLedger = createRunLedger({ file: join(mkdtempSync(join(tmpdir(), 'tc panels ledger ')), 'runs.jsonl') })
+  // M306. Mirrors stores.ts: one record per check run, referenced by the row.
+  const checkOutputs = createCheckOutputStore({ dir: mkdtempSync(join(tmpdir(), 'tc panels check-output ')) })
   const ptyManager = new PtyManager(
     () => win.webContents,
     () => backend,
@@ -607,7 +611,8 @@ app.whenReady().then(async () => {
       // M286. Mirrors stores.ts: a ledger row is stamped with the panel's
       // subject identity as its end mark lands. reviewEngine is declared
       // below and read at call time, the harness's usual forward closure.
-      identityOf: (panelId) => { const b = layoutStore.baseline(panelId); return b === undefined ? Promise.resolve(undefined) : reviewEngine.identityOf(b.root, b.sha) }
+      identityOf: (panelId) => { const b = layoutStore.baseline(panelId); return b === undefined ? Promise.resolve(undefined) : reviewEngine.identityOf(b.root, b.sha) },
+      outputs: checkOutputs
     }
   )
 
@@ -868,6 +873,39 @@ app.whenReady().then(async () => {
   // M58. Where the next export lands; the harness's own save dialog answer.
   let exportTarget = null
   const WORKTREES_DIR = join(mkdtempSync(join(tmpdir(), 'tc panels worktrees ')), 'worktrees')
+  // M311–M314. The workflow kit over real stores in scratch directories. The
+  // editor opener is REAL down to the OS: `launch` records instead of
+  // spawning, so a check can read which editor and argv a click produced.
+  const editorOpens = []
+  const kitDir = mkdtempSync(join(tmpdir(), 'tc panels kit '))
+  const kitMainRootOf = async (cwd) => {
+    const a = await reviewEngine.resolveRepo(cwd)
+    return a.kind === 'root' ? reviewEngine.commonRootOf(a.root) : null
+  }
+  const kit = {
+    combine: createCombineRunner({ run: fencedGitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir: WORKTREES_DIR }).run,
+    ...(() => {
+      const setup = createRepoSetupStore({
+        dir: join(kitDir, 'repo-setup'), mainRootOf: kitMainRootOf,
+        lanesOf: (root) => layoutStore.worktrees().filter((w) => w.root === root).map((w) => w.path),
+        loginEnv: () => loginEnv, outputs: checkOutputs, isPortFree: async () => true
+      })
+      return { setupRead: (c) => setup.read(c), setupSave: (r) => setup.save(r), setupPrepare: (r) => setup.prepare(r) }
+    })(),
+    editorOpen: createEditorOpener({
+      pref: () => String(layoutStore.getSetting('files.editor') ?? 'auto'),
+      which: (bin) => (bin === 'code' ? '/usr/local/bin/code' : null),
+      hasApp: () => false,
+      exists: existsSync,
+      launch: async (bin, args) => { editorOpens.push({ bin, args }); return null },
+      openUrl: async (url) => { editorOpens.push({ url }) },
+      openPath: async (path) => { editorOpens.push({ path }); return '' }
+    }),
+    ...(() => {
+      const recipes = createRecipeStore({ dir: kitDir })
+      return { recipeList: () => recipes.list(), recipeSave: (r) => recipes.save(r), recipeDelete: (id) => recipes.remove(id) }
+    })()
+  }
   const worktreeManager = createWorktreeManager({
     run: realGitRunner,
     resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
@@ -1120,7 +1158,8 @@ app.whenReady().then(async () => {
     ledger: { append: (row) => runLedger.append(row) },
     onState: (id, state) => { if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.WATCHER_STATE, { id, ...state }) },
     // M286. Mirrors watch-handlers.ts: what the run tested, against the tree's HEAD.
-    identityOf: (cwd) => reviewEngine.identityAtHead(cwd)
+    identityOf: (cwd) => reviewEngine.identityAtHead(cwd),
+    outputs: checkOutputs
   })
   const watcherHandlers = {
     create: (req) => {
@@ -1666,7 +1705,11 @@ app.whenReady().then(async () => {
   // believes the record is empty, and the Electron tier proves a different app
   // with nothing red. Every future collaborator has to be added here too.
   (filter, limit) => runLedger.timeline(filter, limit),
-  async (row) => { try { await runLedger.append(row); return true } catch { return false } })
+  async (row) => { try { await runLedger.append(row); return true } catch { return false } },
+  // M306. The check-output door, on the harness's own store (the same trap).
+  (runId) => checkOutputs.read(runId),
+  // M311–M314. The kit, on the harness's own stores (the same trap again).
+  kit)
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -1889,7 +1932,7 @@ app.whenReady().then(async () => {
     })()`)
 
     const ctx = {
-      createPoolCaller, requestFromRendererWith, harnessAttachmentsDir, harnessStarterDir, readImage, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, zoomToScale,
+      editorOpens, kit, createPoolCaller, requestFromRendererWith, harnessAttachmentsDir, harnessStarterDir, readImage, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, zoomToScale,
       state,
     }
     await body(ctx)

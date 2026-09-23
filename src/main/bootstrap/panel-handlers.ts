@@ -21,6 +21,7 @@ import { resolveTranscript, readFrom as readTranscriptFrom } from '../transcript
 import { askSave, inDownloads, liveWindow } from './dialogs'
 import type { Stores } from './stores'
 import type { MainState } from './context'
+import type { EditorOpenResult, EditorTarget } from '../../shared/editor-open'
 
 /**
  * M37. The worktree verbs. A reveal is `shell.showItemInFolder`, which is the
@@ -99,12 +100,18 @@ export function createEnvReporter(state: MainState, stores: Stores, which: (comm
  * (link-open.ts); this does the two shell calls and turns their outcomes into
  * a result — never a navigation of this window.
  */
-export function createLinkHandlers(stores: Stores) {
+export function createLinkHandlers(stores: Stores, editorOpen?: (t: EditorTarget) => Promise<EditorOpenResult>) {
   return {
     open: async (req: { panelId: string; target: string }) => {
       const cwd = stores.ptyManager.list().find((s) => s.panelId === req.panelId)?.cwd ?? homedir()
       const r = resolveLinkOpen({ target: req.target, cwd }, { home: homedir(), exists: existsSync })
       if (r.kind === 'url') { await shell.openExternal(r.url); return { kind: 'opened' as const } }
+      // M313. A path WITH a line goes to the person's editor, at that line —
+      // the default app is the fallback the opener itself names, not the rule.
+      if (r.kind === 'path' && r.line !== undefined && editorOpen !== undefined) {
+        const opened = await editorOpen({ path: r.path, line: r.line, ...(r.col === undefined ? {} : { col: r.col }) })
+        return opened.kind === 'opened' ? { kind: 'opened' as const, ...(opened.note === undefined ? {} : { reason: opened.note }) } : { kind: 'refused' as const, reason: opened.reason }
+      }
       if (r.kind === 'path') {
         const err = await shell.openPath(r.path)
         return err ? { kind: 'refused' as const, reason: err } : (r.note ? { kind: 'opened' as const, reason: r.note } : { kind: 'opened' as const })

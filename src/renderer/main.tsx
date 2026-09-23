@@ -9,6 +9,7 @@ import { App } from './App'
 import { installDropGuard } from './drop-guard'
 import { LAST_VERSION_KEY, type StartupInput } from './canvas/splash'
 import { stampBootTheme } from './canvas/useTheme'
+import { noteBootIssue } from './session/boot-issues'
 
 // Installed before React mounts, and never uninstalled: an unhandled file drop
 // navigates the renderer, which kills every PTY in the window. Nothing about
@@ -98,6 +99,7 @@ async function boot(): Promise<void> {
     initial = await window.canvas.layout.load()
   } catch (error: unknown) {
     console.error('[layout] could not load the saved canvas; opening a fresh one', error)
+    noteBootIssue('The saved canvas could not be read, so a fresh one opened in its place.')
     // Empty panels, not a constructed fallback: Canvas already knows what an
     // empty canvas means (firstRunPanels()), so this reuses that path instead
     // of inventing a second "what does no data look like" decision.
@@ -124,6 +126,7 @@ async function boot(): Promise<void> {
     // An empty set means "everything restores dormant" — the M4b behaviour,
     // which is the safe direction to fail in: it spawns nothing.
     console.warn('[boot] could not list live sessions; restoring every panel dormant', error)
+    noteBootIssue('This app could not ask which sessions were still running, so every terminal was restored stopped — some may still be running; starting one reconnects it.')
   }
 
   // Every panel id in every workspace, not just the active one.

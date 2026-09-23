@@ -9,7 +9,7 @@ import { Menu, MenuTrigger, MenuContent, MenuItem } from '@renderer/primitives'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
 import type { RunNodeSupervision } from '@shared/run-outcome'
-import { retainedNextAction, type RetainedOutcome } from '@shared/retained-outcomes'
+import { retainedNextAction, retainedRefsWord, type RetainedOutcome } from '@shared/retained-outcomes'
 import type { ReviewHandoff } from '@shared/review-readiness'
 import { SWARM_LIST, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 
@@ -236,6 +236,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
               {props.execution !== undefined && <div><dt>execution</dt><dd data-work-execution data-tone={props.execution.tone}>{props.execution.word}</dd></div>}
               {props.retainedOutcome !== undefined && <div><dt>last outcome</dt><dd data-work-outcome={props.retainedOutcome.execution}>{props.retainedOutcome.execution.replace('-', ' ')}</dd></div>}
               {props.retainedOutcome !== undefined && <div><dt>source</dt><dd data-work-outcome-source="unavailable">the closed lane is unavailable; no session was reopened</dd></div>}
+              {props.retainedOutcome?.refs !== undefined && <div><dt>left</dt><dd data-work-outcome-refs>{retainedRefsWord(props.retainedOutcome.refs)}</dd></div>}
               {props.retainedOutcome !== undefined && <div><dt>next</dt><dd data-work-next-action>{retainedNextAction(props.retainedOutcome)}</dd></div>}
               {/* M202. Absent, never a zero-value word: a card whose lane has
                   not been read yet says nothing about review rather than

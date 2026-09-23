@@ -60,4 +60,23 @@ module.exports = {
   /* M286. Revision-bound check evidence: pure over ledger rows, watcher
      outcomes and the M285 identity. */
   ...require('../src/shared/check-evidence'),
+  /* M307. The reviewer's side: line comments, the follow-up they compose,
+     and the finished-is-not-verified judgment — pure, this suite's tier. */
+  ...require('../src/shared/review-comments'),
+  ...require('../src/shared/work-items'),
+  /* M309. The return briefing — pure over the durable record and the inbox. */
+  ...require('../src/shared/return-briefing'),
+  /* M310. The flagship flow's joins — pure. */
+  ...require('../src/shared/task-flow'),
+  /* M311–M314. The workflow kit: combine's plan and its runner (real git),
+     the repository setup and its store, recipes and their store, the editor
+     plan and its opener. */
+  ...require('../src/shared/combine'),
+  ...require('../src/main/combine-runner'),
+  ...require('../src/shared/repo-setup'),
+  ...require('../src/main/repo-setup-store'),
+  ...require('../src/shared/recipes'),
+  ...require('../src/main/recipe-store'),
+  ...require('../src/shared/editor-open'),
+  ...require('../src/main/kit'),
 }

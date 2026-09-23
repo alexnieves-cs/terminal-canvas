@@ -14,6 +14,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 import { useEdgeArriving } from '@renderer/canvas/useEdgeActivity'
 import { useLastLine } from '@renderer/session/last-line-store'
+import type { AdvancedDoor, AdvancedDoorId } from '@renderer/canvas/advanced-doors'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -76,6 +77,8 @@ export interface PanelMarks {
   lens?: ReadonlyMap<string, string> | null
   /** M204 (D08). The ⋯ menu's task section: which task this panel is part of, and the three verbs. Absent in a fixture. */
   task?: { of: (id: string) => TaskMenuFact; show: (id: string) => void; related: (id: string) => void; arrange: (id: string) => void }
+  /** Brief #19. The advanced features relevant to THIS panel, asked when the menu opens, and the verb each runs. Absent in a fixture. */
+  advanced?: { of: (id: string) => AdvancedDoor[]; run: (id: string, door: AdvancedDoorId) => void }
 }
 /** M204 (D08). What the ⋯ menu knows about a panel's task, asked when it opens. */
 export type TaskMenuFact = { kind: 'none' } | { kind: 'one'; title: string; related: boolean } | { kind: 'many'; titles: string[] }
@@ -113,6 +116,8 @@ export interface PanelFrameProps {
   state?: PanelStateWord
   /** M76. What the summary tier shows UNDER the state word — a chat's pending question with its verbs. */
   far?: ReactNode
+  /** #13. Configuration the kind moved out of its header (a chat's folder · branch · model): a line under the kind in the ⋯ menu, where it is looked for rather than read at rest. */
+  menuDetail?: ReactNode
   /** null: no close control (the merged view's read-only geometry). */
   close: PanelFrameClose | null
   /** The terminal's enter animation, on the motion wrapper. */
@@ -128,7 +133,7 @@ const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState,
-  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore
+  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore, menuDetail
 }: PanelFrameProps): JSX.Element {
   // M233. Subscribed per panel id, so a frame re-renders for its OWN
   // arrivals and nobody else's — the same per-id discipline agent-state-store
@@ -296,6 +301,7 @@ export function PanelFrame({
             <div className="pf__menu" role="menu" ref={menuRef} data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={onMenuKey}>
               <div className="pf__menu-title" data-panel-menu-title>{title}</div>
               <div className="pf__note">{kind}</div>
+              {menuDetail !== undefined && <div className="pf__note pf__menu-detail" data-panel-menu-detail>{menuDetail}</div>}
               {/* M204 (D08). The contextual door onto the task verbs, on EVERY
                   member and not only the card. A panel in two tasks says so
                   and names both rather than choosing; a panel in none shows
@@ -312,6 +318,27 @@ export function PanelFrame({
                     <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
                     <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
                     <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>
+                  </div>
+                )
+              })()}
+              {/* Brief #19. Where the advanced features become relevant: at most
+                  three, chosen from what is true of this panel, each said as what
+                  it gives. No section when none applies — an empty heading on
+                  every menu would be noise, the task section's rule. */}
+              {marks.advanced !== undefined && !marks.readOnly && (() => {
+                const doors = marks.advanced.of(id)
+                if (doors.length === 0) return null
+                const adv = marks.advanced
+                return (
+                  <div className="pf__menu-advanced" data-panel-menu-advanced={doors.length}>
+                    <div className="pf__note">do more with this</div>
+                    {doors.map((d) => (
+                      <button key={d.id} type="button" role="menuitem" className="pf__verb pf__verb--word pf__menu-door" data-panel-menu-door={d.id} title={d.benefit}
+                        {...shellControl(() => { setMenuOpen(false); adv.run(id, d.id) })}>
+                        <span>{d.label}</span>
+                        <span className="pf__menu-benefit">{d.benefit}</span>
+                      </button>
+                    ))}
                   </div>
                 )
               })()}

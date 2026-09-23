@@ -511,6 +511,19 @@ export const SETTINGS: readonly SettingDef[] = [
     category: FILES_CATEGORY
   },
   {
+    // M313. Where "Open in editor" goes. `auto` takes the first editor CLI on
+    // the login PATH (editor-open.ts's order), then an installed editor's URL
+    // scheme, then the file's default app — and says which it used.
+    id: 'files.editor',
+    label: 'Open files in',
+    description: 'the editor that “Open in editor” uses for a file at a line, or a whole worktree',
+    keywords: ['editor', 'vscode', 'code', 'cursor', 'zed', 'sublime', 'idea', 'jetbrains', 'open', 'line', 'ide'],
+    type: 'enum',
+    default: 'auto',
+    values: ['auto', 'vscode', 'cursor', 'windsurf', 'zed', 'sublime', 'idea', 'webstorm', 'system'],
+    category: FILES_CATEGORY
+  },
+  {
     id: 'files.showHidden',
     planWritable: true,
     label: 'Show hidden files',

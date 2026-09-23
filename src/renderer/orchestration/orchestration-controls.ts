@@ -16,6 +16,7 @@
  * sessions whose CLI reports a dollar figure; every other session reads
  * Unknown, and no universal cap is implied across providers that report none.
  */
+import { NEEDS_YOU } from '@shared/attention-words'
 import { BACKENDS, type AgentBackend } from '@shared/agent-backends'
 import { windowUtilization, type RateLimitState } from '@shared/rate-limit'
 
@@ -113,7 +114,7 @@ export type OrchStandingKind = 'running' | 'idle' | 'stopped' | 'interrupted' | 
 
 export function orchSessionStanding(input: { state: string; exitCode?: number | null; lastTurn?: OrchLastTurn }): { kind: OrchStandingKind; word: string } {
   const cut = input.lastTurn !== undefined && (input.lastTurn.kind === 'interrupted' || (input.lastTurn.kind === 'aborted' && input.lastTurn.reason === 'interrupt-timeout'))
-  if (input.state === 'wants-you') return { kind: 'waiting', word: 'waiting on you' }
+  if (input.state === 'wants-you') return { kind: 'waiting', word: NEEDS_YOU } // 4.1: the one state word
   if (GENERATING.has(input.state)) return { kind: 'running', word: 'running — a turn is in flight' }
   // An interrupt the CLI answered leaves a partial turn; one it ignored ends in
   // main's kill (interrupt-timeout) and the process is gone until the next send.

@@ -515,7 +515,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // this list applies — it floats over the canvas, it is transient, and it
   // separates from whatever happens to be under it — so it takes --e-3 and is
   // named here rather than being the one surface that dodges the rule.
-  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.shell--inspector-float|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.canvas-toast$/
+  // M309. `.briefing` is the return briefing, which floats over the canvas in
+  // the resume banner's own slot and takes its elevation for the same reason.
+  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.shell--inspector-float|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.briefing$|\.canvas-toast$/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
@@ -1246,7 +1248,12 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // lands in the inspector's Activity tab; an arrival, panel-enter's family.
   // tier-in / tier-out: the zoom-level crossfade between card-detail tiers —
   // opacity only, on layers that are never layout (tier-fade.1).
-  const allowed = ['activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-live-type', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'tier-in', 'tier-out', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  // sheet-enter: a creation sheet's arrival inside the palette — its own
+  // keyframe because palette-enter carries the palette's centring translate,
+  // which clipped every sheet by half its width. first-arrive: the first
+  // task's guide arrives ONCE beside its conversation's cluster-arrive, the
+  // same fade and 6px rise — quieter than panel-enter's spring, never a scale.
+  const allowed = ['first-arrive', 'sheet-enter', 'activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-live-type', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'tier-in', 'tier-out', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a spring rise (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
@@ -1417,6 +1424,73 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     !!halo && /box-shadow:\s*0 0 0 3px var\(--amber\)/.test(halo.body) && /pointer-events:\s*none/.test(halo.body) &&
       timer !== undefined && timer === cssMs,
     JSON.stringify({ found: !!halo, timer, cssMs }))
+}
+
+// A sheet inside the palette must never animate with a keyframe that carries
+// the palette's own centring translate: with fill `both` it held every sheet
+// shifted left by half its width under the palette's overflow:hidden, and the
+// labels were cut off at every window size (start-work.png). No DOM check can
+// see a clip; this reads the keyframe the sheet actually uses. And a long
+// sheet scrolls INSIDE the palette rather than running off the window.
+{
+  const kf = (name) => (bare.match(new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?\\})\\s*\\}`)) || [])[1] ?? ''
+  const sheetAnims = all.filter((r) => /(^|,)\s*\.sheet\s*$/.test(r.sel) && /animation:/.test(r.body)).map((r) => (r.body.match(/animation:\s*([\w-]+)/) || [])[1]).filter((n) => n !== 'none')
+  const clipped = sheetAnims.filter((n) => /translateX\(-50%\)/.test(kf(n)))
+  const cap = all.some((r) => /\.palette:has\(>\s*\.sheet\)/.test(r.sel) && /max-height:/.test(r.body))
+  const scroll = all.some((r) => /\.palette\s*>\s*\.sheet/.test(r.sel) && /overflow-y:\s*auto/.test(r.body) && /min-height:\s*0/.test(r.body))
+  ok('sheet-clip.1', 'a creation sheet arrives on a keyframe with no centring translate, and a long sheet scrolls inside a height-capped palette',
+    sheetAnims.length > 0 && clipped.length === 0 && cap && scroll, JSON.stringify({ sheetAnims, clipped, cap, scroll }))
+}
+
+// Switching Canvas ⇄ Orchestrate is a crossfade: neither page scales or
+// translates, which read as the camera moving on a view that did not.
+{
+  const behind = all.filter((r) => /\.canvas--behind-orch\s*$/.test(r.sel) && !/prefers-reduced/.test(r.at ?? ''))
+  const enter = (bare.match(/@keyframes\s+orch-enter\s*\{([\s\S]*?\})\s*\}/) || [])[1] ?? ''
+  ok('switch-still.1', 'the canvas behind Orchestrate only fades, and Orchestrate arrives by opacity alone',
+    behind.length > 0 && behind.every((r) => [...r.body.matchAll(/transform:\s*([^;]+)/g)].every((x) => x[1].trim() === 'none')) && enter !== '' && !/transform/.test(enter),
+    JSON.stringify({ behind: behind.map((r) => r.body), enter }))
+}
+
+// Brief #21 — motion.tiers.1. ONE motion system for CSS and script. The
+// control and surface tiers are the stylesheet's --dur-1/--dur-2, restated
+// for script in src/renderer/motion.ts; the camera, Motion's overlays and the
+// zoom-tier ghost read that file rather than writing a number of their own
+// (they had drifted to 140/160/180ms for one kind of change).
+{
+  const read = (rel) => { try { return fs.readFileSync(path.join(__dirname, '..', rel), 'utf8') } catch { return '' } }
+  const motion = read('src/renderer/motion.ts')
+  const ms = (name) => Number((motion.match(new RegExp(`export const ${name} = (\\d+)`)) || [])[1])
+  const token = (name) => Number((bare.match(new RegExp(`--${name}:\\s*(\\d+)ms`)) || [])[1])
+  const control = ms('MOTION_CONTROL_MS') === token('dur-1')
+  const surface = ms('MOTION_SURFACE_MS') === token('dur-2')
+  const brief = ms('CAMERA_MAX_MS') > 0 && ms('CAMERA_MAX_MS') <= 400 && ms('CAMERA_MIN_MS') <= ms('CAMERA_MAX_MS')
+  const flight = /FLIGHT_MIN_MS = CAMERA_MIN_MS/.test(read('src/renderer/canvas/flight.ts')) && /FLIGHT_MAX_MS = CAMERA_MAX_MS/.test(read('src/renderer/canvas/flight.ts'))
+  const overlay = /MOTION_SURFACE_MS/.test(read('src/renderer/primitives/MotionSurface.tsx')) && !/duration:\s*0\.\d/.test(read('src/renderer/primitives/MotionSurface.tsx'))
+  const ghost = /TIER_FADE_MS = MOTION_SURFACE_MS/.test(read('src/renderer/canvas/tier-fade.ts'))
+  const easeCss = (bare.match(/--ease:\s*cubic-bezier\(([^)]*)\)/) || [])[1]?.split(',').map((x) => Number(x.trim())).join(',')
+  const easeJs = (motion.match(/MOTION_EASE[^=]*=\s*\[([^\]]*)\]/) || [])[1]?.split(',').map((x) => Number(x.trim())).join(',')
+  ok('motion.tiers.1', 'the control and surface tiers in motion.ts equal --dur-1/--dur-2 and --ease, the camera is brief, and flights, overlays and the tier ghost read those tiers',
+    control && surface && brief && flight && overlay && ghost && easeCss !== undefined && easeCss === easeJs,
+    JSON.stringify({ control, surface, brief, flight, overlay, ghost, easeCss, easeJs }))
+}
+
+// Brief #21 — motion.track.1. Dragging and resizing TRACK THE INPUT, and a
+// terminal's layout is never animated to reveal controls. No rule on a panel,
+// its frame or a terminal transitions or animates a GEOMETRY property (a
+// transition there is lag between the pointer and the thing it moves, and on
+// a terminal a moving box refits xterm and SIGWINCHes the agent — CLAUDE.md's
+// frame rule), and the workflow editor's blocks carry no Motion `layout`,
+// whose projection springs a dragged node towards where it already is.
+{
+  const geometry = /\b(width|height|min-width|min-height|max-width|max-height|top|left|right|bottom|inset|padding[\w-]*|margin[\w-]*|flex[\w-]*|grid-template[\w-]*|all)\b/
+  const panelish = /\.(panel|pf|xterm|terminal)(\b|__|\[|:)/
+  const moving = all.filter((r) => panelish.test(r.sel) && !/prefers-reduced/.test(r.at ?? '')).flatMap((r) =>
+    [...r.body.matchAll(/(?:^|;)\s*transition(?:-property)?\s*:([^;]*)/g)].map((m) => m[1]).flatMap((v) => v.split(',')).map((part) => part.trim().split(/\s+/)[0]).filter((prop) => geometry.test(prop)).map((prop) => `${r.sel.trim().slice(0, 50)} → ${prop}`))
+  const flow = (() => { try { return fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow', 'WorkflowFlow.tsx'), 'utf8') } catch { return '' } })()
+  const layoutProp = /<motion\.[\s\S]*?\blayout(?:=\{[^}]*\})?\s*>/.test(flow.replace(/\/\*[\s\S]*?\*\//g, ''))
+  ok('motion.track.1', 'no panel, frame or terminal rule transitions a geometry property, and the workflow blocks carry no Motion layout animation',
+    moving.length === 0 && flow !== '' && !layoutProp, JSON.stringify({ moving: moving.slice(0, 6), layoutProp }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ReviewIdentity } from '../shared/review-identity'
+import { createOutputCapture, mintCheckRunId, type CheckOutputRecord, type OutputCapture } from '../shared/check-output'
 import { agentArgs } from './agent-args'
 import { AGENT_CAPABILITIES } from '../shared/cost'
 import {
@@ -332,8 +333,8 @@ interface Session {
    * chooseSession's own comment in subagent-scan.ts.
    */
   spawnedAt: number
-  /** M52. The command in flight, from OSC 133 C to D. */
-  run: { command: string; startedAt: number } | null
+  /** M52. The command in flight, from OSC 133 C to D. M306: with its output, when a store is wired. */
+  run: { command: string; startedAt: number; capture: OutputCapture | null } | null
 }
 
 /** M52. The run ledger and the shell-integration directory, injected. */
@@ -357,6 +358,13 @@ export interface RunsDeps {
    * with no baseline answers undefined, which the row records as absence.
    */
   identityOf?: (panelId: PanelId) => Promise<ReviewIdentity | undefined>
+  /**
+   * M306. Where a marked command's exact output goes as its D mark lands.
+   * Optional and inert like `identityOf`, and for the same reason must be
+   * mirrored in `scripts/panels-harness.cjs`. Only a login shell with OSC 133
+   * ever opens a run, so an agent CLI's bytes are never accumulated here.
+   */
+  outputs?: { put(record: CheckOutputRecord): void }
 }
 
 export class PtyManager {
@@ -1406,27 +1414,53 @@ export class PtyManager {
     // M52. The marks: a command start opens a run, a command end closes it
     // into the ledger — a per-command event at human speed, from a scan that
     // already runs on every chunk. Never bumps anything higher-frequency.
-    for (const mark of scanned.marks) {
-      if (mark.kind === 'C') session.run = { command: mark.command, startedAt: this.runs.now() }
-      else if (mark.kind === 'D') {
+    // M306. `cursor` is where this chunk's not-yet-captured bytes begin: a
+    // C mark moves it past itself, a D mark closes the capture at its own end
+    // (the D sequence itself is stripped on display), and whatever follows
+    // the last mark is captured below while a run is still open.
+    let cursor = 0
+    for (let m = 0; m < scanned.marks.length; m += 1) {
+      const mark = scanned.marks[m]
+      const end = scanned.ends[m] ?? data.length
+      if (mark.kind === 'C') {
+        session.run = { command: mark.command, startedAt: this.runs.now(), capture: this.runs.outputs === undefined ? null : createOutputCapture() }
+        cursor = end
+      } else if (mark.kind === 'D') {
         const run = session.run
         session.run = null
+        run?.capture?.push(data.slice(cursor, end))
+        cursor = end
         if (run && this.runs.ledger) {
           const ledger = this.runs.ledger
+          const outputs = this.runs.outputs
           const endedAt = this.runs.now()
-          const row = { panelId: session.panelId, command: run.command, cwd: session.cwd, startedAt: run.startedAt, endedAt, exitCode: mark.exit }
+          const outputId = run.capture !== null && outputs !== undefined ? mintCheckRunId(session.panelId, run.startedAt) : undefined
+          const row = { panelId: session.panelId, command: run.command, cwd: session.cwd, startedAt: run.startedAt, endedAt, exitCode: mark.exit, ...(outputId === undefined ? {} : { outputId }) }
+          const capture = run.capture
+          // M306. The record and the row land together after one stamp, so
+          // the output a person opens names the revision the row claims.
+          const land = (tested: ReviewIdentity | undefined): void => {
+            if (outputId !== undefined && capture !== null) {
+              outputs?.put({
+                v: 1, runId: outputId, panelId: session.panelId, source: 'shell',
+                command: run.command, cwd: session.cwd, startedAt: run.startedAt, endedAt,
+                exitCode: mark.exit, signal: null,
+                ...(tested === undefined ? {} : { tested }),
+                ...capture.snapshot()
+              })
+            }
+            void ledger.append(tested === undefined ? row : { ...row, tested })
+          }
           // M286. The stamp is read as the end mark lands — the tree as the
           // command left it — and the row waits for it; a failed read writes
           // the row without a stamp rather than losing the row.
           const stamp = this.runs.identityOf
-          if (stamp === undefined) void ledger.append(row)
-          else void stamp(session.panelId).then(
-            (tested) => ledger.append(tested === undefined ? row : { ...row, tested }),
-            () => ledger.append(row)
-          )
+          if (stamp === undefined) land(undefined)
+          else void stamp(session.panelId).then(land, () => land(undefined))
         }
       }
     }
+    if (session.run?.capture && cursor < data.length) session.run.capture.push(cursor === 0 ? data : data.slice(cursor))
     // Output BEFORE bell, for this chunk. A panel's very first bytes may
     // contain a bell; bell-then-output would leave the machine in 'busy',
     // because the output event would overwrite the bell's state. This order

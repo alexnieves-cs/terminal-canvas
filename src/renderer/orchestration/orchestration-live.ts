@@ -25,6 +25,7 @@
 
 import type { ContentBlock } from '@shared/transcript'
 import { TONE_NEEDS_YOU, TONE_WORKING } from '@renderer/panels/panel-state'
+import { relativeToCheckout } from '@shared/combine'
 
 export type OrchLiveKind = 'read' | 'write' | 'run' | 'other'
 
@@ -54,6 +55,14 @@ export interface OrchLiveSessionInput {
   blocks: readonly ContentBlock[]
   /** A terminal's live command line (no blocks): one run event per distinct command. */
   command?: string
+  /**
+   * M311. The checkout the session works in (its cwd — a lane's worktree).
+   * A file is keyed by checkout + repo-relative path, so two lanes editing
+   * `src/api.ts` in their OWN worktrees are one file changed in separate
+   * checkouts (`alsoIn`), never `contended`; two sessions in ONE checkout
+   * are. Absent keeps the old key (the raw path) — one unnamed checkout.
+   */
+  checkout?: string
 }
 
 export interface OrchLiveEvent {
@@ -84,8 +93,16 @@ export interface OrchLiveFile {
   writers: string[]
   /** The island most of its writes came from (or its readers', for a file only read). */
   islandId: string | null
-  /** Two or more sessions wrote it: nobody can be named as its author. */
+  /** Two or more sessions wrote it IN THE SAME CHECKOUT: nobody can be named as its author. */
   contended: boolean
+  /** M311. The checkout this tower is in, when the sessions said. */
+  checkout?: string
+  /**
+   * M311. How many OTHER checkouts wrote the same repo-relative path — the
+   * separate-lane overlap that meets at integration (Combine), as distinct
+   * from `contended`, which is a hazard now.
+   */
+  alsoIn: number
 }
 
 export interface OrchLiveSession {
@@ -232,9 +249,11 @@ export function buildOrchLive(inputs: readonly OrchLiveSessionInput[], scrub: (t
   const events: OrchLiveEvent[] = []
   const files = new Map<string, OrchLiveFile & { islandVotes: Map<string | null, number> }>()
   const sessions: OrchLiveSession[] = []
-  const touch = (path: string, islandId: string | null): OrchLiveFile & { islandVotes: Map<string | null, number> } => {
-    let f = files.get(path)
-    if (f === undefined) { f = { path, name: baseName(path), added: 0, removed: 0, reads: 0, writers: [], islandId: null, contended: false, islandVotes: new Map() }; files.set(path, f) }
+  const touch = (raw: string, islandId: string | null, checkout: string | undefined): OrchLiveFile & { islandVotes: Map<string | null, number> } => {
+    const path = relativeToCheckout(raw, checkout)
+    const key = `${checkout ?? ''}\0${path}`
+    let f = files.get(key)
+    if (f === undefined) { f = { path, name: baseName(path), added: 0, removed: 0, reads: 0, writers: [], islandId: null, contended: false, ...(checkout === undefined ? {} : { checkout }), alsoIn: 0, islandVotes: new Map() }; files.set(key, f) }
     f.islandVotes.set(islandId, (f.islandVotes.get(islandId) ?? 0) + 1)
     return f
   }
@@ -264,7 +283,7 @@ export function buildOrchLive(inputs: readonly OrchLiveSessionInput[], scrub: (t
       events.push(ev)
       latest = ev
       if (path !== undefined && (tool.kind === 'write' || tool.kind === 'read')) {
-        const f = touch(path, s.islandId)
+        const f = touch(path, s.islandId, s.checkout)
         if (tool.kind === 'read') f.reads++
         else {
           f.added += tool.added
@@ -290,6 +309,11 @@ export function buildOrchLive(inputs: readonly OrchLiveSessionInput[], scrub: (t
     const { islandVotes: _votes, ...rest } = f
     return { ...rest, islandId: best, contended: f.writers.length > 1 }
   })
+  // M311. The same relative path WRITTEN in other checkouts: overlap, not contention.
+  for (const f of all) {
+    if (f.writers.length === 0) continue
+    f.alsoIn = new Set(all.filter((g) => g !== f && g.path === f.path && g.writers.length > 0 && g.checkout !== f.checkout).map((g) => g.checkout ?? '')).size
+  }
   // Written files first (by lines written), then read-only files by reads: the
   // towers a person came to watch are the ones changing.
   all.sort((a, b) => (b.added + b.removed) - (a.added + a.removed) || b.reads - a.reads || a.path.localeCompare(b.path))
@@ -383,4 +407,90 @@ export function orchLiveLayout(model: OrchLiveModel, islands: readonly { id: str
     const files = p.files.map((f, k) => ({ path: f.path, x: x + start + (k % p.cols) * FILE_PITCH, z: z + start + Math.floor(k / p.cols) * FILE_PITCH }))
     return { id: p.g.id, label: p.g.label, primary: p.primary, x, z, size: p.size, sessions, files }
   })
+}
+
+/**
+ * Brief #16. A BATCH is what the scene animates and the log says: a run of
+ * consecutive fresh events from one session that are the same act on the same
+ * thing — five edits to one file are one flight carrying `+14 −3`, a sweep of
+ * reads is one "Read 6 files". Without it a burst of forty edits is forty
+ * overlapping arcs nobody can read, and the callout's sentence changes faster
+ * than it can be read. Commands never merge: each one has its own outcome.
+ */
+export interface OrchLiveBatch {
+  /** The first event's key: stable, so a re-render never re-fires a batch. */
+  key: string
+  sessionId: string
+  kind: OrchLiveKind
+  /** Present when every event in the batch touched the same path. */
+  path?: string
+  /** Every distinct path the batch touched, first first — a read sweep scans each tower. */
+  paths: string[]
+  count: number
+  added: number
+  removed: number
+  /** The LAST write's token — what the file looks like now. */
+  token?: string
+  command?: string
+  ok: boolean | null
+  keys: string[]
+}
+
+export function orchLiveBatch(events: readonly OrchLiveEvent[]): OrchLiveBatch[] {
+  const out: OrchLiveBatch[] = []
+  for (const e of events) {
+    const prev = out[out.length - 1]
+    const joins = prev !== undefined && prev.sessionId === e.sessionId && prev.kind === e.kind && e.kind !== 'run' &&
+      (e.kind === 'read' || e.kind === 'other' || (e.path !== undefined && prev.path === e.path))
+    if (joins) {
+      prev.count++
+      prev.added += e.added
+      prev.removed += e.removed
+      prev.keys.push(e.key)
+      if (e.token !== undefined) prev.token = e.token
+      if (e.path !== undefined && !prev.paths.includes(e.path)) prev.paths.push(e.path)
+      if (prev.path !== e.path) delete prev.path
+      continue
+    }
+    out.push({
+      key: e.key, sessionId: e.sessionId, kind: e.kind,
+      ...(e.path !== undefined ? { path: e.path } : {}),
+      paths: e.path !== undefined ? [e.path] : [],
+      count: 1, added: e.added, removed: e.removed,
+      ...(e.token !== undefined ? { token: e.token } : {}),
+      ...(e.command !== undefined ? { command: e.command } : {}),
+      ok: e.ok, keys: [e.key]
+    })
+  }
+  return out
+}
+
+/**
+ * Commands that were running and now say how they ended. A run's event is
+ * keyed by its tool call, so when its tool_result lands the event is not FRESH
+ * (orchLiveFresh would never see it again) — without this the outcome, the one
+ * thing worth animating about a command, is never shown. `pending === null`
+ * (the lens just opened) resolves nothing: an outcome from before is history.
+ */
+export function orchLiveOutcomes(events: readonly OrchLiveEvent[], pending: ReadonlySet<string> | null): { resolved: OrchLiveEvent[]; pending: Set<string> } {
+  const next = new Set(events.filter((e) => e.kind === 'run' && e.ok === null).map((e) => e.key))
+  if (pending === null) return { resolved: [], pending: next }
+  return { resolved: events.filter((e) => pending.has(e.key) && e.ok !== null), pending: next }
+}
+
+/** A plain-words line for a batch or an outcome — the log reduced motion (and a paused view) reads instead of motion. */
+export function orchLiveLogLine(b: OrchLiveBatch | { outcome: OrchLiveEvent }): string {
+  if ('outcome' in b) {
+    const cmd = b.outcome.command !== undefined ? orchLiveClip(b.outcome.command, 40) : 'A command'
+    return `${cmd} ${b.outcome.ok === true ? 'passed' : 'failed'}`
+  }
+  const lines = b.added + b.removed > 0 ? ` +${b.added}${b.removed > 0 ? ` −${b.removed}` : ''}` : ''
+  const edits = b.count > 1 ? ` (${b.count} edits)` : ''
+  if (b.kind === 'write') return b.path !== undefined ? `Wrote ${orchLiveShortPath(b.path)}${lines}${edits}` : `Wrote${lines}${edits}`
+  if (b.kind === 'read') return b.paths.length > 1 ? `Read ${b.paths.length} files` : b.path !== undefined ? `Read ${orchLiveShortPath(b.path)}` : `Searched ${b.count === 1 ? 'once' : `${b.count} times`}`
+  if (b.kind === 'run') {
+    const cmd = b.command !== undefined ? orchLiveClip(b.command, 40) : 'a command'
+    return b.ok === null ? `Started ${cmd}` : `Ran ${cmd} — ${b.ok ? 'passed' : 'failed'}`
+  }
+  return b.count > 1 ? `Used ${b.count} tools` : 'Used a tool'
 }

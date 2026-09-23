@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CardDetail } from './card-detail'
+import { MOTION_SURFACE_MS } from '../motion'
 
 /**
  * Zoom-level crossfade for card-detail.ts's render tier.
@@ -17,7 +18,9 @@ import type { CardDetail } from './card-detail'
  *
  * Reduced motion: no ghost, the old instant swap.
  */
-export const TIER_FADE_MS = 180
+// Brief #21. The surface tier, plus a little: the ghost unmounts just AFTER
+// its `--dur-2` CSS fade ends, so the last frame of the fade is never cut.
+export const TIER_FADE_MS = MOTION_SURFACE_MS + 20
 
 function reducedMotion(): boolean {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }

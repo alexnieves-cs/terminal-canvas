@@ -62,7 +62,7 @@ export const TOOL_SCHEMA = {
 } as const
 
 export const TOOL_SYSTEM_PROMPT = [
-  'You design ONE small tool for a person, from their description. You cannot run anything; answer only with the JSON object.',
+  'You design ONE small tool for a person, from their description. You cannot run anything.',
   'Choose kind "workflow" when the tool is a sequence of steps, or kind "app" when it is something the person looks at and clicks.',
   'A workflow has nodes and edges. Every node has a unique "key", a "kind", and "dx"/"dy" (its offset in pixels, ~320 apart). Node kinds:',
   '- "terminal": { command, args? } — a command run in a terminal the person can see.',
@@ -75,25 +75,17 @@ export const TOOL_SYSTEM_PROMPT = [
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-/** The object inside an answer: the schema-validated one, or JSON in the text (fenced or bare). */
+/**
+ * The object inside an answer: the one `--json-schema` validated. A result with
+ * no `structured_output` is refused rather than scraped from its text — the
+ * schema is what makes the answer data, and a scraped object never passed it.
+ */
 function extractObject(raw: string): { kind: 'object'; value: Record<string, unknown> } | { kind: 'refused'; reason: string } {
   let envelope: unknown
   try { envelope = JSON.parse(raw) } catch { envelope = undefined }
   if (isRecord(envelope) && envelope.type === 'result') {
     if (envelope.is_error === true) return { kind: 'refused', reason: `the agent could not answer: ${typeof envelope.result === 'string' ? envelope.result : 'an error with no message'}` }
     if (isRecord(envelope.structured_output)) return { kind: 'object', value: envelope.structured_output }
-    raw = typeof envelope.result === 'string' ? envelope.result : ''
-  } else if (isRecord(envelope)) {
-    return { kind: 'object', value: envelope }
-  }
-  const text = raw.replace(/```(?:json)?\s*([\s\S]*?)```/i, '$1')
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start >= 0 && end > start) {
-    try {
-      const value: unknown = JSON.parse(text.slice(start, end + 1))
-      if (isRecord(value)) return { kind: 'object', value }
-    } catch { /* falls through to the refusal */ }
   }
   return { kind: 'refused', reason: 'the agent answered with something that is not a tool — try describing it again, in one or two sentences' }
 }

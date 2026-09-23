@@ -69,10 +69,101 @@ export function attemptOf(e: { type: string; button?: number; deltaMode?: number
  * of its own before a start, only a `hints.seen` id so it is shown once.
  */
 export type FirstTaskStatus = 'not-started' | 'starting' | 'ready' | 'streaming' | 'exited' | 'disposed'
-export function firstTaskHint(status: FirstTaskStatus | undefined, turns: number, sent: boolean): string | null {
+export function firstTaskHint(status: FirstTaskStatus | undefined, turns: number, sent: boolean, needsInput = false): string | null {
   if (status === 'exited' || status === 'disposed') return null
   if (status === undefined || status === 'not-started' || status === 'starting') return 'Your agent is starting.'
+  // A pending permission request stops the agent mid-turn: the status still
+  // reads `streaming`, so "working on it" would tell a person to wait for an
+  // agent that is waiting for THEM. It outranks every other sentence.
+  if (needsInput) return 'Your agent needs your input — answer it in the conversation.'
   if (status === 'streaming') return 'Your agent is working on it. Anything you type now is a follow-up.'
   if (turns === 0 && !sent) return 'Send your first message — your sentence is already in the composer.'
   return 'Your agent answered. Read it in the conversation, or type a follow-up.'
+}
+
+/**
+ * The conversation-only start's rail — Ask, or a folder with no lane — where
+ * there is no review to walk to: starting, working (or waiting on the person),
+ * answered. Read off the same state as the sentence, so the two never
+ * disagree. Null exactly when `firstTaskHint` is.
+ */
+export type FirstTaskRailStep = 'start' | 'work' | 'answered'
+export function firstTaskRail(status: FirstTaskStatus | undefined, turns: number, sent: boolean, needsInput = false): { step: FirstTaskRailStep; label: string; state: 'done' | 'current' | 'todo' }[] | null {
+  if (firstTaskHint(status, turns, sent, needsInput) === null) return null
+  const at = status === undefined || status === 'not-started' || status === 'starting' ? 0
+    : needsInput || status === 'streaming' || (turns === 0 && !sent) ? 1 : 2
+  const labels: [FirstTaskRailStep, string][] = [['start', 'Starting'], ['work', needsInput ? 'Needs your input' : 'Working'], ['answered', 'Answered']]
+  return labels.map(([step, label], i) => ({ step, label, state: i < at ? 'done' : i === at ? 'current' : 'todo' }))
+}
+
+/**
+ * M310. THE FLAGSHIP GUIDE — the first task, walked end to end. The first
+ * start's hint used to stop at "your agent answered"; the flow it is meant to
+ * teach goes on: review what changed, run the lane's checks, open the pull
+ * request. This is that walk as five steps, each read off the task's ACTUAL
+ * state (the conversation, the review mark's standing, the lane's watchers,
+ * the card's PR) — never a script that advances on a timer or a click.
+ *
+ * `firstTaskHint` above stays the sentence for the first two steps; this adds
+ * the rail and the step after. The action is always the REVIEW: that is where
+ * checks run and the PR opens, so the guide sends a person to one place.
+ */
+export type FlagshipStep = 'start' | 'work' | 'review' | 'checks' | 'pr'
+export interface FlagshipGuideFacts {
+  status: FirstTaskStatus | undefined
+  turns: number
+  sent: boolean
+  /** The conversation holds a pending permission request — the agent is waiting on the person. */
+  needsInput?: boolean
+  /** The review mark's standing (M285), undefined before the lane was read. */
+  standing?: 'none' | 'current' | 'stale' | 'unknown'
+  /** The lane holds changes to review. */
+  hasChanges: boolean
+  /** A watcher in the lane has passed its last run. */
+  checksPassed: boolean
+  github: boolean
+  pr: boolean
+}
+export interface FlagshipGuide {
+  steps: { step: FlagshipStep; label: string; state: 'done' | 'current' | 'todo' }[]
+  /** The agent is waiting on the person — the rail's current step says so, in the attention tone. */
+  needsInput?: boolean
+  sentence: string
+  /** The one verb: open the task's review. Absent while the agent still has the turn. */
+  action?: string
+}
+// The rail reads as the sequence a person lives through — starting, working,
+// ready to review — in the participle, because each step names what is
+// happening NOW, not a menu of stages. `work` is relabelled "Needs your input"
+// while the agent waits on the person (flagshipLabel below).
+const FLAGSHIP_LABELS: Record<FlagshipStep, string> = { start: 'Starting', work: 'Working', review: 'Ready to review', checks: 'Checks', pr: 'Pull request' }
+function flagshipLabel(step: FlagshipStep, needsInput: boolean): string {
+  return step === 'work' && needsInput ? 'Needs your input' : FLAGSHIP_LABELS[step]
+}
+export function flagshipGuide(f: FlagshipGuideFacts): FlagshipGuide | null {
+  const needsInput = f.needsInput === true
+  const first = firstTaskHint(f.status, f.turns, f.sent, needsInput)
+  if (first === null) return null
+  if (needsInput && f.status !== undefined && f.status !== 'not-started' && f.status !== 'starting') {
+    const order: FlagshipStep[] = ['start', 'work', 'review', 'checks', 'pr']
+    return { steps: order.map((step, i) => ({ step, label: flagshipLabel(step, true), state: i < 1 ? 'done' : i === 1 ? 'current' : 'todo' })), sentence: first, needsInput: true }
+  }
+  const answered = f.status !== 'streaming' && f.status !== 'starting' && f.status !== 'not-started' && f.status !== undefined && (f.turns > 0 || f.sent)
+  let current: FlagshipStep
+  let sentence: string
+  let action: string | undefined
+  if (f.status === undefined || f.status === 'not-started' || f.status === 'starting') { current = 'start'; sentence = first }
+  else if (!answered) { current = 'work'; sentence = first }
+  else if (!f.hasChanges) { current = 'work'; sentence = 'Your agent answered, and its lane holds no changes yet — reply in the conversation to keep it going.' }
+  else if (f.standing !== 'current') { current = 'review'; sentence = f.standing === 'stale' ? 'The changes moved since you reviewed — look again.' : 'Your agent finished a turn. Review what it changed — comment on any line and send the comments back.'; action = 'Review changes' }
+  else if (!f.checksPassed) { current = 'checks'; sentence = 'Reviewed. Now run the lane\'s checks — each run keeps its own output.'; action = 'Run checks' }
+  else if (f.github && !f.pr) { current = 'pr'; sentence = 'Reviewed and checked. Open the pull request — its body carries the outcome and the checks.'; action = 'Open pull request' }
+  else { return { steps: (['start', 'work', 'review', 'checks', 'pr'] as FlagshipStep[]).map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: f.pr ? 'The whole flow, done: reviewed, checked and a pull request open.' : 'Reviewed and checked — this task is ready.' } }
+  const order: FlagshipStep[] = ['start', 'work', 'review', 'checks', 'pr']
+  const at = order.indexOf(current)
+  return {
+    steps: order.map((step, i) => ({ step, label: FLAGSHIP_LABELS[step], state: i < at ? 'done' : i === at ? 'current' : 'todo' })),
+    sentence,
+    ...(action === undefined ? {} : { action })
+  }
 }

@@ -295,6 +295,10 @@ export function parseDiffLines(
   const raw = source.split('\n')
   if (raw.length > 0 && raw[raw.length - 1] === '') raw.pop()
   const lines: DiffLine[] = []
+  // M307. The running line numbers, reset by each hunk header. Null until a
+  // header parses: a line whose number is not KNOWN carries none.
+  let oldNo: number | null = null
+  let newNo: number | null = null
   for (const text of raw.slice(0, maxLines)) {
     let kind: DiffLine['kind']
     if (text.startsWith('+++') || text.startsWith('---')) kind = 'meta'
@@ -304,7 +308,24 @@ export function parseDiffLines(
     else if (text.startsWith('\\')) kind = 'meta'
     else if (/^(diff --git|index |new file mode|deleted file mode|old mode|new mode|similarity index|rename (from|to)|Binary files )/.test(text)) kind = 'meta'
     else kind = 'context'
-    lines.push({ kind, text })
+    if (kind === 'hunk') {
+      const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(text)
+      oldNo = m === null ? null : Number(m[1])
+      newNo = m === null ? null : Number(m[2])
+      lines.push({ kind, text })
+    } else if (kind === 'add' && newNo !== null) {
+      lines.push({ kind, text, newNo })
+      newNo += 1
+    } else if (kind === 'del' && oldNo !== null) {
+      lines.push({ kind, text, oldNo })
+      oldNo += 1
+    } else if (kind === 'context' && oldNo !== null && newNo !== null) {
+      lines.push({ kind, text, oldNo, newNo })
+      oldNo += 1
+      newNo += 1
+    } else {
+      lines.push({ kind, text })
+    }
   }
   return { lines, truncated: Math.max(0, raw.length - lines.length) }
 }

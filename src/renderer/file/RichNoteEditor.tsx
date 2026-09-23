@@ -256,7 +256,7 @@ export function RichNoteEditor({ text, onChange, handleRef, onSave, onEscape }: 
   const register = (p: Pending | null): void => { pendingRef.current = p }
   const canLink = active !== null && active.mode === 'rich' && (blocks[active.index]?.kind === 'paragraph' || blocks[active.index]?.kind === 'heading')
 
-  return <div ref={root} className="rich-note" data-rich-note onKeyDown={(e) => {
+  return <div ref={root} className="rich-note" data-rich-note data-edit-owner onKeyDown={(e) => {
     if (e.metaKey && e.key === 's') { e.preventDefault(); onSave(); return }
     if (e.key === 'Escape') { e.preventDefault(); if (active !== null) cancel(); else if (link !== null) setLink(null); else onEscape() }
   }}>

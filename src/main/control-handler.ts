@@ -11,7 +11,7 @@
  */
 import { existsSync } from 'node:fs'
 import type { Preset } from '../shared/layout-schema'
-import type { ControlCanvasModel } from '../shared/ipc-contract'
+import type { BoardControlRequest, ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
 import { unreviewedPresetReason } from './presets'
 import type { ControlReply } from './control-server'
@@ -55,7 +55,7 @@ export interface ControlHandlerDeps {
    * a main-side write would be overwritten by its next coalesced save).
    * `null` is "no window answered" — a named refusal, never a silent ok.
    */
-  board?: (req: { op: 'add'; title: string } | { op: 'done'; id: string }) => Promise<{ kind: 'ok'; id: string } | { kind: 'refused'; reason: string } | null>
+  board?: (req: BoardControlRequest) => Promise<{ kind: 'ok'; id: string } | { kind: 'refused'; reason: string } | null>
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -132,6 +132,18 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         const teammateId = panelId === undefined ? undefined : deps.teammateOf?.(panelId)
         const answer = await deps.broker.call({ service: req.service, method: req.method, path: req.path, ...(req.body === undefined ? {} : { body: req.body }), ...(panelId === undefined ? {} : { panelId }), ...(teammateId === undefined ? {} : { teammateId }), ...(req.cost === undefined ? {} : { cost: req.cost }) })
         return answer.ok ? { ok: true, status: answer.status, body: answer.body, truncated: answer.truncated } : { ok: false, error: answer.reason }
+      }
+      case 'task': {
+        // M313. A PROPOSAL: the renderer opens Start work filled in and says
+        // so; a person presses Start. The cwd is checked here so a typo'd
+        // directory is refused at the door instead of pre-filling a sheet
+        // that then fails to find its repository.
+        if (deps.board === undefined) return { ok: false, error: 'the board is not available here' }
+        if (req.cwd !== undefined && !exists(req.cwd)) return { ok: false, error: `cwd ${req.cwd} does not exist` }
+        const { verb: _verb, ...fields } = req
+        const answer = await deps.board({ op: 'propose', ...fields }).catch(() => null)
+        if (answer === null) return { ok: false, error: 'no canvas is open to bring the task into — open the app first' }
+        return answer.kind === 'ok' ? { ok: true, id: answer.id } : { ok: false, error: answer.reason }
       }
       case 'board': {
         // Writes NOTHING here: the renderer upserts through its ordinary

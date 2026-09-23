@@ -332,7 +332,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         Array.from(document.querySelectorAll('.palette__row')).map((e) => e.textContent)
       `)
       ok('70b a hidden workspace with a waiting panel says so on its row',
-        titles70b.some((t) => t.includes('waiting')), titles70b.join(' | '))
+        titles70b.some((t) => t.includes('needs you')), titles70b.join(' | '))
 
       await pressPlain(wc, 'Escape')
       await settle()
@@ -2435,7 +2435,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         return row ? row.querySelector('.rail-row__tail').textContent : null
       })()`)
       ok('96 a hidden workspace with a waiting panel says so on its rail row',
-        tail !== null && tail.includes('1 waiting'), `tail=${JSON.stringify(tail)}`)
+        tail !== null && tail.includes('1 panel needs you'), `tail=${JSON.stringify(tail)}`)
     }
     await dockTo('panels'); await settle()
 

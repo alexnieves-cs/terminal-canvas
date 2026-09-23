@@ -232,6 +232,19 @@ ok(11, A.initialDetector(0).state === 'starting', 'fresh detector starts at star
     JSON.stringify({ bells, marks }))
 }
 
+// M306 — osc133.ends.1. Each mark's END offset, parallel to `marks`, so the
+//      PTY's capture is the bytes BETWEEN C and D — not whole chunks with the
+//      prompt attached, which would make every captured run end in `$ `.
+{
+  const text = 'x' + ESC + ']133;C;npm%20test' + BEL + 'line one\nFAIL' + ESC + ']133;D;1' + ST + '$ prompt'
+  const r = typeof A.scanChunk === 'function' ? A.scanChunk(A.INITIAL_POS, text) : null
+  const between = r && r.ends.length === 2 ? text.slice(r.ends[0], r.ends[1]) : null
+  ok('osc133.ends.1 scanChunk reports where each mark ends, so a capture from C to D holds the command\'s output and ends at the D mark, never the next prompt',
+    r !== null && r.marks.length === 2 && r.ends.length === 2 && between !== null &&
+      between.startsWith('line one\nFAIL') && !between.includes('$ prompt') && text.slice(r.ends[1]) === '$ prompt',
+    JSON.stringify({ ends: r && r.ends, between }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

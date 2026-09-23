@@ -5,7 +5,7 @@ import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
 import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
-import { pillRestState, runningAgents, type OrchestratorCandidate } from './command-pill'
+import { pillRestState, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
 
 /**
  * M249. The bottom command pill: act on THIS canvas NOW. The palette is
@@ -68,6 +68,11 @@ const NOTE_MS = 8000
 const MAX_VISIBLE_ACTIONS = 5
 /** Rows shown in the Attention/Running zone before it switches to "+N more". */
 const MAX_VISIBLE_RUNNING = 4
+/** 4.3. A per-viewer convenience, like the dock's labels: localStorage, wrapped. */
+const JUMP_TAUGHT_KEY = 'tc.pill.jumpTaught'
+function readJumpTaught(): boolean {
+  try { return window.localStorage.getItem(JUMP_TAUGHT_KEY) === 'true' } catch { return false }
+}
 
 export function CommandPill(props: CommandPillProps): JSX.Element {
   const { actions, panels, attentionCount, taskTitle, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
@@ -104,6 +109,19 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
       ? { id: p.rect.id, kind: 'terminal', agent: p.spec.agent !== undefined, agentState: getAgentState(p.rect.id) }
       : { id: p.rect.id, kind: p.kind })))
   const rest = pillRestState({ attention: attentionCount, running: running.length, selected: selectedIds.length, ...(taskTitle !== undefined ? { taskTitle } : {}) })
+
+  // 4.3. Teach Cmd+J once, beside the first attention sentence; retire it when
+  // that queue empties, so it is seen for a whole episode rather than a blink.
+  const [jumpTaught, setJumpTaught] = useState(readJumpTaught)
+  const jumpHintShownRef = useRef(false)
+  const jumpHint = showJumpHint(jumpTaught, rest.kind)
+  if (jumpHint) jumpHintShownRef.current = true
+  useEffect(() => {
+    if (!retiresJumpHint(jumpHintShownRef.current, rest.kind)) return
+    jumpHintShownRef.current = false
+    setJumpTaught(true)
+    try { window.localStorage.setItem(JUMP_TAUGHT_KEY, 'true') } catch { /* this page keeps it */ }
+  }, [rest.kind])
 
   const collapse = (restore: boolean): void => {
     setExpanded(false)
@@ -352,6 +370,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
             <>
               {rest.kind === 'attention' ? <Bell /> : <Layers />}
               {rest.text !== '' && <span className="command-pill__text">{rest.text}</span>}
+              {jumpHint && <span className="command-pill__hint" data-pill-jump-hint=""><kbd>⌘J</kbd> to jump</span>}
             </>
           )}
       </button>

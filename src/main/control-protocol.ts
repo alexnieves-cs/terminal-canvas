@@ -42,6 +42,14 @@ export type ControlRequest =
    */
   | { verb: 'board'; op: 'add'; title: string }
   | { verb: 'board'; op: 'done'; id: string }
+  /**
+   * M313. BRING A TASK INTO THE CANVAS — from a terminal (`tc task`) or a link
+   * (`terminal-canvas://task?…`). It PROPOSES: the renderer opens Start work
+   * filled in, and a person presses Start. Nothing is added, dispatched or run
+   * by the request itself, which is why this — unlike `board add` — may come
+   * through the URL door: a web page can pre-fill a form, never act.
+   */
+  | { verb: 'task'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -120,6 +128,30 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       }
       return { kind: 'bad', error: `unknown memory op ${JSON.stringify(op)} — use list or add` }
     }
+    case 'task': {
+      const title = optionalString(fields['title'])
+      if (title === null || title === undefined || title.trim() === '') return { kind: 'bad', error: 'a task needs a title' }
+      const brief = optionalString(fields['brief'])
+      const cwd = optionalString(fields['cwd'])
+      const recipe = optionalString(fields['recipe'])
+      if (brief === null || cwd === null || recipe === null) return { kind: 'bad', error: 'brief, cwd and recipe must be non-empty strings when given' }
+      if (cwd !== undefined && !cwd.startsWith('/')) return { kind: 'bad', error: 'cwd must be an absolute path' }
+      // A list from the socket; one-per-line text from a URL's single value.
+      const raw = fields['criteria']
+      const criteria = Array.isArray(raw) ? raw.filter((c): c is string => typeof c === 'string') : typeof raw === 'string' ? raw.split('\n') : undefined
+      const clean = criteria?.map((c) => c.trim()).filter((c) => c !== '' && !/[\x00-\x1f\x7f]/.test(c)).map((c) => c.slice(0, 400)).slice(0, 20)
+      return {
+        kind: 'ok',
+        req: {
+          verb: 'task',
+          title: title.trim().replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 200),
+          ...(brief === undefined ? {} : { brief: brief.slice(0, 4000) }),
+          ...(clean === undefined || clean.length === 0 ? {} : { criteria: clean }),
+          ...(cwd === undefined ? {} : { cwd }),
+          ...(recipe === undefined ? {} : { recipe: recipe.slice(0, 80) })
+        }
+      }
+    }
     case 'board': {
       const op = fields['op']
       if (op === 'add') {
@@ -194,9 +226,10 @@ export function parseControlUrl(url: string): ParsedControl {
     return { kind: 'bad', error: 'not a URL' }
   }
   if (parsed.protocol !== `${CONTROL_SCHEME}:`) return { kind: 'bad', error: `not a ${CONTROL_SCHEME}:// URL` }
-  if (parsed.host !== 'open') return { kind: 'bad', error: `a URL can only open — ${JSON.stringify(parsed.host)} is not accepted` }
+  // M313. `task` is the second host: it only PROPOSES (see the request type).
+  if (parsed.host !== 'open' && parsed.host !== 'task') return { kind: 'bad', error: `a URL can only open or propose a task — ${JSON.stringify(parsed.host)} is not accepted` }
   if (parsed.searchParams.has('verb')) return { kind: 'bad', error: 'a URL can only open — its query cannot replace the verb' }
-  const fields: Record<string, unknown> = { verb: 'open' }
+  const fields: Record<string, unknown> = { verb: parsed.host }
   for (const [k, v] of parsed.searchParams) fields[k] = v
   return fromFields(fields)
 }

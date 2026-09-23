@@ -505,7 +505,11 @@ export interface PaletteActions {
    * only for what it cannot derive: with the triple complete it dispatches
    * with no sheet, and otherwise it opens the sheet on the missing input.
    */
-  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string; swarm?: SwarmPresetId }): void
+  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string; swarm?: SwarmPresetId; recipeId?: string; brief?: string; criteria?: string[]; preferRoot?: string }): void
+  /** M312. The repository setup sheet for a directory's repository (the captured panel's when absent). */
+  beginRepoSetup(cwd?: string): void
+  /** M313. The captured panel (or the given path) in the person's editor. */
+  openInEditor(target?: { path: string; line?: number; dir?: boolean }, panelId?: string): void
   /** M197. The executor behind it, ANSWERING — the awaited half the agent's `dispatch` arm needs. */
   startWork(itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome>
   /**
@@ -816,6 +820,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         {
           id: 'panel.toolbox',
           title: target === undefined ? 'Open toolbox' : `Open toolbox for ${displayLabel(target.label)}`,
+          subtitle: 'its skills, tools and permissions — add a skill so it loads instructions only when they apply',
           searchText: 'toolbox skills mcp hooks commands subagents permissions what can this agent do',
           group: 'panel',
           run: () => { if (target !== undefined) actions.openToolbox(target.id) }
@@ -925,7 +930,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({
     id: 'panel.watcher',
     title: 'Watch…',
-    subtitle: 'run a command when something changes',
+    // Brief #19: said as what it gives, not what it is.
+    subtitle: 'rerun a check whenever files change, so a review always has a fresh result',
     searchText: 'watch watcher run when change trigger tests build timer',
     group: 'panel',
     run: () => actions.beginWatcher()
@@ -980,7 +986,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({
     id: 'template.save',
     title: 'Save selection as template…',
-    subtitle: 'the selected panels and the edges between them',
+    subtitle: 'start the same panels and handoffs again in one step — reusable as a workflow',
     searchText: 'save template selection shape of work',
     group: 'panel',
     hiddenAtRest: true,
@@ -1271,6 +1277,36 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'work.swarm.implement', ...swarmRow(SWARM_PRESETS.implement) })
   out.push({ id: 'work.swarm.test', ...swarmRow(SWARM_PRESETS.test) })
   out.push({ id: 'work.swarm.review', ...swarmRow(SWARM_PRESETS.review) })
+  // M314. THE RECIPE DOORS — written out, `closure.v9.1`'s reason above. Each
+  // opens Start work with the recipe chosen: its context, checks and
+  // deliverables filled in and editable, its one question focused.
+  const recipeRow = (id: string, title: string, subtitle: string, words: string): Omit<Command, 'id'> => ({
+    title, subtitle, searchText: `recipe start work ${words}`, group: 'canvas', run: () => actions.beginStartWork({ recipeId: id })
+  })
+  out.push({ id: 'recipe.fix-test', ...recipeRow('recipe-fix-test', 'Fix a failing test…', 'reproduce, fix the cause, prove it passes', 'fix failing test red broken ci') })
+  out.push({ id: 'recipe.implement-issue', ...recipeRow('recipe-implement-issue', 'Implement an issue…', 'from the issue to a reviewed change with tests', 'implement issue feature ticket github jira') })
+  out.push({ id: 'recipe.review-change', ...recipeRow('recipe-review-change', 'Review a change…', 'findings ranked by severity, no edits', 'review change diff branch pr pull request code review') })
+  out.push({ id: 'recipe.investigate-bug', ...recipeRow('recipe-investigate-bug', 'Investigate a bug…', 'reproduce, find the root cause, propose a fix', 'investigate bug debug root cause reproduce') })
+  // M312. The repository setup, for the captured panel's repository.
+  out.push({
+    id: 'repo.setup',
+    title: 'Repository setup…',
+    subtitle: 'how this repository installs, serves, checks and previews — every new lane inherits it',
+    searchText: 'repository setup install dependencies services ports checks preview environment prepare lane',
+    group: 'canvas',
+    run: () => actions.beginRepoSetup()
+  })
+  // M313. The captured panel in the person's own editor: a file (at its
+  // line when it has one), or the folder a conversation or terminal works in.
+  out.push({
+    id: 'editor.open',
+    title: 'Open in editor',
+    subtitle: 'the selected file, or the folder its agent works in — in your editor (Settings ▸ Open files in)',
+    searchText: 'open in editor vscode code cursor zed ide worktree file line external',
+    group: 'canvas',
+    shortcut: '⌘⇧E',
+    run: () => actions.openInEditor()
+  })
   out.push({
     id: 'board.new',
     title: 'New work item…',
@@ -1964,15 +2000,35 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   if (ctx.searchResults !== null) {
     const result = ctx.searchResults
     const searched = result.searched
+    const work = ctx.workSearch ?? null
     if (searched !== undefined && ctx.searchQuery.trim() !== '') {
-      const t = `searched ${searched.terminals} terminal${searched.terminals === 1 ? '' : 's'} and ${searched.chats} chat${searched.chats === 1 ? '' : 's'}`
+      // D13. The scope names every source it read, and that it is THIS workspace's — nothing private to another was read.
+      const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
+      const t = work === null
+        ? `searched ${plural(searched.terminals, 'terminal')} and ${plural(searched.chats, 'chat')}`
+        : `searched ${plural(searched.terminals, 'terminal')}, ${plural(searched.chats, 'chat')}, ${plural(work.searched.tasks, 'task')} and ${plural(work.searched.retained, 'retained outcome')} in this workspace`
       out.push(withReason({ id: 'search.scope', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t))
     }
     for (const failure of result.failures ?? []) {
       const t = `could not read ${failure.source} — ${failure.reason}`
       out.push(withReason({ id: `search.fail.${failure.source}`, title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t))
     }
-    if (result.hits.length === 0) {
+    // D13. Tasks and retained outcomes lead: they are what the work MEANT,
+    // and the output lines beneath are where it happened. A hit frames the
+    // task's card through the existing verb; one with no card says so and
+    // runs nothing — a retained outcome never reopens its lane.
+    if (work !== null && ctx.searchQuery.trim() !== '') {
+      if (work.capped) { const t = `the first ${work.cap} tasks and outcomes — narrow the search`; out.push(withReason({ id: 'search.work-cap', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t)) }
+      if (work.redacted > 0) { const t = `${work.redacted} secret${work.redacted === 1 ? '' : 's'} redacted from these tasks`; out.push(withReason({ id: 'search.work-redacted', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t)) }
+      for (const hit of work.hits) {
+        const id = hit.source === 'task' ? `search.task.${hit.itemId}` : `search.retained.${hit.outcomeId ?? hit.itemId}`
+        const lead = hit.source === 'task' ? 'Task' : 'Retained outcome'
+        const row = { id, title: `${lead} · ${hit.title}`, subtitle: `${hit.field}: ${hit.line}`, searchText: `${hit.title} ${hit.line}`, group: 'panel' as const, scope: 'search' as const, hiddenAtRest: true as const,
+          run: () => { if (hit.cardPanelId !== undefined) { const r = actions.showTask(hit.cardPanelId); if (r.kind === 'refused' || r.partial === true) actions.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) } } }
+        out.push(hit.cardPanelId === undefined ? withReason(row, 'this task\'s card is no longer on the canvas — its record is kept, and nothing was reopened') : row)
+      }
+    }
+    if (result.hits.length === 0 && (work === null || work.hits.length === 0)) {
       // Only once a query has been typed: an empty query answers null above,
       // not [], so "no matches" never shows before the first keystroke.
       if (ctx.searchQuery.trim() !== '') {
@@ -2171,7 +2227,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({
     id: 'manage.teammates',
     title: 'Manage teammates…',
-    subtitle: ctx.teammateCount === undefined || ctx.teammateCount === 0 ? 'identities with a brief, their own memory and explicit places' : `${ctx.teammateCount} teammate${ctx.teammateCount === 1 ? '' : 's'}`,
+    subtitle: ctx.teammateCount === undefined || ctx.teammateCount === 0 ? 'agents that keep a brief and their own memory, so each task starts where the last left off' : `${ctx.teammateCount} teammate${ctx.teammateCount === 1 ? '' : 's'}`,
     group: 'manage',
     searchText: 'teammates agents roster identity places brief memory manage',
     run: () => actions.openTeammates()

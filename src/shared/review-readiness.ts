@@ -337,6 +337,14 @@ export interface ReviewEvidence {
   more: number
   /** Present only when there is nothing: a sentence naming why, never an empty list alone. */
   none?: string
+  /**
+   * WHICH kind of nothing, for a surface that styles or tests it. Present with
+   * `none` and only then. `failed-reader`: a read was attempted and rejected.
+   * `unread`: there was nowhere to read from (no terminal on this canvas, or
+   * the conversation is closed). `never-ran`: every source was read and none
+   * recorded a command. Only the last may be read as "nothing ran".
+   */
+  noneKind?: 'failed-reader' | 'unread' | 'never-ran'
 }
 
 /**
@@ -397,8 +405,14 @@ export function reportedCommands(turns: readonly TranscriptTurn[]): CommandEvide
 const RANK: Record<CommandEvidence['outcome'], number> = { failed: 0, unknown: 1, passed: 2 }
 
 export interface EvidenceSources {
-  /** False when this app could not read its own ledger at all. */
+  /** False when a ledger read was ATTEMPTED and failed. Nowhere to read from is `ledgerPanels: 0`, not this. */
   ledgerRead: boolean
+  /**
+   * How many panels' ledgers were asked. Zero is "nowhere to read from" —
+   * check-evidence.ts's rule, reused so the review node and Orchestrate's
+   * Checks tab name the same silence the same way. Absent = not counted.
+   */
+  ledgerPanels?: number
   /** False when the lane's conversation is closed, so its commands were never looked for. */
   transcriptRead: boolean
 }
@@ -424,14 +438,18 @@ export function reviewEvidence(
   const all = [...observed, ...reported].sort((a, b) => (RANK[a.outcome] - RANK[b.outcome]) || (b.at - a.at))
   if (all.length === 0) {
     const missing: string[] = []
-    if (!sources.ledgerRead) missing.push('this canvas could not read its own record of what it ran')
+    // A failed read and an absent reader are kept apart: the first is a fault
+    // worth retrying, the second is the ordinary case of a closed terminal.
+    if (!sources.ledgerRead) missing.push('this canvas tried to read its own record of what it ran, and the read failed')
+    else if (sources.ledgerPanels === 0) missing.push('no terminal on this canvas could have recorded a command in this lane, so there was nowhere to read its runs from')
     if (!sources.transcriptRead) missing.push('the lane\'s conversation is closed, so the commands it asked for were never looked for')
     return {
       commands: [],
       more: 0,
       none: missing.length === 0
         ? 'no commands were recorded for this lane — this canvas ran none in it, and the conversation asked for none'
-        : `nothing to show, and not because nothing ran: ${missing.join('; ')}`
+        : `nothing to show, and not because nothing ran: ${missing.join('; ')}`,
+      noneKind: !sources.ledgerRead ? 'failed-reader' : missing.length > 0 ? 'unread' : 'never-ran'
     }
   }
   return { commands: all.slice(0, cap), more: Math.max(0, all.length - cap) }

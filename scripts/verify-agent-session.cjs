@@ -1096,6 +1096,25 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ withPrompt, resumed, without, supArgs, plainArgs: plainSpawns[0]?.args }))
   }
 
+  // no-publish.1. "Never push, never merge" is enforced, not only asked: a
+  //      prompt carrying NO_PUBLISH_SENTENCE also denies the push/merge/PR
+  //      commands on fresh AND resumed spawns; the supervisor's does not. The
+  //      sentence must stay verbatim in DISPATCH_PROMPT and the swarm briefs,
+  //      or the deny list silently stops riding them.
+  {
+    const DISPATCH = M.sharedSession.DISPATCH_PROMPT
+    const swarmSrc = readFileSync(join(__dirname, '..', 'src', 'shared', 'swarm.ts'), 'utf8')
+    const denyOf = (args) => { const i = args.indexOf('--disallowed-tools'); return i < 0 ? [] : args.slice(i + 1, i + 1 + A.NO_PUBLISH_TOOLS.length) }
+    const fresh = A.headlessArgs({ sessionId: 'u-1', resume: false, agentOptions: {}, appendSystemPrompt: DISPATCH })
+    const resumed = A.headlessArgs({ sessionId: 'u-1', resume: true, agentOptions: {}, appendSystemPrompt: DISPATCH })
+    const sup = A.headlessArgs({ sessionId: 'u-1', resume: false, agentOptions: {}, appendSystemPrompt: M.sharedSession.SUPERVISOR_PROMPT })
+    ok('no-publish.1 a dispatch prompt denies git push/merge and gh pr create/merge on fresh and resumed spawns, the supervisor\'s denies nothing, and the swarm briefs still carry the sentence',
+      DISPATCH.includes(A.NO_PUBLISH_SENTENCE) && JSON.stringify(denyOf(fresh)) === JSON.stringify(A.NO_PUBLISH_TOOLS) &&
+        JSON.stringify(denyOf(resumed)) === JSON.stringify(A.NO_PUBLISH_TOOLS) && !sup.includes('--disallowed-tools') &&
+        swarmSrc.split(A.NO_PUBLISH_SENTENCE).length - 1 >= 2,
+      JSON.stringify({ fresh, sup }))
+  }
+
   // M82 — budget.1 / budget.2. TWO CEILINGS THE CANVAS ENFORCES. budget.1:
   //      a ceiling of 0 refuses nothing (every pre-M82 fixture); a send over
   //      the budget is REFUSED and stores no turn (a refused message is not a

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from './template-draft-store'
 import { LIBRARY, defaultNodeOf, placementFor } from '@shared/template-library'
 import { edgeWouldCycle } from '@shared/template-edit'
@@ -6,7 +6,7 @@ import { usePool, usePoolsLive } from './pool-store'
 import { poolStoppedWord } from './pool-model'
 import type { WorkflowPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
-import { PanelFrame } from '@renderer/components/PanelFrame'
+import { PanelFrame, PanelMarksContext } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { blockCount } from '@shared/workflow-nodes'
 import { isBuiltInTemplate } from '@shared/templates'
@@ -16,7 +16,7 @@ import type { PersistedTemplate } from '@shared/templates'
 import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H, BLOCK_W, DIAGRAM_PAD } from './workflow-diagram'
 import { autoLayout, completedWalk, diagramIssues, edgeGeometry, neighbourhood, runTimeline } from './workflow-graph'
-import { AutoLayout, Check, History, More, Plus, Trigger, Warn, WORKFLOW_NODE_GLYPH } from '@renderer/icons'
+import { AutoLayout, Check, History, Maximize, More, Plus, Restore, Trigger, Warn, WORKFLOW_NODE_GLYPH } from '@renderer/icons'
 import { WorkflowFlow } from './WorkflowFlow'
 
 /** M183. Extra SVG room beyond the diagram's extent, for a drop or a wire past the last block. */
@@ -440,6 +440,13 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   // Kept temporarily while the React Flow migration is reviewed; this branch
   // never renders, and all visible graph interaction is the Flow island.
   const renderLegacyDiagram: boolean = false
+  // Brief #19. The EXPANDED EDITOR is the frame's own Fill view (M92's
+  // maximise — one history entry, undone by Restore), offered here as a
+  // labelled toolbar verb because a graph is edited in this toolbar, not in
+  // the ⋯ menu where Fill view was waiting to be found. The flow refits to
+  // the new size, so the larger panel shows the whole diagram.
+  const marks = useContext(PanelMarksContext)
+  const expanded = marks.marks.get(panel.rect.id)?.maximised === true
 
   return (
     <PanelFrame
@@ -502,6 +509,10 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               <button type="button" className="pf__verb pf__verb--word workflow-node__tool workflow-node__tab" data-workflow-tab="runs" aria-pressed={historyOpen} aria-expanded={historyOpen}
                 title={historyOpen ? 'Hide the run history' : 'Show the run history and its timeline'}
                 onMouseDown={press(() => setHistoryOpen((v) => !v))}><History size={13} /><span>{mine.length === 0 ? 'History' : `History (${mine.length})`}</span></button>
+              <button type="button" className="pf__verb pf__verb--word workflow-node__tool workflow-node__expand" data-workflow-expand={expanded ? 'restore' : 'expand'} aria-pressed={expanded}
+                disabled={marks.readOnly}
+                title={marks.readOnly ? REASON_MERGED_VIEW : expanded ? 'Back to the panel\'s size on the canvas — one undo' : 'Edit in an expanded view — the panel fills the window; Restore puts it back'}
+                onMouseDown={press(() => { if (!marks.readOnly) (expanded ? marks.restore : marks.maximise)(panel.rect.id) })}>{expanded ? <Restore /> : <Maximize />}<span>{expanded ? 'Restore' : 'Expand editor'}</span></button>
               <span className="workflow-node__spacer" />
               {/* M259. The status: one word at rest when there is one to say,
                   and the popover of every reason and every unfinished block
@@ -695,6 +706,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                 </svg>}
                 <WorkflowFlow
                   panelId={panel.rect.id}
+                  fitKey={expanded ? 1 : 0}
                   template={drawn ?? template}
                   readOnly={readOnly}
                   selected={selectedRaw}

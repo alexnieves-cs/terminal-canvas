@@ -288,6 +288,13 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // is what the `dispatch` verb maps, so the agent reaches the same action
   // without a form: one action, two doors, and only one of them typed.
   beginStartWork: 'opens the start sheet — a plan has no typist; the `dispatch` verb runs the same action',
+  // M312. A SHEET a person reads and saves: saving is the decision that these
+  // commands may run in every new lane, which a plan must not make for them.
+  beginRepoSetup: 'opens the repository setup sheet — saving lets commands run in every lane, a person\'s decision',
+  // M313. Launches an app OUTSIDE this one; an agent that could open the
+  // person's editor at will could put any file in front of them, so only the
+  // person's own gestures (the row, ⌘⇧E, a diff line) reach it.
+  openInEditor: 'launches the person\'s own editor — outside the app, so a person\'s gesture only',
   openBoard: 'opens a navigator pane — a view, not an action on the canvas',
   // M127/M128. STAYS excluded now that it mints a real panel, and the
   // original reason is why: the verb takes a WORLD POINT, which is the

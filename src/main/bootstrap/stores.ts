@@ -10,6 +10,7 @@ import { createReviewEngine, type ReviewEngine } from '../review-engine'
 import { createReviewCommitter } from '../review-commit'
 import { createReviewDiscarder } from '../review-discard'
 import { createRunLedger } from '../run-ledger'
+import { createCheckOutputStore, type CheckOutputStore } from '../check-output-store'
 import { createAgentTranscriptLog } from '../agent-transcript-log'
 import { createScrollbackLog } from '../scrollback-log'
 import { createWorktreeManager } from '../worktree-manager'
@@ -17,11 +18,13 @@ import { createBaselineCapture } from '../baseline-capture'
 import { createGitRunner } from '../git-runner'
 import { createMemoryStore } from '../memory-store'
 import { createBrokerAudit } from '../broker-audit'
+import { createLastExitStore, type LastExitStore } from '../last-exit'
 import { createAttentionUnion } from '../approvals'
 import { FileWatchers } from '../file-watch'
 import { ToolboxCache } from '../toolbox-cache'
 import { forgetTrail } from '../skill-trail-read'
 import { IPC_EVENTS } from '../../shared/ipc-contract'
+import { needsYouCount, needsYouNamed } from '../../shared/attention-words'
 import type { MainState } from './context'
 
 /**
@@ -53,6 +56,8 @@ export interface Stores {
   /** kill()'s baseline hook: poison an in-flight capture AND drop the persisted record. */
   dropBaseline: (panelId: string) => void
   runLedger: ReturnType<typeof createRunLedger>
+  /** M306. One file per check run's exact output, referenced by `RunRow.outputId`. */
+  checkOutputs: CheckOutputStore
   agentTranscripts: ReturnType<typeof createAgentTranscriptLog>
   scrollbackLog: ReturnType<typeof createScrollbackLog>
   worktreeManager: ReturnType<typeof createWorktreeManager>
@@ -66,6 +71,8 @@ export interface Stores {
   /** M54. Declared ABOVE the manager, which carries them into every spawn's env. */
   controlSocketPath: string
   launcherDir: string
+  /** Brief #20. Which panels had a session when the window last went away. */
+  lastExit: LastExitStore
 }
 
 export function createStores(state: MainState): Stores {
@@ -192,6 +199,11 @@ export function createStores(state: MainState): Stores {
    * through its own append writer, capped. No output bytes: metadata only.
    */
   const runLedger = createRunLedger({ file: join(userData, 'runs.jsonl') })
+  /**
+   * M306. A check run's exact output, one file per run, in its OWN directory
+   * so the ledger above stays the metadata-only file that is safe to paste.
+   */
+  const checkOutputs = createCheckOutputStore({ dir: join(userData, 'check-output') })
   // M73. One append-only transcript per chat panel, beside the scrollback logs.
   const agentTranscripts = createAgentTranscriptLog({ dir: join(userData, 'agent-transcripts') })
 
@@ -209,7 +221,8 @@ export function createStores(state: MainState): Stores {
       if (!Notification.isSupported()) return
       const n = new Notification({
         title: label,
-        body: body ?? (count > 1 ? `${label} wants you (${count} panels waiting)` : `${label} wants you`)
+        // 4.1. The same words the pill and dock use (shared/attention-words.ts).
+        body: body ?? (count > 1 ? `${needsYouNamed(label)} · ${needsYouCount(count)}` : needsYouNamed(label))
       })
       n.on('click', () => {
         const win = state.window
@@ -275,7 +288,9 @@ export function createStores(state: MainState): Stores {
       identityOf: (panelId) => {
         const b = layoutStore.baseline(panelId)
         return b === undefined ? Promise.resolve(undefined) : reviewEngine.identityOf(b.root, b.sha)
-      }
+      },
+      // M306. A marked shell command's exact output, as its D mark lands.
+      outputs: checkOutputs
     }
   )
 
@@ -326,12 +341,14 @@ export function createStores(state: MainState): Stores {
    * else.
    */
   const brokerAudit = createBrokerAudit({ file: join(userData, 'broker-audit.jsonl') })
+  // Brief #20. Read and deleted HERE, at construction — see last-exit.ts.
+  const lastExit = createLastExitStore({ file: join(userData, 'last-exit.json') })
 
   return {
     layoutStore, layoutSnapshots, credentialStore, gitRunner, reviewEngine,
     reviewDiscard, reviewCommit, baselineCapture, captureBaseline, dropBaseline,
-    runLedger, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
+    runLedger, checkOutputs, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
     fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit,
-    attention, controlSocketPath, launcherDir
+    attention, controlSocketPath, launcherDir, lastExit
   }
 }

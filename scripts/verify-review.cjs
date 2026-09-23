@@ -2149,12 +2149,31 @@ if (GIT) {
           // Only the arm where BOTH sources were read may say nothing ran.
           /asked for none/.test(empty.none) &&
           !/asked for none/.test(noChat.none) && /conversation is closed/.test(noChat.none) &&
-          !/asked for none/.test(noLedger.none) && /could not read/.test(noLedger.none) &&
-          /could not read/.test(neither.none) && /conversation is closed/.test(neither.none) &&
+          !/asked for none/.test(noLedger.none) && /read failed/.test(noLedger.none) &&
+          /read failed/.test(neither.none) && /conversation is closed/.test(neither.none) &&
           // Different silences get different sentences.
           new Set([empty.none, noChat.none, noLedger.none, neither.none]).size === 4 &&
           many.commands.length === 5 && many.more === 11 && many.none === undefined,
         JSON.stringify({ empty, noChat, noLedger, neither, manyLen: many.commands.length, more: many.more }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+
+  {
+    const NAME = 'readiness.honest-empty.1 the four silences stay four: no diff is the handoff\'s `empty` state, and an empty evidence list names whether a reader FAILED, there was NO reader (no terminal on the canvas, or the conversation closed), or every source was read and nothing ran — `noneKind` says which, and only `never-ran` may claim nothing ran'
+    try {
+      const failed = R.reviewEvidence([], [], 10, { ledgerRead: false, ledgerPanels: 2, transcriptRead: true })
+      const nowhere = R.reviewEvidence([], [], 10, { ledgerRead: true, ledgerPanels: 0, transcriptRead: true })
+      const closed = R.reviewEvidence([], [], 10, { ledgerRead: true, ledgerPanels: 1, transcriptRead: false })
+      const ran = R.reviewEvidence([], [], 10, { ledgerRead: true, ledgerPanels: 1, transcriptRead: true })
+      const some = R.reviewEvidence([{ attribution: 'observed', command: 'x', outcome: 'passed', exitCode: 0, at: 1, source: 's' }], [], 10, { ledgerRead: true, ledgerPanels: 0, transcriptRead: false })
+      ok(NAME,
+        failed.noneKind === 'failed-reader' && /read failed/.test(failed.none) &&
+          nowhere.noneKind === 'unread' && /nowhere to read/.test(nowhere.none) && !/failed/.test(nowhere.none) &&
+          closed.noneKind === 'unread' && /conversation is closed/.test(closed.none) &&
+          ran.noneKind === 'never-ran' && /asked for none/.test(ran.none) &&
+          [failed, nowhere, closed].every((e) => !/asked for none/.test(e.none)) &&
+          some.none === undefined && some.noneKind === undefined,
+        JSON.stringify({ failed, nowhere, closed, ran, some }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
 }
@@ -2450,6 +2469,385 @@ if (GIT) {
         JSON.stringify({ claims, checks: ev.checks.map((c) => [c.key, c.outcome, c.context]) }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
+}
+
+// M307 — review-comment.1–.4. A REVIEW A PERSON CAN ACT ON. Each property
+//      fails silently: a diff line with no number cannot carry a comment, so
+//      the gutter would pin every note to the wrong line; a comment that does
+//      not survive the layout parse is a review that evaporates on relaunch;
+//      a follow-up that paraphrases instead of quoting sends the agent to a
+//      line number that may now mean something else; and a "verified" that an
+//      agent's stop, a stale pass or an open comment can reach is the exact
+//      claim this milestone exists to separate from "finished".
+{
+  const { lines } = R.parseDiffLines('diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -10,4 +10,5 @@ fn\n ctx a\n-gone\n+new one\n+new two\n ctx b\n@@ -40 +41 @@\n-x\n+y\n')
+  const byText = Object.fromEntries(lines.map((l) => [l.text, l]))
+  const a = R.commentAnchorOf(byText['+new two'])
+  const d = R.commentAnchorOf(byText['-gone'])
+  ok('review-comment.1 diff lines carry their old/new numbers from each hunk header (context both, a deletion old only, an addition new only), a header or meta line none, and a comment anchors by side, number and the line\'s own text',
+    byText[' ctx a'].oldNo === 10 && byText[' ctx a'].newNo === 10 &&
+      byText['-gone'].oldNo === 11 && byText['-gone'].newNo === undefined &&
+      byText['+new one'].newNo === 11 && byText['+new two'].newNo === 12 && byText['+new one'].oldNo === undefined &&
+      byText[' ctx b'].oldNo === 12 && byText[' ctx b'].newNo === 13 &&
+      byText['-x'].oldNo === 40 && byText['+y'].newNo === 41 &&
+      byText['+++ b/x'].newNo === undefined && byText['@@ -40 +41 @@'].oldNo === undefined &&
+      a && a.side === 'new' && a.line === 12 && a.quote === 'new two' &&
+      d && d.side === 'old' && d.line === 11 && d.quote === 'gone' &&
+      R.commentAnchorOf(byText['@@ -40 +41 @@']) === null,
+    JSON.stringify(lines.map((l) => [l.kind, l.oldNo, l.newNo])))
+}
+{
+  const good = { id: 'c1', path: 'src/a.ts', side: 'new', line: 12, quote: 'x()', body: 'rename this', at: 5, sentAt: 9 }
+  const warnings = []
+  const items = R.parseWorkItems([{
+    id: 'w1', source: 'typed', title: 'T', state: 'working', createdAt: 1, updatedAt: 2,
+    criteria: ['tests pass', 'docs updated'], criteriaMet: ['tests pass'],
+    comments: [good, { id: 'bad', path: 'a', side: 'sideways', line: 1, quote: '', body: 'b', at: 1 }, { id: 'zero', path: 'a', side: 'new', line: 0, quote: '', body: 'b', at: 1 }]
+  }, { id: 'w2', source: 'typed', title: 'U', state: 'todo', createdAt: 1, updatedAt: 1, comments: 'not a list' }], warnings)
+  const w1 = items.find((i) => i.id === 'w1')
+  const w2 = items.find((i) => i.id === 'w2')
+  const carried = R.carryWorkItem({ ...w1, comments: [], criteriaMet: [] })
+  ok('review-comment.2 comments and confirmed criteria survive the layout parse field by field — a malformed comment costs itself, a malformed list costs the list, never the card — and an empty list writes no key',
+    w1 && w1.comments.length === 1 && w1.comments[0].id === 'c1' && w1.comments[0].sentAt === 9 &&
+      JSON.stringify(w1.criteriaMet) === JSON.stringify(['tests pass']) &&
+      w2 && w2.comments === undefined && !('comments' in carried) && !('criteriaMet' in carried) &&
+      JSON.stringify(R.unmetCriteria(w1.criteria, w1.criteriaMet)) === JSON.stringify(['docs updated']),
+    JSON.stringify({ w1, w2, carried, warnings }))
+}
+{
+  const text = R.composeFollowUp({
+    title: 'Fix login', brief: 'Users can log in with SSO',
+    comments: [
+      { id: 'a', path: 'src/auth.ts', side: 'new', line: 42, quote: '  return token', body: 'Validate the token first.', at: 1 },
+      { id: 'b', path: 'src/old.ts', side: 'old', line: 7, quote: 'legacy()', body: 'Why remove this?', at: 2 },
+      { id: 'r', path: 'src/x.ts', side: 'new', line: 1, quote: 'y', body: 'resolved already', at: 3, resolved: true }
+    ],
+    failing: [{ command: 'npm test', ended: 'exit 1', lastLines: ['FAIL auth.test.ts', 'expected 200, got 401'] }],
+    unmet: ['docs updated']
+  })
+  const empty = R.composeFollowUp({ title: 'T', comments: [{ id: 'r', path: 'a', side: 'new', line: 1, quote: '', body: 'b', at: 1, resolved: true }], failing: [], unmet: ['x'] })
+  ok('review-comment.3 the follow-up quotes each open comment at its place, numbers every point so the reply can be matched, carries the failing check\'s own last lines, lists the unconfirmed criteria, leaves a resolved comment out, and composes nothing when there is nothing to address',
+    text.includes('1. src/auth.ts:42') && text.includes('   >   return token') && text.includes('Validate the token first.') &&
+      text.includes('2. src/old.ts:7 (removed line)') && text.includes('3. `npm test` — exit 1') &&
+      text.includes('   | expected 200, got 401') && text.includes('- docs updated') &&
+      text.includes('The intended outcome: Users can log in with SSO') && !text.includes('resolved already') &&
+      empty === '',
+    text)
+}
+{
+  const passed = { key: 'k1', source: 'watcher', panelId: 'w', command: 'npm test', context: { cwd: '/l' }, observed: 'passed', outcome: 'passed', exitCode: 0, at: 1 }
+  const stale = { ...passed, key: 'k2', outcome: 'stale' }
+  const failed = { ...passed, key: 'k3', observed: 'failed', outcome: 'failed', exitCode: 1 }
+  const unknown = { ...passed, key: 'k4', outcome: 'unknown' }
+  const resolved = [{ id: 'c', path: 'a', side: 'new', line: 1, quote: '', body: 'b', at: 1, resolved: true }]
+  const base = { agentWorking: false, standing: 'current', checks: [passed], comments: resolved, criteria: ['a'], criteriaMet: ['a'] }
+  const v = (over) => R.verificationOf({ ...base, ...over })
+  const all = v({})
+  const idleNothing = R.verificationOf({ agentWorking: false, standing: 'none', checks: [] })
+  const staleOnly = v({ checks: [stale] })
+  const unknownOnly = v({ checks: [unknown] })
+  const withFail = v({ checks: [passed, failed] })
+  const openComment = v({ comments: [{ id: 'o', path: 'a', side: 'new', line: 1, quote: '', body: 'b', at: 1 }] })
+  const sentWorking = v({ agentWorking: true, comments: [{ id: 'o', path: 'a', side: 'new', line: 1, quote: '', body: 'b', at: 1, sentAt: 5 }] })
+  const unmet = v({ criteriaMet: [] })
+  const moved = v({ standing: 'stale' })
+  ok('review-comment.4 VERIFIED only when the review is current, a witnessed check passed on this content, none failed, every comment is resolved and every criterion confirmed; an agent stopping with none of that reads "agent finished — not verified" and names what is missing; a stale or unplaceable pass, an open comment or an unticked criterion each keep it short; sent comments with the agent at work read "changes requested"',
+    all.stage === 'verified' && all.missing.length === 0 &&
+      idleNothing.stage === 'agent-finished' && idleNothing.word === 'agent finished — not verified' &&
+      idleNothing.missing.includes('not reviewed') && idleNothing.missing.includes('no check has run on this revision') &&
+      staleOnly.stage === 'agent-finished' && staleOnly.missing.some((m) => /earlier revision/.test(m)) &&
+      unknownOnly.stage === 'agent-finished' &&
+      withFail.stage === 'agent-finished' && withFail.missing.includes('1 check failed') &&
+      openComment.stage === 'agent-finished' && openComment.missing.includes('1 comment not sent') &&
+      sentWorking.stage === 'changes-requested' &&
+      unmet.stage === 'agent-finished' && unmet.missing.includes('1 of 1 criteria not confirmed') &&
+      moved.stage === 'stale' && !/verified/.test(moved.word.replace('not verified', '')),
+    JSON.stringify({ all, idleNothing, staleOnly, withFail, openComment, sentWorking, unmet, moved }))
+}
+
+// M309 — brief.1–.3. THE RETURN BRIEFING SAYS ONLY WHAT A RECORD SAYS, FROM
+//      WHEN THE PERSON LEFT. A briefing that replayed the whole history would
+//      bury the one failure that happened while they were away; one that
+//      reported another task's rows would send them to the wrong lane; one
+//      whose failed check opened a panel instead of that run's own output
+//      would be the scrollback hunt M306 exists to end; and a quiet task
+//      padded with an old diff reads as news.
+{
+  const since = 10_000
+  const cmd = (panelId, command, exitCode, endedAt, outputId) => ({ kind: 'command', row: { panelId, command, cwd: '/l', startedAt: endedAt - 5, endedAt, exitCode, ...(outputId ? { outputId } : {}) } })
+  const ev = (event, title, at, extra = {}) => ({ kind: 'event', row: { kind: 'event', runId: 'r', at, event, source: 'person', title, itemId: 't1', ...extra } })
+  const label = (id) => ({ w: 'tests watcher', c: 'agent chat' }[id] ?? id)
+  const t1 = {
+    itemId: 't1', title: 'Fix login', panelIds: ['w', 'c'], labelOf: label,
+    timeline: [
+      cmd('w', 'npm test', 1, 12_000, 'w-abc-1'),
+      cmd('w', 'npm test', 0, 11_000),
+      cmd('w', 'npm test', 1, 9_000, 'w-old-1'),
+      cmd('elsewhere', 'rm x', 0, 12_500),
+      ev('artifact', 'Review mark recorded', 11_500, { paths: ['a.ts', 'b.ts'] }),
+      ev('dispatch', 'Dispatched', 5_000)
+    ],
+    handoff: { actionLabel: 'Review changes', detail: '', state: 'ready', files: 3 },
+    lastReply: { panelId: 'c', at: 12_100, excerpt: 'I fixed the token check.' }
+  }
+  const quiet = { itemId: 't2', title: 'Docs', panelIds: ['d'], labelOf: label, timeline: [cmd('d', 'make', 0, 1_000)], handoff: { actionLabel: 'Review changes', detail: '', state: 'ready', files: 4 } }
+  const b = R.buildReturnBriefing(since, [quiet, t1], [])
+  const task = b.tasks[0]
+  ok('brief.1 a task\'s briefing lists only what ended or happened AFTER the person left and only in its own panels — the failed run first and opening its OWN output record, a passed run without a record going to its panel, the agent\'s reply, the review mark as a change opening the review — and the lane\'s current diff is named as a fact now',
+    b.tasks.length === 1 && task.itemId === 't1' &&
+      task.finished.length === 3 && task.finished[0].tone === 'failed' &&
+      JSON.stringify(task.finished[0].evidence) === JSON.stringify({ kind: 'output', outputId: 'w-abc-1', panelId: 'w' }) &&
+      /`npm test` exited 1 in tests watcher/.test(task.finished[0].text) &&
+      task.finished.some((l) => l.tone === 'passed' && l.evidence.kind === 'panel') &&
+      task.finished.some((l) => /the agent replied — “I fixed the token check.”/.test(l.text)) &&
+      !task.finished.some((l) => /rm x/.test(l.text)) && !task.changed.some((l) => /Dispatched/.test(l.text)) &&
+      task.changed.some((l) => /Review mark recorded — 2 files/.test(l.text) && l.evidence.kind === 'review') &&
+      task.changed.some((l) => /now holds 3 changed files/.test(l.text)),
+    JSON.stringify(task))
+  ok('brief.2 a task with nothing new since is quiet — counted, not listed, and not made loud by a diff that was already there — and the headline counts decisions, runs and failures over every task',
+    b.quietCount === 1 && /(^|· )3 finished \(1 failed\)/.test(b.headline) && /1 task changed/.test(b.headline) &&
+      R.buildReturnBriefing(since, [quiet], []).headline === 'Nothing happened on your tasks while you were away.',
+    JSON.stringify({ headline: b.headline, quiet: b.quietCount }))
+  const withDecision = R.buildReturnBriefing(since, [quiet, t1], [{ panelId: 'c', requestId: 'r9', label: 'agent chat', blocker: 'wants to use Bash — npm install' }, { panelId: 'zz', label: 'other', blocker: 'is waiting' }])
+  const td = withDecision.tasks[0]
+  ok('brief.3 a waiting decision in one of the task\'s panels is listed with its request and makes NEXT "answer the decision"; a failure without one makes NEXT "open the failed check"; a decision in another task\'s panel is not this task\'s',
+    td.decisions.length === 1 && JSON.stringify(td.decisions[0].evidence) === JSON.stringify({ kind: 'decision', panelId: 'c', requestId: 'r9' }) &&
+      /^Answer the decision/.test(td.next) && /^Open the failed check/.test(task.next) &&
+      /1 decision waiting on you/.test(withDecision.headline),
+    JSON.stringify({ decisions: td.decisions, next: td.next, before: task.next }))
+}
+
+// M310 — flow.1–.3. THE FLAGSHIP FLOW'S JOINS. The agent that is never told
+//      the criteria cannot meet them; a "Run checks" that guessed a runner
+//      would run a command the repository never declared; and a PR body that
+//      called an unverified task verified — or claimed no check was witnessed
+//      when nobody looked — puts this app's name on a false statement.
+{
+  const msg = R.dispatchMessage({ key: 'acme/app#12', title: 'Fix login', url: 'https://x/12', description: 'SSO fails', brief: 'SSO users can log in', criteria: ['401 is gone', 'a test covers it'] })
+  const bare = R.dispatchMessage({ title: 'Typed' })
+  ok('flow.1 the first message a lane\'s agent receives carries the issue, its description, the intended outcome and every acceptance criterion; a typed task with none sends only its title',
+    msg.startsWith('Dispatched work item\nacme/app#12\nFix login\nhttps://x/12') && msg.includes('SSO fails') &&
+      msg.includes('Intended outcome:\nSSO users can log in') && msg.includes('Done when:\n- 401 is gone\n- a test covers it') &&
+      bare === 'Dispatched work item\n(typed)\nTyped',
+    msg)
+  const pkg = JSON.stringify({ scripts: { test: 'vitest', build: 'tsc' } })
+  ok('flow.2 Run checks suggests only what the lane declares — its package.json test/check/verify script under the lockfile\'s runner, else Cargo, Go, Python or make — and nothing when it declares none',
+    R.suggestCheckCommand(['package.json', 'pnpm-lock.yaml'], pkg) === 'pnpm test' &&
+      R.suggestCheckCommand(['package.json'], pkg) === 'npm test' &&
+      R.suggestCheckCommand(['package.json'], JSON.stringify({ scripts: { verify: 'node v.js' } })) === 'npm run verify' &&
+      R.suggestCheckCommand(['package.json'], '{not json') === null &&
+      R.suggestCheckCommand(['Cargo.toml']) === 'cargo test' && R.suggestCheckCommand(['go.mod']) === 'go test ./...' &&
+      R.suggestCheckCommand(['pyproject.toml']) === 'pytest' && R.suggestCheckCommand(['README.md']) === null,
+    'suggestions')
+  const item = { url: 'https://x/12', brief: 'SSO users can log in', criteria: ['401 is gone', 'a test covers it'], criteriaMet: ['401 is gone'] }
+  const verified = R.prBody(item, { verification: { word: 'verified', missing: [] }, checks: [{ command: 'npm test', words: 'exit 0', tested: 'abc1234567' }], reviewedFiles: 3, openComments: 0 })
+  const short = R.prBody(item, { verification: { word: 'agent finished — not verified', missing: ['no check has run on this revision'] }, checks: [], openComments: 2 })
+  const card = R.prBody(item)
+  ok('flow.3 the PR body carries the outcome, the criteria ticked by what the person confirmed, the witnessed checks with the revision they tested and the verdict — saying plainly when it is NOT verified — and a PR opened without gathering evidence has no evidence section at all',
+    verified.includes('Closes https://x/12') && verified.includes('## Intended outcome\n\nSSO users can log in') &&
+      verified.includes('- [x] 401 is gone') && verified.includes('- [ ] a test covers it') &&
+      verified.includes('**verified**') && verified.includes('`npm test` — exit 0 (tested abc1234567)') && verified.includes('Reviewed 3 files') &&
+      verified.includes("not the agent's own report") &&
+      short.includes('**agent finished — not verified** — no check has run on this revision.') && short.includes('No check was witnessed') && short.includes('2 review comments are still open') &&
+      !card.includes('## Evidence') && !card.includes('No check was witnessed'),
+    JSON.stringify({ verified, short, card }))
+}
+
+const { existsSync, realpathSync, rmSync } = require('node:fs')
+// M311 — combine.1–.4. PARALLEL WORK, SAFE TO COMBINE. An overlap (one
+//      path, separate checkouts) is not contention (one checkout, two
+//      writers); the order honours authored links, then lanes that meet
+//      nobody, then the smaller diff; and the combined tree is real — two
+//      lanes that each apply alone conflict together, found BEFORE a merge.
+{
+  const lanes = [
+    { id: '/w/a', label: 'A', branch: 'tc/a', files: ['src/api.ts', 'src/a.ts'], added: 40, removed: 2 },
+    { id: '/w/b', label: 'B', branch: 'tc/b', files: ['src/api.ts'], added: 5, removed: 1 },
+    { id: '/w/c', label: 'C', branch: 'tc/c', files: ['docs/c.md'], added: 90, removed: 0 },
+    { id: '/w/d', label: 'D', branch: 'tc/d', files: [], added: 0, removed: 0 }
+  ]
+  const plan = R.planCombine(lanes)
+  const linked = R.planCombine(lanes, [{ from: '/w/a', to: '/w/b' }])
+  const loop = R.planCombine(lanes, [{ from: '/w/a', to: '/w/b' }, { from: '/w/b', to: '/w/a' }])
+  ok('combine.1 overlaps are paths changed in more than one lane; a lane with no changes is not in the plan; a lane that meets nobody lands first, then the smaller overlapping lane — each step says why, and names where it meets the lanes before it',
+    plan.lanes.length === 3 && plan.overlaps.length === 1 && plan.overlaps[0].path === 'src/api.ts' && plan.overlaps[0].lanes.join() === '/w/a,/w/b' &&
+      plan.order.map((s) => s.label).join() === 'C,B,A' && /touches no file/.test(plan.order[0].reason) && /smallest/.test(plan.order[1].reason) &&
+      plan.order[2].meets.join() === 'src/api.ts' && plan.order[1].meets.length === 0 && /1 file changed in more than one/.test(plan.summary),
+    JSON.stringify(plan))
+  ok('combine.2 an authored hand-off outranks size (A before B though A is larger), and a loop of links is SAID and still orders every lane rather than dropping them',
+    linked.order.map((s) => s.label).join() === 'C,A,B' && /hand-off link/.test(linked.order[2].reason) &&
+      loop.cycle.length === 2 && loop.order.length === 3 && loop.order.some((s) => /loop/.test(s.reason)),
+    JSON.stringify({ linked: linked.order, loop: loop.order, cycle: loop.cycle }))
+  const conflicts = R.parseApplyConflicts("error: patch failed: src/x.ts:12\nApplied patch to 'src/y.ts' with conflicts.\nU src/y.ts\nerror: could not build fake ancestor\n")
+  ok('combine.3 relativeToCheckout keys a path by its checkout (and not a sibling that shares a prefix); git apply\'s conflict report yields paths, never its sentences',
+    R.relativeToCheckout('/w/a/src/x.ts', '/w/a') === 'src/x.ts' && R.relativeToCheckout('/w/a2/src/x.ts', '/w/a') === '/w/a2/src/x.ts' &&
+      R.relativeToCheckout('./src/x.ts', undefined) === 'src/x.ts' && R.relativeToCheckout('src/x.ts', '/w/a/') === 'src/x.ts' &&
+      conflicts.join() === 'src/x.ts,src/y.ts',
+    JSON.stringify(conflicts))
+}
+if (GIT) {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'tc combine ')))
+  const repo = join(base, 'repo')
+  mkdirSync(repo)
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' })
+  git(repo, 'init', '-q', '.'); git(repo, 'config', 'user.email', 'v@example.com'); git(repo, 'config', 'user.name', 'v')
+  writeFileSync(join(repo, 'f.txt'), 'one\ntwo\nthree\n')
+  git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'init')
+  const lane = (name) => { const p = join(base, name); git(repo, 'worktree', 'add', '-q', '-b', `tc/${name}`, p); return p }
+  const a = lane('a'), b = lane('b'), c = lane('c')
+  writeFileSync(join(a, 'f.txt'), 'ONE\ntwo\nthree\n')          // uncommitted edit
+  writeFileSync(join(a, 'new-a.txt'), 'a\n')                    // untracked file
+  writeFileSync(join(b, 'f.txt'), 'one\ntwo\nTHREE\n'); git(b, 'commit', '-qam', 'b')   // committed, a different hunk
+  writeFileSync(join(c, 'f.txt'), 'uno\ntwo\nthree\n')          // the SAME line as a
+  const runner = R.createGitRunner({ gitPath: () => 'git', env: () => process.env })
+  const engine = R.createReviewEngine({ run: runner, baselineOf: () => undefined, peersInRepo: () => 0 })
+  const combiner = R.createCombineRunner({ run: runner, commonRootOf: (p) => engine.commonRootOf(p), worktreesDir: join(base, 'wt') })
+  const clean = await combiner.run({ root: a, lanes: [a, b] })
+  const merged = clean.kind === 'combined' ? readFileSync(join(clean.path, 'f.txt'), 'utf8') : ''
+  const clash = await combiner.run({ root: repo, lanes: [a, b, c] })
+  ok('combine.4 a real combine: two lanes (one uncommitted with an untracked file, one committed) apply in order into a scratch checkout OUTSIDE the repository, from any lane\'s path; a third that edits the same line as the first is named as the conflict, with its path — and no lane, nor the main tree, was changed',
+    clean.kind === 'combined' && clean.conflict === null && clean.applied.length === 2 && merged === 'ONE\ntwo\nTHREE\n' &&
+      existsSync(join(clean.path, 'new-a.txt')) && !clean.path.startsWith(repo) &&
+      clash.kind === 'combined' && clash.conflict !== null && clash.conflict.lane === c && clash.conflict.paths.includes('f.txt') && clash.applied.length === 2 &&
+      readFileSync(join(a, 'f.txt'), 'utf8') === 'ONE\ntwo\nthree\n' && readFileSync(join(repo, 'f.txt'), 'utf8') === 'one\ntwo\nthree\n' &&
+      git(repo, 'status', '--porcelain').trim() === '',
+    JSON.stringify({ clean, clash, merged }))
+  rmSync(base, { recursive: true, force: true })
+}
+
+// M312 — setup.1–.4. REPOSITORY SETUP. Detection reads the lockfile's own
+//      tool; a record parses field-level; ports are a per-lane span that
+//      skips taken ones; preparation runs only a SAVED record, stops at the
+//      first failing step with its output kept, and the agent is told only
+//      what the record says.
+{
+  const pkg = JSON.stringify({ scripts: { dev: 'vite', test: 'vitest', lint: 'eslint .' } })
+  const pnpm = R.detectSetup('/r', ['package.json', 'pnpm-lock.yaml'], pkg)
+  const npm = R.detectSetup('/r', ['package.json', 'package-lock.json'], pkg)
+  const go = R.detectSetup('/r', ['go.mod'])
+  ok('setup.1 detection proposes the lockfile\'s own installer (never npm in a pnpm repository), the declared checks, a dev service with a port, and a preview on it',
+    pnpm.install.join() === 'pnpm install --frozen-lockfile' && pnpm.checks.join() === 'pnpm run lint,pnpm test' &&
+      pnpm.services[0].name === 'web' && pnpm.services[0].command === 'pnpm run dev' && pnpm.services[0].port === true && pnpm.previewAt.service === 'web' &&
+      npm.install.join() === 'npm ci' && npm.checks.join() === 'npm run lint,npm test' &&
+      go.install.join() === 'go mod download' && go.checks.join() === 'go test ./...' && go.services.length === 0,
+    JSON.stringify({ pnpm, npm, go }))
+  const parsed = R.parseRepoSetup({ root: '/r', install: ['npm ci', 5, 'bad\nline', ''], services: [{ name: 'web', command: 'npm run dev', port: true }, { name: 'web', command: 'dup' }, { name: '', command: 'x' }], checks: 'npm test', ports: { base: 80, span: 5 }, previewAt: { service: 'nope' } })
+  const ports = R.allocatePorts({ services: [{ name: 'web', command: 'a', port: true }, { name: 'api', command: 'b', port: true }, { name: 'db', command: 'c', port: false }], ports: { base: 4100, span: 3 } }, 2, new Set([4106]))
+  const tight = R.allocatePorts({ services: [{ name: 'a', command: 'a', port: true }, { name: 'b', command: 'b', port: true }], ports: { base: 4100, span: 1 } }, 1, new Set())
+  ok('setup.2 a record parses field-level (a bad command costs itself, a duplicate or nameless service costs itself, a list that is not a list is empty, bad ports fall back); a lane\'s ports are its own span, skipping taken ones, and a service that does not fit is null — never a port outside the span; the env names PORT and TC_PORT_<NAME>',
+    parsed.install.join() === 'npm ci' && parsed.services.length === 1 && parsed.checks.length === 0 && parsed.ports.base === 4100 && parsed.previewAt === undefined &&
+      R.parseRepoSetup({ install: [] }) === null &&
+      ports.web === 4107 && ports.api === 4108 && !('db' in ports) && tight.a === 4101 && tight.b === null &&
+      JSON.stringify(R.setupEnv({ web: 4107, api: 4108, x: null })) === JSON.stringify({ PORT: '4107', TC_PORT_WEB: '4107', TC_PORT_API: '4108' }) &&
+      R.servicesFromText('web: npm run dev\napi : node api.js\nplain command').map((x) => x.name).join() === 'web,api,service3' &&
+      R.watcherArgv('npm test').command === 'npm' && R.watcherArgv('npm run lint && npm test').command === '/bin/sh' && R.watcherArgv('  ') === null,
+    JSON.stringify({ parsed, ports, tight }))
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tc setup ')))
+  const repo = join(dir, 'repo'); mkdirSync(repo)
+  const lanePath = join(dir, 'lane'); mkdirSync(lanePath)
+  writeFileSync(join(repo, 'package.json'), pkg)
+  const puts = []
+  const store = R.createRepoSetupStore({
+    dir: join(dir, 'store'),
+    mainRootOf: async (cwd) => (cwd === repo || cwd === lanePath ? repo : null),
+    lanesOf: () => [lanePath],
+    loginEnv: () => process.env,
+    outputs: { put: (r) => puts.push(r) },
+    isPortFree: async (p) => p !== 4110
+  })
+  const draft = await store.read(lanePath)
+  const none = await store.prepare({ lane: lanePath })
+  const saved = await store.save({ root: lanePath, install: ['echo installed > marker.txt', 'echo "$PORT $TC_PORT_WEB"; echo boom >&2; exit 3', 'echo never > never.txt'], services: [{ name: 'web', command: 'x', port: true }], checks: ['npm test'] })
+  const again = await store.read(repo)
+  const prep = await store.prepare({ lane: lanePath })
+  ok('setup.3 an unsaved repository reads as a DRAFT and preparation refuses to run it; a save is keyed by the MAIN tree (saved from a lane, read from the root); preparation runs the steps in the lane in order, with the lane\'s ports in its env, stops at the first failure — the next step never runs — and keeps each step\'s whole output as a setup record',
+    draft.kind === 'draft' && draft.setup.install.join() === 'npm install' && none.kind === 'no-setup' &&
+      saved.ok === true && saved.setup.root === repo && again.kind === 'saved' &&
+      prep.kind === 'failed' && prep.steps.length === 2 && prep.steps[0].exitCode === 0 && prep.steps[1].exitCode === 3 &&
+      existsSync(join(lanePath, 'marker.txt')) && !existsSync(join(lanePath, 'never.txt')) &&
+      prep.ports.web === 4111 && puts.length === 2 && puts[1].source === 'setup' && /4111 4111/.test(puts[1].head + puts[1].tail) && /boom/.test(puts[1].head + puts[1].tail) &&
+      /exited 3 — boom/.test(R.prepareFailureLine(prep)),
+    JSON.stringify({ draft: draft.kind, none, prep, line: R.prepareFailureLine(prep) }))
+  rmSync(dir, { recursive: true, force: true })
+  const s = R.parseRepoSetup({ root: '/r', install: ['npm ci'], services: [{ name: 'web', command: 'npm run dev', port: true }], checks: ['npm test'] })
+  const brief = R.setupBrief(s, { kind: 'prepared', steps: [{ command: 'npm ci', exitCode: 0, ms: 1, tail: '' }], ports: { web: 4111 } })
+  ok('setup.4 the agent is told what the record says — prepared steps not to repeat, each service with its port and env names, the checks that decide done — and nothing at all for a repository with no saved setup; Start work\'s line says a draft has not been saved',
+    /Already prepared.*`npm ci`/.test(brief) && /\*\*web\*\*: `npm run dev` on port 4111 \(env PORT \/ TC_PORT_WEB\)/.test(brief) && /`npm test`\. Run them before/.test(brief) &&
+      R.setupBrief(null, null) === '' &&
+      /no setup saved/.test(R.setupLine({ kind: 'draft', setup: s })) && /prepares with `npm ci`/.test(R.setupLine({ kind: 'saved', setup: s })),
+    brief)
+}
+
+// M314 — recipe.1–.3. RECIPES carry context, checks and deliverables; the
+//      task keeps its own copy; the first message says them; a finished task
+//      becomes a recipe with the checks that PASSED.
+{
+  const ids = R.BUILT_IN_RECIPES.map((r) => r.id).join()
+  const fill = R.applyRecipe(R.BUILT_IN_RECIPES[0], 'auth › refresh')
+  const impl = R.applyRecipe(R.BUILT_IN_RECIPES.find((r) => r.id === 'recipe-implement-issue'), 'owner/repo#9')
+  ok('recipe.1 the four built-ins exist — fix a failing test, implement an issue, review a change, investigate a bug — each with criteria, deliverables and context, not only an arrangement; applying one aims it with the person\'s answer',
+    ids === 'recipe-fix-test,recipe-implement-issue,recipe-review-change,recipe-investigate-bug' &&
+      R.BUILT_IN_RECIPES.every((r) => r.criteria.length > 0 && r.deliverables.length > 0 && r.context.length > 0) &&
+      fill.title === 'Fix a failing test: auth › refresh' && fill.brief.includes('"auth › refresh"') && !fill.brief.includes('{input}') && fill.swarm === undefined &&
+      impl.swarm === 'implement' && fill.recipeId === 'recipe-fix-test',
+    JSON.stringify({ fill, impl }))
+  const msg = R.dispatchMessage({ title: 'T', brief: 'b' }, [R.recipeMessage({ recipeId: 'recipe-fix-test', checks: ['npm test'], deliverables: ['the fix'] }), ''])
+  const plain = R.dispatchMessage({ title: 'T' }, [R.recipeMessage({}), R.setupBrief(null, null)])
+  const mine = R.recipeFromTask({ id: 'wi1', title: 'login 401', brief: 'Fix login 401 for SSO', criteria: ['401 gone'], checks: ['npm test', 'npm run e2e'], deliverables: ['the fix'], recipeId: 'recipe-fix-test' }, { name: 'SSO login fix', passedChecks: ['npm test', 'npm test'], now: 1000 })
+  ok('recipe.2 the first message gains how to gather context, the checks that must pass and what to hand back — and a task with none sends exactly the M310 message; a saved recipe keeps the checks that PASSED (deduped), templates the brief on the task\'s own title, keeps its recipe\'s ask and context, and records where it came from',
+    /Before you start:\n- Run the failing check first/.test(msg) && /Checks that must pass:\n- `npm test`/.test(msg) && /Hand back:\n- the fix/.test(msg) &&
+      plain === 'Dispatched work item\n(typed)\nT' &&
+      mine.checks.join() === 'npm test' && mine.brief === 'Fix {input} for SSO' && mine.ask.label === 'Which test is failing?' &&
+      mine.context.includes('failing-output') && mine.savedFrom.taskId === 'wi1' && /^mine-sso-login-fix-/.test(mine.id),
+    JSON.stringify({ msg, mine }))
+  const dir = mkdtempSync(join(tmpdir(), 'tc recipes '))
+  const store = R.createRecipeStore({ dir })
+  const s1 = await store.save(mine)
+  const s2 = await store.save({ ...R.BUILT_IN_RECIPES[0] })
+  const s3 = await store.save({ id: 'mine-x', name: 'X', criteria: 'not a list', swarm: 'bogus' })
+  const listed = await store.list()
+  const gone = await store.remove(mine.id)
+  const item = R.parseWorkItems([{ id: 'w', source: 'typed', title: 't', state: 'todo', createdAt: 1, updatedAt: 1, recipeId: 'recipe-fix-test', checks: ['npm test'], deliverables: 'nope' }], [])
+  ok('recipe.3 the store keeps the person\'s recipes, refuses a built-in\'s id (a saved list cannot shadow one), parses field-level, and deletes by id; a work item keeps its recipe, checks and deliverables field-level',
+    s1.ok === true && s2.ok === false && s3.ok === true && s3.recipe.criteria.length === 0 && s3.recipe.swarm === undefined &&
+      listed.map((r) => r.id).join() === `mine-x,${mine.id}` && gone === true && R.allRecipes(listed).length === 6 &&
+      item[0].recipeId === 'recipe-fix-test' && item[0].checks.join() === 'npm test' && item[0].deliverables === undefined,
+    JSON.stringify({ s2, listed: listed.map((r) => r.id), item }))
+  rmSync(dir, { recursive: true, force: true })
+}
+
+// M313 — editor.1–.2. OPEN IN THE PERSON'S EDITOR, AT THE LINE. The CLI on
+//      the login PATH first, then an installed app's URL scheme, then the
+//      default app SAYING it dropped the line; a named editor that is not
+//      there is refused by name, never opened in something else.
+{
+  const which = (bins) => (b) => (bins.includes(b) ? `/usr/local/bin/${b}` : null)
+  const t = { path: '/r/src/a.ts', line: 118, col: 4 }
+  const code = R.planEditorOpen(t, 'auto', which(['code']), () => false)
+  const cursorFirst = R.planEditorOpen(t, 'auto', which(['code', 'cursor']), () => false)
+  const url = R.planEditorOpen(t, 'auto', which([]), (id) => id === 'vscode')
+  const none = R.planEditorOpen(t, 'auto', which([]), () => false)
+  const named = R.planEditorOpen(t, 'zed', which(['code']), () => false)
+  const jb = R.planEditorOpen(t, 'idea', which(['idea']), () => false)
+  const dir = R.planEditorOpen({ path: '/r/wt', dir: true }, 'vscode', which(['code']), () => false)
+  ok('editor.1 a file at a line goes to the first editor CLI with that editor\'s own line syntax (code -g file:line:col; idea --line --column), then to an installed app\'s URL, then to the default app with a note naming the dropped line; a worktree opens as a folder; a named editor that is absent is refused by name',
+    code.kind === 'cli' && code.args.join(' ') === '-g /r/src/a.ts:118:4' && cursorFirst.editor === 'cursor' &&
+      url.kind === 'url' && url.url === 'vscode://file/r/src/a.ts:118:4' &&
+      none.kind === 'default-app' && /line 118/.test(none.note) &&
+      named.kind === 'refused' && /Zed is not installed/.test(named.reason) &&
+      jb.args.join(' ') === '--line 118 --column 4 /r/src/a.ts' && dir.args.join() === '/r/wt' &&
+      JSON.stringify(R.parseEditorTarget('src/a.ts:12:3')) === JSON.stringify({ path: 'src/a.ts', line: 12, col: 3 }),
+    JSON.stringify({ code, url, none, named, jb, dir }))
+  const launched = []
+  const opener = R.createEditorOpener({ pref: () => 'auto', which: which(['code']), hasApp: () => false, exists: (p) => p === '/r/src/a.ts', launch: async (bin, args) => { launched.push([bin, ...args]); return null }, openUrl: async () => {}, openPath: async () => '' })
+  const opened = await opener({ path: '/r/src/a.ts', line: 7 })
+  const missing = await opener({ path: '/r/nope.ts', line: 7 })
+  const relative = await opener({ path: 'src/a.ts' })
+  const bogusLine = await opener({ path: '/r/src/a.ts', line: -3 })
+  ok('editor.2 the opener launches exactly the planned argv, refuses a path that does not exist or is not absolute, and drops a line that is not a positive integer rather than passing it on',
+    opened.kind === 'opened' && opened.editor === 'VS Code' && launched[0].join(' ') === '/usr/local/bin/code -g /r/src/a.ts:7' &&
+      missing.kind === 'refused' && relative.kind === 'refused' && bogusLine.kind === 'opened' && launched[1].join(' ') === '/usr/local/bin/code /r/src/a.ts',
+    JSON.stringify({ launched, missing, relative }))
 }
 
 const failed = results.filter((r) => !r.pass)

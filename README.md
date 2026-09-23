@@ -351,7 +351,7 @@ The main process owns every PTY; the renderer never spawns a process.
 renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list   -->  main
                        machine:sample
                        layout:load / layout:save
-                       session:backend
+                       session:backend / session:last-exit
                        preset:list / preset:rename / preset:delete
                        preset:set-default / preset:spawn-by-id / preset:save-panel
                        preset:set-worktree
@@ -369,6 +369,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:panel / review:baseline / review:at
                        review:diff / review:commit / review:discard
                        review:across / review:identity / git:status
+                       git:root
                        credential:list / credential:set / credential:delete
                        credential:verify
                        github:list / broker:audit
@@ -385,6 +386,9 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
                        env:report / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
+                       check:output / combine:run
+                       setup:read / setup:save / setup:prepare
+                       editor:open / recipe:list / recipe:save / recipe:delete
                        spawn:sheet / spawn:recent / spawn:recent-used
                        agent:create / agent:send / agent:interrupt / agent:dispose
                        agent:answer / agent:list / agent:transcript / agent:import
@@ -1078,6 +1082,15 @@ price of not killing something.
 | M302 | Orchestrate Phase E, reusable arrangements and saved views. [Ledger](docs/build-log/m300-m302-orchestrate-phase-e.md). |
 | M304 | Orchestrate **Watch** — a third lens: a perspective, orbitable three.js scene of what the sessions are DOING, read from their tool calls (`orchestration-live.ts`, pure): each file a session read or wrote is a tower of written lines (green added, red removed, labelled), a write flies its first line — scrubbed through `outward()` — from the session to the tower, a command rises from its station and resolves green or red from its `tool_result`, and a file two sessions wrote wears an amber ring. History stands and never replays; lazy chunk, demand frameloop, the one bloom door. [Ledger](docs/build-log/m304-m305-orchestrate-watch.md). |
 | M305 | Orchestrate task chrome — a task header (the goal as the title in the display serif, placement and blocker on one line, the board's four words as a stage rail, Review changes as the one primary) replaces M299's title row, count tiles, blocker strip and command row; the roster is grouped by state with each count as its group's header (and the metric lens's door); Needs you is a card only when something does; the Changes tab opens its first diff. [Ledger](docs/build-log/m304-m305-orchestrate-watch.md). |
+| M306 | A check run keeps its EXACT output — one record per run in `check-output/` (head and tail kept, the elided middle counted), referenced from the ledger row by `outputId` so `runs.jsonl` stays metadata; watcher runs and login-shell commands (between OSC 133 C and D) both captured; `check:output` opens a run's command, directory, time, exit and tested revision wherever a check is shown. [Ledger](docs/build-log/m306-m310-flagship-flow.md). |
+| M307 | The review, together — line comments on the diff (numbered `DiffLine`s), saved on the task; a follow-up composed from open comments, failing checks' own last lines and unconfirmed criteria, shown whole before Send; acceptance criteria as a checklist; and **finished ≠ verified** — `verificationOf` names what is missing. [Ledger](docs/build-log/m306-m310-flagship-flow.md). |
+| M308 | Needs you as a decision inbox — each item's blocker, context and wait, ranked by what deciding it unblocks over hand-offs, identical requests grouped with Allow all once, snooze as a view (badge counts the unsnoozed; ⌘J follows the inbox). [Ledger](docs/build-log/m306-m310-flagship-flow.md). |
+| M309 | The return briefing — last seen kept per viewer; after an absence, per task: what finished (each run opening its own output), what changed, what needs a decision, and next — in the Resume banner's slot. [Ledger](docs/build-log/m306-m310-flagship-flow.md). |
+| M310 | The flagship joins — Start work from an open issue with an outcome and criteria the agent is sent; Run checks and Open pull request (its body carrying the evidence, through `outward`) from the review; the task's chain in the Inspector; the first-task hint grown into a five-step guide. [Ledger](docs/build-log/m306-m310-flagship-flow.md). |
+| M311 | Parallel work, safe to combine — Orchestrate's Combine tab names files changed in more than one lane (separate checkouts, a review path) apart from sessions sharing one checkout (contention, a hazard now), proposes an integration order that honours hand-offs, and applies every lane in that order into a scratch checkout (`combine:run`, no lane touched) to run checks on the combined tree; Watch keys files by checkout and lists shared writes with their verb. [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
+| M312 | Repository setup, saved once — install, services, checks, ports and preview per repository (`setup:*`), detected as a draft nothing runs, and run in each new lane BEFORE its agent starts; a failed step stops the start with its output kept, each lane gets its own port span, and the agent is told its environment. [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
+| M313 | Meet the editor and the shell — a file at a line or a worktree in the person's editor (`editor:open`, Settings ▸ Open files in; ⌘⇧E; a double-clicked diff line; a Cmd-clicked `path:line`), and `tc task` / `terminal-canvas://task` open Start work filled in, starting nothing. [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
+| M314 | Workflow recipes — Fix a failing test, Implement an issue, Review a change, Investigate a bug, each carrying context, checks and deliverables onto the task and into the first message; a task is saved as the person's own recipe with the checks that passed (`recipe:*`). [Ledger](docs/build-log/m311-m314-workflow-kit.md). |
 
 ### What's next — the v10 run (D01–D20)
 

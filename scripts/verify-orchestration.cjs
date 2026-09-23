@@ -598,6 +598,22 @@ ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationC
     scrubbed >= 4 && write.token !== undefined && !/sk-ant/.test(JSON.stringify(m)) && write.token.length <= L.ORCH_LIVE_TOKEN_MAX &&
       /buildOrchLive\(inputs, \(text, id\) => outward\(text, `panel \$\{id\}`\)\.text\)/.test(viewSrc),
     JSON.stringify({ token: write.token, scrubbed }))
+  // M311. A file is keyed by CHECKOUT + repo-relative path: two lanes writing
+  // `src/api.ts` in their own worktrees are an overlap (alsoIn), never
+  // contention; two sessions in ONE checkout are contention, whatever
+  // spelling (absolute or relative) each tool used for the path.
+  const editAt = (id, p) => [{ type: 'tool_use', id, name: 'Edit', input: { file_path: p, old_string: 'a', new_string: 'b' } }]
+  const lanes = L.buildOrchLive([
+    { id: 'a', title: 'A', state: 'working', islandId: null, blocks: editAt('x1', '/w/a/src/api.ts'), checkout: '/w/a' },
+    { id: 'b', title: 'B', state: 'working', islandId: null, blocks: editAt('x2', '/w/b/src/api.ts'), checkout: '/w/b' },
+    { id: 'c', title: 'C', state: 'working', islandId: null, blocks: editAt('x3', 'src/api.ts'), checkout: '/w/a' }
+  ], (t) => t)
+  const inA = lanes.files.find((f) => f.checkout === '/w/a')
+  const inB = lanes.files.find((f) => f.checkout === '/w/b')
+  ok('orch-live.checkout.1 Watch keys a file by its checkout: the same path in two worktrees is two towers, each saying the other lane changed it too (alsoIn), NOT contended; two sessions in one checkout — one writing an absolute path, one a relative one — are one contended tower',
+    lanes.files.length === 2 && inA.path === 'src/api.ts' && inA.contended === true && inA.writers.join() === 'a,c' && inA.alsoIn === 1 &&
+      inB.contended === false && inB.alsoIn === 1,
+    JSON.stringify(lanes.files))
   const first = L.orchLiveFresh(m.events, null)
   const later = L.orchLiveFresh([...m.events, { key: 'c1:u9', sessionId: 'c1', kind: 'other', ok: null, added: 0, removed: 0, say: 'Using X' }], first.seen)
   ok('orch-live.5 history is never replayed: the first read animates nothing, a later read animates only the new key',
@@ -614,7 +630,88 @@ ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationC
       JSON.stringify(L.orchLiveSlabs({ added: 9, removed: 4 })) === '{"added":3,"removed":1}' &&
       (() => { const c = L.orchLiveSlabs({ added: 400, removed: 400 }); return c.added + c.removed === L.ORCH_LIVE_SLAB_CAP })() &&
       JSON.stringify(L.orchLiveSlabs({ added: 0, removed: 0 })) === '{"added":0,"removed":0}')
+  // Brief #16. A burst is animated as BATCHES; a command's outcome, which lands
+  // on an event that is no longer fresh, is its own item; and every batch has a
+  // plain-words line for reduced motion and a paused view.
+  const ev = (key, sessionId, kind, extra = {}) => ({ key, sessionId, kind, ok: null, added: 0, removed: 0, say: '', ...extra })
+  const burst = [
+    ev('a:1', 'a', 'write', { path: 'src/x.ts', added: 3, token: 'one' }),
+    ev('a:2', 'a', 'write', { path: 'src/x.ts', added: 2, removed: 1, token: 'two' }),
+    ev('a:3', 'a', 'read', { path: 'src/y.ts' }),
+    ev('a:4', 'a', 'read', { path: 'src/z.ts' }),
+    ev('b:1', 'b', 'run', { command: 'npm test' }),
+    ev('b:2', 'b', 'run', { command: 'npm run lint' }),
+    ev('a:5', 'a', 'write', { path: 'src/w.ts', added: 1 })
+  ]
+  const batches = L.orchLiveBatch(burst)
+  ok('orch-live.batch.1 consecutive same-session writes to one file are ONE batch carrying the summed lines and the last token; reads merge across files and keep every path; commands never merge',
+    batches.length === 5 && batches[0].count === 2 && batches[0].added === 5 && batches[0].removed === 1 && batches[0].token === 'two' && batches[0].key === 'a:1' &&
+      batches[1].kind === 'read' && batches[1].paths.join() === 'src/y.ts,src/z.ts' && batches[1].path === undefined &&
+      batches[2].command === 'npm test' && batches[3].command === 'npm run lint' && batches[4].path === 'src/w.ts',
+    JSON.stringify(batches.map((b) => [b.key, b.count, b.paths])))
+  const opened = L.orchLiveOutcomes(burst, null)
+  const done = L.orchLiveOutcomes(burst.map((e) => e.key === 'b:1' ? { ...e, ok: true } : e), opened.pending)
+  ok('orch-live.outcome.1 a running command that later reports is RESOLVED once (the lens opening resolves nothing), and stays pending until it says',
+    opened.resolved.length === 0 && opened.pending.has('b:1') && done.resolved.map((e) => e.key).join() === 'b:1' && !done.pending.has('b:1') && done.pending.has('b:2') &&
+      L.orchLiveOutcomes(burst.map((e) => e.key === 'b:1' ? { ...e, ok: true } : e), done.pending).resolved.length === 0,
+    JSON.stringify(done.resolved.map((e) => e.key)))
+  ok('orch-live.log.1 every batch and outcome has a plain-words line — the text twin of the motion',
+    L.orchLiveLogLine(batches[0]) === 'Wrote src/x.ts +5 −1 (2 edits)' && L.orchLiveLogLine(batches[1]) === 'Read 2 files' &&
+      L.orchLiveLogLine(batches[2]) === 'Started npm test' && L.orchLiveLogLine({ outcome: { ...burst[4], ok: false } }) === 'npm test failed',
+    JSON.stringify(batches.slice(0, 3).map(L.orchLiveLogLine)))
 }
+ok('orch-live.motion.1 Watch moves only for events: no camera auto-orbit, Pause is the VIEW\'s (it freezes the drawn model and says the sessions keep running), and reduced motion or a paused view shows the event log',
+  (() => {
+    const live = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationLive.tsx'), 'utf8')
+    return !/autoRotate/.test(live) && /const model = paused && frozen !== null \? frozen : liveModel/.test(live) &&
+      /sessions keep running/.test(live) && /'Pause view'/.test(live) && /const showLog = reducedMotion \|\| paused/.test(live) && /role="log"/.test(live)
+  })())
+// Brief #18 — finished execution is not finished work. Four outcomes, never
+// blurred, each with a handoff; no handoff while anything still runs.
+{
+  const C = load('src/shared/completion.ts', 'completion.cjs')
+  const idle = { active: 0, needsYou: 0, idle: 1, ended: 0 }
+  const gone = { active: 0, needsYou: 0, idle: 0, ended: 2 }
+  const changes = { files: 2, added: 10, removed: 3 }
+  const check = (outcome) => ({ key: outcome, source: 'watcher', panelId: 'w', command: 'npm test', context: { cwd: '/r' }, observed: outcome === 'stale' ? 'passed' : outcome, outcome, at: 1 })
+  const verified = { stage: 'verified', word: 'verified', tone: 'green', holds: ['reviewed at this revision'], missing: [] }
+  const open = { stage: 'agent-finished', word: 'agent finished — not verified', tone: 'amber', holds: ['reviewed at this revision'], missing: ['no check has run on this revision'] }
+  const a = C.completionOf({ board: 'working', sessions: { ...idle, active: 1 }, changes, checks: [], verification: null, reviewedNow: false })
+  const i = C.completionOf({ board: 'working', sessions: idle, changes, checks: [], verification: null, reviewedNow: false })
+  const e = C.completionOf({ board: 'working', sessions: gone, changes, checks: [], verification: null, reviewedNow: false })
+  const r = C.completionOf({ board: 'review', sessions: idle, changes, checks: [check('stale')], verification: open, reviewedNow: true })
+  const v = C.completionOf({ board: 'review', sessions: idle, changes, checks: [check('passed')], verification: verified, reviewedNow: true })
+  const d = C.completionOf({ board: 'done', sessions: gone, changes, checks: [check('passed')], verification: verified, reviewedNow: true })
+  ok('completion.1 no handoff while a session still works or waits on the person; idle, run ended, reviewed and done are four different outcomes',
+    a === null && C.completionOf({ board: 'working', sessions: { ...idle, needsYou: 1 }, changes, checks: [], verification: null, reviewedNow: false }) === null &&
+      i.outcome === 'idle' && e.outcome === 'ended' && r.outcome === 'reviewed' && v.outcome === 'reviewed' && d.outcome === 'done',
+    JSON.stringify([i, e, r, v, d].map((x) => x && x.outcome)))
+  ok('completion.2 only the board says done — a verified review is "Reviewed · verified" whose next action is Mark done, never done by inference',
+    v.word === 'Reviewed · verified' && v.next.action === 'mark-done' && d.word === 'Done' && d.next.action === 'none' && !/done/i.test(i.word + e.word + r.word),
+    JSON.stringify({ v: v.word, d: d.word }))
+  ok('completion.3 the handoff says what changed, which checks ran, what is unresolved and the next action — an idle or ended run with changes goes to review, an open review to its checks',
+    i.changed === '2 files changed · +10 −3' && i.next.action === 'review' && e.next.action === 'review' &&
+      r.checks === '1 check ran · 1 on an earlier version' && r.unresolved.join() === 'no check has run on this revision' && r.next.action === 'checks' &&
+      /idle is not finished/.test(i.meaning),
+    JSON.stringify({ i, r }))
+  const unread = C.completionOf({ board: 'working', sessions: gone, checks: null, verification: null, reviewedNow: false })
+  ok('completion.4 an unread fact is said as unread, never as an absence — no changes read is not "no changes", no checks read is not "none ran"',
+    unread.changed === 'Changes not read yet' && /not read/.test(unread.checks) && !/no changes/i.test(unread.meaning),
+    JSON.stringify(unread))
+}
+ok('completion.view.1 Orchestrate renders the handoff from completionOf with the WORKBENCH\'s checks (one read), and the review-stage wash no longer glows',
+  /completionOf\(\{/.test(viewSrc) && /onChecks=\{onBenchChecks\}/.test(viewSrc) && /data-orch-completion=\{completion\.outcome\}/.test(viewSrc) &&
+    /\.orch__cube-wash\[data-stage="review"\] \{[^}]*--wash-glow: 0px/.test(readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')))
+ok('review-read.1 the workbench has a reading mode the view holds in memory (never the layout record), Esc leaves it, and the diff carries its context line — subject and branch, shared warning, review and check freshness',
+  (() => {
+    const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
+    const prefs = readFileSync(join(root, 'src/renderer/orchestration/orchestration-prefs.ts'), 'utf8')
+    return /data-orch-bench-reading=/.test(bench) && /data-orch-reading=\{benchReading \|\| undefined\}/.test(viewSrc) && /e\.key !== 'Escape'/.test(viewSrc) &&
+      !/reading/.test(prefs) && /data-orch-diff-context/.test(bench) && /data-orch-diff-where/.test(bench) && /data-orch-diff-shared/.test(bench) &&
+      /data-orch-diff-review=/.test(bench) && /data-orch-diff-checks=/.test(bench) &&
+      // The diff on screen while the next is read keeps its place but is never the answer.
+      /data-orch-diff-previous aria-busy="true"/.test(bench)
+  })())
 ok('orch-live.door.1 OrchestrationLive is reached only through lazy() — nothing imports it for a value — and it reuses the one bloom door rather than importing postprocessing',
   (() => {
     const { execFileSync } = require('node:child_process')
@@ -679,6 +776,14 @@ ok('orch-live.frame.1 the Watch scene keeps the demand frameloop and asks for fr
     rows.length === 2 && rows[0].sent === true && rows[1].sent === false && rows[1].title === 'title c2' &&
       pruned.size === 1 && pruned.has('c2:r7') && !pruned.has('c1:r1'),
     JSON.stringify({ rows, pruned: [...pruned] }))
+  // #18. The selected task's requests sort first, stably, and say so; no task keeps arrival order.
+  const three = [...pendingQ, { id: 'c3', requestId: 'r9', toolName: 'Read', argument: 'b.ts' }]
+  const inTask = I.orchAttentionRows(three, (id) => id, new Set(), ['c3', 'c2'])
+  const noTask = I.orchAttentionRows(three, (id) => id, new Set())
+  ok('orch-attn.task.1 Needs-you rows of the selected task come first in arrival order and are marked in-task; with no task the order is arrival order and nothing is marked',
+    inTask.map((r) => r.id).join(',') === 'c2,c3,c1' && inTask[0].inTask === true && inTask[2].inTask === false &&
+      noTask.map((r) => r.id).join(',') === 'c1,c2,c3' && noTask.every((r) => r.inTask === false),
+    JSON.stringify({ inTask, noTask }))
 }
 
 // M284. Every new text the page shows passes the gate the page's other readers do
@@ -722,8 +827,9 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   const orchDir = join(root, 'src/renderer/orchestration')
   const orchSrc = readdirSync(orchDir).map((f) => readFileSync(join(orchDir, f), 'utf8')).join('\n')
-  ok('workbench.1 the workbench has exactly Changes · Checks · Output · Artifacts · Timeline — WORKBENCH_TABS names those five, each new tab has a READER in the strip (the durable record\'s timeline read) rather than an empty promise, and the strip still reaches only READ doors (review.panel/across/diff/identity, ledger.list, ledger.timeline, scrollback.tail): no review.commit, review.discard, agentSession.send, spawn — and no ledger.event, because the record is inspected here and written elsewhere',
-    /WORKBENCH_TABS: readonly WorkbenchTab\[\] = \['changes', 'checks', 'output', 'artifacts', 'timeline'\]/.test(prefs) &&
+  ok('workbench.1 the workbench has exactly Changes · Checks · Output · Artifacts · Timeline · Combine — WORKBENCH_TABS names those six (M311 added Combine, its body in OrchCombine.tsx, OUTSIDE the strip, because it makes a scratch checkout and runs a check), each new tab has a READER in the strip (the durable record\'s timeline read) rather than an empty promise, and the strip still reaches only READ doors (review.panel/across/diff/identity, ledger.list, ledger.timeline, scrollback.tail): no review.commit, review.discard, agentSession.send, spawn — and no ledger.event, because the record is inspected here and written elsewhere',
+    /WORKBENCH_TABS: readonly WorkbenchTab\[\] = \['changes', 'checks', 'output', 'artifacts', 'timeline', 'combine'\]/.test(prefs) &&
+      /<OrchCombine /.test(bench) && !/combine\.run\(|watcher\.create\(/.test(bench) &&
       /function ArtifactsTab\(/.test(bench) && /function TimelineTab\(/.test(bench) && /ledger\.timeline\(/.test(bench) &&
       /review\.panel\(|review\.across\(|review\.diff\(|review\.identity\(|ledger\.list\(|scrollback\.tail\(/.test(bench) &&
       !/review\.commit|review\.discard|agentSession\.send|agentSession\.create|spawn\.|ledger\.event/.test(bench),

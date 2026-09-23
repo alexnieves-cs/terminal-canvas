@@ -10,6 +10,7 @@ import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
 import { useTierFade } from '@renderer/canvas/tier-fade'
 import type { AgentState } from '@shared/types'
+import { CLOSE_PANEL_FACT } from '@shared/persistence'
 import { PanelFrame } from './PanelFrame'
 import { KindTerminal } from '@renderer/icons'
 import { agentHeader } from '@renderer/shell/rail-rows'
@@ -244,7 +245,7 @@ function TerminalPanelImpl({
       onBeginLink={onBeginLink}
       // onMouseDown rather than onClick, so it runs in the same phase as
       // every other panel interaction and beats the chrome's own drag start.
-      close={readOnly ? null : { armed: arming, onMouseDown: handleClose, title: arming ? 'Click again to kill this process' : 'Close panel', armedText: 'kill?' }}
+      close={readOnly ? null : { armed: arming, onMouseDown: handleClose, title: arming ? `Click again to end this process. ${CLOSE_PANEL_FACT}` : running ? `Close panel. ${CLOSE_PANEL_FACT}` : 'Close panel', label: arming ? 'Click again to end this process' : 'Close panel', armedText: 'kill?' }}
       chrome={<>
         {/* M170. An agent terminal wears the chat's header line (the same builder,
             rail-rows.ts's chatHeaderLine through agentHeader): a person cannot tell

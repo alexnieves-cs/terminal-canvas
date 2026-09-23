@@ -1,5 +1,6 @@
 import { WATCH_KILL_GRACE_MS, WATCH_TAIL_BYTES, type WatchTrigger } from '../shared/watch-trigger'
 import type { ReviewIdentity } from '../shared/review-identity'
+import { createOutputCapture, mintCheckRunId, type CheckOutputRecord, type OutputCapture } from '../shared/check-output'
 
 /**
  * M84. THE WATCHER'S RUNNER — one command per watcher, run when its trigger
@@ -50,6 +51,12 @@ export interface WatchState {
   pending: boolean
   /** M286. The content identity of the tree at `cwd` (against its HEAD) as the last run ended — what it tested. Absent when unreadable or not a repository. */
   tested?: ReviewIdentity
+  /**
+   * M306. The run's id in the check-output store — set when the run STARTS,
+   * so the body can link the record the moment the run ends. Absent when no
+   * store is wired (every harness that predates M306).
+   */
+  outputId?: string
 }
 
 export interface WatchRecord {
@@ -61,7 +68,7 @@ export interface WatchRecord {
 }
 
 export interface WatchLedger {
-  append(row: { panelId: string; command: string; cwd: string; startedAt: number; endedAt: number; exitCode: number | null; tested?: ReviewIdentity }): void
+  append(row: { panelId: string; command: string; cwd: string; startedAt: number; endedAt: number; exitCode: number | null; tested?: ReviewIdentity; outputId?: string }): void
 }
 
 export interface WatchRunnerDeps {
@@ -73,6 +80,13 @@ export interface WatchRunnerDeps {
   onState: (id: string, state: WatchState) => void
   /** M286. See `RunsDeps.identityOf`: the tree at `cwd` against its HEAD, asked as the run ends. Optional; absent stamps nothing. */
   identityOf?: (cwd: string) => Promise<ReviewIdentity | undefined>
+  /**
+   * M306. Where each run's exact output goes, whole, as it ends. Optional with
+   * an inert default like `identityOf` — and like it, a dep `watch-handlers.ts`
+   * wires must be mirrored in `scripts/panels-harness.cjs`, or the Electron
+   * tier proves an app whose checks have no records.
+   */
+  outputs?: { put(record: CheckOutputRecord): void }
 }
 
 export interface WatchRunner {
@@ -95,6 +109,8 @@ interface Entry {
   kill: { cancel: () => void } | null
   /** The process this entry's callbacks are allowed to speak for (the M61 identity rule). */
   epoch: number
+  /** M306. The run in flight's whole output (head and tail), when a store is wired. */
+  capture: OutputCapture | null
 }
 
 const EMPTY: WatchState = { status: 'not-started', tail: '', pending: false }
@@ -122,7 +138,10 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
     const startedAt = deps.now()
     entry.epoch += 1
     const epoch = entry.epoch
-    entry.state = { status: 'running', tail: '', startedAt, pending: false }
+    const outputId = deps.outputs === undefined ? undefined : mintCheckRunId(id, startedAt)
+    entry.capture = deps.outputs === undefined ? null : createOutputCapture()
+    const capture = entry.capture
+    entry.state = { status: 'running', tail: '', startedAt, pending: false, ...(outputId === undefined ? {} : { outputId }) }
     publish(id, entry)
     entry.proc = deps.spawn(
       { cwd: entry.record.cwd, command: entry.record.command, args: entry.record.args },
@@ -132,6 +151,7 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
           // after a restart would otherwise append to the new run's tail, and
           // the body would show output from a run that already ended.
           if (epoch !== entry.epoch) return
+          capture?.push(chunk)
           const joined = entry.state.tail + chunk
           // The END, never the start: a failing command says why on its last
           // lines, and a head-capped tail throws away the answer.
@@ -165,10 +185,12 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
             tail: entry.state.tail,
             ...(entry.state.startedAt === undefined ? {} : { startedAt: entry.state.startedAt }),
             endedAt,
-            pending: false
+            pending: false,
+            ...(outputId === undefined ? {} : { outputId })
           }
-          // Metadata only, like every other ledger row: no output bytes ever
-          // reach a durable file from here. The row waits for the stamp (a
+          // Metadata only, like every other ledger row: no output bytes reach
+          // the LEDGER from here — M306's record is its own file, referenced
+          // by `outputId`, never inlined. The row waits for the stamp (a
           // failed read writes it unstamped), so the ledger says what the
           // run tested rather than only that it ran.
           const row = {
@@ -177,10 +199,17 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
             cwd: entry.record.cwd,
             startedAt: entry.state.startedAt ?? endedAt,
             endedAt,
-            exitCode: code
+            exitCode: code,
+            ...(outputId === undefined ? {} : { outputId })
           }
-          if (deps.identityOf === undefined) deps.ledger.append(row)
-          else void deps.identityOf(entry.record.cwd).then((tested) => deps.ledger.append(tested === undefined ? row : { ...row, tested }), () => deps.ledger.append(row))
+          // M306. The record and the row land TOGETHER, after the same stamp,
+          // so the output a person opens names the revision the row claims.
+          const land = (tested: ReviewIdentity | undefined): void => {
+            if (capture !== null && outputId !== undefined) deps.outputs?.put(outputRecordOf(outputId, id, row, signal, capture, tested))
+            deps.ledger.append(tested === undefined ? row : { ...row, tested })
+          }
+          if (deps.identityOf === undefined) land(undefined)
+          else void deps.identityOf(entry.record.cwd).then(land, () => land(undefined))
           publish(id, entry)
           // The coalesced run, once — however many triggers arrived.
           if (pending) start(id, entry)
@@ -197,7 +226,7 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
     add(record) {
       const existing = entries.get(record.id)
       if (existing !== undefined) { existing.record = record; return }
-      entries.set(record.id, { record, state: { ...EMPTY }, proc: null, kill: null, epoch: 0 })
+      entries.set(record.id, { record, state: { ...EMPTY }, proc: null, kill: null, epoch: 0, capture: null })
     },
 
     /**
@@ -211,14 +240,19 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
       if (entry === undefined) return
       if (entry.proc !== null && entry.state.status === 'running') {
         const endedAt = deps.now()
-        deps.ledger.append({
+        const outputId = entry.state.outputId
+        const row = {
           panelId: id,
           command: [entry.record.command, ...entry.record.args].join(' '),
           cwd: entry.record.cwd,
           startedAt: entry.state.startedAt ?? endedAt,
           endedAt,
-          exitCode: null
-        })
+          exitCode: null,
+          ...(outputId === undefined ? {} : { outputId })
+        }
+        // M306. What it printed before it was removed is still evidence.
+        if (entry.capture !== null && outputId !== undefined) deps.outputs?.put(outputRecordOf(outputId, id, row, 'removed', entry.capture, undefined))
+        deps.ledger.append(row)
       }
       entry.epoch += 1
       entry.kill?.cancel()
@@ -275,6 +309,31 @@ export function createWatchRunner(deps: WatchRunnerDeps): WatchRunner {
     ids() {
       return [...entries.keys()]
     }
+  }
+}
+
+/** M306. One run's record, from the row it shares its facts with. */
+function outputRecordOf(
+  runId: string,
+  panelId: string,
+  row: { command: string; cwd: string; startedAt: number; endedAt: number; exitCode: number | null },
+  signal: string | null,
+  capture: OutputCapture,
+  tested: ReviewIdentity | undefined
+): CheckOutputRecord {
+  return {
+    v: 1,
+    runId,
+    panelId,
+    source: 'watcher',
+    command: row.command,
+    cwd: row.cwd,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    exitCode: row.exitCode,
+    signal,
+    ...(tested === undefined ? {} : { tested }),
+    ...capture.snapshot()
   }
 }
 

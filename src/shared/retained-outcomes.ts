@@ -16,6 +16,30 @@ export interface RetainedOutcome {
   runId?: string
   /** Provenance only — never a request to recreate a panel or a session. */
   sourcePanelId: string
+  /**
+   * What the work LEFT, as references the item already held when it closed —
+   * the pull request, the lane's worktree, the size of the recorded review.
+   * Never content: a PR that was closed or a worktree that was removed since
+   * is shown as a reference, and resolving it is a person's explicit act.
+   * Absent on records written before these existed; a malformed field costs
+   * itself, never the record.
+   */
+  refs?: RetainedRefs
+}
+
+export interface RetainedRefs {
+  pr?: { number: number; url: string }
+  worktreeId?: string
+  reviewedFiles?: number
+}
+
+function parseRefs(raw: unknown): RetainedRefs | undefined {
+  if (!isRecord(raw)) return undefined
+  const out: RetainedRefs = {}
+  if (isRecord(raw.pr) && isNum(raw.pr.number) && isStr(raw.pr.url)) out.pr = { number: raw.pr.number, url: raw.pr.url }
+  if (isStr(raw.worktreeId)) out.worktreeId = raw.worktreeId
+  if (isNum(raw.reviewedFiles) && raw.reviewedFiles >= 0) out.reviewedFiles = raw.reviewedFiles
+  return Object.keys(out).length === 0 ? undefined : out
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -39,8 +63,10 @@ export function parseRetainedOutcomes(raw: unknown, warnings: string[]): Retaine
     }
     const runId = isStr(entry.runId) ? entry.runId : undefined
     if (entry.runId !== undefined && runId === undefined) warnings.push(`retained outcome ${entry.id}: malformed run reference dropped`)
+    const refs = parseRefs(entry.refs)
+    if (entry.refs !== undefined && refs === undefined) warnings.push(`retained outcome ${entry.id}: malformed result references dropped`)
     seen.add(entry.id)
-    out.push({ id: entry.id, itemId: entry.itemId, title: entry.title, state: entry.state as WorkItemState,
+    out.push({ ...(refs === undefined ? {} : { refs }), id: entry.id, itemId: entry.itemId, title: entry.title, state: entry.state as WorkItemState,
       capturedAt: entry.capturedAt, execution: entry.execution as RetainedExecution, sourcePanelId: entry.sourcePanelId,
       ...(runId === undefined ? {} : { runId }) })
   })
@@ -59,18 +85,32 @@ function executionOf(run: PersistedRun): RetainedExecution {
 /** Capture from facts already in memory, before the close removes its panel. */
 export function retainOutcome(item: PersistedWorkItem, runs: readonly PersistedRun[], at: number): RetainedOutcome | null {
   if (item.panelId === undefined) return null
+  const refs = parseRefs({ pr: item.pr, worktreeId: item.worktreeId, reviewedFiles: item.reviewed?.files })
   const run = runs.filter((candidate) => candidate.panelIds.includes(item.panelId as string))
     .sort((a, b) => b.startedAt - a.startedAt)[0]
   return {
     id: `outcome_${item.id}_${at}`.replace(/[^A-Za-z0-9_-]/g, '_'), itemId: item.id, title: item.title,
     state: item.state, capturedAt: at, sourcePanelId: item.panelId,
     execution: run === undefined ? 'not-recorded' : executionOf(run),
-    ...(run === undefined ? {} : { runId: run.id })
+    ...(run === undefined ? {} : { runId: run.id }),
+    ...(refs === undefined ? {} : { refs })
   }
 }
 
-export function retainedNextAction(outcome: RetainedOutcome): string {
+/** Derived from recorded facts only; a PR is named because it is the concrete place the work went. */
+export function retainedNextAction(outcome: Pick<RetainedOutcome, 'state'> & { refs?: RetainedRefs }): string {
+  const pr = outcome.refs?.pr
+  if (pr !== undefined && outcome.state !== 'done') return `check pull request #${pr.number}`
   if (outcome.state === 'done') return 'review the retained evidence before closing history'
   if (outcome.state === 'review') return 'review the lane changes'
   return 'start work again when you are ready'
+}
+
+/** The references in words, for a card's `left` row. Names, never contents. */
+export function retainedRefsWord(refs: RetainedRefs): string {
+  return [
+    refs.pr === undefined ? undefined : `pull request #${refs.pr.number}`,
+    refs.worktreeId === undefined ? undefined : `worktree ${refs.worktreeId}`,
+    refs.reviewedFiles === undefined ? undefined : `a review of ${refs.reviewedFiles} file${refs.reviewedFiles === 1 ? '' : 's'}`
+  ].filter((part): part is string => part !== undefined).join(' · ')
 }

@@ -2308,6 +2308,9 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   notification appears when the window is behind another, that clicking it focuses the window and
   flies to the panel, that the dock shows the count, and that the beep uses the user's own alert
   sound were each confirmed once by hand.
+  Daily loop 4.2 turned "once" into a repeatable script: `docs/manual/attention-acceptance.md`
+  (eight steps with expected text, including the wording from `shared/attention-words.ts`, the
+  popover's Notify/Sound toggles and the pill's teach-once ⌘J hint). It is still a person's check.
 - **`scrollback.persist` off in the REAL main process** — `main/bootstrap/stores.ts` wires the sink's
   `enabled()` and the `scrollback:tail` gate to `layoutStore.getSetting('scrollback.persist')`,
   and no suite runs that line: `verify:pty-manager` drives the sink with a fake `enabled()`, and
@@ -3124,6 +3127,28 @@ been a third door). Recovery goes through `commitHistory` like a spawn, so `Cmd+
 which disposes the sessions, and that is right: the user was asked and said yes, then said no.
 The dialog itself is manual-only; no suite drives `showMessageBox`.
 
+**What was running when the window went away is RECORDED before the teardown, sealed by the quit, and read-and-deleted at the next boot (`main/last-exit.ts`, `shared/persistence.ts`, `shell/ReopenNotice.tsx`, `session:last-exit`).**
+Brief #20. On reopening, a reattached session, a kept session that died, and a process the quit
+stopped by design wear the same dormant card, and only the second is a problem — but the renderer
+cannot tell the third from a panel that was already stopped before the quit. Main records the running
+set, and four orderings each fail silently: **(1)** the quit's record is taken BEFORE `runQuit`, whose
+`killAll` empties the list; **(2)** the window's `closed` record is registered BEFORE
+`attachPtyLifecycle`, whose `detachAll` empties the list on the direct backend; **(3)** the quit
+SEALS the store, because Cmd+Q closes the window after `before-quit` and that later `closed` record
+would overwrite the true one with an empty set; **(4)** the file is read and DELETED when the store
+is built, not at the first ask, so a crash leaves no record rather than the previous quit's — and no
+record means the notice makes no "ended" claim at all. The notice keeps an `ended` line until each
+panel is started, left stopped, or closed; "Got it" clears only news. `verify:layout persist.*`.
+
+**Motion is three tiers, and script reads them from ONE file (`renderer/motion.ts`, `verify:styles motion.tiers.1`/`motion.track.1`).**
+Brief #21. `--dur-1` (control feedback) and `--dur-2` (a surface arriving) are restated for script
+as `MOTION_CONTROL_MS`/`MOTION_SURFACE_MS`, and flights, Motion overlays and the tier ghost read them —
+they had drifted to 140/160/180ms for one kind of change. A camera flight is cancelled by ANY
+pointer-down on the canvas (capture phase) and by a pan-drag's start, not only the wheel: a panel
+drag during a flight otherwise measures its delta against a camera still sliding under it. No rule on
+`.panel`/`.pf`/`.xterm` transitions a geometry property, and the workflow blocks carry no Motion
+`layout` — its projection springs a dragged node towards where the pointer already put it.
+
 **Every DISCRETE camera jump is a flight through one path, no gesture ever is, and tiering
 waits for the flight to land (`canvas/flight.ts`, `useViewport.ts`'s `flyTo`/`jump`,
 `Canvas.tsx`'s tier effect).** `centreOn`, `fitAll`, `resetViewport`, `goToViewport` and the
@@ -3617,6 +3642,25 @@ none of it.** A watcher is not a terminal and its body is the last thing that ha
 scrollback — a durable per-watcher log would be a second, worse scrollback with no keyboard.
 What is durable is M52's run ledger, whose rows are metadata by construction, which is also
 what keeps a command's output out of a file that gets pasted into an issue.
+
+**M306 amends this, and keeps both of its reasons: a check RUN's exact output is durable, as
+ONE record per run in `check-output/`, and the ledger row carries only its id
+(`RunRow.outputId`) (`shared/check-output.ts`, `main/check-output-store.ts`).** Phase E handed
+per-command capture on by name because a failed check's "output" was the session's scrollback
+tail NOW — several commands later, and not the evidence behind the status. The record is not
+a log (written once, whole, as its run ends; never appended), so there is still no second
+scrollback; and it is not in the ledger, so the pasteable file stays metadata. Three rules, each
+silent if broken: **(1)** the run id is minted at START and published in the state, and the
+store serves a record from MEMORY until its write lands — the renderer learns the id from the
+exit publish, which beats the disk, and a click in that window would read `missing`; **(2)** a
+read validates the id against a closed alphabet BEFORE it becomes a path, because the id crosses
+the bridge; **(3)** a capture over its cap keeps its head AND its end and records `elided`, and
+the reader shows the seam — a head-only cap drops the failure, a tail-only cap drops what the
+runner said it was doing. A shell command is captured between its OSC 133 C and D marks using
+`scanChunk`'s parallel `ends` offsets (a separate array so a mark's shape, which `osc133.1/.2`
+compare whole, is unchanged). An agent CLI's own commands have no marks and get no record: they
+stay a `CheckClaim`, which is the distinction a reviewer needs. `CHECK_OUTPUT_MAX_RECORDS` bounds
+the directory by count. `verify:file check-output.1–.4`, `verify:agent-state osc133.ends.1`.
 
 **A directory and a file are watched DIFFERENTLY, and confusing them fails silently
 (`main/bootstrap/watch-handlers.ts`'s watcher arming).** `FileWatchers` watches a file by watching its parent
@@ -4979,3 +5023,50 @@ publish or cost money, which is precisely the "blindly replay side effects" the 
 The results never travel with the shape: an old run's diffs, checks and artifacts stay with
 the execution that produced them (M300's run ids), or a rerun would inherit evidence it never
 earned. `orch-reuse.4`.
+
+**Watch keys a file by CHECKOUT plus repo-relative path, and `contended` means one checkout
+(`orchestration-live.ts`'s `touch`, `shared/combine.ts`'s `relativeToCheckout`, M311).** The
+first Watch keyed by the tool's raw path, which is wrong in both directions and silently: two
+lanes writing `src/api.ts` in their own worktrees use different absolute paths and were never
+flagged, while two sessions in DIFFERENT checkouts that both used the relative `src/api.ts`
+were drawn as contending over a file they did not share. Separate checkouts meeting on one path
+is an OVERLAP (`alsoIn`) — a review path for integration, the Combine tab's business; one
+checkout with two writers is CONTENTION — a hazard now that no merge order fixes. A session
+with no cwd keeps the old key (one unnamed checkout), which is why `orch-live.3` still passes
+unchanged. `orch-live.checkout.1`.
+
+**The combined tree is a SCRATCH checkout that reads lanes and writes only itself
+(`main/combine-runner.ts`, M311).** Every lane read is `diff`/`merge-base`/`ls-files` — the
+review engine's read argv — and the patch applies with `--3way` inside the scratch only, so no
+lane, branch, index or the main tree moves. A lane's WORKING changes count (its content diff
+since its fork, plus untracked files copied), because an agent's lane is usually uncommitted
+when a person asks whether it combines; a branch-only `merge-tree` would have answered about
+work that is not there yet. The scratch is recreated every run (a half-applied conflict must
+not leak into the next) and runs are serialised per repository. The CHECK is a watcher in the
+scratch path, so its output is M306's record rather than a second capture path — and it lives
+in `OrchCombine.tsx`, not the workbench strip, which `workbench.1` holds to read doors only.
+`combine.4`.
+
+**A detected repository setup is a DRAFT and runs nothing; only a SAVED record prepares a lane
+(`main/repo-setup-store.ts`'s `prepare`, M312).** An install command executes the repository's
+own scripts, so the first time one runs must be a person's decision — the inert-until-a-person-
+looks rule applied to a repository rather than an import. `prepare` reads the saved file itself
+and never takes commands from its caller, and the record is keyed by the MAIN tree re-resolved
+in main (a save from a lane path would otherwise be a record no other lane reads). Preparation
+sits between the lane and `agentSession.create`, after the association lands, so a failure
+stops the start with its output kept and a retry reuses the lane instead of minting a second
+worktree. `setup.3`.
+
+**A watcher runs WITHOUT a shell, so a check command that needs one goes through `/bin/sh -c`
+(`shared/task-flow.ts`'s `watcherArgv`, M312).** The M310 Run checks split the command on
+whitespace, which was fine for `npm test` and silently wrong for `npm run lint && npm test`:
+npm received `&&` as an argument, and the "check" that ran was not the one typed. Joining a
+task's or a setup's several checks with `&&` made that the ordinary case. `setup.2`.
+
+**`terminal-canvas://task` and `tc task` PROPOSE; they never add or start (`control-protocol.ts`,
+`control-handler.ts`'s `task` arm, `Canvas.tsx`'s `propose`, M313).** The URL door refuses every
+verb that acts — a link can come from any web page — and `task` is accepted there only because
+the renderer's answer is to open Start work filled in, where a person presses Start. `board add`
+still is not accepted at the URL door: it writes a record. A proposal's `cwd` is checked to
+exist in main and only CHOOSES among the repositories the teammate's places already grant.
+`task.1`.

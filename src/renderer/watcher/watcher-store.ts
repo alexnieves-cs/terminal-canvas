@@ -28,6 +28,8 @@ export interface WatchSnapshot {
   disarmed?: string
   /** M286. What the last run tested (`WatcherStateEvent.tested`), for the Checks workbench. */
   tested?: ReviewIdentity
+  /** M306. The run's exact-output record (`WatcherStateEvent.outputId`). */
+  outputId?: string
 }
 
 const states = new Map<string, WatchSnapshot>()
@@ -70,6 +72,17 @@ export function getWatch(id: string): WatchSnapshot {
 export function clearWatch(id: string): void {
   states.delete(id)
   notify(id)
+}
+
+/** M307. A plain subscription, for a hook that follows a VARYING set of watchers (`useLaneChecks`). */
+export function subscribeWatch(id: string, cb: () => void): () => void {
+  let set = listeners.get(id)
+  if (set === undefined) { set = new Set(); listeners.set(id, set) }
+  set.add(cb)
+  return () => {
+    set?.delete(cb)
+    if (set?.size === 0) listeners.delete(id)
+  }
 }
 
 export function useWatch(id: string): WatchSnapshot {

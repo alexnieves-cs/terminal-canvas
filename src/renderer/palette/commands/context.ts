@@ -16,6 +16,7 @@ import type { CredentialMeta } from '@shared/credential-schema'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import type { UpdateState } from '@renderer/session/update-store'
 import type { EnvReport } from '@shared/env-report'
+import type { WorkSearchResult } from '@shared/work-search'
 
 export interface PaletteContext {
   /** M92. How many panels are pinned on this canvas — the ninth pin is refused by count. */
@@ -71,6 +72,8 @@ export interface PaletteContext {
   searchQuery: string
   /** M122. The whole answer: hits over both logs, the cap stated, the redaction count. */
   searchResults: PanelSearchResult | null
+  /** D13. Tasks and retained outcomes matching the same query; absent means nobody supplied them. */
+  workSearch?: WorkSearchResult | null
   scrollbackEnabled: boolean
   /**
    * Panel ids currently in wants-you, from the renderer's own attention set.

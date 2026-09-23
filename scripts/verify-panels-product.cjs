@@ -5578,7 +5578,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await press('[data-pill-rest]'); await settle()
       const jumped = await press('[data-pill-action="jump"]')
       const centred = await waitUntil(async () => { const d = await offset(); return d !== null && d < 6 }, 4000)
-      record('jump', rang === true && restAttention === true && /1 chat needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
+      record('jump', rang === true && restAttention === true && /1 panel needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
         JSON.stringify({ bellId, rang, bellState, restAttention, restText, away, jumped, centred, final: await offset() }))
       await press('[data-pill-rest]'); await settle()
 

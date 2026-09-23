@@ -296,7 +296,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <span className="launcher__step-num" aria-hidden="true">{step()}</span>
           <label className="launcher__field">
             <span className="launcher__label">What are you working on?</span>
-            <textarea ref={intentRef} className="launcher__input launcher__input--sentence" data-onboarding-intent rows={2} value={intention} spellCheck
+            <textarea ref={intentRef} data-edit-owner className="launcher__input launcher__input--sentence" data-onboarding-intent rows={2} value={intention} spellCheck
               placeholder="In plain language — for example, make the login test stop failing on CI"
               onChange={(e) => edited(setIntention)(e.target.value)} />
           </label>
@@ -317,7 +317,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <label className="launcher__field">
             <span className="launcher__label">Pick or drop a repository</span>
             <span className="launcher__folder-row">
-              <input ref={folderRef} className="launcher__input launcher__input--path" data-onboarding-folder value={folder} spellCheck={false}
+              <input ref={folderRef} data-edit-owner className="launcher__input launcher__input--path" data-onboarding-folder value={folder} spellCheck={false}
                 placeholder="Drop a folder here, or type /Users/you/code/project" onKeyDown={onFolderKey} onChange={(e) => edited(setFolder)(e.target.value)} />
               {onChooseFolder !== undefined && (
                 <button type="button" className="pf__verb pf__verb--word" data-onboarding-choose title="Choose a folder with the system dialog"
@@ -379,6 +379,11 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 {...shellControl(start)}>
                 <span className="launcher__verb-name">{busy ? (opensChat ? 'Opening the conversation…' : 'Making the lane…') : opensChat ? 'Open conversation' : 'Start task'}</span>
                 {!busy && <kbd className="launcher__kbd" aria-hidden="true">↵</kbd>}
+                {/* Three verbs, three outcomes, each said: a person should not
+                    have to infer that Start makes a task, Ask a conversation
+                    and Create an object. The agent · folder · branch it will
+                    use is the summary line above — never repeated here. */}
+                <span className="launcher__verb-hint" data-launcher-verb-hint="start">{opensChat ? 'Talk it through in this folder.' : 'An agent works on it on its own branch.'}</span>
               </button>
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null} aria-describedby={askReason !== null ? 'launcher-summary' : undefined}
                 title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
@@ -389,9 +394,10 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 <span className="launcher__verb-hint">Start a conversation without a repository.</span>
               </button>
               <button type="button" className="launcher__verb launcher__create" data-onboarding-create
-                title="Open the create sheet — Task or Panel"
+                title="Add an object to the canvas — opens the create sheet (Task or Panel)"
                 {...shellControl(() => onOpenSheet())}>
                 <span className="launcher__verb-name">Create…</span>
+                <span className="launcher__verb-hint" data-launcher-verb-hint="create">Add an object — a terminal, note, file or workflow.</span>
               </button>
             </div>
           </div>

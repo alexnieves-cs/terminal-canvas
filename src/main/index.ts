@@ -22,6 +22,7 @@ import { startAgentRuntime } from './bootstrap/agent-runtime'
 import { initTelemetry } from './bootstrap/telemetry-init'
 import { sweepOrphans } from './bootstrap/orphan-sweep'
 import { createWatchWiring } from './bootstrap/watch-handlers'
+import { createKitHandlers } from './bootstrap/kit-handlers'
 import { createAgentHandlers } from './bootstrap/agent-handlers'
 import { createPaletteWiring } from './bootstrap/palette-handlers'
 import { createToolboxHandlers } from './bootstrap/toolbox-handlers'
@@ -100,6 +101,9 @@ const which = (command: string): string | null => whichFromEnv(command, state.lo
 const places = createPlaces(stores)
 const menu = createMenuActions(state, stores, which)
 const control = createControlWiring(state, stores, places, tokens)
+// M311–M314. Built at module scope with the other collaborators; every
+// closure inside reads `state` at the point of use (context.ts's rule).
+const kit = createKitHandlers(state, stores, app.getPath('userData'))
 
 // M54. The URL door. Registered at module scope because macOS delivers a
 // launch-time URL before whenReady's body runs. The URL never reaches the
@@ -231,7 +235,7 @@ app.whenReady().then(async () => {
     createWorktreeHandlers(stores),
     createScrollbackHandlers(stores),
     createEnvReporter(state, stores, which),
-    createLinkHandlers(stores),
+    createLinkHandlers(stores, kit.editorOpen),
     // M52. The ledger's read half.
     (panelId, limit) => stores.runLedger.list(panelId, limit),
     stores.reviewDiscard,
@@ -267,7 +271,13 @@ app.whenReady().then(async () => {
         // so; it does not get a silent true and a record with a hole in it.
         return false
       }
-    }
+    },
+    // M306. One check run's exact output, from its own store beside the ledger.
+    (runId) => stores.checkOutputs.read(runId),
+    // M311–M314. The workflow kit: combine, repository setup, editor, recipes.
+    kit,
+    // Brief #20. What was running when the window last went away, once.
+    () => stores.lastExit.take()
   )
   createWindow(state, stores)
 
@@ -338,8 +348,17 @@ app.on('before-quit', () => {
   // The direct backend has no sessions to keep, so it always ends. The
   // ordering inside each arm lives in quit.ts with its reasons, where
   // verify:pty-manager can run it against a real server.
+  const keepOnQuit = stores.layoutStore.getSetting('session.keepOnQuit') === true && state.backend.kind === 'tmux'
+  // Brief #20. Which panels had a session at this moment, recorded BEFORE the
+  // teardown below empties the list — the next launch's only way to tell a
+  // session the quit stopped from one that was kept and died anyway.
+  try {
+    stores.lastExit.record('quit', keepOnQuit, stores.ptyManager.list().map((s) => s.panelId))
+  } catch (error) {
+    console.warn('[quit] could not record the running sessions', error)
+  }
   runQuit({
-    keep: stores.layoutStore.getSetting('session.keepOnQuit') === true && state.backend.kind === 'tmux',
+    keep: keepOnQuit,
     manager: stores.ptyManager,
     backend: state.backend,
     flush: () => stores.layoutStore.flushSync(),

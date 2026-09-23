@@ -1177,9 +1177,13 @@ body {
    are the facts a glance across the canvas is for, and the glow is how a
    node at 40% still says which it is. Geometry only — the hue is the same
    --tone-dim the narrow default reads. */
-[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--amber); --tone-glow: 0 0 22px 5px var(--tone-dim); }
+/* #12. The working shimmer's rim is iris, never amber: amber is reserved for something that needs the person, and a working node does not. */
+[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--iris); --tone-glow: 0 0 22px 5px var(--tone-dim); }
 [data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); --tone-glow: 0 0 22px 5px var(--tone-dim); }
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
+/* Backlog #90. A clean exit is FINISHED, not failed: the settled neutral of a
+   closed thing, so the red keeps meaning something went wrong. */
+[data-tone="done"] { --tone: var(--muted); --tone-dim: var(--s-4); }
 [data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
 
 /* M91. THE FAR VIEW'S HAIRLINE. The frame border is a world-space pixel, so
@@ -1432,6 +1436,11 @@ body {
 .memory-node__text { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
 .memory-node__at { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .memory-node__redacted { grid-column: 2; font-size: var(--t-xs); color: var(--amber); }
+/* 5.2 (D12). Provenance is contextual density: a quiet word under the text,
+   a button because it moves the camera to the source conversation. */
+.memory-node__source { grid-column: 2; justify-self: start; padding: 0; border: 0; background: none; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); cursor: pointer; text-align: left; }
+.memory-node__source:hover:not(:disabled) { color: var(--fg); text-decoration: underline; }
+.memory-node__source:disabled { cursor: default; }
 .memory-node__add { display: flex; align-items: center; gap: var(--sp-2); }
 .memory-node__select { min-height: 24px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); }
 .memory-node__input { flex: 1 1 auto; min-width: 0; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font: inherit; font-size: var(--t-sm); }
@@ -1470,6 +1479,40 @@ body {
 .rail-attention__argument { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
 .rail-row__verb { min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
 .rail-row__verb:hover { background: var(--s-4); }
+/* #17. The approval detail — context, the action in full, scoped verbs — the
+   one layout the Needs-you queue and Orchestrate's card share. The action wraps
+   rather than ellipsises (the tail is what a reviewer decides on) and scrolls
+   past a height so a long heredoc cannot push the verbs off the popover. */
+.approval { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.approval__context { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-1) var(--sp-2); margin: 0; font-size: var(--t-xs); }
+.approval__fact { display: contents; }
+.approval__fact dt { color: var(--fg-3); }
+.approval__fact dd { margin: 0; min-width: 0; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.approval__mono { font-family: var(--font-mono); }
+.approval__why { margin: 0; font-size: var(--t-xs); color: var(--fg-2); }
+.approval__action { margin: 0; max-height: 12rem; overflow: auto; padding: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.approval__action--prose { font-family: var(--font-ui); }
+.approval__rest-toggle { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.approval__rest-toggle:hover { color: var(--fg); }
+.approval__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.approval__verb { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
+.approval__verb:hover { background: var(--s-4); }
+.approval__verb--primary { border-color: var(--iris); background: var(--iris-dim); }
+.approval__verb--deny { margin-left: auto; color: var(--red); }
+.approval__sent { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+/* #14. The decision's one sentence (who, what will happen, where), its scope in
+   words under the verbs, and the acknowledgment an answer leaves behind. The
+   acknowledgment is a quiet confirmation, not a call: no amber, the green
+   check only for an allow — a deny is a neutral fact, not an error. */
+.approval__headline { margin: 0; font-size: var(--t-sm); color: var(--fg); line-height: var(--lh-body); overflow-wrap: anywhere; }
+.approval__headline strong { font-weight: 600; }
+.approval__scope { margin: 0; font-size: var(--t-xs); color: var(--fg-3); line-height: var(--lh-body); }
+.approval-ack { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.approval-ack__row { display: flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); font-size: var(--t-sm); color: var(--fg); animation: panel-enter var(--dur-2) var(--ease); }
+.approval-ack__mark { flex: 0 0 auto; font-weight: 600; color: var(--fg-3); }
+.approval-ack__row[data-approval-ack="once"] .approval-ack__mark, .approval-ack__row[data-approval-ack="session"] .approval-ack__mark { color: var(--green); }
+.rail-attention__summary { flex: 1 1 100%; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: 0 var(--sp-2) var(--sp-1) calc(var(--sp-2) + 14px); }
+.rail-attention__detail { flex: 1 1 100%; min-width: 0; padding: 0 var(--sp-2) var(--sp-2) calc(var(--sp-2) + 14px); }
 /* M76. The question at the summary tier, under the state word. */
 /* M77. A tool row's diff, under the row in the review node's own line idiom; a review row's touches. */
 .chat__tool-diff { grid-column: 1 / -1; min-width: 0; overflow-x: auto; }
@@ -1496,6 +1539,7 @@ body {
 .status-dot[data-tone="working"],
 .status-dot[data-tone="needs-you"],
 .status-dot[data-tone="idle"],
+.status-dot[data-tone="done"],
 .status-dot[data-tone="exited"] { background: var(--tone); }
 
 /* M256 (spec §19). Visually hidden but still in the accessibility tree: text
@@ -3731,6 +3775,38 @@ body {
   pointer-events: none;
 }
 
+/* Brief #20. The reopen notice: what came back running, what came back
+   stopped, what was lost. Bottom-left, the one canvas corner nothing else
+   rests in (the map is top-right, the zoom pill bottom-right, the command
+   pill bottom-centre), so it covers no panel's header. It stays until dealt
+   with, so it takes no arrival motion — a moment is for something that
+   passes. A problem line carries the amber rule on its edge, never a dimmed
+   text colour. */
+.reopen-notice {
+  position: absolute;
+  left: var(--sp-5);
+  bottom: var(--sp-5);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-width: min(380px, 60%);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--s-2);
+  color: var(--fg);
+  font-size: var(--t-sm);
+}
+.reopen-notice__kicker { color: var(--fg-3); font-size: var(--t-xs); text-transform: uppercase; letter-spacing: var(--track-caps); }
+.reopen-notice__lines { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.reopen-notice__line { display: flex; flex-direction: column; gap: var(--sp-1); padding-left: var(--sp-2); border-left: 2px solid var(--line); }
+.reopen-notice__line[data-reopen-problem] { border-left-color: var(--amber); }
+.reopen-notice__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.reopen-notice__facts { margin: 0; color: var(--fg-3); font-size: var(--t-xs); }
+.reopen-notice__ack { align-self: flex-end; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: none; color: var(--fg-2); font: inherit; font-size: var(--t-xs); cursor: pointer; transition: background var(--dur-1) var(--ease); }
+.reopen-notice__ack:hover { background: var(--s-3); }
+
 /* Startup splash. The top screen-space layer, a sibling of .world, alive for
    under three seconds. pointer-events is set INLINE per mode: Field Lines
    covers the canvas (a click there is a skip, never a blind click on the
@@ -5104,6 +5180,12 @@ body {
    own row grammar under the `where` field.
    ───────────────────────────────────────────────────────────────────────── */
 .sheet { padding: var(--sp-5) var(--sp-6) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); }
+/* A long sheet (a recipe's checks, a swarm's seats) SCROLLS INSIDE the
+   palette rather than running past the window's foot: the palette is capped
+   to what is left below its 12% top, and the sheet is the part that scrolls.
+   Scoped with :has so the command list keeps its own measure. */
+.palette:has(> .sheet) { display: flex; flex-direction: column; max-height: calc(88% - var(--sp-6)); }
+.palette > .sheet { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 /* M253. The pack preview: the palette's container and the sheet's grammar,
    plus a list and a foot. Every value is a token — the preview adds no
    colour of its own. */
@@ -5322,6 +5404,24 @@ body {
 .chat__verb--send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
 .chat__verb--interrupt { align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: var(--red-dim); color: var(--red); border-color: transparent; }
 .chat__verb--send svg, .chat__verb--interrupt svg { width: 16px; height: 16px; }
+/* #13. Send and Stop differ by SHAPE and WORD, not by hue alone: Send is the
+   filled iris circle, Stop a red pill that says Stop — a person reaching for
+   the corner mid-answer reads which one is there. It is absolutely placed, so
+   the wider pill moves nothing in the well. */
+.chat__composer--live .chat__verb--interrupt { width: auto; gap: var(--sp-1); padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-full); font-size: var(--t-sm); font-weight: 600; }
+/* #13. The status line: always present, always one line, so nothing above or
+   below it moves as a turn starts, streams and ends. Its right edge clears the
+   anchored Send/Stop control. */
+.chat__status { margin: 0; min-height: calc(var(--t-sm) * 1.5); line-height: 1.5; padding-right: calc(var(--sp-8) * 3); font-size: var(--t-sm); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat__status[data-chat-status="answering"], .chat__status[data-chat-status="sending"] { color: var(--blue); }
+.chat__status[data-chat-status="attached"] { color: var(--fg); }
+.chat__status[data-chat-status="unavailable"], .chat__status[data-chat-status="memory-unresolved"] { color: var(--fg-2); }
+/* #13. The engine word is configuration once the header is identity and state:
+   it joins the frame's hover/focus/selection reveal (the M163 rest rule), box
+   kept, so checks that read it and the header's widths are unchanged. */
+.pf__chrome .chat__backend { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pf:hover .pf__chrome .chat__backend, .pf:focus-within .pf__chrome .chat__backend, .panel--selected .pf__chrome .chat__backend { opacity: 1; }
+.pf__menu-detail { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .chat__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 /* `.chat__chips .chat__chip--quiet`: two classes, so the M75 attachment chip's mono rule later in the file does not win by source order (the first golden had the chips in mono). */
 .chat__chips .chat__chip--quiet { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: transparent; }
@@ -6023,7 +6123,7 @@ body {
    dismiss sits INSIDE a state pill, where a hidden box reads as a hole. Both sit
    below the hiding rule at equal specificity: SOURCE ORDER is what wins here. */
 .pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .chat__backend { transition: none; } }
 /* M163. The inspector's Machine section (the metrics rule): the one place the
    per-panel CPU · RAM figure lives. */
 .inspector__machine { font-variant-numeric: tabular-nums; }
@@ -6551,6 +6651,12 @@ body {
    rather than a second voice interrupting it. */
 .command-pill__rest[data-pill-state="result"] { color: var(--fg); box-shadow: inset 3px 0 0 var(--iris); }
 .command-pill__rest .command-pill__text { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 4.3. The once-only Cmd+J lesson: quieter than the sentence it rides (fg-3,
+   not amber), so it reads as a footnote to the fact and not a second fact. */
+.command-pill__rest .command-pill__hint { color: var(--fg-3); white-space: nowrap; }
+.command-pill__rest .command-pill__hint kbd { font: inherit; color: var(--fg-2); margin-right: var(--sp-1); }
+/* Dock attention popover's footer: the OS-surface settings, found where attention lives. */
+.dock__popover-foot { display: flex; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) var(--sp-2); border-top: 1px solid var(--line); margin-top: var(--sp-2); }
 
 /* The panel GROWS from the rest pill: transform-origin pins the animation to
    where the rest pill sits, so the motion reads as one object changing shape
@@ -7211,6 +7317,16 @@ body {
 .launcher__kbd { font-family: var(--font-ui); font-size: var(--t-xs); padding: 0 var(--sp-3); border-radius: var(--r-sm); background: color-mix(in srgb, var(--on-iris) 18%, transparent); }
 .launcher__ask { color: var(--fg); flex-direction: column; align-items: flex-start; gap: var(--sp-1); }
 /* Create… stays secondary: no border, no fill — the text button beside two boxes. */
+/* Each of the three says its OUTCOME under its name — a task, a conversation,
+   an object — so the row reads as three different results, not three words
+   for "go". The hints wrap inside a measure rather than ellipsing: a cut
+   sentence is the one thing a hint must not be (M91). The primary's hint
+   takes its own line under the name and the ↵, in the fill's own ink. */
+.launcher__actions .launcher__start { flex-wrap: wrap; row-gap: var(--sp-1); }
+.launcher__actions .launcher__start .launcher__verb-hint { flex-basis: 100%; text-align: center; font-size: var(--t-xs); }
+.launcher__actions .launcher__ask, .launcher__actions .launcher__create { flex: 0 1 13em; min-width: 0; }
+.launcher__actions .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }
+.launcher__create { flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--sp-1); padding: var(--sp-4) var(--sp-3); }
 
 /* NOTICES under the action, quieter than it. */
 .launcher__notices { margin-top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -7220,7 +7336,7 @@ body {
 .launcher__more { margin-top: var(--sp-5); }
 /* THE FIRST START'S HANDOFF: one line, bottom-centre over the canvas, in the
    neutral surface — a status, not an alert. */
-.first-task-hint { position: absolute; left: 50%; bottom: var(--sp-8); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: var(--sp-4); margin: 0; padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); max-width: min(560px, calc(100% - 32px)); }
+.first-task-hint { position: absolute; left: 50%; bottom: var(--sp-8); translate: -50% 0; z-index: 20; display: flex; align-items: center; gap: var(--sp-4); margin: 0; padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); max-width: min(560px, calc(100% - 32px)); }
 /* OPTIONAL SETUP: a closed group in the neutral tone — an improvement, never
    styled like the amber banner or a refusal, because nothing here blocks. */
 .launcher__improve { font-size: var(--t-sm); color: var(--fg-3); }
@@ -7237,11 +7353,14 @@ body {
    further and in turn — never scaled: the keyframe runs on `.pf__motion`,
    and nothing above the body may be transformed but by translation (the
    panel-enter comment above, and `annot.1`). */
+/* RESTRAINED (first-task continuity): a 6px rise, not 24 — the first object a
+   person makes should read as placed, not thrown. The Ask/folder-only first
+   start raises the same flag, so every first start arrives the same way. */
 @keyframes cluster-arrive {
-  from { opacity: 0; transform: translateY(24px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.canvas[data-cluster-arrival] .panel__motion--entering { animation: cluster-arrive calc(var(--dur-2) * 3) var(--ease) both; }
+.canvas[data-cluster-arrival] .panel__motion--entering { animation: cluster-arrive calc(var(--dur-2) * 2) var(--ease) both; }
 .canvas[data-cluster-arrival] .panel:nth-child(2) .panel__motion--entering { animation-delay: calc(var(--dur-stagger) * 4); }
 .canvas[data-cluster-arrival] .panel:nth-child(3) .panel__motion--entering { animation-delay: calc(var(--dur-stagger) * 8); }
 @media (prefers-reduced-motion: reduce) {
@@ -7383,6 +7502,15 @@ body {
   background: transparent;
 }
 .shell__top .shell__center-btn:hover { color: var(--fg); background: var(--s-3); }
+/* The name and its purpose, stacked: the purpose one step quieter (weight and
+   ink, never size — the scale's rule), so the
+   pressed segment still reads as its name first. The purpose steps out below
+   the bar's middle breakpoint (the title keeps it) — the search field needs
+   that width more than a returning person needs the introduction. */
+.shell__top .shell__center-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; padding-block: 2px; }
+.shell__center-purpose { font-size: var(--t-xs); font-weight: 400; color: var(--fg-4); }
+.shell__top .shell__center-btn--on .shell__center-purpose { color: inherit; }
+@media (max-width: 1220px) { .shell__center-purpose { display: none; } }
 .shell__top .shell__center-btn--on,
 .shell__top .shell__center-btn--on:hover {
   color: var(--iris);
@@ -7441,6 +7569,19 @@ body {
   margin-bottom: var(--sp-2);
 }
 .orch__section-head .orch__section-title { margin-bottom: 0; }
+/* #18. The agent pool and the activity feed fold away; the task header, the
+   scene and the workbench never do. A folded pool keeps its column as a narrow
+   strip holding only its toggle, so the scene takes the width. */
+.orch__fold { padding: 0; border: 0; background: none; font-family: var(--font-ui); cursor: pointer; text-align: left; }
+.orch__fold::after { content: ' ▾'; }
+.orch__fold[aria-expanded="false"]::after { content: ' ▸'; }
+.orch__fold:hover { color: var(--fg); }
+.orch__body--pool-closed { grid-template-columns: auto minmax(0, 1fr) minmax(15rem, 19rem); }
+.orch__roster:not([data-orch-pool-open]) > :not(.orch__section-head),
+.orch__roster:not([data-orch-pool-open]) .orch__section-head > :not(.orch__fold) { display: none; }
+.orch__roster:not([data-orch-pool-open]) { padding: var(--sp-3); }
+.orch__tabs--fold { align-items: center; }
+.orch__fold-end { margin-left: auto; }
 .orch__roster, .orch__side {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -7523,23 +7664,23 @@ body {
    so it recedes; an authored link is a dependency a person made, so it reads
    thicker and brighter and paints last (orchEdgePaintOrder). */
 .orch__edge { stroke: color-mix(in srgb, var(--iris) 24%, transparent); stroke-width: 1; }
-.orch__edge--authored { stroke: var(--amber); stroke-width: 2.5; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--amber) 45%, transparent)); }
+.orch__edge--authored { stroke: var(--fg-2); stroke-width: 2.5; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--fg-2) 35%, transparent)); }
 .orch__edge[data-edge-activity="firing"] {
   stroke: var(--iris);
   stroke-width: 2px;
   stroke-dasharray: 18 8 3 8;
   animation: edge-current var(--dur-packet) linear 1;
 }
-.orch__edge--authored[data-edge-activity="firing"] { stroke: var(--amber); stroke-width: 3.5px; }
+.orch__edge--authored[data-edge-activity="firing"] { stroke: var(--fg); stroke-width: 3.5px; }
 /* Packets: position and fade are set per frame from ORCH_PACKET_MS; no CSS
    transition or animation of their own, which would smear the frame. */
 .orch__packet { fill: var(--iris); }
 .orch__packet-halo { fill: var(--iris-dim); stroke: var(--iris); stroke-width: 1px; }
 .orch__packet-trail { fill: var(--iris); }
-[data-authored] > .orch__packet, [data-authored] > .orch__packet-trail { fill: var(--amber); }
-[data-authored] > .orch__packet-halo { fill: color-mix(in srgb, var(--amber) 30%, transparent); stroke: var(--amber); }
+[data-authored] > .orch__packet, [data-authored] > .orch__packet-trail { fill: var(--fg); }
+[data-authored] > .orch__packet-halo { fill: color-mix(in srgb, var(--fg) 20%, transparent); stroke: var(--fg-2); }
 .orch__chip { pointer-events: none; }
-.orch__chip rect { fill: color-mix(in srgb, var(--s-1) 92%, transparent); stroke: var(--amber); stroke-width: 1px; }
+.orch__chip rect { fill: color-mix(in srgb, var(--s-1) 92%, transparent); stroke: var(--line-strong); stroke-width: 1px; }
 .orch__chip text { fill: var(--fg); font-family: var(--font-mono); font-size: var(--t-xs); }
 .orch__ground-ring { fill: none; stroke: color-mix(in srgb, var(--iris) 14%, transparent); stroke-width: 1; }
 /* Scene depth: a foreshortened ground plane (grid clipped to an ellipse, faded
@@ -7573,7 +7714,8 @@ body {
 .orch__cube--synthetic .orch__cube-label { fill: var(--fg-3); font-style: italic; }
 .orch__cube-label {
   fill: var(--fg-2);
-  font-size: var(--t-xs);
+  /* #11. A station's name is the scene's primary text: --t-sm, not the caption size. The compact tier keeps --t-xs below. */
+  font-size: var(--t-sm);
   font-family: var(--font-ui);
   pointer-events: none;
 }
@@ -7711,7 +7853,7 @@ body {
   cursor: pointer;
 }
 .orch__mini:hover { color: var(--fg); border-color: var(--line-strong); }
-.orch__mini--stop { color: var(--amber); }
+.orch__mini--stop { color: var(--red); }
 /* M284. Orchestrate Phase A: the mode row carries the Scene | List lens beside the
    mode tabs; the side column leads with Needs attention, then the inspector, then the
    tabs. Scoped to .orch — the plan's density exceptions are Orchestrate's only. */
@@ -7868,6 +8010,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 
 @media (max-width: 1100px) {
   .orch__body { grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr); }
+  .orch__body--pool-closed { grid-template-columns: auto minmax(0, 1fr); }
   .orch__side { grid-column: 1 / -1; max-height: 16rem; }
   .orch__bench-changes { grid-template-columns: minmax(0, 1fr); }
   .orch__bench[data-orch-bench-open] { max-height: 40vh; }
@@ -7996,26 +8139,67 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   box-shadow: none;
 }
 .shell__rail .resume-banner__verbs { flex-direction: row; }
+/* #10. THE RESUME STRIP. The floating card covered the panels it named, so
+   outside the navigator Resume is one line in a grid row of its own between
+   the top bar and the center column. The row exists only while the strip does
+   (`.shell--strip`): at rest the grid is the two-row grid every measurement
+   was taken against. The canvas shrinks by the strip's height — the host's
+   own rect is what the viewport math reads, so nothing drifts — and no panel
+   is resized, so no PTY sees a SIGWINCH. A flat band, not an overlay: it is
+   above nothing, so it takes no elevation. */
+.shell--strip {
+  grid-template-rows: var(--shell-top-h) auto 1fr;
+  grid-template-areas:
+    "top top top top"
+    "dock nav strip context"
+    "dock nav canvas context";
+}
+.resume-strip {
+  grid-area: strip;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-5);
+  border-bottom: 1px solid color-mix(in srgb, var(--iris) 30%, var(--line));
+  background: var(--iris-dim);
+  font-size: var(--t-sm);
+}
+.resume-strip .resume-banner__kicker { flex: 0 0 auto; }
+.resume-strip__title { flex: 0 1 auto; min-width: 0; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-strip__line { flex: 1 1 0; min-width: 0; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-strip__line--blocker { color: var(--amber); }
+.resume-strip .resume-banner__verbs { flex-direction: row; margin-left: auto; }
+.resume-strip .resume-banner__go { background: var(--iris); color: var(--on-iris); font-weight: 500; border-color: transparent; }
+.resume-strip .resume-banner__go, .resume-strip .resume-banner__dismiss { padding-block: var(--sp-1); }
+/* #10. The summary's collapsed form: the lens bar Continue opened carries the next action. */
+.task-lens__next { min-width: 0; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); }
 .shell__rail .resume-banner__go { background: var(--iris); color: var(--on-iris); font-weight: 500; }
 
 .inspector__context { padding: 0 var(--sp-4) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
 .inspector__context-next { margin: 0; font-size: var(--t-sm); color: var(--fg); }
 .inspector__context-blocker { margin: 0; font-size: var(--t-sm); color: var(--amber); }
 .inspector__context-resolve { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.inspector__context-request { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); color: var(--fg-2); }
+.inspector__context-request code { font-family: var(--font-mono); }
 .inspector__context-related { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-2); }
 .inspector__deep { margin: 0; }
 .inspector__deep-summary { font-size: var(--t-sm); color: var(--fg-3); cursor: pointer; }
 
+/* Switching places is a CROSSFADE, never a camera move: the canvas used to
+   shrink to .985 as Orchestrate rose 8px over it, which read as the camera
+   pulling back — and on the way home as the canvas zooming in on a view the
+   person had left exactly where it was. Its camera, selection and task are
+   kept (Canvas.tsx's setCenterView); only opacity changes here. */
 .canvas--behind-orch {
   opacity: 0;
   pointer-events: none;
-  transform: scale(0.985);
-  transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+  transition: opacity var(--dur-2) var(--ease);
 }
 .shell__orch--on { animation: orch-enter var(--dur-2) var(--ease) both; }
 @keyframes orch-enter {
-  from { opacity: 0; transform: translateY(8px) scale(0.99); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .orch__commands { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
@@ -8104,7 +8288,17 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .panel--selected .workflow-node__verbs,
 .panel--selected .workflow-node__refusal { opacity: 1; }
 
-.sheet { animation: palette-enter var(--dur-2) var(--ease) both; }
+/* A sheet arrives with its OWN keyframe, never `palette-enter`: that one
+   carries the palette's centring `translateX(-50%)`, and with `both` it held
+   every sheet shifted left by half its own width inside the palette's
+   `overflow: hidden` — labels and the left of every field cut off at every
+   window size (start-work.png). No DOM check sees a clip; a rise does not
+   need the translate, so none is here. */
+@keyframes sheet-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.sheet { animation: sheet-enter var(--dur-2) var(--ease) both; }
 
 @media (prefers-reduced-motion: reduce) {
   .canvas--behind-orch { transform: none; transition: none; }
@@ -8159,11 +8353,11 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__cube-wash { fill: none; stroke: var(--wash); pointer-events: none; animation: orch-stage-wash var(--dur-flow) var(--ease) 2; }
 .orch__cube-wash[data-stage="todo"] { --wash: var(--line-strong); }
 .orch__cube-wash[data-stage="working"] { --wash: var(--blue); }
-.orch__cube-wash[data-stage="review"] { --wash: var(--iris); }
+.orch__cube-wash[data-stage="review"] { --wash: var(--iris); --wash-glow: 0px; animation-iteration-count: 1; } /* Brief #18: an agent finishing is not the work finishing — no glow, one pass. */
 .orch__cube-wash[data-stage="done"] { --wash: var(--green); }
 @keyframes orch-stage-wash {
   0% { stroke-width: 1px; stroke: color-mix(in srgb, var(--wash) 0%, transparent); filter: none; }
-  30% { stroke-width: 3px; stroke: var(--wash); filter: drop-shadow(0 0 6px var(--wash)); }
+  30% { stroke-width: 3px; stroke: var(--wash); filter: drop-shadow(0 0 var(--wash-glow, 6px) var(--wash)); }
   100% { stroke-width: 1px; stroke: color-mix(in srgb, var(--wash) 0%, transparent); filter: none; }
 }
 /* Reduced motion: the rim holds still for the window, so the fact survives the motion. */
@@ -8277,7 +8471,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   stroke-width: 3;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--role-light, var(--iris)) 75%, transparent));
 }
-.orch__edge--authored { stroke-width: 3; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--amber) 55%, transparent)); }
+.orch__edge--authored { stroke-width: 3; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--fg-2) 40%, transparent)); }
 /* A lensed-out edge stays a hairline on purpose: the lens is a way of reading
    the ring, so what it drops must not compete with what it keeps. */
 .orch__edge--lensed { stroke-width: 1; }
@@ -8432,7 +8626,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 /* The compact name tier (M294): two short lines cut to the station pitch, no glyph tile. */
 .orch__plate--compact .orch__cube-label { font-size: var(--t-xs); font-family: var(--font-mono); }
 .orch__plate--compact .orch__cube-role { font-size: var(--t-xs); }
-.orch__edge-label { font-family: var(--font-mono); font-size: var(--t-xs); fill: var(--amber); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
+.orch__edge-label { font-family: var(--font-mono); font-size: var(--t-xs); fill: var(--fg-2); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
 .orch__edge-label--grouping { fill: var(--fg-4); }
 /* M291. The platform scene. The plate's label is screen-aligned SVG text over
    a deck-surface backing, top-left of the plate's hit-target; it is the island
@@ -8587,3 +8781,300 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .orch__needs--card > .orch__section-head { margin-bottom: var(--sp-3); }
 .orch__needs-eyebrow { font: var(--t-xs) var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); }
 .orch__command.is-primary { background: var(--iris); color: var(--on-iris); border-color: transparent; font-weight: 600; }
+
+/* M306. One check run, opened — its facts, then its own output. Used by the
+   Checks tab, the review node's task section and the return briefing, so it
+   carries no surface's prefix. The log opens scrolled to its END. */
+.check-run { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.check-run__facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-1) var(--sp-3); font-size: var(--t-xs); }
+.check-run__facts dt { color: var(--fg-3); }
+.check-run__facts dd { margin: 0; color: var(--fg-2); overflow-wrap: anywhere; }
+.check-run__log {
+  margin: 0;
+  padding: var(--sp-3);
+  max-height: 18rem;
+  overflow: auto;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--well);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.check-run__log:focus-visible { outline: 2px solid var(--iris); outline-offset: 1px; }
+.check-run__none, .check-run__note { margin: 0; font-size: var(--t-xs); color: var(--fg-4); }
+.watcher-node__whole { margin-left: var(--sp-2); }
+
+/* M307. The review, together — the verdict first (finished is not verified),
+   then outcome, criteria, checks, comments and the follow-up. One family of
+   blocks, one label style, the evidence list's own mono for commands. */
+.task-review { display: flex; flex-direction: column; gap: var(--sp-3); margin: var(--sp-2) 0; }
+.task-review__verdict { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--s-1); }
+.task-review__verdict[data-tone='green'] { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: var(--green-dim); }
+.task-review__verdict[data-tone='amber'] { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); background: var(--amber-dim); }
+.task-review__word { font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.task-review__conditions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--t-xs); }
+.task-review__holds { color: var(--fg-2); }
+.task-review__holds::before { content: '✓ '; color: var(--green); }
+.task-review__missing { color: var(--fg-2); }
+.task-review__missing::before { content: '○ '; color: var(--amber); }
+.task-review__block { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.task-review__label { font-size: var(--t-xs); color: var(--fg-3); }
+.task-review__brief { margin: 0; font-size: var(--t-sm); color: var(--fg); white-space: pre-wrap; }
+.task-review__criteria, .task-review__checks, .task-review__comments { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.task-review__criterion { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-2); cursor: pointer; }
+.task-review__criterion[data-task-criterion='met'] { color: var(--fg-3); }
+.task-review__check-row { display: flex; align-items: baseline; gap: var(--sp-2); width: 100%; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.task-review__check-row:hover .task-review__check-command { color: var(--fg); }
+.task-review__check-word { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; min-width: 5.5em; }
+.task-review__check-word[data-tone='needs-you'] { color: var(--amber); }
+.task-review__check-command { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-review__check .check-run, .task-review__check .check-run__none { margin: var(--sp-1) 0 var(--sp-2); }
+.task-review__comment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-2); padding: var(--sp-1) var(--sp-2); border-left: 2px solid var(--iris); background: var(--s-1); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.task-review__comment[data-task-comment='resolved'] { border-left-color: var(--line); }
+.task-review__comment[data-task-comment='resolved'] .task-review__comment-place, .task-review__comment[data-task-comment='resolved'] .task-review__comment-quote { color: var(--fg-4); }
+.task-review__comment[data-task-comment='resolved'] .task-review__comment-body { text-decoration: line-through; color: var(--fg-3); }
+.task-review__comment-place { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.task-review__comment-state { font-size: var(--t-xs); color: var(--fg-4); text-align: right; }
+.task-review__comment-quote { grid-column: 1 / -1; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.task-review__comment-body { grid-column: 1 / -1; margin: 0; font-size: var(--t-sm); color: var(--fg); white-space: pre-wrap; }
+.task-review__comment-verbs { grid-column: 1 / -1; display: flex; gap: var(--sp-2); }
+.task-review__followup-text { margin: 0; padding: var(--sp-2) var(--sp-3); max-height: 14rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg-2); font-family: var(--font-mono); font-size: var(--t-xs); white-space: pre-wrap; }
+.task-review__followup-verbs { display: flex; gap: var(--sp-2); }
+.task-review__send:not(:disabled) { color: var(--iris); }
+
+/* M307. A diff line takes a comment: the + sits in the gutter at rest-opacity
+   0 and shows on hover (the contextual layer), a pinned comment reads under
+   its line, and the draft is a plain textarea that owns its own keys. */
+.review-node__line { position: relative; }
+.review-node__line--commentable { padding-left: calc(var(--sp-3) + 14px); }
+.review-node__comment-add { position: absolute; left: 2px; top: 0; width: 14px; height: 100%; padding: 0; border: 0; background: transparent; color: var(--iris); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; }
+.review-node__line:hover .review-node__comment-add, .review-node__comment-add:focus-visible { opacity: 1; }
+.review-node__comment { margin: var(--sp-1) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); padding: var(--sp-1) var(--sp-2); border-left: 2px solid var(--iris); background: var(--s-1); font-size: var(--t-xs); color: var(--fg); white-space: pre-wrap; font-family: var(--font-ui); }
+.review-node__comment[data-review-comment='resolved'] { border-left-color: var(--line); color: var(--fg-3); text-decoration: line-through; }
+.review-node__comment-draft { margin: var(--sp-1) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); display: flex; flex-direction: column; gap: var(--sp-1); }
+.review-node__comment-input { width: 100%; box-sizing: border-box; resize: vertical; font: var(--t-sm) var(--font-ui); color: var(--fg); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); white-space: pre-wrap; }
+.review-node__comment-input:focus { outline: none; border-color: var(--iris); }
+.review-node__comment-verbs { display: flex; gap: var(--sp-2); }
+/* M307. The workbench's verdict line under the freshness line — the review node's words. */
+.orch__bench-verify { margin: 0 0 var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }
+.orch__bench-verify strong { color: var(--fg); font-weight: 600; }
+.orch__bench-verify[data-tone='green'] strong { color: var(--green); }
+.orch__bench-verify[data-tone='amber'] strong { color: var(--amber); }
+
+/* M308. The decision inbox — each Needs-you row says why it waits, what it
+   unblocks and for how long, and can be put off. Contextual text in the
+   quiet tones; "unblocks" is the one fact that earns the accent. */
+.inbox__why { display: flex; flex-direction: column; gap: var(--sp-1); padding: 0 var(--sp-3) var(--sp-1) calc(var(--sp-3) + 14px); min-width: 0; }
+.inbox__blocker { margin: 0; font-size: var(--t-xs); color: var(--fg-2); }
+.inbox__context { margin: 0; font: var(--t-xs) var(--font-mono); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox__meta { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--t-xs); color: var(--fg-4); }
+.inbox__unblocks { color: var(--iris); font-weight: 600; }
+.inbox__group-verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+.inbox__snooze { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); }
+.inbox__snooze-label { font-size: var(--t-xs); color: var(--fg-3); }
+.inbox__snoozed { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); }
+.inbox__snoozed .rail-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); }
+
+/* M309. "Since you left" — the resume banner's family (its glass over the
+   canvas, its tint in the navigator), grown to one section per task that
+   moved. Decisions lead each task; every line ends in the verb that opens
+   its evidence, and a check's output opens in place. */
+.briefing {
+  position: absolute;
+  top: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: min(38rem, 92%);
+  max-height: min(70vh, 40rem);
+  overflow: auto;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--glass-3);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--e-3);
+  pointer-events: auto;
+}
+.shell__rail .briefing { position: static; transform: none; width: auto; max-height: none; box-shadow: none; background: color-mix(in srgb, var(--iris) 6%, transparent); border-color: color-mix(in srgb, var(--iris) 30%, var(--line)); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.briefing__headline { margin: var(--sp-1) 0 0; font-size: var(--t-md); font-weight: 600; color: var(--fg); }
+.briefing__task { display: flex; flex-direction: column; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.briefing__task-title { margin: 0; font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.briefing__group { display: flex; flex-direction: column; gap: var(--sp-1); }
+.briefing__group-title { font-size: var(--t-xs); color: var(--fg-3); }
+.briefing__lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.briefing__line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-2); align-items: baseline; font-size: var(--t-sm); color: var(--fg-2); }
+.briefing__line[data-briefing-tone='failed'] .briefing__text { color: var(--amber); }
+.briefing__line[data-briefing-tone='needs-you'] .briefing__text { color: var(--fg); }
+.briefing__text { overflow-wrap: anywhere; }
+.briefing__output { grid-column: 1 / -1; }
+.briefing__next { margin: 0; font-size: var(--t-sm); color: var(--fg); }
+.briefing__quiet { margin: 0; font-size: var(--t-xs); color: var(--fg-4); }
+.briefing__verbs { display: flex; justify-content: flex-end; }
+/* M310. Run checks in the lane: one command field, edited before anything runs. */
+.task-review__run-form { display: flex; gap: var(--sp-2); align-items: center; }
+.task-review__run-input { flex: 1; min-width: 0; font: var(--t-xs) var(--font-mono); color: var(--fg); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); }
+.task-review__run-input:focus { outline: none; border-color: var(--iris); }
+
+/* M310. The task's chain in the inspector — six steps in one wrapping row,
+   each a place to go; an absent step is its own sentence in the quiet tone,
+   and the arrow between steps is drawn, never typed. */
+.inspector__chain { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); }
+.inspector__chain-step { display: flex; align-items: center; gap: var(--sp-3); }
+.inspector__chain-step + .inspector__chain-step::before { content: ''; width: 6px; height: 6px; border-top: 1px solid var(--fg-4); border-right: 1px solid var(--fg-4); transform: rotate(45deg); margin-right: var(--sp-2); }
+.inspector__chain-button { border: 0; background: transparent; padding: 0; font: inherit; font-size: var(--t-xs); color: var(--fg-4); cursor: pointer; text-align: left; }
+.inspector__chain-step[data-chain-present] .inspector__chain-button { color: var(--iris); }
+.inspector__chain-button:hover:not(:disabled) { text-decoration: underline; }
+.inspector__chain-button:disabled { cursor: default; }
+.sheet__textarea { resize: vertical; min-height: 2.6em; font-family: var(--font-ui); line-height: 1.4; }
+
+/* M310. The first task's guide — the hint grown a five-step rail. Done steps
+   in the quiet tone, the current one in iris, the rest waiting. */
+.first-task-hint--guide { flex-wrap: wrap; }
+.flagship__steps { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--sp-3); flex-basis: 100%; font-size: var(--t-xs); }
+.flagship__step { color: var(--fg-4); }
+.flagship__step[data-flagship-state='done'] { color: var(--fg-3); text-decoration: line-through; }
+.flagship__step[data-flagship-state='current'] { color: var(--iris); font-weight: 600; }
+.flagship__go { color: var(--iris); }
+/* The rail's separators: the sequence reads left to right as one path. */
+.flagship__step + .flagship__step::before { content: "›"; margin-right: var(--sp-3); color: var(--fg-4); text-decoration: none; display: inline-block; }
+/* The agent is waiting on the PERSON: the current step takes the attention
+   tone, the one colour the product keeps for "this needs you". */
+.flagship__step[data-flagship-needs] { color: var(--amber); }
+.first-task-hint[data-first-task-hint="needs-input"] { border-color: var(--amber); }
+
+/* THE FIRST HINT'S ARRIVAL, once, matching its conversation's (cluster-arrive):
+   a fade and a 6px rise, no overshoot. `transform` only — the hint centres
+   with the separate `translate` property, which this keyframe leaves alone. */
+@keyframes first-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.first-task-hint { animation: first-arrive calc(var(--dur-2) * 2) var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .first-task-hint { animation: none; }
+}
+
+/* M311. COMBINE — the workbench tab that says whether a repository's lanes
+   are safe to put together. Blocks stack; the contention label takes the
+   warning colour because it is a hazard now, the overlap label does not. */
+.orch__combine { display: flex; flex-direction: column; gap: var(--sp-3); }
+.orch__combine-block { display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__label { font-size: var(--t-xs); color: var(--fg-3); }
+.orch__label--warn { color: var(--amber); }
+.orch__combine-order { margin: 0; padding-left: var(--sp-4); font-size: var(--t-sm); color: var(--fg); display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__combine-opens { display: inline-flex; gap: var(--sp-1); margin-left: auto; }
+.orch__combine-verbs, .orch__combine-check { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+
+/* M314. What a task promised to hand back — the criteria list's shape. */
+.task-review__deliverables { margin: 0; padding-left: var(--sp-4); font-size: var(--t-sm); color: var(--fg-2); display: flex; flex-direction: column; gap: var(--sp-1); }
+
+/* M311. Watch's shared files, in words: top-right, under the HUD's line, the
+   glass the HUD uses. A contended row takes the warning colour; an overlap
+   row does not — it is a meeting at integration, not a hazard now. */
+.orch-live__label--overlap { border-style: dashed; }
+.orch-live__shared { position: absolute; top: calc(var(--sp-3) * 6); right: var(--sp-3); max-width: 340px; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--s-1) 86%, transparent); backdrop-filter: blur(8px); color: var(--fg-3); font: var(--t-xs) var(--font-ui); }
+.orch-live__shared-row { display: flex; align-items: center; gap: var(--sp-2); }
+.orch-live__shared-row code { color: var(--fg); }
+.orch-live__shared-row span { flex: 1; min-width: 0; }
+.orch-live__shared-row[data-orch-live-shared-kind="contended"] code { color: var(--amber); }
+
+/* ------------------------------------------------------------ #11 / #12 --
+   READABILITY AND MEANING IN ORCHESTRATE, as one block so the pass reads as a
+   pass. Declared last so source order wins at equal specificity; every rule
+   that states a stronger case (a needs-you group head, the current phase, a
+   pressed filter) keeps its own colour because its selector outranks these.
+
+   #11. Readable text is --fg-3 or stronger. --fg-4 measures 3.0:1 against the
+   ground (verify:styles' contrast table) where every other text token holds
+   4.5:1, so it is for disabled controls and hairline punctuation only — not
+   for a time, a caption, a phase name or the facts under a decision. Compact
+   controls and captions step up from --t-xs to --t-sm; the peripheral marks
+   (edge labels, the compact station tier, far-depth names) stay small. */
+.orch__cube-role, .orch__pplate-sub { fill: var(--fg-2); }
+.orch__caption { font-size: var(--t-sm); color: var(--fg-3); }
+.orch__label, .orch__mini, .orch__tab { font-size: var(--t-sm); }
+.orch__activity-time, .orch__brief-summary--quiet, .orch-live__note, .orch__limit-kind, .orch__phase, .orch__group-head,
+.check-run__none, .check-run__note, .task-review__comment-state, .inbox__meta, .briefing__quiet, .inspector__chain-button, .flagship__step { color: var(--fg-3); }
+/* #12. ONE SELECTION TREATMENT: iris — the tint and the iris edge the roster,
+   the island card and the list row already wear. The pipeline card's selected
+   edge took its STATE tone, so a selected working card and an unselected
+   working card differed only by fill; the "Selected" chip was green, the
+   colour of idle. Hover may keep the tone: hover is not selection. */
+.orch__wp--on { border-color: color-mix(in srgb, var(--iris) 55%, var(--line)); }
+.orch__chip[data-orch-selected-chip] { color: var(--iris); border-color: color-mix(in srgb, var(--iris) 45%, var(--line)); background: var(--iris-dim); }
+/* #12. AMBER MEANS "THIS NEEDS YOU", nothing else. An authored dependency is a
+   fact about the graph, not a call to act, so its edge, its packets, its
+   trigger chip and its label move to strong neutral ink — still the heaviest
+   line in the scene (weight is the meaning, orchEdgePaintOrder), no longer the
+   hue a waiting agent uses. Discard is destructive, so it is red, not amber. */
+/* (Those rules are edited where they were declared — .orch__edge--authored, the
+   [data-authored] packets, .orch__chip rect, .orch__edge-label, .orch__mini--stop —
+   so no override here outranks the lensed or grouping modifiers.) */
+/* #14. Declared at the end, not beside .approval-ack: verify:styles' edge.flow.css.1
+   reads the FIRST reduced-motion block before the link layer's, and a block of
+   its own earlier in the file made that read span two blocks. */
+@media (prefers-reduced-motion: reduce) { .approval-ack__row { animation: none; } }
+
+/* Brief #16. Watch: the paused view says so in words, and the event log is the
+   text twin of the motion — shown for reduced motion and while the view is paused. */
+.orch-live__live[data-paused] { color: var(--fg-2); }
+.orch-live__hud[data-orch-live-paused] { border-color: var(--line-strong); }
+.orch-live__log { position: absolute; right: var(--sp-3); bottom: calc(var(--sp-3) * 3); width: min(22rem, 45%); margin: 0; padding: var(--sp-2) var(--sp-3); list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--s-1) 90%, transparent); backdrop-filter: blur(8px); color: var(--fg-2); font: var(--t-xs) var(--font-ui); }
+.orch-live__log li { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-left: var(--sp-2); border-left: 2px solid var(--line-strong); }
+.orch-live__log li strong { color: var(--fg); font-weight: 600; }
+.orch-live__log li[data-log="add"], .orch-live__log li[data-log="pass"] { border-left-color: var(--green); }
+.orch-live__log li[data-log="del"], .orch-live__log li[data-log="fail"] { border-left-color: var(--red); }
+.orch-live__log li[data-log="run"] { border-left-color: var(--iris); }
+.orch-live__log-empty { color: var(--fg-3); border-left-color: transparent !important; }
+
+/* Brief #17. Review reading mode: the workbench takes the working area and the
+   scene steps aside (the header stays — it names the task being reviewed). */
+.orch[data-orch-reading] > .orch__body { display: none; }
+.orch[data-orch-reading] > .orch__bench { flex: 1 1 auto; min-height: 0; max-height: none; }
+.orch__mini--read { color: var(--iris); border-color: color-mix(in srgb, var(--iris) 45%, var(--line)); }
+.orch__mini--read[aria-pressed="true"] { color: var(--fg); background: var(--s-3); }
+/* The diff's context line: one row, fixed height, above the diff — switching
+   files changes its words, never its size. */
+.orch__bench-col--diff { display: flex; flex-direction: column; min-width: 0; }
+.orch__bench-diffhead { flex: none; display: flex; align-items: center; gap: var(--sp-3); min-height: calc(var(--sp-3) * 2.5); padding: var(--sp-1) var(--sp-2); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); font: var(--t-xs) var(--font-ui); color: var(--fg-3); white-space: nowrap; overflow: hidden; }
+.orch__bench-diffpath { display: inline-flex; align-items: baseline; gap: var(--sp-2); min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.orch__bench-diffpath code { color: var(--fg); font: var(--t-xs) var(--font-mono); overflow: hidden; text-overflow: ellipsis; }
+.orch__bench-diffpath em { font-style: normal; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.orch__bench-diffmeta { display: inline-flex; align-items: center; gap: var(--sp-3); margin-left: auto; min-width: 0; overflow: hidden; }
+.orch__bench-diffmeta > span { overflow: hidden; text-overflow: ellipsis; }
+.orch__bench-diffmeta [data-fresh="fresh"] { color: var(--green); }
+.orch__bench-diffmeta [data-fresh="stale"] { color: var(--amber); }
+.orch__bench-diffwarn { color: var(--amber); }
+.orch__diff--pending .orch__diff-line { color: var(--fg-4); background: none; }
+
+/* Brief #18. The completion handoff under the task header. A small state
+   transition (its border settles to the outcome's colour) and no motion
+   beyond it: only `done`, the person's own word, is green. */
+.orch__handoff { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2) var(--sp-4); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-left-width: 3px; border-radius: var(--r-md); background: color-mix(in srgb, var(--s-1) 88%, transparent); font: var(--t-xs) var(--font-ui); color: var(--fg-2); transition: border-color var(--dur-2) var(--ease); }
+.orch__handoff[data-orch-completion="idle"] { border-left-color: var(--fg-4); }
+.orch__handoff[data-orch-completion="ended"] { border-left-color: var(--line-strong); }
+.orch__handoff[data-orch-completion="reviewed"] { border-left-color: var(--iris); }
+.orch__handoff[data-orch-completion="done"] { border-left-color: var(--green); }
+.orch__handoff-head { grid-column: 1; display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.orch__handoff-word { color: var(--fg); font-weight: 600; white-space: nowrap; }
+.orch__handoff-meaning { color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__handoff-facts { grid-column: 1; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); margin: 0; }
+.orch__handoff-facts > div { display: flex; gap: var(--sp-1); min-width: 0; }
+.orch__handoff-facts dt { color: var(--fg-4); }
+.orch__handoff-facts dd { margin: 0; color: var(--fg-2); }
+.orch__handoff > .orch__command { grid-column: 2; grid-row: 1 / span 2; }
+@media (prefers-reduced-motion: reduce) { .orch__handoff { transition: none; } }
+
+/* Brief #19. The ⋯ menu's advanced doors: a label and the benefit under it. */
+.pf__menu-advanced { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
+.pf__menu-door { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; white-space: normal; }
+.pf__menu-benefit { color: var(--fg-3); font-size: var(--t-xs); line-height: 1.35; max-width: 18rem; }

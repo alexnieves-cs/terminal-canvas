@@ -31,6 +31,13 @@ export interface MemoryNodeProps {
   readOnly?: boolean
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   linkTarget: boolean
+  /**
+   * 5.2 (D12). Brings an accepted decision's SOURCE conversation into view.
+   * Returns null when it did, or the sentence saying why it could not — a
+   * closed conversation is the ordinary case, and the entry keeps its source
+   * ids either way, so "where did this come from?" never rests on a title.
+   */
+  onShowSource?: (conversationId: string) => string | null
 }
 
 const KINDS = ['decided', 'tried', 'failed', 'note'] as const
@@ -78,6 +85,7 @@ function MemoryNodeImpl(props: MemoryNodeProps): JSX.Element {
   const [kind, setKind] = useState<(typeof KINDS)[number]>('decided')
   const [text, setText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [sourceNote, setSourceNote] = useState<string | null>(null)
 
   const load = useCallback(() => {
     void window.canvas.memory.list(root, MEMORY_MAX).then((answer) => setRead({
@@ -156,6 +164,17 @@ function MemoryNodeImpl(props: MemoryNodeProps): JSX.Element {
                 <span className="memory-node__text">{entry.text}</span>
                 <span className="memory-node__at">{clock(entry.at)}</span>
                 {entry.redacted !== undefined && <span className="memory-node__redacted">{entry.redacted} redacted</span>}
+                {/* ACCEPTED knowledge says so; a hand-typed or agent-written row
+                    carries no line, and an old record's absence is never
+                    back-filled with a guess. */}
+                {entry.source !== undefined && (
+                  <button type="button" className="memory-node__source" data-memory-source={entry.source.conversationId}
+                    title={`accepted ${new Date(entry.source.acceptedAt).toLocaleString()} from conversation ${entry.source.conversationId}, turn ${entry.source.turnId}${entry.source.taskId === undefined ? '' : `, task ${entry.source.taskId}`}`}
+                    disabled={props.onShowSource === undefined}
+                    {...shellControl(() => { setSourceNote(props.onShowSource?.((entry.source as { conversationId: string }).conversationId) ?? null) })}>
+                    accepted from a conversation{entry.source.taskId === undefined ? '' : ' on a task'} · {clock(entry.source.acceptedAt)}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -178,6 +197,7 @@ function MemoryNodeImpl(props: MemoryNodeProps): JSX.Element {
           </div>
         )}
         {refusal !== null && <p className="pf__note memory-node__refusal" data-memory-refusal role="alert">{refusal}</p>}
+        {sourceNote !== null && <p className="pf__note" data-memory-source-note role="status">{sourceNote}</p>}
       </div>
     </PanelFrame>
   )

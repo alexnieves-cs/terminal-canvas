@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isWatcherPanel } from '@renderer/panels/panels'
 import { getWatch } from '@renderer/watcher/watcher-store'
 import { useChat } from '@renderer/chat/chat-store'
 import { shellControl } from '@renderer/shell/shell-control'
+import { OrchCombine } from './OrchCombine'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import { KindFile } from '@renderer/icons'
 import { outward } from '@shared/outward'
 import { displayPath } from '@shared/display-path'
+import { CheckRunOutput } from '../checks/CheckRunOutput'
+import { agentWorkingOf, verificationOf } from '@shared/review-comments'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { ReviewDiff, ReviewFile, ReviewResult, ReviewSection } from '@shared/review'
 import type { ReviewIdentity } from '@shared/review-identity'
@@ -83,6 +86,20 @@ export interface OrchWorkbenchProps {
   /** Closed = the tab bar alone; nothing is read while closed. */
   open: boolean
   onOpen: (open: boolean) => void
+  /**
+   * Brief #17. READING MODE: the strip takes the page's working area and the
+   * scene steps aside, so a diff is read at full height instead of in the
+   * 200px the scene leaves it. Held by the view in memory (not the layout
+   * record): it is a way of looking, not a place the page reopens in.
+   */
+  reading?: boolean
+  onReading?: (reading: boolean) => void
+  /**
+   * Brief #18. The bound checks this strip read for its subject, handed up so
+   * the task's completion handoff says the SAME checks — one read, never a
+   * second that could disagree with the verdict line here.
+   */
+  onChecks?: (subjectKey: string, checks: readonly CheckRecord[] | null) => void
   panels: readonly Panel[]
   workItems: readonly PersistedWorkItem[]
   worktrees: readonly WorktreeListRow[]
@@ -103,6 +120,8 @@ export interface OrchWorkbenchProps {
   output: { panelId: string | null; title: string | undefined; command: string | undefined; lines: readonly string[] }
   /** Bumped by the view when a chat turn ends, so reads refresh without a watch. */
   refresh: number
+  /** M311. The authored hand-offs (panel → panel), for Combine's proposed order. */
+  edges?: readonly { from: string; to: string }[]
 }
 
 /* ── Changes ─────────────────────────────────────────────────────────────── */
@@ -339,7 +358,7 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
     const ledger = checksFromLedger(rows.rows, lanePath, worktreeOf).filter((c) => !watcherPanelIds.has(c.panelId))
     const watchers = checksFromWatchers(panels.filter(isWatcherPanel).map((p) => {
       const w = getWatch(p.rect.id)
-      return { id: p.rect.id, cwd: p.watch.cwd, command: p.watch.command, args: p.watch.args, status: w.status, exitCode: w.exitCode, signal: w.signal, startedAt: w.startedAt, endedAt: w.endedAt, tested: w.tested }
+      return { id: p.rect.id, cwd: p.watch.cwd, command: p.watch.command, args: p.watch.args, status: w.status, exitCode: w.exitCode, signal: w.signal, startedAt: w.startedAt, endedAt: w.endedAt, tested: w.tested, outputId: w.outputId }
     }), lanePath ?? (subject.kind === 'task' ? undefined : undefined), worktreeOf)
     // A session subject's watchers are the ones in ITS directory — a watcher
     // elsewhere on the canvas is somebody else's check.
@@ -375,14 +394,18 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
 }
 
 function CheckOutput({ record }: { record: CheckRecord }): JSX.Element {
+  // M306. A run with a record opens ITS OWN output; the tail fallback below is
+  // only for a run that has none (a pre-M306 row), and says what it is.
+  const hasRecord = record.outputId !== undefined
   const [tail, setTail] = useState<string[] | null>(null)
   useEffect(() => {
+    if (hasRecord) return
     if (record.source === 'watcher') { setTail(getWatch(record.panelId).tail.split('\n').slice(-40)); return }
     if (typeof window.canvas?.scrollback?.tail !== 'function') { setTail([]); return }
     let live = true
     void window.canvas.scrollback.tail({ panelId: record.panelId, lines: 40 }).then((got) => { if (live) setTail(got) }, () => { if (live) setTail([]) })
     return () => { live = false }
-  }, [record.key, record.source, record.panelId])
+  }, [record.key, record.source, record.panelId, hasRecord])
   const text = tail === null ? null : outward(tail.join('\n'), `panel ${record.panelId}`).text
   return (
     <div className="orch__check-detail" data-orch-check-detail={record.key}>
@@ -390,11 +413,15 @@ function CheckOutput({ record }: { record: CheckRecord }): JSX.Element {
         <dt>Command</dt><dd><code>{record.command}</code></dd>
         <dt>Context</dt><dd>{displayPath(record.context.cwd).short}{record.context.worktree !== undefined ? ` · worktree ${record.context.worktree}` : ' · shared directory'}</dd>
         <dt>Outcome</dt><dd>{checkWords(record)}{record.note !== undefined ? ` — ${record.note}` : ''}</dd>
-        <dt>Tested</dt><dd>{record.tested === undefined ? 'revision not recorded' : `${record.tested.base.slice(0, 10)} · content ${record.tested.content.slice(0, 8)}`}</dd>
-        <dt>Witness</dt><dd>{record.source === 'watcher' ? 'a watcher this canvas ran' : 'a command this canvas watched exit'}</dd>
+        {!hasRecord && <><dt>Tested</dt><dd>{record.tested === undefined ? 'revision not recorded' : `${record.tested.base.slice(0, 10)} · content ${record.tested.content.slice(0, 8)}`}</dd></>}
+        {!hasRecord && <><dt>Witness</dt><dd>{record.source === 'watcher' ? 'a watcher this canvas ran' : 'a command this canvas watched exit'}</dd></>}
       </dl>
-      <p className="orch__caption">{record.source === 'watcher' ? 'The run\'s output, its last lines:' : 'The ledger keeps no output bytes; this is the session\'s scrollback tail now, which may be later than the command:'}</p>
-      <pre className="orch__term-log orch__term-log--check" aria-label="Check output">{text === null ? 'Reading output…' : text === '' ? 'No output was captured.' : text}</pre>
+      {hasRecord
+        ? <CheckRunOutput outputId={record.outputId} subject={`panel ${record.panelId}`} />
+        : <>
+          <p className="orch__caption">{record.source === 'watcher' ? 'This run has no output record; the watcher\'s last lines:' : 'This run has no output record; this is the session\'s scrollback tail now, which may be later than the command:'}</p>
+          <pre className="orch__term-log orch__term-log--check" aria-label="Check output">{text === null ? 'Reading output…' : text === '' ? 'No output was captured.' : text}</pre>
+        </>}
     </div>
   )
 }
@@ -610,10 +637,11 @@ function ArtifactsTab({ read, subject, onOpenPath }: { read: TimelineRead; subje
 /* ── The strip ───────────────────────────────────────────────────────────── */
 
 export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
-  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh } = props
+  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, reading = false, onReading, onChecks, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh, edges } = props
   const [localRefresh, setLocalRefresh] = useState(0)
   const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh)
-  const checks = useChecks(subject, open && tab === 'checks', panels, worktrees, refresh + localRefresh)
+  // M307. Read on Changes too: the verdict line there needs the same bound checks.
+  const checks = useChecks(subject, open && (tab === 'checks' || tab === 'changes'), panels, worktrees, refresh + localRefresh)
   // M300. One read for both new tabs — they are two views of one record, and a
   // second read would let the same subject answer twice and disagree.
   const record = useTimeline(subject, open && (tab === 'artifacts' || tab === 'timeline'), refresh + localRefresh)
@@ -621,6 +649,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   // M290. The two writes' draft state and their last outcome, per subject key —
   // a draft opened on one subject must not survive a selection change.
   const subjectKey = benchSubjectKey(subject)
+  useEffect(() => { onChecks?.(subjectKey, checks.evidence?.checks ?? null) }, [subjectKey, checks.evidence]) // eslint-disable-line react-hooks/exhaustive-deps
   const [writeDraft, setWriteDraft] = useState<{ key: string; kind: 'commit' | 'discard'; message: string; busy: boolean } | null>(null)
   const [writeOutcome, setWriteOutcome] = useState<{ key: string; outcome: OrchWriteOutcome } | null>(null)
   const draft = writeDraft !== null && writeDraft.key === subjectKey ? writeDraft : null
@@ -737,17 +766,60 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   }
   const dataSubject = subject === null ? '' : subject.kind === 'session' ? subject.id : subject.chatId ?? subject.itemId
 
+  /*
+   * Brief #17. SWITCHING FILES MOVES NOTHING AROUND THE DIFF. While the next
+   * file's diff is read, the one on screen stays (dimmed, and without
+   * `data-orch-diff`, so nothing mistakes it for the answer) instead of
+   * collapsing to a one-line caption and letting the column jump; and each
+   * file keeps where it was scrolled, so going back to a file returns to the
+   * line you were reading.
+   */
+  const [shownDiff, setShownDiff] = useState<Extract<DiffRead, { kind: 'diff' }> | null>(null)
+  useEffect(() => { if (changes.diff.kind === 'diff') setShownDiff(changes.diff) }, [changes.diff])
+  const previousDiff = changes.diff.kind === 'loading' && shownDiff !== null && shownDiff.key.startsWith(`${subjectKey}:`) ? shownDiff : null
+  const scrolls = useRef(new Map<string, number>())
+  const diffRef = useRef<HTMLPreElement | null>(null)
+  const openDiffKey = changes.diff.kind === 'diff' ? changes.diff.key : null
+  useLayoutEffect(() => {
+    if (openDiffKey === null || diffRef.current === null) return
+    diffRef.current.scrollTop = scrolls.current.get(openDiffKey) ?? 0
+  }, [openDiffKey])
+  const openPath = changes.diff.kind === 'none' ? null : changes.diff.key.slice(subjectKey.length + 1)
+  const openFileRow = changes.read.kind === 'result' && (changes.read.result.kind === 'changes' || changes.read.result.kind === 'shared')
+    ? changes.read.result.files.find((f) => f.path === openPath) : undefined
+
+  /*
+   * Brief #17. THE FACTS A DIFF IS READ AGAINST, BESIDE IT. Whose change this
+   * is, which branch, whether the directory is shared (so the diff is not
+   * theirs alone), and whether the review mark and the checks are about THIS
+   * content — one line above the diff, where the eye already is, rather than
+   * a column away. The long sentences stay in the left column; these are
+   * their short forms, from the same reads.
+   */
+  const checkLine = ((): { word: string; tone: 'fresh' | 'stale' | 'none' } => {
+    const list = checks.evidence?.checks ?? []
+    if (checks.evidence === null) return { word: 'checks not read yet', tone: 'none' }
+    if (list.length === 0) return { word: 'no check has run', tone: 'none' }
+    const stale = list.filter((c) => c.outcome === 'stale' || c.outcome === 'unknown').length
+    const failed = list.filter((c) => c.outcome === 'failed').length
+    const current = list.length - stale
+    if (stale === list.length) return { word: `${list.length} check${list.length === 1 ? '' : 's'} · all on an earlier version`, tone: 'stale' }
+    return { word: `${current} check${current === 1 ? '' : 's'} on this version${failed > 0 ? ` · ${failed} failed` : ''}${stale > 0 ? ` · ${stale} stale` : ''}`, tone: stale > 0 || failed > 0 ? 'stale' : 'fresh' }
+  })()
+  const sharedCount = changes.read.kind === 'result' && changes.read.result.kind === 'shared' ? changes.read.result.panelCount : null
+  const where = subject === null ? '' : subject.kind === 'session' ? 'session' : subject.lane !== undefined ? subject.lane.branch : 'shared directory'
+
   return (
-    <section className="orch__bench" data-orch-workbench data-orch-bench-tab={tab} data-orch-bench-open={open || undefined} data-orch-bench-subject={benchSubjectKey(subject)} style={open ? { height: `${height}px` } : undefined} aria-label="Workbench">
-      <div className="orch__bench-handle" role="separator" aria-orientation="horizontal" aria-label="Resize the workbench" data-orch-bench-handle
+    <section className="orch__bench" data-orch-workbench data-orch-bench-tab={tab} data-orch-bench-open={open || undefined} data-orch-bench-reading-mode={reading || undefined} data-orch-bench-subject={benchSubjectKey(subject)} style={open && !reading ? { height: `${height}px` } : undefined} aria-label="Workbench">
+      {!reading && <div className="orch__bench-handle" role="separator" aria-orientation="horizontal" aria-label="Resize the workbench" data-orch-bench-handle
         onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
-        onDoubleClick={() => onHeight(clampWorkbenchHeight(WORKBENCH_DEFAULT_HEIGHT))} />
+        onDoubleClick={() => onHeight(clampWorkbenchHeight(WORKBENCH_DEFAULT_HEIGHT))} />}
       <div className="orch__bench-head">
         <div className="orch__tabs orch__tabs--bench" role="tablist" aria-label="Workbench tabs">
           {WORKBENCH_TABS.map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} data-orch-bench-tab-button={t}
               className={`orch__tab${open && tab === t ? ' orch__tab--on' : ''}`} {...shellControl(() => { onTab(t); onOpen(true) })}>
-              {t === 'changes' ? 'Changes' : t === 'checks' ? 'Checks' : t === 'output' ? 'Output' : t === 'artifacts' ? 'Artifacts' : 'Timeline'}
+              {t === 'changes' ? 'Changes' : t === 'checks' ? 'Checks' : t === 'output' ? 'Output' : t === 'artifacts' ? 'Artifacts' : t === 'timeline' ? 'Timeline' : 'Combine'}
             </button>
           ))}
         </div>
@@ -756,13 +828,28 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
           {pinned !== null
             ? <button type="button" className="orch__mini" data-orch-bench-pin="off" {...shellControl(() => onPin(null))}>Unpin</button>
             : <button type="button" className="orch__mini" data-orch-bench-pin="on" disabled={current === null} title={current === null ? 'select a session or the task to pin' : `keep the workbench on ${current.title} while you look around`} {...shellControl(() => { if (current !== null) onPin(current) })}>Pin</button>}
+          {/* M313. The task's worktree in the person's own editor. */}
+          {subject?.kind === 'task' && subject.lane !== undefined && (
+            <button type="button" className="orch__mini" data-orch-bench-editor title={`open ${subject.lane.path} in your editor (Settings ▸ Open files in)`}
+              {...shellControl(() => { void window.canvas.editor.open({ path: (subject.lane as { path: string }).path, dir: true }).catch(() => {}) })}>Open lane in editor</button>
+          )}
           <button type="button" className="orch__mini" data-orch-bench-refresh {...shellControl(() => { setLocalRefresh((n) => n + 1); onRefreshTaskHandoffs?.() })}>Refresh</button>
-          <button type="button" className="orch__mini" data-orch-bench-toggle={open ? 'close' : 'open'} {...shellControl(() => onOpen(!open))}>{open ? 'Collapse' : 'Expand'}</button>
+          {onReading !== undefined && (
+            <button type="button" className="orch__mini orch__mini--read" data-orch-bench-reading={reading ? 'on' : 'off'} aria-pressed={reading}
+              title={reading ? 'Back to the scene (Esc)' : 'Read the review in the full working area — the scene steps aside until you come back'}
+              {...shellControl(() => { if (!open) onOpen(true); onReading(!reading) })}>{reading ? 'Back to scene' : 'Read full view'}</button>
+          )}
+          {!reading && <button type="button" className="orch__mini" data-orch-bench-toggle={open ? 'close' : 'open'} {...shellControl(() => onOpen(!open))}>{open ? 'Collapse' : 'Expand'}</button>}
         </span>
       </div>
 
       {open && <div className="orch__bench-body" data-orch-density="detail">
-        {subject === null ? (
+        {tab === 'combine' ? (
+          // M311. About every lane of the repository, so it needs no subject:
+          // the subject's lane names the repository, else any lane on the page.
+          <OrchCombine root={subject?.kind === 'task' && subject.lane !== undefined ? subject.lane.root : worktrees[0]?.root ?? null}
+            edges={edges ?? []} refresh={refresh + localRefresh} {...(onOpenPath === undefined ? {} : { onOpenPath })} />
+        ) : subject === null ? (
           <p className="orch__caption">Select a chat or terminal session, or the task, to fill the workbench.</p>
         ) : tab === 'changes' ? (
           <div className="orch__bench-changes" data-orch-review={dataSubject}>
@@ -770,6 +857,20 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
               {freshness !== null && (
                 <p className="orch__bench-fresh" data-orch-fresh={freshness.standing}>{freshness.word}</p>
               )}
+              {/* M307. Finished is not verified — the review node's own judgment, from the same function. */}
+              {subject?.kind === 'task' && handoff !== undefined && checks.evidence !== null && (() => {
+                const v = verificationOf({
+                  agentWorking: agentWorkingOf(handoff.state), standing: handoff.standing, checks: checks.evidence.checks,
+                  ...(item?.comments === undefined ? {} : { comments: item.comments }),
+                  ...(item?.criteria === undefined ? {} : { criteria: item.criteria }),
+                  ...(item?.criteriaMet === undefined ? {} : { criteriaMet: item.criteriaMet })
+                })
+                return (
+                  <p className="orch__bench-verify" data-orch-verification={v.stage} data-tone={v.tone}>
+                    <strong>{v.word}</strong>{v.missing.length > 0 ? ` — ${v.missing.join(' · ')}` : v.holds.length > 0 ? ` — ${v.holds.join(' · ')}` : ''}
+                  </p>
+                )
+              })()}
               {changes.read.kind === 'loading' && <p className="orch__caption" role="status">Reading changes…</p>}
               {changes.read.kind === 'no-lane' && <p className="orch__review-words" data-orch-review-kind="no-lane">This task has not been started — no conversation and no lane, so there is no diff to show.</p>}
               {changes.read.kind === 'lane-missing' && <p className="orch__review-words" data-orch-review-kind="lane-missing">The task's worktree is not listed by git any more — it was removed outside this app.</p>}
@@ -834,12 +935,35 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
               {outcome !== null && <p className="orch__caption" role="status" data-orch-write-outcome={outcome.kind}>{outcome.sentence}</p>}
             </div>
             <div className="orch__bench-col orch__bench-col--diff" data-orch-diff-subject={subjectKey}>
+              {openFileRow !== undefined || sharedCount !== null ? <div className="orch__bench-diffhead" data-orch-diff-context>
+                <span className="orch__bench-diffpath" title={openPath ?? undefined}>
+                  {openPath !== null ? <code>{openPath}</code> : <span className="orch__caption">No file open</span>}
+                  {openFileRow !== undefined && !openFileRow.binary && <em>{openFileRow.untracked ? 'new file' : `+${openFileRow.added} −${openFileRow.removed}`}</em>}
+                </span>
+                <span className="orch__bench-diffmeta">
+                  <span data-orch-diff-where title={subject.kind === 'task' && subject.lane !== undefined ? subject.lane.path : undefined}>{subject.title}{where !== '' ? ` · ${where}` : ''}</span>
+                  {sharedCount !== null && <span className="orch__bench-diffwarn" data-orch-diff-shared>{`shared by ${sharedCount} sessions — not this one's alone`}</span>}
+                  {freshness !== null && freshness.standing !== 'no-lane' && freshness.standing !== 'unread' && (
+                    <span data-orch-diff-review={freshness.standing} data-fresh={freshness.standing === 'current' ? 'fresh' : freshness.standing === 'none' ? 'none' : 'stale'}>
+                      {freshness.standing === 'current' ? 'reviewed · current' : freshness.standing === 'none' ? 'not reviewed' : freshness.standing === 'stale' ? 'review stale' : 'review freshness unknown'}
+                    </span>
+                  )}
+                  <span data-orch-diff-checks={checkLine.tone} data-fresh={checkLine.tone}>{checkLine.word}</span>
+                </span>
+              </div> : null}
               {changes.diff.kind === 'none' && changes.read.kind === 'result' && (changes.read.result.kind === 'changes' || changes.read.result.kind === 'shared') && <p className="orch__caption">Choose a file to read its diff.</p>}
-              {changes.diff.kind === 'loading' && <p className="orch__caption" role="status">Reading the diff…</p>}
+              {changes.diff.kind === 'loading' && (previousDiff !== null && previousDiff.diff.kind === 'diff' ? (
+                <pre className="orch__diff orch__diff--bench orch__diff--pending" data-orch-diff-previous aria-busy="true" aria-label="Reading the next diff">
+                  {previousDiff.diff.lines.map((line, i) => (
+                    <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}`}>{outward(line.text, `panel ${dataSubject}`).text}{'\n'}</span>
+                  ))}
+                </pre>
+              ) : <p className="orch__caption" role="status">Reading the diff…</p>)}
               {changes.diff.kind === 'no-base' && <p className="orch__caption">No revision to diff against — the review's starting point could not be read.</p>}
               {changes.diff.kind === 'diff' && (
                 changes.diff.diff.kind === 'diff' ? (
-                  <pre className="orch__diff orch__diff--bench" data-orch-diff data-orch-diff-key={changes.diff.key} aria-label="Diff">
+                  <pre ref={diffRef} className="orch__diff orch__diff--bench" data-orch-diff data-orch-diff-key={changes.diff.key} aria-label="Diff"
+                    onScroll={(e) => { if (openDiffKey !== null) scrolls.current.set(openDiffKey, e.currentTarget.scrollTop) }}>
                     {changes.diff.diff.lines.map((line, i) => (
                       <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}`}>{outward(line.text, `panel ${dataSubject}`).text}{'\n'}</span>
                     ))}

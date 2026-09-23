@@ -12,10 +12,11 @@ import { autoChipWords } from '@shared/auto'
 import { chatHeaderLine, SANDBOX_HEADER } from '@renderer/shell/rail-rows'
 import { panelState, autoTone, TONE_WORKING } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
-import { takeInsert, useChat, dismissAuto } from './chat-store'
+import { takeInsert, useChat, dismissAuto, useApprovals, isAnswered, markAnswered, unmarkAnswered } from './chat-store'
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
-import { chatRows, chatPhase, chatPhaseWord, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive } from './chat-model'
+import { noteApprovalOutcome, withdrawApprovalOutcome } from '@renderer/shell/approval-outcome'
+import { chatRows, chatPhase, chatPhaseWord, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive, composerStatus } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
@@ -48,8 +49,8 @@ import { useTrailFor } from '@renderer/skills/skill-trail-store'
  * never delivers a native copy or paste to this textarea, and Canvas.tsx's
  * listener routes `edit:paste` to the focused TERMINAL — for a chat panel
  * that is nobody. The composer therefore subscribes itself and serves the
- * paste only while it holds DOM focus. Cmd+Z over the composer still reaches
- * applyHistory — the known limit CLAUDE.md records for the Jira draft.
+ * paste only while it holds DOM focus. Cmd+Z over the composer is the
+ * textarea's own undo (canvas/draft-focus.ts), no longer applyHistory.
  *
  * M75. The composer resolves `@` references against the panel's directory,
  * offers the project's and the saved prompts as `/` commands (a saved
@@ -263,6 +264,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [refusal, setRefusal] = useState<string | null>(null)
+  // #13. A send between the press and main's answer — the status line's `Sending…`.
+  const [sending, setSending] = useState(false)
   const [popup, setPopup] = useState<Popup | null>(null)
   const [decision, setDecision] = useState<{ turnId: string; text: string } | null>(null)
   const [decisionResult, setDecisionResult] = useState<string | null>(null)
@@ -476,7 +479,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     // user's text — the same bound the note above the composer states.
     const carried = turnCount === 0 && !memorySentRef.current && memoryBlock !== null ? memoryBlock.text : ''
     if (carried !== '') { memorySentRef.current = true; setMemoryBlock(null) }
-    void Promise.resolve(window.canvas.agentSession.send(id, `${carried}${text}`, outgoing)).then((answer) => {
+    setSending(true)
+    void Promise.resolve(window.canvas.agentSession.send(id, `${carried}${text}`, outgoing)).finally(() => setSending(false)).then((answer) => {
       if (typeof answer === 'object' && answer !== null && 'refused' in answer) {
         setRefusal(answer.refused)
         setDraft((d) => (d === '' ? draft : d))
@@ -492,10 +496,21 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   // answers through the same door. The scope is written only when given —
   // an `undefined` key would cross IPC as present. The mirror is refreshed
   // after, so the inspector's field reads the grant main now holds.
+  // #16. Marked answered BEFORE the IPC, so the queue, Orchestrate and this
+  // card drop the request in the same frame; a failed call puts it back.
   const answer = (requestId: string, allow: boolean, scope?: 'session'): void => {
+    if (isAnswered(id, requestId)) return
+    markAnswered(id, requestId)
+    // #14. The same acknowledgment the queue shows, whichever route answered.
+    const asked = snapshot?.pending.find((p) => p.requestId === requestId)
+    if (asked !== undefined) noteApprovalOutcome({ requestId, panelId: id, agent: props.teammateName ?? BACKENDS[backend].label, toolName: asked.toolName, kind: !allow ? 'deny' : scope === 'session' ? 'session' : 'once' })
     void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
-      .then(() => { if (scope !== undefined) refreshChatGrants(id) })
+      .then((accepted) => { if (accepted === false) withdrawApprovalOutcome(requestId); if (scope !== undefined) refreshChatGrants(id) }, () => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId) })
   }
+  // Subscribed for the re-render a mark causes (the snapshot itself is not
+  // replaced by one); the filter is what hides an answered request here.
+  useApprovals()
+  const openPending = snapshot === null ? [] : snapshot.pending.filter((p) => !isAnswered(id, p.requestId))
 
   const alive = snapshot !== null && snapshot.pid !== undefined && snapshot.status !== 'exited' && snapshot.status !== 'disposed'
   // Counted from the TRANSCRIPT, never the snapshot: a restored panel's fresh
@@ -592,10 +607,10 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       // M76. The question at the SUMMARY tier too: the tool and its argument
       // in mono, Allow and Deny. The block tier is the tone alone — a
       // control smaller than a word is not a control.
-      far={snapshot !== null && snapshot.pending.length > 0 ? (() => { const p = snapshot.pending[0]!; return (
+      far={openPending.length > 0 ? (() => { const p = openPending[0]!; return (
         <div className="chat__far-approval" data-chat-far-approval={p.requestId} onMouseDown={(e) => e.stopPropagation()}>
           <span className={`chat__far-question${toolArgumentIsCode(p.input) ? ' chat__far-question--code' : ''}`}><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
-          <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow ${p.toolName}`} {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+          <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow this one ${p.toolName} call`} {...shellControl(() => answer(p.requestId, true))}>Allow once</button>
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
           <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title={`Deny ${p.toolName}`} {...shellControl(() => answer(p.requestId, false))}>Deny</button>
         </div>) })() : undefined}
@@ -614,14 +629,16 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       // front-ends render one state one way (principle 11). The turn count
       // left the chrome after M73's critic — two facts in one slot — and lives
       // in the inspector's Detail and on the root as data.
+      menuDetail={<span data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}) })}>{[panel.chat.sandbox === true ? SANDBOX_HEADER : (panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'), branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>}
       chrome={<>
         {/* M90. Which CLI this panel talks to — a KIND fact, before the state pill, like the github card's. */}
         {/* M100. The identity leads the kind word: `ada · claude`. */}
         {props.teammateName !== undefined && <span className="pf__kind chat__teammate" data-chat-teammate title={`speaking as ${props.teammateName}`}>{props.teammateName}</span>}
-        {/* M107. The header reads on from the mark: folder · branch · model — the
-            engine is the kind word beside it (the M90 mark the checks pin), so
-            it is not said twice. Every absent piece absent. */}
-        <span className="pf__summary chat__header-line" data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}) })}>{[panel.chat.sandbox === true ? SANDBOX_HEADER : (panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'), branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>
+        {/* #13. The header is identity and state: who (the teammate), the
+            title, the engine and the state pill. M107's folder · branch · model
+            line is configuration a person looks up, not reads at rest — it
+            moved to the ⋯ menu (`menuDetail`) and the pane's Detail, and the
+            title it was crowding gets the width back. */}
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M279. The phase, a SIBLING of the pill: the pill's text is the
@@ -719,8 +736,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             is never inside the scroll host). */}
         {/* `--live` is composerLive — the ONE predicate composerState reads, so Send is never hidden while it is enabled (the Act II critic). */}
         <div className={`chat__composer${composerLive(snapshot) ? ' chat__composer--live' : ''}`} data-chat-composer>
-        {snapshot !== null && snapshot.pending.length > 0 && <div className="chat__questions" data-chat-questions>
-          {snapshot.pending.map((p) => (
+        {openPending.length > 0 && <div className="chat__questions" data-chat-questions>
+          {openPending.map((p) => (
             <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>
               {/* M169. A SENTENCE and two buttons (the brief, Codex): the tool and
                   its argument are the sentence's object; the role stays as the
@@ -728,7 +745,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               <span className="chat__role">asks</span>
               <p className="chat__permission-sentence">{BACKENDS[backend].label} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</p>
               <div className="chat__permission-verbs">
-                <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+                <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this one tool call — the next one asks again" {...shellControl(() => answer(p.requestId, true))}>Allow once</button>
                 {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session — it will not ask again`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
                 <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title="Deny this tool call" {...shellControl(() => answer(p.requestId, false))}>Deny</button>
@@ -740,15 +757,6 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>
           ) : (
             <>
-              {chat.granted !== undefined && chat.granted.length > 0 && (
-                <p className="pf__note chat__grant-note" data-chat-grant-note>{chat.granted[chat.granted.length - 1]} ran under a session grant{chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''} — revoke in the pane's Detail</p>
-              )}
-              {memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved !== undefined && (
-                <p className="pf__note chat__memory-note" data-chat-memory-unresolved>no memories can go with this message — {memoryBlock.unresolved}</p>
-              )}
-              {memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved === undefined && (
-                <p className="pf__note chat__memory-note" data-chat-memory-note>{memoryBlock.count} memor{memoryBlock.count === 1 ? 'y' : 'ies'} from {memoryBlock.repository === undefined ? 'this repository' : displayPath(memoryBlock.repository, memoryBlock.repository).short} will go with your first message</p>
-              )}
               {attachments.length > 0 && (
                 <div className="chat__attachments" data-chat-attachments>
                   {/* M260, reversing M75's "not a bordered pill": a horizontal
@@ -839,6 +847,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               </div>
               <textarea
                 ref={textareaRef}
+                data-edit-owner
                 className="chat__input"
                 data-chat-input
                 value={draft}
@@ -856,6 +865,30 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                 onKeyDown={onComposerKey}
               />
               {refusal !== null && <p className="pf__note chat__refusal" data-chat-send-refusal role="alert">{refusal}</p>}
+              {/* #13. ONE fixed-height line under the text: what the well is
+                  doing now. It replaced the grant and memory notes that grew
+                  the well above the textarea mid-turn. The memory hooks ride
+                  the line while it says so (agents' memory check reads them). */}
+              {(() => {
+                const st = composerStatus({
+                  live: composerLive(snapshot),
+                  sending,
+                  sendEnabled: composer.send.enabled,
+                  ...(composer.send.reason === undefined ? {} : { sendReason: composer.send.reason }),
+                  interruptEnabled: composer.interrupt.enabled,
+                  ...(composer.interrupt.reason === undefined ? {} : { interruptReason: composer.interrupt.reason }),
+                  attachments: attachments.length,
+                  ...(memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved !== undefined ? { memoryUnresolved: memoryBlock.unresolved } : {}),
+                  ...(memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved === undefined ? { memory: `${memoryBlock.count} memor${memoryBlock.count === 1 ? 'y' : 'ies'} from ${memoryBlock.repository === undefined ? 'this repository' : displayPath(memoryBlock.repository, memoryBlock.repository).short} will go with your first message` } : {}),
+                  ...(chat.granted !== undefined && chat.granted.length > 0 ? { grant: `${chat.granted[chat.granted.length - 1]} ran under a session grant${chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''} — revoke in the pane's Detail` } : {})
+                })
+                return (
+                  <p className="chat__status" data-chat-status={st.kind} title={st.text} aria-live="polite"
+                    {...(st.kind === 'memory' ? { 'data-chat-memory-note': '' } : {})}
+                    {...(st.kind === 'memory-unresolved' ? { 'data-chat-memory-unresolved': '' } : {})}
+                    {...(st.kind === 'grant' ? { 'data-chat-grant-note': '' } : {})}>{st.text}</p>
+                )
+              })()}
               {/* M260. ONE anchored control, bottom-right of the well: a filled
                   circle. Interrupt still takes Send's exact spot while a turn
                   runs (the `--live` class, unchanged) — only the two buttons'
@@ -864,7 +897,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                 <button type="button" className="chat__verb chat__verb--send" data-chat-send disabled={!composer.send.enabled || (draft.trim() === '' && attachments.length === 0)}
                   title={composer.send.enabled ? 'Send — ⌘↩ sends' : composer.send.reason} aria-label="Send" {...shellControl(send)}><ArrowUp /></button>
                 <button type="button" className="chat__verb chat__verb--interrupt" data-chat-interrupt disabled={!composer.interrupt.enabled}
-                  title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}><Stop /></button>
+                  title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}><Stop /><span className="chat__verb-word" aria-hidden="true">Stop</span></button>
               </div>
             </>
           )}

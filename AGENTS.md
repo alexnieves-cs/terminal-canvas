@@ -15,10 +15,9 @@ npm run verify
 ```
 
 There is no unit-test runner and no linter. `npm run verify` chains every plain-node suite,
-the typecheck, the build, and the real-Electron suites, and it must print every suite's tally
-at exit 0 before any work is called done. `npm run verify:visual` (goldens) and
-`npm run verify:packaged` (the packaged binary) are outside the chain and are owed at every
-act close. `npm run dev` unsets `ELECTRON_RUN_AS_NODE` first; if you see
+the typecheck, the build, and the real-Electron suites; CLAUDE.md says how much weight it
+carries. `npm run verify:visual` (goldens) and `npm run verify:packaged` (the packaged
+binary) are outside the chain. `npm run dev` unsets `ELECTRON_RUN_AS_NODE` first; if you see
 `Cannot read properties of undefined (reading 'whenReady')` your shell exports it.
 
 ## Rules that are Codex-specific

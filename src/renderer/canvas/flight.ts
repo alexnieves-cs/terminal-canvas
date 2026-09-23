@@ -16,9 +16,11 @@
  * No DOM, no React: verify:viewport runs this under plain node.
  */
 import { clampScale, type Point, type Size, type Viewport } from './viewport'
+import { CAMERA_MAX_MS, CAMERA_MIN_MS } from '../motion'
 
-export const FLIGHT_MIN_MS = 160
-export const FLIGHT_MAX_MS = 320
+// Brief #21. Brief and legible: the camera tier of the one motion system.
+export const FLIGHT_MIN_MS = CAMERA_MIN_MS
+export const FLIGHT_MAX_MS = CAMERA_MAX_MS
 
 export function easeInOut(t: number): number {
   const x = Math.min(1, Math.max(0, t))

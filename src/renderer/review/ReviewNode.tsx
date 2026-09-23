@@ -9,13 +9,20 @@ import { useChat } from '@renderer/chat/chat-store'
 import { indexToolFiles, touchesByPath, type ToolTouch } from '@shared/tool-index'
 import { shortPath } from '@renderer/palette/panel-name'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { Refresh, ChevronLeft, ChevronRight, Check } from '@renderer/icons'
+import { Refresh, ChevronLeft, ChevronRight, Check, Plus } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
 import {
   observedCommands, reportedCommands, reviewEvidence,
   type CommandEvidence, type ReviewEvidence, type ReviewHandoff
 } from '@shared/review-readiness'
 import type { RunRow } from '@shared/run-ledger'
+import type { CheckRecord } from '@shared/check-evidence'
+import { agentWorkingOf, commentAnchorOf, commentPlace, REVIEW_COMMENT_BODY_MAX, type ReviewComment } from '@shared/review-comments'
+import { useLaneChecks, type LaneWatcher } from '@renderer/checks/useLaneChecks'
+import { TaskReviewPanel } from './TaskReviewPanel'
+import type { PrEvidence } from '@shared/task-flow'
+
+const NO_WATCHERS: readonly LaneWatcher[] = []
 
 /**
  * Everything the task section needs, resolved by the canvas rather than
@@ -55,6 +62,40 @@ export interface ReviewTaskContext {
   onMarkReviewed: (itemId: string, signature: string, files: number, identity: ReviewIdentity | undefined) => void
   /** Focus the lane's chat and INSERT a message — never send it. */
   onContinue: (itemId: string, paths: readonly string[]) => void
+  /**
+   * 5.3. When the lane's conversation is CLOSED: open Start work for this
+   * item, so continuing after review is still one press from here instead of
+   * a disabled button. Optional so a caller without the door still renders.
+   */
+  onStartAgain?: (itemId: string) => void
+  /**
+   * M307. The review, together: the task's intended outcome and acceptance
+   * criteria (the person's, from the work item), its line comments, whether
+   * the lane's agent is mid-turn, and the lane's watchers — every one
+   * optional, so a caller that predates M307 renders exactly as before.
+   */
+  brief?: string
+  criteria?: readonly string[]
+  criteriaMet?: readonly string[]
+  comments?: readonly ReviewComment[]
+  watchers?: readonly LaneWatcher[]
+  onToggleCriterion?: (itemId: string, criterion: string, met: boolean) => void
+  onComments?: (itemId: string, next: ReviewComment[]) => void
+  onSendFollowUp?: (itemId: string, text: string) => Promise<string | null>
+  onDraftFollowUp?: (itemId: string, text: string) => void
+  /** M310. Open (or find) the lane's pull request, its body carrying this review's evidence. GitHub items only. */
+  onOpenPr?: (itemId: string, evidence: PrEvidence) => void
+  /** M310. The lane's pull request, once one is open. */
+  pr?: { number: number; url: string }
+  /** The item's note — a PR refusal lands here. */
+  note?: string
+  /** M310. A starting command for Run checks, from the lane's own files; null when it declares none. */
+  suggestCheck?: () => Promise<string | null>
+  /** M310. Make and run a checks watcher in the lane. Resolves null when it ran, or the reason it did not. */
+  onRunChecks?: (itemId: string, command: string) => Promise<string | null>
+  /** M314. The task's deliverables, and the door that saves it as a recipe. */
+  deliverables?: readonly string[]
+  onSaveRecipe?: (itemId: string, name: string, passedChecks: string[]) => Promise<string | null>
 }
 
 /**
@@ -289,7 +330,8 @@ function renderTask(
   paths: readonly string[],
   signature: string | undefined,
   readOnly: boolean,
-  press: (run: () => void) => (e: ReactMouseEvent) => void
+  press: (run: () => void) => (e: ReactMouseEvent) => void,
+  laneChecks: readonly CheckRecord[] | null = null
 ): JSX.Element {
   const h = task.handoff
   // `shared` is markable too: a person CAN read a shared diff, and the
@@ -304,6 +346,38 @@ function renderTask(
         <span className="review-node__section-count" data-review-task-word={h.state} data-review-task-standing={h.standing} data-tone={h.tone}>{h.word}</span>
       </h4>
       <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>
+
+      {/* M307. The review, together: outcome, verdict, criteria, checks with
+          their own output, comments and the follow-up. Only when the caller
+          wired the comment door — an older caller keeps the section as it was. */}
+      {task.onComments !== undefined && (
+        <TaskReviewPanel
+          itemId={task.itemId}
+          title={task.title}
+          {...(task.brief === undefined ? {} : { brief: task.brief })}
+          {...(task.criteria === undefined ? {} : { criteria: task.criteria })}
+          {...(task.criteriaMet === undefined ? {} : { criteriaMet: task.criteriaMet })}
+          {...(task.comments === undefined ? {} : { comments: task.comments })}
+          standing={h.standing}
+          agentWorking={agentWorkingOf(h.state)}
+          checks={laneChecks}
+          readOnly={readOnly}
+          chatOpen={task.chatPanelId !== undefined}
+          press={press}
+          {...(task.onToggleCriterion === undefined ? {} : { onToggleCriterion: task.onToggleCriterion })}
+          onComments={task.onComments}
+          {...(task.onSendFollowUp === undefined ? {} : { onSendFollowUp: task.onSendFollowUp })}
+          {...(task.onDraftFollowUp === undefined ? {} : { onDraftFollowUp: task.onDraftFollowUp })}
+          {...(task.onOpenPr === undefined ? {} : { onOpenPr: task.onOpenPr })}
+          {...(task.pr === undefined ? {} : { pr: task.pr })}
+          {...(task.note === undefined ? {} : { note: task.note })}
+          {...(task.onRunChecks === undefined ? {} : { onRunChecks: task.onRunChecks })}
+          {...(task.suggestCheck === undefined ? {} : { suggestCheck: task.suggestCheck })}
+          {...(task.deliverables === undefined ? {} : { deliverables: task.deliverables })}
+          {...(task.onSaveRecipe === undefined ? {} : { onSaveRecipe: task.onSaveRecipe })}
+          reviewedFiles={task.reviewed?.files}
+        />
+      )}
 
       {/* D07 step 2's "unresolved questions". The blocker is M199's, projected
           by the same table the card and the workflow diagram read, so all
@@ -331,7 +405,7 @@ function renderTask(
       {evidence === undefined ? (
         <p className="pf__note review-node__note" data-review-evidence="reading">reading what was run in this lane…</p>
       ) : evidence.none !== undefined ? (
-        <p className="pf__note review-node__note" data-review-evidence="none">{evidence.none}</p>
+        <p className="pf__note review-node__note" data-review-evidence="none" data-review-evidence-none={evidence.noneKind}>{evidence.none}</p>
       ) : (
         <ul className="review-node__evidence" data-review-evidence={String(evidence.commands.length)}>
           {evidence.commands.map((c: CommandEvidence, i) => (
@@ -377,12 +451,24 @@ function renderTask(
         {/* INSERTED into the composer, never sent — M80's rule for every
             template message, and the only version that leaves the person in
             charge of what their agent is told. */}
-        <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="continue"
-          disabled={readOnly || task.chatPanelId === undefined}
-          title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
-          onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => task.onContinue(task.itemId, paths))}>
-          Continue the conversation
-        </button>
+        {/* 5.3. ONE button, two arms, never a dead end: an open conversation
+            takes a drafted message; a closed one opens Start work for this
+            item. Either way the next press after reviewing is right here. */}
+        {task.chatPanelId !== undefined || task.onStartAgain === undefined ? (
+          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="continue"
+            disabled={readOnly || task.chatPanelId === undefined}
+            title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
+            onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => task.onContinue(task.itemId, paths))}>
+            Continue the conversation
+          </button>
+        ) : (
+          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="start-again"
+            disabled={readOnly}
+            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed — open Start work for this task to continue it in a new conversation; nothing starts until you confirm'}
+            onMouseDown={readOnly ? undefined : press(() => task.onStartAgain?.(task.itemId))}>
+            Continue in a new conversation…
+          </button>
+        )}
       </div>
     </section>
   )
@@ -620,7 +706,7 @@ function ReviewNodeImpl({
     // that came back empty. The lane's terminal being closed is the ordinary
     // case, and saying "this canvas ran none in it" over a record nobody
     // consulted is the same overclaim the failed-read arm below fixes.
-    if (ids.length === 0) { setLedgerRows([]); setLedgerUnreadable(true); return }
+    if (ids.length === 0) { setLedgerRows([]); return }
     setLedgerRows(null)
     // allSettled, not all: one panel's ledger rejecting must not discard
     // every other panel's rows. A partial read is still evidence; it is
@@ -641,6 +727,35 @@ function ReviewNodeImpl({
   }, [taskPanelKey, refreshToken, task === undefined]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const laneChat = useChat(task?.chatPanelId ?? '')
+  // M313. A reviewed file (repo-relative) at a line, in the person's editor.
+  // A refusal is said on the node's own status line, never swallowed.
+  const [editorNote, setEditorNote] = useState<string | null>(null)
+  const openInEditor = (path: string, line?: number): void => {
+    const root = result != null && 'root' in result ? result.root : undefined
+    if (root === undefined) return
+    void window.canvas.editor.open({ path: `${root.replace(/\/+$/, '')}/${path}`, ...(line === undefined ? {} : { line }) })
+      .then((r) => setEditorNote(r.kind === 'refused' ? r.reason : r.note ?? null), (e: unknown) => setEditorNote(e instanceof Error ? e.message : String(e)))
+  }
+  // M307. The lane's witnessed checks, bound to the content they tested — the
+  // verdict line and the follow-up's failing checks read these.
+  // M307. The diff's comment door: only with a task that wired it, never in the
+  // merged view, and addressed to the file the diff is showing.
+  const commenting = useMemo<HunkComments | undefined>(() => {
+    if (task === undefined || task.onComments === undefined || readOnly || expandedPath === null) return undefined
+    const onComments = task.onComments
+    const comments = task.comments ?? []
+    const identity = task.handoff.changes?.identity
+    return {
+      path: expandedPath,
+      comments,
+      onAdd: (anchor, body) => onComments(task.itemId, [...comments, {
+        id: `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        path: expandedPath, side: anchor.side, line: anchor.line, quote: anchor.quote, body, at: Date.now(),
+        ...(identity === undefined ? {} : { identity })
+      }])
+    }
+  }, [task, readOnly, expandedPath])
+  const laneChecks = useLaneChecks(task === undefined ? null : ledgerRows, task?.lanePath, task?.watchers ?? NO_WATCHERS, refreshToken)
   // The signature comes from the handoff the canvas built, never from a
   // second read here — see ReviewTaskContext.paths.
   const taskSignature = task?.handoff.changes?.signature
@@ -652,7 +767,9 @@ function ReviewNodeImpl({
       EVIDENCE_CAP,
       // What was actually LOOKED AT, so the empty arm cannot claim nothing
       // ran when the truth is that nobody could look.
-      { ledgerRead: !ledgerUnreadable, transcriptRead: task.chatPanelId !== undefined }
+      // `ledgerPanels: 0` is "nowhere to read from"; `ledgerRead: false` is a
+      // read that was tried and failed — two silences, two sentences.
+      { ledgerRead: !ledgerUnreadable, ledgerPanels: task.ledgerPanelIds.length, transcriptRead: task.chatPanelId !== undefined }
     )
   }, [task, ledgerRows, ledgerUnreadable, laneChat.turns])
   const rowPaths = useMemo(() => (result !== undefined && (result.kind === 'changes' || result.kind === 'shared') ? result.files.map((f) => f.path) : []), [result])
@@ -962,7 +1079,7 @@ function ReviewNodeImpl({
           </div>
         )}
         {!railLayout && f.expanded && f.touches !== undefined && <Touches list={touchMap.get(f.path) ?? []} />}
-        {!railLayout && f.expanded && <Hunks diff={diff} />}
+        {!railLayout && f.expanded && <Hunks diff={diff} onOpenLine={(line) => openInEditor(f.path, line)} {...(commenting === undefined ? {} : { commenting })} />}
       </li>
     )
   }
@@ -1068,7 +1185,7 @@ function ReviewNodeImpl({
             question a person came with is "what should I do with this?", and
             the file list is the evidence for the answer rather than the
             answer. Absent entirely for a review opened by any other door. */}
-        {task !== undefined && renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press)}
+        {task !== undefined && renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks)}
         {subject.across === true ? renderAcross(across, sectionLabel) : (<>
         <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
         {/* M164. The path rule: the repository's basename at rest, the full path on hover. */}
@@ -1126,15 +1243,20 @@ function ReviewNodeImpl({
                     disabled={prevChangeDisabled} title="Previous change" aria-label="Previous change"
                     onMouseDown={press(goPrevChange)}><ChevronLeft /></button>
                   <span className="review-node__nav-label" title={expandedPath}>{expandedPath}</span>
+                  {/* M313. The file, in the person's own editor — at the change being looked at. */}
+                  <button type="button" className="pf__verb pf__verb--word" data-review-open-editor={expandedPath}
+                    title="Open this file in your editor (Settings ▸ Open files in)"
+                    onMouseDown={press(() => openInEditor(expandedPath, firstNewLine(diff, activeHunk)))}>Open in editor</button>
                   <button type="button" className="review-node__nav-verb" data-review-node-nav-verb="next"
                     disabled={nextChangeDisabled} title="Next change" aria-label="Next change"
                     onMouseDown={press(goNextChange)}><ChevronRight /></button>
                 </div>
+                {editorNote !== null && <p className="review-node__hunk-note" data-review-editor-note role="status">{editorNote}</p>}
                 {(() => {
                   const f = model.files.find((x) => x.path === expandedPath)
                   return f?.touches !== undefined ? <Touches list={touchMap.get(expandedPath) ?? []} /> : null
                 })()}
-                <Hunks diff={diff} activeHunkIndex={activeHunk} />
+                <Hunks diff={diff} activeHunkIndex={activeHunk} onOpenLine={(line) => openInEditor(expandedPath, line)} {...(commenting === undefined ? {} : { commenting })} />
               </>
             )}
           </div>
@@ -1245,22 +1367,89 @@ function Touches({ list }: { list: ToolTouch[] }): JSX.Element {
  * kind is filtered or reordered, where a running count over one kind alone
  * does not.
  */
-function Hunks({ diff, activeHunkIndex }: { diff: ReviewDiff | null; activeHunkIndex?: number }): JSX.Element {
+/**
+ * M307. What the diff needs to take comments: the file it shows, the task's
+ * comments, and the one write. Absent for a review with no task — a comment
+ * has nowhere to live without a work item, and a gutter that saved nothing
+ * would be a control that lies.
+ */
+interface HunkComments {
+  path: string
+  comments: readonly ReviewComment[]
+  onAdd: (anchor: { side: 'new' | 'old'; line: number; quote: string }, body: string) => void
+}
+
+function Hunks({ diff, activeHunkIndex, commenting, onOpenLine }: { diff: ReviewDiff | null; activeHunkIndex?: number; commenting?: HunkComments; onOpenLine?: (line: number) => void }): JSX.Element {
+  const [drafting, setDrafting] = useState<{ side: 'new' | 'old'; line: number; quote: string } | null>(null)
+  const [draftText, setDraftText] = useState('')
   if (diff === null) return <p className="review-node__hunk-note">reading…</p>
   if (diff.kind === 'binary') return <p className="review-node__hunk-note">binary file</p>
   if (diff.kind === 'unavailable') return <p className="review-node__hunk-note">this diff could not be read</p>
   let hunkCount = -1
+  const here = commenting === undefined ? [] : commenting.comments.filter((c) => c.path === commenting.path)
+  const save = (): void => {
+    const body = draftText.trim()
+    if (commenting === undefined || drafting === null || body === '') return
+    commenting.onAdd(drafting, body.slice(0, REVIEW_COMMENT_BODY_MAX))
+    setDrafting(null)
+    setDraftText('')
+  }
   return (
     <div className="review-node__hunks" data-review-node-hunks>
       {diff.lines.map((line, i) => {
         const marker = line.kind === 'hunk' ? ++hunkCount : undefined
         const active = marker !== undefined && marker === activeHunkIndex
+        const anchor = commenting === undefined ? null : commentAnchorOf(line)
+        const pinned = anchor === null ? [] : here.filter((c) => c.side === anchor.side && c.line === anchor.line)
+        const isDraft = anchor !== null && drafting !== null && drafting.side === anchor.side && drafting.line === anchor.line
         return (
-          <div
-            className={`review-node__line review-node__line--${line.kind}${active ? ' review-node__line--active' : ''}`}
-            key={i}
-            {...(marker === undefined ? {} : { 'data-review-node-hunk-marker': marker })}
-          >{line.text}</div>
+          <div key={i} className="review-node__line-wrap">
+            <div
+              className={`review-node__line review-node__line--${line.kind}${active ? ' review-node__line--active' : ''}${anchor !== null ? ' review-node__line--commentable' : ''}`}
+              {...(marker === undefined ? {} : { 'data-review-node-hunk-marker': marker })}
+              {...(anchor === null ? {} : { 'data-review-line': `${anchor.side}:${anchor.line}` })}
+              // M313. A double-click on a line that exists in the new file opens
+              // it there, in the person's editor — reading here, editing there.
+              {...(onOpenLine !== undefined && line.newNo !== undefined && line.kind !== 'del' ? { title: 'Double-click to open this line in your editor', onDoubleClick: () => onOpenLine(line.newNo as number) } : {})}
+            >
+              {anchor !== null && (
+                <button type="button" className="review-node__comment-add" data-review-comment-add={`${anchor.side}:${anchor.line}`}
+                  title={`Comment on ${commentPlace({ path: commenting?.path ?? '', side: anchor.side, line: anchor.line })}`}
+                  aria-label={`Comment on line ${anchor.line}`}
+                  onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setDrafting(anchor); setDraftText('') }}><Plus /></button>
+              )}
+              {line.text}
+            </div>
+            {pinned.map((c) => (
+              <div key={c.id} className="review-node__comment" data-review-comment={c.resolved === true ? 'resolved' : 'open'}>
+                {c.body}
+              </div>
+            ))}
+            {isDraft && (
+              <div className="review-node__comment-draft" data-review-comment-draft onMouseDown={(e) => e.stopPropagation()}>
+                <textarea
+                  className="review-node__comment-input"
+                  aria-label={`Comment on line ${drafting?.line ?? ''}`}
+                  placeholder="What should change here? The agent gets this line quoted with your words."
+                  value={draftText}
+                  rows={2}
+                  ref={(el) => { if (el !== null && document.activeElement !== el && draftText === '') el.focus({ preventScroll: true }) }}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save() }
+                    if (e.key === 'Escape') { e.preventDefault(); setDrafting(null) }
+                  }}
+                />
+                <div className="review-node__comment-verbs">
+                  <button type="button" className="pf__verb pf__verb--word" data-review-comment-save disabled={draftText.trim() === ''}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); save() }}>Comment</button>
+                  <button type="button" className="pf__verb pf__verb--word"
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setDrafting(null) }}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
         )
       })}
       {diff.truncated > 0 && (
@@ -1271,3 +1460,14 @@ function Hunks({ diff, activeHunkIndex }: { diff: ReviewDiff | null; activeHunkI
 }
 
 export const ReviewNode = memo(ReviewNodeImpl)
+
+/** M313. The first new-file line of the hunk being looked at — where "Open in editor" lands. */
+function firstNewLine(diff: ReviewDiff | null, hunk: number): number | undefined {
+  if (diff === null || diff.kind !== 'diff') return undefined
+  let at = -1
+  for (const l of diff.lines) {
+    if (l.kind === 'hunk') at++
+    if (at === hunk && l.kind !== 'hunk' && l.kind !== 'del' && l.newNo !== undefined) return l.newNo
+  }
+  return undefined
+}

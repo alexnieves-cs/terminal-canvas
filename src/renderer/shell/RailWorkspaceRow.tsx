@@ -1,6 +1,7 @@
 import { memo, type JSX } from 'react'
 import type { RailWorkspace } from './rail-sections'
 import { shellControl } from './shell-control'
+import { needsYouCount } from '@shared/attention-words'
 import { Close, Pencil } from '@renderer/icons'
 
 export interface RailWorkspaceRowProps {
@@ -60,7 +61,7 @@ function RailWorkspaceRowImpl({
         */}
         <span className="rail-row__tail">
           {row.waiting > 0 && (
-            <span className="rail-row__waiting">{row.waiting} waiting · </span>
+            <span className="rail-row__waiting">{needsYouCount(row.waiting)} · </span>
           )}
           {row.panels} panel{row.panels === 1 ? '' : 's'}
         </span>

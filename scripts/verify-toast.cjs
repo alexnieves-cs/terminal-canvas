@@ -48,7 +48,7 @@ const shown = (sentence, restKind) => T.toastDecision({ sentence }, restKind)
 // The attention line. Both halves.
 // ---------------------------------------------------------------------------
 ok('toast.attention.1 a queue-count sentence NEVER becomes a toast, whatever produced it — it is state the dock, the ring and the pill already carry, and a five-second window onto a fact that outlives it teaches a person to stop reading the real surfaces',
-  ['3 chats need you', '1 chat needs you', '2 agents need you', '  4 chats need you  ']
+  ['3 panels need you', '1 panel needs you', '3 chats need you', '1 chat needs you', '2 agents need you', '  4 chats need you  ']
     .every((s) => shown(s).kind === 'suppressed' && shown(s).why === 'attention-restatement'),
   JSON.stringify(shown('3 chats need you')))
 

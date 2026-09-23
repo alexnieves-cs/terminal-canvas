@@ -8,6 +8,7 @@ import { buildFileNodeModel, missingStory } from './file-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Maximize, Pencil, Refresh } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
+import { useRepoRoot } from '@renderer/shell/useRepoRoot'
 import { importedNoteReason } from '@shared/imported-note'
 import { RichNoteEditor, type RichNoteHandle } from './RichNoteEditor'
 import { CodeEditor } from './CodeEditor'
@@ -276,6 +277,8 @@ function FileNodeImpl({
     () => buildFileNodeModel({ source: panel.source, title: panel.title, result }),
     [panel.source, panel.title, result]
   )
+  // Backlog #86. The header reads `repo/src` once main names the repository.
+  const repoRoot = useRepoRoot(model.directory)
 
   // The draft lives HERE, never in file-store.ts. That store's own header
   // says it is "a cache of main's answer, never a second author of it", and a
@@ -792,7 +795,7 @@ function FileNodeImpl({
         }}
       >
         {/* M164. The path rule: the last two segments at rest (the file panel knows no repository root — the review engine resolves one; M164 records this), the full path on hover. */}
-        <p className="file-node__directory" data-file-node-directory title={model.directory}>{displayPath(model.directory).short}</p>
+        <p className="file-node__directory" data-file-node-directory title={model.directory}>{displayPath(model.directory, repoRoot).short}</p>
         {gate !== undefined && panel.source.imported !== undefined && (
           // M250. The import gate, in the body above the text it is about: the
           // person reads the note right here, then says so.

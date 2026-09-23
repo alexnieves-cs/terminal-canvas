@@ -661,9 +661,26 @@ export function useViewport(
   const [panning, setPanning] = useState(false)
 
   const beginPanDrag = useCallback((originScreen: Point) => {
+    // Brief #21. The pan takes the camera where it IS: a flight still running
+    // would keep writing its own frames over the drag's, and the drag's origin
+    // viewport would be one frame of a camera that is still moving.
+    cancelFlight()
     panDragRef.current = { originScreen, originViewport: viewportRef.current }
     setPanning(true)
-  }, [])
+  }, [cancelFlight])
+
+  // Brief #21. Camera travel is brief AND interruptible: any press on the
+  // canvas stops a flight where it is, as the wheel already did. Capture, so
+  // a panel that stops its own pointerdown (a drag grip, xterm) still stops
+  // the camera first — a panel drag during a flight otherwise moves the panel
+  // by a delta measured against a camera that is still sliding under it.
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const onPointerDown = (): void => { cancelFlight() }
+    host.addEventListener('pointerdown', onPointerDown, { capture: true })
+    return () => host.removeEventListener('pointerdown', onPointerDown, { capture: true })
+  }, [hostRef, cancelFlight])
 
   useEffect(() => {
     const endPanDrag = (): void => {

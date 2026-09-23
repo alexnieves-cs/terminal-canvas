@@ -151,6 +151,20 @@ export interface PendingApproval {
   toolName: string
   /** `toolArgument(input)` — the transcript's own short form. */
   argument: string
+  /**
+   * #17. The action IN FULL (`approvalAction`) — what the approval detail
+   * shows in its code block. Optional so every pre-#17 fixture keeps its
+   * meaning; a surface without it falls back to `argument`.
+   */
+  action?: string
+  /** Whether `action` is code (mono) or a sentence. */
+  actionIsCode?: boolean
+  /** Every other key of the input, pretty-printed — present only when there is more than the action. */
+  rest?: string
+  /** The agent's own reason for the request, when the CLI sent one. */
+  description?: string
+  /** The session's working directory — where the action would run. */
+  cwd?: string
 }
 
 /**
@@ -265,4 +279,43 @@ export function runSignature(rows: readonly RailRun[]): string {
 
 export function attentionSignature(rows: readonly RailAttention[]): string {
   return JSON.stringify(rows)
+}
+
+/**
+ * D17 / daily loop 4.4. One row per OTHER workspace with a panel that needs
+ * the person — the read-only cross-workspace projection.
+ *
+ * Its source is the facts already here, never a second store: main keeps a
+ * hidden workspace's sessions running (a switch demotes, it never disposes)
+ * and keeps emitting their agent state, so the renderer's attention queue
+ * ALREADY holds those ids; `workspaces` says which canvas owns each. A
+ * LIVE fact, then, not a last-known one: a hidden workspace whose sessions
+ * are gone contributes nothing, and an inactive workspace is not reported
+ * idle — it simply has no row.
+ *
+ * Ordered by each workspace's LONGEST-waiting panel (queue position), the
+ * same "oldest first" Cmd+J uses, and `panelIds` is in queue order so a jump
+ * lands on the oldest. The active workspace is excluded: the rows above it
+ * already name its panels, and a second row for them would be a restatement.
+ */
+export interface ElsewhereRow {
+  workspaceId: string
+  name: string
+  /** Waiting panel ids in this workspace, longest-waiting first. */
+  panelIds: string[]
+}
+
+export function buildElsewhereRows(
+  workspaces: readonly WorkspaceRow[],
+  queue: readonly string[]
+): ElsewhereRow[] {
+  const rows: Array<ElsewhereRow & { first: number }> = []
+  for (const w of workspaces) {
+    if (w.active) continue
+    const owned = new Set(w.panelIds)
+    const ids = queue.filter((id) => owned.has(id))
+    if (ids.length === 0) continue
+    rows.push({ workspaceId: w.id, name: w.name, panelIds: ids, first: queue.indexOf(ids[0]) })
+  }
+  return rows.sort((a, b) => a.first - b.first).map(({ first: _first, ...row }) => row)
 }

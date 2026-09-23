@@ -211,6 +211,65 @@ export function composerLive(snapshot: AgentSessionSnapshot | null): boolean {
   return snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
 }
 
+/**
+ * #13. THE COMPOSER'S ONE STATUS LINE. Sending, answering, attachments ready,
+ * the first message's memories and a session grant used to be separate notes
+ * that each appeared and vanished ABOVE the textarea — so the well grew and
+ * shrank as a turn ran (the memory note left when the first answer ended, a
+ * grant note arrived mid-answer) and the text a person was typing moved under
+ * their cursor. They are one line of fixed height now, and one fact wins by
+ * this order: the turn in flight (what Stop does), the send in flight, what
+ * is attached, what the first message will carry, a grant in use, then ready.
+ * `kind` is the DOM hook; `text` is what a person reads.
+ */
+export type ComposerStatusKind = 'answering' | 'sending' | 'attached' | 'memory' | 'memory-unresolved' | 'grant' | 'unavailable' | 'ready'
+export function composerStatus(input: {
+  live: boolean
+  sending: boolean
+  sendEnabled: boolean
+  sendReason?: string
+  interruptEnabled: boolean
+  interruptReason?: string
+  attachments: number
+  memory?: string
+  memoryUnresolved?: string
+  grant?: string
+}): { kind: ComposerStatusKind; text: string } {
+  const attached = input.attachments === 0 ? '' : `${input.attachments} attachment${input.attachments === 1 ? '' : 's'} ready`
+  if (input.live) {
+    const stop = input.interruptEnabled ? 'Answering — Stop interrupts' : `Answering — ${input.interruptReason ?? 'it cannot be interrupted from here'}`
+    return { kind: 'answering', text: attached === '' ? stop : `${stop} · ${attached}, sent with your next message` }
+  }
+  if (input.sending) return { kind: 'sending', text: 'Sending…' }
+  if (!input.sendEnabled) return { kind: 'unavailable', text: input.sendReason ?? 'this chat cannot send right now' }
+  if (attached !== '') return { kind: 'attached', text: `${attached} — sent with your next message` }
+  if (input.memoryUnresolved !== undefined) return { kind: 'memory-unresolved', text: `no memories can go with this message — ${input.memoryUnresolved}` }
+  if (input.memory !== undefined) return { kind: 'memory', text: input.memory }
+  if (input.grant !== undefined) return { kind: 'grant', text: input.grant }
+  return { kind: 'ready', text: 'Ready — ⌘↩ sends' }
+}
+
+/**
+ * #14. WHAT WILL HAPPEN, in words, before the action's text. A decision reads
+ * "ada asks to run a command in terminal-canvas" and then shows the command;
+ * the code block alone made a person parse a shell line to learn the verb.
+ * Keyed on the tool names the CLIs send; anything unknown says its own name
+ * rather than a guess.
+ */
+export function approvalHeadline(toolName: string): string {
+  switch (toolName) {
+    case 'Bash': case 'shell': case 'exec_command': return 'run a command'
+    case 'Edit': case 'MultiEdit': case 'apply_patch': return 'edit a file'
+    case 'Write': return 'write a file'
+    case 'Read': return 'read a file'
+    case 'NotebookEdit': return 'edit a notebook'
+    case 'WebFetch': return 'fetch a web page'
+    case 'WebSearch': return 'search the web'
+    case 'Glob': case 'Grep': return 'search files'
+    default: return `use ${toolName}`
+  }
+}
+
 export function composerState(
   snapshot: AgentSessionSnapshot | null,
   claudeAvailable: boolean,
@@ -274,6 +333,28 @@ export function toolArgument(input: Record<string, unknown>, keep = 2): string {
   if (typeof first === 'string') return first.length > 96 ? first.slice(0, 93) + '…' : first
   const keys = Object.keys(input)
   return keys.length === 0 ? '' : keys.join(', ')
+}
+
+/**
+ * Approval detail (#17). The request's action IN FULL — what a person is
+ * actually allowing — never `toolArgument`'s row-sized cut: a command
+ * truncated at 96 characters hides exactly the tail a reviewer needs (`&& rm
+ * -rf …`), and a path shortened from the left hides which checkout it is in.
+ * `action` is the primary key's whole value; `rest` is every OTHER key of the
+ * input, pretty-printed, so an Edit's old/new strings or a Write's content are
+ * inspectable before the allow rather than after. `rest` is absent when the
+ * primary key was the whole input (a plain Bash call), so the layout does not
+ * repeat the command under a second heading.
+ */
+export function approvalAction(input: Record<string, unknown>): { action: string; code: boolean; rest?: string } {
+  const primaryKey = ['command', 'file_path', 'path', 'notebook_path', 'url', 'pattern', 'query', 'description']
+    .find((k) => typeof input[k] === 'string')
+  // `description` is the request's own prose and is shown as context, so it
+  // never counts as "the rest" of an input whose primary is something else.
+  const others = Object.keys(input).filter((k) => k !== primaryKey && !(k === 'description' && primaryKey !== 'description'))
+  const rest = others.length === 0 ? undefined : JSON.stringify(Object.fromEntries(others.map((k) => [k, input[k]])), null, 2)
+  if (primaryKey === undefined) return { action: rest ?? '', code: true }
+  return { action: input[primaryKey] as string, code: toolArgumentIsCode(input), ...(rest === undefined ? {} : { rest }) }
 }
 
 /**

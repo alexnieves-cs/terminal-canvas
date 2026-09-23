@@ -11,13 +11,35 @@
  */
 
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
-import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
+import { WORK_ITEM_STATES, carryWorkItem, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
+import type { IssueChoice } from '@renderer/palette/StartWorkSheet'
 import { repoOfKey } from '@shared/work-items'
 import { startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
 import { getChat } from '@renderer/chat/chat-store'
+import { allRecipes } from '@shared/recipes'
 import { isWorkPanel, isChatPanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
+
+/**
+ * M310. The open issues a task can start FROM — GitHub's and Jira's lists,
+ * read through the same doors their nodes use, merged. A service that is not
+ * connected contributes nothing; when neither answers, the sheet says why
+ * rather than showing an empty list that reads as "you have no issues".
+ */
+async function readOpenIssues(): Promise<{ kind: 'items'; items: IssueChoice[] } | { kind: 'none'; reason: string }> {
+  const [gh, jira] = await Promise.all([
+    window.canvas.github.list().catch(() => null),
+    window.canvas.jira.list().catch(() => null)
+  ])
+  const items: IssueChoice[] = [
+    ...(gh?.kind === 'items' ? gh.items.map((i) => ({ source: 'github' as const, key: i.id, title: i.title, url: i.url, description: i.description })) : []),
+    ...(jira?.kind === 'items' ? jira.items.map((i) => ({ source: 'jira' as const, key: i.id, title: i.title, url: i.url, description: i.description })) : [])
+  ]
+  if (items.length > 0) return { kind: 'items', items }
+  const why = gh !== null && gh.kind !== 'items' ? gh.reason : jira !== null && jira.kind !== 'items' ? jira.reason : 'no open issues were found'
+  return { kind: 'none', reason: `no issues — ${why}` }
+}
 
 export type BoardActions = Pick<PaletteActions,
   | 'reviewTask'
@@ -27,6 +49,8 @@ export type BoardActions = Pick<PaletteActions,
   | 'fitTask'
   | 'addWorkItem'
   | 'beginStartWork'
+  | 'beginRepoSetup'
+  | 'openInEditor'
   | 'startWork'
   | 'startSwarm'
   | 'beginNewWorkItem'
@@ -109,6 +133,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
      * on an item already on the board updates it rather than minting a twin.
      */
     beginStartWork: (opts) => {
+      let recipes = allRecipes([])
       const openSheet = (title: string, titleFixed: boolean, wanted: string | null, itemId: string | undefined, teammateId: string | undefined): void => {
         const item = itemId === undefined ? undefined : (workItemsRef.current ?? []).find((i) => i.id === itemId)
         setInputMode({
@@ -135,13 +160,49 @@ export function boardActions(ctx: ActionCtx): BoardActions {
               queued: panelsRef.current.reduce((n, p) => n + (isChatPanel(p) ? (getChat(p.rect.id).snapshot?.queued ?? 0) : 0), 0)
             },
             ...(opts?.swarm === undefined ? {} : { swarm: opts.swarm }),
+            ...(item?.brief ?? opts?.brief) === undefined ? {} : { brief: item?.brief ?? opts?.brief },
+            ...(item?.criteria ?? opts?.criteria) === undefined ? {} : { criteria: item?.criteria ?? opts?.criteria },
+            // M314. The recipes, read at open (built-ins are code; the person's from main).
+            recipes,
+            ...(opts?.recipeId === undefined ? {} : { recipeId: opts.recipeId }),
+            ...(item?.checks === undefined ? {} : { checks: item.checks }),
+            ...(item?.deliverables === undefined ? {} : { deliverables: item.deliverables }),
+            // M313. A proposal's directory picks its repository once the list is read.
+            ...(opts?.preferRoot === undefined ? {} : { preferRoot: opts.preferRoot }),
+            // M312. The chosen repository's setup, and the route to edit it.
+            setupOf: (root) => window.canvas.setup.read(root),
+            openSetup: (root) => self.beginRepoSetup(root),
+            // M310. The flagship start: the connected services' open issues,
+            // through the same reads the GitHub and Jira nodes use. Only the
+            // typed door asks — a card already IS its issue.
+            ...(itemId === undefined ? { issues: readOpenIssues } : {}),
             repositories: (id) => window.canvas.board.repositories({ teammateId: id }),
             submit: async (choice) => {
               // The task is minted only once the triple is answered: a sheet
               // the user escapes must leave no card behind, the same rule
               // M149 reached for `New workspace from` (an Escape used to
               // strand the user in an empty workspace).
-              const id = itemId ?? self.addWorkItem({ source: 'typed', title: choice.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+              // M310. From an issue, the card IS that issue (the board's dedupe
+              // by key, so a second start from it is the same task); the
+              // outcome and criteria are the person's, written on the card.
+              const words = {
+                ...(choice.brief === undefined ? {} : { brief: choice.brief }),
+                ...(choice.criteria === undefined ? {} : { criteria: choice.criteria }),
+                // M314. The recipe's copy lands on the card; the recipe is not consulted again.
+                ...(choice.checks === undefined ? {} : { checks: choice.checks }),
+                ...(choice.deliverables === undefined ? {} : { deliverables: choice.deliverables }),
+                ...(choice.recipeId === undefined ? {} : { recipeId: choice.recipeId })
+              }
+              const id = itemId ?? (choice.issue !== undefined
+                ? self.addWorkItem({ source: choice.issue.source, key: choice.issue.key, title: choice.issue.title, url: choice.issue.url, ...(choice.issue.description === '' ? {} : { description: choice.issue.description }), state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'], ...words })
+                : self.addWorkItem({ source: 'typed', title: choice.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'], ...words }))
+              if (Object.keys(words).length > 0) {
+                // An existing card (or a dedupe hit) keeps its own fields through
+                // `upsertWorkItem`; what the person typed here is written on it.
+                const next = (workItemsRef.current ?? []).map((i) => (i.id === id ? carryWorkItem({ ...i, ...words, updatedAt: Date.now() }) : i))
+                workItemsRef.current = next
+                setWorkItems(next)
+              }
               // ONE route in, two executors out. The arrangement decides which,
               // and nothing else does: a swarm that fell through to `startWork`
               // would open one lane and report `started`, which is the silent
@@ -170,11 +231,17 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       // stays one gesture; a shape that opens five panels, two worktrees and
       // three handoffs is not that, and the seats must be stated before any
       // of them is minted (the sheet's own standing rule).
-      if (teammateId === undefined || item === undefined || opts?.swarm !== undefined) { openSheet(title, item !== undefined, wanted, item?.id, teammateId); return }
+      // M314. A recipe opens the sheet (its fields are to be read before a
+      // start), after the person's recipes arrive — a slow read costs the
+      // saved ones, never the sheet.
+      const withRecipes = (open: () => void): void => {
+        void window.canvas.recipes.list().then((saved) => { recipes = allRecipes(saved) }, () => undefined).finally(open)
+      }
+      if (teammateId === undefined || item === undefined || opts?.swarm !== undefined || opts?.recipeId !== undefined) { withRecipes(() => openSheet(title, item !== undefined, wanted, item?.id, teammateId)); return }
       void window.canvas.board.repositories({ teammateId }).then((answer) => {
         const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
         const needs = startWorkNeeds({ title, teammateId }, { teammates: teammatesRef.current ?? [], repos, wanted })
-        if (needs.length > 0) { openSheet(title, true, wanted, item.id, teammateId); return }
+        if (needs.length > 0) { withRecipes(() => openSheet(title, true, wanted, item.id, teammateId)); return }
         void self.startWork(item.id, teammateId)
       })
     },
@@ -184,6 +251,61 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     /** M275. The arrangement's executor — Canvas's, installed the same way, and a no-op refusal before it is installed rather than a throw. */
     startSwarm: async (itemId, teammateId, root, preset): Promise<StartWorkOutcome> =>
       (await boardVerbsRef.current?.swarm?.(itemId, teammateId, root, preset)) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    /**
+     * M312. THE REPOSITORY SETUP SHEET for a directory's repository — the
+     * captured panel's cwd when none is named. Main answers the saved record
+     * or a detected draft; saving is the person's decision (repo-setup.ts).
+     */
+    beginRepoSetup: (cwd) => {
+      const panel = cwd === undefined ? panelsRef.current.find((p) => p.rect.id === palette.capturedId) : undefined
+      // The panel's own directory by kind: a chat's and a terminal's cwd, a watcher's, a file's folder.
+      const own = panel as { chat?: { cwd?: string }; spec?: { cwd?: string }; watch?: { cwd?: string }; source?: { path?: string } } | undefined
+      const dir = cwd ?? own?.chat?.cwd ?? own?.watch?.cwd ?? (own?.source?.path?.replace(/\/[^/]*$/, '') || undefined) ?? own?.spec?.cwd
+      if (dir === undefined || dir === '') {
+        setInputMode({ kind: 'text', label: 'Repository setup — the folder of the repository', verb: 'open', initial: '', submit: (value) => { if (value.trim() !== '') self.beginRepoSetup(value.trim()) } })
+        palette.openPalette()
+        return
+      }
+      void window.canvas.setup.read(dir).then((read) => {
+        setInputMode({
+          kind: 'setup',
+          label: 'Repository setup',
+          initial: '',
+          submit: () => undefined,
+          setup: {
+            read,
+            save: async (setup) => {
+              const r = await window.canvas.setup.save(setup)
+              return r.ok ? { ok: true } : { ok: false, reason: r.reason }
+            }
+          }
+        })
+        palette.openPalette()
+      })
+    },
+    /**
+     * M313. OPEN IN EDITOR — the given path, else the captured panel: a file
+     * panel's file, else the folder its conversation, terminal or watcher
+     * works in (for a lane, the worktree). Silent when it opened; a refusal,
+     * or a fallback that dropped the line, is said in the palette.
+     */
+    openInEditor: (target, panelId) => {
+      const subject = panelId ?? palette.capturedId
+      const panel = target === undefined ? panelsRef.current.find((p) => p.rect.id === subject) : undefined
+      const own = panel as { chat?: { cwd?: string }; spec?: { cwd?: string }; watch?: { cwd?: string }; source?: { path?: string } } | undefined
+      const file = own?.source?.path
+      const dir = own?.chat?.cwd ?? own?.watch?.cwd ?? own?.spec?.cwd
+      const t = target ?? (file !== undefined ? { path: file } : dir !== undefined && dir.startsWith('/') ? { path: dir, dir: true } : undefined)
+      const say = (label: string): void => {
+        setInputMode({ kind: 'text', label, feedback: true, verb: 'close', initial: '', submit: () => setInputMode(null) })
+        palette.openPalette()
+      }
+      if (t === undefined) { say('Select a file, a conversation or a terminal first — Open in editor opens what it works on'); return }
+      void window.canvas.editor.open(t).then((r) => {
+        if (r.kind === 'refused') say(r.reason)
+        else if (r.note !== undefined) say(r.note)
+      }, (e: unknown) => say(e instanceof Error ? e.message : String(e)))
+    },
     beginNewWorkItem: () => {
       setInputMode({
         kind: 'text',

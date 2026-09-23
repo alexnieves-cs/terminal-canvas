@@ -105,6 +105,14 @@ module.exports = {
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
   /* M52: the run ledger, for a scratch file the harness owns. */
   createRunLedger: require('../src/main/run-ledger').createRunLedger,
+  // M306. Mirrored so the harness's checks keep their exact output records.
+  createCheckOutputStore: require('../src/main/check-output-store').createCheckOutputStore,
+  // M311–M314. The workflow kit's pieces, so the harness wires REAL stores
+  // behind the kit's eight channels (kit.ts's header) instead of the inert set.
+  createCombineRunner: require('../src/main/combine-runner').createCombineRunner,
+  createRepoSetupStore: require('../src/main/repo-setup-store').createRepoSetupStore,
+  createRecipeStore: require('../src/main/recipe-store').createRecipeStore,
+  createEditorOpener: require('../src/main/kit').createEditorOpener,
   // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
   // reloads the renderer: reload survival is a tmux property, so a direct
   // backend cannot express it at all.

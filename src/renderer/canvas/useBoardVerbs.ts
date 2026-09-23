@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import {
-  addLink, cascadeCentre, isChatPanel, isTerminalPanel, isWorkPanel, makeChatPanel, makePanel,
+  addLink, cascadeCentre, isChatPanel, isTerminalPanel, isWatcherPanel, isWorkPanel, makeChatPanel, makePanel, makeWatcherPanel, WATCHER_H,
   nextZ, setLinkAutomation, setLinkLabel, workCardItemId, CHAT_W, type Panel
 } from '@renderer/panels/panels'
 import { seedAfter } from '@renderer/panels/recover'
@@ -22,6 +22,11 @@ import type { PaletteController } from '@renderer/palette/usePalette'
 import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
 import type { useTaskHandoffs } from './useTaskHandoffs'
+import { insideDirectory } from '@shared/work-scope'
+import { dispatchMessage, prBody, suggestCheckCommand, watcherArgv, type PrEvidence } from '@shared/task-flow'
+import { prepareFailureLine, setupBrief, type PrepareResult, type RepoSetup } from '@shared/repo-setup'
+import { recipeFromTask, recipeMessage } from '@shared/recipes'
+import { outward } from '@shared/outward'
 import { adoptedRunId, beginRun, mintRunId, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
 
 /**
@@ -117,6 +122,12 @@ export interface BoardVerbsDeps {
   /** M203/M204. Every task's members, built ONE way — the component owns the live-session read. */
   taskMemberships: (shown: readonly Panel[], items: readonly PersistedWorkItem[]) => TaskMembership[]
   reviewTaskLane: (itemId: string) => VerbOutcome
+  /**
+   * 5.3. The palette's Start work door, by REF: the palette is built below
+   * this hook, and a ref keeps `taskContextFor`'s identity stable so the
+   * review node's memo still holds.
+   */
+  startWorkRef: MutableRefObject<{ beginStartWork(opts: { itemId: string }): void } | null>
 
   /* ---- M204's lens ---- */
   relatedItemId: string | null
@@ -154,7 +165,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     viewportRef, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
-    relatedItemId, setRelatedItemId
+    startWorkRef, relatedItemId, setRelatedItemId
   } = deps
   /**
    * M114. DISPATCH — the one verb. In order, each step refusing by name into
@@ -209,6 +220,35 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // same id/root pair and returns the standing worktree.
     patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: 'the lane is ready, but the conversation has not been created yet', state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
     let panel = standingPanel
+    // M312. PREPARATION, BEFORE THE AGENT — the repository's SAVED setup runs
+    // its install steps in the lane, and a failure stops the start here with
+    // the step, its exit and its own last line on the card (each step's whole
+    // output is a check-output record). An agent handed a broken environment
+    // "repairs" it, usually by editing the wrong thing. No saved setup is the
+    // old start, unchanged.
+    let prepared: PrepareResult | null = null
+    let setup: RepoSetup | null = null
+    if (panel === undefined) {
+      patch({ note: 'preparing the lane with the repository setup…' })
+      const read = await window.canvas.setup.read(lane.path).catch(() => null)
+      setup = read?.kind === 'saved' ? read.setup : null
+      if (setup !== null) {
+        prepared = await window.canvas.setup.prepare({ lane: lane.path }).catch((e: unknown) => ({ kind: 'unreadable' as const, detail: e instanceof Error ? e.message : String(e) }))
+        const failed = prepareFailureLine(prepared)
+        if (failed !== null) {
+          patch({ note: failed })
+          const bad = 'steps' in prepared ? prepared.steps.find((st) => st.exitCode !== 0) : undefined
+          void recordOrchEvent({
+            runId: mintRunId(), itemId, event: 'check', source: 'app',
+            title: 'Preparation failed', detail: failed,
+            // The failed step's output record, by id, so a reader can open it.
+            ...(bad?.outputId === undefined ? {} : { key: `setup-output:${bad.outputId}` })
+          })
+          return { kind: 'refused', reason: failed }
+        }
+      }
+      patch({ note: 'the lane is ready, but the conversation has not been created yet' })
+    }
     if (panel === undefined) {
       const sessionId = crypto.randomUUID()
       // M275. A swarm's PRIMARY seat is still a dispatched lane — it takes the
@@ -237,8 +277,15 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       patch({ anchor, note: 'the lane and the conversation are ready, but the first message has not been sent yet' })
       selectOnly(chatId)
     }
-    const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
-    const body = item.description === undefined || item.description === '' ? '' : `\n\n${item.description}`
+    // M310. The brief and the criteria ride the first message: an agent told
+    // only a title works to the title, and the review then asks about
+    // criteria it never saw (`task-flow.ts`).
+    // M312/M314. The recipe's context, checks and deliverables, and the
+    // prepared environment (ports, services, the checks the setup declares),
+    // read from the item as it stands now — the sheet wrote them after mint.
+    const current = workItemsRef.current.find((i) => i.id === itemId) ?? item
+    const saved = current.recipeId?.startsWith('mine-') === true ? await window.canvas.recipes.list().catch(() => []) : []
+    const message = dispatchMessage(current, [recipeMessage(current, saved), setupBrief(setup, prepared)])
     // M197 (D05). The first send's answer is READ. `send` has a `{ refused }`
     // arm — M82's budget ceiling refuses and STORES NOTHING, by that
     // milestone's own rule — so a dispatch over budget used to leave a chat
@@ -247,7 +294,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // reached `working`, because `working` is the runtime's word from a turn
     // that never started. The lane and the chat are real and are KEPT; the
     // note says the send did not happen, which is the recoverable state.
-    const sent = await window.canvas.agentSession.send(chatId, `${header}${body}`, [])
+    const sent = await window.canvas.agentSession.send(chatId, message, [])
     const notSent = sendRefusalSentence(sent)
     if (notSent !== null) {
       patch({ note: `the lane and the conversation are ready, but the first message was refused — ${notSent}` })
@@ -515,6 +562,9 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
   const frozenTerminalIds = useMemo(() => terminalIds, [terminalIdsKey]) // eslint-disable-line react-hooks/exhaustive-deps
   terminalIdsRef.current = frozenTerminalIds
 
+  // M310. `openPr` is declared below this callback; the review's Open PR reads
+  // it through this ref at press time, never by closure (a TDZ at render).
+  const openPrRef = useRef<((itemId: string, evidence?: PrEvidence) => Promise<void>) | null>(null)
   const taskContextFor = useCallback((itemId: string | undefined): ReviewTaskContext | undefined => {
     if (itemId === undefined) return undefined
     const item = workItemsRef.current.find((i) => i.id === itemId)
@@ -566,11 +616,139 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         void deliverToComposer(it.panelId, paths.length === 0
           ? 'I have looked at the lane and it holds no changes. '
           : `I have reviewed these changes:\n${named.map((path) => `- ${path}`).join('\n')}${rest > 0 ? `\n- and ${rest} more` : ''}\n\n`)
+      },
+      // 5.3. The closed-conversation arm of the same button: the Start work
+      // sheet for THIS item, which re-uses its lane. It opens a sheet the
+      // person confirms — nothing is spawned by the press alone.
+      onStartAgain: (id) => { startWorkRef.current?.beginStartWork({ itemId: id }) },
+      // M307. The review, together. The brief and the criteria are the
+      // person's (M287); the comments and the confirmed criteria are theirs
+      // too, and ride the work item so they outlive this node and the chat.
+      ...(item.brief === undefined ? {} : { brief: item.brief }),
+      ...(item.criteria === undefined ? {} : { criteria: item.criteria }),
+      ...(item.criteriaMet === undefined ? {} : { criteriaMet: item.criteriaMet }),
+      ...(item.comments === undefined ? {} : { comments: item.comments }),
+      // The lane's watchers, by the SAME rule `checksFromWatchers` filters by,
+      // so a watcher in a neighbouring lane cannot vouch for this one.
+      watchers: panelsRef.current.filter(isWatcherPanel)
+        .filter((p) => p.watch.cwd !== '' && insideDirectory(record.path, p.watch.cwd))
+        .map((p) => ({ id: p.rect.id, cwd: p.watch.cwd, command: p.watch.command, args: p.watch.args })),
+      onToggleCriterion: (id, criterion, met) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it === undefined) return
+        const now = new Set(it.criteriaMet ?? [])
+        if (met) now.add(criterion)
+        else now.delete(criterion)
+        // Only criteria that still exist are kept: an edited criterion is unconfirmed.
+        patchWorkItem(id, { criteriaMet: (it.criteria ?? []).filter((c) => now.has(c)) })
+      },
+      onComments: (id, next) => { patchWorkItem(id, { comments: next }) },
+      // A HAND-OFF, sent by a person's press after the whole text was shown —
+      // dispatch's kind of message, not a template (M80's insert rule is
+      // `onDraftFollowUp` below). The refusal is the send's own sentence.
+      onSendFollowUp: async (id, text) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it?.panelId === undefined || !panelsRef.current.some((p) => p.rect.id === it.panelId && isChatPanel(p))) return 'the lane\'s conversation is closed'
+        try {
+          const refusal = sendRefusalSentence(await window.canvas.agentSession.send(it.panelId, text, []))
+          if (refusal === null) {
+            void recordOrchEvent({
+              runId: runOfTask(id) ?? adoptedRunId(it.panelId), event: 'dispatch', source: 'person',
+              title: 'Review follow-up sent to the agent', detail: text.split('\n')[0] ?? '', itemId: id, panelId: it.panelId,
+              key: 'review-followup'
+            })
+          }
+          return refusal
+        } catch (e) {
+          return e instanceof Error ? e.message : 'the message could not be sent'
+        }
+      },
+      // M310. The PR, from the review, with the evidence the review gathered.
+      ...(item.source === 'github' && item.key !== undefined ? {
+        onOpenPr: (id: string, evidence: PrEvidence) => { void openPrRef.current?.(id, evidence) },
+        ...(item.pr === undefined ? {} : { pr: item.pr })
+      } : {}),
+      ...(item.note === undefined ? {} : { note: item.note }),
+      // M310. RUN CHECKS in the lane — a watcher in the lane's own directory,
+      // run once now and left DISARMED (it re-runs when asked, not on every
+      // edit the agent makes). Its runs are the lane's witnessed checks, each
+      // with its own output record (M306).
+      suggestCheck: async () => {
+        // M314/M312. What the task was told decides "done" comes first (its
+        // recipe's copy), then the repository's saved checks, then a guess
+        // from the lane's files — each joined with && so one watcher runs all.
+        const own = workItemsRef.current.find((i) => i.id === itemId)?.checks
+        if (own !== undefined && own.length > 0) return own.join(' && ')
+        const setup = await window.canvas.setup.read(record.path).catch(() => null)
+        if (setup?.kind === 'saved' && setup.setup.checks.length > 0) return setup.setup.checks.join(' && ')
+        const listed = await window.canvas.files.list(record.path).catch(() => null)
+        if (listed === null || listed.kind !== 'ok') return null
+        const names = listed.entries.map((e) => e.name)
+        let manifest: string | undefined
+        if (names.includes('package.json')) {
+          // A one-off read: `file:read` arms a watch by panel id, so the probe
+          // id is closed straight after — nothing stays watching.
+          const probe = `probe-${itemId}`
+          try {
+            const got = await window.canvas.file.read({ panelId: probe, path: `${record.path}/package.json` })
+            if (got.kind === 'text') manifest = got.content
+          } catch { /* no manifest text; the suggestion falls through */ }
+          void window.canvas.file.close(probe).catch(() => {})
+        }
+        return suggestCheckCommand(names, manifest)
+      },
+      onRunChecks: async (id, command) => {
+        // M312. Through the shell when the command needs one (task-flow.ts).
+        const argv = watcherArgv(command)
+        if (argv === null) return 'type the command that runs this lane\'s checks'
+        const it = workItemsRef.current.find((i) => i.id === id)
+        const lane = taskLaneOf(id)
+        if (it === undefined || lane === undefined) return 'the lane is gone — start the task again'
+        const watcherId = `w${nextIdRef.current++}`
+        const trigger = { kind: 'path' as const, path: lane.path }
+        // Main first, then the run, THEN the panel: the node's own create on
+        // mount is idempotent at the id, and a run asked for before main knew
+        // the watcher would be dropped with no word.
+        const made = await window.canvas.watcher.create({ id: watcherId, cwd: lane.path, command: argv.command, args: argv.args, trigger, armed: false })
+        if (!made.ok) return made.reason
+        void window.canvas.watcher.run(watcherId)
+        const chat = it.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === it.panelId)
+        const centre = chat === undefined
+          ? { x: 0, y: 0 }
+          : { x: chat.rect.x + chat.rect.w / 2, y: chat.rect.y + chat.rect.h + 40 + WATCHER_H / 2 }
+        setPanels((current) => {
+          const made = makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), { cwd: lane.path, command: argv.command, args: argv.args, trigger })
+          const next = [...current, { ...made, title: `checks · ${it.title}`, watch: { ...made.watch, armed: false as const } }]
+          panelsRef.current = next
+          commitHistory(next)
+          return next
+        })
+        return null
+      },
+      // M314. What the task promised back, and "Save as recipe" — its outcome,
+      // criteria, deliverables and arrangement with the checks that passed.
+      ...(item.deliverables === undefined ? {} : { deliverables: item.deliverables }),
+      onSaveRecipe: async (id: string, name: string, passedChecks: string[]) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it === undefined) return 'the task is gone'
+        const saved = await window.canvas.recipes.list().catch(() => [])
+        const chat = it.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === it.panelId)
+        const swarm = chat !== undefined && isChatPanel(chat) ? chat.chat.swarm?.preset : undefined
+        const recipe = recipeFromTask(it, { name, passedChecks, now: Date.now(), saved, ...(swarm === undefined ? {} : { swarm }) })
+        const r = await window.canvas.recipes.save(recipe)
+        return r.ok ? null : r.reason
+      },
+      onDraftFollowUp: (id, text) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it?.panelId === undefined) return
+        selectOnly(it.panelId)
+        onFocusPanel(it.panelId)
+        void deliverToComposer(it.panelId, text)
       }
     }
-  }, [taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, patchWorkItem, selectOnly, onFocusPanel])
+  }, [taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, patchWorkItem, selectOnly, onFocusPanel, startWorkRef])
 
-  const openPr = useCallback(async (itemId: string): Promise<void> => {
+  const openPr = useCallback(async (itemId: string, evidence?: PrEvidence): Promise<void> => {
     if (mergedRef.current) return
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined) return
@@ -583,7 +761,10 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     if (refusal !== null || lane === undefined || item.teammateId === undefined || item.panelId === undefined || item.key === undefined) { patchWorkItem(itemId, { note: refusal ?? 'no lane yet — dispatch the item first' }); return }
     const repo = repoOfKey(item.key)
     if (repo === null) return
-    const body = [`Dispatched from the Terminal Canvas board.`, item.url === undefined ? '' : `Closes ${item.url}`, item.description ?? ''].filter((l) => l !== '').join('\n\n')
+    // M310. The evidence rides the PR when the review gathered it.
+    // M310. Through the ONE outward gate: the body now carries check commands
+    // and the person's own words, and a command can hold a token.
+    const body = outward(prBody(item, evidence), 'pull request body').text
     const result = await window.canvas.board.openPr({ itemId, panelId: item.panelId, teammateId: item.teammateId, worktreeId: lane.id, repo, title: item.title, body })
     if (result.kind === 'opened' || result.kind === 'exists') {
       patchWorkItem(itemId, { pr: { number: result.number, url: result.url }, state: WORK_ITEM_STATES[2] as PersistedWorkItem['state'], note: undefined })
@@ -618,6 +799,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     }
   }, [patchWorkItem, commentPr, palette])
   boardVerbsRef.current.openPr = (itemId) => { void openPr(itemId) }
+  openPrRef.current = openPr
   boardVerbsRef.current.commentPr = (itemId) => { void commentPr(itemId) }
   boardVerbsRef.current.markDone = markDone
   // M202 (D07). The fourth door's landing point: the palette row, the agent

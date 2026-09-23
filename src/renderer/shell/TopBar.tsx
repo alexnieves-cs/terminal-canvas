@@ -97,9 +97,13 @@ export function TopBar({
         label="Center view"
         value={centerView}
         onChange={onSetCenterView}
+        // Each place is introduced by its PURPOSE under its name — the two
+        // are different jobs, not two views of one thing, and a bare
+        // "Orchestrate" never said what a person goes there to do. The name
+        // stays first: it is what the dock, the palette and the docs call it.
         options={[
-          { id: 'canvas', label: 'Canvas', className: 'shell__center-btn' },
-          { id: 'orchestration', label: 'Orchestrate', className: 'shell__center-btn' }
+          { id: 'canvas', label: <><span className="shell__center-name">Canvas</span><span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
+          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Orchestrate — monitor and review: what the agents are doing, and what is ready for you', className: 'shell__center-btn' }
         ]}
       />
 
@@ -109,7 +113,7 @@ export function TopBar({
         // M65. The button is the considered door (the sheet); ⌘N — the menu's
         // accelerator — stays the instant default. Never disabled: the sheet
         // can always take a typed command.
-        title={preferred ? `Create… (⌘⇧N) — ⌘N starts ${preferred.name} at once` : 'Create… (⌘⇧N)'}
+        title={preferred ? `Create… (⌘⇧N) — start a task or add an object; ⌘N starts ${preferred.name} at once` : 'Create… (⌘⇧N) — start a task or add an object'}
         {...shellControl(onOpenSheet)}
       >
         <span>+ Create</span> <kbd>⌘⇧N</kbd>

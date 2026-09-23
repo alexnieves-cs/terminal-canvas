@@ -22,7 +22,12 @@ export interface LinkOpenRequest {
 
 export type LinkOpenResolution =
   | { kind: 'url'; url: string }
-  | { kind: 'path'; path: string; /** Says when a :line suffix was dropped: opening AT a line needs an editor integration. */ note?: string }
+  /**
+   * `line`/`col` from a `:line[:col]` suffix. M313: the handler takes them to
+   * the person's editor (editor-open.ts); `note` is what is said when the
+   * opener falls back to the default app and the line is dropped.
+   */
+  | { kind: 'path'; path: string; line?: number; col?: number; note?: string }
   | { kind: 'refused'; reason: string }
 
 export interface LinkOpenDeps {
@@ -47,7 +52,7 @@ export function resolveLinkOpen(req: LinkOpenRequest, deps: LinkOpenDeps): LinkO
   const path = isAbsolute(expanded) ? expanded : join(req.cwd, expanded)
   if (!deps.exists(path)) return { kind: 'refused', reason: `${path} does not exist` }
   return m
-    ? { kind: 'path', path, note: `opened in its default app; going to line ${m[1]} needs an editor integration this app does not have` }
+    ? { kind: 'path', path, line: Number(m[1]), ...(m[2] !== undefined ? { col: Number(m[2]) } : {}), note: `opened in its default app; going to line ${m[1]} needs an editor — set “Open files in”` }
     : { kind: 'path', path }
 }
 

@@ -6,6 +6,7 @@ import { buildToolboxNodeModel } from './toolbox-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
+import { useRepoRoot } from '@renderer/shell/useRepoRoot'
 
 export interface ToolboxNodeProps {
   panel: ToolboxPanel
@@ -92,6 +93,8 @@ function ToolboxNodeImpl({
     () => buildToolboxNodeModel({ source: panel.source, title: panel.title, result }),
     [panel.source, panel.title, result]
   )
+  // Backlog #86. The header reads `repo/src` once main names the repository.
+  const repoRoot = useRepoRoot(model.directory)
 
   useEffect(() => {
     let live = true
@@ -161,7 +164,7 @@ function ToolboxNodeImpl({
         onKeyDown={(event) => event.stopPropagation()}
       >
         {/* M164. The path rule. */}
-        <p className="toolbox-node__directory" data-toolbox-directory title={model.directory}>{displayPath(model.directory).short}</p>
+        <p className="toolbox-node__directory" data-toolbox-directory title={model.directory}>{displayPath(model.directory, repoRoot).short}</p>
 
         {model.stale && (
           // A fact about FILES, never a claim about the running agent, and

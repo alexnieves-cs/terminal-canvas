@@ -24,9 +24,17 @@ import { WORK_ITEM_STATES, type WorkItemState } from '@shared/work-items'
 /** The display kind, `Panel['kind']` plus M27's `note` — see rail-rows.ts. */
 export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image'
 
-export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-you' | 'idle' | 'exited'
+/**
+ * Backlog #90. `done` is a process that exited 0 — the word stays `exited 0`,
+ * only the tone splits, because a finished run painted in the failure red
+ * trains a person to distrust the red. Signals and non-zero codes stay `exited`.
+ */
+export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-you' | 'idle' | 'done' | 'exited'
 
-export const TONES: readonly Tone[] = ['kind', 'asleep', 'none', 'starting', 'working', 'needs-you', 'idle', 'exited']
+export const TONES: readonly Tone[] = ['kind', 'asleep', 'none', 'starting', 'working', 'needs-you', 'idle', 'done', 'exited']
+
+/** The exit tone by code: 0 finished, anything else (or a signal) failed. */
+function exitTone(code: number | null | undefined): Tone { return code === 0 ? 'done' : 'exited' }
 
 /**
  * M229. The two tones anything OUTSIDE a panel may speak.
@@ -156,7 +164,7 @@ export function panelState(input: StateInput, agent: AgentState | undefined): Pa
   switch (status.kind) {
     case 'starting': return { word: 'starting', tone: 'starting' }
     case 'error': return { word: status.message, tone: 'exited' }
-    case 'exited': return { word: `exited ${status.code}`, tone: 'exited' }
+    case 'exited': return { word: `exited ${status.code}`, tone: exitTone(status.code) }
     case 'running':
       switch (agent) {
         case 'wants-you': return { word: 'needs you', tone: 'needs-you' }
@@ -213,7 +221,7 @@ function watchState(watch: WatchStateInput | undefined): PanelStateWord {
     case 'exited':
       return watch.signal !== undefined && watch.signal !== null
         ? { word: `exited ${watch.signal}`, tone: 'exited' }
-        : { word: `exited ${watch.exitCode ?? 0}`, tone: 'exited' }
+        : { word: `exited ${watch.exitCode ?? 0}`, tone: exitTone(watch.exitCode ?? 0) }
   }
 }
 
@@ -287,7 +295,7 @@ function chatState(chat: ChatStateInput | undefined): PanelStateWord {
     case 'ready': return { word: 'idle', tone: 'idle' }
     // `exited ${code}` as a template, never a truthiness test: 0 is the
     // common exit; a signal exit has a null code and names the signal's absence.
-    case 'exited': return { word: typeof chat.exitCode === 'number' ? `exited ${chat.exitCode}` : 'exited', tone: 'exited' }
+    case 'exited': return { word: typeof chat.exitCode === 'number' ? `exited ${chat.exitCode}` : 'exited', tone: exitTone(chat.exitCode) }
     default: return { word: 'not started', tone: 'none' }
   }
 }

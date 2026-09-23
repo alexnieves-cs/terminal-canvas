@@ -29,6 +29,14 @@
  *     commands are agent output; the model (orchestration-live.ts) scrubs them
  *     before they reach this file, which paints what it is given and nothing
  *     it reads for itself.
+ * (5) **Every movement explains an event** (brief #16). Nothing moves for
+ *     ambience: no camera auto-orbit, no idle bob. What moves is a batch of
+ *     tool calls (orchLiveBatch — five edits to one file are one flight), a
+ *     command's column that stands while it runs and resolves the moment its
+ *     outcome lands (orchLiveOutcomes), or a working core's turn, which IS
+ *     its state. Pause freezes the PICTURE (the model the scene draws), never
+ *     the sessions; reduced motion and a paused view get the same events as
+ *     text (orchLiveLogLine).
  */
 import { useEffect, useMemo, useRef, useState, type JSX, type MutableRefObject, type RefObject } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
@@ -38,10 +46,14 @@ import { OrchestrationBloom } from './orchestration-bloom'
 import { shellControl } from '@renderer/shell/shell-control'
 import { agentWord, TONE_WORKING } from '@renderer/panels/panel-state'
 import {
+  orchLiveBatch,
   orchLiveFresh,
+  orchLiveLogLine,
+  orchLiveOutcomes,
   orchLiveLayout,
   orchLiveSlabs,
   ORCH_LIVE_LINES_PER_SLAB,
+  type OrchLiveBatch,
   type OrchLiveEvent,
   type OrchLiveFile,
   type OrchLiveModel,
@@ -57,6 +69,12 @@ export interface OrchestrationLiveProps {
   quality?: 'full' | 'lean' | 'flat'
   onSelect: (id: string) => void
   onJump: (id: string) => void
+  /**
+   * M311. The review path for a shared file: `contended` (one checkout, two
+   * writers — review it now) or `overlap` (separate lanes — plan the combine).
+   * Absent hides the list's verbs, never the list: the facts stay said.
+   */
+  onFileAction?: (kind: 'contended' | 'overlap', file: OrchLiveFile) => void
 }
 
 const SLAB_H = 0.16
@@ -237,6 +255,7 @@ interface SessionHandle { core: THREE.Object3D; pulse: (strength: number) => voi
 
 function Session({ s, x, z, selected, p, tex, reducedMotion, shadows, handles, onSelect, onJump }: {
   s: OrchLiveSession; x: number; z: number; selected: boolean; p: Palette; tex: THREE.Texture
+  /** Reduced motion OR a paused view: the core holds still; its colour still says its state. */
   reducedMotion: boolean; shadows: boolean
   handles: Map<string, SessionHandle>
   onSelect: (id: string) => void; onJump: (id: string) => void
@@ -282,8 +301,7 @@ function Session({ s, x, z, selected, p, tex, reducedMotion, shadows, handles, o
       core.current.rotation.y += delta * (0.4 + busy)
       core.current.rotation.x += delta * 0.25 * busy
       shell.current.rotation.y -= delta * 0.35
-      const bob = Math.sin(phase.current) * 0.07
-      core.current.position.y = shell.current.position.y = CORE_Y + bob
+      // No bob: a turning core says "working"; a bobbing one said nothing (rule 5).
       if (working) {
         ringA.current.rotation.set(Math.PI / 2 + Math.sin(phase.current * 0.7) * 0.5, phase.current * 0.6, 0)
         ringB.current.rotation.set(Math.PI / 2 + Math.cos(phase.current * 0.5) * 0.7, -phase.current * 0.4, 0)
@@ -423,11 +441,11 @@ function Tower({ f, x, z, p, tex, reducedMotion, shadows, handles }: {
     if (crown.current) {
       crown.current.position.y = towerTopY(b.length)
       const since = now - Math.max(...b, -99)
-      crown.current.material.opacity = since >= 0 && since < 1.2 ? (1 - since / 1.2) * 0.9 : 0
-      if (since >= 0 && since < 1.2) moving = true
+      crown.current.material.opacity = since >= 0 && since < 0.8 ? (1 - since / 0.8) * 0.9 : 0
+      if (since >= 0 && since < 0.8) moving = true
     }
     if (ring.current) {
-      const k = (now - ring.current.userData.t0) / 1.3
+      const k = (now - ring.current.userData.t0) / 0.8
       const h = towerTopY(b.length) - 0.3
       if (k >= 1) { group.current.remove(ring.current); disposeObject(ring.current); ring.current = null }
       else { ring.current.position.y = h - k * (h - 0.1); (ring.current.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - k); moving = true }
@@ -478,23 +496,41 @@ function Tower({ f, x, z, p, tex, reducedMotion, shadows, handles }: {
 // Effects: write arcs with their token, run columns, core pulses
 // ---------------------------------------------------------------------------
 
-/** A queued event: `delay` is seconds after the previous one; `at` is stamped on the canvas clock when Effects first sees it. */
-interface QueueItem { ev: OrchLiveEvent; delay: number; at?: number }
+/**
+ * A queued thing to animate: a batch of tool calls, or a command's outcome
+ * arriving for a column already standing. `delay` is seconds after the previous
+ * item; `at` is stamped on the canvas clock when Effects first sees it.
+ */
+type QueueItem = ({ batch: OrchLiveBatch } | { outcome: OrchLiveEvent }) & { delay: number; at?: number }
 
-interface Fx { t0: number; dur: number; update: (k: number) => void; end: () => void; started?: boolean; start?: () => void }
+interface Fx { t0: number; dur: number; update: (k: number) => void; end: () => void }
+
+/** A command's column, standing while it runs. It resolves on its outcome, or gives up quietly at this age. */
+const RUN_HOLD_S = 20
+const FLIGHT_S = 1.1
+
+interface Column { col: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>; flare: THREE.Sprite; t0: number; base: THREE.Vector3 }
 
 function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, version }: {
   queue: MutableRefObject<QueueItem[]>
   towers: Map<string, TowerHandle>
   sessions: Map<string, SessionHandle>
   p: Palette; tex: THREE.Texture; reducedMotion: boolean; paused: boolean
-  /** Bumped when events join the queue: a sleeping demand loop has to be woken to see them. */
+  /** Bumped when items join the queue: a sleeping demand loop has to be woken to see them. */
   version: number
 }): JSX.Element {
   const root = useRef<THREE.Group>(null!)
   const fx = useRef<Fx[]>([])
+  // Running commands, by the event key their outcome will arrive under.
+  const columns = useRef(new Map<string, Column>())
   const invalidate = useThree((s) => s.invalidate)
-  useEffect(() => () => { for (const f of fx.current) f.end(); fx.current = [] }, [])
+  const dropColumn = (c: Column): void => { root.current?.remove(c.col, c.flare); disposeObject(c.col); disposeObject(c.flare) }
+  useEffect(() => () => {
+    for (const f of fx.current) f.end()
+    fx.current = []
+    for (const c of columns.current.values()) dropColumn(c)
+    columns.current.clear()
+  }, [])
   const origin = (id: string): THREE.Vector3 | null => {
     const h = sessions.get(id)
     if (!h) return null
@@ -502,29 +538,45 @@ function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, versi
     h.core.getWorldPosition(v)
     return v
   }
-  const spawn = (ev: OrchLiveEvent, now: number): void => {
-    const from = origin(ev.sessionId)
-    sessions.get(ev.sessionId)?.pulse(1)
+  /** The flare that says how a command ended, then the column goes — promptly, not on a fixed clock. */
+  const resolve = (c: Column, ok: boolean, now: number): void => {
+    c.flare.material.color.copy(ok ? p.green : p.red)
+    const h = c.col.scale.y
+    fx.current.push({
+      t0: now, dur: 0.6,
+      update: (k) => {
+        c.flare.position.y = DECK_Y + h
+        c.flare.material.opacity = Math.sin(k * Math.PI)
+        c.col.material.opacity = 0.32 * (1 - k)
+      },
+      end: () => dropColumn(c)
+    })
+  }
+  const spawn = (b: OrchLiveBatch, now: number): void => {
+    const from = origin(b.sessionId)
+    sessions.get(b.sessionId)?.pulse(1)
     if (from === null) return
-    const tower = ev.path !== undefined ? towers.get(ev.path) : undefined
-    if (ev.kind === 'read' && tower) { tower.scan(); return }
-    if (ev.kind === 'write' && tower) {
+    if (b.kind === 'read') { for (const path of b.paths) towers.get(path)?.scan(); return }
+    const tower = b.kind === 'write' && b.path !== undefined ? towers.get(b.path) : undefined
+    if (b.kind === 'write' && tower) {
       const top = new THREE.Vector3()
       tower.group.getWorldPosition(top)
       top.y += tower.top()
       const mid = from.clone().lerp(top, 0.5)
       mid.y += 2.2 + from.distanceTo(top) * 0.12
       const curve = new THREE.QuadraticBezierCurve3(from, mid, top)
-      const del = ev.added === 0 && ev.removed > 0
+      const del = b.added === 0 && b.removed > 0
       const col = del ? p.red : p.iris
       const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.02, 6, false), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }))
       const sparks = Array.from({ length: 10 }, () => glowSprite(tex, col, 0.42, 0, p.dark))
-      const label = ev.token !== undefined ? tokenSprite(ev.token, del ? p.red : p.green, p) : null
+      // A batch of several edits carries its COUNT, not a token that was only the last of them.
+      const text = b.count > 1 ? `+${b.added}${b.removed > 0 ? ` −${b.removed}` : ''} · ${b.count} edits` : b.token
+      const label = text !== undefined ? tokenSprite(text, del ? p.red : p.green, p) : null
       root.current.add(tube, ...sparks)
       if (label) root.current.add(label)
-      tower.holdUntil(now + 1.2)
+      tower.holdUntil(now + FLIGHT_S * 0.75)
       fx.current.push({
-        t0: now, dur: 1.6,
+        t0: now, dur: FLIGHT_S,
         update: (k) => {
           tube.material.opacity = Math.sin(Math.min(1, k) * Math.PI) * 0.6
           sparks.forEach((s, i) => {
@@ -541,26 +593,24 @@ function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, versi
       })
       return
     }
-    if (ev.kind === 'run') {
+    if (b.kind === 'run') {
       const col = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 20, 1, true), new THREE.MeshBasicMaterial({ color: p.iris, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }))
-      const flareColor = ev.ok === false ? p.red : ev.ok === true ? p.green : p.iris
-      const flare = glowSprite(tex, flareColor, 2.3, 0, p.dark)
+      const flare = glowSprite(tex, p.iris, 2.3, 0, p.dark)
       const base = from.clone()
       base.y = DECK_Y
       col.position.copy(base)
+      col.scale.y = 0.001
       flare.position.copy(base)
       root.current.add(col, flare)
+      const c: Column = { col, flare, t0: now, base }
+      // The rise is 0.5 s; then it STANDS — a running command is a column that is up.
       fx.current.push({
-        t0: now, dur: 2.2,
-        update: (k) => {
-          const h = Math.min(1, k * 1.6) * 3.2
-          col.scale.y = Math.max(0.001, h)
-          col.position.y = DECK_Y + h / 2
-          col.material.opacity = 0.32 * (1 - Math.max(0, k - 0.6) / 0.4)
-          flare.position.y = DECK_Y + h
-          flare.material.opacity = k > 0.55 ? Math.sin(((k - 0.55) / 0.45) * Math.PI) : 0
-        },
-        end: () => { root.current?.remove(col, flare); disposeObject(col); disposeObject(flare) }
+        t0: now, dur: 0.5,
+        update: (k) => { const h = k * 3.2; col.scale.y = Math.max(0.001, h); col.position.y = DECK_Y + h / 2 },
+        end: () => {
+          if (b.ok !== null) resolve(c, b.ok, now + 0.5)
+          else columns.current.set(b.key, c)
+        }
       })
     }
   }
@@ -570,12 +620,17 @@ function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, versi
     let last = now
     for (const q of queue.current) { if (q.at === undefined) q.at = Math.max(now, last) + (q === queue.current[0] ? 0 : q.delay); last = q.at }
     if (!paused) {
-      // Due events leave the queue in order; reduced motion keeps the pulse and
-      // the towers' new heights, and skips the flight.
+      // Due items leave the queue in order; reduced motion keeps the pulse and
+      // the towers' new heights, and skips the flight — the log says it in words.
       while (queue.current.length > 0 && (queue.current[0]!.at ?? Infinity) <= now) {
-        const { ev } = queue.current.shift()!
-        if (reducedMotion) { sessions.get(ev.sessionId)?.pulse(1); if (ev.kind === 'read' && ev.path) towers.get(ev.path)?.scan() }
-        else spawn(ev, now)
+        const q = queue.current.shift()!
+        if ('outcome' in q) {
+          const c = columns.current.get(q.outcome.key)
+          if (c) { columns.current.delete(q.outcome.key); resolve(c, q.outcome.ok === true, now) }
+          continue
+        }
+        if (reducedMotion) { sessions.get(q.batch.sessionId)?.pulse(1); if (q.batch.kind === 'read') for (const path of q.batch.paths) towers.get(path)?.scan() }
+        else spawn(q.batch, now)
       }
     }
     for (let i = fx.current.length - 1; i >= 0; i--) {
@@ -584,6 +639,9 @@ function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, versi
       f.update(Math.min(1, k))
       if (k >= 1) { f.end(); fx.current.splice(i, 1) }
     }
+    // A column whose outcome never came (the session exited, or the engine never said) fades out alone.
+    for (const [key, c] of columns.current) if (now - c.t0 > RUN_HOLD_S) { columns.current.delete(key); dropColumn(c) }
+    // A standing column is not motion: it asks for no frames, only its end does.
     if (fx.current.length > 0 || queue.current.length > 0) state.invalidate()
   })
   useEffect(() => { invalidate() }, [invalidate, version])
@@ -594,7 +652,8 @@ function Effects({ queue, towers, sessions, p, tex, reducedMotion, paused, versi
 // Camera: orbit, damped, with an optional follow of the active session
 // ---------------------------------------------------------------------------
 
-function CameraRig({ bounds, autoRotate, follow, reset }: { bounds: { x: number; z: number; r: number }; autoRotate: boolean; follow: THREE.Vector3 | null; reset: number }): null {
+/** No auto-orbit (rule 5): a camera that turns on its own is movement no event explains. The person orbits; Follow nudges. */
+function CameraRig({ bounds, follow, reset }: { bounds: { x: number; z: number; r: number }; follow: THREE.Vector3 | null; reset: number }): null {
   const camera = useThree((s) => s.camera)
   const dom = useThree((s) => s.gl.domElement)
   const invalidate = useThree((s) => s.invalidate)
@@ -639,15 +698,13 @@ function CameraRig({ bounds, autoRotate, follow, reset }: { bounds: { x: number;
   useFrame((state, delta) => {
     const c = controls.current
     if (!c) return
-    c.autoRotate = autoRotate
-    c.autoRotateSpeed = 0.35
     if (follow) {
       // A nudge toward the active session, never a re-centre: the fit stays the frame.
       const goal = new THREE.Vector3(centre.x + (follow.x - centre.x) * 0.25, 0.4, centre.z + (follow.z - centre.z) * 0.25)
       if (c.target.distanceToSquared(goal) > 0.0004) { c.target.lerp(goal, 1 - Math.pow(0.02, delta)); state.invalidate() }
     }
     // update() returns true while damping has motion left; keep asking until it settles.
-    if (c.update() || autoRotate) state.invalidate()
+    if (c.update()) state.invalidate()
   })
   return null
 }
@@ -664,14 +721,21 @@ function LabelProjector({ specs, host }: { specs: readonly LabelSpec[]; host: Re
   const size = useThree((s) => s.size)
   const v = useMemo(() => new THREE.Vector3(), [])
   const ordered = useMemo(() => [...specs].sort((a, b) => a.rank - b.rank), [specs])
+  // Labels that were showing last frame are placed first within their rank, so
+  // a tie between two near labels does not flip-flop as the camera damps: a
+  // label that is up STAYS up until something of a higher rank needs its place.
+  const shown = useRef(new Set<string>())
   useFrame(() => {
     const el = host.current
     if (!el) return
+    const prior = shown.current
+    const pass = [...ordered].sort((a, b) => a.rank - b.rank || Number(prior.has(b.key)) - Number(prior.has(a.key)))
+    const now = new Set<string>()
     // A collision pass in screen space, in rank order: a label that would overlap
     // one already placed is hidden rather than drawn over it — every name hidden
     // here is still in the roster, and a file's name is on its hover in the List.
     const placed: { l: number; t: number; r: number; b: number }[] = []
-    for (const spec of ordered) {
+    for (const spec of pass) {
       const node = el.querySelector<HTMLElement>(`[data-orch-live-label="${CSS.escape(spec.key)}"]`)
       if (!node) continue
       const at = spec.show === undefined || spec.show() ? spec.at() : null
@@ -686,9 +750,10 @@ function LabelProjector({ specs, host }: { specs: readonly LabelSpec[]; host: Re
       const clash = placed.some((p) => box.l < p.r && box.r > p.l && box.t < p.b && box.b > p.t)
       const visible = onScreen && !clash
       node.style.visibility = visible ? 'visible' : 'hidden'
-      if (visible) placed.push(box)
+      if (visible) { placed.push(box); now.add(spec.key) }
       node.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`
     }
+    shown.current = now
   })
   return null
 }
@@ -725,7 +790,6 @@ function LiveScene({ model, plates, selectedId, quality, p, reducedMotion, pause
   }, [plates])
   const byId = new Map(model.sessions.map((s) => [s.id, s]))
   const byPath = new Map(model.files.map((f) => [f.path, f]))
-  const anyWorking = model.sessions.some((s) => s.state === TONE_WORKING)
   const followAt = useMemo(() => {
     if (!follow || active === null) return null
     for (const pl of plates) { const s = pl.sessions.find((x) => x.id === active); if (s) return new THREE.Vector3(s.x, 0, s.z) }
@@ -750,14 +814,14 @@ function LiveScene({ model, plates, selectedId, quality, p, reducedMotion, pause
       {plates.map((pl) => <Platform key={pl.id ?? '\0none'} plate={pl} p={p} shadows={shadows} />)}
       {plates.flatMap((pl) => pl.files.map((ft) => {
         const f = byPath.get(ft.path)
-        return f ? <Tower key={f.path} f={f} x={ft.x} z={ft.z} p={p} tex={tex} reducedMotion={reducedMotion} shadows={shadows} handles={towerHandles} /> : null
+        return f ? <Tower key={f.path} f={f} x={ft.x} z={ft.z} p={p} tex={tex} reducedMotion={reducedMotion || paused} shadows={shadows} handles={towerHandles} /> : null
       }))}
       {plates.flatMap((pl) => pl.sessions.map((st) => {
         const s = byId.get(st.id)
-        return s ? <Session key={s.id} s={s} x={st.x} z={st.z} selected={s.id === selectedId} p={p} tex={tex} reducedMotion={reducedMotion} shadows={shadows} handles={sessionHandles} onSelect={onSelect} onJump={onJump} /> : null
+        return s ? <Session key={s.id} s={s} x={st.x} z={st.z} selected={s.id === selectedId} p={p} tex={tex} reducedMotion={reducedMotion || paused} shadows={shadows} handles={sessionHandles} onSelect={onSelect} onJump={onJump} /> : null
       }))}
       <Effects queue={queue} towers={towerHandles} sessions={sessionHandles} p={p} tex={tex} reducedMotion={reducedMotion} paused={paused} version={version} />
-      <CameraRig bounds={bounds} autoRotate={anyWorking && !paused && !reducedMotion} follow={followAt} reset={reset} />
+      <CameraRig bounds={bounds} follow={paused ? null : followAt} reset={reset} />
       <LabelProjector specs={labels} host={labelHost} />
     </>
   )
@@ -772,37 +836,93 @@ function typedStyle(chars: number): { width: string; animationTimingFunction: st
 const sessionHandlesRef: { current: Map<string, SessionHandle> | null } = { current: null }
 const towerHandlesRef: { current: Map<string, TowerHandle> | null } = { current: null }
 
-export function OrchestrationLive({ model, islands, primaryIslandId, selectedId, quality = 'full', onSelect, onJump }: OrchestrationLiveProps): JSX.Element {
+/** Items waiting in the queue past this many: a backlog replayed after a pause is noise, the towers already hold it. */
+const QUEUE_CAP = 8
+/** Lines the text log keeps. */
+const LOG_CAP = 6
+/** The callout holds a session at least this long before it moves to another: a label that jumps cannot be read. */
+const CALLOUT_DWELL_MS = 2200
+
+interface LogLine { key: string; sessionId: string; text: string; tone: 'add' | 'del' | 'run' | 'pass' | 'fail' | 'read' }
+
+/** `value`, except that after each change it holds for `ms` before taking the next one. */
+function useDwell<T>(value: T, ms: number): T {
+  const [held, setHeld] = useState(value)
+  const since = useRef(0)
+  useEffect(() => {
+    if (Object.is(value, held)) return
+    const wait = since.current + ms - Date.now()
+    if (wait <= 0) { since.current = Date.now(); setHeld(value); return }
+    const t = window.setTimeout(() => { since.current = Date.now(); setHeld(value) }, wait)
+    return () => window.clearTimeout(t)
+  }, [value, held, ms])
+  return held
+}
+
+export function OrchestrationLive({ model: liveModel, islands, primaryIslandId, selectedId, quality = 'full', onSelect, onJump, onFileAction }: OrchestrationLiveProps): JSX.Element {
   const p = usePalette()
   const reducedMotion = reducedMotionNow()
-  const plates = useMemo(() => orchLiveLayout(model, islands, primaryIslandId), [model, islands, primaryIslandId])
   const [paused, setPaused] = useState(false)
+  // PAUSE FREEZES THE PICTURE, NOT THE WORK: the scene draws the model as it was
+  // when Pause was pressed; the sessions keep running, the count and the log keep
+  // moving, and Play shows what changed. Interrupting a session is its own verb,
+  // on the session, and never lives on this toolbar.
+  const [frozen, setFrozen] = useState<OrchLiveModel | null>(null)
+  const model = paused && frozen !== null ? frozen : liveModel
+  const plates = useMemo(() => orchLiveLayout(model, islands, primaryIslandId), [model, islands, primaryIslandId])
   const [follow, setFollow] = useState(true)
   const [reset, setReset] = useState(0)
   const labelHost = useRef<HTMLDivElement>(null)
   const queue = useRef<QueueItem[]>([])
   const seen = useRef<Set<string> | null>(null)
-  const [latest, setLatest] = useState<OrchLiveEvent | null>(null)
+  const pending = useRef<Set<string> | null>(null)
+  const [latest, setLatest] = useState<OrchLiveBatch | null>(null)
   const [count, setCount] = useState(0)
-  // New tool calls join the queue, staggered so a burst reads as a sequence.
+  const [held, setHeld] = useState(0)
+  const [log, setLog] = useState<LogLine[]>([])
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
+  // New tool calls join the queue as BATCHES, staggered so a burst reads as a
+  // sequence; commands that just finished join as outcomes for their column.
   useEffect(() => {
-    const { fresh, seen: next } = orchLiveFresh(model.events, seen.current)
-    seen.current = next
-    if (fresh.length === 0) return
-    for (const ev of fresh) queue.current.push({ ev, delay: STAGGER_S })
-    if (queue.current.length > 24) queue.current.splice(0, queue.current.length - 24)
-    setLatest(fresh[fresh.length - 1]!)
+    const { fresh, seen: nextSeen } = orchLiveFresh(liveModel.events, seen.current, 64)
+    seen.current = nextSeen
+    const { resolved, pending: nextPending } = orchLiveOutcomes(liveModel.events, pending.current)
+    pending.current = nextPending
+    if (fresh.length === 0 && resolved.length === 0) return
+    const batches = orchLiveBatch(fresh)
+    for (const batch of batches) queue.current.push({ batch, delay: STAGGER_S })
+    for (const outcome of resolved) queue.current.push({ outcome, delay: 0 })
+    if (queue.current.length > QUEUE_CAP) queue.current.splice(0, queue.current.length - QUEUE_CAP)
+    const lines: LogLine[] = [
+      ...batches.map((b) => ({ key: b.key, sessionId: b.sessionId, text: orchLiveLogLine(b), tone: (b.kind === 'write' ? (b.added === 0 && b.removed > 0 ? 'del' : 'add') : b.kind === 'run' ? (b.ok === null ? 'run' : b.ok ? 'pass' : 'fail') : 'read') as LogLine['tone'] })),
+      ...resolved.map((e) => ({ key: `${e.key}:done`, sessionId: e.sessionId, text: orchLiveLogLine({ outcome: e }), tone: (e.ok ? 'pass' : 'fail') as LogLine['tone'] }))
+    ]
+    setLog((prev) => [...lines.reverse(), ...prev].slice(0, LOG_CAP))
+    if (batches.length > 0) setLatest(batches[batches.length - 1]!)
     setCount((c) => c + fresh.length)
-  }, [model.events])
+    if (pausedRef.current) setHeld((h) => h + batches.length + resolved.length)
+  }, [liveModel.events])
+  const togglePause = (): void => {
+    if (paused) { setPaused(false); setFrozen(null); setHeld(0); return }
+    setFrozen(liveModel)
+    setPaused(true)
+  }
   // The callout follows the WORK: the selection only when it is itself doing
-  // something (working or waiting on the person), else the latest event's session,
-  // else any working one. A selected idle terminal is not what Watch is for.
+  // something (working or waiting on the person), else the latest batch's session,
+  // else any working one — and it DWELLS, so a burst across three sessions does
+  // not throw the one label a person is reading from station to station.
   const selectedLit = model.sessions.find((s) => s.id === selectedId && (s.state === TONE_WORKING || s.state === 'needs-you'))
   const latestLive = latest !== null ? model.sessions.find((s) => s.id === latest.sessionId && s.state !== 'exited') : undefined
-  const active = selectedLit?.id ?? latestLive?.id ?? model.sessions.find((s) => s.state === TONE_WORKING)?.id ?? model.sessions.find((s) => s.state === 'needs-you')?.id ?? null
+  const candidate = selectedLit?.id ?? latestLive?.id ?? model.sessions.find((s) => s.state === TONE_WORKING)?.id ?? model.sessions.find((s) => s.state === 'needs-you')?.id ?? null
+  const dwelt = useDwell(candidate, CALLOUT_DWELL_MS)
+  // A selection is a person's choice and takes effect at once; only the automatic moves dwell.
+  const active = selectedLit !== undefined ? selectedLit.id : (model.sessions.some((s) => s.id === dwelt) ? dwelt : candidate)
   const activeSession = model.sessions.find((s) => s.id === active) ?? null
-  const shownEvent = activeSession !== null ? (latest?.sessionId === activeSession.id ? latest : activeSession.latest) : null
-  const working = model.sessions.filter((s) => s.state === TONE_WORKING).length
+  const shownBatch = activeSession !== null && latest?.sessionId === activeSession.id ? latest : null
+  const shownSay = shownBatch !== null ? orchLiveLogLine(shownBatch) : activeSession?.latest?.say
+  const working = liveModel.sessions.filter((s) => s.state === TONE_WORKING).length
+  const showLog = reducedMotion || paused
 
   const labels = useMemo<LabelSpec[]>(() => {
     const out: LabelSpec[] = []
@@ -813,7 +933,7 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
         const f = byPath.get(ft.path)
         if (!f) continue
         const n = f.added || f.removed ? `+${f.added}${f.removed ? ` −${f.removed}` : ''}` : `${f.reads} read${f.reads === 1 ? '' : 's'}`
-        out.push({ key: `file:${f.path}`, rank: f.contended ? 1 : 2, text: f.name, extra: n, cls: `orch-live__label orch-live__label--file${f.contended ? ' orch-live__label--warn' : ''}`,
+        out.push({ key: `file:${f.path}`, rank: f.contended ? 1 : 2, text: f.name, extra: n, cls: `orch-live__label orch-live__label--file${f.contended ? ' orch-live__label--warn' : f.alsoIn > 0 ? ' orch-live__label--overlap' : ''}`,
           at: () => { const h = towerHandlesRef.current?.get(f.path); return h ? new THREE.Vector3(ft.x, DECK_Y + h.top() + 0.1, ft.z) : null } })
       }
       for (const st of pl.sessions) {
@@ -856,24 +976,33 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
         {activeSession !== null && (
           <div className="orch-live__callout" data-orch-live-label="callout" data-orch-live-callout={activeSession.id} data-state={activeSession.state}>
             <strong><span className="orch-live__pip" data-state={activeSession.state} />{activeSession.title}</strong>
-            <span className="orch-live__say">{shownEvent?.say ?? (activeSession.state === TONE_WORKING ? 'Working' : activeSession.state === 'needs-you' ? 'Waiting on you' : 'Idle')}</span>
-            {shownEvent?.token !== undefined && (
-              <code key={shownEvent.key} className="orch-live__typing" style={typedStyle(shownEvent.token.length + 2)} data-kind={shownEvent.added === 0 && shownEvent.removed > 0 ? 'del' : 'add'}>
-                {shownEvent.added === 0 && shownEvent.removed > 0 ? '− ' : '+ '}{shownEvent.token}
+            <span className="orch-live__say">{shownSay ?? (activeSession.state === TONE_WORKING ? 'Working' : activeSession.state === 'needs-you' ? 'Waiting on you' : 'Idle')}</span>
+            {shownBatch?.token !== undefined && (
+              <code key={shownBatch.key} className="orch-live__typing" style={typedStyle(shownBatch.token.length + 2)} data-kind={shownBatch.added === 0 && shownBatch.removed > 0 ? 'del' : 'add'}>
+                {shownBatch.added === 0 && shownBatch.removed > 0 ? '− ' : '+ '}{shownBatch.token}
               </code>
             )}
-            {shownEvent?.kind === 'run' && shownEvent.command !== undefined && (
-              <code key={shownEvent.key} className="orch-live__typing" style={typedStyle(Math.min(40, shownEvent.command.length + 2))} data-kind="run">$ {shownEvent.command}</code>
+            {shownBatch?.kind === 'run' && shownBatch.command !== undefined && (
+              <code key={shownBatch.key} className="orch-live__typing" style={typedStyle(Math.min(40, shownBatch.command.length + 2))} data-kind="run">$ {shownBatch.command}</code>
             )}
           </div>
         )}
       </div>
-      <div className="orch-live__hud" role="status" aria-live="polite">
-        <span className="orch-live__live" data-on={working > 0 || undefined}><span className="orch-live__pip" data-state={working > 0 ? TONE_WORKING : 'idle'} />{working > 0 ? 'Live' : 'Quiet'}</span>
-        <span>{`${working} working · ${count} ${count === 1 ? 'event' : 'events'} since you opened Watch`}</span>
+      <div className="orch-live__hud" role="status" aria-live="polite" data-orch-live-paused={paused || undefined}>
+        {paused ? (
+          // Said in words, not only by a pressed button: the sessions did NOT stop.
+          <span className="orch-live__live" data-paused><span className="orch-live__pip" data-state="idle" />View paused</span>
+        ) : (
+          <span className="orch-live__live" data-on={working > 0 || undefined}><span className="orch-live__pip" data-state={working > 0 ? TONE_WORKING : 'idle'} />{working > 0 ? 'Live' : 'Quiet'}</span>
+        )}
+        <span>{paused
+          ? `sessions keep running · ${working} working · ${held} ${held === 1 ? 'update' : 'updates'} since you paused`
+          : `${working} working · ${count} ${count === 1 ? 'event' : 'events'} since you opened Watch`}</span>
       </div>
-      <div className="orch-live__tools" role="toolbar" aria-label="Watch controls">
-        <button type="button" className="orch-live__tool" aria-pressed={paused} data-orch-live-pause title={paused ? 'Play — resume the flights' : 'Pause the flights (the model keeps updating)'} {...shellControl(() => setPaused((v) => !v))}>{paused ? 'Play' : 'Pause'}</button>
+      <div className="orch-live__tools" role="toolbar" aria-label="Watch view controls">
+        <button type="button" className="orch-live__tool" aria-pressed={paused} data-orch-live-pause
+          title={paused ? 'Resume the view — show what the sessions did meanwhile' : 'Pause the view only — sessions keep running (to stop a session, use Interrupt on it)'}
+          {...shellControl(togglePause)}>{paused ? 'Resume view' : 'Pause view'}</button>
         <button type="button" className="orch-live__tool" aria-pressed={follow} data-orch-live-follow title="Follow the session doing the latest work" {...shellControl(() => setFollow((v) => !v))}>Follow</button>
         <button type="button" className="orch-live__tool" data-orch-live-reset title="Reset the camera" {...shellControl(() => setReset((n) => n + 1))}>Reset</button>
       </div>
@@ -885,6 +1014,45 @@ export function OrchestrationLive({ model, islands, primaryIslandId, selectedId,
         <span><i data-k="idle" />idle</span>
         <span className="orch-live__note">{`Tower = lines written by sessions (1 slab ≈ ${ORCH_LIVE_LINES_PER_SLAB}), not git${model.moreFiles > 0 ? ` · +${model.moreFiles} more files` : ''} · drag to orbit, scroll to zoom`}</span>
       </div>
+      {/* M311. SHARED WRITES, AS A REVIEW PATH — the towers say it in colour;
+          this says it in words, with the verb for each kind. One checkout with
+          two writers is a hazard now (review the file); the same path in
+          separate lanes meets at integration (plan the combine). */}
+      {(() => {
+        const shared = model.files.filter((f) => f.contended || f.alsoIn > 0)
+        if (shared.length === 0) return null
+        const titleOf = (id: string): string => model.sessions.find((x) => x.id === id)?.title ?? id
+        return (
+          <div className="orch-live__shared" data-orch-live-shared={shared.length} role="region" aria-label="Shared files">
+            {shared.map((f) => (
+              <div key={`${f.checkout ?? ''}:${f.path}`} className="orch-live__shared-row" data-orch-live-shared-kind={f.contended ? 'contended' : 'overlap'}>
+                <code>{f.name}</code>
+                <span>{f.contended
+                  ? `${f.writers.map(titleOf).join(' and ')} write it in one checkout`
+                  : `also changed in ${f.alsoIn} other ${f.alsoIn === 1 ? 'lane' : 'lanes'} — separate checkouts`}</span>
+                {onFileAction !== undefined && (
+                  <button type="button" className="orch-live__tool" data-orch-live-shared-verb={f.contended ? 'review' : 'combine'}
+                    {...shellControl(() => onFileAction(f.contended ? 'contended' : 'overlap', f))}>{f.contended ? 'Review the file' : 'Plan the combine'}</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+      {/* Brief #16. THE SAME EVENTS, IN WORDS — for reduced motion (where nothing
+          flies) and a paused view (where the picture is frozen). Newest first;
+          batched exactly as the scene batches them, so the two never disagree. */}
+      {showLog && (
+        <ol className="orch-live__log" role="log" aria-live="polite" aria-label="Watch events" data-orch-live-log={log.length}>
+          {log.length === 0
+            ? <li className="orch-live__log-empty">{paused ? 'Nothing new since you paused.' : 'Events appear here as the sessions work.'}</li>
+            : log.map((l) => (
+              <li key={l.key} data-log={l.tone}>
+                <strong>{liveModel.sessions.find((s) => s.id === l.sessionId)?.title ?? 'A session'}</strong> {l.text}
+              </li>
+            ))}
+        </ol>
+      )}
       {model.sessions.length === 0 && <p className="orch-live__empty">No sessions to watch yet — start one and its work shows up here.</p>}
     </div>
   )
