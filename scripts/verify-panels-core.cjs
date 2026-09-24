@@ -4260,8 +4260,13 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // DIRECTION rather than a value keeps this true in both themes without
       // hard-coding either theme's ground.
       const warm = (idle !== null && waiting !== null) ? (waiting[0] - waiting[2]) - (idle[0] - idle[2]) : 0
-      ok('aura.paint.1 a panel that needs you warms the canvas ground toward amber and releases it — measured off the compositor at the aura\'s centre, not read off the DOM',
-        spot !== null && victim !== null && warm >= 2 && attr === null,
+      // M328 (restrained system) REVERSED M229's direction on purpose: state is
+      // the panel's edge and word, never a tinted ground, so the aura tokens are
+      // zero-alpha and the ground must NOT move. The attribute still toggles and
+      // releases (aura.1's plumbing stays), so a later direction can bring the
+      // light back without re-plumbing — and this check then flips again.
+      ok('aura.paint.1 a panel that needs you leaves the canvas ground neutral (M328: no tinted surface explains a state) and the activity attribute still releases — measured off the compositor at the aura\'s centre, not read off the DOM',
+        spot !== null && victim !== null && Math.abs(warm) < 2 && attr === null,
         JSON.stringify({ spot, victim, idle, waiting, warm, attrAfterRelease: attr }))
     }
 

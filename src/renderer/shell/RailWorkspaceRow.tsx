@@ -9,6 +9,12 @@ export interface RailWorkspaceRowProps {
   onSwitch: (id: string) => void
   onRename: (id: string, currentName: string) => void
   onDelete: (id: string, name: string, panelCount: number) => void
+  /**
+   * Decision queue. The waiting count is a door to the REQUEST, not a label
+   * beside a switch: it switches and lands on the longest-waiting panel's
+   * request. Optional — without it the count stays text inside the switch.
+   */
+  onJumpWaiting?: (id: string) => void
 }
 
 /**
@@ -37,7 +43,7 @@ export interface RailWorkspaceRowProps {
  * supported path (Canvas switches away before it removes).
  */
 function RailWorkspaceRowImpl({
-  row, onSwitch, onRename, onDelete
+  row, onSwitch, onRename, onDelete, onJumpWaiting
 }: RailWorkspaceRowProps): JSX.Element {
   return (
     <li
@@ -60,12 +66,24 @@ function RailWorkspaceRowImpl({
           strings.
         */}
         <span className="rail-row__tail">
-          {row.waiting > 0 && (
+          {row.waiting > 0 && onJumpWaiting === undefined && (
             <span className="rail-row__waiting">{needsYouCount(row.waiting)} · </span>
           )}
           {row.panels} panel{row.panels === 1 ? '' : 's'}
         </span>
       </button>
+      {/* A sibling, never nested in the switch (the three-controls rule above). */}
+      {row.waiting > 0 && onJumpWaiting !== undefined && (
+        <button
+          type="button"
+          className="rail-row__verb rail-row__waiting"
+          data-rail-workspace-waiting={row.id}
+          title={`Go to what needs you in ${row.name}`}
+          {...shellControl(() => onJumpWaiting(row.id))}
+        >
+          {needsYouCount(row.waiting)}
+        </button>
+      )}
       <button
         type="button"
         className="rail-row__rename icon-button"

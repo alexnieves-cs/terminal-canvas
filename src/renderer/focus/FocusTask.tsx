@@ -13,15 +13,25 @@ import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import { agentWorkingOf, commentAnchorOf, commentPlace, composeFollowUp, openComments, type ReviewComment } from '@shared/review-comments'
 import { shellControl } from '@renderer/shell/shell-control'
-import type { TaskGroup } from '@renderer/shell/task-queue'
+import type { ResolvedDecision, TaskGroup } from '@renderer/shell/task-queue'
+import { waitedWords } from '@renderer/shell/decision-inbox'
 import { ChatConversation } from '@renderer/chat/ChatConversation'
 import { claimConversation } from '@renderer/chat/conversation-host'
-import { insertIntoComposer, onChatTurnEnd } from '@renderer/chat/chat-store'
+import { deliverToComposer, insertIntoComposer, onChatTurnEnd, useChat } from '@renderer/chat/chat-store'
+import { useAgentState } from '@renderer/session/agent-state-store'
+import { TONE_WORKING } from '@renderer/panels/panel-state'
+import { orchPhase } from '@renderer/orchestration/orchestration-model'
+import { formatAgo } from '@renderer/shell/format-ago'
+import { Menu, MenuTrigger, MenuContent, MenuItem } from '@renderer/primitives'
+import { useLaneAccept } from '@renderer/review/useLaneAccept'
+import type { QueueCheckRun } from '@renderer/shell/task-queue'
+import type { TaskPlan } from '@shared/task-plan'
+import { FocusPlan } from './FocusPlan'
 import { OrchWorkbench, type BenchSubject } from '@renderer/orchestration/OrchWorkbench'
 import { useOrchOutput, useOrchWorktrees } from '@renderer/orchestration/OrchestrationView'
 import { TaskReviewPanel } from '@renderer/review/TaskReviewPanel'
 import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
-import { benchTabOf, clampSplit, focusHeaderOf, openingSide, sideLabel, FOCUS_SIDES, type FocusSide } from './focus-model'
+import { benchTabOf, clampSplit, focusHeaderOf, openingSide, shownAgent, sideLabel, FOCUS_SIDES, type FocusSide } from './focus-model'
 import { readFocusPrefs, writeFocusPrefs } from './focus-prefs-store'
 
 /**
@@ -51,6 +61,17 @@ import { readFocusPrefs, writeFocusPrefs } from './focus-prefs-store'
  * camera is untouched, so Back returns to exactly the view that was left.
  * The split, the side, the open file and its scroll are remembered per task
  * (`focus-prefs-store.ts`).
+ *
+ * M326. THE PLACE A TASK IS WORKED ON. A new task opens here, and so does a
+ * task chosen on Orchestrate's list. The header keeps the repository, the
+ * branch, what the agent is doing right now, and the next action on screen;
+ * the title is a switcher to the other open tasks, and switching keeps each
+ * task's own side, file, scroll and conversation draft (the draft lives with
+ * the chat, `chat-drafts.ts`). A task with more than one agent gets a compact
+ * switcher over its conversation, remembered per task. The review's decision
+ * — Mark reviewed, then Accept — is here too (`useLaneAccept`, the review
+ * node's own flow), so start → read → comment → correct → check → accept
+ * never leaves the page.
  */
 
 export interface FocusTaskProps {
@@ -61,6 +82,11 @@ export interface FocusTaskProps {
   memberIds: readonly string[]
   /** The queue's group for this task, when it needs the person. */
   group?: TaskGroup
+  /**
+   * The decisions this task already had answered, newest first — kept here,
+   * in the task, after the queue lets go of them (`TaskQueue.history`).
+   */
+  history?: readonly ResolvedDecision[]
   handoff?: ReviewHandoff
   /** The review node's task context — the comment and follow-up doors. Absent for a task with no lane. */
   taskContext?: ReviewTaskContext
@@ -78,6 +104,18 @@ export interface FocusTaskProps {
   onOpenPath(path: string): void
   /** Open Start work for a task that has no conversation yet. */
   onStartWork(itemId: string): void
+  /** M325. The side the opener asked for, and when — a new opening re-applies it. */
+  initialSide?: FocusSide
+  openedAt?: number
+  /** M326. Open another task in this page (Back still returns where the first was opened from). */
+  onSwitchTask?(itemId: string): void
+  /** M326. Tasks that need the person, for the switcher's marks. */
+  needsYou?: ReadonlySet<string>
+  /** M327. The task's witnessed check runs, latest per command — the plan's check step reads them. */
+  checkRuns?: readonly QueueCheckRun[]
+  /** M327. Open a new agent for a plan step, its brief INSERTED in the composer. */
+  onSpawnAgent?(opts: { cwd?: string; title: string }): Promise<{ id: string } | { reason: string }>
+  onInterrupt?(panelId: string): void
 }
 
 const LAST_LINES = 12
@@ -85,13 +123,15 @@ const LAST_LINES = 12
 export function FocusTask(props: FocusTaskProps): JSX.Element {
   const { item, panels, workItems, memberIds } = props
   const itemId = item.id
-  const chat = useMemo(() => {
-    const p = item.panelId === undefined ? undefined : panels.find((x) => x.rect.id === item.panelId)
-    return p !== undefined && isChatPanel(p) ? p : undefined
-  }, [item.panelId, panels])
-  const chatId = chat?.rect.id
-  // One composer per chat: the canvas's panel stands aside while this page holds it.
-  useEffect(() => (chatId === undefined ? undefined : claimConversation(chatId)), [chatId])
+  // M326. The task's conversations: its own (the lane's) first, then every other
+  // chat that is a member. The one shown is the person's choice, per task.
+  const chats = useMemo(() => {
+    // A plan step's agent is the task's too, even one started outside the lane.
+    const owners = new Set((item.plan?.steps ?? []).map((st) => st.owner).filter((o): o is string => o !== undefined))
+    const all = panels.filter(isChatPanel).filter((p) => p.rect.id === item.panelId || memberIds.includes(p.rect.id) || owners.has(p.rect.id))
+    return [...all.filter((p) => p.rect.id === item.panelId), ...all.filter((p) => p.rect.id !== item.panelId)]
+  }, [item.panelId, item.plan, panels, memberIds])
+  const chatIds = chats.map((c) => c.rect.id)
 
   const previews = useMemo(() => panels.filter(isBrowserPanel).filter((p) => memberIds.includes(p.rect.id) && p.url !== ''), [panels, memberIds])
   // `page`, not a field named for the binding: the page is the pane's address,
@@ -99,19 +139,29 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
   const has = { page: previews.length > 0, review: props.taskContext !== undefined }
   const sides = FOCUS_SIDES.filter((s) => (s === 'preview' ? has.page : s === 'review' ? has.review : true))
 
+  const hasPlan = item.plan !== undefined
   const [prefs, setPrefs] = useState(() => readFocusPrefs(itemId))
-  const [side, setSideState] = useState<FocusSide>(() => openingSide(readFocusPrefs(itemId), has))
-  // A task switched under a mounted page reads its OWN prefs.
+  const [side, setSideState] = useState<FocusSide>(() => openingSide(readFocusPrefs(itemId), { ...has, plan: hasPlan }, props.initialSide))
+  // A task switched under a mounted page reads its OWN prefs; a new opening
+  // (another press on Orchestrate's list) re-applies the side it asked for.
   const shownItem = useRef(itemId)
+  const shownOpening = useRef(props.openedAt)
   useEffect(() => {
-    if (shownItem.current === itemId) return
+    if (shownItem.current === itemId && shownOpening.current === props.openedAt) return
     shownItem.current = itemId
+    shownOpening.current = props.openedAt
     const next = readFocusPrefs(itemId)
     setPrefs(next)
-    setSideState(openingSide(next, has))
-  }, [itemId]) // eslint-disable-line react-hooks/exhaustive-deps
+    setSideState(openingSide(next, { ...has, plan: hasPlan }, props.initialSide))
+  }, [itemId, props.openedAt]) // eslint-disable-line react-hooks/exhaustive-deps
   const patch = useCallback((p: Parameters<typeof writeFocusPrefs>[1]): void => { setPrefs(writeFocusPrefs(itemId, p)) }, [itemId])
   const setSide = (s: FocusSide): void => { setSideState(s); patch({ side: s }) }
+
+  const chatId = shownAgent(chatIds, item.panelId, prefs.agent) ?? undefined
+  const chat = chats.find((c) => c.rect.id === chatId)
+  // One composer per chat: the canvas's panel stands aside while this page holds it.
+  useEffect(() => (chatId === undefined ? undefined : claimConversation(chatId)), [chatId])
+  const showAgent = (id: string): void => { if (id !== prefs.agent) patch({ agent: id }) }
 
   // The evidence re-reads when the conversation's turn ends — the next result is inspected where it lands.
   const [refresh, setRefresh] = useState(0)
@@ -122,7 +172,8 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
   const subject: BenchSubject = {
     kind: 'task', itemId, title: item.title, memberIds,
     ...(lane === undefined ? {} : { lane: { id: lane.id, path: lane.path, root: lane.root, branch: lane.branch } }),
-    ...(chatId === undefined ? {} : { chatId })
+    // The evidence is the TASK's — its own conversation's, whichever agent is shown.
+    ...(chatIds.includes(item.panelId ?? '') ? { chatId: item.panelId as string } : chatId === undefined ? {} : { chatId })
   }
   // Output: the task's terminal when it has one (a build, a server), its conversation otherwise.
   const terminal = panels.find((p) => memberIds.includes(p.rect.id) && isTerminalPanel(p))
@@ -137,7 +188,20 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
     hasConversation: chat !== undefined
   })
   const composerRef = useRef<HTMLElement | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const goConversation = (): void => { composerRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-input]')?.focus({ preventScroll: true }) }
+  // A plan step handed to an agent: show that agent FIRST — so this page claims
+  // its conversation before anything is inserted (the canvas's panel behind
+  // would otherwise take the insert) — then put the brief in its composer and
+  // give it the keyboard once it has mounted. `deliverToComposer` waits for a
+  // brand-new chat's session to exist.
+  const showAgentWith = (id: string, text?: string): void => {
+    showAgent(id)
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if (text === undefined) { goConversation(); return }
+      void deliverToComposer(id, text, { focus: true })
+    }))
+  }
   const go = (): void => {
     if (header.go === null) { if (chat === undefined) props.onStartWork(itemId); return }
     if (header.go.kind === 'conversation') goConversation()
@@ -251,13 +315,78 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
   const [previewIndex, setPreviewIndex] = useState(0)
   const preview = previews[Math.min(previewIndex, previews.length - 1)]
 
+  /* ── M326. The decision, in the page: Mark reviewed, then Accept ── */
+  const accept = useLaneAccept(ctx, false, () => setRefresh((n) => n + 1))
+  const h = ctx?.handoff
+  const signature = h?.changes?.signature
+  const markable = ctx !== undefined && signature !== undefined && (h?.state === 'ready' || h?.state === 'shared')
+  const reviewedNow = h?.standing === 'current'
+  const accepted = h?.state === 'accepted'
+  const markReviewed = (): void => {
+    if (!markable || ctx === undefined || signature === undefined) return
+    ctx.onMarkReviewed(itemId, signature, ctx.paths.length, h?.changes?.identity)
+    ctx.onRefresh()
+  }
+  const decision = ctx === undefined || (!markable && !accepted && accept?.outcome == null) ? null : (
+    <div className="focus__decide" data-focus-decide={accepted ? 'accepted' : reviewedNow ? 'reviewed' : 'unreviewed'}>
+      {accept !== null && accept.armed !== null ? (
+        <>
+          <span className="focus__decide-sentence" data-focus-accept-armed>{accept.armed}</span>
+          <button type="button" className="focus__primary" data-focus-accept-confirm disabled={accept.busy} {...shellControl(accept.onConfirm)}>{accept.busy ? 'Merging…' : 'Merge'}</button>
+          <button type="button" className="focus__secondary" disabled={accept.busy} {...shellControl(accept.onCancel)}>Cancel</button>
+        </>
+      ) : accepted ? (
+        <span className="focus__decide-sentence">{h?.detail}</span>
+      ) : (
+        <>
+          <span className="focus__decide-sentence">{reviewedNow ? 'You have read the current changes.' : `${ctx.paths.length} file${ctx.paths.length === 1 ? '' : 's'} changed — read them, then mark them reviewed.`}</span>
+          {/* ONE filled primary: Mark reviewed until the current changes are read, then Accept. */}
+          <button type="button" className={reviewedNow ? 'focus__secondary' : 'focus__primary'} data-focus-mark-reviewed disabled={!markable}
+            title={markable ? 'record that you have read these changes' : h?.detail} {...shellControl(markReviewed)}>{ctx.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}</button>
+          {accept !== null && (
+            <button type="button" className={reviewedNow ? 'focus__primary' : 'focus__secondary'} data-focus-accept disabled={accept.blocked !== null || accept.busy}
+              title={accept.blocked ?? 'merge this task\'s branch into your main branch — you see the plan first'} {...shellControl(accept.onArm)}>{accept.busy ? 'Reading…' : 'Accept…'}</button>
+          )}
+        </>
+      )}
+      {accept?.outcome != null && <span className="focus__decide-outcome" role="status" data-focus-accept-outcome>{accept.outcome}</span>}
+    </div>
+  )
+
+  /* ── M326. The task switcher ── */
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const otherTasks = workItems.filter((w) => w.id !== itemId && w.state !== 'done').slice(0, 20)
+
   return (
     <div className="focus-view" data-focus-task={itemId} data-focus-side={side} onKeyDown={onKey} role="region" aria-label={`Focus: ${item.title}`}>
       <header className="focus__head">
         <button type="button" className="focus__back" data-focus-back title="Back to where you were (Esc)" {...shellControl(props.onBack)}>← Back</button>
         <div className="focus__id">
-          <h1 className="focus__title" data-focus-title title={item.title}>{item.title}</h1>
+          {props.onSwitchTask !== undefined && otherTasks.length > 0 ? (
+            <Menu open={switchOpen} onOpenChange={setSwitchOpen}>
+              {/* Still the page's heading; the heading is the switcher's trigger. */}
+              <h1 className="focus__title" data-focus-title title={item.title}>
+                <MenuTrigger className="focus__switch" data-focus-switch aria-label={`${item.title} — switch to another task`}>
+                  <span className="focus__title-text">{item.title}</span><span className="focus__switch-caret" aria-hidden="true">▾</span>
+                </MenuTrigger>
+              </h1>
+              <MenuContent>
+                <div className="focus__menu" role="menu" data-focus-switch-menu>
+                  {otherTasks.map((w) => (
+                    <MenuItem key={w.id} className="focus__menu-item" data-focus-switch-to={w.id} onSelect={() => props.onSwitchTask?.(w.id)}>
+                      {props.needsYou?.has(w.id) === true && <span className="status-dot" data-tone="needs-you" aria-label="needs you" />}
+                      <span className="focus__menu-label">{w.title}</span>
+                    </MenuItem>
+                  ))}
+                </div>
+              </MenuContent>
+            </Menu>
+          ) : (
+            <h1 className="focus__title" data-focus-title title={item.title}>{item.title}</h1>
+          )}
           <span className="focus__repo" data-focus-repo title={lane?.path ?? chat?.chat.cwd}>{repository}{lane !== undefined ? ` · ${lane.branch}` : ''}{backend !== undefined ? ` · ${BACKENDS[backend].label}` : ''}</span>
+          {chatId !== undefined && <FocusActivity panelId={chatId} />}
         </div>
         <div className="focus__state">
           {header.blocker !== null && <p className="focus__blocker" data-focus-blocker role="status">{header.blocker}</p>}
@@ -265,12 +394,44 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
             title={header.go === null ? header.next : `${header.next} — here, without leaving this page`} {...shellControl(go)}>
             <span className="focus__next-label">Next</span> {header.next}
           </button>
+          {(props.history?.length ?? 0) > 0 && (
+            <button type="button" className="focus__history-toggle" data-focus-history-toggle aria-expanded={historyOpen}
+              title="Requests, failed checks and reviews this task already had answered" {...shellControl(() => setHistoryOpen((v) => !v))}>
+              Answered · {props.history?.length}
+            </button>
+          )}
+          {historyOpen && (props.history?.length ?? 0) > 0 && (
+            <ol className="focus__history" data-focus-history>
+              {props.history?.map((h) => (
+                <li key={h.key} className="focus__history-row" data-focus-history-kind={h.kind} data-focus-history-outcome={h.outcome}>
+                  <span className="focus__history-text">{h.text}</span>
+                  <span className="focus__history-at">{((w) => (w === 'just now' ? w : `${w} ago`))(waitedWords(h.at, Date.now()))}</span>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
-        <button type="button" className="pf__verb pf__verb--word" data-focus-show-canvas title="Leave this page and frame the task on the canvas" {...shellControl(() => props.onShowOnCanvas(itemId))}>Show on canvas</button>
+        <Menu open={moreOpen} onOpenChange={setMoreOpen}>
+          <MenuTrigger className="focus__more" aria-label="More" data-focus-more>⋯</MenuTrigger>
+          <MenuContent>
+            <div className="focus__menu" role="menu">
+              <MenuItem className="focus__menu-item" data-focus-show-canvas onSelect={() => props.onShowOnCanvas(itemId)}>Show on canvas</MenuItem>
+              {chat === undefined && <MenuItem className="focus__menu-item" onSelect={() => props.onStartWork(itemId)}>Start work…</MenuItem>}
+            </div>
+          </MenuContent>
+        </Menu>
       </header>
 
       <div className="focus__body" ref={bodyRef} style={{ gridTemplateColumns: `${(split * 100).toFixed(1)}% 8px minmax(0, 1fr)` }}>
         <section className="focus__conversation" data-focus-conversation={chatId ?? ''} ref={composerRef} aria-label="Conversation">
+          {/* M326. More than one agent on the task: which conversation is shown. */}
+          {chats.length > 1 && (
+            <div className="focus__agents" role="tablist" aria-label="Agents on this task" data-focus-agents={chats.length}>
+              {chats.map((c) => (
+                <AgentTab key={c.rect.id} id={c.rect.id} title={c.title ?? c.rect.id} on={c.rect.id === chatId} onPick={() => showAgent(c.rect.id)} />
+              ))}
+            </div>
+          )}
           {chat !== undefined && backend !== undefined ? (
             // Keyed by the chat: a task switched under a mounted page is a NEW
             // conversation, and its draft, attachments and queue edit must not
@@ -297,8 +458,27 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
               </button>
             ))}
           </div>
+          {(side === 'changes' || side === 'review') && decision}
           <div className="focus__pane">
-            {benchTab !== null ? (
+            {side === 'plan' ? (
+              <FocusPlan
+                itemId={itemId} title={item.title}
+                {...(item.brief === undefined ? {} : { brief: item.brief })}
+                {...(item.plan === undefined ? {} : { plan: item.plan })}
+                {...(item.checks?.[0] === undefined ? {} : { check: item.checks[0] })}
+                {...(item.panelId === undefined || !chatIds.includes(item.panelId) ? {} : { ownChat: item.panelId })}
+                chats={chats.map((c) => ({ id: c.rect.id, title: c.title ?? c.rect.id }))}
+                {...(lane === undefined ? {} : { lanePath: lane.path })}
+                runs={props.checkRuns ?? []}
+                review={{ standing: h?.standing ?? 'none', accepted: accepted || item.merged !== undefined }}
+                onPatchPlan={(plan: TaskPlan | undefined) => props.onPatchWorkItem(itemId, { plan })}
+                {...(props.onSpawnAgent === undefined ? {} : { onSpawnAgent: props.onSpawnAgent })}
+                onShowAgent={showAgentWith}
+                {...(props.onInterrupt === undefined ? {} : { onInterrupt: props.onInterrupt })}
+                {...(ctx?.onRunChecks === undefined ? {} : { onRunCheck: (command: string) => ctx.onRunChecks!(itemId, command) })}
+                onReview={() => setSide(has.review ? 'review' : 'changes')}
+              />
+            ) : benchTab !== null ? (
               <OrchWorkbench
                 subject={subject} current={subject} pinned={null} onPin={() => {}}
                 tab={benchTab} onTab={() => {}} height={0} onHeight={() => {}} open onOpen={() => {}} reading
@@ -378,6 +558,35 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
         </section>
       </div>
     </div>
+  )
+}
+
+/**
+ * M326. What the shown agent is doing RIGHT NOW, in one line: the tool it is
+ * using, that it is thinking, that it waits on the person, or when its last
+ * turn ended. The phase is `orchPhase`'s (the Orchestrate inspector's own
+ * reading); a tool name is the agent's text too, so it crosses the gate.
+ */
+function FocusActivity({ panelId }: { panelId: string }): JSX.Element {
+  const chat = useChat(panelId)
+  const state = useAgentState(panelId)
+  const blocks = chat.live !== null ? chat.live.blocks.map((b) => b.block) : chat.turns.filter((t) => t.role === 'assistant').at(-1)?.blocks ?? []
+  const phase = orchPhase(blocks, chat.live !== null)
+  const words = state === 'wants-you' ? 'Waiting on you'
+    : chat.live !== null ? (phase.kind === 'idle' ? 'Working' : outward(phase.label, `panel ${panelId}`).text)
+    : chat.lastTurn !== undefined ? `${chat.lastTurn.kind === 'ok' ? 'Idle — last turn ended' : chat.lastTurn.kind === 'interrupted' ? 'Interrupted' : 'Stopped — its last turn failed'} ${formatAgo(chat.lastTurn.at)}`
+    : 'Idle'
+  return <span className="focus__activity" data-focus-activity={state ?? 'none'} role="status">{words}</span>
+}
+
+/** M326. One agent on the task: its state and its name — the conversation shown when pressed. */
+function AgentTab({ id, title, on, onPick }: { id: string; title: string; on: boolean; onPick: () => void }): JSX.Element {
+  const state = useAgentState(id)
+  const tone = state === 'wants-you' ? 'needs-you' : state === 'busy' || state === 'starting' ? TONE_WORKING : 'idle'
+  return (
+    <button type="button" role="tab" aria-selected={on} className={`focus__agent${on ? ' focus__agent--on' : ''}`} data-focus-agent={id} {...shellControl(onPick)}>
+      <span className="status-dot" data-tone={tone} aria-hidden="true" />{title}
+    </button>
   )
 }
 

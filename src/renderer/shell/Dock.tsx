@@ -149,6 +149,10 @@ function DockImpl({
   const openEvidence = (d: QueueDecision): void => {
     setQueueCursor(d.key)
     if (d.evidence.kind === 'output') { setOpenOutput(openOutput === d.key ? null : d.key); return }
+    // A permission is answered HERE (#16): its evidence is the request itself,
+    // opened in place — closing the popover to frame the agent took the
+    // person away from the one surface that resolves it.
+    if (d.evidence.kind === 'decision' && d.evidence.requestId !== undefined) { setOpenRequest(d.evidence.requestId); return }
     if (onEvidence === undefined) return
     setReturnTo(d.key)
     if (attentionOpen) onToggleAttention()
@@ -226,7 +230,8 @@ function DockImpl({
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const orchPressed = centerView === 'orchestration'
-  const renderInboxRow = (item: InboxItem, queueKey?: string): JSX.Element => {
+  const [historyOpen, setHistoryOpen] = useState<string | null>(null)
+  const renderInboxRow = (item: InboxItem, queueKey?: string, affects?: string): JSX.Element => {
                   const row = { id: item.panelId, label: item.label }
                   const a = item.approval
                   const open = a !== undefined && shownRequest === a.requestId
@@ -265,6 +270,7 @@ function DockImpl({
                           {item.moreFromPanel > 0 && <span data-inbox-more>+{item.moreFromPanel} more waiting</span>}
                           <span data-inbox-waited>waiting {waitedWords(item.since, now)}</span>
                         </p>
+                        {affects !== undefined && <p className="queue__row-affects" data-queue-row-affects>{affects}</p>}
                       </div>
                     )}
                     {/* M76. A chat's question, answerable HERE. A
@@ -361,12 +367,33 @@ function DockImpl({
         )}
       </li>
     )
-    return [head, ...g.decisions.map((d) => d.inbox !== undefined ? renderInboxRow(d.inbox, d.key) : (
+    // What this task already had answered — kept in the task, folded.
+    const hkey = g.itemId ?? 'none'
+    const history = g.history.length === 0 ? [] : [(
+      <li key={`history:${hkey}`} className="queue__history" data-queue-history={hkey}>
+        <button type="button" className="rail-row__verb queue__history-toggle" aria-expanded={historyOpen === hkey} data-queue-history-toggle={hkey}
+          {...shellControl(() => setHistoryOpen(historyOpen === hkey ? null : hkey))}>
+          Answered in this task · {g.history.length}
+        </button>
+        {historyOpen === hkey && (
+          <ol className="queue__history-list">
+            {g.history.map((h) => (
+              <li key={h.key} className="queue__history-row" data-queue-history-kind={h.kind} data-queue-history-outcome={h.outcome}>
+                <span className="queue__history-text">{h.text}</span>
+                <span className="queue__history-at">{((w) => (w === 'just now' ? w : `${w} ago`))(waitedWords(h.at, now))}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </li>
+    )]
+    return [head, ...g.decisions.map((d) => d.inbox !== undefined ? renderInboxRow(d.inbox, d.key, d.affects) : (
       <li key={d.key} className="rail-row rail-attention queue__row" data-queue-kind={d.kind} data-queue-key={d.key} data-queue-cursor={d.key === cursor ? '' : undefined}>
         <div className="queue__row-main">
           <span className="rail-row__dot status-dot" data-tone={d.kind === 'review' ? 'idle' : 'needs-you'} aria-hidden="true" />
           <span className="queue__row-text">{d.kind === 'check' ? 'Check failed — ' : d.kind === 'review' ? 'Review — ' : d.kind === 'lost' ? 'Before the restart — ' : ''}{d.text}</span>
         </div>
+        <p className="queue__row-affects" data-queue-row-affects>{d.affects}</p>
         <div className="queue__row-verbs">
           <button type="button" className="rail-row__verb" data-queue-evidence={d.evidence.kind}
             {...shellControl(() => openEvidence(d))}>{d.evidence.kind === 'output' ? (openOutput === d.key ? 'Hide output' : 'Output') : d.evidence.kind === 'review' ? 'Review' : 'Go to'}</button>
@@ -379,7 +406,7 @@ function DockImpl({
           <div className="queue__output"><CheckRunOutput outputId={d.evidence.outputId} subject={`panel ${d.evidence.panelId}`} fallback="This run has no output record." /></div>
         )}
       </li>
-    ))]
+    )), ...history]
   }
   return (
     <nav className="shell__dock" aria-label="Dock">
@@ -478,7 +505,7 @@ function DockImpl({
               ) : decisions.length === 0 && (queue === undefined || flatQueue(queue)) ? (
                 <li className="rail-empty" data-inbox-all-snoozed="">Everything waiting is snoozed — it comes back on its own, or wake it below.</li>
               ) : (
-                (queue === undefined || flatQueue(queue) ? decisions.map((item) => renderInboxRow(item, queue === undefined ? undefined : item.key)) : queue.groups.map((g) => renderGroup(g)))
+                (queue === undefined || flatQueue(queue) ? decisions.map((item) => renderInboxRow(item, queue === undefined ? undefined : item.key, queue?.groups.flatMap((g) => g.decisions).find((d) => d.key === item.key)?.affects)) : queue.groups.map((g) => renderGroup(g)))
               )}
             </ul>
             {/* M308. Snoozed decisions: still waiting, counted, and wakeable. */}

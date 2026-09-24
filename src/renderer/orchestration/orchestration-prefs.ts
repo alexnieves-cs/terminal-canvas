@@ -18,11 +18,18 @@ import type { OrchMode } from './orchestration-model'
 import { ORCH_VIEWS_MAX, WORKBENCH_DEFAULT_HEIGHT, type OrchSavedView, type PersistedOrchestrate, type WorkbenchTab } from '@shared/orchestrate-prefs'
 
 export type OrchLens = 'scene' | 'list' | 'watch'
+/**
+ * M325. What the page shows: the task list (the default, and what a record
+ * without the field means) or the visualisation — the scene, Watch or the
+ * List, whichever `lens` names.
+ */
+export type OrchView = 'tasks' | 'visualize'
 /** M287. Output and Review left the side column for the workbench; the side keeps Activity and Files. */
 export type OrchSideTab = 'activity' | 'files'
 
 export interface OrchPrefs {
   mode: OrchMode
+  view: OrchView
   lens: OrchLens
   camera: { x: number; y: number; k: number }
   tab: OrchSideTab
@@ -48,6 +55,7 @@ export interface OrchPrefs {
 
 const DEFAULTS: OrchPrefs = {
   mode: 'dev',
+  view: 'tasks',
   lens: 'scene',
   camera: { x: 0, y: 0, k: 1 },
   tab: 'activity',
@@ -68,6 +76,8 @@ export function seedOrchPrefs(persisted: PersistedOrchestrate | undefined): void
   if (persisted === undefined) return
   prefs = {
     ...prefs,
+    // Absent is the task list — the record wins over what another workspace left.
+    view: persisted.view === 'visualize' ? 'visualize' : 'tasks',
     ...(persisted.lens === undefined ? {} : { lens: persisted.lens }),
     ...(persisted.mode === undefined ? {} : { mode: persisted.mode }),
     ...(persisted.sideTab === undefined ? {} : { tab: persisted.sideTab }),
@@ -105,7 +115,8 @@ export function viewFromPrefs(p: OrchPrefs, name: string, id: string): OrchSaved
 export function prefsFromView(p: OrchPrefs, v: OrchSavedView): OrchPrefs {
   return {
     ...p,
-    ...(v.lens === undefined ? {} : { lens: v.lens }),
+    // A saved view is a way of LOOKING at the work, so it opens the visualisation it names.
+    ...(v.lens === undefined ? {} : { lens: v.lens, view: 'visualize' as const }),
     ...(v.mode === undefined ? {} : { mode: v.mode }),
     ...(v.sideTab === undefined ? {} : { tab: v.sideTab }),
     ...(v.camera === undefined ? {} : { camera: { ...v.camera } }),
@@ -121,7 +132,7 @@ export function withSavedView(views: readonly OrchSavedView[], next: OrchSavedVi
 
 /** The record the workspace saves — every field, so a relaunch returns to the same view. */
 export function persistedOrchPrefs(p: OrchPrefs): PersistedOrchestrate {
-  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? {} : { open: false }) }, lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera }, ...(p.islands.length === 0 ? {} : { islands: [...p.islands] }), ...(p.views.length === 0 ? {} : { views: p.views.map((v) => ({ ...v })) }) }
+  return { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open ? {} : { open: false }) }, ...(p.view === 'visualize' ? { view: 'visualize' as const } : {}), lens: p.lens, mode: p.mode, sideTab: p.tab, camera: { ...p.camera }, ...(p.islands.length === 0 ? {} : { islands: [...p.islands] }), ...(p.views.length === 0 ? {} : { views: p.views.map((v) => ({ ...v })) }) }
 }
 
 let prefs: OrchPrefs = DEFAULTS

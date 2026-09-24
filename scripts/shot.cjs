@@ -709,6 +709,9 @@ const SCENES = [
       try {
         await k.loadMain()
         await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
+        await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
         if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration scene: no 3D cube painted')
         // The fixture has a focused task, which ghosts every non-member cube and
@@ -767,6 +770,9 @@ const SCENES = [
       const seeded = []
       try {
         await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
+        await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
         if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration-working: no 3D cube painted')
         await k.theme('dark')

@@ -1058,7 +1058,10 @@ export function buildInspectorModelBare(
   // "no answer yet" for Codex when this process has no per-panel transcript
   // adapter would be a confident wrong answer.
   const pinned =
-    panel.spec.agent !== undefined && AGENT_CAPABILITIES[panel.spec.agent].transcriptAccounting
+    // `?.`: a layout can carry an agent kind this build does not know (a later
+    // build's, or a hand-written file — verify:panels:orchestrate's reconcile
+    // fixture writes `'claude'`), and indexing past it took the whole shell down.
+    panel.spec.agent !== undefined && AGENT_CAPABILITIES[panel.spec.agent]?.transcriptAccounting === true
   const isClaude = panel.spec.agent === 'claude-code'
   const processLive = running !== undefined
   const restartable = isRestartable(status)

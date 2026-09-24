@@ -5,8 +5,9 @@ import type { Panel } from '@renderer/panels/panels'
 import type { Inbox } from './decision-inbox'
 import {
   buildTaskQueue, isCheckCommand, parseRemembered, rememberDecisions,
-  type QueueCheckRun, type RememberedDecision, type TaskQueue
+  type HistoryEvent, type QueueCheckRun, type RememberedDecision, type TaskQueue
 } from './task-queue'
+import { onRecordLanded } from '@renderer/orchestration/record-landed'
 
 /**
  * M318. The task queue's renderer half: the inputs the pure builder takes,
@@ -106,8 +107,11 @@ export function useTaskQueue(deps: TaskQueueDeps): TaskQueue {
     if (typeof door !== 'function') return
     return door((ev) => { if (ev.status === 'passed' || ev.status === 'exited') setRunTick((n) => n + 1) })
   }, [])
+  // A decision answered HERE lands in its task's history in the same beat it
+  // leaves the queue — the record's own "landed", not a poll.
+  useEffect(() => onRecordLanded((row) => { if (row.source === 'person') setRunTick((n) => n + 1) }), [])
 
-  const [runs, setRuns] = useState<ReadonlyMap<string, QueueCheckRun[]>>(() => new Map())
+  const [runs, setRuns] = useState<ReadonlyMap<string, { runs: QueueCheckRun[]; events: HistoryEvent[] }>>(() => new Map())
   const taskKey = tasks.map((t) => `${t.id}:${(members.get(t.id) ?? []).join(',')}`).join(' ')
   useEffect(() => {
     if (!active) return
@@ -120,9 +124,11 @@ export function useTaskQueue(deps: TaskQueueDeps): TaskQueue {
         const read = await door({ itemId: t.id, ...(panelIds.length === 0 ? {} : { panelIds }) }, TIMELINE_ROWS)
         const rows: QueueCheckRun[] = read.entries.flatMap((e) => e.kind === 'command' && isCheckCommand(e.row.command, { watcher: watcherIds.has(e.row.panelId), ...(t.checks === undefined ? {} : { declared: t.checks }) })
           ? [{ command: e.row.command, panelId: e.row.panelId, at: e.row.endedAt, exitCode: e.row.exitCode, ...(e.row.outputId === undefined ? {} : { outputId: e.row.outputId }) }] : [])
-        return [t.id, rows] as const
+        const events: HistoryEvent[] = read.entries.flatMap((e) => e.kind === 'event' && e.row.source === 'person'
+          ? [{ event: e.row.event, source: e.row.source, at: e.row.at, title: e.row.title, ...(e.row.key === undefined ? {} : { key: e.row.key }) }] : [])
+        return [t.id, { runs: rows, events }] as const
       } catch {
-        return [t.id, [] as QueueCheckRun[]] as const
+        return [t.id, { runs: [] as QueueCheckRun[], events: [] as HistoryEvent[] }] as const
       }
     })).then((pairs) => { if (live) setRuns(new Map(pairs)) })
     return () => { live = false }
@@ -157,7 +163,8 @@ export function useTaskQueue(deps: TaskQueueDeps): TaskQueue {
         return {
           itemId: t.id, title: t.title, members: members.get(t.id) ?? [],
           ...(h === undefined ? {} : { handoff: { state: h.state, standing: h.standing, ...(h.changes === undefined ? {} : { files: h.changes.files }) } }),
-          runs: runs.get(t.id) ?? []
+          runs: runs.get(t.id)?.runs ?? [],
+          events: runs.get(t.id)?.events ?? []
         }
       })
     })

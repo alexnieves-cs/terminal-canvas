@@ -74,6 +74,15 @@ export interface BoardVerbs {
   fitTask?: () => VerbOutcome
   /** M324. Open the focus view of the task a card or member panel belongs to. */
   focus?: (panelId: string) => VerbOutcome
+  /** M326. Open a task's focus view by its item — where a task a person just started lands. */
+  focusItem?: (itemId: string) => void
+  /**
+   * Decision queue. The ONE task a panel belongs to, or undefined for none or
+   * several — so an answered request is filed under its task. A task
+   * timeline read filters events by `itemId`, so a row without one never
+   * shows up in the task's history.
+   */
+  taskOfPanel?: (panelId: string) => string | undefined
 }
 
 export interface BoardVerbsDeps {

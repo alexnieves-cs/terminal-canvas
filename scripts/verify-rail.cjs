@@ -2671,6 +2671,33 @@ const session = (id, over = {}) => ({
     JSON.stringify({ fromQueue, asking, toReview, blocked, none }))
 }
 
+// M325/M326 — focus.4–.5. The side the OPENER asked for wins when the task can
+//     show it (a failing check opens Checks); a task with a plan opens on it the
+//     first time; the conversation shown is the person's choice per task while
+//     that chat is still the task's. And the queue's per-task check tallies.
+{
+  const opening = typeof R.openingSide === 'function' ? R.openingSide : () => null
+  const shown = typeof R.shownAgent === 'function' ? R.shownAgent : () => undefined
+  ok('focus.4 an asked-for side wins unless the task cannot show it; a first opening of a task with a plan lands on the plan, a remembered side still wins after; the agent shown is the remembered one while it is still the task\'s, else the task\'s own, else its first, else none',
+    opening({ side: 'changes', at: 5 }, { page: false, review: true }, 'checks') === 'checks' &&
+      opening({ side: 'changes', at: 5 }, { page: false, review: true }, 'preview') === 'changes' &&
+      opening({ side: 'changes', at: 0 }, { page: false, review: true, plan: true }) === 'plan' &&
+      opening({ side: 'checks', at: 7 }, { page: false, review: true, plan: true }) === 'checks' &&
+      shown(['a', 'b'], 'a', 'b') === 'b' && shown(['a', 'b'], 'a', 'gone') === 'a' && shown(['b'], 'a', undefined) === 'b' && shown([], 'a', 'b') === null,
+    'openingSide/shownAgent')
+  const tally = typeof R.tallyChecks === 'function' ? R.tallyChecks : () => null
+  const t = tally([
+    { command: 'npm test', panelId: 'p', at: 1, exitCode: 1 },
+    { command: 'npm test', panelId: 'p', at: 3, exitCode: 0 },
+    { command: 'npm run lint', panelId: 'p', at: 2, exitCode: null },
+    { command: 'tsc', panelId: 'p', at: 2, exitCode: 0 }
+  ])
+  const q = typeof R.buildTaskQueue === 'function' ? R.buildTaskQueue({ now: 10, inbox: { items: [], snoozed: [] }, tasks: [{ itemId: 'i', title: 'T', members: [], runs: [{ command: 'x', panelId: 'p', at: 1, exitCode: 0 }, { command: 'x', panelId: 'p', at: 2, exitCode: 2 }] }] }) : null
+  ok('focus.5 check tallies read the LATEST run per command (a re-run that passed is a pass; a signal is a failure), and the queue carries each task\'s tally and its latest runs',
+    t && t.passed === 2 && t.failed === 1 && q && q.checks.i.failed === 1 && q.checks.i.passed === 0 && q.runs.i.length === 1 && q.runs.i[0].exitCode === 2,
+    JSON.stringify({ t, checks: q?.checks, runs: q?.runs }))
+}
+
 // M206 — groups.1. THE RAIL AS OBJECTS AND TASK ROLES: every row lands in exactly one group
 //     (agents · files · reviews · work · workflows · capabilities), in array
 //     order within it; an empty group is omitted; the group order is fixed;
@@ -3946,6 +3973,50 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
       R.isCheckCommand('npx tsc --noEmit') && R.isCheckCommand('cargo test') && R.isCheckCommand('./scripts/ci.sh', { declared: ['./scripts/ci.sh'] }) &&
       R.isCheckCommand('anything', { watcher: true }),
     JSON.stringify(order))
+}
+
+// Decision queue (brief item 5). Every decision says what the action AFFECTS
+// — the tool and where it runs, whose turn waits, what stays unverified,
+// what Accept lands — and a task keeps the decisions it already had answered.
+// Each of these fails silently: an affects line that drops the action reads
+// as a request with no subject, and a history read from memory forgets a
+// restart the ledger beside it remembers.
+{
+  const appr = { id: 'chatA', requestId: 'r1', toolName: 'Bash', argument: 'npm install left-pad', action: 'npm install left-pad', cwd: '/Users/me/api/' }
+  const inbox = R.buildInbox({ now: 10_000, rows: [{ id: 'chatA', label: 'builder', approval: appr }, { id: 'chatQ', label: 'writer' }], approvals: [appr], kindOf: () => 'chat', firstSeen: new Map() })
+  const tasks = [
+    { itemId: 'T1', title: 'API rewrite', members: ['chatA'], runs: [{ command: 'npm test', panelId: 'chatA', at: 1, exitCode: 1 }, { command: 'npm test', panelId: 'chatA', at: 3, exitCode: 0 }, { command: 'npm run lint', panelId: 'chatA', at: 4, exitCode: 2 }],
+      events: [
+        { event: 'permission', source: 'person', at: 2, title: 'Allowed Bash — git status', key: 'p:r0' },
+        { event: 'permission', source: 'person', at: 5, title: 'Denied Write — src/app.ts', key: 'p:r2' },
+        { event: 'permission', source: 'agent', at: 6, title: 'Allowed Bash — rm -rf /' },
+        { event: 'artifact', source: 'person', at: 7, title: 'Reviewed 3 changed files' },
+        { event: 'dispatch', source: 'person', at: 0, title: 'Started work' }
+      ] },
+    { itemId: 'T2', title: 'Docs', members: ['chatQ'], handoff: { state: 'ready', standing: 'none', files: 2 } }
+  ]
+  const q = R.buildTaskQueue({ now: 10_000, tasks, inbox })
+  const d = (key) => q.groups.flatMap((g) => g.decisions).find((x) => x.key === key)
+  ok('queue.affects.1 every decision says what its action affects: a permission names the tool, the action and the directory it runs in and whose turn waits; a question names the turn that waits; a failed check what stays unverified; a review what Accept lands',
+    /^Affects Bash `npm install left-pad` in api — builder's turn waits on it\.$/.test(d('p:r1')?.affects ?? '') &&
+      /writer's next turn/.test(d('q:chatQ')?.affects ?? '') &&
+      /API rewrite can be verified.*`npm run lint`/.test(d('check:T1:npm run lint')?.affects ?? '') &&
+      /2 changed files — nothing lands on your branch until you accept/.test(d('review:T2')?.affects ?? '') &&
+      q.groups.every((g) => g.decisions.every((x) => typeof x.affects === 'string' && x.affects !== '')),
+    JSON.stringify(q.groups.flatMap((g) => g.decisions.map((x) => [x.key, x.affects]))))
+  const h = q.history.T1 ?? []
+  ok('queue.history.1 a task keeps its answered decisions newest first — the person\'s allowed and denied requests and review marks, and a check that passed after failing — never an agent\'s claim, a dispatch, or a check still failing; the group carries the same list',
+    h.map((x) => x.text).join(' | ') === 'Reviewed 3 changed files | Denied Write — src/app.ts | `npm test` passed after failing | Allowed Bash — git status' &&
+      h.map((x) => x.outcome).join() === 'resolved,denied,resolved,allowed' &&
+      q.groups.find((g) => g.itemId === 'T1')?.history.length === 4 && q.history.T2 === undefined,
+    JSON.stringify(h))
+  ok('queue.history.2 an answered permission is recorded by what it decided — the tool and its action, clipped to one line, "for this session" when it was a grant — and falls back to the old words only when the request could not be read',
+    R.permissionRecordTitle(true, undefined, { toolName: 'Bash', argument: 'npm   test' }) === 'Allowed Bash — npm test' &&
+      R.permissionRecordTitle(false, undefined, { toolName: 'Write', argument: 'a.ts' }) === 'Denied Write — a.ts' &&
+      R.permissionRecordTitle(true, 'session', { toolName: 'Bash', argument: '' }) === 'Allowed for this session: Bash' &&
+      R.permissionRecordTitle(true, undefined, { toolName: 'Bash', argument: 'x'.repeat(200) }).length < 100 &&
+      R.permissionRecordTitle(false, undefined) === 'Denied a request',
+    R.permissionRecordTitle(true, 'session', { toolName: 'Bash', argument: '' }))
 }
 
 const failed = results.filter((r) => !r.pass)

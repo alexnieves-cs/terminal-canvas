@@ -59,6 +59,31 @@ export interface QueueDecision {
   evidence: QueueEvidence
   /** The inbox item, for permission and question — the Dock renders its verbs. */
   inbox?: InboxItem
+  /**
+   * WHAT THE ACTION AFFECTS, in one line: what the tool would touch and
+   * where, whose turn waits on a reply, what a failed check keeps from being
+   * verified, which changes Accept would land. The "why" says what happened
+   * and the verb says what is asked; this is the part a person needs before
+   * pressing it.
+   */
+  affects: string
+}
+
+/**
+ * A decision that is no longer waiting — kept in its task, newest first, so
+ * "what did I allow, and when" has an answer after the request leaves the
+ * queue. Read from the durable record (the person's own rows, and the check
+ * runs that went from failing to passing), never from memory: a history that
+ * forgot a restart would contradict the ledger it sits beside.
+ */
+export interface ResolvedDecision {
+  key: string
+  kind: 'permission' | 'check' | 'review'
+  at: number
+  /** One line: "Allowed Bash — npm test", "`npm test` passed after failing". */
+  text: string
+  /** How it ended — `allowed` / `denied` for a permission, else `resolved`. */
+  outcome: 'allowed' | 'denied' | 'resolved'
 }
 
 export interface TaskGroup {
@@ -74,6 +99,8 @@ export interface TaskGroup {
   /** Tasks that wait on this one, over hand-off links. */
   affects: { itemId: string; title: string }[]
   oldest: number
+  /** Decisions this task already had answered, newest first (`resolvedDecisions`). */
+  history: ResolvedDecision[]
 }
 
 export interface TaskQueue {
@@ -83,6 +110,29 @@ export interface TaskQueue {
   /** Active tasks that need nothing — counted, not listed. */
   quiet: number
   headline: string
+  /**
+   * M325. Each task's witnessed checks, latest run per command: how many pass
+   * and how many fail now. The Orchestrate task board's checks column — the
+   * same rows the `check` decisions come from, never an agent's claim.
+   */
+  checks: Record<string, CheckTally>
+  /** M327. Each task's latest run per command — what a plan's check step reads. */
+  runs: Record<string, QueueCheckRun[]>
+  /** Every task's resolved decisions, newest first — including tasks that need nothing now. */
+  history: Record<string, ResolvedDecision[]>
+}
+
+export interface CheckTally { passed: number; failed: number }
+
+/** Latest run per command, split into passing and failing (a signal is a failure — M84). */
+export function tallyChecks(runs: readonly QueueCheckRun[]): CheckTally {
+  const latest = new Map<string, QueueCheckRun>()
+  for (const r of runs) {
+    const cur = latest.get(r.command)
+    if (cur === undefined || r.at > cur.at) latest.set(r.command, r)
+  }
+  const all = [...latest.values()]
+  return { passed: all.filter((r) => r.exitCode === 0).length, failed: all.filter((r) => r.exitCode !== 0).length }
 }
 
 export interface QueueCheckRun {
@@ -101,6 +151,17 @@ export interface QueueTaskInput {
   handoff?: { state: ReviewHandoffState; standing: ReviewStanding; files?: number }
   /** The task's witnessed command runs, any order. */
   runs?: readonly QueueCheckRun[]
+  /** The person's own rows from the task's durable record (`HistoryEvent`), any order. */
+  events?: readonly HistoryEvent[]
+}
+
+/** The slice of a durable event row the history reads — `EventRow`'s own fields. */
+export interface HistoryEvent {
+  event: string
+  source: string
+  at: number
+  title: string
+  key?: string
 }
 
 /** A decision that was waiting when the app last closed (decision memory). */
@@ -150,10 +211,30 @@ export function failingChecks(runs: readonly QueueCheckRun[]): QueueCheckRun[] {
   return [...latest.values()].filter((r) => r.exitCode !== 0).sort((a, b) => a.at - b.at)
 }
 
+/** Where a request would run, as its last path segment — the approval detail's own `In` line in short. */
+function whereOf(cwd: string | undefined): string {
+  if (cwd === undefined) return ''
+  const tail = cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'
+  return ` in ${tail}`
+}
+
+const clip = (s: string, n = 60): string => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t }
+
+function inboxAffects(item: InboxItem): string {
+  const behind = item.unblocks > 0 ? `, and ${item.unblocks} more ${item.unblocks === 1 ? 'waits' : 'wait'} behind it` : ''
+  const a = item.approval
+  if (a !== undefined) {
+    const what = a.argument === '' ? `one ${a.toolName} call` : `${a.toolName} \`${clip(a.argument)}\``
+    const askers = item.members.length > 1 ? `${item.members.length} agents' turns wait` : `${item.label}'s turn waits`
+    return `Affects ${what}${whereOf(a.cwd)} — ${askers} on it${behind}.`
+  }
+  return `Affects ${item.label}'s next turn — nothing runs until you reply${behind}.`
+}
+
 function decisionFromInbox(item: InboxItem): QueueDecision {
   const who = item.members.length > 1 ? `${item.label} + ${item.members.length - 1} more` : item.label
   return {
-    key: item.key, kind: item.kind, text: `${who} ${item.blocker}`, since: item.since, inbox: item,
+    key: item.key, kind: item.kind, text: `${who} ${item.blocker}`, since: item.since, inbox: item, affects: inboxAffects(item),
     evidence: { kind: 'decision', panelId: item.panelId, ...(item.approval === undefined ? {} : { requestId: item.approval.requestId }) }
   }
 }
@@ -224,6 +305,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
       push(t.itemId, {
         key: `check:${t.itemId}:${r.command}`, kind: 'check', since: r.at,
         text: `\`${r.command}\` ${r.exitCode === null ? 'ended without an exit code' : `exited ${r.exitCode}`}${where === undefined ? '' : ` in ${where}`}`,
+        affects: `Affects whether ${t.title} can be verified — it stays unverified until \`${clip(r.command, 40)}\` passes again.`,
         evidence: r.outputId !== undefined ? { kind: 'output', outputId: r.outputId, panelId: r.panelId } : { kind: 'panel', panelId: r.panelId }
       })
     }
@@ -232,7 +314,8 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
       const files = h.files === undefined ? '' : ` (${h.files} file${h.files === 1 ? '' : 's'})`
       push(t.itemId, {
         key: `review:${t.itemId}`, kind: 'review', since: 0, evidence: { kind: 'review', itemId: t.itemId },
-        text: h.standing === 'stale' ? `the changes moved since your review${files}` : `the agent finished with changes${files} and nothing is verified yet`
+        text: h.standing === 'stale' ? `the changes moved since your review${files}` : `the agent finished with changes${files} and nothing is verified yet`,
+        affects: `Affects ${h.files === undefined ? 'the task\'s changes' : `${h.files} changed file${h.files === 1 ? '' : 's'}`} — nothing lands on your branch until you accept.`
       })
     }
   }
@@ -241,7 +324,8 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     if (liveKeys.has(l.key)) continue
     push(l.itemId !== null && input.tasks.some((t) => t.itemId === l.itemId) ? l.itemId : null, {
       key: `lost:${l.key}`, kind: 'lost', since: l.since, evidence: { kind: 'panel', panelId: l.panelId },
-      text: `${l.label} ${l.text} — its session ended before you answered`
+      text: `${l.label} ${l.text} — its session ended before you answered`,
+      affects: 'Affects nothing now — the request is gone, and nothing was allowed on your behalf.'
     })
   }
 
@@ -254,6 +338,12 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     return input.tasks.filter((t) => t.itemId !== itemId && t.members.some((m) => down.has(m))).map((t) => ({ itemId: t.itemId, title: t.title }))
   }
 
+  const history: Record<string, ResolvedDecision[]> = {}
+  for (const t of input.tasks) {
+    const h = resolvedDecisions(t.events ?? [], t.runs ?? [])
+    if (h.length > 0) history[t.itemId] = h
+  }
+
   const kindRank: Record<QueueKind, number> = { permission: 0, question: 1, check: 2, review: 3, lost: 4 }
   const groups: TaskGroup[] = [...byTask.entries()].map(([itemId, decisions]) => {
     decisions.sort((a, b) => kindRank[a.kind] - kindRank[b.kind] || a.since - b.since)
@@ -261,7 +351,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     const affects = itemId === null ? [] : affectsOf(itemId)
     const told = describe({ title, decisions, affects })
     const timed = decisions.filter((d) => d.since > 0).map((d) => d.since)
-    return { itemId, title, decisions, affects, ...told, oldest: timed.length === 0 ? input.now : Math.min(...timed) }
+    return { itemId, title, decisions, affects, ...told, oldest: timed.length === 0 ? input.now : Math.min(...timed), history: itemId === null ? [] : history[itemId] ?? [] }
   })
   groups.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.affects.length - a.affects.length || a.oldest - b.oldest || (a.itemId === null ? 1 : 0) - (b.itemId === null ? 1 : 0))
 
@@ -278,7 +368,57 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
   const headline = groups.length === 0
     ? (quiet > 0 ? `Nothing needs you — ${quiet} task${quiet === 1 ? ' is' : 's are'} working or done.` : 'Nothing needs you.')
     : `${parts.join(' · ')}${quiet > 0 ? ` — ${quiet} other${quiet === 1 ? '' : 's'} need nothing` : ''}.`
-  return { groups, decisions, quiet, headline }
+  const checks: Record<string, CheckTally> = {}
+  const runs: Record<string, QueueCheckRun[]> = {}
+  for (const t of input.tasks) {
+    if ((t.runs ?? []).length === 0) continue
+    checks[t.itemId] = tallyChecks(t.runs ?? [])
+    const latest = new Map<string, QueueCheckRun>()
+    for (const r of t.runs ?? []) { const cur = latest.get(r.command); if (cur === undefined || r.at > cur.at) latest.set(r.command, r) }
+    runs[t.itemId] = [...latest.values()]
+  }
+  return { groups, decisions, quiet, headline, checks, runs, history }
+}
+
+/** How many resolved decisions a task keeps on screen — the record keeps the rest. */
+export const HISTORY_MAX = 12
+
+/**
+ * A task's answered decisions, newest first, from two witnessed sources:
+ *
+ * - the PERSON's rows — an answered permission (`permission`), a review mark
+ *   (`artifact` "Reviewed N changed files"). `source: 'person'` is required:
+ *   an agent's claim that something was approved is not a decision anyone
+ *   made here;
+ * - check runs: a command whose run FAILED and whose later run PASSED is a
+ *   failure that was resolved, at the passing run. A command still failing is
+ *   a live `check` decision, not history.
+ */
+export function resolvedDecisions(events: readonly HistoryEvent[], runs: readonly QueueCheckRun[]): ResolvedDecision[] {
+  const out: ResolvedDecision[] = []
+  for (const e of events) {
+    if (e.source !== 'person') continue
+    if (e.event === 'permission') {
+      const denied = e.title.startsWith('Denied')
+      out.push({ key: `h:${e.key ?? `${e.at}`}`, kind: 'permission', at: e.at, text: e.title, outcome: denied ? 'denied' : 'allowed' })
+    } else if (e.event === 'artifact' && e.title.startsWith('Reviewed')) {
+      out.push({ key: `h:review:${e.at}`, kind: 'review', at: e.at, text: e.title, outcome: 'resolved' })
+    }
+  }
+  const byCommand = new Map<string, QueueCheckRun[]>()
+  for (const r of runs) { const l = byCommand.get(r.command); if (l === undefined) byCommand.set(r.command, [r]); else l.push(r) }
+  for (const [command, list] of byCommand) {
+    list.sort((a, b) => a.at - b.at)
+    let failedSince: number | null = null
+    for (const r of list) {
+      if (r.exitCode !== 0) { if (failedSince === null) failedSince = r.at; continue }
+      if (failedSince !== null) {
+        out.push({ key: `h:check:${command}:${r.at}`, kind: 'check', at: r.at, text: `\`${command}\` passed after failing`, outcome: 'resolved' })
+        failedSince = null
+      }
+    }
+  }
+  return out.sort((a, b) => b.at - a.at).slice(0, HISTORY_MAX)
 }
 
 /** The order keyboard traversal walks: group by group, decision by decision. */

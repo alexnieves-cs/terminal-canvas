@@ -36,8 +36,11 @@
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
      is right. 50% and --r-full are SHAPES (a circle, a pill), not steps. */
-  /* M109. One step rounder each (Obsidian: round corners, 12px on the frame). */
-  --r-sm: 5px; --r-md: 8px; --r-lg: 12px; --r-full: 999px;
+  /* M109. One step rounder each (Obsidian: round corners, 12px on the frame).
+     M328 (restrained system). Back down a step each: a working surface reads
+     as an instrument, and a 12px frame around 8px boxes around 5px controls
+     was the rounded-container look the brief named. Still decreasing inward. */
+  --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-full: 999px;
 
   /* Type. A six-step scale at a 1.2 ratio, 11 to 24. --t-xs is legal below
      the 12px floor ONLY because every user of it is a one- or two-word
@@ -121,8 +124,11 @@
      second selector binding a hue. A glow is a box-shadow, never a filter:
      it composites for free on forty panels where a drop-shadow filter would
      not. */
-  --glow-iris: 0 0 0 1px var(--iris), 0 0 18px var(--iris-dim);
-  --glow-tone: 0 0 14px 3px var(--tone-dim);
+  /* M328. No spill: selection is the 1px accent ring, and a state's edge is
+     its colour — a glow was carrying a fact the edge and the word already
+     say. Kept as tokens (every site reads them) with the spill at zero. */
+  --glow-iris: 0 0 0 1px var(--iris);
+  --glow-tone: 0 0 0 0 transparent;
   /* M258. The editorial measure a file or note page reads at — tighter than
      --measure, which is the assistant's prose — and its face: the system's
      own reading serif, local, so the CSP's default-src 'self' is untouched. */
@@ -256,15 +262,18 @@
   --edge-light: rgba(255, 255, 255, .95);
   --bezel:      rgba(30, 40, 70, .10);
   --lift:       0 12px 30px -16px rgba(30, 50, 90, .28);
-  --aura-1:     rgba(14, 116, 144, .14);
-  --aura-2:     rgba(99, 102, 241, .10);
+  /* M328. The ground is neutral: the two lights are kept as tokens at zero,
+     so the layers that paint them (ground.1, aura.1) still exist and a later
+     direction can bring them back without re-plumbing. */
+  --aura-1:     rgba(14, 116, 144, 0);
+  --aura-2:     rgba(99, 102, 241, 0);
   /* M229. The ground's two ACTIVITY lights. Not new hues: the same working
      blue and needs-you amber every panel edge already uses, at the aura's own
      low alpha. A third colour here would be a third vocabulary. */
-  --aura-working:   rgba(47, 107, 216, .13);
-  --aura-needs-you: rgba(160, 108, 8, .12);
+  --aura-working:   rgba(47, 107, 216, 0);
+  --aura-needs-you: rgba(160, 108, 8, 0);
   --on-iris:    #ffffff;
-  --bubble:     #e6ecf7;   /* M162. The user turn's ground: a soft tint one step from the panel */
+  --bubble:     #eceef2;   /* M162. The user turn's ground: one step from the panel. M328: neutral, not a blue tint */
   --blur:       blur(12px) saturate(120%);
 
   /* M227 (the Obsidian-amplified brief). THE DEPTH TOKENS. The glass ramp is
@@ -401,10 +410,10 @@
   /* The ground's light: electric blue at the centre, cyan in the diagonal —
      the two illumination hues the brief names, at the alphas M109 chose for
      indigo and teal. */
-  --aura-1:     rgba(94, 196, 212, .07);
-  --aura-2:     rgba(140, 150, 175, .05);
-  --aura-working:   rgba(122, 167, 232, .10);
-  --aura-needs-you: rgba(232, 180, 76, .12);
+  --aura-1:     rgba(94, 196, 212, 0);
+  --aura-2:     rgba(140, 150, 175, 0);
+  --aura-working:   rgba(122, 167, 232, 0);
+  --aura-needs-you: rgba(232, 180, 76, 0);
   --on-iris:    #06222a;
   --bubble:     #1f242d;
   --blur:       blur(14px) saturate(140%);
@@ -1178,8 +1187,8 @@ body {
    node at 40% still says which it is. Geometry only — the hue is the same
    --tone-dim the narrow default reads. */
 /* #12. The working shimmer's rim is iris, never amber: amber is reserved for something that needs the person, and a working node does not. */
-[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--iris); --tone-glow: 0 0 22px 5px var(--tone-dim); }
-[data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); --tone-glow: 0 0 22px 5px var(--tone-dim); }
+[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--iris); }
+[data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
 /* Backlog #90. A clean exit is FINISHED, not failed: the settled neutral of a
    closed thing, so the red keeps meaning something went wrong. */
@@ -7579,16 +7588,16 @@ body {
   font-family: var(--font-ui);
   color: var(--fg);
   box-sizing: border-box;
-  background:
-    radial-gradient(ellipse at 50% 44%, color-mix(in srgb, var(--iris) 10%, transparent), transparent 58%),
-    var(--deck-ground);
+  /* M328. A neutral ground: the iris wash behind the page was a tinted surface. */
+  background: var(--deck-ground);
 }
 .orch__header { display: flex; flex-direction: column; gap: var(--sp-2); flex-shrink: 0; }
 .orch__blocker { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg-2); }
 .orch__blocker::before { content: "·"; margin-right: var(--sp-3); color: var(--fg-4); }
 .orch__blocker[data-orch-blocker="waiting-on-you"] { color: var(--amber); }
-/* M305. The task header's title: the goal, in the display serif. */
-.orch__title { margin: 0; font-family: var(--font-display); font-size: var(--t-2xl); font-weight: 400; letter-spacing: 0; color: var(--fg); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* M305. The task header's title: the goal. M328: in the chrome's sans, like
+   every navigation and task heading — the display serif stays a note's. */
+.orch__title { margin: 0; font-family: var(--font-ui); font-size: var(--t-xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orch__title-scope { font-size: var(--t-sm); font-weight: 500; color: var(--fg-3); font-family: var(--font-mono); letter-spacing: 0; }
 .orch__context { margin: 0; display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; font-size: var(--t-sm); color: var(--fg-3); overflow: hidden; white-space: nowrap; }
 .orch__context-place { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -8255,7 +8264,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
   cursor: pointer;
 }
 .orch__wp[data-orch-stage-current] {
-  box-shadow: 0 0 0 1px var(--iris), 0 0 18px color-mix(in srgb, var(--iris) 22%, transparent);
+  box-shadow: 0 0 0 1px var(--iris);
 }
 .orch__wp[data-orch-stage-shift] {
   animation: orch-stage-shift var(--dur-flow) var(--ease) 1;
@@ -8799,7 +8808,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
    --------------------------------------------------------------------------- */
 .orch__task-head { display: flex; align-items: flex-end; gap: var(--sp-6); min-width: 0; padding-bottom: var(--sp-2); }
 .orch__task-id { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; flex: 1 1 auto; }
-.orch__eyebrow { font: var(--t-xs) var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--iris); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__eyebrow { font: var(--t-xs) var(--font-ui); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orch__eyebrow .orch__title-scope { font-size: inherit; text-transform: none; letter-spacing: 0; color: var(--fg-3); }
 .orch__phases { display: flex; align-items: center; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; flex: none; }
 .orch__phase { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-4); white-space: nowrap; }
@@ -8948,6 +8957,21 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .queue__row-verbs { display: flex; gap: var(--sp-1); }
 .queue__output { max-height: 16rem; overflow: auto; }
 [data-queue-cursor] { box-shadow: inset 2px 0 0 var(--focus); }
+/* Decision queue. What a decision affects, and a task's answered decisions:
+   both information beside the verb, so both step back. The outcome is a word
+   in the row's text ("Allowed", "Denied", "passed"), never colour alone. */
+.queue__row-affects { margin: 0; font-size: var(--t-xs); color: var(--fg-3); overflow-wrap: anywhere; }
+.queue__history { list-style: none; padding: 0 var(--sp-3) var(--sp-2); }
+.queue__history-list, .focus__history { list-style: none; margin: var(--sp-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.queue__history-row, .focus__history-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); font-size: var(--t-xs); color: var(--fg-2); }
+.queue__history-text, .focus__history-text { min-width: 0; overflow-wrap: anywhere; }
+.queue__history-at, .focus__history-at { flex: none; color: var(--fg-3); }
+[data-queue-history-outcome='denied'] .queue__history-text, [data-focus-history-outcome='denied'] .focus__history-text { color: var(--fg-3); }
+.focus__history-toggle { border: 0; background: none; padding: 0; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); cursor: pointer; }
+.focus__history-toggle:hover { color: var(--fg-2); }
+/* Over the body, never pushing it: the header keeps its height, as the frame rule asks of chrome. */
+.focus__state { position: relative; }
+.focus__history { position: absolute; top: 100%; right: 0; z-index: 30; width: min(360px, 60vw); max-height: 50vh; overflow: auto; margin-top: var(--sp-1); padding: var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-3); }
 /* M318. Information vs intervention in the feeds: an intervention row says so
    in words (never colour alone), and an information row steps back. */
 .orch__activity-need, .activity-row__need { flex: none; font-size: var(--t-xs); font-weight: 600; color: var(--amber); }
@@ -9300,3 +9324,141 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .focus__guest { display: flex; width: 100%; height: 100%; }
 .chat__claimed { margin: auto; padding: var(--sp-5); text-align: center; }
 .board-row__focus { margin-right: var(--sp-2); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M325. ORCHESTRATE'S TASK LIST — the page's default view. Rows, not cards:
+   a hairline between tasks and no box around each, so ten tasks read as one
+   list. Each row is four columns (the task and its status sentence, the
+   agents, the checks, the one action) and colour appears only where a state
+   means something — a status dot, a failing check. The ⋯ menu holds every
+   secondary verb, so a row has one filled control at most.
+   ───────────────────────────────────────────────────────────────────────── */
+.orch--tasks { gap: var(--sp-4); }
+.orch__tasks-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); flex-shrink: 0; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.orch__tasks-headline { margin: var(--sp-1) 0 0; font-size: var(--t-md); color: var(--fg-2); }
+.tboard { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--sp-5); padding-right: var(--sp-2); }
+.tboard__empty { margin: var(--sp-6) auto; max-width: 52ch; font-size: var(--t-md); color: var(--fg-2); text-align: center; line-height: var(--lh-body); }
+.tboard__group { display: flex; flex-direction: column; }
+.tboard__group-head { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0 0 var(--sp-1); padding-bottom: var(--sp-1); font-size: var(--t-sm); font-weight: 600; color: var(--fg-2); border-bottom: 1px solid var(--line); }
+.tboard__count { font-weight: 500; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.tboard__fold { display: inline-flex; align-items: baseline; gap: var(--sp-2); padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.tboard__rows { list-style: none; margin: 0; padding: 0; }
+.tboard__row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 14rem) minmax(6rem, 9rem) auto;
+  align-items: center; column-gap: var(--sp-4); row-gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2); border-bottom: 1px solid var(--line);
+}
+.tboard__row:hover { background: var(--s-2); }
+.tboard__main { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; padding: 0; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.tboard__title { font-size: var(--t-md); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tboard__main:hover .tboard__title { text-decoration: underline; text-underline-offset: 2px; }
+.tboard__status { font-size: var(--t-sm); color: var(--fg-2); line-height: var(--lh-tight); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tboard__plan { font-size: var(--t-sm); color: var(--fg-3); }
+.tboard__agents { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); min-width: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.tboard__agent { display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tboard__idle { color: var(--fg-3); }
+.tboard__checks { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tboard__checks[data-board-checks="failed"] { color: var(--fg); font-weight: 600; }
+.tboard__act { display: inline-flex; align-items: center; gap: var(--sp-1); justify-self: end; }
+.tboard__primary, .tboard__secondary, .tboard__more {
+  min-height: 26px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap;
+}
+.tboard__primary:hover, .tboard__secondary:hover, .tboard__more:hover { background: var(--s-3); }
+.tboard__primary:disabled { color: var(--fg-4); cursor: default; }
+.tboard__row[data-board-row-group="attention"] .tboard__primary { border-color: var(--iris); background: var(--iris); color: var(--on-iris); font-weight: 600; }
+.tboard__row[data-board-row-group="attention"] .tboard__primary:disabled { border-color: var(--line-strong); background: var(--s-1); color: var(--fg-4); }
+.tboard__more { padding: 0 var(--sp-2); color: var(--fg-3); }
+.tboard__secondary { border-color: var(--line); color: var(--fg-2); }
+.tboard__menu { position: absolute; right: 0; top: 100%; z-index: 30; margin-top: var(--sp-1); min-width: 180px; padding: var(--sp-1); display: flex; flex-direction: column; background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md) }
+.tboard__act { position: relative; }
+.tboard__menu-item { display: block; width: 100%; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-sm); background: none; text-align: left; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); cursor: pointer; }
+.tboard__menu-item:hover, .tboard__menu-item:focus-visible { background: var(--s-4); outline: none; }
+.tboard__respond { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-2) 0 var(--sp-1); }
+.tboard__reply { resize: vertical; min-height: 52px; padding: var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); }
+.tboard__reply:focus { outline: none; border-color: var(--iris); }
+.tboard__respond-verbs { display: flex; align-items: center; gap: var(--sp-2); }
+.tboard__note { font-size: var(--t-sm); color: var(--fg-2); }
+@media (max-width: 900px) {
+  .tboard__row { grid-template-columns: minmax(0, 1fr) auto; }
+  .tboard__agents, .tboard__checks { grid-column: 1; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M326. THE WORKSPACE'S NEW PARTS — the task switcher in the title, the
+   agent's activity line, the agent switcher over the conversation, the ⋯
+   menu, and the review decision (Mark reviewed, then Accept) over the
+   evidence. One filled control per context: the header's Next, and in the
+   decision bar whichever of Mark reviewed / Accept is due.
+   ───────────────────────────────────────────────────────────────────────── */
+.focus__switch { display: inline-flex; align-items: baseline; gap: var(--sp-2); max-width: 100%; padding: 0; border: 0; background: none; font: inherit; color: var(--fg); cursor: pointer; text-align: left; }
+.focus__title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__switch-caret { font-size: var(--t-xs); color: var(--fg-3); }
+.focus__id { position: relative; }
+.focus__menu { position: absolute; left: 0; top: 100%; z-index: 40; margin-top: var(--sp-1); min-width: 240px; max-width: 420px; max-height: 60vh; overflow: auto; padding: var(--sp-1); display: flex; flex-direction: column; background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md) }
+.focus__head > .focus__more + .focus__menu, .focus__head .focus__menu:not([data-focus-switch-menu]) { left: auto; right: 0; }
+.focus__menu-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-sm); background: none; text-align: left; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); cursor: pointer; }
+.focus__menu-item:hover, .focus__menu-item:focus-visible { background: var(--s-4); outline: none; }
+.focus__menu-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__head { position: relative; }
+.focus__more { flex-shrink: 0; min-height: 28px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg-3); font-size: var(--t-md); cursor: pointer; }
+.focus__more:hover { background: var(--s-3); color: var(--fg); }
+.focus__activity { font-size: var(--t-sm); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__activity[data-focus-activity="wants-you"] { color: var(--fg); font-weight: 600; }
+.focus__conversation { display: flex; flex-direction: column; }
+.focus__agents { display: flex; flex-wrap: wrap; gap: var(--sp-1); flex-shrink: 0; padding: var(--sp-1) 0 var(--sp-2); border-bottom: 1px solid var(--line); margin-bottom: var(--sp-2); }
+.focus__agent { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 24px; padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-sm); background: none; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); cursor: pointer; }
+.focus__agent:hover { background: var(--s-2); }
+.focus__agent--on { border-color: var(--line-strong); background: var(--s-1); color: var(--fg); }
+.focus__decide { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); flex-shrink: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); }
+.focus__decide-sentence { flex: 1 1 16rem; min-width: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.focus__decide-outcome { flex-basis: 100%; font-size: var(--t-sm); color: var(--fg-2); }
+.focus__primary, .focus__secondary { min-height: 26px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
+.focus__primary { border-color: var(--iris); background: var(--iris); color: var(--on-iris); font-weight: 600; }
+.focus__primary:disabled, .focus__secondary:disabled { border-color: var(--line); background: transparent; color: var(--fg-4); cursor: default; }
+.focus__secondary:hover:not(:disabled) { background: var(--s-3); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M327. THE PLAN SIDE. Steps as a numbered list with hairlines between them;
+   each carries its state (a dot and a word — never colour alone), one
+   sentence of what actually happened, four facts (owner, waits for, works
+   in, expected) and the actions for THAT step beside its title.
+   ───────────────────────────────────────────────────────────────────────── */
+.fplan { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); font-size: var(--t-sm); }
+.fplan--empty { gap: var(--sp-4); }
+.fplan__lead { margin: 0; max-width: 64ch; font-size: var(--t-md); color: var(--fg-2); line-height: var(--lh-body); }
+.fplan__template { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+.fplan__template-steps { margin: 0; padding-left: var(--sp-5); color: var(--fg-2); line-height: var(--lh-body); }
+.fplan__caption { font-size: var(--t-sm); color: var(--fg-3); }
+.fplan__head { display: flex; align-items: center; gap: var(--sp-3); }
+.fplan__summary { flex: 1; font-weight: 600; color: var(--fg); }
+.fplan__head-verbs { display: inline-flex; gap: var(--sp-1); }
+.fplan__problems { margin: 0; padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-5); border-left: 2px solid var(--line-strong); color: var(--fg-2); }
+.fplan__note { margin: 0; color: var(--fg-2); }
+.fplan__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.fplan__step { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
+.fplan__step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
+.fplan__index { flex-shrink: 0; width: 20px; height: 20px; display: inline-grid; place-items: center; border: 1px solid var(--line-strong); border-radius: var(--r-full); font-size: var(--t-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.fplan__title { font-size: var(--t-md); font-weight: 600; color: var(--fg); }
+.fplan__state { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--fg-2); }
+.fplan__step[data-plan-state="stopped"] .fplan__state, .fplan__step[data-plan-state="failed"] .fplan__state, .fplan__step[data-plan-state="needs-you"] .fplan__state { color: var(--fg); font-weight: 600; }
+.fplan__verbs { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: var(--sp-1); }
+.fplan__detail { margin: 0; padding-left: calc(20px + var(--sp-3)); color: var(--fg-2); line-height: var(--lh-body); }
+.fplan__facts { margin: 0; padding-left: calc(20px + var(--sp-3)); display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--sp-1) var(--sp-4); }
+.fplan__facts > div { min-width: 0; }
+.fplan__facts dt { font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.fplan__facts dd { margin: 0; color: var(--fg); overflow: hidden; text-overflow: ellipsis; }
+.fplan__primary, .fplan__secondary { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
+.fplan__primary { border-color: var(--iris); background: var(--iris); color: var(--on-iris); font-weight: 600; }
+.fplan__secondary { border-color: var(--line); color: var(--fg-2); }
+.fplan__secondary:hover:not(:disabled) { background: var(--s-3); color: var(--fg); }
+.fplan__primary:disabled, .fplan__secondary:disabled { border-color: var(--line); background: transparent; color: var(--fg-4); cursor: default; }
+.fplan__assign { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); padding-left: calc(20px + var(--sp-3)); }
+.fplan__editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--sp-2) var(--sp-3); margin-left: calc(20px + var(--sp-3)); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); }
+.fplan__field { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; font-size: var(--t-sm); color: var(--fg-3); }
+.fplan__input { min-height: 26px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
+.fplan__input:focus { outline: none; border-color: var(--iris); }
+.fplan__deps { margin: 0; padding: 0; border: 0; grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); }
+.fplan__deps legend { padding: 0; margin-bottom: var(--sp-1); }
+.fplan__dep { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--fg); }
+.fplan__remove { justify-self: start; }

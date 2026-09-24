@@ -33,6 +33,8 @@ export interface NavigatorProps {
   runs: Array<RailRun & { note?: string }>
   onRunAgain: (id: string) => void
   onSwitchWorkspace: (id: string) => void
+  /** Decision queue. A workspace's waiting count lands on its longest-waiting request. */
+  onJumpWaitingWorkspace?: (id: string) => void
   onCreateWorkspace: () => void
   onRenameWorkspace: (id: string, currentName: string) => void
   onDeleteWorkspace: (id: string, name: string, panelCount: number) => void
@@ -203,6 +205,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                     key={row.id}
                     row={row}
                     onSwitch={props.onSwitchWorkspace}
+                    {...(props.onJumpWaitingWorkspace === undefined ? {} : { onJumpWaiting: props.onJumpWaitingWorkspace })}
                     onRename={props.onRenameWorkspace}
                     onDelete={props.onDeleteWorkspace}
                   />

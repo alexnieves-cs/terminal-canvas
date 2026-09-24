@@ -25,6 +25,23 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   // main/index.ts wires it, or a fixture that expects a dormant panel after a
   // reload finds it live. Installed once, at this part's start.
   attachPtyLifecycle(win, () => ptyManager.detachAll())
+  // M325. Orchestrate OPENS on the task list; the checks below were written
+  // against the scene, which is now the visualisation a person chooses. After
+  // an open, this chooses it the way a person does (the Scene lens) — only when
+  // the task list is what showed, so a page that remembered a lens is left
+  // alone. The first open also records that the list IS the default
+  // (orch-tasks.app.1, below).
+  let tasksSeen = null
+  const toVisual = async () => {
+    await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"] .orch') !== null`), 3000)
+    const onTasks = await wc.executeJavaScript(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false
+      const board = document.querySelector('[data-board]'); const head = document.querySelector('[data-board-headline]')
+      const r = { board: !!board, headline: head ? head.textContent : null, groups: [...document.querySelectorAll('[data-board-group]')].map((g) => g.getAttribute('data-board-group')), scene: document.querySelector('.orch__graph-scene') !== null }
+      const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+      return r })()`)
+    if (onTasks !== false && tasksSeen === null) tasksSeen = onTasks
+    if (onTasks !== false) await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-view="tasks"]') === null`), 3000)
+  }
   // Navigation hierarchy: Canvas and Orchestrate are views of the same work, so the
   // canvas's selection ARRIVES selected on Orchestrate, and a List row click TOGGLES.
   // A fixture that means "select this row" must not assume the page opened empty —
@@ -93,6 +110,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // Onto the Orchestrate page, through the Dock.
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       const islandRead = () => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-island]'); return i ? { id: i.getAttribute('data-orch-island'), source: i.getAttribute('data-orch-island-source'), goal: i.querySelector('[data-orch-island-goal]')?.textContent ?? null, place: i.querySelector('[data-orch-island-place]')?.textContent ?? null, count: document.querySelectorAll('[data-orch-island]').length } : null })()`)
       const island = await waitUntil(islandRead, 4000)
@@ -270,6 +288,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       const benchRead = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-orch-workbench]'); if (!b) return null
         return { tabs: [...b.querySelectorAll('[role="tab"]')].map((t) => t.textContent.trim()), tab: b.getAttribute('data-orch-bench-tab'), subject: b.getAttribute('data-orch-bench-subject'),
@@ -354,6 +373,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const ranOnce = await waitUntil(async () => { const rows = await runLedger.list(watcherId, 5); return rows.length === 1 && rows[0].exitCode === 0 ? rows[0] : false }, 8000)
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       // Back on the task (the island), then Checks.
       await click(`[data-orch-island="${itemId}"]`)
@@ -385,6 +405,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       plainChatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p && p.getAttribute('data-panel-id') !== ${JSON.stringify(chatId)} ? p.getAttribute('data-panel-id') : false })()`), 8000)
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       // The task frame hides non-members from the scene and the List: show the whole ring first.
       await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await click('[data-orch-lens="list"]')
@@ -481,6 +502,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       if (live) ptyManager.write('dA', 'exit 1\r')
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       // Every object, then dB in the List.
       await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -603,6 +625,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       // The scene's column rests folded (the focused card + a toggle); every read below wants it open.
       const openIslands = () => wc.executeJavaScript(`(() => { const t = document.querySelector('[data-orch-islands-toggle][aria-expanded="false"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!t })()`)
@@ -690,6 +713,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       writeFileSync(join(shared, 's.txt'), 's changed by someone\n')
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       const sharedIslandId = `dir:${shared}`
       const sharedCard = await waitUntil(async () => { const r = await islandsRead(); const c = r && r.cards.find((x) => x.id === sharedIslandId); return c || false }, 8000)
@@ -729,6 +753,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       itemC = C.id
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       const appended = await waitUntil(async () => { const r = await islandsRead(); return r && r.order.split(' ').includes(itemC) ? r : false }, 8000)
       await demo('m289-3-moved-and-appended')
       const beforeIds = before.order.split(' ')
@@ -779,6 +804,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       plainId = await mintChat(repo) // never sent: spend Unknown with its reason
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await settle()
       // The frame is back on the task after a remount: every object again.
       await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -919,6 +945,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await settle()
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await click('[data-orch-lens="scene"]')
       await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= 2 && document.querySelector('.orch__graph-scene [data-node="pW"]') !== null`), 8000)
@@ -1035,6 +1062,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         await settle()
         await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
+        await toVisual()
         await click('[data-orch-lens="scene"]')
         await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         // A fifth working, a tenth waiting on a person — the tiers the scene is for.
@@ -1200,6 +1228,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         await settle()
         await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
+        await toVisual()
         await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       }
       await seed()
@@ -1277,6 +1306,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`(() => { const orig = HTMLCanvasElement.prototype.getContext; window.__tcOrigGetContext = orig; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /webgl/i.test(String(kind)) ? null : orig.call(this, kind, ...rest) }; return true })()`)
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await click('[data-orch-lens="scene"]')
       // Names arrive at the evidence zoom: Fit selected on the island first.
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch__graph-scene[data-orch-webgl="unavailable"] [data-orch-platform-plate][data-orch-island-id]') !== null`), 8000)
@@ -1294,6 +1324,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await click('[data-orch-lens="scene"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-node]').length >= 5`), 8000)
       wc.send('agent:state', { panelId: 'qB', state: 'wants-you' })
@@ -1377,6 +1408,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         await settle()
         await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
+        await toVisual()
         await click('[data-orch-lens="scene"]')
         await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= 1`), 15000)
         await settle()
@@ -1476,6 +1508,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${chatId}"] button') !== null`), 3000)
       await selectRow(chatId)
@@ -1562,6 +1595,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const runtimeHasIt = await wc.executeJavaScript(`Promise.all([window.canvas.agentSession.list(), window.canvas.pty.list()]).then(([a, p]) => a.some((x) => x.id === ${JSON.stringify(restoredId)}) || p.some((x) => x.panelId === ${JSON.stringify(restoredId)}))`)
       await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
+      await toVisual()
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${restoredId}"] button') !== null`), 4000)
       await selectRow(restoredId)
@@ -1632,6 +1666,57 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* scratch */ }
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // M325–M327 — orch-tasks.app.*. The page's FIRST view is the task list (no
+  // scene mounted); a task row opens the task's workspace; a plan created
+  // there is persisted on the work item and read back on the row.
+  // ---------------------------------------------------------------------
+  {
+    const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+    const IDS = [
+      'orch-tasks.app.1 Orchestrate opens on the task list — the board and its headline, with no scene mounted — and the lenses are the visualisation behind it',
+      'orch-tasks.app.2 a task nobody started is a Running row that says so, offers Start work as its one action and reads "No checks run"; its title opens the task\'s workspace, and Back returns to the list',
+      'orch-tasks.app.3 the workspace\'s Plan side creates the implement-and-verify plan: four steps with their states, persisted on the work item, and the row reads the plan\'s progress'
+    ]
+    const errs = []
+    wc.on('console-message', (_e, level, m) => { if (level >= 2) errs.push(String(m).slice(0, 300)) })
+    ok(IDS[0], tasksSeen !== null && tasksSeen.board === true && tasksSeen.scene === false && typeof tasksSeen.headline === 'string' && tasksSeen.headline !== '', JSON.stringify(tasksSeen))
+    try {
+      if (await wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)) await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await settle()
+      const itemId = await wc.executeJavaScript(`window.__m113.add({ source: 'typed', title: 'Board row task' })`)
+      // The block before ends on a reload: press the Dock until the page is up.
+      const opened = await waitUntil(async () => {
+        if (await wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"] .orch') !== null`)) return true
+        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        return false
+      }, 6000)
+      await click('[data-orch-view-tasks]')
+      const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-board-row="${itemId}"]'); return r ? { group: r.getAttribute('data-board-row-group'), action: r.getAttribute('data-board-action'), primary: r.querySelector('[data-board-primary]')?.textContent ?? null, status: r.querySelector('[data-board-status]')?.textContent ?? null, checks: r.querySelector('[data-board-checks]')?.textContent ?? null } : false })()`), 4000)
+      const diag = row ? null : await wc.executeJavaScript(`({ opened: ${JSON.stringify(opened)}, dock: !!document.querySelector('[data-dock="orchestration"]'), center: document.querySelector('[data-center-view]')?.getAttribute('data-center-view') ?? null, itemId: ${JSON.stringify(itemId)}, view: document.querySelector('.orch')?.getAttribute('data-orch-view') ?? null, tasksBtn: !!document.querySelector('[data-orch-view-tasks]'), rows: [...document.querySelectorAll('[data-board-row]')].map((r) => r.getAttribute('data-board-row')), items: window.__m113.items().map((w) => w.id + ':' + w.state), body: document.body.innerText.slice(0, 200) })`)
+      await click(`[data-board-row="${itemId}"] [data-board-open]`)
+      const focus = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-center-view="focus"] [data-focus-task="${itemId}"]') !== null`), 4000)
+      await click('[data-focus-side-button="plan"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-focus-plan-create]') !== null`), 3000)
+      await click('[data-focus-plan-create]')
+      const steps = await waitUntil(() => wc.executeJavaScript(`(() => { const s = [...document.querySelectorAll('[data-plan-step]')]; return s.length === 4 ? s.map((x) => [x.getAttribute('data-plan-step'), x.getAttribute('data-plan-state')]) : false })()`), 3000)
+      const stored = await wc.executeJavaScript(`(window.__m113.items().find((w) => w.id === ${JSON.stringify(itemId)})?.plan?.steps ?? []).map((s) => s.id)`)
+      await click('[data-focus-back]')
+      const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"] [data-board-row="${itemId}"]') !== null`), 3000)
+      const planLine = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-board-row="${itemId}"] [data-board-plan]')?.textContent ?? false`), 3000)
+      ok(IDS[1],
+        row && row.group === 'running' && row.action === 'start' && row.primary === 'Start work' && /Not started/.test(row.status ?? '') && row.checks === 'No checks run' && focus === true && back === true,
+        JSON.stringify({ row, focus, back, diag, errs: errs.slice(-4) }))
+      ok(IDS[2],
+        Array.isArray(steps) && steps.map((x) => x[0]).join() === 'api,ui,verify,review' && steps[0][1] === 'ready' && steps[2][1] === 'waiting' &&
+          stored.join() === 'api,ui,verify,review' && /^Plan 0 of 4 verified/.test(planLine || ''),
+        JSON.stringify({ steps, stored, planLine }))
+      await wc.executeJavaScript(`window.__m113.done(${JSON.stringify(itemId)})`)
+    } catch (error) {
+      for (const id of IDS.slice(1)) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
     }
   }
 

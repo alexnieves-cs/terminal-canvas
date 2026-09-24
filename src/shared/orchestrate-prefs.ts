@@ -79,6 +79,13 @@ export interface PersistedOrchestrate {
    * A pre-M299 record's `open: true` still parses; its absence now reads open.
    */
   workbench?: { height: number; tab: WorkbenchTab; open?: boolean }
+  /**
+   * M325. The page opens on the TASK LIST; the scene, Watch and the List are
+   * an optional visualisation a person chooses. Only that choice is written,
+   * as `'visualize'` — ABSENT is the task list, which is what makes every
+   * pre-M325 record (all of which carry a `lens`) open on the tasks too.
+   */
+  view?: 'visualize'
   lens?: 'scene' | 'list' | 'watch'
   mode?: 'dev' | 'pipeline'
   sideTab?: 'activity' | 'files'
@@ -123,6 +130,7 @@ export function parseOrchestrate(raw: unknown, warnings: string[]): PersistedOrc
   if (isRecord(wb) && isNum(wb.height) && WORKBENCH_TABS.includes(wb.tab as WorkbenchTab)) {
     out.workbench = { height: clampWorkbenchHeight(wb.height), tab: wb.tab as WorkbenchTab, ...(typeof wb.open === 'boolean' ? { open: wb.open } : {}) }
   } else if (wb !== undefined) warnings.push('dropped a malformed orchestrate workbench')
+  if (raw.view === 'visualize') out.view = 'visualize'
   if (raw.lens === 'scene' || raw.lens === 'list' || raw.lens === 'watch') out.lens = raw.lens
   if (raw.mode === 'dev' || raw.mode === 'pipeline') out.mode = raw.mode
   if (raw.sideTab === 'activity' || raw.sideTab === 'files') out.sideTab = raw.sideTab
@@ -172,6 +180,7 @@ function parseSavedView(raw: unknown): OrchSavedView | null {
 export function carryOrchestrate(p: PersistedOrchestrate): PersistedOrchestrate {
   return {
     ...(p.workbench === undefined ? {} : { workbench: { height: p.workbench.height, tab: p.workbench.tab, ...(p.workbench.open === true ? { open: true as const } : {}) } }),
+    ...(p.view === 'visualize' ? { view: 'visualize' as const } : {}),
     ...(p.lens === undefined ? {} : { lens: p.lens }),
     ...(p.mode === undefined ? {} : { mode: p.mode }),
     ...(p.sideTab === undefined ? {} : { sideTab: p.sideTab }),

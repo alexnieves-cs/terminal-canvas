@@ -11,6 +11,7 @@ module.exports = {
   ...require('../src/renderer/shell/decision-inbox'),
   /* M318. The task-centered queue — pure over the inbox and the tasks' facts. */
   ...require('../src/renderer/shell/task-queue'),
+  permissionRecordTitle: require('../src/renderer/orchestration/orch-record').permissionRecordTitle,
   /* M309. Presence's pure rule (the listeners install only on first use). */
   ...require('../src/renderer/shell/presence'),
   /* M9b: the review node's model is a canvas module rather than a shell one,

@@ -2435,10 +2435,13 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       const tail = await wc.executeJavaScript(`(() => {
         const row = document.querySelector(
           '.rail-row[data-rail-workspace=${JSON.stringify(waitroomId)}]')
-        return row ? row.querySelector('.rail-row__tail').textContent : null
+        // Decision queue: the count is its own control beside the switch — a
+        // door to the waiting request, not a label inside "Switch to".
+        const door = row ? row.querySelector('[data-rail-workspace-waiting]') : null
+        return row ? { text: row.textContent, door: door ? door.textContent : null } : null
       })()`)
-      ok('96 a hidden workspace with a waiting panel says so on its rail row',
-        tail !== null && tail.includes('1 panel needs you'), `tail=${JSON.stringify(tail)}`)
+      ok('96 a hidden workspace with a waiting panel says so on its rail row, and the count is a door of its own',
+        tail !== null && tail.text.includes('1 panel needs you') && tail.door === '1 panel needs you', `tail=${JSON.stringify(tail)}`)
     }
     await dockTo('panels'); await settle()
 
@@ -5686,6 +5689,9 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ leaked, tabInside, panelsBeforeChords, panelsAfterChords }))
 
       // Orchestrate's own layout is its own: a mode chosen there survives the round trip.
+      // M325. The page opens on the task list; the mode is the visualisation's, chosen there.
+      await wc.executeJavaScript(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); b?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      await settle()
       await wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.orch__mode [role="tab"]')].find((b) => b.textContent.trim() === 'Pipeline'); t?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!t })()`)
       await settle()
 

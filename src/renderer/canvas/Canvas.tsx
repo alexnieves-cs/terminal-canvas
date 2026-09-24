@@ -148,7 +148,7 @@ import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
-import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart, useChatsVersion } from '@renderer/chat/chat-store'
+import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart, scrollToTurn, useChatsVersion } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
@@ -248,6 +248,9 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 import { TopBar } from '../shell/TopBar'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { FocusTask } from '../focus/FocusTask'
+import type { FocusSide } from '../focus/focus-model'
+import { planFactsOf } from '../focus/plan-facts'
+import { planSummary, planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
@@ -1644,7 +1647,32 @@ export function Canvas({
   const jumpToAttention = useCallback((panelId: string) => {
     landingTargetRef.current = panelId
     paletteActionsRef.current?.goToPanel(panelId)
+    openRequestOfRef.current(panelId)
   }, [])
+  // Decision queue. EVERY "needs you" door lands on the REQUEST, never only
+  // on the agent: a chat's pending permission opens in the queue beside it
+  // (the one surface that resolves it, #16), a chat's question is scrolled
+  // into view in its conversation, and a terminal's prompt is the terminal
+  // itself. Nothing here focuses or acknowledges — focus is the renderer's
+  // single acknowledgement trigger, and a jump that cleared the badge on
+  // arrival would take the decision away before the person read it.
+  // Decision queue. A row that names a WAITING panel — the rail, the Dock's
+  // "jump", Orchestrate's jump — lands on its request like every attention
+  // door; any other panel is just framed, as goToPanel always did.
+  const goToPanelOrRequest = useCallback((panelId: string) => {
+    const waiting = attentionIds().includes(panelId) || approvals().some((a) => a.id === panelId)
+    if (waiting) jumpToAttention(panelId)
+    else paletteActionsRef.current?.goToPanel(panelId)
+  }, [jumpToAttention])
+  const openRequestOfRef = useRef<(panelId: string) => void>(() => {})
+  openRequestOfRef.current = (panelId: string) => {
+    const request = approvals().find((a) => a.id === panelId)
+    if (request !== undefined) { chromeRef.current.openAttentionAt(request.requestId); return }
+    const panel = displayPanelsRef.current.find((p) => p.rect.id === panelId)
+    if (panel === undefined || !isChatPanel(panel)) return
+    const turns = getChat(panelId).turns.length
+    if (turns > 0) scrollToTurn(panelId, turns - 1)
+  }
 
   // Attention navigation's arrival: after the camera lands, the destination
   // frame is briefly lit, or a person flown across a busy canvas has to
@@ -2563,6 +2591,7 @@ export function Canvas({
     landingTargetRef.current = id
     centreOn(panel.rect)
     selectAndRaise(id)
+    openRequestOfRef.current(id)
   }
 
   // M249. The command pill's Jump: Cmd+J's own queue and its own cursor — so
@@ -2575,12 +2604,8 @@ export function Canvas({
     const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), jumpCursorRef.current, 1)
     if (id === null) return
     jumpCursorRef.current = id
+    // #16. jumpToAttention opens the request itself (a permission in the queue).
     jumpToAttention(id)
-    // #16. A chat waiting on a PERMISSION is resolved in the Needs-you queue,
-    // so the pill's shortcut lands there too — on that request — beside the
-    // agent it flew to. A terminal's bell has no request and only flies.
-    const request = approvals().find((a) => a.id === id)
-    if (request !== undefined) chromeRef.current.openAttentionAt(request.requestId)
   }, [jumpToAttention])
   // Filled by CommandPill with its "expand and take the keyboard"; a ref so
   // useKeyboardNav's listener installs once (openPill's identity is fixed).
@@ -3622,9 +3647,11 @@ export function Canvas({
   // M324. A TASK'S FOCUS VIEW — the third center page. It remembers the page it
   // was opened from (the canvas, or Orchestrate) so Back returns there; the
   // canvas's camera is never touched, so "there" is exactly where it was.
-  const [focusTask, setFocusTask] = useState<{ itemId: string; from: 'canvas' | 'orchestration' } | null>(null)
-  const openFocusTask = useCallback((itemId: string): void => {
-    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow }))
+  // M325. `side` opens the task on the side that answers what it needs (a
+  // failing check, the changes to review); absent, the task's remembered side.
+  const [focusTask, setFocusTask] = useState<{ itemId: string; from: 'canvas' | 'orchestration'; side?: FocusSide; at: number } | null>(null)
+  const openFocusTask = useCallback((itemId: string, side?: FocusSide): void => {
+    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
     setCenterView('focus')
   }, [centerViewNow, setCenterView])
   const closeFocusTask = useCallback((): void => {
@@ -3646,6 +3673,20 @@ export function Canvas({
     const itemId = owners[0]!
     window.setTimeout(() => openFocusTaskRef.current(itemId), 0)
     return { kind: 'ran' }
+  }
+  // M326. A task a PERSON just started opens in its workspace — the place it
+  // is worked on — once the palette that started it has closed (an open
+  // palette returns every covering page to the canvas, so the open waits a
+  // beat). An agent's start (the agent line) and a canvas drop stay on the canvas.
+  boardVerbsRef.current.focusItem = (itemId: string) => {
+    window.setTimeout(() => { if (workItemsRef.current.some((w) => w.id === itemId)) openFocusTaskRef.current(itemId) }, 0)
+  }
+  // Decision queue. The same ownership rule as `focus` above: one task or none.
+  boardVerbsRef.current.taskOfPanel = (panelId: string) => {
+    const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (panel === undefined) return undefined
+    const owners = isWorkPanel(panel) ? [panel.work.itemId] : taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === panelId)).map((m) => m.itemId)
+    return owners.length === 1 ? owners[0] : undefined
   }
   // A focus view with no task to show (deleted, or a workspace switch took it
   // away) is an empty page — it returns to the canvas instead.
@@ -7667,7 +7708,8 @@ export function Canvas({
   // decisions a restart lost. Timelines are read only while the popover shows.
   const taskQueue = useTaskQueue({
     inbox, workItems, panels: displayPanels, membersOf: taskMembersOf, handoffOf: taskHandoffOf, labelOf: panelLabelOf,
-    active: chrome.attentionOpen
+    // M325. Orchestrate's task list and the focus view read the check tallies too.
+    active: chrome.attentionOpen || chrome.centerView !== 'canvas'
   })
 
   // Brief #20. What came back running, what came back stopped, and what was
@@ -7820,7 +7862,7 @@ export function Canvas({
         onJumpElsewhere={jumpAnywhere}
         attentionOpen={chrome.attentionOpen}
         onToggleAttention={chrome.toggleAttention}
-        onGoToPanel={paletteActions.goToPanel}
+        onGoToPanel={goToPanelOrRequest}
         onAnswer={paletteActions.answerApproval}
         attentionFocus={chrome.attentionFocus}
         taskTitleOf={approvalTaskOf}
@@ -7829,7 +7871,7 @@ export function Canvas({
         onEvidence={(e) => {
           // M318. A decision's evidence: the asking panel, or the task's review.
           if (e.kind === 'review') { boardVerbsRef.current.review?.(e.itemId); return }
-          if (e.kind === 'decision' || e.kind === 'panel' || e.kind === 'output') paletteActions.goToPanel(e.panelId)
+          if (e.kind === 'decision' || e.kind === 'panel' || e.kind === 'output') goToPanelOrRequest(e.panelId)
         }}
         onFocusTask={openFocusTask}
         onSettings={openSettingsScope}
@@ -7878,6 +7920,13 @@ export function Canvas({
         snapshots={snapshots}
         onRestoreSnapshot={restoreSnapshot}
         onSwitchWorkspace={paletteActions.switchWorkspace}
+        onJumpWaitingWorkspace={(workspaceId) => {
+          // The active workspace's own waiting panels are the ⌘J queue; any
+          // other's are its elsewhere row, longest-waiting first.
+          const id = railElsewhere.find((w) => w.workspaceId === workspaceId)?.panelIds[0]
+          if (id !== undefined) jumpAnywhere(id)
+          else jumpToWaiting()
+        }}
         onCreateWorkspace={paletteActions.beginCreateWorkspace}
         onRenameWorkspace={paletteActions.beginRenameWorkspace}
         onDeleteWorkspace={paletteActions.deleteWorkspace}
@@ -7885,7 +7934,7 @@ export function Canvas({
         rows={railRows}
         selectedId={selectedId}
         taskMemberReason={navTask === null ? undefined : (panelId) => navTask.members.find((m) => m.panelId === panelId)?.reason}
-        onGoToPanel={paletteActions.goToPanel}
+        onGoToPanel={goToPanelOrRequest}
         onStartPanel={paletteActions.startPanel}
         onClosePanel={paletteActions.closePanel}
         treeRootPath={treeRoot}
@@ -7944,7 +7993,7 @@ export function Canvas({
             }}
             onJumpPanel={(id) => {
               leaveForCanvas()
-              paletteActions.goToPanel(id)
+              goToPanelOrRequest(id)
             }}
             onJumpWorkItem={(id) => {
               leaveForCanvas()
@@ -8015,6 +8064,21 @@ export function Canvas({
             // Navigation hierarchy: the canvas's selection goes in, Orchestrate's comes out.
             initialSelectedId={selectedId}
             onSelectionChange={setOrchSelectedId}
+            // M325. The task list: the queue's groups, and a task opens in its workspace.
+            taskQueue={taskQueue}
+            onOpenTask={openFocusTask}
+            // M327. A task's plan progress on its row, read the way its plan side reads it.
+            planOf={(itemId) => {
+              const item = workItems.find((w) => w.id === itemId)
+              if (item?.plan === undefined) return undefined
+              const members = new Set(taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? [])
+              const owners = new Set(item.plan.steps.map((st) => st.owner).filter((o): o is string => o !== undefined))
+              const chats = panels.filter(isChatPanel).filter((p) => p.rect.id === item.panelId || members.has(p.rect.id) || owners.has(p.rect.id)).map((p) => ({ id: p.rect.id, title: p.title ?? p.rect.id }))
+              const h = taskHandoffOf(itemId)
+              const views = planView(item.plan, planFactsOf({ chats, runs: taskQueue.runs[itemId] ?? [], review: { standing: h?.standing ?? 'none', accepted: h?.state === 'accepted' || item.merged !== undefined } }))
+              return planSummary(item.plan, views)
+            }}
+            onStartWork={(id) => { leaveForCanvas(); paletteActions.beginStartWork({ itemId: id }) }}
             onSend={async (id, text) => sendRefusalSentence(await window.canvas.agentSession.send(id, text, []))}
             /*
              * M302. SAVE AN ARRANGEMENT. The shape is built here, where the
@@ -8080,11 +8144,15 @@ export function Canvas({
         return (
           <div className="shell__orch shell__orch--on" data-center-view="focus" role="presentation">
             <FocusTask
+              // One instance per task: a switch is a new page, so nothing held
+              // mid-gesture (an armed Accept, a picked diff line) crosses tasks.
+              key={item.id}
               item={item}
               panels={panels}
               workItems={workItems}
               memberIds={members}
               {...(group === undefined ? {} : { group })}
+              {...(taskQueue.history[item.id] === undefined ? {} : { history: taskQueue.history[item.id] })}
               {...(handoff === undefined ? {} : { handoff })}
               {...(ctx === undefined ? {} : { taskContext: ctx })}
               backendAvailable={(b) => backendAvailable(presetRows, b)}
@@ -8103,6 +8171,33 @@ export function Canvas({
               onJump={(id) => { setFocusTask(null); leaveForCanvas(); paletteActions.goToPanel(id) }}
               onOpenPath={(path) => { setFocusTask(null); leaveForCanvas(); openFileAtCentre(path) }}
               onStartWork={(id) => { setFocusTask(null); leaveForCanvas(); paletteActions.beginStartWork({ itemId: id }) }}
+              {...(focusTask.side === undefined ? {} : { initialSide: focusTask.side })}
+              openedAt={focusTask.at}
+              // M326. Another task, in the same page; Back still returns where the first was opened from.
+              // A task that needs the person opens on its request's evidence —
+              // a failed check at its output, changes at the diff; a permission
+              // or question is already in the conversation the page claims.
+              onSwitchTask={(id) => {
+                const ev = taskQueue.groups.find((g) => g.itemId === id)?.next.evidence.kind
+                openFocusTask(id, ev === 'output' ? 'checks' : ev === 'review' ? 'changes' : undefined)
+              }}
+              needsYou={new Set(taskQueue.groups.filter((g) => g.itemId !== null && g.severity !== 'review').map((g) => g.itemId as string))}
+              // M327. The plan's check step reads the task's witnessed runs; a
+              // step's new agent is an ordinary chat in the step's directory, on
+              // the task's backend, its brief INSERTED (M80's rule) by the page.
+              checkRuns={taskQueue.runs[item.id] ?? []}
+              onSpawnAgent={async (opts) => {
+                // No message here: the focus view claims the new conversation
+                // first, then hands it the brief — the canvas's panel must not take it.
+                const r = await beginNewChat({
+                  title: opts.title,
+                  ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
+                  ...(item.backend === undefined ? {} : { backend: item.backend }),
+                  ...(item.teammateId === undefined ? {} : { teammateId: item.teammateId })
+                })
+                return r.kind === 'spawned' && r.id !== undefined ? { id: r.id } : { reason: r.kind === 'refused' ? r.reason : 'no conversation was opened' }
+              }}
+              onInterrupt={(id) => { void window.canvas.agentSession.interrupt(id) }}
             />
           </div>
         )

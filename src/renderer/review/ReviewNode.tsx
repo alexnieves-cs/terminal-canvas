@@ -20,7 +20,8 @@ import type { CheckRecord } from '@shared/check-evidence'
 import { agentWorkingOf, commentAnchorOf, commentPlace, REVIEW_COMMENT_BODY_MAX, type ReviewComment } from '@shared/review-comments'
 import { useLaneChecks, type LaneWatcher } from '@renderer/checks/useLaneChecks'
 import { TaskReviewPanel, TaskVerdict } from './TaskReviewPanel'
-import { laneMergeOutcome, laneMergePlanSentence, type LaneMergeResult } from '@shared/lane-merge'
+import type { LaneMergeResult } from '@shared/lane-merge'
+import { useLaneAccept, type AcceptUi } from './useLaneAccept'
 import type { PrEvidence } from '@shared/task-flow'
 
 const NO_WATCHERS: readonly LaneWatcher[] = []
@@ -327,22 +328,6 @@ const LEDGER_ROWS_PER_PANEL = 40
  * answer. Nothing here decides that a command was a "test": see
  * `review-readiness.ts`'s header for why that guess is not made.
  */
-/**
- * M315. What the decision bar's Accept control needs from the node: its own
- * armed state and the press handlers. Built by the component (it holds the
- * state); rendered by `renderTask` beside Mark reviewed.
- */
-interface AcceptUi {
-  /** Why Accept cannot run now, or null when it can. */
-  blocked: string | null
-  /** `null` at rest; the plan sentence while armed. */
-  armed: string | null
-  busy: boolean
-  outcome: string | null
-  onArm: () => void
-  onConfirm: () => void
-  onCancel: () => void
-}
 
 /**
  * M315. The task review in THREE parts, placed around the diff by the node:
@@ -884,42 +869,8 @@ function ReviewNodeImpl({
     setExpandedPath((model.files[0] as { path: string }).path)
   }, [task, expandedPath, model.files])
 
-  // M315. ACCEPT: plan (a dry run that refuses by name), confirm, merge.
-  const [acceptPlan, setAcceptPlan] = useState<Extract<LaneMergeResult, { kind: 'ready' }> | null>(null)
-  const [acceptBusy, setAcceptBusy] = useState(false)
-  const [acceptOutcome, setAcceptOutcome] = useState<string | null>(null)
-  const accept: AcceptUi | null = task === undefined || task.onAccepted === undefined ? null : {
-    blocked: readOnly ? 'leave merged view to act on this review'
-      : task.handoff.state === 'accepted' ? task.handoff.detail
-      : task.handoff.standing !== 'current' ? 'mark the current changes reviewed first — Accept merges what you read'
-      : null,
-    armed: acceptPlan === null ? null : laneMergePlanSentence(acceptPlan),
-    busy: acceptBusy,
-    outcome: acceptOutcome,
-    onArm: () => {
-      setAcceptBusy(true)
-      setAcceptOutcome(null)
-      void window.canvas.lane.merge({ lane: task.lanePath, title: task.title, dryRun: true })
-        .then((r) => { setAcceptBusy(false); if (r.kind === 'ready') setAcceptPlan(r); else setAcceptOutcome(laneMergeOutcome(r)) },
-          (e: unknown) => { setAcceptBusy(false); setAcceptOutcome(`could not read the lane — ${String(e)}`) })
-    },
-    onConfirm: () => {
-      if (acceptPlan === null) return
-      const plan = acceptPlan
-      setAcceptBusy(true)
-      // expectHead: the lane must still be at the commit the plan named.
-      void window.canvas.lane.merge({ lane: task.lanePath, title: task.title, expectHead: plan.head })
-        .then((r) => {
-          setAcceptBusy(false)
-          setAcceptPlan(null)
-          setAcceptOutcome(laneMergeOutcome(r))
-          if (r.kind === 'merged') task.onAccepted?.(task.itemId, r)
-          setRefreshToken((n) => n + 1)
-          task.onRefresh()
-        }, (e: unknown) => { setAcceptBusy(false); setAcceptPlan(null); setAcceptOutcome(`nothing was merged — ${String(e)}`) })
-    },
-    onCancel: () => setAcceptPlan(null)
-  }
+  // M315. ACCEPT: plan (a dry run that refuses by name), confirm, merge — `useLaneAccept`, shared with the focus view.
+  const accept = useLaneAccept(task, readOnly, () => setRefreshToken((n) => n + 1))
   const taskParts = task === undefined ? undefined : renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks, accept)
 
   // M260. Prune `locallyReviewed` to whatever the current result still

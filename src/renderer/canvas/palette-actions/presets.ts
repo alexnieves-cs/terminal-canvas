@@ -15,7 +15,7 @@ import { inspectionDirectory } from '../inspection-directory'
 import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
 import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
-import { isAnswered, markAnswered, reportedModels, scrollToTurn, unmarkAnswered } from '@renderer/chat/chat-store'
+import { approvals, isAnswered, markAnswered, reportedModels, scrollToTurn, unmarkAnswered } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { withdrawApprovalOutcome } from '@renderer/shell/approval-outcome'
 import { normaliseTypedUrl } from '@shared/browser-panel'
@@ -33,7 +33,7 @@ import type { CapturedPanel } from '@shared/ipc-contract'
 import { railLabel } from '../../shell/rail-rows'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
-import { adoptedRunId, recordOrchEvent } from '../../orchestration/orch-record'
+import { adoptedRunId, permissionRecordTitle, recordOrchEvent } from '../../orchestration/orch-record'
 
 export type PresetsActions = Pick<PaletteActions,
   | 'spawnPreset'
@@ -82,7 +82,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     beginNewChat, openAsChat, openInTerminal, instantiateTemplate, lockPanel, unlockPanel,
     pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate, restartWithSpec,
     commitHistory, reloadPresets, reloadWorktrees, worktreeRows, setPanels, setInputMode,
-    teammatesRef, openBrowserPanel, openSkillPanel, self, intoNewWorkspace
+    teammatesRef, openBrowserPanel, openSkillPanel, self, intoNewWorkspace, boardVerbsRef
   } = ctx
   return ({
     spawnPreset: (id) => {
@@ -599,6 +599,10 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // that gap sends nothing. A rejected call puts it back.
     answerApproval: (id, requestId, allow, scope) => {
       if (isAnswered(id, requestId)) return
+      // Read BEFORE the mark: the request is what the record describes, and
+      // its task is what files the record in that task's history.
+      const asked = approvals().find((a) => a.id === id && a.requestId === requestId)
+      const itemId = boardVerbsRef.current?.taskOfPanel?.(id)
       markAnswered(id, requestId)
       void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
         .catch(() => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId); return undefined })
@@ -626,7 +630,10 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
           // The source is `person` because a person decided it here.
           void recordOrchEvent({
             runId: adoptedRunId(id), panelId: id, event: 'permission', source: 'person',
-            title: allow ? 'Allowed a request' : 'Denied a request',
+            ...(itemId === undefined ? {} : { itemId }),
+            // The inbox's own key, so a history row matches the decision it closed.
+            key: `p:${requestId}`,
+            title: permissionRecordTitle(allow, scope, asked),
             detail: `${requestId}${scope === undefined ? '' : ` · for this ${scope}`}`
           })
         })

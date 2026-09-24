@@ -25,12 +25,13 @@ import type { WorkbenchTab } from '@shared/orchestrate-prefs'
  * verdict, criteria, comments and the follow-up they compose — the review
  * node's own panel), and a preview when the task has one bound.
  */
-export type FocusSide = 'changes' | 'checks' | 'review' | 'output' | 'artifacts' | 'preview'
-export const FOCUS_SIDES: readonly FocusSide[] = ['changes', 'checks', 'review', 'output', 'artifacts', 'preview']
+export type FocusSide = 'plan' | 'changes' | 'checks' | 'review' | 'output' | 'artifacts' | 'preview'
+/** M327. `plan` first: who is doing what, and what each step waits on, reads before the evidence. */
+export const FOCUS_SIDES: readonly FocusSide[] = ['plan', 'changes', 'checks', 'review', 'output', 'artifacts', 'preview']
 
 /** The workbench tab a side reads through; `preview` is the focus view's own. */
 export function benchTabOf(side: FocusSide): WorkbenchTab | null {
-  const tabs: Record<FocusSide, WorkbenchTab | null> = { changes: 'changes', checks: 'checks', review: null, output: 'output', artifacts: 'artifacts', preview: null }
+  const tabs: Record<FocusSide, WorkbenchTab | null> = { plan: null, changes: 'changes', checks: 'checks', review: null, output: 'output', artifacts: 'artifacts', preview: null }
   return tabs[side]
 }
 
@@ -51,6 +52,13 @@ export interface FocusPrefs {
   file?: string
   /** How far that file's diff was scrolled, in pixels. */
   scroll?: number
+  /**
+   * M326. The conversation shown, when the task has more than one agent — a
+   * panel id, so a task with an implementer and a tester reopens on the one
+   * the person was talking to. A panel that has since closed falls back to
+   * the task's own conversation (`shownAgent`).
+   */
+  agent?: string
   /** When these were last written, so the oldest task's prefs go first. */
   at: number
 }
@@ -71,6 +79,7 @@ export function parseFocusPrefs(raw: unknown): FocusPrefs {
   if (typeof raw.side === 'string' && (FOCUS_SIDES as readonly string[]).includes(raw.side)) out.side = raw.side as FocusSide
   if (typeof raw.file === 'string' && raw.file !== '') out.file = raw.file
   if (typeof raw.scroll === 'number' && Number.isFinite(raw.scroll) && raw.scroll >= 0) out.scroll = Math.round(raw.scroll)
+  if (typeof raw.agent === 'string' && raw.agent !== '') out.agent = raw.agent
   if (typeof raw.at === 'number' && Number.isFinite(raw.at)) out.at = raw.at
   return out
 }
@@ -96,14 +105,30 @@ export function withFocusPrefs(prev: FocusPrefs, patch: Partial<Omit<FocusPrefs,
  * the task no longer has, which falls back to Changes rather than an empty
  * pane that promises a page.
  */
-export function openingSide(prefs: FocusPrefs, has: { page: boolean; review: boolean }): FocusSide {
+export function openingSide(prefs: FocusPrefs, has: { page: boolean; review: boolean; plan?: boolean }, asked?: FocusSide): FocusSide {
+  // M325. A side the opener asked for (a failing check, the changes to review)
+  // wins — when this task can show it.
+  if (asked !== undefined && !(asked === 'preview' && !has.page) && !(asked === 'review' && !has.review)) return asked
+  // M327. A task with a plan, opened for the first time, opens on the plan.
+  if (prefs.at === 0 && has.plan === true) return 'plan'
   if (prefs.side === 'preview' && !has.page) return 'changes'
   if (prefs.side === 'review' && !has.review) return 'changes'
   return prefs.side
 }
 
+/**
+ * M326. The conversation a task's workspace shows: the one the person chose
+ * when it is still one of the task's chats, else the task's own (its lane's),
+ * else its first chat. Null when it has none.
+ */
+export function shownAgent(chats: readonly string[], own: string | undefined, remembered: string | undefined): string | null {
+  if (remembered !== undefined && chats.includes(remembered)) return remembered
+  if (own !== undefined && chats.includes(own)) return own
+  return chats[0] ?? null
+}
+
 export function sideLabel(side: FocusSide): string {
-  const words: Record<FocusSide, string> = { changes: 'Changes', checks: 'Checks', review: 'Review', output: 'Output', artifacts: 'Artifacts', preview: 'Preview' }
+  const words: Record<FocusSide, string> = { plan: 'Plan', changes: 'Changes', checks: 'Checks', review: 'Review', output: 'Output', artifacts: 'Artifacts', preview: 'Preview' }
   return words[side]
 }
 

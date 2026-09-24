@@ -236,6 +236,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
               const outcome = choice.swarm === undefined
                 ? await self.startWork(id, choice.teammateId, choice.root)
                 : await self.startSwarm(id, choice.teammateId, choice.root, choice.swarm)
+              // M326. The task opens in its workspace once it has started.
+              if (outcome.kind === 'started') boardVerbsRef.current?.focusItem?.(id)
               return outcome.kind === 'started' ? { kind: 'started' } : { kind: 'refused', reason: outcome.reason }
             },
             openTeammates: () => chooseNavigator('teammates'),
@@ -275,7 +277,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
         const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
         const needs = startWorkNeeds({ title, teammateId }, { teammates: teammatesRef.current ?? [], repos, wanted })
         if (needs.length > 0) { withRecipes(() => openSheet(title, true, wanted, item.id, teammateId)); return }
-        void self.startWork(item.id, teammateId)
+        void self.startWork(item.id, teammateId).then((o) => { if (o.kind === 'started') boardVerbsRef.current?.focusItem?.(item.id) })
       })
     },
     /** M197. The executor, unchanged in shape: the same `dispatchWorkItem` every door already ran through, now answering. */

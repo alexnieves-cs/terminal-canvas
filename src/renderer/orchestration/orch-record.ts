@@ -27,6 +27,7 @@
 
 import type { EventRow, OrchEventKind, OrchEventSource } from '@shared/run-ledger'
 import type { ReviewIdentity } from '@shared/review-identity'
+import { announceRecordLanded } from './record-landed'
 
 /**
  * An EXECUTION's id: minted once per dispatch, never reused, and never
@@ -139,8 +140,25 @@ export async function recordOrchEvent(input: OrchEventInput): Promise<boolean> {
     ...(input.root === undefined || !input.root.startsWith('/') ? {} : { root: input.root })
   }
   try {
-    return await door(row)
+    const landed = await door(row)
+    if (landed) announceRecordLanded(row)
+    return landed
   } catch {
     return false
   }
+}
+
+/**
+ * Decision queue. What an answered permission request is called in the
+ * record — the decision, the tool and the action it covered, in the
+ * product's words — so a task's history reads "Allowed Bash — npm test"
+ * rather than an opaque request id. The action is the request's short form
+ * (`argument`), clipped: `detail` stays one line (rule 4).
+ */
+export function permissionRecordTitle(allow: boolean, scope: 'session' | undefined, asked?: { toolName: string; argument: string }): string {
+  if (asked === undefined) return allow ? 'Allowed a request' : 'Denied a request'
+  const verb = !allow ? 'Denied' : scope === 'session' ? 'Allowed for this session:' : 'Allowed'
+  const arg = asked.argument.replace(/\s+/g, ' ').trim()
+  const clipped = arg.length > 80 ? `${arg.slice(0, 79)}…` : arg
+  return `${verb} ${asked.toolName}${clipped === '' ? '' : ` — ${clipped}`}`
 }

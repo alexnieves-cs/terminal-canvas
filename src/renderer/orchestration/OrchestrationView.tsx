@@ -82,7 +82,10 @@ import {
   ORCH_PLATE_LABEL, ORCH_PLATE_MORE, ORCH_PLATFORM, ORCH_SELECT_LIFT, ORCH_WORKSPACE_PLATFORM, orchConnectors, orchHiddenLine, orchHitOrder, orchLabelBudget, orchLabelMargins, orchNameTier, orchObjectVisible, orchPlatformBounds, orchPlatformCountsLine, orchPlatformHitPolygon, orchPolygonBounds, orchNextSort, orchPlatforms, orchQualityStep, orchSceneObjects, orchSegmentBetween, orchSortRows, orchSpatialStep, orchZoomLevel,
   type OrchArrow, type OrchListSort, type OrchListSortKey, type OrchNameTier, type OrchObjectKind, type OrchPlatform, type OrchZoomLevel
 } from './orchestration-platforms'
-import { getOrchPrefs, persistedOrchPrefs, prefsFromView, seedOrchPrefs, setOrchPrefs, viewFromPrefs, withSavedView, type OrchLens, type OrchSideTab } from './orchestration-prefs'
+import { getOrchPrefs, persistedOrchPrefs, prefsFromView, seedOrchPrefs, setOrchPrefs, viewFromPrefs, withSavedView, type OrchLens, type OrchSideTab, type OrchView } from './orchestration-prefs'
+import { buildTaskBoard, type BoardPlanInput, type BoardSide } from './orch-task-board'
+import { OrchTaskBoard } from './OrchTaskBoard'
+import type { TaskQueue } from '@renderer/shell/task-queue'
 import { OrchWorkbench, benchSubjectKey, type BenchSubject } from './OrchWorkbench'
 import { completionOf, type Completion } from '@shared/completion'
 import { agentWorkingOf, verificationOf } from '@shared/review-comments'
@@ -221,6 +224,18 @@ export interface OrchestrationViewProps {
   initialSelectedId?: string | null
   /** The page's one selected session (null for none or many), for the title bar's crumb and the return handoff. */
   onSelectionChange?: (panelId: string | null) => void
+  /**
+   * M325. The task queue — the ONE judgment of what needs the person, grouped
+   * by task — which the task list reads its Needs attention rows from.
+   * Absent, the list still groups tasks by their own state.
+   */
+  taskQueue?: TaskQueue
+  /** M325. Open a task's workspace (the focus view), on a side when one answers the need. */
+  onOpenTask?: (itemId: string, side?: BoardSide) => void
+  /** M325. Start work for a task that has no conversation yet. */
+  onStartWork?: (itemId: string) => void
+  /** M327. A task's plan progress, when it has a plan. */
+  planOf?: (itemId: string) => BoardPlanInput | undefined
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
@@ -1542,7 +1557,7 @@ export function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, onContinueOnBackend, backendsAvailable, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, onContinueOnBackend, backendsAvailable, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange, taskQueue, onOpenTask, onStartWork, planOf } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -2015,6 +2030,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   // keyboard (and reduced-motion, and no-WebGL) way to reach every one of them.
   const [lens, setLens] = useState<OrchLens>(() => getOrchPrefs().lens)
   useEffect(() => { setOrchPrefs({ lens }) }, [lens])
+  // M325. The task list is the page's default; the lenses are the visualisation.
+  const [view, setView] = useState<OrchView>(() => getOrchPrefs().view)
+  useEffect(() => { setOrchPrefs({ view }) }, [view])
+  const showLens = useCallback((l: OrchLens): void => { setView('visualize'); setLens(l) }, [])
+  const viewRef = useRef(view)
+  viewRef.current = view
   const lensRef = useRef(lens)
   lensRef.current = lens
   // M304. The Watch lens's model, built only while Watch is showing: every roster
@@ -2057,7 +2078,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   useEffect(() => {
     const timer = window.setTimeout(flushOrchestrate, 250)
     return () => window.clearTimeout(timer)
-  }, [tab, mode, lens, graphCamera, benchTab, benchHeight, benchOpen, islandOrder, flushOrchestrate])
+  }, [tab, mode, view, lens, graphCamera, benchTab, benchHeight, benchOpen, islandOrder, flushOrchestrate])
   // M288. Leaving the page inside the 250 ms window dropped the pending write —
   // measured as an Undo move that came back undone on the next visit, because
   // the mount re-seeds from the record. The unmount flushes what the timer owed.
@@ -2084,6 +2105,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     const next = prefsFromView(getOrchPrefs(), v)
     setOrchPrefs(next)
     // The React state follows the prefs, in the same order the page reads them.
+    setView(next.view)
     setLens(next.lens)
     setMode(next.mode)
     setTab(next.tab)
@@ -2159,6 +2181,20 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     setSent((cur) => new Set(cur).add(key))
     onAnswer(row.id, row.requestId, allow, scope)
   }
+
+  // M325. THE TASK LIST — the page's default. The queue decides what needs the
+  // person; the roster says what each agent is doing; the canvas's readiness
+  // judgement says what a task's lane holds. Nothing here re-derives any of them.
+  const rosterById = useMemo(() => new Map(liveSnap.roster.map((r) => [r.id, r])), [liveSnap.roster])
+  const board = useMemo(() => buildTaskBoard({
+    items: workItems,
+    membersOf: (id) => taskMembersOf?.(id) ?? [],
+    agentOf: (id) => { const r = rosterById.get(id); return r === undefined ? undefined : { id: r.id, title: r.title, kind: r.kind, state: r.state, word: stateWord(r), tone: r.tone } },
+    groups: taskQueue?.groups ?? [],
+    checks: taskQueue?.checks ?? {},
+    handoffOf: (id) => taskHandoffOf?.(id),
+    ...(planOf === undefined ? {} : { planOf })
+  }), [workItems, taskMembersOf, rosterById, taskQueue, taskHandoffOf, planOf])
 
   // M284. The inspector's subject: the selected session, else the island's task.
   const selectedArtifact = selectedRow === null && selectedId !== null ? (liveSnap.files.find((f) => f.id === selectedId) ?? null) : null
@@ -2342,6 +2378,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) return
+      // M325. The task list is buttons in the tab order; the scene's keys are the scene's.
+      if (viewRef.current === 'tasks') return
       const isArrow = event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'ArrowRight'
       const isEnter = event.key === 'Enter'
       const isEscape = event.key === 'Escape'
@@ -2619,6 +2657,53 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     )
   }
 
+  // M325. THE TASK LIST is the page's default view: the header, one line of
+  // counts, the switch to the visualisation, and the list. The roster, the
+  // inspector, the activity feed and the workbench are the visualisation's;
+  // a task's own conversation and evidence are its workspace (the focus view).
+  if (view === 'tasks') {
+    return (
+      <div className="orch orch--tasks" role="region" aria-label="Orchestration" data-orch-view="tasks">
+        <header className="orch__tasks-head">
+          <div className="orch__task-id">
+            <span className="orch__eyebrow">Orchestrate{workspaceName !== undefined && workspaceName !== '' && <span className="orch__title-scope"> / {workspaceName}</span>}</span>
+            <h1 className="orch__title orch__title--tasks" data-orch-title>Tasks</h1>
+            <p className="orch__tasks-headline" data-board-headline role="status">{board.headline}</p>
+          </div>
+          <span className="orch__lens" role="group" aria-label="Tasks or a visualisation">
+            <button type="button" className="orch__tab orch__tab--on" aria-pressed={true} data-orch-view-tasks>Tasks</button>
+            {(['scene', 'watch', 'list'] as const).map((l) => (
+              <button key={l} type="button" className="orch__tab" aria-pressed={false} data-orch-lens={l}
+                title={l === 'scene' ? 'The tasks as platforms and their agents as a scene' : l === 'watch' ? 'Watch the sessions work — files as towers, writes and commands as they happen' : 'Every session, by name, in a table'}
+                {...shellControl(() => showLens(l))}>{l === 'scene' ? 'Scene' : l === 'watch' ? 'Watch' : 'List'}</button>
+            ))}
+          </span>
+        </header>
+        <OrchTaskBoard
+          board={board}
+          approvalOf={(panelId, requestId) => attentionRows.find((r) => r.id === panelId && r.requestId === requestId)}
+          onOpen={(itemId, side) => { if (onOpenTask !== undefined) onOpenTask(itemId, side); else onJumpWorkItem(itemId) }}
+          {...(onStartWork === undefined ? {} : { onStart: onStartWork })}
+          onJump={jump}
+          onShowOnCanvas={onJumpWorkItem}
+          onShowInScene={(itemId) => {
+            const isl = islands.find((i) => i.itemId === itemId)
+            showLens('scene')
+            if (isl !== undefined) { setFocusIslandId(isl.id); setSelectedIds([]) }
+          }}
+          {...(onMarkDone === undefined ? {} : { onMarkDone })}
+          {...(onAnswer === undefined ? {} : {
+            onAnswer: (panelId: string, requestId: string, allow: boolean, scope?: 'session') => {
+              const row = attentionRows.find((r) => r.id === panelId && r.requestId === requestId)
+              if (row !== undefined) answer(row, allow, scope)
+            }
+          })}
+          {...(onSend === undefined ? {} : { onSend })}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="orch" role="region" aria-label="Orchestration" data-orch-reading={benchReading || undefined}>
       <header className="orch__header">
@@ -2806,10 +2891,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             ))}
           </div>
             <span className="orch__lens" role="group" aria-label="Scene, watch or list">
+              <button type="button" className="orch__tab" aria-pressed={false} data-orch-view-tasks
+                title="Back to the task list — what needs you, what is running, what is ready for review"
+                {...shellControl(() => setView('tasks'))}>Tasks</button>
               {(['scene', 'watch', 'list'] as const).map((l) => (
                 <button key={l} type="button" className={`orch__tab${lens === l ? ' orch__tab--on' : ''}`} aria-pressed={lens === l}
                   data-orch-lens={l} title={l === 'watch' ? 'Watch the sessions work — files as towers, writes and commands as they happen' : undefined}
-                  {...shellControl(() => setLens(l))}>{l === 'scene' ? 'Scene' : l === 'watch' ? 'Watch' : 'List'}</button>
+                  {...shellControl(() => showLens(l))}>{l === 'scene' ? 'Scene' : l === 'watch' ? 'Watch' : 'List'}</button>
               ))}
             </span>
             {/* M302. SAVED VIEWS — filters, camera and layout, and nothing else.
@@ -2906,7 +2994,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 // Watch is three.js or nothing; without WebGL the List is the same sessions, by name.
                 <div className="orch-live orch-live--fallback" data-orch-live-fallback>
                   <p>Watch needs WebGL, which this window can't use. The List shows the same sessions and their state.</p>
-                  <button type="button" className="orch__mini" {...shellControl(() => setLens('list'))}>Show the List</button>
+                  <button type="button" className="orch__mini" {...shellControl(() => showLens('list'))}>Show the List</button>
                 </div>
               )
             ) : mode === 'dev' ? (

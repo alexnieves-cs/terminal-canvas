@@ -29,6 +29,7 @@ import { parseRecipeUse } from './recipes'
 import type { RecipeUse } from './recipe-portability'
 import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
 import { carryReviewComment, parseReviewComments, type ReviewComment } from './review-comments'
+import { carryTaskPlan, parseTaskPlan, type TaskPlan } from './task-plan'
 
 export type WorkItemState = 'todo' | 'working' | 'review' | 'done'
 export const WORK_ITEM_STATES: readonly WorkItemState[] = ['todo', 'working', 'review', 'done']
@@ -147,6 +148,14 @@ export interface PersistedWorkItem {
    * and a reuse is compared against it.
    */
   recipeUsed?: RecipeUse
+  /**
+   * M327. The task's EXECUTION PLAN — its steps, their owners, dependencies,
+   * places and expected outputs (`task-plan.ts`). The USER's, like the brief:
+   * a provider re-add keeps it. Holds decisions, never state — a step's
+   * status is derived from the sessions and the checks at render time. A
+   * malformed plan costs the field, never the card.
+   */
+  plan?: TaskPlan
   createdAt: number
   updatedAt: number
 }
@@ -195,7 +204,8 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.checks === undefined || item.checks.length === 0 ? {} : { checks: item.checks.filter((c) => c !== '') }),
     ...(item.deliverables === undefined || item.deliverables.length === 0 ? {} : { deliverables: item.deliverables.filter((c) => c !== '') }),
     ...carryBackend(item),
-    ...(item.recipeUsed === undefined ? {} : { recipeUsed: { ...item.recipeUsed, definition: { ...item.recipeUsed.definition }, ...(item.recipeUsed.params === undefined ? {} : { params: { ...item.recipeUsed.params } }) } })
+    ...(item.recipeUsed === undefined ? {} : { recipeUsed: { ...item.recipeUsed, definition: { ...item.recipeUsed.definition }, ...(item.recipeUsed.params === undefined ? {} : { params: { ...item.recipeUsed.params } }) } }),
+    ...(item.plan === undefined || item.plan.steps.length === 0 ? {} : { plan: carryTaskPlan(item.plan) })
   }
 }
 
@@ -269,7 +279,9 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       // M319. An unknown backend costs the field (the card runs on claude), not the card.
       ...(BACKEND_IDS.includes(raw.backend as AgentBackend) ? { backend: raw.backend as AgentBackend } : {}),
       // M321. A run's recipe that does not parse WHOLE costs the field, not the card.
-      ...(parseRecipeUse(raw.recipeUsed) === undefined ? {} : { recipeUsed: parseRecipeUse(raw.recipeUsed)! })
+      ...(parseRecipeUse(raw.recipeUsed) === undefined ? {} : { recipeUsed: parseRecipeUse(raw.recipeUsed)! }),
+      // M327. A plan that does not parse costs the field, not the card.
+      ...(() => { const plan = parseTaskPlan(raw.plan, []); return plan === undefined ? {} : { plan } })()
     })
   }
 }

@@ -1500,6 +1500,177 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       /paths\?: string\[\]/.test(src),
     'EventRow')
 
+  // M325 — board.1–.4. ORCHESTRATE'S TASK LIST. The queue decides what needs
+  //     the person; the board only groups and words it — Needs attention in
+  //     the queue's order, Running, Ready for review, Completed — with one
+  //     action per row, inline only where the answer fits in a row.
+  {
+    const B = load('src/renderer/orchestration/orch-task-board.ts', 'orch-task-board.cjs')
+    const build = typeof B.buildTaskBoard === 'function' ? B.buildTaskBoard : () => ({ groups: [], headline: '' })
+    const agents = {
+      c1: { id: 'c1', title: 'build', kind: 'chat', state: 'wants-you', tone: 'needs-you' },
+      c2: { id: 'c2', title: 'test', kind: 'chat', state: 'idle', tone: 'idle' },
+      c3: { id: 'c3', title: 'ui', kind: 'chat', state: 'busy', tone: 'working' },
+      c4: { id: 'c4', title: 'api', kind: 'chat', state: 'idle', tone: 'idle' },
+      w1: { id: 'w1', title: 'card', kind: 'work', state: 'idle', tone: 'kind' },
+      c9: { id: 'c9', title: 'loose', kind: 'chat', state: 'wants-you', tone: 'needs-you' }
+    }
+    const members = { perm: ['c1', 'c2', 'w1'], run: ['c3', 'c4'], rev: ['c4'], fail: [], todo: [], done: [] }
+    const approval = { id: 'c1', requestId: 'r1', toolName: 'Bash', argument: 'npm i' }
+    const groups = [
+      { itemId: 'perm', title: 'Payments', severity: 'blocked', why: 'Stopped — build needs your permission to use Bash.', next: { label: 'Answer Bash request', evidence: { kind: 'decision', panelId: 'c1', requestId: 'r1' } }, decisions: [{ key: 'r1', kind: 'permission', text: 'x', since: 1, evidence: { kind: 'decision', panelId: 'c1', requestId: 'r1' }, inbox: { approval } }], oldest: 1 },
+      { itemId: 'fail', title: 'Search', severity: 'failed', why: 'A check failed — `npm test` exited 1.', next: { label: 'Open the failing output', evidence: { kind: 'output', outputId: 'o1', panelId: 't1' } }, decisions: [{ key: 'check:fail:npm test', kind: 'check', text: 'x', since: 2, evidence: { kind: 'output', outputId: 'o1', panelId: 't1' } }], oldest: 2 },
+      { itemId: 'rev', title: 'Docs', severity: 'review', why: 'Waiting for your review — the agent finished with changes (3 files).', next: { label: 'Review the changes', evidence: { kind: 'review', itemId: 'rev' } }, decisions: [{ key: 'review:rev', kind: 'review', text: 'x', since: 0, evidence: { kind: 'review', itemId: 'rev' } }], oldest: 3 },
+      { itemId: null, title: 'Not in a task', severity: 'blocked', why: 'Stopped — loose asks a question.', next: { label: 'Reply to loose', evidence: { kind: 'decision', panelId: 'c9' } }, decisions: [{ key: 'q:c9', kind: 'question', text: 'x', since: 4, evidence: { kind: 'decision', panelId: 'c9' } }], oldest: 4 }
+    ]
+    const items = [
+      { id: 'perm', title: 'Payments', state: 'working', panelId: 'c1' },
+      { id: 'run', title: 'Checkout UI', state: 'working', panelId: 'c3' },
+      { id: 'rev', title: 'Docs', state: 'working', panelId: 'c4' },
+      { id: 'fail', title: 'Search', state: 'working', panelId: 'cx' },
+      { id: 'todo', title: 'Later', state: 'todo' },
+      { id: 'done', title: 'Shipped', state: 'done', merged: { into: 'main' } }
+    ]
+    const board = build({
+      items, groups,
+      membersOf: (id) => members[id] ?? [],
+      agentOf: (id) => agents[id],
+      checks: { fail: { passed: 2, failed: 1 }, run: { passed: 3, failed: 0 } },
+      handoffOf: (id) => (id === 'run' ? { state: 'working', standing: 'none', detail: 'working', changes: { files: 4 } } : undefined),
+      planOf: (id) => (id === 'run' ? { steps: 4, verified: 1, attention: 'Implement UI — stopped responding' } : undefined)
+    })
+    const g = (id) => board.groups.find((x) => x.id === id)?.rows ?? []
+    const row = (key) => board.groups.flatMap((x) => x.rows).find((r) => r.key === key)
+    ok('board.1 four groups in scan order; Needs attention keeps the queue\'s order (a stopped agent before a failed check, a decision no task owns kept as a row), review is the queue\'s review group, a merged or done task is Completed, a task nobody has started is Running with Start work',
+      board.groups.map((x) => x.id).join() === 'attention,running,review,done' &&
+        g('attention').map((r) => r.key).join() === 'perm,fail,untasked:c9' &&
+        g('review').map((r) => r.key).join() === 'rev' && g('done').map((r) => r.key).join() === 'done' &&
+        g('running').map((r) => r.key).join() === 'run,todo' && row('todo')?.action.kind === 'start' &&
+        /merged into main/.test(row('done')?.status ?? ''),
+      JSON.stringify(board.groups.map((x) => [x.id, x.rows.map((r) => r.key)])))
+    ok('board.2 one action per row, inline only where the answer fits: a permission is answered in the row (its panel and request), a question gets a reply, a failed check opens the task on Checks, a review opens it on Changes, a loose session is not a task',
+      row('perm')?.action.kind === 'answer' && row('perm')?.action.requestId === 'r1' && row('perm')?.action.panelId === 'c1' &&
+        row('untasked:c9')?.action.kind === 'reply' && row('untasked:c9')?.itemId === null &&
+        row('fail')?.action.kind === 'open' && row('fail')?.action.side === 'checks' &&
+        row('rev')?.action.kind === 'open' && row('rev')?.action.side === 'changes',
+      JSON.stringify(['perm', 'untasked:c9', 'fail', 'rev'].map((k) => row(k)?.action)))
+    ok('board.3 the row\'s status is the queue\'s why when it has one, else a concrete sentence from the agents and the lane ("ui is working; 1 idle — 4 files changed so far"); idle agents are counted, not listed, and a card is not an agent; checks read "2 passed" / "1 failed · 2 passed" / "No checks run"; a plan says its progress',
+      row('perm')?.status === groups[0].why && row('perm')?.agents.map((a) => a.id).join() === 'c1' && row('perm')?.idle === 1 &&
+        row('run')?.status === 'ui is working; 1 idle — 4 files changed so far.' &&
+        row('fail')?.checks.text === '1 failed · 2 passed' && row('run')?.checks.text === '3 passed' && row('todo')?.checks.text === 'No checks run' &&
+        row('run')?.plan === 'Plan 1 of 4 verified · Implement UI — stopped responding' && row('run')?.action.side === 'plan',
+      JSON.stringify({ perm: row('perm'), run: row('run') }))
+    ok('board.4 the headline counts each group that has rows, needs-attention first; an empty board says so',
+      board.headline === '3 need attention · 2 running · 1 ready for review · 1 completed.' &&
+        build({ items: [], groups: [], membersOf: () => [], agentOf: () => undefined, checks: {}, handoffOf: () => undefined }).headline === 'No tasks yet.',
+      board.headline)
+  }
+
+  // M325 — orch-view.1. The page opens on the task list: `view` is written only
+  //     as 'visualize', so a pre-M325 record (which always carries a lens)
+  //     parses to the list, and a saved view opens the visualisation it names.
+  {
+    const P = load('src/shared/orchestrate-prefs.ts', 'orchestrate-prefs-view.cjs')
+    const Q = load('src/renderer/orchestration/orchestration-prefs.ts', 'orchestration-prefs-view.cjs')
+    const w = []
+    const old = P.parseOrchestrate({ lens: 'scene', mode: 'dev' }, w)
+    const vis = P.parseOrchestrate({ view: 'visualize', lens: 'watch' }, w)
+    const junk = P.parseOrchestrate({ view: 'tasks', lens: 'list' }, w)
+    Q.resetOrchPrefs()
+    const fresh = Q.getOrchPrefs().view
+    Q.seedOrchPrefs(vis)
+    const seeded = Q.getOrchPrefs().view
+    Q.seedOrchPrefs(old)
+    const reseeded = Q.getOrchPrefs().view
+    const applied = Q.prefsFromView(Q.getOrchPrefs(), { id: 'v', name: 'Scene', lens: 'scene' })
+    const persisted = Q.persistedOrchPrefs({ ...Q.getOrchPrefs(), view: 'tasks' })
+    Q.resetOrchPrefs()
+    ok('orch-view.1 the task list is the default: a record without `view` (every pre-M325 one) opens on it, only `visualize` is written or parsed, a saved view with a lens opens the visualisation, and the tasks view writes no key',
+      old.view === undefined && vis.view === 'visualize' && junk.view === undefined && fresh === 'tasks' && seeded === 'visualize' && reseeded === 'tasks' &&
+        applied.view === 'visualize' && applied.lens === 'scene' && !('view' in persisted),
+      JSON.stringify({ old, vis, junk, fresh, seeded, reseeded, persisted }))
+  }
+
+  // M327 — plan.1–.5. A TASK'S EXECUTION PLAN. The record holds decisions; the
+  //     state of every step is derived — and stopped is not finished, and
+  //     finished is not verified.
+  {
+    const T = load('src/shared/task-plan.ts', 'task-plan.cjs')
+    const plan = T.implementVerifyPlan({ now: 100, owner: 'c1', check: 'npm test' })
+    const w = []
+    const parsed = T.parseTaskPlan({ createdAt: 5, steps: [
+      { id: 'a', title: 'A', kind: 'agent', role: 'r', dependsOn: ['ghost', 'a', 'b'], expected: 'x', owner: '', startedAt: 'soon' },
+      { id: 'b', title: 'B', kind: 'wizard', dependsOn: 'nope', expected: 3 },
+      { title: 'no id' },
+      { id: 'a', title: 'duplicate' }
+    ] }, w)
+    ok('plan.1 the one workflow: implement API (the task\'s own conversation, started) and UI run independently, verify waits for both and carries the task\'s check, review waits for verify; a record parses field by field — a step without an id, or a duplicate id, is dropped by name, an unknown kind reads as an agent step, a dependency on a missing step or on itself is dropped',
+      plan.steps.map((s) => `${s.id}:${s.kind}:${s.dependsOn.join('+')}`).join() === 'api:agent:,ui:agent:,verify:check:api+ui,review:review:verify' &&
+        plan.steps[0].owner === 'c1' && plan.steps[0].startedAt === 100 && plan.steps[2].command === 'npm test' &&
+        parsed.steps.length === 2 && parsed.steps[0].dependsOn.join() === 'b' && parsed.steps[0].owner === undefined && parsed.steps[0].startedAt === undefined &&
+        parsed.steps[1].kind === 'agent' && parsed.steps[1].expected === '' && w.length === 2 &&
+        T.parseTaskPlan({ steps: 'x' }, []) === undefined && T.parseTaskPlan(undefined, []) === undefined,
+      JSON.stringify({ parsed, w }))
+    const agent = (o) => ({ present: true, title: 'api', live: false, waiting: false, ended: false, ...o })
+    const facts = (over = {}) => ({ agentOf: () => agent(over.a ?? {}), runOf: over.runOf ?? (() => undefined), review: over.review ?? { standing: 'none', accepted: false } })
+    const state = (p, f, id) => T.planView(p, f).find((v) => v.id === id)
+    const ok1 = state(plan, facts({ a: { lastTurn: { kind: 'ok', at: 200 }, lastWords: 'Added the endpoint.\nMore.' } }), 'api')
+    const died = state(plan, facts({ a: { lastTurn: { kind: 'error', at: 200, reason: 'process exited 1' } } }), 'api')
+    const gone = state(plan, { ...facts(), agentOf: () => ({ present: false, title: 'c1', live: false, waiting: false, ended: true }) }, 'api')
+    const ended = state(plan, facts({ a: { ended: true } }), 'api')
+    const old = state(plan, facts({ a: { lastTurn: { kind: 'ok', at: 50 } } }), 'api')
+    ok('plan.2 stopped responding is not finished, and finished is not verified: a turn that ended normally after the step started is "Finished — not verified" with the agent\'s own first line; an errored turn, a closed conversation or an ended session is "Stopped responding" with retry and reassign beside it; a turn from BEFORE the step started is not its result',
+      ok1.state === 'finished' && ok1.word === 'Finished — not verified' && /“Added the endpoint\.”/.test(ok1.detail) && ok1.actions[0] === 'verify' && ok1.tone === 'done' &&
+        died.state === 'stopped' && died.word === 'Stopped responding' && /process exited 1/.test(died.detail) && died.actions.join() === 'retry,assign' && died.tone === 'exited' &&
+        gone.state === 'stopped' && /closed/.test(gone.detail) && ended.state === 'stopped' &&
+        old.state === 'assigned',
+      JSON.stringify({ ok1, died, gone, ended, old }))
+    const withUi = T.withStep(plan, 'ui', { owner: 'c2', startedAt: 100 })
+    const finishedBoth = facts({ a: { lastTurn: { kind: 'ok', at: 300 } } })
+    const waiting = state(plan, facts(), 'verify')
+    const ready = state(withUi, finishedBoth, 'verify')
+    const passed = state(T.withStep(withUi, 'verify', { startedAt: 400 }), { ...finishedBoth, runOf: () => ({ exitCode: 0, at: 500 }) }, 'verify')
+    const stale = state(T.withStep(withUi, 'verify', { startedAt: 600 }), { ...finishedBoth, runOf: () => ({ exitCode: 0, at: 500 }) }, 'verify')
+    const failed = state(T.withStep(withUi, 'verify', { startedAt: 400 }), { ...finishedBoth, runOf: () => ({ exitCode: 1, at: 500 }) }, 'verify')
+    const neverRun = state(withUi, { ...finishedBoth, runOf: () => ({ exitCode: 0, at: 500 }) }, 'verify')
+    const reviewWaits = state(withUi, finishedBoth, 'review')
+    const reviewed = state(T.withStep(withUi, 'verify', { startedAt: 400 }), { ...finishedBoth, runOf: () => ({ exitCode: 0, at: 500 }), review: { standing: 'current', accepted: false } }, 'review')
+    ok('plan.3 dependencies decide readiness: verify waits for BOTH implementations by name until each has finished, then is ready to run its command; only a run after the step was started verifies it (exit 0) or fails it — a step never started has no result, even when the command passed before the plan existed; the review waits for verify and is verified by the person\'s current review',
+      waiting.state === 'waiting' && waiting.waitsOn.join() === 'Implement API,Implement UI' &&
+        ready.state === 'ready' && ready.actions[0] === 'run' &&
+        passed.state === 'verified' && stale.state === 'ready' && neverRun.state === 'ready' && failed.state === 'failed' && failed.actions[0] === 'retry' &&
+        reviewWaits.state === 'waiting' && reviewed.state === 'verified',
+      JSON.stringify({ waiting, ready, passed, stale, failed, reviewWaits, reviewed }))
+    const cyc = T.withStep(T.withStep(plan, 'api', { dependsOn: ['review'] }), 'verify', { command: undefined })
+    const problems = T.planProblems(cyc)
+    const cycView = T.planView(cyc, facts())
+    const removed = T.removeStep(plan, 'ui')
+    const added = T.addStep(plan)
+    const cancelled = state(T.withStep(plan, 'api', { cancelledAt: 700 }), facts({ a: { live: true } }), 'api')
+    ok('plan.4 editing: a cycle is named and every step on it reads waiting (never a hang), a check without a command is named, removing a step removes it from every dependency, a new step waits for the last one, a cancelled step says so and offers retry',
+      problems.some((p) => /wait on each other/.test(p)) && problems.some((p) => /no command/.test(p)) && cycView.length === 4 &&
+        removed.steps.length === 3 && removed.steps.find((s) => s.id === 'verify').dependsOn.join() === 'api' &&
+        added.steps.length === 5 && added.steps[4].dependsOn.join() === 'review' &&
+        cancelled.state === 'cancelled' && cancelled.actions.join() === 'retry',
+      JSON.stringify({ problems, cancelled }))
+    const brief = T.stepBrief(plan, 'ui', { title: 'Checkout', brief: 'Add a coupon field', lane: '/w/lane' })
+    const summary = T.planSummary(withUi, T.planView(withUi, facts({ a: { lastTurn: { kind: 'error', at: 300 } } })))
+    ok('plan.5 a step\'s brief names the step and its task, what to produce, where, who runs alongside and what waits on it — for the composer, never sent; the task list\'s summary names the step that most needs the person',
+      /Your step: Implement UI — part of the task “Checkout”/.test(brief) && /Add a coupon field/.test(brief) && /Work in: \/w\/lane/.test(brief) &&
+        /Running alongside you: Implement API/.test(brief) && /Waiting on this step: Verify integration/.test(brief) &&
+        summary.steps === 4 && summary.verified === 0 && summary.attention === 'Implement API — stopped responding',
+      JSON.stringify({ brief, summary }))
+    // The record is the user's: a provider re-add keeps it, and it survives the layout parse.
+    const WI = load('src/shared/work-items.ts', 'work-items-plan.cjs')
+    const item = { id: 'i1', source: 'github', key: 'o/r#1', title: 'T', state: 'working', createdAt: 1, updatedAt: 1, plan }
+    const back = WI.parseWorkItems([JSON.parse(JSON.stringify(item))], [])
+    const bad = WI.parseWorkItems([{ ...item, plan: { steps: 7 } }], [])
+    const readded = WI.upsertWorkItem([item], { id: 'x', source: 'github', key: 'o/r#1', title: 'T2', state: 'todo' }, 9)
+    ok('plan.6 the plan rides the work item: it round-trips the layout parse, a malformed plan costs the field and keeps the card, and a provider re-add keeps it',
+      back?.[0]?.plan?.steps.length === 4 && bad?.length === 1 && bad[0].plan === undefined && readded[0].plan?.steps.length === 4 && readded[0].title === 'T2',
+      JSON.stringify({ back: back?.[0]?.plan?.steps.length, bad: bad?.[0]?.plan }))
+  }
+
   ;(async () => {
     const file = join(dir, 'ledger.jsonl')
     const led = L.createRunLedger({ file, maxLines: 10 })
