@@ -8,6 +8,7 @@ import type { ReviewDiff } from '@shared/review'
 import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { BACKENDS, backendOf } from '@shared/agent-backends'
+import { exitSentence } from '@shared/backend-fit'
 import { autoChipWords } from '@shared/auto'
 import { chatHeaderLine, SANDBOX_HEADER } from '@renderer/shell/rail-rows'
 import { panelState, autoTone, TONE_WORKING } from '@renderer/panels/panel-state'
@@ -712,8 +713,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             <p className="pf__note chat__queued" data-chat-queued>{snapshot.queued} message{snapshot.queued === 1 ? '' : 's'} waiting {snapshot.queuedReason === 'concurrency' ? 'for a free agent — this canvas has a ceiling on how many work at once' : 'for this turn to end'}</p>
           )}
           {snapshot?.status === 'exited' && (
-            <p className="pf__note chat__exited" data-chat-exited>
-              claude exited{typeof snapshot.exitCode === 'number' ? ` with ${snapshot.exitCode}` : ''}{snapshot.exitSignal ? ` (${snapshot.exitSignal})` : ''} — the next message resumes the conversation
+            // M319. The backend by name, and the resume promise only where it
+            // is true: a conversation the CLI said it no longer holds is NOT
+            // resumed by the next message, and the line used to say it was.
+            <p className="pf__note chat__exited" data-chat-exited data-chat-resume-lost={snapshot.resumeLost === undefined ? undefined : ''}>
+              {exitSentence(snapshot.backend, { code: snapshot.exitCode, ...(snapshot.exitSignal === undefined ? {} : { signal: snapshot.exitSignal }), ...(snapshot.resumeLost === undefined ? {} : { resumeLost: snapshot.resumeLost }) })}
             </p>
           )}
           {decision !== null && (

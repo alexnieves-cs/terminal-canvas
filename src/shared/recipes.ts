@@ -1,5 +1,6 @@
 import type { PersistedWorkItem } from './work-items'
 import type { SwarmPresetId } from './swarm'
+import { parameterizeRecipe, recipeHash, renderRecipeText, type RecipeParam, type RecipeRequires, type RecipeUse, type RenderContext } from './recipe-portability'
 
 /**
  * M314. WORKFLOW RECIPES — a few excellent starting points, each carrying the
@@ -43,6 +44,17 @@ export interface Recipe {
   builtIn?: true
   /** Present on a recipe saved from a task: which one, and when. */
   savedFrom?: { taskId: string; at: number }
+  /**
+   * M321. The definition's version: absent is 1. A save whose definition
+   * differs from every stored version of this id lands one past the newest;
+   * the earlier versions stay in the store's history, so a run started from
+   * v2 can still be read as v2 after v3 exists.
+   */
+  version?: number
+  /** M321. Named inputs beyond the one `ask` — `{param:NAME}` in the text, each with an optional default. */
+  params?: RecipeParam[]
+  /** M321. What the recipe needs beyond its text: backend capabilities, tools on PATH, a saved setup. */
+  requires?: RecipeRequires
 }
 
 export const RECIPES_MAX = 30
@@ -113,6 +125,35 @@ export const BUILT_IN_RECIPES: readonly Recipe[] = [
 const str = (v: unknown, max = TEXT_MAX): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null)
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => str(x, 400)).filter((x): x is string => x !== null).slice(0, 20) : [])
 const SWARMS: readonly SwarmPresetId[] = ['explore', 'implement', 'test', 'review']
+const CAPABILITIES: readonly string[] = ['cli', 'prompt', 'no-publish', 'interrupt', 'resume', 'images', 'cost', 'window', 'permissions', 'read-only']
+
+/** M321. Parameters, field-level: a malformed one costs itself; a duplicate name keeps the first. */
+function parseParams(v: unknown): RecipeParam[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  const out: RecipeParam[] = []
+  for (const raw of v) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const o = raw as Record<string, unknown>
+    const name = typeof o.name === 'string' && /^[a-z][a-z0-9-]{0,39}$/.test(o.name) ? o.name : null
+    if (name === null || out.some((p) => p.name === name)) continue
+    out.push({ name, label: str(o.label, 200) ?? name, ...(str(o.default, 400) === null ? {} : { default: str(o.default, 400)! }) })
+  }
+  return out.length === 0 ? undefined : out.slice(0, 12)
+}
+
+/** M321. Requirements, field-level. */
+function parseRequires(v: unknown): RecipeRequires | undefined {
+  if (typeof v !== 'object' || v === null) return undefined
+  const o = v as Record<string, unknown>
+  const capabilities = Array.isArray(o.capabilities) ? [...new Set(o.capabilities.filter((c): c is string => typeof c === 'string' && CAPABILITIES.includes(c)))] : []
+  const tools = Array.isArray(o.tools) ? [...new Set(o.tools.filter((t): t is string => typeof t === 'string' && /^[\w.+-]{1,60}$/.test(t)))].slice(0, 20) : []
+  const out: RecipeRequires = {
+    ...(capabilities.length === 0 ? {} : { capabilities: capabilities as RecipeRequires['capabilities'] }),
+    ...(tools.length === 0 ? {} : { tools }),
+    ...(o.setup === true ? { setup: true } : {})
+  }
+  return Object.keys(out).length === 0 ? undefined : out
+}
 
 /** One saved recipe, field-level: a malformed optional costs itself; no id or name costs the recipe. */
 export function parseRecipe(raw: unknown): Recipe | null {
@@ -134,7 +175,35 @@ export function parseRecipe(raw: unknown): Recipe | null {
     checks: strs(r.checks),
     deliverables: strs(r.deliverables),
     context: Array.isArray(r.context) ? [...new Set(r.context.filter((c): c is RecipeContext => CONTEXTS.includes(c as RecipeContext)))] : [],
-    ...(sf !== null && typeof sf.taskId === 'string' && typeof sf.at === 'number' ? { savedFrom: { taskId: sf.taskId, at: sf.at } } : {})
+    ...(sf !== null && typeof sf.taskId === 'string' && typeof sf.at === 'number' ? { savedFrom: { taskId: sf.taskId, at: sf.at } } : {}),
+    ...(typeof r.version === 'number' && Number.isInteger(r.version) && r.version >= 1 ? { version: r.version } : {}),
+    ...(parseParams(r.params) === undefined ? {} : { params: parseParams(r.params)! }),
+    ...(parseRequires(r.requires) === undefined ? {} : { requires: parseRequires(r.requires)! })
+  }
+}
+
+/**
+ * M321. What a run was started from, read back from a work item: the whole
+ * definition must parse (a run's recipe is not guessed field by field — the
+ * point is the EXACT definition), and the hash is recomputed rather than
+ * trusted, so a hand-edited file cannot claim a version it is not.
+ */
+export function parseRecipeUse(raw: unknown): RecipeUse | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const r = raw as Record<string, unknown>
+  if (typeof r.id !== 'string' || typeof r.at !== 'number' || typeof r.version !== 'number') return undefined
+  // A built-in's id is refused by parseRecipe (the shadowing rule), so the
+  // definition is parsed under a neutral id and given its own back.
+  const def = parseRecipe({ ...(r.definition as object), id: 'run-definition' })
+  if (def === null) return undefined
+  const definition: Recipe = { ...def, id: r.id }
+  const params = typeof r.params === 'object' && r.params !== null
+    ? Object.fromEntries(Object.entries(r.params as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string').slice(0, 12))
+    : undefined
+  return {
+    id: r.id, version: r.version, hash: recipeHash(definition), definition, at: r.at,
+    ...(typeof r.repository === 'string' && r.repository.startsWith('/') ? { repository: r.repository } : {}),
+    ...(params === undefined || Object.keys(params).length === 0 ? {} : { params })
   }
 }
 
@@ -164,17 +233,26 @@ export interface RecipeFill {
   swarm?: SwarmPresetId
 }
 
-/** What picking `recipe` and answering its ask writes into the Start work sheet. */
-export function applyRecipe(recipe: Recipe, input: string): RecipeFill {
+/**
+ * What picking `recipe` and answering its ask writes into the Start work sheet.
+ * M321: every text field is rendered — `{input}`, and with a context the
+ * target `{repository}`, `{repo}` and each `{param:NAME}` (its value, else its
+ * default). A placeholder the context cannot fill stays as written, and the
+ * preflight refuses the start on it.
+ */
+export function applyRecipe(recipe: Recipe, input: string, ctx: Omit<RenderContext, 'input'> = {}): RecipeFill {
   const answer = input.trim()
-  const brief = recipe.brief.includes('{input}') ? recipe.brief.split('{input}').join(answer || '…') : recipe.brief
+  const params: Record<string, string> = {}
+  for (const p of recipe.params ?? []) { const v = ctx.params?.[p.name] ?? p.default; if (v !== undefined && v !== '') params[p.name] = v }
+  const render = (text: string): string => renderRecipeText(text, { ...ctx, input: answer, params })
+  const brief = render(recipe.brief)
   const title = answer === '' ? recipe.name : `${recipe.name}: ${answer}`.slice(0, 120)
   return {
     title,
     brief,
-    criteria: [...recipe.criteria],
-    checks: [...recipe.checks],
-    deliverables: [...recipe.deliverables],
+    criteria: recipe.criteria.map(render),
+    checks: recipe.checks.map(render),
+    deliverables: recipe.deliverables.map(render),
     recipeId: recipe.id,
     ...(recipe.swarm === undefined ? {} : { swarm: recipe.swarm })
   }
@@ -202,8 +280,8 @@ export function recipeMessage(item: Pick<PersistedWorkItem, 'checks' | 'delivera
  * falling back to the task's declared ones.
  */
 export function recipeFromTask(
-  item: Pick<PersistedWorkItem, 'id' | 'title' | 'brief' | 'criteria' | 'checks' | 'deliverables' | 'recipeId'>,
-  o: { name: string; passedChecks: readonly string[]; swarm?: SwarmPresetId; now: number; saved?: readonly Recipe[] }
+  item: Pick<PersistedWorkItem, 'id' | 'title' | 'brief' | 'criteria' | 'checks' | 'deliverables' | 'recipeId' | 'recipeUsed'>,
+  o: { name: string; passedChecks: readonly string[]; swarm?: SwarmPresetId; now: number; saved?: readonly Recipe[]; /** M321. The task's lane and main tree: paths under them become `{repository}`. */ roots?: readonly string[] }
 ): Recipe {
   const from = item.recipeId === undefined ? undefined : allRecipes(o.saved ?? []).find((r) => r.id === item.recipeId)
   const brief = (item.brief ?? '').trim()
@@ -220,6 +298,21 @@ export function recipeFromTask(
     checks: o.passedChecks.length > 0 ? [...new Set(o.passedChecks)] : [...(item.checks ?? [])],
     deliverables: [...(item.deliverables ?? from?.deliverables ?? [])],
     context: [...(from?.context ?? ['setup'])],
-    savedFrom: { taskId: item.id, at: o.now }
+    savedFrom: { taskId: item.id, at: o.now },
+    // M321. What the run it was saved from relied on, carried forward: its
+    // parameters and requirements (the exact definition it ran, when kept).
+    ...(item.recipeUsed?.definition.params ?? from?.params) === undefined ? {} : { params: (item.recipeUsed?.definition.params ?? from?.params)! },
+    ...(item.recipeUsed?.definition.requires ?? from?.requires) === undefined ? {} : { requires: (item.recipeUsed?.definition.requires ?? from?.requires)! }
   }
+}
+
+/**
+ * M321. `recipeFromTask`, portable: the paths it embeds under the task's own
+ * repository become `{repository}`, others become parameters. What the
+ * palette's Save as recipe calls — the saved recipe can go to another repository.
+ */
+export function portableRecipeFromTask(...args: Parameters<typeof recipeFromTask>): { recipe: Recipe; lifted: number } {
+  const recipe = recipeFromTask(...args)
+  const { recipe: portable, findings } = parameterizeRecipe(recipe, args[1].roots ?? [])
+  return { recipe: portable, lifted: findings.length }
 }

@@ -77,6 +77,7 @@ import { applyDrag, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { jumpOrder, type Inbox } from '@renderer/shell/decision-inbox'
 import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
+import { useTaskQueue } from '@renderer/shell/useTaskQueue'
 import { taskChain } from '@renderer/shell/inspector-context'
 import { useAwaySince } from '@renderer/shell/presence'
 import { ReturnBriefingCard, useReturnBriefing } from '@renderer/shell/ReturnBriefing'
@@ -116,7 +117,8 @@ import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
 import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
-import { searchWork } from '@shared/work-search'
+import { searchWork, type WorkEvidenceRow } from '@shared/work-search'
+import { portableCwd } from '@shared/recipe-portability'
 import { buildResumeSummary, pickResumeSubject, type ResumeSummary } from '@shared/resume-summary'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
@@ -156,7 +158,7 @@ import { approvals, useApprovals } from '@renderer/chat/chat-store'
 import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { activityNow, forgetAllEdges, forgetEdgesFor, freezeEdgeClock, noteEdgeArrived, noteEdgeFired, noteEdgeWaiting, setEdgeContext } from './useEdgeActivity'
 import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
-import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
+import { BACKENDS, BACKEND_IDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
@@ -205,7 +207,7 @@ import { allTemplates, isBuiltInTemplate, type PersistedTemplate, type TemplateE
 import { applyPoolEvent } from '@renderer/workflow/pool-store'
 import type { PoolMintReply, PoolMintRequest } from '@shared/ipc-contract'
 import { fillTemplate, templateHoles, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
-import { enabledEdges, sealAbandoned } from './run-model'
+import { enabledEdges, interruptedRunAccount, sealAbandoned, type InterruptedRun } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
@@ -250,6 +252,7 @@ import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
 import { ReopenNotice, useReopenNotice } from '../shell/ReopenNotice'
+import { JobRecoveryNotice, useJobRecovery } from '../shell/JobRecoveryNotice'
 import { buildInspectorContext } from '../shell/inspector-context'
 import { useShellChrome, type CenterView } from '../shell/useShellChrome'
 import { useDockExpanded } from '../shell/useDockExpanded'
@@ -264,7 +267,7 @@ import { TRIGGER_WORDS } from './trigger-words'
 import type { PanelSearchResult } from '@shared/ipc-contract'
 // M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
-import { adoptedRunId, isSettledHandoff, recordOrchEvent } from '../orchestration/orch-record'
+import { adoptedRunId, isSettledHandoff, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
 import { arrangementTemplate } from '../orchestration/orch-arrangement'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
@@ -362,6 +365,10 @@ export function Canvas({
   // row a seeded `running` auto status shows comes through useRuns.onAutoEvent;
   // carried to M124 rather than redesigned here.
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
+  // M316. The runs THIS launch's seal cut off — open in the saved layout, so
+  // the relaunch interrupted them. Fixed at mount: a run sealed last launch
+  // was already told about then, and is not news now.
+  const [runsCutOff] = useState<ReadonlySet<string>>(() => new Set((initial.runs ?? []).filter((r) => r.endedAt === undefined).map((r) => r.id)))
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
   // M181. The starter record: which manifest keys were ever applied to this
@@ -4551,6 +4558,7 @@ export function Canvas({
   // D13. The query as STATE too, for the renderer-side half (tasks and
   // retained outcomes) — the ref stays the stale-reply guard for main's half.
   const [workSearchQuery, setWorkSearchQuery] = useState('')
+  const [workEvidence, setWorkEvidence] = useState<readonly WorkEvidenceRow[]>([])
   const onSearchQuery = useCallback((query: string) => {
     searchQueryRef.current = query
     setWorkSearchQuery(query)
@@ -4581,8 +4589,16 @@ export function Canvas({
     if (workSearchQuery.trim() === '') return null
     const cards = new Map<string, string>()
     for (const p of panels) if (isWorkPanel(p)) cards.set(p.work.itemId, p.rect.id)
-    return searchWork(workSearchQuery, workItems, retainedOutcomes, (itemId) => cards.get(itemId))
-  }, [workSearchQuery, workItems, retainedOutcomes, panels])
+    return searchWork(workSearchQuery, workItems, retainedOutcomes, (itemId) => cards.get(itemId), undefined, workEvidence)
+  }, [workSearchQuery, workItems, retainedOutcomes, panels, workEvidence])
+  // M320. The record's per-task index (check runs, reviewed paths, captures),
+  // read once each time the search scope opens — a reference list, not content.
+  useEffect(() => {
+    if (palette.scope !== 'search' || typeof window.canvas?.tasks?.index !== 'function') return
+    let live = true
+    void window.canvas.tasks.index().then((rows) => { if (live) setWorkEvidence(rows) }, () => undefined)
+    return () => { live = false }
+  }, [palette.scope])
   // Leaving the search scope drops the answer, so the next open starts clean.
   useEffect(() => {
     if (palette.scope !== 'search') {
@@ -6415,6 +6431,17 @@ export function Canvas({
       return next
     })
     selectOnly(imageId)
+    // M320. A capture of a task's lane is one of the task's DELIVERABLES, and
+    // its provenance used to live only on the image panel — delete the panel,
+    // lose the fact. The row keeps it (the capture id is main's file name),
+    // naming the pane it was taken in even after that pane is gone.
+    if (task !== undefined) {
+      void recordOrchEvent({
+        runId: runOfTask(task.id) ?? adoptedRunId(task.id), itemId: task.id, event: 'artifact', source: 'person',
+        title: `Captured ${shot.host}`, detail: shot.url, key: `capture:${shot.id}`, panelId: pane.rect.id,
+        producer: { title: pane.title ?? 'a preview', kind: 'browser' }, at: shot.capturedAt
+      })
+    }
     return { kind: 'ran', note: `captured ${shot.url}` }
   }, [commitHistory, previewPane, selectOnly])
   const startDevServer = useCallback(async (script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
@@ -7578,17 +7605,26 @@ export function Canvas({
   // M309. The return briefing: every task that moved while the person was
   // away, from the durable record, measured from when they were last here.
   const awaySince = useAwaySince()
+  const taskMembersOf = (itemId: string): string[] => {
+    const item = workItems.find((w) => w.id === itemId)
+    if (item === undefined) return []
+    return taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
+  }
+  const panelLabelOf = (panelId: string): string => { const p = displayPanels.find((q) => q.rect.id === panelId); return p === undefined ? 'a closed panel' : panelLabel(p) }
   const briefing = useReturnBriefing({
     since: awaySince,
     workItems,
-    membersOf: (itemId) => {
-      const item = workItems.find((w) => w.id === itemId)
-      if (item === undefined) return []
-      return taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
-    },
+    membersOf: taskMembersOf,
     handoffOf: taskHandoffOf,
     inbox,
-    labelOf: (panelId) => { const p = displayPanels.find((q) => q.rect.id === panelId); return p === undefined ? 'a closed panel' : panelLabel(p) }
+    labelOf: panelLabelOf
+  })
+  // M318. The same decisions grouped by TASK — why each is stopped, its next
+  // step, what waits on it — with failed checks, unreviewed changes and
+  // decisions a restart lost. Timelines are read only while the popover shows.
+  const taskQueue = useTaskQueue({
+    inbox, workItems, panels: displayPanels, membersOf: taskMembersOf, handoffOf: taskHandoffOf, labelOf: panelLabelOf,
+    active: chrome.attentionOpen
   })
 
   // Brief #20. What came back running, what came back stopped, and what was
@@ -7601,6 +7637,14 @@ export function Canvas({
     dormant: dormantIds,
     backend: backendInfo?.kind ?? null
   })
+
+  // M316. What an interrupted job left — the pool's journal from main, and
+  // the handoff runs this launch's seal cut off — with the recovery choices.
+  const interruptedRuns = useMemo(() => runs
+    .filter((r) => runsCutOff.has(r.id))
+    .map((r) => interruptedRunAccount(r, (id) => { const p = displayPanels.find((q) => q.rect.id === id); return p === undefined ? 'a closed panel' : panelLabel(p) }))
+    .filter((r): r is InterruptedRun => r !== null), [runs, runsCutOff, displayPanels])
+  const jobRecovery = useJobRecovery({ runs: interruptedRuns, continueRun: (runId) => runsApi.continueRun(runId, runsRef.current) })
 
   // M303 (Quiet instrument). Resume work is an INBOX item: it rests at the
   // head of the navigator's Panels pane, and floats over the canvas only when
@@ -7738,6 +7782,12 @@ export function Canvas({
         attentionFocus={chrome.attentionFocus}
         taskTitleOf={approvalTaskOf}
         inbox={inbox}
+        queue={taskQueue}
+        onEvidence={(e) => {
+          // M318. A decision's evidence: the asking panel, or the task's review.
+          if (e.kind === 'review') { boardVerbsRef.current.review?.(e.itemId); return }
+          if (e.kind === 'decision' || e.kind === 'panel' || e.kind === 'output') paletteActions.goToPanel(e.panelId)
+        }}
         onSettings={openSettingsScope}
         expanded={dock.expanded}
         onToggleExpanded={dock.toggle}
@@ -7900,6 +7950,20 @@ export function Canvas({
               paletteActions.goToPanel(id)
               insertIntoComposer(id, text)
             }}
+            // M319. The cross-backend hand-off's exit: a NEW chat on the chosen
+            // backend, in the source chat's folder and as its teammate, with the
+            // reviewed text inserted — never sent — in its composer.
+            backendsAvailable={Object.fromEntries(BACKEND_IDS.map((b) => [b, backendAvailable(presetRows, b)]))}
+            onContinueOnBackend={(id, backend, text) => {
+              const source = panelsRef.current.find((p) => p.rect.id === id)
+              if (source === undefined || !isChatPanel(source)) return
+              leaveForCanvas()
+              void beginNewChat({
+                cwd: source.chat.cwd, backend, message: text,
+                title: `${source.title ?? id} · on ${BACKENDS[backend].label}`,
+                ...(source.chat.teammateId === undefined ? {} : { teammateId: source.chat.teammateId })
+              })
+            }}
             // M299. The title row's scope, and the follow-up composer's one send door:
             // the same agentSession.send a chat's composer uses, its answer read by the
             // one sentence-maker, so a refusal reads the same on both pages.
@@ -7931,6 +7995,9 @@ export function Canvas({
               // on screen and not a set of absolute coordinates that would put
               // the next instantiation wherever this one happened to sit.
               const origin = members[0]!.rect
+              const laneChat = item?.panelId === undefined ? undefined : shown.find((x) => x.rect.id === item.panelId)
+              const arrangementRoots = [laneChat !== undefined && isChatPanel(laneChat) ? laneChat.chat.cwd : undefined, item?.recipeUsed?.repository]
+                .filter((x): x is string => x !== undefined && x !== '')
               const edges = members.flatMap((m) => {
                 const p = shown.find((x) => x.rect.id === m.panelId)
                 return (p?.links ?? []).flatMap((l) => (l.automation?.kind === 'handoff' && l.automation.enabled
@@ -7941,7 +8008,11 @@ export function Canvas({
                 goal: item?.title ?? 'Arrangement',
                 ...(item?.brief === undefined ? {} : { brief: item.brief }),
                 ...(item?.criteria === undefined ? {} : { criteria: item.criteria }),
-                members: members.map((m) => ({ panelId: m.panelId, title: m.title, cwd: m.cwd, dx: m.rect.x - origin.x, dy: m.rect.y - origin.y })),
+                // M321. A member working in the task's lane or repository is saved
+                // as `{{repository}}` — a template HOLE the spawn sheet asks for —
+                // so the arrangement starts in whichever repository it is taken to,
+                // not in this machine's lane (which may not even exist then).
+                members: members.map((m) => ({ panelId: m.panelId, title: m.title, cwd: portableCwd(m.cwd, arrangementRoots), dx: m.rect.x - origin.x, dy: m.rect.y - origin.y })),
                 edges
               })
               const saved = await window.canvas.template.save(template)
@@ -8673,12 +8744,17 @@ export function Canvas({
             navigator's Panels pane is not there to hold it. Resume alone
             never floats here any more — it is the strip (see resumeStrip). */}
         {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
-        {reopen !== null && (
-          <ReopenNotice
-            model={reopen}
-            onGo={paletteActions.goToPanel}
-            onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
-          />
+        {(reopen !== null || jobRecovery !== null) && (
+          <div className="reopen-stack">
+            {reopen !== null && (
+              <ReopenNotice
+                model={reopen}
+                onGo={paletteActions.goToPanel}
+                onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
+              />
+            )}
+            {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
+          </div>
         )}
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner role="status">

@@ -3782,7 +3782,10 @@ body {
    with, so it takes no arrival motion — a moment is for something that
    passes. A problem line carries the amber rule on its edge, never a dimmed
    text colour. */
-.reopen-notice {
+/* M316. The Reopened notice and Unfinished work share one corner, stacked:
+   two absolutely placed cards in one corner would sit on each other. The
+   stack owns the placement; each card inside it is a plain flex child. */
+.reopen-stack {
   position: absolute;
   left: var(--sp-5);
   bottom: var(--sp-5);
@@ -3791,6 +3794,13 @@ body {
   flex-direction: column;
   gap: var(--sp-2);
   max-width: min(380px, 60%);
+  max-height: calc(100% - 2 * var(--sp-5));
+  overflow-y: auto;
+}
+.reopen-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
@@ -3806,6 +3816,9 @@ body {
 .reopen-notice__facts { margin: 0; color: var(--fg-3); font-size: var(--t-xs); }
 .reopen-notice__ack { align-self: flex-end; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: none; color: var(--fg-2); font: inherit; font-size: var(--t-xs); cursor: pointer; transition: background var(--dur-1) var(--ease); }
 .reopen-notice__ack:hover { background: var(--s-3); }
+.job-recovery__items { display: flex; flex-direction: column; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; color: var(--fg-2); font-size: var(--t-xs); }
+.job-recovery__pick { display: inline-flex; align-items: center; gap: var(--sp-1); cursor: pointer; }
+.job-recovery__note { color: var(--fg-3); }
 
 /* Startup splash. The top screen-space layer, a sibling of .world, alive for
    under three seconds. pointer-events is set INLINE per mode: Field Lines
@@ -7388,6 +7401,12 @@ body {
    that wraps must wrap under itself. */
 [data-start-swarm-plan] .sheet__seat { display: block; color: var(--fg-3); }
 [data-start-swarm-plan] .sheet__seat:first-child { color: var(--fg); }
+/* M319. The task's backend fit: one row per capability THIS task touches.
+   Met is quiet; a wanted one unmet is amber (the task runs without it); a
+   required one unmet is red, and Start is disabled beside it. */
+.sheet__fit-row { display: block; color: var(--fg-3); }
+.sheet__fit-row.is-degraded { color: var(--amber); }
+.sheet__fit-row.is-refused { color: var(--red); }
 .sheet__advanced { margin: 0; }
 .sheet__advanced-toggle { cursor: pointer; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); padding: var(--sp-2) 0; }
 .sheet__advanced-toggle:hover { color: var(--fg); }
@@ -8680,6 +8699,11 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__control-notes { list-style: none; margin: var(--sp-1) 0 0; padding: 0; }
 .orch__retry { margin-top: var(--sp-2); padding: var(--sp-2); border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line)); border-radius: var(--r-sm); }
 .orch__retry-prompt { max-height: 8rem; overflow: auto; white-space: pre-wrap; }
+/* M319. The cross-backend hand-off draft is EDITED before it goes anywhere. */
+.orch__handoff-text { width: 100%; min-height: 10rem; max-height: 16rem; resize: vertical; font: inherit; color: var(--fg); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.orch__stops { margin-top: var(--sp-2); }
+/* M320. A task's deliverables sit above the per-execution file record. */
+.orch__deliverables { margin-bottom: var(--sp-4); }
 .orch__limits { margin-bottom: var(--sp-3); }
 .orch__float .orch__island-place { max-width: 100%; }
 .orch__limit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
@@ -8879,6 +8903,36 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .inbox__snoozed { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); }
 .inbox__snoozed .rail-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); }
 
+/* M318. The task-centered queue: a header per task (why it waits, the next
+   step, what happens after, who waits on it) above its decisions. Wider than
+   the flat inbox because a task's sentence is longer than a panel's name. The
+   keyboard cursor is the focus colour on the row's edge — the same signal a
+   focused control gives — and the popover itself paints no ring when it
+   takes focus (the cursor is the focus). */
+.dock__popover:has(.queue__task) { width: 340px; max-height: 70vh; }
+.dock__popover:focus-visible { outline: none; }
+.queue__headline { margin: 0; padding: 0 var(--sp-3) var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }
+.queue__task { list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3) var(--sp-1); border-top: 1px solid var(--line); }
+.queue__task:first-child { border-top: 0; }
+.queue__task-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.queue__task-title { font-size: var(--t-sm); font-weight: 600; color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue__task-count { flex: none; font-size: var(--t-xs); color: var(--fg-3); }
+.queue__why { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.queue__next { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+.queue__after, .queue__affects { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+.queue__row { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-1) var(--sp-3); }
+.queue__row-main { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-2); }
+.queue__row-text { min-width: 0; overflow-wrap: anywhere; }
+.queue__row-verbs { display: flex; gap: var(--sp-1); }
+.queue__output { max-height: 16rem; overflow: auto; }
+[data-queue-cursor] { box-shadow: inset 2px 0 0 var(--focus); }
+/* M318. Information vs intervention in the feeds: an intervention row says so
+   in words (never colour alone), and an information row steps back. */
+.orch__activity-need, .activity-row__need { flex: none; font-size: var(--t-xs); font-weight: 600; color: var(--amber); }
+[data-activity-weight='info'] .orch__activity-title, .activity-row[data-activity-weight='info'] .activity-row__title { color: var(--fg-2); }
+.orch__activity-weights { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+.dock__return { position: absolute; left: calc(100% + var(--sp-2)); bottom: 0; z-index: 940; white-space: nowrap; font-size: var(--t-xs); color: var(--fg-2); background: var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-2); cursor: pointer; }
+
 /* M309. "Since you left" — the resume banner's family (its glass over the
    canvas, its tint in the navigator), grown to one section per task that
    moved. Decisions lead each task; every line ends in the verb that opens
@@ -8977,6 +9031,19 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .orch__combine-order { margin: 0; padding-left: var(--sp-4); font-size: var(--t-sm); color: var(--fg); display: flex; flex-direction: column; gap: var(--sp-1); }
 .orch__combine-opens { display: inline-flex; gap: var(--sp-1); margin-left: auto; }
 .orch__combine-verbs, .orch__combine-check { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+/* M317. The integration flow: a traced failure's send-back (the brief shown
+   whole, the follow-up's own well), the gate as a checklist, and the receipt
+   as a bordered record above the tab so a landing is the first thing seen. */
+.orch__combine-branch { font-size: var(--t-xs); color: var(--fg-3); }
+.orch__combine-send { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.orch__combine-select { font: inherit; font-size: var(--t-xs); color: var(--fg); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.orch__combine-brief { display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-start; }
+.orch__combine-brief-text { margin: 0; align-self: stretch; padding: var(--sp-2) var(--sp-3); max-height: 16rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg-2); font-family: var(--font-mono); font-size: var(--t-xs); white-space: pre-wrap; }
+.orch__combine-gate { margin: 0; padding: 0; list-style: none; font-size: var(--t-sm); color: var(--fg-2); display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__combine-gate [data-orch-combine-gate='missing'] { color: var(--fg-3); }
+.orch__combine-receipt { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); }
+.orch__combine-receipt-head { display: flex; align-items: center; justify-content: space-between; }
+.orch__combine-receipt-row { width: 100%; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
 
 /* M314. What a task promised to hand back — the criteria list's shape. */
 .task-review__deliverables { margin: 0; padding-left: var(--sp-4); font-size: var(--t-sm); color: var(--fg-2); display: flex; flex-direction: column; gap: var(--sp-1); }

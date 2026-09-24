@@ -24,6 +24,9 @@
  * Pure: no DOM, no React, no electron. `verify:layout work.1–.4`.
  */
 
+import { BACKEND_IDS, carryBackend, type AgentBackend } from './agent-backends'
+import { parseRecipeUse } from './recipes'
+import type { RecipeUse } from './recipe-portability'
 import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
 import { carryReviewComment, parseReviewComments, type ReviewComment } from './review-comments'
 
@@ -128,6 +131,22 @@ export interface PersistedWorkItem {
   recipeId?: string
   checks?: string[]
   deliverables?: string[]
+  /**
+   * M319. The backend the task's lane runs on, chosen in Start work against
+   * the task's requirements (`backend-fit.ts`). Absent is claude — every
+   * pre-M319 card, and the default is never written (`carryBackend`'s rule),
+   * so a claude card grows no key. Read again by a re-dispatch, so recovery
+   * does not silently switch vendor.
+   */
+  backend?: AgentBackend
+  /**
+   * M321. The EXACT recipe definition this task was started from — id,
+   * version, content hash, the definition itself, its parameter values and
+   * the repository. Kept here, not re-read from the store: editing or
+   * deleting the recipe later never rewrites what this run was started from,
+   * and a reuse is compared against it.
+   */
+  recipeUsed?: RecipeUse
   createdAt: number
   updatedAt: number
 }
@@ -174,7 +193,9 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.criteriaMet === undefined || item.criteriaMet.length === 0 ? {} : { criteriaMet: item.criteriaMet.filter((c) => c !== '') }),
     ...(item.recipeId === undefined || item.recipeId === '' ? {} : { recipeId: item.recipeId }),
     ...(item.checks === undefined || item.checks.length === 0 ? {} : { checks: item.checks.filter((c) => c !== '') }),
-    ...(item.deliverables === undefined || item.deliverables.length === 0 ? {} : { deliverables: item.deliverables.filter((c) => c !== '') })
+    ...(item.deliverables === undefined || item.deliverables.length === 0 ? {} : { deliverables: item.deliverables.filter((c) => c !== '') }),
+    ...carryBackend(item),
+    ...(item.recipeUsed === undefined ? {} : { recipeUsed: { ...item.recipeUsed, definition: { ...item.recipeUsed.definition }, ...(item.recipeUsed.params === undefined ? {} : { params: { ...item.recipeUsed.params } }) } })
   }
 }
 
@@ -244,7 +265,11 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       criteriaMet,
       recipeId: opt(raw.recipeId),
       checks: strings(raw.checks),
-      deliverables: strings(raw.deliverables)
+      deliverables: strings(raw.deliverables),
+      // M319. An unknown backend costs the field (the card runs on claude), not the card.
+      ...(BACKEND_IDS.includes(raw.backend as AgentBackend) ? { backend: raw.backend as AgentBackend } : {}),
+      // M321. A run's recipe that does not parse WHOLE costs the field, not the card.
+      ...(parseRecipeUse(raw.recipeUsed) === undefined ? {} : { recipeUsed: parseRecipeUse(raw.recipeUsed)! })
     })
   }
 }

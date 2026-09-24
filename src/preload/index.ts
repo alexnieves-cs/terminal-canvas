@@ -223,7 +223,10 @@ const bridge: CanvasBridge = {
     report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true)
   },
   combine: {
-    run: (req: { root: string; lanes: string[] }) => ipcRenderer.invoke(IPC.COMBINE_RUN, req)
+    run: (req: { root: string; lanes: string[] }) => ipcRenderer.invoke(IPC.COMBINE_RUN, req),
+    inputs: (req: { root: string; lanes: string[] }) => ipcRenderer.invoke(IPC.COMBINE_INPUTS, req),
+    integrate: (req: unknown) => ipcRenderer.invoke(IPC.COMBINE_INTEGRATE, req),
+    receipts: (root: string) => ipcRenderer.invoke(IPC.COMBINE_RECEIPTS, root)
   },
   lane: {
     merge: (req: unknown) => ipcRenderer.invoke(IPC.LANE_MERGE, req)
@@ -231,7 +234,8 @@ const bridge: CanvasBridge = {
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
     save: (setup: unknown) => ipcRenderer.invoke(IPC.SETUP_SAVE, setup),
-    prepare: (req: { lane: string }) => ipcRenderer.invoke(IPC.SETUP_PREPARE, req)
+    prepare: (req: { lane: string }) => ipcRenderer.invoke(IPC.SETUP_PREPARE, req),
+    preflight: (req: { root: string; tools: readonly string[] }) => ipcRenderer.invoke(IPC.SETUP_PREFLIGHT, req)
   },
   editor: {
     open: (target: unknown) => ipcRenderer.invoke(IPC.EDITOR_OPEN, target)
@@ -239,7 +243,8 @@ const bridge: CanvasBridge = {
   recipes: {
     list: () => ipcRenderer.invoke(IPC.RECIPE_LIST),
     save: (recipe: unknown) => ipcRenderer.invoke(IPC.RECIPE_SAVE, recipe),
-    remove: (id: string) => ipcRenderer.invoke(IPC.RECIPE_DELETE, id)
+    remove: (id: string) => ipcRenderer.invoke(IPC.RECIPE_DELETE, id),
+    history: (id: string) => ipcRenderer.invoke(IPC.RECIPE_HISTORY, id)
   },
   ledger: {
     list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit),
@@ -254,6 +259,8 @@ const bridge: CanvasBridge = {
     clipboardImage: () => ipcRenderer.invoke(IPC.AGENT_CLIPBOARD_IMAGE),
     clipboardFile: () => ipcRenderer.invoke(IPC.ATTACHMENT_CLIPBOARD_FILE),
     interrupt: (id) => ipcRenderer.invoke(IPC.AGENT_INTERRUPT, id),
+    cancelQueued: (id) => ipcRenderer.invoke(IPC.AGENT_CANCEL_QUEUED, id),
+    terminate: (id) => ipcRenderer.invoke(IPC.AGENT_TERMINATE, id),
     dispose: (req) => ipcRenderer.invoke(IPC.AGENT_DISPOSE, req),
     answer: (req) => ipcRenderer.invoke(IPC.AGENT_ANSWER, req),
     list: () => ipcRenderer.invoke(IPC.AGENT_LIST),
@@ -306,6 +313,12 @@ const bridge: CanvasBridge = {
   tool: {
     generate: (req: { description: string; folder: string }) => ipcRenderer.invoke(IPC.TOOL_GENERATE, req)
   },
+  // M320. The task doors.
+  tasks: {
+    evidence: (req) => ipcRenderer.invoke(IPC.TASK_EVIDENCE, req),
+    index: () => ipcRenderer.invoke(IPC.TASK_EVIDENCE_INDEX),
+    exportHandoff: (req) => ipcRenderer.invoke(IPC.TASK_EXPORT_HANDOFF, req)
+  },
   diagnostics: {
     sample: () => ipcRenderer.invoke(IPC.DIAGNOSTICS_SAMPLE),
     export: (snapshot: DiagnosticsSnapshot) => ipcRenderer.invoke(IPC.DIAGNOSTICS_EXPORT, snapshot)
@@ -313,6 +326,8 @@ const bridge: CanvasBridge = {
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
     lastExit: () => ipcRenderer.invoke(IPC.SESSION_LAST_EXIT),
+    jobs: () => ipcRenderer.invoke(IPC.JOB_LIST),
+    recoverJob: (req) => ipcRenderer.invoke(IPC.JOB_RECOVER, req),
     onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener),
     onRecover: (listener) => subscribe<OrphanRow[]>(IPC_EVENTS.SESSION_RECOVER, listener),
     onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener),

@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { AgentSessionManager } from '../agent-session'
 import { claudeCliRunner } from '../claude-cli-runner'
 import { createPoolCaller } from '../pool-caller'
+import { createJobHandlers, type JobHandlers } from '../job-recovery'
+import type { RepoMark } from '../../shared/job-journal'
 import { createApprovalTracker } from '../approvals'
 import { expandTilde } from '../pty-manager'
 import { requestFromRendererWith } from '../ipc'
@@ -104,7 +106,17 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     }),
     spend: () => agents.list().reduce((sum, snap) => sum + (snap.costUsd ?? 0), 0),
     windowUtil: () => windowUtilization(agents.rateLimit()),
-    emit: (event) => { state.window?.webContents.send(IPC_EVENTS.POOL_EVENT, event) }
+    emit: (event) => { state.window?.webContents.send(IPC_EVENTS.POOL_EVENT, event) },
+    // M316. Every transition written through to userData/jobs.json, so a
+    // crash, a quit or a closed window leaves a job a person can recover.
+    journal: {
+      get: (id) => stores.jobs.get(id),
+      put: (job) => stores.jobs.put(job),
+      update: (id, f) => stores.jobs.update(id, f),
+      newId: () => `job-${randomUUID().slice(0, 8)}`,
+      now: Date.now,
+      repoMark: (cwd) => repoMarkOf(stores, cwd)
+    }
   })
 
   // M76. A pending permission is `needs you` on the terminal's own channel,
@@ -128,5 +140,32 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
       if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns })
     }
     state.window?.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
+  })
+}
+
+/** M316. The repository under `cwd` as the job account compares it: HEAD and a count of uncommitted paths. */
+async function repoMarkOf(stores: Stores, cwd: string): Promise<RepoMark | null> {
+  const dir = expandTilde(cwd)
+  const head = await stores.gitRunner(['-C', dir, 'rev-parse', 'HEAD'])
+  if (!head.ok) return null
+  const status = await stores.gitRunner(['-C', dir, 'status', '--porcelain'])
+  if (!status.ok) return null
+  return { head: head.stdout.trim(), dirty: status.stdout.split('\n').filter((l) => l.trim() !== '').length }
+}
+
+/**
+ * M316. The recovery doors over the journal. `state.pool` is read at the point
+ * of USE (bootstrap/context.ts's rule): these are built before the agent
+ * runtime starts, and a captured null would refuse every recovery for ever.
+ */
+export function createJobDoors(state: MainState, stores: Stores): JobHandlers {
+  return createJobHandlers({
+    store: stores.jobs,
+    pool: () => state.pool,
+    transcript: (workerId) => {
+      const meta = stores.agentTranscripts.read(workerId).meta
+      return meta === undefined ? null : { turns: meta.turns, ...(meta.costUsd === undefined ? {} : { costUsd: meta.costUsd }) }
+    },
+    repoNow: (cwd) => repoMarkOf(stores, cwd)
   })
 }

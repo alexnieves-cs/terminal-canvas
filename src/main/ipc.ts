@@ -1,6 +1,8 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
 import type { CheckOutputRead } from '../shared/check-output'
 import type { LastExit } from '../shared/persistence'
+import { INERT_JOBS, type JobHandlers } from './job-recovery'
+import { INERT_TASKS, type TaskHandlers } from './task-evidence'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
 import type { PreviewCaptureResult, AssetPutResult, NodeFetchResult, PortableWriteResult, PortableReadResult } from '@shared/ipc-contract'
@@ -72,6 +74,7 @@ import { writeDiagnosticsBundle } from './diagnostics-export'
 import type { DiagnosticsSnapshot } from '../shared/ipc-contract'
 import { INERT_KIT, type KitHandlers } from './kit'
 import type { EditorTarget } from '../shared/editor-open'
+import type { IntegrateRequest } from '../shared/integration'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -195,6 +198,9 @@ export interface AgentHandlers {
   /** M145. See ATTACHMENT_CLIPBOARD_FILE. */
   clipboardFile(): ClipboardFile
   interrupt(id: string): boolean
+  /** M319. Optional so every harness that builds these handlers by hand still does; absent answers 0 / false. */
+  cancelQueued?(id: string): number
+  terminate?(id: string): boolean
   dispose(req: { id: string; drop: boolean }): void
   /** M98. `scope: 'session'` grants the request's tool for the rest of the session before answering. */
   answer(req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }): boolean
@@ -554,13 +560,67 @@ export function registerIpcHandlers(
    * once (main/last-exit.ts). Appended last so no positional call site
    * shifts; the inert default is the honest one — no record, no claim.
    */
-  lastExit: () => LastExit | null = () => null
+  lastExit: () => LastExit | null = () => null,
+  /**
+   * M316. The job journal's two doors (main/job-recovery.ts), appended last
+   * so no positional call site shifts; inert by default — no jobs, and every
+   * recovery refused by name.
+   */
+  jobs: JobHandlers = INERT_JOBS,
+  /**
+   * M320–M321. The task doors — a task's deliverables and their evidence,
+   * the search index over them, the gated hand-off export, and the recipe
+   * preflight — as ONE collaborator appended last (the kit's rule: one
+   * positional parameter, one harness mirror). Inert by default: nothing
+   * recorded, every export refused by name.
+   */
+  tasks: TaskHandlers = INERT_TASKS
 ): void {
+  // M320. Shape-checked here; main re-checks every path against its root.
+  ipcMain.handle(IPC.TASK_EVIDENCE, (_event, req: unknown) => {
+    const r = req as { itemId?: unknown; panelIds?: unknown; root?: unknown } | null
+    if (typeof r?.itemId !== 'string') return INERT_TASKS.evidence({ itemId: '', panelIds: [] })
+    const panelIds = Array.isArray(r.panelIds) ? r.panelIds.filter((p): p is string => typeof p === 'string').slice(0, 200) : []
+    return tasks.evidence({ itemId: r.itemId, panelIds, ...(typeof r.root === 'string' && r.root.startsWith('/') ? { root: r.root } : {}) })
+  })
+  ipcMain.handle(IPC.TASK_EVIDENCE_INDEX, () => tasks.index())
+  ipcMain.handle(IPC.TASK_EXPORT_HANDOFF, (_event, req: unknown) => {
+    const r = req as { itemId?: unknown; title?: unknown; markdown?: unknown } | null
+    if (typeof r?.itemId !== 'string' || typeof r.markdown !== 'string') return { kind: 'failed', reason: 'an export names a task and its text' }
+    return tasks.exportHandoff({ itemId: r.itemId, title: typeof r.title === 'string' ? r.title : r.itemId, markdown: r.markdown.slice(0, 512 * 1024) })
+  })
+  // M316. Shape-checked here; the plan re-checks every index against the record.
+  ipcMain.handle(IPC.JOB_LIST, () => jobs.list())
+  ipcMain.handle(IPC.JOB_RECOVER, (_event, req: unknown) => {
+    const r = req as { jobId?: unknown; choice?: unknown; items?: unknown } | null
+    const choice = r?.choice
+    if (typeof r?.jobId !== 'string' || (choice !== 'reconnect' && choice !== 'continue' && choice !== 'retry' && choice !== 'abandon')) return { kind: 'refused', reason: 'a recovery names a job and a choice' }
+    const items = Array.isArray(r.items) ? r.items.filter((i): i is number => typeof i === 'number' && Number.isInteger(i)) : undefined
+    return jobs.recover({ jobId: r.jobId, choice, ...(items === undefined ? {} : { items }) })
+  })
   // M311–M314. Shapes are checked here; each store validates its own fields again.
   ipcMain.handle(IPC.COMBINE_RUN, (_event, req: unknown) => {
     const r = req as { root?: unknown; lanes?: unknown } | null
     return typeof r?.root === 'string' && Array.isArray(r.lanes) ? kit.combine({ root: r.root, lanes: r.lanes.filter((l): l is string => typeof l === 'string') }) : { kind: 'unreadable', detail: 'a combine names a repository and its lanes' }
   })
+  // M317. Shapes checked here; the integrator re-reads every fact it acts on.
+  ipcMain.handle(IPC.COMBINE_INPUTS, (_event, req: unknown) => {
+    const r = req as { root?: unknown; lanes?: unknown } | null
+    return typeof r?.root === 'string' && Array.isArray(r.lanes) ? kit.combineInputs({ root: r.root, lanes: r.lanes.filter((l): l is string => typeof l === 'string') }) : { kind: 'unreadable', detail: 'a read names a repository and its lanes' }
+  })
+  ipcMain.handle(IPC.COMBINE_INTEGRATE, (_event, req: unknown) => {
+    const r = req as Partial<IntegrateRequest> | null
+    const lanes = Array.isArray(r?.lanes) ? r.lanes.filter((l): l is IntegrateRequest['lanes'][number] => typeof l?.lane === 'string' && l.lane.startsWith('/') && typeof l.label === 'string' && typeof l.digest === 'string') : []
+    if (typeof r?.root !== 'string' || typeof r.base !== 'string' || typeof r.tree !== 'string' || lanes.length === 0 || typeof r.check?.outputId !== 'string' || typeof r.check.command !== 'string') {
+      return { kind: 'refused', reason: 'an integration names a repository, its checked lanes and the check that witnessed them' }
+    }
+    return kit.combineIntegrate({
+      root: r.root, base: r.base, tree: r.tree, check: { command: r.check.command, outputId: r.check.outputId },
+      lanes: lanes.map((l) => ({ lane: l.lane, label: l.label, digest: l.digest, ...(typeof l.itemId === 'string' ? { itemId: l.itemId } : {}), ...(typeof l.title === 'string' ? { title: l.title } : {}) })),
+      reviewed: Array.isArray(r.reviewed) ? r.reviewed.filter((p): p is string => typeof p === 'string') : []
+    })
+  })
+  ipcMain.handle(IPC.COMBINE_RECEIPTS, (_event, root: unknown) => (typeof root === 'string' ? kit.combineReceipts(root) : []))
   // M315. Shape-checked here; the merger re-reads the repository itself.
   ipcMain.handle(IPC.LANE_MERGE, (_event, req: unknown) => {
     const r = req as { lane?: unknown; title?: unknown; dryRun?: unknown; expectHead?: unknown } | null
@@ -577,6 +637,13 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.RECIPE_LIST, () => kit.recipeList())
   ipcMain.handle(IPC.RECIPE_SAVE, (_event, recipe: unknown) => kit.recipeSave(recipe))
   ipcMain.handle(IPC.RECIPE_DELETE, (_event, id: unknown) => (typeof id === 'string' ? kit.recipeDelete(id) : false))
+  // M321. The preflight probe and a recipe's versions.
+  ipcMain.handle(IPC.SETUP_PREFLIGHT, (_event, req: unknown) => {
+    const r = req as { root?: unknown; tools?: unknown } | null
+    const tools = Array.isArray(r?.tools) ? r.tools.filter((t): t is string => typeof t === 'string') : []
+    return kit.setupPreflight?.({ root: typeof r?.root === 'string' ? r.root : '', tools }) ?? { tools: {}, ports: null }
+  })
+  ipcMain.handle(IPC.RECIPE_HISTORY, (_event, id: unknown) => (typeof id === 'string' ? (kit.recipeHistory?.(id) ?? []) : []))
   ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M250. The renderer names a path (or none, for the chooser) and nothing
@@ -593,6 +660,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.ATTACHMENT_CLIPBOARD_FILE, () => agents.clipboardFile())
   ipcMain.handle(IPC.AGENT_INTERRUPT, (_event, id: string) => agents.interrupt(id))
   ipcMain.handle(IPC.AGENT_DISPOSE, (_event, req: { id: string; drop: boolean }) => agents.dispose(req))
+  // M319. Cancel and terminate — the id is the only input, as for interrupt.
+  ipcMain.handle(IPC.AGENT_CANCEL_QUEUED, (_event, id: unknown) => (typeof id === 'string' ? (agents.cancelQueued?.(id) ?? 0) : 0))
+  ipcMain.handle(IPC.AGENT_TERMINATE, (_event, id: unknown) => (typeof id === 'string' ? (agents.terminate?.(id) ?? false) : false))
   ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }) => agents.answer(req))
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))

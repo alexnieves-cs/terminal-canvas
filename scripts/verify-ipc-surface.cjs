@@ -283,7 +283,21 @@ app.whenReady().then(() => {
   // window last went away, handed out once; the reopen notice's evidence.
   // M315 lane:merge (160) — accept a task: the lane's branch merged into the
   // main tree's, with a dry-run plan first and every refusal named.
-  const EXPECTED_CHANNELS = 160
+  // M316 job:list / job:recover (162) — the pool's job journal read back as an
+  // account reconciled against live workers, transcripts and git, and one
+  // recovery choice (reconnect, continue, retry, abandon) that never re-runs
+  // a finished item.
+  // M317 combine:inputs / combine:integrate / combine:receipts (165) — each
+  // lane's content fingerprint now (a combined result's staleness), the
+  // checked lanes landed in order with every witness re-read first, and the
+  // receipts of what landed.
+  // M319 agent:cancel-queued / agent:terminate (167) — the two stops that are
+  // neither Interrupt nor Dispose: drop what is queued, end the process and keep the session.
+  // M320 task:evidence / task:evidence-index / task:export-handoff (170) — a
+  // task's deliverables as main reads them, the search index, the gated export.
+  // M321 setup:preflight / recipe:history (172) — tools on PATH and the next
+  // lane's ports probed with nothing run, and a recipe's stored versions.
+  const EXPECTED_CHANNELS = 172
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

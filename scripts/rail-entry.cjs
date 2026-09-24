@@ -9,6 +9,8 @@ module.exports = {
   ...require('../src/renderer/shell/rail-sections'),
   /* M308. The decision inbox — pure over the attention rows, this suite's tier. */
   ...require('../src/renderer/shell/decision-inbox'),
+  /* M318. The task-centered queue — pure over the inbox and the tasks' facts. */
+  ...require('../src/renderer/shell/task-queue'),
   /* M309. Presence's pure rule (the listeners install only on first use). */
   ...require('../src/renderer/shell/presence'),
   /* M9b: the review node's model is a canvas module rather than a shell one,

@@ -10,13 +10,15 @@
  * is the object under construction rather than a getter.
  */
 
-import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { BACKEND_IDS } from '@shared/agent-backends'
 import { WORK_ITEM_STATES, carryWorkItem, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import type { IssueChoice } from '@renderer/palette/StartWorkSheet'
 import { repoOfKey } from '@shared/work-items'
 import { startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
 import { getChat } from '@renderer/chat/chat-store'
 import { allRecipes } from '@shared/recipes'
+import { recipeUse } from '@shared/recipe-portability'
 import { isWorkPanel, isChatPanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
@@ -154,6 +156,13 @@ export function boardActions(ctx: ActionCtx): BoardActions {
             // Enter rather than after the fourth agent has already started.
             agentAvailable: claudeAvailable(presetRows) || codexAvailable(presetRows),
             ...(item === undefined ? {} : { itemState: item.state }),
+            // M319. What the backend field judges each row against: which
+            // CLIs discovery found, the card's own vendor (a re-start keeps
+            // it), and the ceilings a backend with no cost cannot report to.
+            available: Object.fromEntries(BACKEND_IDS.map((id) => [id, backendAvailable(presetRows, id)])),
+            ...(item?.backend === undefined ? {} : { backend: item.backend }),
+            budgetUsd: Number(settingRows.find((r) => r.id === 'agents.budgetUsd')?.value ?? 0),
+            windowPercent: Number(settingRows.find((r) => r.id === 'agents.budgetWindowPercent')?.value ?? 0),
             ceiling: {
               maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0),
               liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,
@@ -171,6 +180,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
             ...(opts?.preferRoot === undefined ? {} : { preferRoot: opts.preferRoot }),
             // M312. The chosen repository's setup, and the route to edit it.
             setupOf: (root) => window.canvas.setup.read(root),
+            // M321. The preflight's probe: tools on PATH and the next lane's ports, nothing run.
+            ...(typeof window.canvas.setup.preflight === 'function' ? { preflightOf: (req: { root: string; tools: readonly string[] }) => window.canvas.setup.preflight(req) } : {}),
             openSetup: (root) => self.beginRepoSetup(root),
             // M310. The flagship start: the connected services' open issues,
             // through the same reads the GitHub and Jira nodes use. Only the
@@ -191,7 +202,19 @@ export function boardActions(ctx: ActionCtx): BoardActions {
                 // M314. The recipe's copy lands on the card; the recipe is not consulted again.
                 ...(choice.checks === undefined ? {} : { checks: choice.checks }),
                 ...(choice.deliverables === undefined ? {} : { deliverables: choice.deliverables }),
-                ...(choice.recipeId === undefined ? {} : { recipeId: choice.recipeId })
+                ...(choice.recipeId === undefined ? {} : { recipeId: choice.recipeId }),
+                // M319. The chosen backend lands on the card; the executor reads it there.
+                // Written even when absent (claude): a card that ran on codex and is
+                // re-started on claude must lose its old vendor, and `carryWorkItem`
+                // drops an undefined key rather than writing it.
+                backend: choice.backend,
+                // M321. The EXACT definition this run starts from — kept on the
+                // card, never re-read, so editing the recipe later cannot
+                // rewrite what this task was started with.
+                ...(() => {
+                  const r = choice.recipeId === undefined ? undefined : recipes.find((x) => x.id === choice.recipeId)
+                  return r === undefined ? {} : { recipeUsed: recipeUse(r, { at: Date.now(), repository: choice.root, ...(choice.recipeParams === undefined ? {} : { params: choice.recipeParams }) }) }
+                })()
               }
               const id = itemId ?? (choice.issue !== undefined
                 ? self.addWorkItem({ source: choice.issue.source, key: choice.issue.key, title: choice.issue.title, url: choice.issue.url, ...(choice.issue.description === '' ? {} : { description: choice.issue.description }), state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'], ...words })

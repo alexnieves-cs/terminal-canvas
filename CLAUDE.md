@@ -11,7 +11,7 @@ An index. Every rule in this repository exists because the obvious version fails
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
-| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md). Work numbered past a ledger's range is logged per milestone beside them ([M274](docs/build-log/m274-orchestration-deepen.md), [M275](docs/build-log/m275-swarm-presets.md), [M276](docs/build-log/m276-monaco-file-editor.md), [M277](docs/build-log/m277-libraries.md), [M279](docs/build-log/m279-ui-evolution.md) — the UI evolution, planned in [docs/ui-evolution-plan.md](docs/ui-evolution-plan.md), and then its **Orchestrate reference track, closed 2026-09-17**: [M280](docs/build-log/m280-orchestration-bloom.md) — the diorama's bloom pass, [M281](docs/build-log/m281-orchestration-hud.md) — the dark HUD glass and the C1 phase row, [M282](docs/build-log/m282-orchestration-jump-cards.md) — the Orchestrate jump cards, whose closeout section carries the goldens and the gate for all three; then Orchestrate **Phase A** of [docs/orchestrate-reference-plan.md](docs/orchestrate-reference-plan.md), [M283–M284](docs/build-log/m283-m284-orchestrate-phase-a.md) — the page boundary and one real task island; then **Phase B**, [M285–M287](docs/build-log/m285-m287-orchestrate-phase-b.md) — review content identity, revision-bound checks, and the Changes · Checks · Output workbench; then **Phase C**, [M288–M290](docs/build-log/m288-m290-orchestrate-phase-c.md) — many islands with their own review subjects, the read-only dependency lens, capability-aware controls and run limits; then **Phase D**, [M291–M293](docs/build-log/m291-m293-orchestrate-phase-d.md) — layered platforms, semantic zoom, minimap, adaptive quality, List/keyboard parity and the WebGL fallback; then the **scene pass**, [M294](docs/build-log/m294-orchestrate-scene.md) — isometric diamond platforms, polygon hit rule, names at rest by density tier, grouping connectors, the zig-zag fill and a visible selection lift; then the **fit pass**, [M298](docs/build-log/m298-orchestrate-fit.md) — the stage follows the panel's aspect, label margins in pixels, Fit all's own floor, the pyramid lattice past six, a tools rail beside the scene, measured at 1–100 platforms across three window sizes; then the **chrome pass**, [M299](docs/build-log/m299-orchestrate-chrome.md) — the title row, tiles with actions, the two side cards, the follow-up composer, no bottom tiles and a workbench that rests open; then **Phase E**, [M300–M302](docs/build-log/m300-m302-orchestrate-phase-e.md) — the durable timeline that fills the workbench's Artifacts and Timeline tabs, restart reconciliation that will not show Running for a session that is gone, and reusable arrangements and saved views, by its [run prompt](docs/superpowers/specs/2026-09-20-orchestrate-phase-e-run-prompt.md); then the **Watch lens and task chrome**, [M304–M305](docs/build-log/m304-m305-orchestrate-watch.md) — a live, orbitable 3D view of what the sessions are doing (files as towers of written lines, writes flying their scrubbed token, commands rising and resolving), and a task header with a stage rail, a state-grouped roster and a Needs-you card); then the **flagship flow**, [M306–M310](docs/build-log/m306-m310-flagship-flow.md) — each check run keeps its exact output, the review with line comments and finished ≠ verified, the decision inbox, the return briefing, and the issue → PR joins); then the **workflow kit**, [M311–M314](docs/build-log/m311-m314-workflow-kit.md) — lanes checked for overlap and combined in a scratch checkout before a merge, repository setup run before the agent starts, the person's own editor at a line and `tc task`, and four workflow recipes); then the **shippable pass**, [M315](docs/build-log/m315-shippable-pass.md) — the task review is the lane's own diff and opens in view, Accept merges a reviewed lane into the main branch (`lane:merge`), and the journey from first launch to a merged result was driven end to end with a real agent). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
+| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md). Work numbered past a ledger's range is logged per milestone beside them in `docs/build-log/` (`ls` it; [milestone-history](docs/milestone-history.md) has the story). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
 | [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
 
 ## What this is
@@ -133,8 +133,10 @@ edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset preset:sp
 preset:default preset:capture agent:state attention:jump settings:changed spawn:open-sheet
 agent:event watcher:state vault:changed session:live session:recover subagent:state
 file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip board:add
-canvas:plan pool:mint pool:event check:output combine:run setup:read setup:save
+canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine:integrate combine:receipts setup:read setup:save
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge
+job:list job:recover agent:cancel-queued agent:terminate task:evidence task:evidence-index
+task:export-handoff setup:preflight recipe:history
 ```
 
 Direction is meaning, not convention. `preset:*` are main → renderer because the *menu* is
@@ -147,58 +149,19 @@ the bridge in neither direction. `canvas:counts`, `canvas:model`, `board:add` an
 reverse direction — main asks, the renderer replies on an ephemeral channel declared nowhere,
 because the renderer owns the workspace it renders; `verify:ipc` does not and should not cover
 those.
+The canvas is layered so the math is testable without a browser — the import-direction and
+hook-ordering rules live in `src/renderer/canvas/CLAUDE.md`, which loads when you work there.
 
-The canvas is layered so the math is testable without a browser, and a layer may only import
-downward: `viewport.ts` / `canvas-input.ts` / `lod.ts` (pure, plain node) → `useViewport.ts`
-(the only place state and math meet; the setter stays private) → `Canvas.tsx` (clipping host,
-one transformed world layer, the registry, tier assignment, the one Cmd+C/Cmd+V subscription).
-`palette/` and `groups/` follow the same shape. The hooks split out of `Canvas.tsx` each
-replace a CONTIGUOUS run of hook calls at exactly their old position — several refs are
-created above a block and assigned below it, so re-ordering a call makes a ref read null for
-the life of an effect, silently. Each takes one `Deps` object, destructures on entry, and
-names the DESTRUCTURED members in dependency arrays — never `deps`, which the caller rebuilds
-every render.
-
-**`main/index.ts` is a COMPOSITION ROOT, and `main/bootstrap/` is the wiring it composes.**
-`index.ts` keeps the single-instance lock, the `open-url` door, the `whenReady` sequence, the
-one `registerIpcHandlers` call and the quit sequence — the ORDER, which is the load-bearing
-part. Everything a collaborator needs to be built is a `create*` in `main/bootstrap/`, taking
-`state` and `stores`. Three rules hold that split up, and each fails silently:
-**(1)** every value the startup probe resolves — the login env, the CLI paths, the backend, the
-agent runtime, the window — travels as the MUTABLE `MainState` record and is read at the point
-of USE. A sub-module that destructures `state` on entry captures the pre-probe placeholder for
-the life of the app: agents spawn on launchd's bare PATH and every chat refuses by name, with
-no error anywhere (`bootstrap/context.ts`'s header). This is the same rule `Canvas.tsx`'s hooks
-follow for `Deps`, for the same reason and in the opposite direction.
-**(2)** `createStores`'s declaration ORDER is the order those consts had at module scope, and
-three pairs in it close over each other FORWARDS; reordering to resolve a forward reference
-turns a working closure into a TDZ throw on the first review or the first spawn.
-**(3)** `registerIpcHandlers` is POSITIONAL, every parameter documented "appended last so no
-existing positional call site shifts" because `scripts/panels-entry.cjs` and the other Electron
-entries construct it the same way. Inserting or reordering an argument re-binds every later one
-to the wrong collaborator — a wrong answer on a channel, not a type error.
-Three checks read main's window code AS TEXT and name its file: `verify:meta browser.1`,
-`verify:electron eneg.4`, and `eneg.3`'s ACCEPTED rows (electronegativity reports by path).
-Moving that code means editing those three in the same change.
+**`main/index.ts` is a COMPOSITION ROOT, and `main/bootstrap/` is the wiring it composes.** Its
+three silent-failure rules (mutable `MainState` read at use, `createStores` order, positional
+`registerIpcHandlers`) and the three checks that read main's window file as text live in
+`src/main/CLAUDE.md`, which loads when you work there.
 
 ### The library layer (M276–M277, Rounds 1–8)
 
 Every third-party library here is **confined to a named module set and reached through it**,
-never imported ambiently. That is the rule; the modules are where to look:
-
-| Library | Its one door | Why the confinement is load-bearing |
-|---|---|---|
-| `monaco-editor` | `file/monaco.ts`, lazily `import()`ed by `CodeEditor` | A static import from anything `Canvas.tsx` reaches puts ~6MB in the first chunk, silently. `file/editor-registry.ts` exists precisely so the harness door can be installed without it. |
-| `zod` | `shared/workflow-graph-schema.ts` | Adopted at the boundaries that had NO reader — **not** a retrofit of `parseTemplates`, which stays the layout file's hand-written reader. |
-| `sonner` | `shell/toast.ts` + `shell/CanvasToaster.tsx` | `toast.door.1` pins the importer set so it cannot be walked around. A toast is for what is FINISHED; the attention system stays the source of truth for what is still outstanding. |
-| `recharts` | `shell/MachineChart.tsx`, `shell/UsageChart.tsx` | Colours come from `shell/chart-tokens.ts`, read off the live theme — `var()` does not resolve in SVG presentation attributes, so the natural spelling paints an invisible series with no error. |
-| `@radix-ui/*` | `renderer/primitives/` | Adopters take the primitive, never the Radix package. |
-| `@xyflow/react` + `zustand` | `renderer/workflow/` | The store is the flow editor's own; it is not an app-wide state layer and should not become one. |
-| `three` + `@react-three/fiber` | `orchestration/OrchestrationCubes.tsx` and (M304) `orchestration/OrchestrationLive.tsx`, each lazily `import()`ed by `OrchestrationView` | The diorama and the Watch lens only. Measured at **+2.2MB in the FIRST chunk** when that import was static — the same trap as Monaco's row, and nothing pins it. |
-| `motion` | `primitives/MotionSurface.tsx`, `workflow/` | Motion still answers to the token rules in `styles.css` (`verify:styles`). |
-| `postprocessing` | `orchestration/orchestration-bloom.tsx`, reached only from the lazily-`import()`ed `OrchestrationCubes` | The diorama's bloom. Rides three.js's deferred chunk, so the first chunk pays nothing — a second importer undoes that silently, which is why `verify:orchestration orch.bloom-door.1/.2` pin the importer set AND the `lazy()`. The raw library, NOT `@react-three/postprocessing`, whose peer range would have forced a `@react-three/fiber` bump under a working scene. |
-
-Renderer libraries are vite-bundled, so nothing here ships `node_modules` and the
+never imported ambiently. The per-library door table (monaco, zod, sonner, recharts, Radix,
+xyflow/zustand, three/R3F, motion, postprocessing) lives in `src/renderer/CLAUDE.md`.
 `dependencies`/`devDependencies` split currently carries no rule — don't read one into it.
 
 ## Notes on patterns used so far (not gates)

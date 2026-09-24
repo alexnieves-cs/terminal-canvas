@@ -100,6 +100,7 @@ const {
   createRunLedger,
   createCheckOutputStore,
   createCombineRunner, createRepoSetupStore, createRecipeStore, createEditorOpener,
+  createLaneMerger, createIntegrator, createReceiptStore,
   createBaselineCapture,
   createReviewCommitter,
   createReviewDiscarder,
@@ -883,7 +884,14 @@ app.whenReady().then(async () => {
     return a.kind === 'root' ? reviewEngine.commonRootOf(a.root) : null
   }
   const kit = {
-    combine: createCombineRunner({ run: fencedGitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir: WORKTREES_DIR }).run,
+    // M317. inputs/integrate/receipts over the same runner and a receipts file in the scratch dir.
+    ...(() => {
+      const combiner = createCombineRunner({ run: fencedGitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir: WORKTREES_DIR })
+      const laneMerge = createLaneMerger({ run: fencedGitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
+      const receipts = createReceiptStore({ file: join(kitDir, 'integration-receipts.json') })
+      const integrate = createIntegrator({ run: fencedGitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir: WORKTREES_DIR, readOutput: (id) => checkOutputs.read(id), merge: laneMerge, receipts, record: (row) => runLedger.append(row) })
+      return { combine: combiner.run, combineInputs: combiner.inputs, laneMerge, combineIntegrate: integrate, combineReceipts: (root) => receipts.list(root) }
+    })(),
     ...(() => {
       const setup = createRepoSetupStore({
         dir: join(kitDir, 'repo-setup'), mainRootOf: kitMainRootOf,

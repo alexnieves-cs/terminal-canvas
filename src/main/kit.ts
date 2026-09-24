@@ -1,9 +1,10 @@
 import type { LaneMergeRequest, LaneMergeResult } from '../shared/lane-merge'
 import type { CombineRunResult } from '../shared/combine'
+import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from '../shared/integration'
 import type { PrepareResult } from '../shared/repo-setup'
 import type { Recipe } from '../shared/recipes'
 import { planEditorOpen, isEditorPref, type EditorId, type EditorOpenResult, type EditorPref, type EditorTarget } from '../shared/editor-open'
-import type { SetupRead } from './repo-setup-store'
+import type { SetupPreflight, SetupRead } from './repo-setup-store'
 
 /**
  * M311–M314. THE WORKFLOW KIT'S DOORS — combine, repository setup, the
@@ -25,6 +26,16 @@ export interface KitHandlers {
   recipeDelete: (id: string) => Promise<boolean>
   /** M315. Accept a task by merging its lane (shared/lane-merge.ts). */
   laneMerge: (req: LaneMergeRequest) => Promise<LaneMergeResult>
+  /** M317. Each lane's content fingerprint now — the combined result's staleness read. */
+  combineInputs: (req: { root: string; lanes: string[] }) => Promise<CombineInputsResult>
+  /** M317. Land the checked lanes, in order, and keep the receipt (main/integrator.ts). */
+  combineIntegrate: (req: IntegrateRequest) => Promise<IntegrateResult>
+  /** M317. The receipts kept for a repository, newest first. */
+  combineReceipts: (root: string) => Promise<IntegrationReceipt[]>
+  /** M321. Probe what a start would meet — tools on PATH, the next lane's ports — running nothing. Optional: a harness mirror without it answers nothing probed. */
+  setupPreflight?: (req: { root: string; tools: readonly string[] }) => Promise<SetupPreflight>
+  /** M321. Every stored version of a recipe, newest first. */
+  recipeHistory?: (id: string) => Promise<Recipe[]>
 }
 
 const off = 'not wired in this process'
@@ -38,7 +49,12 @@ export const INERT_KIT: KitHandlers = {
   recipeList: async () => [],
   recipeSave: async () => ({ ok: false, reason: `recipes are ${off}` }),
   recipeDelete: async () => false,
-  laneMerge: async () => ({ kind: 'refused', reason: `accepting is ${off}` })
+  laneMerge: async () => ({ kind: 'refused', reason: `accepting is ${off}` }),
+  combineInputs: async () => ({ kind: 'unreadable', detail: `reading lanes is ${off}` }),
+  combineIntegrate: async () => ({ kind: 'refused', reason: `integrating is ${off}` }),
+  combineReceipts: async () => [],
+  setupPreflight: async () => ({ tools: {}, ports: null }),
+  recipeHistory: async () => []
 }
 
 /** What the editor opener needs from the OS — injected, so the harness never launches an editor. */

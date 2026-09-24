@@ -25,8 +25,10 @@ import type { useTaskHandoffs } from './useTaskHandoffs'
 import { insideDirectory } from '@shared/work-scope'
 import { dispatchMessage, prBody, suggestCheckCommand, watcherArgv, type PrEvidence } from '@shared/task-flow'
 import { prepareFailureLine, setupBrief, type PrepareResult, type RepoSetup } from '@shared/repo-setup'
-import { recipeFromTask, recipeMessage } from '@shared/recipes'
+import { portableRecipeFromTask, recipeMessage } from '@shared/recipes'
+import { preflightTools, recipePreflight, recipeTexts } from '@shared/recipe-portability'
 import { outward } from '@shared/outward'
+import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { adoptedRunId, beginRun, mintRunId, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
 
 /**
@@ -208,6 +210,17 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // retries a message through an existing conversation.
     const retryingSend = item.note?.startsWith('the lane and the conversation are ready, but the first message was refused — ') === true ||
       item.note === 'the lane and the conversation are ready, but the first message has not been sent yet'
+    // M319. The card's backend (absent is claude). The sheet judged it against
+    // the task; this is the executor's own gate for the doors with no sheet
+    // (the one-gesture drop, a re-dispatch): a CLI discovery did not find, or
+    // an arrangement on a backend that cannot carry a seat's role, refuses
+    // HERE — before a worktree exists — rather than after the agent starts.
+    const backend = backendOf(item)
+    if (swarm !== undefined && !BACKENDS[backend].appendsPrompt && standingPanel === undefined) {
+      const reason = `${BACKENDS[backend].reasons.noPrompt} — choose claude for an arrangement`
+      patch({ note: reason })
+      return { kind: 'refused', reason }
+    }
     const repo = item.key === undefined ? null : repoOfKey(item.key)
     const lane = await window.canvas.board.lane({ itemId, chatPanelId: chatId, teammateId, ...(repo === null ? {} : { repo }), ...(root === undefined ? {} : { root }) })
     if (lane.kind === 'refused') { patch({ note: lane.reason }); return { kind: 'refused', reason: lane.reason } }
@@ -232,6 +245,32 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       patch({ note: 'preparing the lane with the repository setup…' })
       const read = await window.canvas.setup.read(lane.path).catch(() => null)
       setup = read?.kind === 'saved' ? read.setup : null
+      // M321. PREFLIGHT, the executor's own gate — the sheet ran the same
+      // check, but the one-gesture drop and a re-dispatch open no sheet. The
+      // tools the setup and the checks invoke must be on the login PATH, the
+      // setup the recipe needs must be saved, and no placeholder may reach a
+      // shell unfilled; a failure stops the start before any setup step runs
+      // and before an agent exists.
+      const card = workItemsRef.current.find((i) => i.id === itemId) ?? item
+      const setupFor = read === null || read.kind === 'not-a-repo' ? null : read
+      const wanted = preflightTools({ checks: card.checks ?? [], ...(card.recipeUsed === undefined ? {} : { recipe: card.recipeUsed.definition }), setup: setupFor })
+      const probe = typeof window.canvas.setup.preflight === 'function'
+        ? await window.canvas.setup.preflight({ root: lane.path, tools: wanted.map((t) => t.tool) }).catch(() => null)
+        : null
+      const pre = recipePreflight({
+        checks: card.checks ?? [],
+        ...(card.recipeUsed === undefined ? {} : { recipe: card.recipeUsed.definition }),
+        texts: recipeTexts({ brief: card.brief ?? '', criteria: card.criteria ?? [], checks: card.checks ?? [], deliverables: card.deliverables ?? [] }),
+        renderContext: { repository: lane.path, ...(card.recipeUsed?.params === undefined ? {} : { params: card.recipeUsed.params }) },
+        setup: setupFor,
+        tools: probe?.tools ?? {},
+        ports: probe?.ports ?? null
+      })
+      if (pre.blocked !== undefined) {
+        const reason = `Not started — ${pre.blocked}`
+        patch({ note: reason })
+        return { kind: 'refused', reason }
+      }
       if (setup !== null) {
         prepared = await window.canvas.setup.prepare({ lane: lane.path }).catch((e: unknown) => ({ kind: 'unreadable' as const, detail: e instanceof Error ? e.message : String(e) }))
         const failed = prepareFailureLine(prepared)
@@ -256,7 +295,11 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       // the generic one: an explorer told to commit as it goes is an explorer
       // that writes. `swarmSystemPrompt` folds the lane's own rules (never
       // push, never open a PR) back into every seat brief that needs them.
-      const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: swarm === undefined ? DISPATCH_PROMPT : swarmSystemPrompt(swarm, SUPERVISOR_PROMPT) })
+      // M319. A backend with no appended prompt (codex, copilot) gets none —
+      // main would drop it silently — and its lane rules ride the first
+      // message instead (below). The sheet said so before the start.
+      const lanePrompt = swarm === undefined ? DISPATCH_PROMPT : swarmSystemPrompt(swarm, SUPERVISOR_PROMPT)
+      const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, ...carryBackend(item), ...(BACKENDS[backend].appendsPrompt ? { appendSystemPrompt: lanePrompt } : {}) })
       if (created.kind === 'refused') { patch({ note: `the lane is ready, but the conversation was refused — ${created.reason}` }); return { kind: 'refused', reason: created.reason } }
       const GAP = 48
       // The card and the offset are computed HERE, from the ref, not inside
@@ -267,7 +310,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       const centre = card === undefined
         ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
         : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
-      const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }
+      const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...carryBackend(item), ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }
       const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
       let next: Panel[] = [...before, chatPanel]
       if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
@@ -285,7 +328,12 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // read from the item as it stands now — the sheet wrote them after mint.
     const current = workItemsRef.current.find((i) => i.id === itemId) ?? item
     const saved = current.recipeId?.startsWith('mine-') === true ? await window.canvas.recipes.list().catch(() => []) : []
-    const message = dispatchMessage(current, [recipeMessage(current, saved), setupBrief(setup, prepared)])
+    const composed = dispatchMessage(current, [recipeMessage(current, saved), setupBrief(setup, prepared)])
+    // M319. The lane's rules as the message's first section where the CLI
+    // has no appended prompt — weaker (no deny list comes with it), and the
+    // sheet's fit row said so, but a codex lane told nothing about staying in
+    // its worktree is a lane that pushes.
+    const message = BACKENDS[backendOf(current)].appendsPrompt ? composed : `## How to work in this lane\n${DISPATCH_PROMPT}\n\n${composed}`
     // M197 (D05). The first send's answer is READ. `send` has a `{ refused }`
     // arm — M82's budget ceiling refuses and STORES NOTHING, by that
     // milestone's own rule — so a dispatch over budget used to leave a chat
@@ -312,6 +360,9 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     beginRun(itemId, runId)
     void recordOrchEvent({
       runId, itemId, panelId: chatId, event: 'dispatch', source: 'person',
+      // M320. The conversation's name and vendor, recorded — its transcript is
+      // deleted when the chat closes, and this row is what still says who did it.
+      producer: { title: item.key ?? item.title, kind: 'chat', ...carryBackend(item) },
       title: `Dispatched ${item.key ?? item.title}`,
       detail: `${teammateId} in ${lane.path}`
     })
@@ -527,8 +578,19 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       // the durable facts, and a row with no paths says so by having none,
       // which the Artifacts tab shows as a run with nothing listed under it.
       const paths = taskPathsOf(itemId)
+      // M320. The lane's root rides the row so main can digest each path as it
+      // is NOW — the reviewed version a later reader compares against — and the
+      // lane's chat is named as the producer, so a closed chat still has a name.
+      const card = workItemsRef.current.find((i) => i.id === itemId)
+      const lanePanel = card?.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === card.panelId)
+      const laneChat = lanePanel !== undefined && isChatPanel(lanePanel) ? lanePanel : undefined
       void recordOrchEvent({
         runId: runOfTask(itemId) ?? adoptedRunId(itemId), itemId, event: 'artifact', source: 'person',
+        ...(laneChat === undefined ? {} : {
+          panelId: laneChat.rect.id,
+          root: laneChat.chat.cwd,
+          producer: { title: laneChat.title ?? card?.title ?? laneChat.rect.id, kind: 'chat', ...carryBackend(laneChat.chat) }
+        }),
         title: `Reviewed ${reviewed.files} changed file${reviewed.files === 1 ? '' : 's'}`,
         ...(paths === undefined ? {} : { paths }),
         ...(reviewed.identity === undefined ? {} : { tested: reviewed.identity }),
@@ -734,7 +796,14 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         const saved = await window.canvas.recipes.list().catch(() => [])
         const chat = it.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === it.panelId)
         const swarm = chat !== undefined && isChatPanel(chat) ? chat.chat.swarm?.preset : undefined
-        const recipe = recipeFromTask(it, { name, passedChecks, now: Date.now(), saved, ...(swarm === undefined ? {} : { swarm }) })
+        // M321. PORTABLE: the task's lane and the repository it was started in
+        // are this machine's paths — under them becomes `{repository}`, any
+        // other absolute path a named parameter, so the recipe can be taken to
+        // another repository without repairing it by hand.
+        const laneRoot = chat !== undefined && isChatPanel(chat) ? chat.chat.cwd : undefined
+        const setupRoot = laneRoot === undefined ? undefined : await window.canvas.setup.read(laneRoot).then((r) => (r.kind === 'not-a-repo' ? undefined : r.setup.root), () => undefined)
+        const roots = [laneRoot, it.recipeUsed?.repository, setupRoot].filter((x): x is string => x !== undefined && x !== '')
+        const { recipe } = portableRecipeFromTask(it, { name, passedChecks, now: Date.now(), saved, roots, ...(swarm === undefined ? {} : { swarm }) })
         const r = await window.canvas.recipes.save(recipe)
         return r.ok ? null : r.reason
       },

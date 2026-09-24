@@ -104,6 +104,10 @@ export interface OrchEventInput {
   paths?: readonly string[]
   /** M301. The writer's own key for what this row is about — see EventRow.key. */
   key?: string
+  /** M320. Who produced it, as it is NOW — so the row still names it after the panel closes. */
+  producer?: EventRow['producer']
+  /** M320. The directory `paths` are relative to; main digests each path against it. */
+  root?: string
   at?: number
 }
 
@@ -130,7 +134,9 @@ export async function recordOrchEvent(input: OrchEventInput): Promise<boolean> {
     ...(input.panelId === undefined ? {} : { panelId: input.panelId }),
     ...(input.tested === undefined ? {} : { tested: input.tested }),
     ...(input.paths === undefined || input.paths.length === 0 ? {} : { paths: [...input.paths] }),
-    ...(input.key === undefined || input.key === '' ? {} : { key: input.key })
+    ...(input.key === undefined || input.key === '' ? {} : { key: input.key }),
+    ...(input.producer === undefined ? {} : { producer: { title: input.producer.title, kind: input.producer.kind, ...(input.producer.backend === undefined ? {} : { backend: input.producer.backend }) } }),
+    ...(input.root === undefined || !input.root.startsWith('/') ? {} : { root: input.root })
   }
   try {
     return await door(row)

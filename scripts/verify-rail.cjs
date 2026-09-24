@@ -3805,6 +3805,73 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
     JSON.stringify(chain))
 }
 
+// M318 — queue.1–.4. THE TASK-CENTERED QUEUE. Each fails quietly: a
+//      decision filed under the wrong task sends a person to the wrong
+//      story; a failed check that a later pass already fixed (or a stray
+//      shell typo) cries wolf; an order that puts a review above a stopped
+//      agent leaves the agent stopped; a restart that drops an unanswered
+//      decision loses it with no trace; and a feed that calls every state
+//      change an intervention teaches the eye to ignore the one that is.
+{
+  const appr = (id, requestId, tool = 'Bash', action = 'npm install') => ({ id, requestId, toolName: tool, argument: action, action, cwd: '/r' })
+  const rows = [
+    { id: 'chatA', label: 'builder', approval: appr('chatA', 'r1') },
+    { id: 'termB', label: 'shell' },
+    { id: 'loose', label: 'stray' }
+  ]
+  const inbox = R.buildInbox({ now: 10_000, rows, approvals: [appr('chatA', 'r1')], kindOf: (id) => (id === 'termB' ? 'terminal' : 'chat'), firstSeen: new Map([['p:r1', 1000], ['q:termB', 2000], ['q:loose', 3000]]) })
+  const tasks = [
+    { itemId: 'T1', title: 'API rewrite', members: ['chatA', 'watchA'], runs: [{ command: 'npm test', panelId: 'watchA', at: 5, exitCode: 0 }] },
+    { itemId: 'T2', title: 'Docs', members: ['termB'], handoff: { state: 'working', standing: 'none' } },
+    { itemId: 'T3', title: 'Deploy', members: ['chatC'], runs: [{ command: 'npm test', panelId: 'chatC', at: 1, exitCode: 0 }, { command: 'npm test', panelId: 'chatC', at: 9, exitCode: 1, outputId: 'o9' }, { command: 'npm run lint', panelId: 'chatC', at: 4, exitCode: 2 }, { command: 'npm run lint', panelId: 'chatC', at: 8, exitCode: 0 }] },
+    { itemId: 'T4', title: 'Settings page', members: ['chatD'], handoff: { state: 'ready', standing: 'none', files: 3 } },
+    { itemId: 'T5', title: 'Quiet one', members: ['chatE'], handoff: { state: 'ready', standing: 'current', files: 1 } }
+  ]
+  const q = R.buildTaskQueue({ now: 10_000, tasks, inbox, handoffs: [{ from: 'chatA', to: 'chatC' }], labelOf: (id) => id })
+  const g = (id) => q.groups.find((x) => x.itemId === id)
+  ok('queue.1 decisions are filed under the task whose panel asked (a loose panel under "Not in a task"); a check is failing only when its LATEST run failed; an unreviewed finished lane is a review decision and a reviewed-at-this-revision one is not; a task that needs nothing is counted, never listed',
+    g('T1').decisions.map((d) => d.kind).join() === 'permission' && g('T2').decisions.map((d) => d.kind).join() === 'question' &&
+      g(null).decisions.map((d) => d.key).join() === 'q:loose' && g(null).title === 'Not in a task' &&
+      g('T3').decisions.map((d) => d.key).join() === 'check:T3:npm test' && g('T3').decisions[0].evidence.outputId === 'o9' &&
+      g('T4').decisions.map((d) => d.kind).join() === 'review' && /3 files/.test(g('T4').decisions[0].text) &&
+      g('T5') === undefined && q.quiet === 1,
+    JSON.stringify(q.groups.map((x) => [x.itemId, x.decisions.map((d) => d.key)])))
+  ok('queue.2 order: an agent stopped on you first (the one more tasks wait on ahead), then a failed check, then a review; each group says why, the next step and where it goes, what happens after — naming the tasks that wait on it — and the headline counts each',
+    q.groups.map((x) => x.itemId).join() === 'T1,T2,,T3,T4' &&
+      /needs your permission to use Bash/.test(g('T1').why) && g('T1').next.label === 'Answer Bash request' && g('T1').next.evidence.requestId === 'r1' &&
+      g('T1').affects.map((a) => a.itemId).join() === 'T3' && /Deploy waits on this task/.test(g('T1').after) &&
+      g('T3').severity === 'failed' && /`npm test` exited 1 in chatC/.test(g('T3').why) && g('T3').next.evidence.kind === 'output' &&
+      g('T4').severity === 'review' && g('T4').next.evidence.kind === 'review' &&
+      /^3 stopped on you · 1 with a failed check · 1 to review — 1 other need nothing\.$/.test(q.headline),
+    JSON.stringify({ order: q.groups.map((x) => x.itemId), why: q.groups.map((x) => x.why), headline: q.headline }))
+
+  // Restart: what the last launch left, what comes back, what was resolved here.
+  const remembered = [
+    { key: 'p:old', kind: 'permission', itemId: 'T4', label: 'settings agent', text: 'wants to use Write — src/app.ts', since: 500, panelId: 'chatD' },
+    { key: 'q:termB', kind: 'question', itemId: 'T2', label: 'shell', text: 'rang for you', since: 700, panelId: 'termB' }
+  ]
+  const withLost = R.buildTaskQueue({ now: 10_000, tasks, inbox, lost: remembered.filter((r) => r.key !== 'q:termB') })
+  const next = R.rememberDecisions([...remembered, { key: 'p:answered', kind: 'permission', itemId: null, label: 'x', text: 'y', since: 1, panelId: 'z' }], inbox, (id) => (id === 'chatA' ? 'T1' : null), new Set(['p:answered', 'p:r1', 'q:termB', 'q:loose']))
+  ok('queue.3 a decision waiting when the app closed that did not come back is kept as LOST under its task until dismissed (and one that came back is live, not lost); the memory carries unresolved leftovers, forgets what was seen and resolved this session, keeps a decision\'s first-seen time, and a malformed entry costs itself',
+    withLost.groups.find((x) => x.itemId === 'T4').decisions.map((d) => d.kind).join() === 'review,lost' &&
+      /its session ended before you answered/.test(withLost.groups.find((x) => x.itemId === 'T4').decisions[1].text) &&
+      next.map((r) => r.key).sort().join() === 'p:old,p:r1,q:loose,q:termB' && next.find((r) => r.key === 'q:termB').since === 700 &&
+      next.find((r) => r.key === 'p:r1').itemId === 'T1' &&
+      R.parseRemembered([{ key: 'a' }, remembered[0], 'x', null]).length === 1,
+    JSON.stringify({ lost: withLost.groups.map((x) => [x.itemId, x.decisions.map((d) => d.key)]), next }))
+
+  const order = R.traversalOrder(q)
+  ok('queue.4 keyboard traversal walks every decision group by group and wraps; a cursor on a decision that left restarts at the ends; a feed row needs a person only on the needs-you tone or when its producer says so; a stray shell command is not a check, a test/lint/declared command or any watcher run is',
+    order[0] === 'p:r1' && R.stepCursor(order, order[order.length - 1], 1) === order[0] && R.stepCursor(order, order[0], -1) === order[order.length - 1] &&
+      R.stepCursor(order, 'gone', 1) === order[0] && R.stepCursor([], null, 1) === null &&
+      R.classifyActivity({ tone: 'needs-you' }) === 'intervene' && R.classifyActivity({ tone: 'exited', intervene: true }) === 'intervene' &&
+      R.classifyActivity({ tone: 'working' }) === 'info' && R.classifyActivity({ tone: 'exited' }) === 'info' &&
+      !R.isCheckCommand('git sttus') && !R.isCheckCommand('ls -la') && R.isCheckCommand('npm test') && R.isCheckCommand('pnpm run lint') &&
+      R.isCheckCommand('npx tsc --noEmit') && R.isCheckCommand('cargo test') && R.isCheckCommand('./scripts/ci.sh', { declared: ['./scripts/ci.sh'] }) &&
+      R.isCheckCommand('anything', { watcher: true }),
+    JSON.stringify(order))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

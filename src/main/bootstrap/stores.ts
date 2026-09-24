@@ -19,6 +19,7 @@ import { createGitRunner } from '../git-runner'
 import { createMemoryStore } from '../memory-store'
 import { createBrokerAudit } from '../broker-audit'
 import { createLastExitStore, type LastExitStore } from '../last-exit'
+import { createJobStore, type JobStore } from '../job-store'
 import { createAttentionUnion } from '../approvals'
 import { FileWatchers } from '../file-watch'
 import { ToolboxCache } from '../toolbox-cache'
@@ -73,6 +74,8 @@ export interface Stores {
   launcherDir: string
   /** Brief #20. Which panels had a session when the window last went away. */
   lastExit: LastExitStore
+  /** M316. The pool's job journal; a saved `running` is converted to interrupted at construction. */
+  jobs: JobStore
 }
 
 export function createStores(state: MainState): Stores {
@@ -343,12 +346,14 @@ export function createStores(state: MainState): Stores {
   const brokerAudit = createBrokerAudit({ file: join(userData, 'broker-audit.jsonl') })
   // Brief #20. Read and deleted HERE, at construction — see last-exit.ts.
   const lastExit = createLastExitStore({ file: join(userData, 'last-exit.json') })
+  // M316. Built here, before any pool can start — see job-store.ts.
+  const jobs = createJobStore({ file: join(userData, 'jobs.json') })
 
   return {
     layoutStore, layoutSnapshots, credentialStore, gitRunner, reviewEngine,
     reviewDiscard, reviewCommit, baselineCapture, captureBaseline, dropBaseline,
     runLedger, checkOutputs, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
     fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit,
-    attention, controlSocketPath, launcherDir, lastExit
+    attention, controlSocketPath, launcherDir, lastExit, jobs
   }
 }

@@ -2939,6 +2939,352 @@ if (GIT) {
   }
 }
 
+// ── M317. THE INTEGRATION FLOW ─────────────────────────────────────────────
+// A combined result knows what it combined (content fingerprints, so a commit
+// of the checked bytes keeps it and an edit does not); a failure is traced to
+// the lanes and files that produced it, or SAYS it cannot be; the brief to the
+// responsible agent is scoped to that interaction; nothing lands unless every
+// witness is re-read; and the receipt says whether what landed IS what was checked.
+{
+  const lanes = [
+    { id: '/w/a', label: 'A', branch: 'tc/a', files: ['src/api.ts', 'src/a.ts'], added: 40, removed: 2 },
+    { id: '/w/b', label: 'B', branch: 'tc/b', files: ['src/api.ts', 'test/api.test.ts'], added: 5, removed: 1 },
+    { id: '/w/c', label: 'C', branch: 'tc/c', files: ['docs/c.md'], added: 9, removed: 0 }
+  ]
+  const plan = R.planCombine(lanes)
+  const conflict = R.attributeConflict(plan, { lane: '/w/a', paths: ['src/api.ts'] }, ['/w/c', '/w/b'])
+  const output = 'FAIL /scratch/tc/test/api.test.ts\n  at Object.<anonymous> (/scratch/tc/src/api.ts:12:3)\n  see https://example.com/x.ts\n  node v20.1.0\n'
+  const check = R.attributeCheckFailure(plan, ['/w/c', '/w/b', '/w/a'], output, '/scratch/tc')
+  const none = R.attributeCheckFailure(plan, ['/w/c', '/w/b', '/w/a'], 'Error: expected 2 got 3\n', '/scratch/tc')
+  const elsewhere = R.attributeCheckFailure(plan, ['/w/c', '/w/b'], 'FAIL src/other/untouched.ts:4\n', '/scratch/tc')
+  ok('integrate.1 a conflict is the LATER lane\'s (it lands on top) and names the applied lanes that changed the path as met; a failed check is traced through the files its output names — scratch prefix stripped, URLs and versions ignored — to the lane with the most named files; an output naming no changed file says it is unattributed rather than guessing silently',
+    conflict.responsible === '/w/a' && conflict.participants.find((p) => p.lane === '/w/b').role === 'met' && conflict.participants.find((p) => p.lane === '/w/c').role === 'present' &&
+      R.outputPaths(output, '/scratch/tc').join() === 'test/api.test.ts,src/api.ts' &&
+      check.responsible === '/w/b' && !check.unattributed && check.paths.includes('test/api.test.ts') && check.participants.find((p) => p.lane === '/w/a').role === 'met' &&
+      none.unattributed && none.responsible === '/w/a' && /names no file/.test(none.summary) &&
+      elsewhere.unattributed && /no lane changed/.test(elsewhere.summary),
+    JSON.stringify({ conflict, check, none, elsewhere }))
+  const brief = R.integrationFixBrief({ attribution: check, to: '/w/b', labelOf: (l) => l, command: 'npm test', exitCode: 1, tail: 'FAIL test/api.test.ts', base: 'abcdef1234' })
+  ok('integrate.2 the brief to the responsible agent is scoped: what failed together and with whom, the files, where the other lane\'s copy is (read, never edit), the output\'s last lines, and the check to run again',
+    /can each pass alone/.test(brief) && /npm test` exited 1/.test(brief) && /abcdef1/.test(brief) && /Files involved: src\/api\.ts, test\/api\.test\.ts/.test(brief) &&
+      /A changed src\/api\.ts too — its copy: \/w\/a\/src\/api\.ts/.test(brief) && /do not edit that lane/.test(brief) && /```\nFAIL test\/api\.test\.ts\n```/.test(brief) && /run `npm test` in your lane/.test(brief),
+    brief)
+  const w = { base: 'b1', inputs: [{ lane: '/w/a', head: 'h1', digest: 'd1', dirty: true }, { lane: '/w/b', head: 'h2', digest: 'd2', dirty: false }] }
+  const same = R.integrationStanding(w, { kind: 'inputs', root: '/r', base: 'b1', lanes: [{ lane: '/w/a', head: 'h9', digest: 'd1', dirty: false }, { lane: '/w/b', head: 'h2', digest: 'd2', dirty: false }] })
+  const moved = R.integrationStanding(w, { kind: 'inputs', root: '/r', base: 'b2', lanes: [{ lane: '/w/a', head: 'h1', digest: 'dX', dirty: true }] })
+  const gate = R.integrationGate({ combined: 'clean', check: 'passed', standing: same, lanes: [{ lane: '/w/a', label: 'A', review: 'current', dirty: false }, { lane: '/w/b', label: 'B', review: 'stale', dirty: true }] })
+  const ready = R.integrationGate({ combined: 'clean', check: 'passed', standing: same, lanes: [{ lane: '/w/a', label: 'A', review: 'current', dirty: false }] })
+  ok('integrate.3 staleness is CONTENT: a commit of the checked bytes (new head, same digest) is current, an edit or a moved main tree or a lane gone is stale and said; the gate lists each unmet condition by lane and is ready only when all hold',
+    same.kind === 'current' && moved.kind === 'stale' && moved.changed.join() === '/w/a' && moved.missing.join() === '/w/b' && moved.mainMoved &&
+      /A changed since the combine; B can no longer be read; the main tree has new commits/.test(R.staleWords(moved, (l) => l.slice(3).toUpperCase())) &&
+      !gate.ready && gate.items.some((i) => !i.holds && /B changed since its review/.test(i.text)) && gate.items.some((i) => !i.holds && /B has uncommitted/.test(i.text)) &&
+      ready.ready,
+    JSON.stringify({ same, moved, gate }))
+}
+if (GIT) {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'tc integrate ')))
+  const repo = join(base, 'repo')
+  mkdirSync(repo)
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env })
+  try {
+    git(repo, 'init', '-q', '-b', 'main')
+    writeFileSync(join(repo, 'f.txt'), 'one\ntwo\nthree\n')
+    git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'init')
+    const lane = (name) => { const p = join(base, name); git(repo, 'worktree', 'add', '-q', '-b', `tc/${name}`, p); return p }
+    const a = lane('a'), b = lane('b')
+    writeFileSync(join(a, 'f.txt'), 'ONE\ntwo\nthree\n')                              // uncommitted at combine time
+    writeFileSync(join(a, 'new-a.txt'), 'created\n')                                 // UNTRACKED at combine time
+    writeFileSync(join(b, 'g.txt'), 'b\n'); git(b, 'add', '-A'); git(b, 'commit', '-qm', 'b')
+    const runner = R.createGitRunner({ gitPath: () => 'git', env: () => env, timeoutMs: () => 20000 })
+    const engine = R.createReviewEngine({ run: runner, baselineOf: () => undefined, peersInRepo: () => 0 })
+    const wt = join(base, 'wt')
+    const combiner = R.createCombineRunner({ run: runner, commonRootOf: (p) => engine.commonRootOf(p), worktreesDir: wt })
+    const combined = await combiner.run({ root: repo, lanes: [a, b] })
+    // Commit the SAME content the check saw — the fingerprint must hold, even
+    // for a file that was untracked then and is a committed hunk now.
+    git(a, 'add', '-A'); git(a, 'commit', '-qm', 'a')
+    const after = await combiner.inputs({ root: repo, lanes: [a, b] })
+    const standing = R.integrationStanding({ base: combined.base, inputs: combined.inputs }, after)
+    const outputs = new Map()
+    const scratch = R.combineScratchPath(wt, repo)
+    outputs.set('ok-run', { kind: 'ok', record: { runId: 'ok-run', cwd: scratch, exitCode: 0, command: 'npm test', endedAt: 5 } })
+    outputs.set('red-run', { kind: 'ok', record: { runId: 'red-run', cwd: scratch, exitCode: 1, command: 'npm test', endedAt: 5 } })
+    outputs.set('elsewhere', { kind: 'ok', record: { runId: 'elsewhere', cwd: a, exitCode: 0, command: 'npm test', endedAt: 5 } })
+    const receipts = R.createReceiptStore({ file: join(base, 'receipts.json') })
+    const merge = R.createLaneMerger({ run: runner, commonRootOf: (p) => engine.commonRootOf(p) })
+    const integrate = R.createIntegrator({ run: runner, commonRootOf: (p) => engine.commonRootOf(p), worktreesDir: wt, readOutput: async (id) => outputs.get(id) ?? { kind: 'missing' }, merge, receipts, now: () => 1000 })
+    const req = (outputId) => ({
+      root: repo, base: combined.base, tree: combined.tree, check: { command: 'npm test', outputId }, reviewed: [a, b],
+      lanes: combined.inputs.map((i) => ({ lane: i.lane, label: i.lane === a ? 'A' : 'B', digest: i.digest, itemId: i.lane === a ? 'item-a' : 'item-b', title: i.lane === a ? 'Task A' : 'Task B' }))
+    })
+    const red = await integrate(req('red-run'))
+    const wrongPlace = await integrate(req('elsewhere'))
+    // An edit after the check makes it stale — and nothing merges.
+    writeFileSync(join(b, 'g.txt'), 'b2\n')
+    const staleRun = await integrate(req('ok-run'))
+    const headBefore = git(repo, 'rev-parse', 'HEAD').trim()
+    git(b, 'checkout', '--', 'g.txt')
+    const done = await integrate(req('ok-run'))
+    const listed = await receipts.list(repo)
+    ok('integrate.4 real git: a combine records each lane\'s fingerprint and the combined tree; committing the checked content keeps it current; integrate refuses a failed check and a check that ran elsewhere, returns stale (merging nothing) after a lane is edited, and otherwise lands both lanes in order — the receipt names each merge, the witnessing check, and that the landed tree IS the checked tree',
+      combined.kind === 'combined' && combined.conflict === null && typeof combined.tree === 'string' && combined.inputs.length === 2 &&
+        standing.kind === 'current' &&
+        red.kind === 'refused' && /did not pass/.test(red.reason) && wrongPlace.kind === 'refused' && /did not run on this repository/.test(wrongPlace.reason) &&
+        staleRun.kind === 'stale' && staleRun.changed.join() === b && headBefore === combined.base &&
+        done.kind === 'done' && done.receipt.complete && done.receipt.tree.identical && done.receipt.lanes.map((l) => l.outcome).join() === 'merged,merged' &&
+        done.receipt.lanes[0].title === 'Task A' && done.receipt.lanes.every((l) => l.reviewed) && done.receipt.checks[0].outputId === 'ok-run' &&
+        git(repo, 'show', 'HEAD:f.txt') === 'ONE\ntwo\nthree\n' && git(repo, 'show', 'HEAD:g.txt') === 'b\n' && git(repo, 'show', 'HEAD:new-a.txt') === 'created\n' &&
+        listed.length === 1 && listed[0].id === done.receipt.id && /2 of 2 lanes landed in main .*byte-identical/.test(R.receiptHeadline(listed[0])),
+      JSON.stringify({ combined, standing, red, wrongPlace, staleRun, done }))
+  } catch (e) {
+    ok('integrate.4 real git', false, 'threw: ' + String(e && e.stack || e))
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+}
+
+// ── M320 — a task's deliverables, their status and provenance ──────────────
+{
+  const idAt = (base, content) => ({ base, content })
+  const item = {
+    id: 't1', source: 'typed', title: 'Fix the parser', state: 'review', createdAt: 1, updatedAt: 50, panelId: 'c9',
+    brief: 'no crash on empty input', criteria: ['tests pass'], criteriaMet: ['tests pass'], deliverables: ['a test for empty input'],
+    reviewed: { at: 40, signature: 'sig', files: 3, identity: idAt('b1', 'c'.repeat(32)) },
+    merged: { into: 'main', sha: 'abcdef1234', at: 60 },
+    comments: [{ id: 'k', path: 'src/p.ts', side: 'new', line: 3, quote: 'x', body: 'handle null too', at: 41 }]
+  }
+  const artifact = (at, paths, digests, extra = {}) => ({ kind: 'event', runId: 'r1', at, event: 'artifact', source: 'person', itemId: 't1', panelId: 'c9', title: 'Reviewed', paths, root: '/lane', ...(digests ? { digests } : {}), producer: { title: 'parser lane', kind: 'chat', backend: 'codex' }, ...extra })
+  const events = [
+    { kind: 'event', runId: 'r1', at: 10, event: 'dispatch', source: 'person', itemId: 't1', panelId: 'c9', title: 'Dispatched', producer: { title: 'parser lane', kind: 'chat', backend: 'codex' } },
+    artifact(20, ['src/p.ts', 'src/old.ts'], { 'src/p.ts': 'aaaa1111aaaa1111', 'src/old.ts': 'bbbb2222bbbb2222' }),
+    artifact(40, ['src/p.ts', 'src/new.ts', 'src/gone.ts'], { 'src/p.ts': 'cccc3333cccc3333', 'src/new.ts': 'dddd4444dddd4444', 'src/gone.ts': 'eeee5555eeee5555' }, { tested: idAt('b1', 'c'.repeat(32)) }),
+    { kind: 'event', runId: 'r1', at: 45, event: 'artifact', source: 'person', itemId: 't1', panelId: 'b2', title: 'Captured localhost', detail: 'http://localhost:3000/', key: 'capture:shot-1.png', producer: { title: 'preview', kind: 'browser' } },
+    { kind: 'event', runId: 'r1', at: 46, event: 'artifact', source: 'person', itemId: 't1', panelId: 'b2', title: 'Captured localhost', detail: 'http://localhost:3000/x', key: 'capture:shot-2.png', producer: { title: 'preview', kind: 'browser' } }
+  ]
+  const commands = [
+    { panelId: 'w1', command: 'npm test', cwd: '/lane', startedAt: 30, endedAt: 31, exitCode: 1, outputId: 'o1', tested: idAt('b1', 'c'.repeat(32)) },
+    { panelId: 'w1', command: 'npm test', cwd: '/lane', startedAt: 42, endedAt: 43, exitCode: 0, outputId: 'o2', tested: idAt('b1', 'c'.repeat(32)) },
+    { panelId: 'w1', command: 'npm run lint', cwd: '/lane', startedAt: 44, endedAt: 44, exitCode: 0, outputId: 'o3', tested: idAt('b1', 'c'.repeat(32)) }
+  ]
+  const checks = { o1: { runId: 'o1', panelId: 'w1', command: 'npm test', exitCode: 1, endedAt: 31, tested: idAt('b1', 'c'.repeat(32)) }, o2: { runId: 'o2', panelId: 'w1', command: 'npm test', exitCode: 0, endedAt: 43, tested: idAt('b1', 'c'.repeat(32)) }, o3: null }
+  const files = { 'src/p.ts': { exists: true, digest: 'cccc3333cccc3333' }, 'src/new.ts': { exists: true, digest: 'ffff0000ffff0000' }, 'src/gone.ts': { exists: false }, 'src/old.ts': { exists: true, digest: 'zzzz' } }
+  const receipts = [{ v: 1, id: 'rc1', root: '/repo', into: 'main', at: 61, base: 'b', before: 'b', after: 'a', tree: { checked: 't', landed: 't', identical: true }, lanes: [{ lane: '/lane', label: 'A', branch: 'tc/a', itemId: 't1', digest: 'd', head: 'h', reviewed: true, outcome: 'merged', commits: 1, sha: 'abcdef1234' }], checks: [], complete: true }]
+  const livePanels = [{ id: 'w1', kind: 'watcher', title: 'tests' }]
+  const same = new Map([['b1', idAt('b1', 'c'.repeat(32))]])
+  const moved = new Map([['b1', idAt('b1', 'd'.repeat(32))]])
+  const list = R.collectDeliverables({ item, events, commands, checks, files, receipts, panels: livePanels, capturesOnDisk: new Set(['shot-1.png']), identities: same })
+  const by = (id) => list.find((d) => d.id === id)
+  const fileAt = (path, at) => list.find((d) => d.kind === 'file' && d.subject === path && d.at === at)
+  ok('deliver.1 every kind of output is gathered under the task with its status: a reviewed file whose digest still matches is CURRENT and a CAPTURED version; one whose content moved is MODIFIED since review; a deleted one MISSING; an earlier review of the same path SUPERSEDED; a capture whose image file is gone MISSING; the newest run of a command current and the older SUPERSEDED; a check whose output record was pruned MISSING; the merge, the receipt, the conversation and each expected deliverable listed — and nothing unknown reads as current',
+    fileAt('src/p.ts', 40).status === 'current' && fileAt('src/p.ts', 40).reference === 'captured' &&
+      fileAt('src/new.ts', 40).status === 'modified' && /changed after it was reviewed/.test(fileAt('src/new.ts', 40).why) &&
+      fileAt('src/gone.ts', 40).status === 'missing' && fileAt('src/p.ts', 20).status === 'superseded' &&
+      fileAt('src/old.ts', 20).status === 'modified' &&
+      by('capture:shot-1.png').status === 'current' && by('capture:shot-2.png').status === 'missing' &&
+      by('check:o2').status === 'current' && /^Passed: npm test/.test(by('check:o2').title) && by('check:o1').status === 'superseded' && /^Failed \(exit 1\)/.test(by('check:o1').title) &&
+      by('check:o3').status === 'missing' && by('review').status === 'current' &&
+      by('merge:abcdef1234') !== undefined && by('receipt:rc1').status === 'current' &&
+      by('expected:a test for empty input').status === 'pending' && list[list.length - 1].kind === 'expected' &&
+      list.filter((d) => d.status !== 'current' && d.status !== 'pending').every((d) => d.why !== '' || d.kind === 'pr'),
+    JSON.stringify(list.map((d) => [d.id, d.status, d.reference, d.why])))
+  const stale = R.collectDeliverables({ item, events, commands, checks, files, receipts, panels: livePanels, identities: moved })
+  const noLane = R.collectDeliverables({ item, events, commands, checks, files, receipts, panels: livePanels, identities: new Map([['b1', null]]) })
+  const unread = R.collectDeliverables({ item, events, commands, checks, files: {}, receipts, panels: livePanels })
+  const st = (l, id) => l.find((d) => d.id === id).status
+  ok('deliver.2 evidence applies to a revision: when the lane moved, the check and the review read STALE (an older revision), with the lane gone or its identity unread they read UNKNOWN — never current; an unprobed file is unknown and an unprobed capture is unknown',
+    st(stale, 'check:o2') === 'stale' && st(stale, 'review') === 'stale' && st(noLane, 'check:o2') === 'unknown' && /lane is gone/.test(noLane.find((d) => d.id === 'review').why) &&
+      st(unread, 'review') === 'unknown' && unread.find((d) => d.kind === 'file' && d.at === 40 && d.subject === 'src/p.ts').status === 'unknown' && st(unread, 'capture:shot-1.png') === 'unknown',
+    JSON.stringify({ stale: stale.map((d) => [d.id, d.status]), noLane: noLane.map((d) => [d.id, d.status]) }))
+  const conv = by('conversation')
+  ok('deliver.3 provenance outlives the panel: with the lane chat and the preview CLOSED, each deliverable still names who produced it from what its row recorded — "parser lane on codex (closed)", "preview (closed)" — the live watcher is named from the canvas, and the conversation says its transcript went with it',
+    R.producerWord(fileAt('src/p.ts', 40).producedBy) === 'parser lane on codex (closed)' && R.producerWord(by('capture:shot-1.png').producedBy) === 'preview (closed)' &&
+      R.producerWord(by('check:o2').producedBy) === 'tests' && conv.status === 'missing' && /transcript/.test(conv.why) && /parser lane on codex \(closed\)/.test(conv.title) &&
+      R.producerWord({ panelId: 'x', closed: true }) === 'a closed panel',
+    JSON.stringify({ file: fileAt('src/p.ts', 40).producedBy, conv }))
+  const md = R.taskHandoffMarkdown({ ...item, backend: 'codex' }, list, Date.UTC(2026, 8, 23, 12, 0))
+  const account = R.deliverablesAccount(list)
+  ok('deliver.4 the hand-off states the ask (outcome, criteria with the confirmed one ticked), what landed, the verification with each item\'s status and why, the files, where it came from, what was expected back, and the open review comments; the account counts by status and ignores the expected rows',
+    /^# Fix the parser/.test(md) && /backend: codex/.test(md) && /- \[x\] tests pass/.test(md) && /### Landed[\s\S]*Merged into main/.test(md) &&
+      /### Verification[\s\S]*Passed: npm test @ b1 — current/.test(md) && /src\/new\.ts @ b1 — modified \(the file changed after it was reviewed/.test(md) &&
+      /### Expected back\n- a test for empty input/.test(md) && /## Open review comments\n- src\/p\.ts:3 — handle null too/.test(md) &&
+      account.total === list.length - 1 && /1 modified|2 modified/.test(account.line) && /missing/.test(account.line),
+    md)
+
+  // deliver.5 — main's half against a tmpdir: digests are main's, paths stay
+  // inside their root, the evidence read joins the stores, the export is gated.
+  const dir = mkdtempSync(join(tmpdir(), 'tc-deliver-'))
+  try {
+    writeFileSync(join(dir, 'kept.ts'), 'one\n')
+    writeFileSync(join(dir, 'changes.ts'), 'before\n')
+    const row = await R.withDigests({ kind: 'event', runId: 'r', at: 1, event: 'artifact', source: 'person', itemId: 't', title: 'Reviewed', root: dir, paths: ['kept.ts', 'changes.ts', '../../etc/hosts', 'absent.ts'] })
+    const plain = await R.withDigests({ kind: 'event', runId: 'r', at: 1, event: 'dispatch', source: 'person', title: 'x', root: dir, paths: ['kept.ts'] })
+    writeFileSync(join(dir, 'changes.ts'), 'after\n')
+    const probe = await R.probeFiles(dir, ['kept.ts', 'changes.ts', 'absent.ts', '../outside'])
+    const rows = [
+      { kind: 'event', row: { ...row, itemId: 't' } },
+      { kind: 'event', row: { kind: 'event', runId: 'r', at: 2, event: 'artifact', source: 'person', itemId: 't', title: 'Captured', key: 'capture:there.png' } },
+      { kind: 'event', row: { kind: 'event', runId: 'r', at: 3, event: 'artifact', source: 'person', itemId: 't', title: 'Captured', key: 'capture:../../escape.png' } },
+      { kind: 'command', row: { panelId: 'w', command: 'npm test', cwd: dir, startedAt: 1, endedAt: 2, exitCode: 0, outputId: 'o-ok' } },
+      { kind: 'command', row: { panelId: 'w', command: 'npm test', cwd: dir, startedAt: 1, endedAt: 2, exitCode: 0, outputId: 'o-gone' } }
+    ]
+    mkdirSync(join(dir, 'captures'), { recursive: true })
+    writeFileSync(join(dir, 'captures', 'there.png'), 'png')
+    const asked = []
+    const written = []
+    const doors = R.createTaskEvidence({
+      timeline: async (filter) => { asked.push(filter); return { entries: filter.itemId !== undefined ? rows.filter((e) => e.kind === 'event') : rows.filter((e) => e.kind === 'command'), reachedStart: true } },
+      checkOutput: async (id) => (id === 'o-ok' ? { kind: 'ok', record: { v: 1, runId: 'o-ok', panelId: 'w', source: 'shell', command: 'npm test', cwd: dir, startedAt: 1, endedAt: 2, exitCode: 0, signal: null, chars: 3, head: 'SECRET OUTPUT', tail: '', elided: 0 } } : { kind: 'missing' }),
+      receipts: async () => [{ ...receipts[0], lanes: [{ ...receipts[0].lanes[0], itemId: 't' }] }, { ...receipts[0], id: 'other', lanes: [{ ...receipts[0].lanes[0], itemId: 'someone-else' }] }],
+      capturesDir: join(dir, 'captures'),
+      askPath: async (s) => (s.includes('cancel') ? null : join(dir, s)),
+      write: async (path, text) => { written.push([path, text]) }
+    })
+    const ev = await doors.evidence({ itemId: 't', panelIds: ['w'], root: dir })
+    const token = 'ghp_' + 'A'.repeat(36)
+    const out = await doors.exportHandoff({ itemId: 't', title: 'Fix: the parser', markdown: `# Fix\ntoken ${token}\n` })
+    const cancelled = await doors.exportHandoff({ itemId: 't', title: 'cancel me', markdown: '# x' })
+    ok('deliver.5 main computes an artifact row\'s digests itself at append (a path outside the root and an absent file get none; a non-artifact row passes through), the probe reports a file changed since as a different digest and an absent one as not existing, the evidence read asks by ITEM for events and by PANEL for check runs, carries each check\'s facts but never its output text, marks a pruned record null, keeps only this task\'s receipts and only captures still on disk (never a name with a separator), and the export goes through the outward gate with its count and a sanitised file name',
+      Object.keys(row.digests ?? {}).join() === 'kept.ts,changes.ts' && plain.digests === undefined &&
+        probe['kept.ts'].exists && probe['kept.ts'].digest === row.digests['kept.ts'] && probe['changes.ts'].digest !== row.digests['changes.ts'] && probe['absent.ts'].exists === false && probe['../outside'] === undefined &&
+        asked.some((f) => f.itemId === 't' && f.panelIds === undefined) && asked.some((f) => f.itemId === undefined && f.panelIds.join() === 'w') &&
+        ev.checks['o-ok'].command === 'npm test' && !JSON.stringify(ev.checks).includes('SECRET OUTPUT') && ev.checks['o-gone'] === null &&
+        ev.receipts.length === 1 && ev.captures.join() === 'there.png' && ev.files['kept.ts'].exists &&
+        out.kind === 'written' && out.redacted === 1 && /Fix-the-parser-handoff\.md$/.test(out.path) && !written[0][1].includes(token) && cancelled.kind === 'cancelled' && written.length === 1,
+      JSON.stringify({ digests: row.digests, probe, asked, ev: { ...ev, events: ev.events.length }, out }))
+  } catch (e) {
+    ok('deliver.5 main\'s evidence doors', false, 'threw: ' + String(e && e.stack || e))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+
+  const hits = (q, ev) => R.searchWork(q, [item], [], () => undefined, 30, ev).hits.map((h) => h.field)
+  ok('deliver.6 search reaches what a task says and what its record holds: a review comment, a check that decides done, an expected deliverable, a check command it ran and a path its review covered each find the task, naming the field — one row per task',
+    hits('handle null', []).join() === 'review comment' && hits('empty input', []).join() === 'brief' && hits('a test for', []).join() === 'deliverable' &&
+      hits('vitest --run', [{ itemId: 't1', field: 'check', text: 'vitest --run parser' }]).join() === 'check run' &&
+      hits('src/lexer', [{ itemId: 't1', field: 'deliverable', text: 'src/lexer.ts' }, { itemId: 'other', field: 'deliverable', text: 'src/lexer.ts' }]).join() === 'produced',
+    JSON.stringify({ c: hits('handle null', []) }))
+}
+
+// ── M321 — a successful recipe, reproducible in another repository ────────
+{
+  const saved = R.recipeFromTask(
+    { id: 'wi9', title: 'flaky auth', brief: 'Fix flaky auth in /Users/ada/work/api/src/auth.ts', criteria: ['no retries in /Users/ada/work/api/test'], checks: ['cd /Users/ada/work/api && npm test -- auth', 'node /Users/ada/tools/lint-auth.js'], deliverables: ['a note in /Users/ada/work/api/NOTES.md'], recipeId: 'recipe-fix-test' },
+    { name: 'Auth fix', passedChecks: [], now: 5000 })
+  const { recipe: portable, findings } = R.parameterizeRecipe(saved, ['/Users/ada/work/api', '/Users/ada/work/api-lane'])
+  const again = R.parameterizeRecipe(portable, ['/Users/ada/work/api'])
+  ok('portable.1 a recipe saved from a task has its paths lifted: under the repository it was saved from they become {repository}; any other absolute path becomes a named parameter whose default is the original — flagged, never silently kept; a URL is not a path; parameterising twice changes nothing',
+    portable.checks[0] === 'cd {repository} && npm test -- auth' && /\{repository\}\/src\/auth\.ts/.test(portable.brief) && portable.criteria[0] === 'no retries in {repository}/test' &&
+      portable.deliverables[0] === 'a note in {repository}/NOTES.md' &&
+      portable.checks[1] === 'node {param:lint-auth-js}' && portable.params.length === 1 && portable.params[0].default === '/Users/ada/tools/lint-auth.js' &&
+      findings.filter((f) => f.fix === 'repository').length === 4 && findings.filter((f) => f.fix === 'param').length === 1 &&
+      R.portabilityScan({ brief: 'see https://example.com/a/b and /dev/null', criteria: [], checks: [], deliverables: [] }, []).length === 0 &&
+      again.findings.length === 0 && JSON.stringify(again.recipe) === JSON.stringify(portable),
+    JSON.stringify({ portable, findings }))
+
+  const fill = R.applyRecipe(portable, 'token refresh', { repository: '/srv/other-repo', params: {} })
+  const fillOver = R.applyRecipe(portable, 'x', { repository: '/srv/other-repo', params: { 'lint-auth-js': '/opt/lint/auth.js' } })
+  const noRoot = R.applyRecipe(portable, 'x')
+  const cwdPortable = R.portableCwd('/Users/ada/work/api-lane/packages/web', ['/Users/ada/work/api', '/Users/ada/work/api-lane'])
+  ok('portable.2 taken to a second repository, every field renders against THAT repository: {repository} is its root, a parameter takes its value else its default, and with no repository chosen the placeholder stays — which the preflight refuses; a template member\'s cwd under the lane becomes the {{repository}} hole (the longest root wins)',
+    fill.checks[0] === 'cd /srv/other-repo && npm test -- auth' && fill.checks[1] === 'node /Users/ada/tools/lint-auth.js' && /\/srv\/other-repo\/src\/auth\.ts/.test(fill.brief) &&
+      fillOver.checks[1] === 'node /opt/lint/auth.js' && noRoot.checks[0] === 'cd {repository} && npm test -- auth' &&
+      R.unfilled(noRoot.checks[0], {}).join() === '{repository}' && R.unfilled('{param:missing} {input}', { params: {} }).join() === '{param:missing}' &&
+      cwdPortable === '{{repository}}/packages/web' && R.portableCwd('/elsewhere', ['/Users/ada/work/api']) === '/elsewhere',
+    JSON.stringify({ fill: fill.checks, fillOver: fillOver.checks, cwdPortable }))
+
+  const setup = R.parseRepoSetup({ root: '/srv/other-repo', install: ['pnpm install --frozen-lockfile'], services: [{ name: 'web', command: 'pnpm run dev', port: true }, { name: 'api', command: 'FOO=1 uvicorn app:api', port: true }], checks: ['pnpm test'] })
+  const req = { ...portable, requires: { setup: true, tools: ['docker'], capabilities: ['interrupt'] } }
+  const checks = ['cd /srv/other-repo && npm test -- auth', 'node ./scripts/x.js | jq .']
+  const fitCodex = R.backendFit('codex', R.taskRequirements({ lane: true }))
+  const fitClaude = R.backendFit('claude', R.taskRequirements({ lane: true }))
+  const tools = R.preflightTools({ checks, recipe: req, setup: { kind: 'saved', setup } })
+  const missing = R.recipePreflight({ checks, recipe: req, setup: { kind: 'saved', setup }, tools: { pnpm: true, uvicorn: false, npm: true, node: true, jq: true, docker: true }, ports: { web: 4110, api: null }, fit: fitClaude, texts: [{ field: 'checks', text: '{param:nope}' }], renderContext: { repository: '/srv/other-repo' } })
+  const clear = R.recipePreflight({ checks, recipe: req, setup: { kind: 'saved', setup }, tools: Object.fromEntries(tools.map((t) => [t.tool, true])), ports: { web: 4110, api: 4111 }, fit: fitClaude })
+  const noSetup = R.recipePreflight({ checks, recipe: req, setup: { kind: 'draft', setup }, tools: {}, ports: null, fit: fitCodex })
+  const unprobed = R.recipePreflight({ checks, setup: null, tools: null, ports: null })
+  const ids = (p) => p.items.filter((i) => !i.ok).map((i) => i.id).join()
+  ok('portable.3 the preflight names every tool the setup, the services and the checks invoke (past VAR= and builtins, never a path-qualified script) and refuses BEFORE a worker exists on a tool missing from PATH (saying where it would have failed), an unfilled parameter, an unsaved setup the recipe needs, and a backend capability the recipe requires; a port that does not fit only warns; the preview says what will run; unprobed tools are "checking…", never passed',
+    tools.map((t) => t.tool).join() === 'pnpm,uvicorn,npm,node,jq,docker' &&
+      R.toolsOf('FOO=1 BAR=2 cargo test && cd x; ./gradlew check | tee out').join() === 'cargo,tee' &&
+      missing.blocked !== undefined && /\{param:nope\}/.test(missing.blocked) && ids(missing) === 'placeholder:{param:nope},tool:uvicorn,port:api' &&
+      /uvicorn is not on the login PATH — a service would fail/.test(missing.items.find((i) => i.id === 'tool:uvicorn').line) && missing.items.find((i) => i.id === 'port:api').severity === 'warn' &&
+      clear.blocked === undefined && clear.plan.install.join() === 'pnpm install --frozen-lockfile' && clear.plan.services.map((sv) => `${sv.name}:${sv.port}`).join() === 'web:4110,api:4111' && clear.plan.checks.length === 2 &&
+      noSetup.blocked !== undefined && /repository setup saved/.test(noSetup.blocked) && ids(noSetup).includes('capability:interrupt') &&
+      unprobed.blocked === undefined && unprobed.items.some((i) => i.id === 'tools' && !i.ok && i.severity === 'warn'),
+    JSON.stringify({ missing, clear: clear.plan, noSetup: noSetup.items }))
+
+  // portable.4 — versions: the store assigns them, keeps what they replaced,
+  // and a run keeps the exact definition it used.
+  const dir = mkdtempSync(join(tmpdir(), 'tc recipe versions '))
+  try {
+    const store = R.createRecipeStore({ dir })
+    const base = { ...portable, id: 'mine-auth' }
+    const v1 = await store.save(base)
+    const same = await store.save({ ...base, version: 99 })
+    const v2 = await store.save({ ...base, checks: [...base.checks, 'npm run lint'] })
+    const v3 = await store.save({ ...base, brief: 'rewritten' })
+    const history = await store.history('mine-auth')
+    const listed = await store.list()
+    const use = R.recipeUse(v2.recipe, { at: 10, repository: '/srv/other-repo', params: { 'lint-auth-js': '/opt/l.js' } })
+    const items = R.parseWorkItems([{ id: 'w', source: 'typed', title: 't', state: 'todo', createdAt: 1, updatedAt: 1, recipeId: 'mine-auth', recipeUsed: JSON.parse(JSON.stringify(use)) }, { id: 'w2', source: 'typed', title: 't2', state: 'todo', createdAt: 1, updatedAt: 1, recipeUsed: { ...JSON.parse(JSON.stringify(use)), definition: { brief: 'a definition with no name does not parse' } } }], [])
+    const tampered = R.parseRecipeUse({ ...JSON.parse(JSON.stringify(use)), hash: 'ffffffff' })
+    ok('portable.4 the STORE assigns versions: an unchanged definition keeps its number (a version the renderer claims is ignored), a changed one lands one past the newest, the replaced version moves to the history, and the list holds only the live one; a work item keeps the EXACT definition its run used — parsed whole, its hash recomputed rather than trusted — and a later edit of the recipe does not touch it',
+      v1.ok && v1.recipe.version === 1 && same.recipe.version === 1 && v2.recipe.version === 2 && v3.recipe.version === 3 &&
+        history.map((h) => h.version).join() === '3,2,1' && listed.filter((r) => r.id === 'mine-auth').length === 1 && listed[0].version === 3 &&
+        R.recipeHash(v2.recipe) !== R.recipeHash(v3.recipe) && R.recipeHash(v1.recipe) === R.recipeHash({ ...v1.recipe, version: 7, savedFrom: { taskId: 'z', at: 1 } }) &&
+        items[0].recipeUsed.version === 2 && items[0].recipeUsed.definition.checks.includes('npm run lint') && items[0].recipeUsed.definition.brief !== 'rewritten' &&
+        items[0].recipeUsed.params['lint-auth-js'] === '/opt/l.js' && items[1].recipeUsed === undefined && tampered.hash === use.hash &&
+        R.recipeChanges(v2.recipe, v3.recipe).join() === 'the brief changed,checks: 0 added, 1 removed',
+      JSON.stringify({ versions: [v1.recipe.version, same.recipe.version, v2.recipe.version, v3.recipe.version], history: history.map((h) => h.version) }))
+  } catch (e) {
+    ok('portable.4 recipe versions', false, 'threw: ' + String(e && e.stack || e))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+
+  // portable.6 — main's probe: tool NAMES looked up (never a path or a
+  // command line), the NEXT lane's ports, nothing run.
+  {
+    const d = mkdtempSync(join(tmpdir(), 'tc preflight '))
+    try {
+      const repo = join(d, 'repo'); mkdirSync(repo)
+      const looked = []
+      const st = R.createRepoSetupStore({
+        dir: join(d, 'store'), mainRootOf: async (cwd) => (cwd.startsWith(repo) ? repo : null), lanesOf: () => ['/lane-a'], loginEnv: () => ({}),
+        isPortFree: async (p) => p !== 4120, which: (b) => { looked.push(b); return b === 'pnpm' }
+      })
+      const before = await st.preflight({ root: repo, tools: ['pnpm', 'uvicorn', '/bin/rm', 'rm -rf /', 'x'.repeat(80)] })
+      await st.save({ root: repo, install: ['touch ran.txt'], services: [{ name: 'web', command: 'x', port: true }, { name: 'api', command: 'y', port: true }], checks: [] })
+      const after = await st.preflight({ root: repo, tools: ['pnpm'] })
+      const outside = await st.preflight({ root: '/nowhere', tools: [] })
+      ok('portable.6 main\'s preflight looks up tool NAMES only (a path, a command line and an overlong name are never looked up), allocates the ports the NEXT lane would get (slot = lanes + 1, skipping a taken one), runs nothing, and answers no ports without a saved setup or a repository',
+        looked.join() === 'pnpm,uvicorn,pnpm' && before.tools.pnpm === true && before.tools.uvicorn === false && before.ports === null &&
+          after.ports.web === 4121 && after.ports.api === 4122 && !existsSync(join(repo, 'ran.txt')) && outside.ports === null,
+        JSON.stringify({ looked, before, after }))
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  }
+
+  // portable.5 — a reuse beside the last success of the same recipe.
+  const v1 = { ...portable, id: 'mine-auth', version: 1 }
+  const v2 = { ...v1, version: 2, checks: [...v1.checks, 'npm run lint'] }
+  const first = { id: 'a', source: 'typed', title: 'first', state: 'done', createdAt: 0, updatedAt: 100, recipeUsed: R.recipeUse(v1, { at: 0, repository: '/Users/ada/work/api' }), merged: { into: 'main', sha: 's', at: 30 * 60_000 }, reviewed: { at: 20 * 60_000, signature: 'x', files: 4 }, criteria: ['a', 'b'], criteriaMet: ['a', 'b'] }
+  const older = { ...first, id: 'o', title: 'older', merged: { into: 'main', sha: 's0', at: 10 } }
+  const unfinished = { ...first, id: 'u', state: 'review', merged: undefined }
+  const second = { id: 'b', source: 'typed', title: 'second', state: 'review', createdAt: 0, updatedAt: 200, recipeUsed: R.recipeUse(v2, { at: 60 * 60_000, repository: '/srv/other-repo' }), reviewed: { at: 90 * 60_000, signature: 'y', files: 6 }, criteria: ['a', 'b'], criteriaMet: ['a'], comments: [{ id: 'c', path: 'x', side: 'new', line: 1, quote: '', body: 'b', at: 1 }] }
+  const prev = R.lastSuccessfulRun([older, unfinished, first, second], second)
+  const lines = R.compareRecipeRuns({ item: second, outcome: R.recipeOutcome(second, { passed: ['npm run lint'], failed: ['npm test'] }) }, { item: first, outcome: R.recipeOutcome(first, { passed: ['npm test'], failed: [] }) })
+  const noEvidence = R.compareRecipeRuns({ item: second, outcome: R.recipeOutcome(second) }, { item: first, outcome: R.recipeOutcome(first) })
+  ok('portable.5 a reuse is compared with the LAST SUCCESSFUL run of the same recipe (merged or done — never an unfinished one, never itself): the definition change leads, named (v1 → v2, a check added), then the other repository, the outcome, the time, files reviewed, criteria confirmed and each check that passed then and does not now; a side whose evidence was not read says so instead of comparing',
+      prev !== undefined && prev.id === 'a' && R.lastSuccessfulRun([second], second) === undefined &&
+        /^v1 → v2: checks: 1 added, 0 removed$/.test(lines[0]) && /another repository \(api → other-repo\)/.test(lines[1]) &&
+        lines.some((l) => /^not finished \(last success: merged\)$/.test(l)) && lines.some((l) => /30 min to review \(last success: 30 min\)/.test(l)) &&
+        lines.some((l) => /6 files reviewed \(last success: 4\)/.test(l)) && lines.some((l) => /1 of 2 criteria confirmed \(last success: 2 of 2\)/.test(l)) &&
+        lines.some((l) => /not passing now: `npm test`/.test(l)) && lines.some((l) => /1 review comment still open/.test(l)) &&
+        noEvidence.some((l) => /checks: not compared/.test(l)),
+      JSON.stringify(lines))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

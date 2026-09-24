@@ -113,6 +113,10 @@ module.exports = {
   createRepoSetupStore: require('../src/main/repo-setup-store').createRepoSetupStore,
   createRecipeStore: require('../src/main/recipe-store').createRecipeStore,
   createEditorOpener: require('../src/main/kit').createEditorOpener,
+  // M315/M317. Accept's merger, and the integrator that lands checked lanes through it.
+  createLaneMerger: require('../src/main/lane-merge').createLaneMerger,
+  createIntegrator: require('../src/main/integrator').createIntegrator,
+  createReceiptStore: require('../src/main/integrator').createReceiptStore,
   // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
   // reloads the renderer: reload survival is a tmux property, so a direct
   // backend cannot express it at all.

@@ -4,6 +4,7 @@ import { buildInbox, inboxKeyOf, type Inbox } from './decision-inbox'
 import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
+import { rememberedSince } from './useTaskQueue'
 
 /**
  * M308. The inbox's two renderer-held facts — WHEN each decision was first
@@ -85,7 +86,8 @@ export function useDecisionInbox(deps: InboxDeps): Inbox {
     let changed = false
     for (const k of [...snoozes.keys()]) if (!live.has(k)) { snoozes.delete(k); changed = true }
     for (const k of [...firstSeen.keys()]) if (!live.has(k)) firstSeen.delete(k)
-    for (const k of liveKeys) if (!firstSeen.has(k)) firstSeen.set(k, Date.now())
+    // M318. A decision that was waiting before a relaunch keeps its wait.
+    for (const k of liveKeys) if (!firstSeen.has(k)) firstSeen.set(k, rememberedSince(k) ?? Date.now())
     if (changed) bump()
   }, [liveKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

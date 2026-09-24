@@ -76,10 +76,20 @@ module.exports = {
      plan and its opener. */
   ...require('../src/shared/combine'),
   ...require('../src/main/combine-runner'),
+  // M317. The integration flow: staleness, attribution, the brief, the gate, the receipt; and the integrator (real git).
+  ...require('../src/shared/integration'),
+  ...require('../src/main/integrator'),
   ...require('../src/shared/repo-setup'),
   ...require('../src/main/repo-setup-store'),
   ...require('../src/shared/recipes'),
   ...require('../src/main/recipe-store'),
   ...require('../src/shared/editor-open'),
   ...require('../src/main/kit'),
+  // M320. A task's deliverables: the pure collector, and main's evidence doors (node:fs, injected stores).
+  ...require('../src/shared/task-deliverables'),
+  ...require('../src/main/task-evidence'),
+  ...require('../src/shared/work-search'),
+  // M321. Portable, versioned recipes and the preflight.
+  ...require('../src/shared/recipe-portability'),
+  ...require('../src/shared/backend-fit'),
 }

@@ -88,7 +88,8 @@
     "verify:workflow-schema": "node scripts/verify-workflow-schema.cjs",
     "verify:electron": "node scripts/verify-electron.cjs",
     "verify:chart-series": "node scripts/verify-chart-series.cjs",
-    "verify:toast": "node scripts/verify-toast.cjs"
+    "verify:toast": "node scripts/verify-toast.cjs",
+    "verify:jobs": "node scripts/verify-jobs.cjs"
   },
   "dependencies": {
     "@react-three/fiber": "^9.4.0",

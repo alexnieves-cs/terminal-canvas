@@ -2508,6 +2508,192 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify(Object.fromEntries(rows.map((k) => [k, B[k].pastesImagePath]))))
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* M319. Backend differences made explicit before work starts            */
+  /* ---------------------------------------------------------------------- */
+  {
+    const F = M.fit
+    const lane = F.taskRequirements({ lane: true })
+    const swarm = F.taskRequirements({ swarm: true, budgetUsd: 5, images: true, readOnly: true })
+    const fit = (b, reqs, avail) => F.backendFit(b, reqs, avail)
+    const cl = fit('claude', lane), cx = fit('codex', lane), cxSwarm = fit('codex', swarm), clSwarm = fit('claude', swarm), gone = fit('claude', lane, false)
+    ok('fit.1 a requirement is REQUIRED or WANTED and only a required one refuses: a solo lane on codex is DEGRADED (its rules ride the first message; no deny list, no interrupt) while an arrangement on codex is REFUSED with the registry\'s own noPrompt sentence; claude fits a lane; a CLI discovery did not find refuses anything',
+      cl.verdict === 'fits' && cx.verdict === 'degraded' && cx.refusal === undefined &&
+        cx.rows.find((r) => r.id === 'prompt').ok === false && cx.rows.find((r) => r.id === 'prompt').level === 'wanted' &&
+        cx.rows.find((r) => r.id === 'no-publish').ok === false && cx.rows.find((r) => r.id === 'interrupt').ok === false &&
+        cxSwarm.verdict === 'refused' && cxSwarm.refusal === M.backends.BACKENDS.codex.reasons.noPrompt &&
+        gone.verdict === 'refused' && gone.refusal === M.backends.BACKENDS.claude.reasons.noCli,
+      JSON.stringify({ cl, cx, cxSwarm, gone }))
+    const ids = (r) => r.map((x) => x.id).join()
+    ok('fit.2 only the capabilities THIS task touches are listed: a plain chat asks for the CLI alone; a budget adds cost, an image in the brief adds images, a "no edits" brief adds read-only — and a backend that reports no cost says the budget cannot stop it rather than claiming a figure',
+      ids(F.taskRequirements({})) === 'cli' && ids(lane) === 'cli,prompt,no-publish,interrupt,resume,permissions' &&
+        ['cost', 'images', 'read-only'].every((id) => swarm.some((r) => r.id === id)) &&
+        F.briefWantsImages('match the screenshot in the issue') && !F.briefWantsImages('fix the flaky test') &&
+        F.briefIsReadOnly('Report findings; do not change the code.') && !F.briefIsReadOnly('change the parser') &&
+        /budget cannot stop it/.test(fit('codex', swarm).rows.find((r) => r.id === 'cost').line) && clSwarm.rows.find((r) => r.id === 'cost').ok === true &&
+        /can do everything/.test(F.fitSummary(cl)) && /without an appended prompt/.test(F.fitSummary(cx)) && /cannot do this task/.test(F.fitSummary(cxSwarm)),
+      JSON.stringify({ lane: ids(lane), swarm: ids(swarm), sum: [F.fitSummary(cl), F.fitSummary(cx), F.fitSummary(cxSwarm)] }))
+
+    const s1 = F.stopOptions('claude', { generating: true, queued: 2 })
+    const s2 = F.stopOptions('codex', { generating: true, queued: 0 })
+    const s3 = F.stopOptions('claude', { generating: false, queued: 0, processUp: false })
+    const by = (opts, k) => opts.find((o) => o.kind === k)
+    ok('stop.1 interrupt, cancel and terminate are three acts with three effects: Interrupt keeps the process and the conversation (claude, mid-turn) and is absent on codex with the registry\'s reason; Cancel drops only what is queued and leaves the turn; End process kills the CLI, says the turn is lost mid-turn, says whether the conversation resumes, and names the untracked children',
+      by(s1, 'interrupt').available && /stays up/.test(by(s1, 'interrupt').effect) && /conversation continues/.test(by(s1, 'interrupt').effect) &&
+        by(s1, 'cancel').available && by(s1, 'cancel').label === 'Cancel 2 queued' && /not touched/.test(by(s1, 'cancel').effect) &&
+        by(s1, 'terminate').available && /turn is lost/.test(by(s1, 'terminate').effect) && /same conversation/.test(by(s1, 'terminate').effect) && /may survive/.test(by(s1, 'terminate').effect) &&
+        !by(s2, 'interrupt').available && by(s2, 'interrupt').effect === M.backends.BACKENDS.codex.reasons.noInterrupt && !by(s2, 'cancel').available && by(s2, 'terminate').available &&
+        !by(s3, 'interrupt').available && !by(s3, 'terminate').available,
+      JSON.stringify({ s1, s2, s3 }))
+
+    // stop.2 — the manager's two new doors over the fake runner.
+    const { manager, spawns, events } = makeManager()
+    manager.create({ id: 'st', cwd: '/w' })
+    manager.send('st', 'one')
+    manager.send('st', 'two')
+    manager.send('st', 'three')
+    const queuedBefore = manager.get('st').queued
+    const dropped = manager.cancelQueued('st')
+    const afterCancel = manager.get('st')
+    const p = spawns[0].proc
+    p.emitLines(upTo(fixture('turn.jsonl'), (l) => l.includes('"text_delta"')))
+    const ended = manager.terminate('st')
+    p.exit(null, 'SIGTERM')
+    const afterTerm = manager.get('st')
+    const aborted = events.find((e) => e.id === 'st' && e.type === 'turn-aborted')
+    const again = manager.send('st', 'after')
+    ok('stop.2 cancelQueued drops the queued messages and leaves the turn in flight; terminate kills the process and KEEPS the session — the cut turn is aborted as `terminated` (an interrupted turn, told apart from an exit), and the next message respawns on --resume of the same id',
+      queuedBefore === 2 && dropped === 2 && afterCancel.queued === 0 && afterCancel.status !== 'exited' && p.killed === 1 && ended === true &&
+        aborted !== undefined && aborted.reason === 'terminated' && afterTerm.status === 'exited' && afterTerm.id === 'st' &&
+        again === 'sent' && spawns.length === 2 && spawns[1].args.includes('--resume') && manager.terminate('nobody') === false && manager.cancelQueued('st') === 0,
+      JSON.stringify({ queuedBefore, dropped, afterTerm, aborted, again, args: spawns[1] && spawns[1].args }))
+  }
+
+  {
+    // resume-lost.* — recorded 2026-09-23 against claude 2.1.281, codex-cli
+    // 0.156.1 and GitHub Copilot CLI 1.0.87, each asked to resume an id it
+    // never held (scripts/fixtures/agent-session/{,codex/,copilot/}resume-fail.*).
+    const F = M.fit
+    const claudeLines = fixture('resume-fail.jsonl')
+    const claudeErr = readFileSync(join(FIX, 'resume-fail.stderr'), 'utf8')
+    const codexErr = readFileSync(join(FIX, 'codex', 'resume-fail.stderr'), 'utf8')
+    const copilotErr = readFileSync(join(FIX, 'copilot', 'resume-fail.stderr'), 'utf8')
+    const parsed = claudeLines.map(T.parseStreamLine)
+    const result = parsed.find((e) => e.type === 'result')
+    ok('resume-lost.1 each CLI\'s measured "no such conversation" is recognised — claude IN-STREAM as a zero-turn error result whose `errors` name the id, codex and copilot on STDERR — and ordinary errors are not mistaken for one',
+      result !== undefined && result.ok === false && result.numTurns === 0 &&
+        /No conversation found/.test(F.resumeLostDetail('claude', result.error) ?? '') &&
+        /No conversation found/.test(F.resumeLostDetail('claude', claudeErr) ?? '') &&
+        /no rollout found/.test(F.resumeLostDetail('codex', codexErr) ?? '') && !/^Error:/.test(F.resumeLostDetail('codex', codexErr)) &&
+        /No session, task, or name matched/.test(F.resumeLostDetail('copilot', copilotErr) ?? '') &&
+        F.resumeLostDetail('claude', 'API Error: 529 overloaded') === null && F.resumeLostDetail('codex', claudeErr) === null && F.resumeLostDetail('acp', codexErr) === null,
+      JSON.stringify({ result, claude: F.resumeLostDetail('claude', result && result.error), codex: F.resumeLostDetail('codex', codexErr), copilot: F.resumeLostDetail('copilot', copilotErr) }))
+
+    // claude: a restored panel (spec.resume) whose conversation the CLI pruned.
+    const c = makeManager()
+    c.manager.create({ id: 'rl', cwd: '/w', sessionId: '7d1f3c2a-0b4e-4c55-9a61-2f8e0d9b1c44', resume: '7d1f3c2a-0b4e-4c55-9a61-2f8e0d9b1c44' })
+    c.manager.send('rl', 'hello again')
+    const firstArgs = c.spawns[0].args
+    c.spawns[0].proc.emitLines(claudeLines)
+    c.spawns[0].proc.exit(1, null, claudeErr)
+    const lostSnap = c.manager.get('rl')
+    const exitEvent = c.events.find((e) => e.id === 'rl' && e.type === 'status' && e.status === 'exited')
+    c.manager.send('rl', 'start over')
+    const secondArgs = c.spawns[1] && c.spawns[1].args
+    ok('resume-lost.2 claude: the failed resume is carried on the exit and the snapshot, counts no turn, and the NEXT message starts a fresh conversation (--session-id, never --resume again) — before M319 every message re-resumed the missing id and failed the same way',
+      firstArgs.includes('--resume') && /No conversation found/.test(lostSnap.resumeLost ?? '') && lostSnap.turns === 0 &&
+        exitEvent !== undefined && /No conversation found/.test(exitEvent.resumeLost ?? '') &&
+        secondArgs !== undefined && !secondArgs.includes('--resume') && secondArgs.includes('--session-id') && c.manager.get('rl').resumeLost === undefined,
+      JSON.stringify({ firstArgs, lostSnap, secondArgs }))
+
+    // codex: a thread the CLI no longer holds — stderr, exit 1, no stream.
+    const x = makeManager({ codex: { command: '/fake/bin/codex' } })
+    x.manager.create({ id: 'xl', cwd: '/w', backend: 'codex', resume: '019a0000-0000-7000-8000-00000000dead' })
+    x.manager.send('xl', 'hello again')
+    const xFirst = x.spawns[0].args
+    x.spawns[0].proc.exit(1, null, codexErr)
+    const xSnap = x.manager.get('xl')
+    x.manager.send('xl', 'start over')
+    const xSecond = x.spawns[1] && x.spawns[1].args
+    // copilot: the same, pinned id.
+    const y = makeManager({ binaries: { copilot: { command: '/fake/bin/copilot' } } })
+    y.manager.create({ id: 'yl', cwd: '/w', backend: 'copilot', sessionId: '7d1f3c2a-0b4e-4c55-9a61-2f8e0d9b1c44', resume: '7d1f3c2a-0b4e-4c55-9a61-2f8e0d9b1c44' })
+    y.manager.send('yl', 'hello again')
+    const yFirst = y.spawns[0] && y.spawns[0].args
+    if (y.spawns[0]) y.spawns[0].proc.exit(1, null, copilotErr)
+    const ySnap = y.manager.get('yl')
+    y.manager.send('yl', 'start over')
+    const ySecond = y.spawns[1] && y.spawns[1].args
+    ok('resume-lost.3 codex and copilot: a stderr-only failed resume is recognised at the exit, and the next message is `exec` (codex) / `--session-id` (copilot) — a fresh conversation — instead of the same failing resume',
+      xFirst[1] === 'resume' && /no rollout found/.test(xSnap.resumeLost ?? '') && xSecond !== undefined && xSecond[0] === 'exec' && xSecond[1] !== 'resume' &&
+        yFirst !== undefined && yFirst.some((a) => a.startsWith('--resume=')) && /No session, task, or name matched/.test(ySnap.resumeLost ?? '') &&
+        ySecond !== undefined && !ySecond.some((a) => a.startsWith('--resume=')) && ySecond.includes('--session-id'),
+      JSON.stringify({ xFirst, xSnap, xSecond, yFirst, ySnap, ySecond }))
+    ok('resume-lost.4 the exit sentence names the backend and promises a resume only where it is true: a failed resume says the next message starts a NEW conversation with nothing from before',
+      /^codex could not resume/.test(F.exitSentence('codex', { code: 1, resumeLost: 'no rollout found' })) && /NEW conversation/.test(F.exitSentence('claude', { code: 1, resumeLost: 'x' })) &&
+        F.exitSentence('claude', { code: 1 }) === 'claude exited with 1 — the next message resumes the conversation',
+      F.exitSentence('codex', { code: 1, resumeLost: 'no rollout found' }))
+  }
+
+  {
+    // protocol.malformed.* / protocol.interrupted.* — the recorded streams,
+    // damaged the way a real pipe damages them: a record cut mid-JSON and a
+    // line of non-JSON noise (a CLI printing a warning on stdout), for every
+    // backend's parser; and a turn cut off before its result.
+    const C = M.codex, CP = M.copilot
+    const codexLines = readFileSync(join(FIX, 'codex', 'pong.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
+    const cpLines = readFileSync(join(FIX, 'copilot', 'pong.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
+    const damage = (lines) => [lines[0], lines[1].slice(0, Math.floor(lines[1].length / 2)), 'Warning: something printed on stdout', ...lines.slice(2)]
+    let claudeEv = [], codexEv = [], cpEv = [], threw = null
+    try {
+      claudeEv = damage(fixture('turn.jsonl')).map(T.parseStreamLine)
+      codexEv = C.parseCodexLines(damage(codexLines))
+      cpEv = CP.parseCopilotLines(damage(cpLines), { sessionId: 'p' })
+    } catch (e) { threw = String(e) }
+    const good = (ev) => ev.filter((e) => e.type === 'malformed').length === 2 && ev.some((e) => e.type === 'result')
+    ok('protocol.malformed.1 a record cut mid-JSON and a stray non-JSON line are each `malformed` — never a throw, never an unknown — and every intact record after them still parses to its result, for claude, codex and copilot alike',
+      threw === null && good(claudeEv) && good(codexEv) && good(cpEv),
+      JSON.stringify({ threw, claude: claudeEv.map((e) => e.type), codex: codexEv.map((e) => e.type), copilot: cpEv.map((e) => e.type) }))
+
+    const { manager, spawns, events } = makeManager()
+    manager.create({ id: 'mal', cwd: '/w' })
+    manager.send('mal', 'hi')
+    spawns[0].proc.emitLines(damage(fixture('turn.jsonl')))
+    const snap = manager.get('mal')
+    ok('protocol.malformed.2 the manager counts the damaged records on the snapshot and still ends the turn — a session is never left streaming by noise',
+      snap.counters.malformed === 2 && snap.turns === 1 && snap.status === 'ready',
+      JSON.stringify(snap))
+
+    const cut = makeManager({ codex: { command: '/fake/bin/codex' } })
+    cut.manager.create({ id: 'ic', cwd: '/w', backend: 'codex' })
+    cut.manager.send('ic', 'ping')
+    cut.spawns[0].proc.emitLines(codexLines.filter((l) => !l.includes('turn.completed')))
+    cut.spawns[0].proc.exit(null, 'SIGKILL')
+    const icSnap = cut.manager.get('ic')
+    const icAbort = cut.events.find((e) => e.id === 'ic' && e.type === 'turn-aborted')
+    ok('protocol.interrupted.1 a codex turn whose process dies before turn.completed is an ABORTED turn and an exited session — not the normal one-process-per-turn end that an exit 0 after the result is',
+      icAbort !== undefined && icAbort.reason === 'exited' && icSnap.status === 'exited' && icSnap.turns === 0 && icSnap.exitSignal === 'SIGKILL',
+      JSON.stringify({ icSnap, icAbort }))
+  }
+
+  {
+    const F = M.fit
+    const turns = [
+      { role: 'user', text: 'fix the parser' },
+      ...Array.from({ length: 8 }, (_, i) => ({ role: i % 2 === 0 ? 'assistant' : 'user', text: `step ${i}` })),
+      { role: 'assistant', text: 'the token is sk-ant-api03-' + 'a'.repeat(90) + ' and I set it' }
+    ]
+    const h = F.backendHandoff({ from: 'claude', to: 'codex', title: 'Fix the parser', brief: 'no crash on empty input', criteria: ['tests pass'], cwd: '/w/lane', turns, changedFiles: ['src/parse.ts'] })
+    ok('handoff.1 a cross-backend hand-off is a DRAFT of text only: the task, outcome and criteria, the folder, the changed files and the LAST six messages (the count left out said), secrets scrubbed by the outward gate with the count kept, and what does not carry named — tool history, grants, and each capability the target lacks in the registry\'s own words',
+      /continuing a task another agent \(claude\)/.test(h.text) && /Outcome: no crash on empty input/.test(h.text) && /- tests pass/.test(h.text) && /- src\/parse\.ts/.test(h.text) &&
+        /the last 6; 4 earlier messages left out/.test(h.text) && !/step 1\b/.test(h.text) && /step 7/.test(h.text) &&
+        h.redacted === 1 && !/sk-ant-api03-a{20}/.test(h.text) &&
+        h.dropped.some((d) => /tool calls/.test(d)) && h.dropped.some((d) => /permission grants/.test(d)) &&
+        h.dropped.some((d) => d.includes(M.backends.BACKENDS.codex.reasons.noPrompt)) && h.dropped.some((d) => d.includes(M.backends.BACKENDS.codex.reasons.noInterrupt)) &&
+        h.dropped.some((d) => /known cost/.test(d)),
+      JSON.stringify(h))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {

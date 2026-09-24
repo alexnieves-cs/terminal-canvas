@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type JSX } from 'react'
+import { memo, useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { ElsewhereRow, RailAttention } from './rail-sections'
 import type { CenterView, NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
@@ -12,6 +12,9 @@ import { useApprovalOutcomes } from './approval-outcome'
 import { SNOOZE_CHOICES, waitedWords, type Inbox, type InboxItem } from './decision-inbox'
 import { snoozeDecision, wakeDecision } from './useDecisionInbox'
 import { outward } from '@shared/outward'
+import { stepCursor, traversalOrder, type QueueDecision, type QueueEvidence, type TaskGroup, type TaskQueue } from './task-queue'
+import { dismissLost, setQueueCursor, useQueueCursor } from './useTaskQueue'
+import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
 
 export interface DockProps {
   /** Which pane the navigator shows, when it shows. */
@@ -47,6 +50,15 @@ export interface DockProps {
    * queue in arrival order exactly as before.
    */
   inbox?: Inbox
+  /**
+   * M318. The same decisions grouped by TASK, with each task's blocker, next
+   * step, what happens after, and the tasks that wait on it — plus failed
+   * checks, unreviewed changes and decisions a restart lost. Optional: without
+   * it the popover is M308's flat inbox exactly.
+   */
+  queue?: TaskQueue
+  /** M318. Open a decision's evidence — the panel, or the task's review. A check's output opens in place. */
+  onEvidence?: (e: QueueEvidence) => void
   onSettings: () => void
   /** Backlog #13. The labelled rail is showing — a remembered choice, else Wide's default. */
   expanded: boolean
@@ -72,11 +84,97 @@ export interface DockProps {
  *
  * Every control mounts shellControl(): focus never leaves the terminal.
  */
+/**
+ * M318. A queue with nothing to group — only loose panels' permissions and
+ * questions — renders as M308's flat inbox, headers and all left out, so the
+ * surface a single-agent canvas knows does not change.
+ */
+function flatQueue(q: TaskQueue): boolean {
+  return q.groups.every((g) => g.itemId === null && g.decisions.every((d) => d.inbox !== undefined))
+}
+
 function DockImpl({
   navigator, navVisible, onChoose, centerView, onSetCenterView,
-  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, attentionFocus = null, taskTitleOf, inbox, onSettings,
+  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onSettings,
   expanded, onToggleExpanded
 }: DockProps): JSX.Element {
+  // M318. KEYBOARD TRAVERSAL — decision → evidence → back. The cursor is the
+  // decision the person is on; it survives the popover closing and the jump
+  // to evidence (useTaskQueue's module state), so ⌥⌘J — or the "Back to
+  // decisions" chip — reopens on it. The popover takes focus only when it was
+  // opened FROM the keyboard; a mouse open leaves focus where it was (every
+  // shell control's rule), so a terminal keeps its keys.
+  const cursor = useQueueCursor()
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const restoreFocusRef = useRef<Element | null>(null)
+  const [focusWanted, setFocusWanted] = useState(false)
+  const [returnTo, setReturnTo] = useState<string | null>(null)
+  const [openOutput, setOpenOutput] = useState<string | null>(null)
+  // A flat queue walks the rows as DRAWN — the inbox's own rank — never the task builder's kind order.
+  const order = queue === undefined ? [] : flatQueue(queue) ? (inbox?.items ?? []).map((i) => i.key) : traversalOrder(queue)
+  const orderRef = useRef(order)
+  orderRef.current = order
+  const openRef = useRef({ attentionOpen, onToggleAttention })
+  openRef.current = { attentionOpen, onToggleAttention }
+  useEffect(() => {
+    if (queue === undefined) return
+    // ⌥⌘J: to the decisions (and back to them from the evidence). `code`, not
+    // `key`: with Option held, macOS reports J as '∆'.
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.metaKey && e.altKey && !e.ctrlKey && e.code === 'KeyJ')) return
+      e.preventDefault()
+      e.stopPropagation()
+      restoreFocusRef.current = document.activeElement
+      if (!openRef.current.attentionOpen) openRef.current.onToggleAttention()
+      setFocusWanted(true)
+      setReturnTo(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [queue === undefined]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!attentionOpen || !focusWanted) return
+    setFocusWanted(false)
+    popoverRef.current?.focus({ preventScroll: true })
+    if (cursor === null || !orderRef.current.includes(cursor)) setQueueCursor(orderRef.current[0] ?? null)
+  }, [attentionOpen, focusWanted]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!attentionOpen) setOpenOutput(null) }, [attentionOpen])
+  // The cursor row stays in view as it moves.
+  useEffect(() => {
+    if (!attentionOpen || cursor === null) return
+    popoverRef.current?.querySelector(`[data-queue-key="${CSS.escape(cursor)}"]`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [attentionOpen, cursor])
+  const openEvidence = (d: QueueDecision): void => {
+    setQueueCursor(d.key)
+    if (d.evidence.kind === 'output') { setOpenOutput(openOutput === d.key ? null : d.key); return }
+    if (onEvidence === undefined) return
+    setReturnTo(d.key)
+    if (attentionOpen) onToggleAttention()
+    onEvidence(d.evidence)
+  }
+  const backToDecisions = (): void => {
+    restoreFocusRef.current = document.activeElement
+    setReturnTo(null)
+    if (!attentionOpen) onToggleAttention()
+    setFocusWanted(true)
+  }
+  const onPopoverKey = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (queue === undefined) return
+    const t = e.target as HTMLElement
+    if (t.closest('input, textarea, select, [contenteditable="true"]') !== null) return
+    const all = queue.groups.flatMap((g) => g.decisions)
+    const current = all.find((d) => d.key === cursor)
+    if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); setQueueCursor(stepCursor(order, cursor, 1)) }
+    else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); setQueueCursor(stepCursor(order, cursor, -1)) }
+    else if ((e.key === 'Enter' || e.key === 'ArrowRight') && current !== undefined && t === popoverRef.current) { e.preventDefault(); openEvidence(current) }
+    else if (e.key === ' ' && current?.inbox?.approval !== undefined && t === popoverRef.current) { e.preventDefault(); setOpenRequest(current.inbox.approval.requestId) }
+    else if (e.key === 'Escape') {
+      e.preventDefault()
+      onToggleAttention()
+      const back = restoreFocusRef.current
+      if (back instanceof HTMLElement) back.focus({ preventScroll: true })
+    }
+  }
   // #16. ONE request's detail is open at a time: the person's own choice,
   // else the one a shortcut pointed at, else the longest-waiting — so the
   // queue opens on a decision, not on a list of summaries. A new focus from
@@ -126,98 +224,14 @@ function DockImpl({
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const orchPressed = centerView === 'orchestration'
-  return (
-    <nav className="shell__dock" aria-label="Dock">
-      <span className="dock__product" aria-hidden="true"><ProductMark /></span>
-      {groups.map((group) => <div className="dock__group" data-dock-group={group.label.toLowerCase()} key={group.label}>
-        <div className="dock__group-label">{group.label}</div>
-        {group.entries.map((e) => {
-        const isCanvas = e.id === 'panels'
-        const pressed = isCanvas
-          ? canvasPressed
-          : centerView === 'canvas' && navVisible && navigator === e.id
-        return (
-          <button
-            key={e.id}
-            type="button"
-            className={`dock__button icon-button${pressed ? ' dock__button--on' : ''}`}
-            data-dock={e.id}
-            aria-pressed={pressed}
-            aria-label={e.label}
-            aria-keyshortcuts={e.shortcut === undefined ? undefined : e.shortcut.replace('⌘', 'Meta+')}
-            title={`${pressed ? 'Hide' : 'Show'} ${e.label}${e.shortcut === undefined ? '' : ` (${e.shortcut})`}`}
-            {...shellControl(() => {
-              if (isCanvas) {
-                onSetCenterView('canvas')
-                onChoose('panels')
-                return
-              }
-              onChoose(e.id)
-            })}
-          >
-            {e.icon}
-            {/* M172/M257. The name is always a tooltip and becomes a persistent label at wide widths. */}
-            <span className="dock__label" aria-hidden="true">{e.label}{e.shortcut !== undefined && <kbd>{e.shortcut}</kbd>}</span>
-          </button>
-        )
-      })}
-        {group.label === 'Work' && (
-          <button
-            type="button"
-            className={`dock__button icon-button${orchPressed ? ' dock__button--on' : ''}`}
-            data-dock="orchestration"
-            aria-pressed={orchPressed}
-            aria-label="Orchestrate"
-            title={orchPressed ? 'Show Canvas — arrange and work' : 'Show Orchestrate — monitor and review'}
-            {...shellControl(() => onSetCenterView(orchPressed ? 'canvas' : 'orchestration'))}
-          >
-            <Orbit />
-            <span className="dock__label" aria-hidden="true">Orchestrate</span>
-          </button>
-        )}
-      </div>)}
-      <div className="dock__group dock__group--system" data-dock-group="system">
-        <div className="dock__group-label">System</div>
-        <div className="dock__attention">
-        <button
-          type="button"
-          className={`dock__button icon-button${attentionOpen ? ' dock__button--on' : ''}`}
-          data-dock="attention"
-          aria-pressed={attentionOpen}
-          aria-label={waiting === 0 ? (attention.length === 0 ? 'Notifications: nothing waiting' : `Notifications: ${attention.length} snoozed`) : `Notifications: ${needsYouCount(waiting)}`}
-          aria-keyshortcuts="Meta+J"
-          title="Notifications: panels that need you (⌘J)"
-          {...shellControl(onToggleAttention)}
-        >
-          <Bell />
-          <span className="dock__label" aria-hidden="true">Notifications <kbd>⌘J</kbd></span>
-        </button>
-        {/* Always mounted, so the live region exists before the first bell;
-            empty text when nothing waits, which a screen reader reads as
-            nothing. */}
-        {/* M308. The badge counts what is NOT snoozed — putting a decision
-            off is the point of a snooze — and the popover still lists both. */}
-        <span className="dock__badge" data-dock-badge data-attention-new={waiting > 0 ? '' : undefined} aria-live="polite" hidden={waiting === 0}>
-          {waiting === 0 ? '' : String(waiting)}
-        </span>
-        {attentionOpen && (
-          <div className="dock__popover" role="dialog" aria-label="Attention">
-            <div className="shell__region-title">Needs you</div>
-            {/* #14. What was just decided, above what is still waiting. */}
-            <ApprovalAcks />
-            <ul className="rail-list rail-list--attention" aria-label="Attention">
-              {attention.length === 0 ? (
-                <li className="rail-empty"><EmptyState id="attention" glyph={<Bell />} /></li>
-              ) : decisions.length === 0 ? (
-                <li className="rail-empty" data-inbox-all-snoozed="">Everything waiting is snoozed — it comes back on its own, or wake it below.</li>
-              ) : (
-                decisions.map((item) => {
+  const renderInboxRow = (item: InboxItem, queueKey?: string): JSX.Element => {
                   const row = { id: item.panelId, label: item.label }
                   const a = item.approval
                   const open = a !== undefined && shownRequest === a.requestId
                   const others = item.members.slice(1)
                   return (
                   <li key={item.key} className="rail-row rail-attention" data-rail-attention={row.id} data-inbox-kind={item.kind}
+                    data-queue-key={queueKey} data-queue-cursor={queueKey !== undefined && queueKey === cursor ? '' : undefined}
                     data-inbox-unblocks={item.unblocks > 0 ? String(item.unblocks) : undefined}>
                     {/* goToPanel and NOTHING else — never onSelectPanel (which
                         wakes) and never an acknowledge: focus is the renderer's
@@ -318,7 +332,147 @@ function DockImpl({
                     )}
                   </li>
                   )
-                })
+  }
+  // M318. One task: its header (why it waits, the next step, what happens
+  // after, who waits on it), then each decision — the inbox's own row for a
+  // permission or question, a plain row for a check, a review or a decision
+  // a restart lost.
+  const renderGroup = (g: TaskGroup): JSX.Element[] => {
+    const head = (
+      <li key={`task:${g.itemId ?? 'none'}`} className="queue__task" data-queue-task={g.itemId ?? 'none'} data-queue-severity={g.severity}>
+        <div className="queue__task-head">
+          <span className="queue__task-title">{g.title}</span>
+          <span className="queue__task-count">{g.decisions.length === 1 ? '1 decision' : `${g.decisions.length} decisions`}</span>
+        </div>
+        <p className="queue__why" data-queue-why>{g.why}</p>
+        <div className="queue__next">
+          <button type="button" className="rail-row__verb queue__next-verb" data-queue-next={g.next.evidence.kind}
+            {...shellControl(() => { const d = g.decisions.find((x) => x.evidence === g.next.evidence) ?? g.decisions[0]; if (d !== undefined) openEvidence(d) })}>{g.next.label}</button>
+          <span className="queue__after" data-queue-after>{g.after}</span>
+        </div>
+        {g.affects.length > 0 && (
+          <p className="queue__affects" data-queue-affects={g.affects.length}>Waiting on this task: {g.affects.map((a) => a.title).join(', ')}</p>
+        )}
+      </li>
+    )
+    return [head, ...g.decisions.map((d) => d.inbox !== undefined ? renderInboxRow(d.inbox, d.key) : (
+      <li key={d.key} className="rail-row rail-attention queue__row" data-queue-kind={d.kind} data-queue-key={d.key} data-queue-cursor={d.key === cursor ? '' : undefined}>
+        <div className="queue__row-main">
+          <span className="rail-row__dot status-dot" data-tone={d.kind === 'review' ? 'idle' : 'needs-you'} aria-hidden="true" />
+          <span className="queue__row-text">{d.kind === 'check' ? 'Check failed — ' : d.kind === 'review' ? 'Review — ' : d.kind === 'lost' ? 'Before the restart — ' : ''}{d.text}</span>
+        </div>
+        <div className="queue__row-verbs">
+          <button type="button" className="rail-row__verb" data-queue-evidence={d.evidence.kind}
+            {...shellControl(() => openEvidence(d))}>{d.evidence.kind === 'output' ? (openOutput === d.key ? 'Hide output' : 'Output') : d.evidence.kind === 'review' ? 'Review' : 'Go to'}</button>
+          {d.kind === 'lost' && (
+            <button type="button" className="rail-row__verb" data-queue-dismiss={d.key} title="Put this away — nothing was allowed or answered on your behalf"
+              {...shellControl(() => dismissLost(d.key))}>Dismiss</button>
+          )}
+        </div>
+        {d.evidence.kind === 'output' && openOutput === d.key && (
+          <div className="queue__output"><CheckRunOutput outputId={d.evidence.outputId} subject={`panel ${d.evidence.panelId}`} fallback="This run has no output record." /></div>
+        )}
+      </li>
+    ))]
+  }
+  return (
+    <nav className="shell__dock" aria-label="Dock">
+      <span className="dock__product" aria-hidden="true"><ProductMark /></span>
+      {groups.map((group) => <div className="dock__group" data-dock-group={group.label.toLowerCase()} key={group.label}>
+        <div className="dock__group-label">{group.label}</div>
+        {group.entries.map((e) => {
+        const isCanvas = e.id === 'panels'
+        const pressed = isCanvas
+          ? canvasPressed
+          : centerView === 'canvas' && navVisible && navigator === e.id
+        return (
+          <button
+            key={e.id}
+            type="button"
+            className={`dock__button icon-button${pressed ? ' dock__button--on' : ''}`}
+            data-dock={e.id}
+            aria-pressed={pressed}
+            aria-label={e.label}
+            aria-keyshortcuts={e.shortcut === undefined ? undefined : e.shortcut.replace('⌘', 'Meta+')}
+            title={`${pressed ? 'Hide' : 'Show'} ${e.label}${e.shortcut === undefined ? '' : ` (${e.shortcut})`}`}
+            {...shellControl(() => {
+              if (isCanvas) {
+                onSetCenterView('canvas')
+                onChoose('panels')
+                return
+              }
+              onChoose(e.id)
+            })}
+          >
+            {e.icon}
+            {/* M172/M257. The name is always a tooltip and becomes a persistent label at wide widths. */}
+            <span className="dock__label" aria-hidden="true">{e.label}{e.shortcut !== undefined && <kbd>{e.shortcut}</kbd>}</span>
+          </button>
+        )
+      })}
+        {group.label === 'Work' && (
+          <button
+            type="button"
+            className={`dock__button icon-button${orchPressed ? ' dock__button--on' : ''}`}
+            data-dock="orchestration"
+            aria-pressed={orchPressed}
+            aria-label="Orchestrate"
+            title={orchPressed ? 'Show Canvas — arrange and work' : 'Show Orchestrate — monitor and review'}
+            {...shellControl(() => onSetCenterView(orchPressed ? 'canvas' : 'orchestration'))}
+          >
+            <Orbit />
+            <span className="dock__label" aria-hidden="true">Orchestrate</span>
+          </button>
+        )}
+      </div>)}
+      <div className="dock__group dock__group--system" data-dock-group="system">
+        <div className="dock__group-label">System</div>
+        <div className="dock__attention">
+        <button
+          type="button"
+          className={`dock__button icon-button${attentionOpen ? ' dock__button--on' : ''}`}
+          data-dock="attention"
+          aria-pressed={attentionOpen}
+          aria-label={waiting === 0 ? (attention.length === 0 ? 'Notifications: nothing waiting' : `Notifications: ${attention.length} snoozed`) : `Notifications: ${needsYouCount(waiting)}`}
+          aria-keyshortcuts="Meta+J"
+          title="Notifications: panels that need you (⌘J)"
+          {...shellControl(onToggleAttention)}
+        >
+          <Bell />
+          <span className="dock__label" aria-hidden="true">Notifications <kbd>⌘J</kbd></span>
+        </button>
+        {/* Always mounted, so the live region exists before the first bell;
+            empty text when nothing waits, which a screen reader reads as
+            nothing. */}
+        {/* M308. The badge counts what is NOT snoozed — putting a decision
+            off is the point of a snooze — and the popover still lists both. */}
+        <span className="dock__badge" data-dock-badge data-attention-new={waiting > 0 ? '' : undefined} aria-live="polite" hidden={waiting === 0}>
+          {waiting === 0 ? '' : String(waiting)}
+        </span>
+        {/* M318. Back from the evidence to the decision you left. */}
+        {!attentionOpen && returnTo !== null && queue !== undefined && order.includes(returnTo) && (
+          <button type="button" className="dock__return" data-queue-return={returnTo} title="Back to the decision you were on (⌥⌘J)"
+            {...shellControl(backToDecisions)}>← Decisions</button>
+        )}
+        {attentionOpen && (
+          <div className="dock__popover" role="dialog" aria-label="Attention" ref={popoverRef} tabIndex={-1} onKeyDown={onPopoverKey}
+            aria-keyshortcuts={queue === undefined ? undefined : 'Alt+Meta+J'}>
+            <div className="shell__region-title">Needs you</div>
+            {queue !== undefined && !flatQueue(queue) && <p className="queue__headline" data-queue-headline>{queue.headline}{order.length > 0 ? ' ↑↓ to move, ↩ opens the evidence, ⌥⌘J comes back.' : ''}</p>}
+            {/* #14. What was just decided, above what is still waiting. */}
+            <ApprovalAcks />
+            <ul className="rail-list rail-list--attention" aria-label="Attention">
+              {/* M318. No agent waiting is still said, even when a task below
+                  has a failed check or a review — those are decisions, not agents. */}
+              {attention.length === 0 ? (
+                <>
+                  <li className="rail-empty"><EmptyState id="attention" glyph={<Bell />} /></li>
+                  {queue !== undefined && !flatQueue(queue) && queue.groups.map((g) => renderGroup(g))}
+                </>
+              ) : decisions.length === 0 && (queue === undefined || flatQueue(queue)) ? (
+                <li className="rail-empty" data-inbox-all-snoozed="">Everything waiting is snoozed — it comes back on its own, or wake it below.</li>
+              ) : (
+                (queue === undefined || flatQueue(queue) ? decisions.map((item) => renderInboxRow(item, queue === undefined ? undefined : item.key)) : queue.groups.map((g) => renderGroup(g)))
               )}
             </ul>
             {/* M308. Snoozed decisions: still waiting, counted, and wakeable. */}

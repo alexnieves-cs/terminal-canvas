@@ -1,5 +1,6 @@
 import { addTotals, emptyTotals, type AgentOptions, type TokenTotals } from '@shared/cost'
 import { BACKENDS, backendOf, type BackendDef } from '@shared/agent-backends'
+import { resumeLostDetail } from '@shared/backend-fit'
 import {
   interruptLine,
   permissionResponseLine,
@@ -169,6 +170,14 @@ interface Session {
   exitCode?: number | null
   exitSignal?: string
   everSpawned: boolean
+  /**
+   * M319. The CLI's own sentence when it was asked to resume this
+   * conversation and answered that it does not exist (pruned, another
+   * machine's, a codex thread from a deleted home). Set with `everSpawned`
+   * cleared, so the NEXT message starts a fresh conversation instead of
+   * failing the same resume on every send; cleared by that next spawn.
+   */
+  resumeLost?: string
   /** M120. A chat with no place: the row's sandboxArgs ride every spawn; a row without them refuses the send. */
   sandbox: boolean
   carry: string
@@ -195,7 +204,7 @@ interface Session {
   inFlight: boolean
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
-  abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | null
+  abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'terminated' | null
   /** `auto` marks a continuation the run pushed: dropped with the run, never served after it. */
   queue: { text: string; images: OutgoingImage[]; auto?: true }[]
   pending: Map<string, PendingPermission>
@@ -412,6 +421,36 @@ export class AgentSessionManager {
       session.abortReason = 'interrupt-timeout'
       proc.kill()
     }, this.interruptGraceMs)
+    return true
+  }
+
+  /**
+   * M319. CANCEL — the messages waiting behind the turn in flight are dropped;
+   * the turn itself is not touched. Answers how many were dropped (0 with
+   * nothing queued), and emits `queue-dropped` so every surface counts down.
+   */
+  cancelQueued(id: string): number {
+    const session = this.sessions.get(id)
+    if (!session || session.queue.length === 0) return 0
+    const count = session.queue.length
+    session.queue.length = 0
+    this.emit({ id, type: 'queue-dropped', count })
+    return count
+  }
+
+  /**
+   * M319. TERMINATE — the CLI's process is killed, and the SESSION is kept
+   * (unlike `dispose`): the transcript, the conversation id and the panel
+   * stay, and the next message spawns a new process that resumes. The one
+   * stop codex and copilot have; on claude it is what Interrupt escalates to
+   * when the CLI ignores the request. Child processes the CLI started are not
+   * tracked, and the caller's sentence says so. False with no process.
+   */
+  terminate(id: string): boolean {
+    const session = this.sessions.get(id)
+    if (!session || !session.proc) return false
+    session.abortReason = 'terminated'
+    session.proc.kill()
     return true
   }
 
@@ -680,6 +719,7 @@ export class AgentSessionManager {
     session.carry = ''
     session.exitCode = undefined
     session.exitSignal = undefined
+    session.resumeLost = undefined
     session.abortReason = null
     proc.onData((chunk) => {
       if (this.sessions.get(session.id) !== session || session.proc !== proc) return
@@ -831,7 +871,12 @@ export class AgentSessionManager {
         session.heldPrompt = undefined
         this.clearHandshakeTimer(session)
         this.clearInterruptTimer(session)
-        session.turnCount += 1
+        // M319. claude answers a resume of a conversation it no longer holds
+        // IN-STREAM (a zero-turn result whose `errors` name the id). Without
+        // this the next send resumes the same missing id and fails again.
+        const lost = event.ok ? null : resumeLostDetail(session.backend, event.error)
+        if (lost !== null) { session.resumeLost = lost; session.everSpawned = false }
+        if (lost === null) session.turnCount += 1
         if (event.usage) session.usage = addTotals(session.usage, event.usage)
         if (event.costUsd !== undefined) session.costUsd = event.costUsd
         // M82. A result is where the canvas's spend changes, so it is where a
@@ -902,6 +947,10 @@ export class AgentSessionManager {
   private handleExit(session: Session, info: AgentExitInfo): void {
     const id = session.id
     session.proc = undefined
+    // M319. codex and copilot answer a resume of a missing conversation on
+    // STDERR and exit 1 with no stream at all (the recorded fixtures).
+    const lost = resumeLostDetail(session.backend, info.stderr)
+    if (lost !== null) { session.resumeLost = lost; session.everSpawned = false }
     // M90. A codex process that reported turn.completed and then exited 0
     // has ENDED ITS TURN: the session stays ready with its queue intact, and
     // the next queued message spawns the next process. Anything else — an
@@ -954,7 +1003,8 @@ export class AgentSessionManager {
       status: 'exited',
       exitCode: info.code,
       exitSignal: info.signal ?? undefined,
-      stderr: info.stderr
+      stderr: info.stderr,
+      ...(session.resumeLost === undefined ? {} : { resumeLost: session.resumeLost })
     })
   }
 
@@ -1079,6 +1129,7 @@ export class AgentSessionManager {
       pid: session.proc?.pid,
       exitCode: session.exitCode,
       exitSignal: session.exitSignal,
+      ...(session.resumeLost === undefined ? {} : { resumeLost: session.resumeLost }),
       turns: session.turnCount,
       usage: { ...session.usage },
       costUsd: session.costUsd,

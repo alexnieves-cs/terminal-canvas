@@ -42,12 +42,23 @@ export interface RepoSetupStoreDeps {
   stepTimeoutMs?: number
   /** Overridable so the verifier does not bind real sockets. */
   isPortFree?: (port: number) => Promise<boolean>
+  /** M321. Whether a tool is on the login PATH — the preflight's probe. Absent answers nothing (every tool unprobed). */
+  which?: (bin: string) => boolean
+}
+
+/** M321. What a start would meet, probed before a worker exists: tools on the login PATH, and the next lane's ports. */
+export interface SetupPreflight {
+  tools: Record<string, boolean>
+  /** Null when there is no saved setup (nothing is allocated) or the path is in no repository. */
+  ports: Record<string, number | null> | null
 }
 
 export interface RepoSetupStore {
   read(cwd: string): Promise<SetupRead>
   save(raw: unknown): Promise<{ ok: true; setup: RepoSetup } | { ok: false; reason: string }>
   prepare(req: { lane: string }): Promise<PrepareResult>
+  /** M321. Probe, run nothing: see SetupPreflight. */
+  preflight(req: { root: string; tools: readonly string[] }): Promise<SetupPreflight>
 }
 
 const STEP_TIMEOUT_MS = 15 * 60_000
@@ -137,6 +148,26 @@ export function createRepoSetupStore(deps: RepoSetupStoreDeps): RepoSetupStore {
       await fs.writeFile(`${file}.tmp`, JSON.stringify(setup, null, 2), 'utf8')
       await fs.rename(`${file}.tmp`, file)
       return { ok: true, setup }
+    },
+    async preflight(req) {
+      const tools: Record<string, boolean> = {}
+      // A tool NAME, never a path or a command line: it is looked up, not run.
+      for (const t of (Array.isArray(req?.tools) ? req.tools : []).slice(0, 40)) {
+        if (typeof t !== 'string' || !/^[\w.+-]{1,60}$/.test(t) || deps.which === undefined) continue
+        tools[t] = deps.which(t)
+      }
+      const root = typeof req?.root === 'string' && req.root.startsWith('/') ? await deps.mainRootOf(req.root) : null
+      const setup = root === null ? null : await readSaved(root)
+      if (root === null || setup === null) return { tools, ports: null }
+      // The slot the NEXT lane would take — the one prepare() would allocate.
+      const slot = 1 + deps.lanesOf(root).length
+      const free = deps.isPortFree ?? portFree
+      const taken = new Set<number>()
+      for (let i = 0; i < setup.ports.span; i += 1) {
+        const p = setup.ports.base + slot * setup.ports.span + i
+        if (!(await free(p))) taken.add(p)
+      }
+      return { tools, ports: allocatePorts(setup, slot, taken) }
     },
     async prepare(req) {
       const lane = req?.lane

@@ -47,6 +47,9 @@ module.exports = {
      and startPool — the mint asked of the renderer, the send, the finished
      and tick driven from the manager's own events. Absent until it lands. */
   poolCaller: (() => { try { return require('../src/main/pool-caller') } catch { return undefined } })(),
+  /* M319. The backend fit, the three stops, the failed-resume classifier and
+     the cross-backend hand-off: pure (outward is the text gate, pure too). */
+  fit: require('../src/shared/backend-fit'),
   /* Account-level usage windows + unit-aware budgetCrossing. */
   rateLimit: require('../src/shared/rate-limit')
 }

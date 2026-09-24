@@ -125,7 +125,7 @@ export function finishRun(run: PersistedRun, at: number, costUsd: number | undef
  * panels that are not. A run with one busy panel stays open.
  */
 export function sealAbandoned(runs: readonly PersistedRun[], at: number, idle?: (panelId: string) => boolean): PersistedRun[] {
-  const reason = idle === undefined ? 'abandoned — the app relaunched' : 'abandoned — its panels were idle'
+  const reason = idle === undefined ? ABANDONED_BY_RELAUNCH : 'abandoned — its panels were idle'
   return runs.map((run) => {
     if (run.endedAt !== undefined) return run
     if (idle !== undefined && !run.panelIds.every((id) => idle(id))) return run
@@ -137,22 +137,60 @@ export function sealAbandoned(runs: readonly PersistedRun[], at: number, idle?: 
   })
 }
 
+/** M316. The outcome `sealAbandoned` writes on a step the relaunch cut off — the recovery surface keys on it. */
+export const ABANDONED_BY_RELAUNCH = 'abandoned — the app relaunched'
+
+/**
+ * M316. A run the relaunch cut off, told as a job: which steps finished,
+ * which were mid-step, which never started. The handoff chain is the run's
+ * dependency graph, so `continue` restarts ONLY the mid-step panels — a
+ * finished step is never run again, and the steps after it start through
+ * their edges exactly as they would have.
+ */
+export interface InterruptedRun {
+  id: string
+  name: string
+  finished: string[]
+  midStep: string[]
+  notStarted: string[]
+  line: string
+}
+
+export function interruptedRunAccount(run: PersistedRun, labelOf: (panelId: string) => string): InterruptedRun | null {
+  const midStep = [...new Set(run.entries.filter((e) => e.outcome === ABANDONED_BY_RELAUNCH).map((e) => e.panelId))]
+  if (midStep.length === 0) return null
+  const finished = [...new Set(run.entries.filter((e) => e.endedAt !== undefined && e.outcome !== ABANDONED_BY_RELAUNCH).map((e) => e.panelId))].filter((id) => !midStep.includes(id))
+  const touched = new Set(run.entries.map((e) => e.panelId))
+  const notStarted = run.panelIds.filter((id) => !touched.has(id))
+  const names = midStep.map(labelOf)
+  const line = `${run.name}: ${finished.length} of ${run.panelIds.length} step${run.panelIds.length === 1 ? '' : 's'} finished — ${names.length === 1 ? names[0] : `${names.length} steps`} ${names.length === 1 ? 'was' : 'were'} mid-step when the app closed${notStarted.length > 0 ? `, ${notStarted.length} not started` : ''}`
+  return { id: run.id, name: run.name, finished, midStep, notStarted, line }
+}
+
 /** The summary's rule: absent when any panel's model is unpriced; panels with no usage cost nothing. */
 /**
  * What THIS run cost: the panels' priced usage now, less what they had spent
  * when the run began. Without the baseline a second run bills every earlier
  * run again (M79's verifier).
  */
-export function runCostSince(panelIds: readonly string[], usages: ReadonlyMap<string, PanelUsage>, baseline: ReadonlyMap<string, PanelUsage>): number | undefined {
-  const now = runCost(panelIds, usages)
-  const before = runCost(panelIds, baseline)
+export function runCostSince(panelIds: readonly string[], usages: ReadonlyMap<string, PanelUsage>, baseline: ReadonlyMap<string, PanelUsage>, unmeasured: ReadonlySet<string> = new Set()): number | undefined {
+  const now = runCost(panelIds, usages, unmeasured)
+  const before = runCost(panelIds, baseline, unmeasured)
   if (now === undefined || before === undefined) return undefined
   return Math.max(0, now - before)
 }
 
-export function runCost(panelIds: readonly string[], usages: ReadonlyMap<string, PanelUsage>): number | undefined {
+/**
+ * `unmeasured` (M319): members whose spend this sum CANNOT see — a chat, whose
+ * usage is its session's and never a terminal's PanelUsage. One of those in a
+ * run makes the run's cost unknown: skipping it (the old `continue` for a
+ * member with no usage) wrote a figure that silently left an agent out, the
+ * $0-for-unknown the orchestration limits already refuse to print.
+ */
+export function runCost(panelIds: readonly string[], usages: ReadonlyMap<string, PanelUsage>, unmeasured: ReadonlySet<string> = new Set()): number | undefined {
   let total = 0
   for (const id of panelIds) {
+    if (unmeasured.has(id)) return undefined
     const u = usages.get(id)
     if (!u) continue
     for (const [model, totals] of Object.entries(u.byModel)) {

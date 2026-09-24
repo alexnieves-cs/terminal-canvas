@@ -19,6 +19,7 @@
 import { NEEDS_YOU } from '@shared/attention-words'
 import { BACKENDS, type AgentBackend } from '@shared/agent-backends'
 import { windowUtilization, type RateLimitState } from '@shared/rate-limit'
+import { stopOptions, type StopOption } from '@shared/backend-fit'
 
 export type OrchControlId = 'interrupt' | 'retry' | 'reassign' | 'stop'
 
@@ -84,8 +85,19 @@ export function orchControls(input: OrchControlInput): { controls: OrchControl[]
     absent.push({ id: 'retry', reason: input.kind === 'terminal' ? 'a failed command is never re-run from here — it is not assumed safe to repeat' : 'not a session' })
   }
   absent.push({ id: 'reassign', reason: 'no runtime here can move a running session to another teammate' })
-  absent.push({ id: 'stop', reason: isChat && row !== undefined && !row.interrupts ? row.reasons.noInterrupt : 'no runtime here stops a session while reporting its surviving child processes — close the panel on the canvas to end it' })
+  absent.push({ id: 'stop', reason: isChat && row !== undefined && !row.interrupts ? `${row.reasons.noInterrupt} — End process below is the stop it has` : 'no runtime here stops a session while reporting its surviving child processes — End process kills the CLI only' })
   return { controls, absent }
+}
+
+/**
+ * M319. THE THREE STOPS for a chat, kept apart: Interrupt (ends the turn,
+ * keeps the process and conversation), Cancel (drops what is queued, the turn
+ * continues), End process (kills the CLI, keeps the session). Null for
+ * anything but an agent chat — a terminal's stop is Ctrl-C in its own panel.
+ */
+export function orchStops(input: { kind: string; backend?: AgentBackend; state: string; queued: number; /** The session's pid is known; absent falls back to "not exited". */ processUp?: boolean }): StopOption[] | null {
+  if (input.kind !== 'chat' || input.backend === undefined) return null
+  return stopOptions(input.backend, { generating: GENERATING.has(input.state), queued: input.queued, processUp: input.processUp ?? input.state !== 'exited' })
 }
 
 /** The retry PREVIEW: what would be sent, to whom, from where. Nothing is sent. */

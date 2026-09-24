@@ -43,12 +43,24 @@ export interface WorkSearchResult {
 
 export const WORK_SEARCH_CAP = 30
 
+/**
+ * M320. What a task's RECORD holds beyond its card, per task: the check
+ * commands it ran, the paths its reviews covered, its captures — main's
+ * `task:evidence-index`, references only. Optional: absent is D13's search.
+ */
+export interface WorkEvidenceRow {
+  itemId: string
+  field: 'check' | 'deliverable' | 'capture'
+  text: string
+}
+
 export function searchWork(
   query: string,
   items: readonly PersistedWorkItem[],
   retained: readonly RetainedOutcome[],
   cardOf: (itemId: string) => string | undefined,
-  cap: number = WORK_SEARCH_CAP
+  cap: number = WORK_SEARCH_CAP,
+  evidence: readonly WorkEvidenceRow[] = []
 ): WorkSearchResult {
   const q = query.trim().toLowerCase()
   const result: WorkSearchResult = { hits: [], capped: false, cap, redacted: 0, searched: { tasks: items.length, retained: retained.length } }
@@ -68,7 +80,16 @@ export function searchWork(
     const card = cardOf(item.id)
     const fields: [string, string | undefined][] = [
       ['title', item.title], ['key', item.key], ['brief', item.brief], ['description', item.description],
-      ['criteria', item.criteria?.join('\n')], ['note', item.note]
+      ['criteria', item.criteria?.join('\n')], ['note', item.note],
+      // M320. The rest of what a task SAYS: its review comments (path and
+      // text), the checks that decide done, and what it is expected to hand
+      // back — then what its record holds (the commands it ran, the files its
+      // reviews covered, its captures).
+      ['review comment', item.comments?.map((c) => `${c.path}:${c.line} ${c.body}`).join('\n')],
+      ['check', item.checks?.join('\n')],
+      ['deliverable', item.deliverables?.join('\n')],
+      ['check run', evidence.filter((e) => e.itemId === item.id && e.field === 'check').map((e) => e.text).join('\n')],
+      ['produced', evidence.filter((e) => e.itemId === item.id && e.field !== 'check').map((e) => e.text).join('\n')]
     ]
     // One row per task: the first field that matches is the reason, so a task
     // whose title and brief both hold the word is not listed twice.

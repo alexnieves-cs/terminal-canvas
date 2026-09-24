@@ -1,5 +1,7 @@
 import type { TokenTotals } from './cost'
 import { parseReviewIdentity, type ReviewIdentity } from './review-identity'
+import type { AgentBackend } from './agent-backends'
+import { parseDigests, parseProducer } from './task-deliverables'
 /**
  * M52. One row of the run ledger — what a panel ran and how it ended. Shared
  * so the contract can name it; the writer is main/run-ledger.ts. No output
@@ -119,6 +121,23 @@ export interface EventRow {
    * not know a key's namespace ignores it.
    */
   key?: string
+  /**
+   * M320. WHO produced it, as it was when the row was written — the panel's
+   * title, kind and backend. A panel id alone dangles once the panel closes
+   * (and a closed chat's transcript is deleted with it); this is what keeps
+   * "produced by api-fix on codex" true afterwards. Absent on older rows.
+   */
+  producer?: { title: string; kind: string; backend?: AgentBackend }
+  /** M320. The directory `paths` are relative to (the lane), when the writer knew it. */
+  root?: string
+  /**
+   * M320. Each path's content digest when the row was APPENDED — computed by
+   * main from `root`, never trusted from the renderer. It is what makes a
+   * reviewed file a captured VERSION rather than only a live reference: a
+   * later reader compares it with the file now and can say "modified since
+   * review". Absent for a path main could not read (and on older rows).
+   */
+  digests?: Record<string, string>
 }
 
 /**
@@ -203,7 +222,11 @@ export function parseEventRow(raw: unknown): EventRow | null {
     ...(typeof r.panelId === 'string' && r.panelId !== '' ? { panelId: r.panelId } : {}),
     ...(tested === undefined ? {} : { tested }),
     ...(paths !== undefined && paths.length > 0 ? { paths } : {}),
-    ...(typeof r.key === 'string' && r.key !== '' ? { key: r.key } : {})
+    ...(typeof r.key === 'string' && r.key !== '' ? { key: r.key } : {}),
+    // M320. Field-level, like `tested`: a malformed producer or digest costs itself.
+    ...(parseProducer(r.producer) === undefined ? {} : { producer: parseProducer(r.producer)! }),
+    ...(typeof r.root === 'string' && r.root.startsWith('/') ? { root: r.root } : {}),
+    ...(parseDigests(r.digests) === undefined ? {} : { digests: parseDigests(r.digests)! })
   }
 }
 

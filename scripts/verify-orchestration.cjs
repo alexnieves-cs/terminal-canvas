@@ -987,6 +987,18 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       ids(interruptedClaude) === 'retry' && ids(term) === '' &&
       [busyClaude, busyCodex, idleClaude, exitedClaude, term].every((r) => r.absent.some((a) => a.id === 'reassign') && r.absent.some((a) => a.id === 'stop')),
     JSON.stringify({ busyClaude, busyCodex, idleClaude, exitedClaude, interruptedClaude, term }))
+  // M319 — orch-stops.1. The inspector's three stops for a chat, apart.
+  {
+    const busy = C.orchStops({ kind: 'chat', backend: 'claude', state: 'busy', queued: 1 })
+    const cx = C.orchStops({ kind: 'chat', backend: 'codex', state: 'busy', queued: 0 })
+    const gone = C.orchStops({ kind: 'chat', backend: 'claude', state: 'exited', queued: 0 })
+    const term = C.orchStops({ kind: 'terminal', state: 'busy', queued: 0 })
+    const k = (r) => r.filter((o) => o.available).map((o) => o.kind).join()
+    ok('orch-stops.1 a busy claude chat offers interrupt, cancel and end-process as three buttons with three effects; codex offers only end-process (its interrupt absent with the registry reason); an exited session has nothing to end; a terminal gets none — its stop is Ctrl-C in its own panel',
+      k(busy) === 'interrupt,cancel,terminate' && k(cx) === 'terminate' && k(gone) === '' && term === null &&
+        busyCodex.absent.find((a) => a.id === 'stop').reason.includes('End process'),
+      JSON.stringify({ busy, cx, gone }))
+  }
   const none = C.orchLimits({ maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0, inFlight: 1, sessions: [{ backend: 'claude', costUsd: 0.5 }, { backend: 'codex' }], rateLimit: { kind: 'none' } })
   const set = C.orchLimits({ maxConcurrent: 2, budgetUsd: 5, budgetWindowPercent: 80, inFlight: 1, sessions: [{ backend: 'claude', costUsd: 1.25 }, { backend: 'claude' }, { backend: 'copilot' }], rateLimit: { kind: 'allowed', overage: false, at: 1, windows: { five_hour: { utilization: 0.42 } } } })
   const row = (rows, id) => rows.find((r) => r.id === id)
@@ -1234,9 +1246,12 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     const writers = files.filter((f) => /ledger\??\.event\b/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(srcDir.length + 1))
     const importers = files.filter((f) => /from '.*orch-record'/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(srcDir.length + 1)).sort()
     const record = readFileSync(join(srcDir, 'renderer/orchestration/orch-record.ts'), 'utf8')
-    ok('orch-timeline.6 the renderer writes history through ONE door: only orch-record.ts calls ledger.event, its importers are the three verbs that own a fact main cannot see (dispatch, the permission answer, the review mark) plus the canvas\'s handoff funnel, and the door itself starts nothing — no send, spawn, create or run',
+    // M317 adds OrchCombine: sending a traced integration failure back to an
+    // agent is a person's DISPATCH, which main cannot tell from any other
+    // message. The landing itself is main's to write (integrator.ts).
+    ok('orch-timeline.6 the renderer writes history through ONE door: only orch-record.ts calls ledger.event, its importers are the three verbs that own a fact main cannot see (dispatch, the permission answer, the review mark) plus the canvas\'s handoff funnel and Combine\'s send-back (a dispatch), and the door itself starts nothing — no send, spawn, create or run',
       JSON.stringify(writers) === JSON.stringify(['renderer/orchestration/orch-record.ts']) &&
-        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts']) &&
+        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts', 'renderer/orchestration/OrchCombine.tsx']) &&
         !/agentSession|spawn\.|\.send\(|review\.commit|review\.discard/.test(record),
       JSON.stringify({ writers, importers }))
   }

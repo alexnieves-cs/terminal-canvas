@@ -82,6 +82,8 @@ export interface AgentSessionSnapshot {
   pid?: number
   exitCode?: number | null
   exitSignal?: string
+  /** M319. The CLI's own sentence for a failed resume; absent otherwise. Cleared by the next spawn. */
+  resumeLost?: string
   /** Results seen, i.e. completed turns. */
   turns: number
   usage: TokenTotals
@@ -129,9 +131,10 @@ export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
 export type AgentSessionEvent = { id: string } & (
   | Exclude<TranscriptEvent, { type: 'result' | 'assistant' | 'user' | 'ignored' }>
   | ResultEvent
-  | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
+  /** M319. `resumeLost`: the CLI said the conversation it was asked to resume does not exist — the next message starts a new one. */
+  | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string; resumeLost?: string }
   | { type: 'turn'; turn: TranscriptTurn }
-  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'handshake-timeout' | 'budget' }
+  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'terminated' }
   /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
   | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
   /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */

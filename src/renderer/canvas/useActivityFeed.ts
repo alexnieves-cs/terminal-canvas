@@ -56,6 +56,23 @@ export function useActivityFeed(deps: { panels: readonly Panel[] }): void {
       const line = text.length > TURN_LINE_MAX ? `${text.slice(0, TURN_LINE_MAX - 1)}…` : text
       pushOrchActivity({ at: Date.now(), kind: 'agent', panelId: id, ...kindOf(id), title: titleOf(id), detail: line === '' ? 'finished a turn' : `finished a turn — ${line}`, tone: 'idle' })
     })
-    return () => { offState(); offTurn() }
+    // M318. A check run ENDING is activity too, and a failed one is the
+    // feed's other intervention (its tone is `exited`, like a clean exit, so
+    // the producer says so). One row per run: keyed by the run's end time.
+    const ended = new Map<string, number>()
+    const offWatch = typeof window.canvas?.watcher?.onState === 'function' ? window.canvas.watcher.onState((ev) => {
+      if ((ev.status !== 'passed' && ev.status !== 'exited') || ev.endedAt === undefined || ended.get(ev.id) === ev.endedAt) return
+      ended.set(ev.id, ev.endedAt)
+      const panel = panelOf(ev.id)
+      const title = panel !== undefined ? titleOf(ev.id) : ev.id.startsWith('combine-') ? 'combined tree' : 'check'
+      const failed = ev.status !== 'passed'
+      pushOrchActivity({
+        at: ev.endedAt, kind: 'watcher', title, tone: failed ? 'exited' : 'idle',
+        detail: failed ? `check failed${ev.exitCode === null || ev.exitCode === undefined ? '' : ` (exit ${ev.exitCode})`}` : 'check passed',
+        ...(panel === undefined ? {} : { panelId: ev.id, panelKind: panel.kind }),
+        ...(failed ? { intervene: true as const } : {})
+      })
+    }) : () => {}
+    return () => { offState(); offTurn(); offWatch() }
   }, [])
 }

@@ -9,7 +9,7 @@ import { railLabel } from '@renderer/shell/rail-rows'
 import { getUsage } from '@renderer/session/usage-store'
 import type { AutoStatus } from '@shared/auto'
 import {
-  beginRun, componentOf, finishRun, recordRunEvent, runCostSince, runIsComplete, runName, type RunComponent, type RunEvent
+  ABANDONED_BY_RELAUNCH, beginRun, componentOf, finishRun, recordRunEvent, runCostSince, runIsComplete, runName, type RunComponent, type RunEvent
 } from './run-model'
 
 /**
@@ -50,6 +50,12 @@ export interface RunsApi {
   onAutoEvent: (panelId: string, status: AutoStatus) => void
   /** Restart the run's terminal roots in order; a chat root is skipped by name. Returns the sentence. */
   runAgain: (runId: string, runs: readonly PersistedRun[]) => string
+  /**
+   * M316. Continue a run the relaunch cut off: restart ONLY its mid-step
+   * panels. Run again restarts the roots, which re-runs every finished step;
+   * this is the recovery that does not.
+   */
+  continueRun: (runId: string, runs: readonly PersistedRun[]) => string
   /** Forget every open run's component — a workspace switch replaces the panels. */
   forgetOpen: () => void
   /** Whether any run is open, for the rail's ticking duration. */
@@ -92,6 +98,11 @@ export function useRuns(deps: RunsDeps): RunsApi {
   // A guard here would swallow the panel's next REAL exit instead — the
   // harness watched it do exactly that.
 
+  // M319. The members a terminal-usage sum cannot see: chats. Their spend is
+  // their session's; a run that holds one has an UNKNOWN cost, never a figure
+  // that quietly left the agent out.
+  const unmeasuredOf = (panelIds: readonly string[]): Set<string> =>
+    new Set(panelIds.filter((id) => panelsRef.current.some((p) => p.rect.id === id && p.kind === 'chat')))
   const usageOf = (panelIds: readonly string[]): Map<string, PanelUsage> => {
     const out = new Map<string, PanelUsage>()
     for (const id of panelIds) { const u = getUsage(id); if (u) out.set(id, u) }
@@ -149,7 +160,7 @@ export function useRuns(deps: RunsDeps): RunsApi {
     const run = next.find((r) => r.id === runId)
     if (run !== undefined && runIsComplete(run, component)) {
       openRef.current.delete(runId)
-      const sealed = finishRun(run, event.at, runCostSince(run.panelIds, usageOf(run.panelIds), baseline))
+      const sealed = finishRun(run, event.at, runCostSince(run.panelIds, usageOf(run.panelIds), baseline, unmeasuredOf(run.panelIds)))
       next = next.map((r) => (r.id === runId ? sealed : r))
     }
     runsRef.current = next
@@ -184,7 +195,7 @@ export function useRuns(deps: RunsDeps): RunsApi {
     const next = current.map((r) => {
       if (r.id !== runId) return r
       const sealedEntries = r.entries.map((e) => (e.panelId === panelId && e.endedAt === undefined ? { ...e, endedAt: at, outcome } : e))
-      return finishRun({ ...r, entries: sealedEntries }, at, runCostSince([panelId], usageOf([panelId]), open.baseline))
+      return finishRun({ ...r, entries: sealedEntries }, at, runCostSince([panelId], usageOf([panelId]), open.baseline, unmeasuredOf([panelId])))
     })
     runsRef.current = next
     setRuns(next)
@@ -210,11 +221,30 @@ export function useRuns(deps: RunsDeps): RunsApi {
     return `${restarted} root${restarted === 1 ? '' : 's'} restarted${skipped.length > 0 ? ` · ${skipped.join('; ')}` : ''}`
   }, [panelsRef, restartWithSpec])
 
+  const continueRun = useCallback((runId: string, runs: readonly PersistedRun[]): string => {
+    const run = runs.find((r) => r.id === runId)
+    if (!run) return 'that run is gone'
+    const mid = [...new Set(run.entries.filter((e) => e.outcome === ABANDONED_BY_RELAUNCH).map((e) => e.panelId))]
+    if (mid.length === 0) return 'nothing of this run was cut off mid-step'
+    const panels = panelsRef.current
+    let restarted = 0
+    const skipped: string[] = []
+    for (const id of mid) {
+      const p = panels.find((x) => x.rect.id === id)
+      if (!p) { skipped.push(`${id} is gone`); continue }
+      if (isChatPanel(p)) { skipped.push(`${railLabel(p, undefined)} is a chat — continue it by sending a message`); continue }
+      if (!isTerminalPanel(p)) { skipped.push(`${railLabel(p, undefined)} has no process`); continue }
+      restartWithSpec(id, p.spec)
+      restarted += 1
+    }
+    return `${restarted} step${restarted === 1 ? '' : 's'} restarted; finished steps were not${skipped.length > 0 ? ` · ${skipped.join('; ')}` : ''}`
+  }, [panelsRef, restartWithSpec])
+
   // A workspace switch replaces the panels, so the origins of the ones that
   // left mean nothing — and a recycled id would inherit a dead panel's
   // template, the failure every module-level store here names.
   const forgetOpen = useCallback(() => { openRef.current.clear(); originRef.current.clear() }, [])
   const hasOpen = useCallback(() => openRef.current.size > 0, [])
 
-  return { onRunEvent, onAutoEvent, noteTemplate, runAgain, forgetOpen, hasOpen }
+  return { onRunEvent, onAutoEvent, noteTemplate, runAgain, continueRun, forgetOpen, hasOpen }
 }

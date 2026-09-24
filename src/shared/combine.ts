@@ -20,8 +20,10 @@
  * paths never showed as contended (keys differed), while two relative-path
  * writers in different checkouts showed as contended when they were not.
  *
- * Imports nothing, so it runs in the plain-node tier (verify:review combine.*).
+ * Imports types only, so it runs in the plain-node tier (verify:review combine.*).
  */
+
+import type { LaneFingerprint } from './integration'
 
 /** One lane as the cross-worktree review reports it (ReviewSection, flattened). */
 export interface CombineLane {
@@ -176,6 +178,13 @@ export type CombineRunResult =
     /** The main tree's HEAD the combination starts from. */
     base: string
     applied: string[]
+    /**
+     * M317. Each lane's fingerprint AS IT WAS COMBINED (`integration.ts`) —
+     * what makes the result able to go stale. Absent from a pre-M317 answer.
+     */
+    inputs?: LaneFingerprint[]
+    /** M317. The combined tree's hash, when every lane applied — what the integrate step compares the landed tree to. */
+    tree?: string
     /** A lane whose changes did not apply cleanly, and the paths git named; the run stops there. */
     conflict: { lane: string; paths: string[]; detail: string } | null
   }

@@ -5,6 +5,7 @@ import { getWatch } from '@renderer/watcher/watcher-store'
 import { useChat } from '@renderer/chat/chat-store'
 import { shellControl } from '@renderer/shell/shell-control'
 import { OrchCombine } from './OrchCombine'
+import { OrchDeliverables } from './OrchDeliverables'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import { KindFile } from '@renderer/icons'
 import { outward } from '@shared/outward'
@@ -122,6 +123,8 @@ export interface OrchWorkbenchProps {
   refresh: number
   /** M311. The authored hand-offs (panel → panel), for Combine's proposed order. */
   edges?: readonly { from: string; to: string }[]
+  /** M317. The follow-up door, so Combine can send a traced failure back to its agent. */
+  onSend?: (panelId: string, text: string) => Promise<string | null>
 }
 
 /* ── Changes ─────────────────────────────────────────────────────────────── */
@@ -637,7 +640,7 @@ function ArtifactsTab({ read, subject, onOpenPath }: { read: TimelineRead; subje
 /* ── The strip ───────────────────────────────────────────────────────────── */
 
 export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
-  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, reading = false, onReading, onChecks, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh, edges } = props
+  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, reading = false, onReading, onChecks, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh, edges, onSend } = props
   const [localRefresh, setLocalRefresh] = useState(0)
   const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh)
   // M307. Read on Changes too: the verdict line there needs the same bound checks.
@@ -848,7 +851,12 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
           // M311. About every lane of the repository, so it needs no subject:
           // the subject's lane names the repository, else any lane on the page.
           <OrchCombine root={subject?.kind === 'task' && subject.lane !== undefined ? subject.lane.root : worktrees[0]?.root ?? null}
-            edges={edges ?? []} refresh={refresh + localRefresh} {...(onOpenPath === undefined ? {} : { onOpenPath })} />
+            edges={edges ?? []} refresh={refresh + localRefresh} {...(onOpenPath === undefined ? {} : { onOpenPath })}
+            workItems={workItems} worktrees={worktrees}
+            {...(taskHandoffOf === undefined ? {} : { taskHandoffOf })}
+            {...(onSend === undefined ? {} : { onSend })}
+            {...(onPatchWorkItem === undefined ? {} : { onPatchWorkItem })}
+            {...(onRefreshTaskHandoffs === undefined ? {} : { onRefreshTaskHandoffs })} />
         ) : subject === null ? (
           <p className="orch__caption">Select a chat or terminal session, or the task, to fill the workbench.</p>
         ) : tab === 'changes' ? (
@@ -1032,6 +1040,15 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
           </div>
         ) : tab === 'artifacts' ? (
           <div className="orch__bench-checks" data-orch-artifacts-subject={dataSubject}>
+            {/* M320. A TASK's deliverables first — every kind, with status and
+                provenance — then the per-execution file record beneath. */}
+            {subject.kind === 'task' && (
+              <OrchDeliverables
+                subject={{ itemId: subject.itemId, title: subject.title, memberIds: subject.memberIds, ...(subject.chatId === undefined ? {} : { chatId: subject.chatId }), ...(subject.lane === undefined ? {} : { lane: { path: subject.lane.path } }) }}
+                item={workItems.find((w) => w.id === subject.itemId)}
+                workItems={workItems}
+                panels={panels} refresh={refresh + localRefresh} {...(onOpenPath === undefined ? {} : { onOpenPath })} />
+            )}
             <ArtifactsTab read={record} subject={subject} onOpenPath={onOpenPath} />
           </div>
         ) : tab === 'timeline' ? (

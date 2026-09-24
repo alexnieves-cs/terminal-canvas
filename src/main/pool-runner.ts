@@ -34,7 +34,8 @@ export interface PoolDeps {
   spend: () => number
   /** Binding window utilization when known; absent means the window budget cannot fire. */
   windowUtil?: () => number | undefined
-  createWorker: (prompt: string, item: string) => Promise<{ id: string }>
+  /** `index` is the item's position in the list `readList` returned — M316's journal keys on it. */
+  createWorker: (prompt: string, item: string, index: number) => Promise<{ id: string }>
   interrupt: (id: string) => void
   onEvent: (e: PoolEvent) => void
 }
@@ -114,7 +115,7 @@ export function startPool(node: PoolNode, deps: PoolDeps): PoolHandle {
       const ceiling = maxConcurrent > 0 ? Math.min(node.width, maxConcurrent) : node.width
       while (live.size < ceiling && pending.length > 0) {
         const next = pending.shift() as { idx: number; item: string }
-        const { id } = await deps.createWorker(node.prompt, next.item)
+        const { id } = await deps.createWorker(node.prompt, next.item, next.idx)
         // A stop() or a budget crossing that landed WHILE this await was
         // pending has already interrupted everything it knew about — and this
         // worker was not in `live` to be known. Returning without interrupting

@@ -10,7 +10,10 @@ import { SWARM_LIST, SWARM_PRESETS, swarmPlan, type SwarmPresetId } from '@share
 import { applyRecipe, type Recipe } from '@shared/recipes'
 import { setupLine } from '@shared/repo-setup'
 import type { SetupReadResult } from '@shared/ipc-contract'
-import { startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, type StartWorkRepo } from './start-work'
+import { startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, type StartWorkRepo } from './start-work'
+import { BACKENDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
+import { fitSummary } from '@shared/backend-fit'
+import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@shared/recipe-portability'
 
 /**
  * M197 (D05). THE START WORK SHEET — the one place a task, an agent and a
@@ -60,7 +63,7 @@ export interface StartWorkSheetModel {
   teammateId?: string
   /** Main's answer: the repositories under this teammate's places. Three arms. */
   repositories(teammateId: string): Promise<BoardRepositoriesResult>
-  submit(choice: { title: string; teammateId: string; root: string; swarm?: SwarmPresetId; issue?: IssueChoice; brief?: string; criteria?: string[]; checks?: string[]; deliverables?: string[]; recipeId?: string }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
+  submit(choice: { title: string; teammateId: string; root: string; swarm?: SwarmPresetId; backend?: AgentBackend; recipeParams?: Record<string, string>; issue?: IssueChoice; brief?: string; criteria?: string[]; checks?: string[]; deliverables?: string[]; recipeId?: string }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
   /**
    * M310. The connected services' open issues, read when the sheet opens —
    * the flagship start is FROM an issue. Absent hides the field; an answer
@@ -98,6 +101,15 @@ export interface StartWorkSheetModel {
   setupOf?(root: string): Promise<SetupReadResult>
   /** M312. The named route to edit it — closes this sheet. */
   openSetup?(root: string): void
+  /** M319. Discovery's answer per backend CLI; absent hides nothing and reads as available. */
+  available?: Partial<Record<AgentBackend, boolean>>
+  /** M319. The card's own backend (a re-start keeps its vendor); absent is claude. */
+  backend?: AgentBackend
+  /** M321. Probe the tools a start would invoke and the next lane's ports — nothing runs. Absent skips the probe (every tool unprobed). */
+  preflightOf?(req: { root: string; tools: readonly string[] }): Promise<{ tools: Record<string, boolean>; ports: Record<string, number | null> | null }>
+  /** M319. The canvas's enforced ceilings, so a backend the budget cannot see says so before the start. */
+  budgetUsd?: number
+  windowPercent?: number
 }
 
 export interface StartWorkSheetProps {
@@ -114,6 +126,8 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   // default, because a person who opened this sheet to start one task must
   // not get five agents for pressing Enter.
   const [swarm, setSwarm] = useState<'' | SwarmPresetId>(model.swarm ?? '')
+  // M319. The backend — claude unless the card already runs on another.
+  const [backend, setBackend] = useState<AgentBackend>(model.backend ?? DEFAULT_BACKEND)
   // M310. The issue this start is FROM, the outcome and the criteria.
   const [issues, setIssues] = useState<{ kind: 'items'; items: IssueChoice[] } | { kind: 'none'; reason: string } | null>(null)
   const [issueKey, setIssueKey] = useState('')
@@ -125,11 +139,17 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const [checksText, setChecksText] = useState((model.checks ?? []).join('\n'))
   const [deliverText, setDeliverText] = useState((model.deliverables ?? []).join('\n'))
   const recipe = model.recipes?.find((r) => r.id === recipeId)
-  const pickRecipe = (id: string, answer: string): void => {
+  // M321. The recipe's named parameters, as the person has answered them; a
+  // parameter left blank takes its default, and one with neither refuses the start.
+  const [params, setParams] = useState<Record<string, string>>({})
+  const rootRef = useRef<string | null>(null)
+  const pickRecipe = (id: string, answer: string, values: Record<string, string> = params): void => {
     setRecipeId(id)
     const r = model.recipes?.find((x) => x.id === id)
     if (r === undefined) return
-    const fill = applyRecipe(r, answer)
+    // Rendered against the CHOSEN repository — `{repository}` is where this
+    // run happens, not where the recipe was saved from.
+    const fill = applyRecipe(r, answer, { ...(rootRef.current === null ? {} : { repository: rootRef.current }), params: values })
     if (!model.titleFixed) setTitle(fill.title)
     setBrief(fill.brief)
     setCriteriaText(fill.criteria.join('\n'))
@@ -205,18 +225,61 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const ctx = useMemo(() => ({
     teammates: model.teammates, repos, wanted,
     ...(model.agentAvailable === undefined ? {} : { agentAvailable: model.agentAvailable }),
-    ...(model.itemState === undefined ? {} : { itemState: model.itemState })
-  }), [model.teammates, repos, wanted, model.agentAvailable, model.itemState])
-  const choice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }) }
+    ...(model.itemState === undefined ? {} : { itemState: model.itemState }),
+    ...(model.available === undefined ? {} : { available: model.available }),
+    ...(model.budgetUsd === undefined ? {} : { budgetUsd: model.budgetUsd }),
+    ...(model.windowPercent === undefined ? {} : { windowPercent: model.windowPercent })
+  }), [model.teammates, repos, wanted, model.agentAvailable, model.itemState, model.available, model.budgetUsd, model.windowPercent])
+  const choice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }), ...(backend === DEFAULT_BACKEND ? {} : { backend }) }
   const needs = startWorkNeeds(choice, ctx)
   const blocking = startWorkRefusal(choice, ctx)
   // M275. The arrangement's own refusal is a THIRD kind: the triple can be
   // answered and the shape still not apply. It disables Start by itself, so a
   // swarm cannot half-land and then report why.
   const swarmBlocked = startWorkSwarmRefusal(choice, ctx)
+  // M319. Whether the chosen backend can do what THIS task asks — its rows
+  // are the capabilities the task touches, and a required one unmet is a
+  // fourth refusal that disables Start the same way.
+  const taskText = [brief, criteriaText, checksText, deliverText, recipe?.brief ?? '', recipe?.criteria.join('\n') ?? ''].join('\n')
+  const fit = startWorkBackendFit(choice, ctx, taskText)
+  const backendRows = startWorkBackendRows(choice, ctx, taskText)
+  const backendBlocked = fit.verdict === 'refused' ? (fit.refusal ?? fitSummary(fit)) : null
   const mate = model.teammates.find((t) => t.id === teammateId)
   const chosenRoot = startWorkRoot(choice, ctx)
+  rootRef.current = chosenRoot
   const summary = startWorkSummary(choice, mate, chosenRoot)
+  // M321. A recipe's `{repository}` follows the repository: re-rendered when it changes.
+  useEffect(() => {
+    if (recipe !== undefined) pickRecipe(recipe.id, aim)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenRoot])
+  // M321. PREFLIGHT — the tools the setup and the checks invoke, looked up on
+  // the login PATH, and the ports the next lane would get; nothing runs.
+  const checkLines = checksText.split('\n').map((c) => c.trim()).filter((c) => c !== '')
+  const setupForPreflight = setupRead !== null && setupRead.kind !== 'not-a-repo' ? setupRead : null
+  const wantedTools = preflightTools({ checks: checkLines, ...(recipe === undefined ? {} : { recipe }), setup: setupForPreflight })
+  const toolsKey = `${chosenRoot ?? ''}|${wantedTools.map((t) => t.tool).join(' ')}|${setupRead?.kind ?? ''}`
+  const [probe, setProbe] = useState<{ key: string; tools: Record<string, boolean>; ports: Record<string, number | null> | null } | null>(null)
+  useEffect(() => {
+    if (chosenRoot === null || model.preflightOf === undefined) return
+    let live = true
+    const key = toolsKey
+    void model.preflightOf({ root: chosenRoot, tools: wantedTools.map((t) => t.tool) }).then((r) => { if (live) setProbe({ key, ...r }) }, () => undefined)
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toolsKey])
+  const probed = probe !== null && probe.key === toolsKey ? probe : null
+  const preflight: Preflight | null = chosenRoot === null ? null : recipePreflight({
+    checks: checkLines,
+    ...(recipe === undefined ? {} : { recipe }),
+    texts: [{ field: 'outcome', text: brief }, ...recipeTexts({ brief: '', criteria: criteriaText.split('\n'), checks: checkLines, deliverables: deliverText.split('\n') }).filter((t) => t.text !== '')],
+    renderContext: { repository: chosenRoot, params },
+    setup: setupForPreflight,
+    tools: model.preflightOf === undefined ? {} : probed?.tools ?? null,
+    ports: probed?.ports ?? null
+  })
+  // M321. What must hold before a worker exists — a fifth refusal, same rule.
+  const preflightBlocked = preflight?.blocked ?? null
   useEffect(() => {
     setSetupRead(null)
     if (chosenRoot === null || model.setupOf === undefined) return
@@ -235,7 +298,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   })
 
   const submit = (): void => {
-    if (busy || blocking !== null || swarmBlocked !== null || needs.length > 0 || teammateId === '' || chosenRoot === null) return
+    if (busy || blocking !== null || swarmBlocked !== null || backendBlocked !== null || preflightBlocked !== null || needs.length > 0 || teammateId === '' || chosenRoot === null) return
     setBusy(true); setRefusal(null)
     const criteria = criteriaText.split('\n').map((c) => c.trim()).filter((c) => c !== '')
     const checks = checksText.split('\n').map((c) => c.trim()).filter((c) => c !== '')
@@ -245,6 +308,8 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       ...(deliverables.length === 0 ? {} : { deliverables }),
       ...(recipe === undefined ? {} : { recipeId: recipe.id }),
       title: title.trim(), teammateId, root: chosenRoot, ...(swarm === '' ? {} : { swarm }),
+      ...(backend === DEFAULT_BACKEND ? {} : { backend }),
+      ...(recipe === undefined || Object.keys(params).length === 0 ? {} : { recipeParams: params }),
       ...(issue === undefined ? {} : { issue }),
       ...(brief.trim() === '' ? {} : { brief: brief.trim() }),
       ...(criteria.length === 0 ? {} : { criteria })
@@ -293,6 +358,16 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             onChange={(e) => { setAim(e.target.value); pickRecipe(recipe.id, e.target.value) }} />
         </label>
       )}
+      {/* M321. The recipe's parameters — a path it was saved with that is not
+          this repository's, say. Blank takes the default; blank with none
+          refuses the start below, by name. */}
+      {recipe?.params?.map((p) => (
+        <label key={p.name} className="sheet__field">
+          <span className="sheet__label" title={p.label}>{p.name}</span>
+          <input className="sheet__input sheet__input--mono" data-start-recipe-param={p.name} value={params[p.name] ?? ''} placeholder={p.default ?? p.label} spellCheck={false}
+            onChange={(e) => { const next = { ...params, [p.name]: e.target.value }; setParams(next); pickRecipe(recipe.id, aim, next) }} />
+        </label>
+      ))}
 
       {/* M310. THE FLAGSHIP START: from an open issue. Choosing one names the
           task and — for GitHub — the repository, the same way a card from
@@ -411,12 +486,38 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         </select>
       </label>
 
+      {/* M319. THE BACKEND, judged against this task. Every row is offered —
+          one that cannot do the task is disabled with why, never dropped —
+          and below it only the capabilities THIS task touches, each met or
+          not, in the vendor's own words. Stated before a session exists. */}
+      <label className="sheet__field">
+        <span className="sheet__label">Backend</span>
+        <select className="sheet__select" data-start-backend value={backend} aria-label="backend"
+          onChange={(e) => { setBackend(e.target.value as AgentBackend); setRefusal(null) }}>
+          {backendRows.map((r) => (
+            <option key={r.backend} value={r.backend} disabled={r.fit.verdict === 'refused'} data-start-backend-row={r.backend} data-start-backend-fit={r.fit.verdict}>
+              {r.label}{r.fit.verdict === 'fits' ? ' — can do everything this task needs' : r.fit.verdict === 'refused' ? ` — cannot: ${r.fit.refusal ?? ''}` : ` — without ${r.fit.rows.filter((x) => !x.ok).length} of what this task asks`}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="sheet__field sheet__field--how" data-start-fit={fit.verdict}>
+        <span className="sheet__label">This task</span>
+        <span className="sheet__defaults sheet__fit">
+          {fit.rows.map((r) => (
+            <span key={r.id} className={`sheet__fit-row${r.ok ? '' : r.level === 'required' ? ' is-refused' : ' is-degraded'}`} data-start-fit-row={r.id} data-start-fit-ok={r.ok ? 'yes' : 'no'} data-start-fit-level={r.level}>
+              {r.ok ? '✓' : r.level === 'required' ? '✕' : '–'} {r.line}
+            </span>
+          ))}
+        </span>
+      </div>
+
       {/* M262. What runs, said: a lane is Claude Code with the CLI's own
           defaults — nothing on this sheet changes them, and saying so is
           what stops a person hunting for a knob that is not here. */}
       <div className="sheet__field sheet__field--how">
         <span className="sheet__label">Runtime</span>
-        <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine('Claude Code', {})} · {plan === null ? 'in its own worktree' : `${plan.line} · the person opens the pull request`}</span>
+        <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine(backend === DEFAULT_BACKEND ? 'Claude Code' : BACKENDS[backend].label, {})} · {plan === null ? 'in its own worktree' : `${plan.line} · the person opens the pull request`}</span>
       </div>
 
       {/* M312. What a new lane of this repository gets before its agent
@@ -432,6 +533,27 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
                 onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
                 onClick={(e) => { e.preventDefault(); model.openSetup?.(chosenRoot) }}>{setupRead.kind === 'saved' ? 'Edit setup' : 'Set up this repository…'}</button>
             )}
+          </span>
+        </div>
+      )}
+
+      {/* M321. BEFORE IT STARTS — what will run in the lane (install steps,
+          services with the ports they would get, the checks) and what must
+          hold first (tools on PATH, a saved setup, filled parameters). A
+          blocking item disables Start; nothing here runs anything. */}
+      {preflight !== null && (preflight.items.length > 0 || preflight.plan.install.length > 0 || preflight.plan.checks.length > 0 || preflight.plan.services.length > 0) && (
+        <div className="sheet__field sheet__field--how" data-start-preflight={preflight.blocked === undefined ? 'clear' : 'blocked'}>
+          <span className="sheet__label">Before it starts</span>
+          <span className="sheet__defaults sheet__fit">
+            {preflight.plan.install.length > 0 && <span className="sheet__fit-row" data-start-preflight-install>prepares with {preflight.plan.install.map((c) => `\`${c}\``).join(' then ')}</span>}
+            {preflight.plan.services.map((sv) => (
+              <span key={sv.name} className="sheet__fit-row" data-start-preflight-service={sv.name}>service {sv.name}: `{sv.command}`{sv.port === undefined ? '' : sv.port === null ? ' — no free port' : ` on :${sv.port}`}</span>
+            ))}
+            {preflight.plan.checks.length > 0 && <span className="sheet__fit-row" data-start-preflight-checks>checks {preflight.plan.checks.map((c) => `\`${c}\``).join(', ')}</span>}
+            {preflight.items.filter((i) => !i.ok).map((i) => (
+              <span key={i.id} className={`sheet__fit-row ${i.severity === 'block' ? 'is-refused' : 'is-degraded'}`} data-start-preflight-item={i.id}>{i.severity === 'block' ? '✕' : '–'} {i.line}</span>
+            ))}
+            {preflight.items.length > 0 && preflight.items.every((i) => i.ok) && <span className="sheet__fit-row" data-start-preflight-ok>✓ {preflight.items.length} prerequisite{preflight.items.length === 1 ? '' : 's'} met</span>}
           </span>
         </div>
       )}
@@ -471,6 +593,13 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         {swarmBlocked !== null && blocking === null && (
           <span className="sheet__refusal" data-start-swarm-refusal role="alert">{swarmBlocked}</span>
         )}
+        {preflightBlocked !== null && blocking === null && swarmBlocked === null && backendBlocked === null && (
+          <span className="sheet__refusal" data-start-preflight-refusal role="alert">{preflightBlocked}</span>
+        )}
+        {/* M319. The backend's refusal — a requirement of THIS task it cannot meet. */}
+        {backendBlocked !== null && blocking === null && swarmBlocked === null && (
+          <span className="sheet__refusal" data-start-backend-refusal role="alert">{backendBlocked}</span>
+        )}
         {plan !== null && plan.ceilingLine !== '' && swarmBlocked === null && (
           <span className="sheet__hint" data-start-swarm-ceiling>{plan.ceilingLine}</span>
         )}
@@ -490,8 +619,8 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           <button type="button" className="sheet__button" data-start-cancel
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
             onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>
-          <button type="button" className="sheet__button is-primary" data-start-submit disabled={busy || blocking !== null || swarmBlocked !== null || needs.length > 0 || chosenRoot === null}
-            title={needs[0]?.why ?? blocking ?? swarmBlocked ?? undefined}
+          <button type="button" className="sheet__button is-primary" data-start-submit disabled={busy || blocking !== null || swarmBlocked !== null || backendBlocked !== null || preflightBlocked !== null || needs.length > 0 || chosenRoot === null}
+            title={needs[0]?.why ?? blocking ?? swarmBlocked ?? backendBlocked ?? preflightBlocked ?? undefined}
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
             onClick={(e) => { e.preventDefault(); submit() }}>{busy ? (plan === null ? 'Starting the lane…' : 'Making the arrangement…') : 'Start task'}</button>
         </div>

@@ -1449,6 +1449,17 @@ ok('74 a panel with no kind is not a review panel',
   ok('run.2 runCost sums priced usage and is absent when any panel is unpriced; no usage at all is zero',
     typeof priced === 'number' && priced > 0 && unpriced === undefined && none === 0,
     JSON.stringify({ priced, unpriced, none }))
+  // M319 — run.unmeasured.1. A member whose spend this sum cannot see (a
+  // chat: its usage is its session's) makes the run's cost UNKNOWN, rather
+  // than a figure that quietly left the agent out.
+  {
+    const withChat = V.runCost(['a', 'chat'], new Map([['a', usage('claude-haiku-4-5', 1000000)]]), new Set(['chat']))
+    const since = V.runCostSince(['a', 'chat'], new Map([['a', usage('claude-haiku-4-5', 2000000)]]), new Map([['a', usage('claude-haiku-4-5', 1000000)]]), new Set(['chat']))
+    const termOnly = V.runCost(['a', 'shell'], new Map([['a', usage('claude-haiku-4-5', 1000000)]]), new Set())
+    ok('run.unmeasured.1 a run holding a member whose usage this sum cannot see is Unknown (undefined) — never the terminals\' figure with the agent left out — while a plain shell with no usage still counts as zero',
+      withChat === undefined && since === undefined && typeof termOnly === 'number' && termOnly === priced / 2,
+      JSON.stringify({ withChat, since, termOnly }))
+  }
   // M121 — runs.seal.1. A run whose every panel is IDLE (or gone) is also
   // abandoned: nothing will ever fire its remaining edges, so an open run
   // beside idle panels reads `working` for ever (critic 11's stale seeded

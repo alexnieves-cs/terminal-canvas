@@ -1,7 +1,9 @@
 import type { AgentPlanReply, AgentPlanRequest } from './plan'
+import type { TaskEvidence, TaskEvidenceRequest, TaskExportResult, TaskIndexRow } from './task-deliverables'
 import type { LastExit } from './persistence'
 import type { CheckOutputRead } from './check-output'
 import type { CombineRunResult } from './combine'
+import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from './integration'
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
@@ -130,6 +132,7 @@ import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
 import type { MachineCostSnapshot, MachineCostTarget } from './machine-cost'
 import type { PoolNode } from './workflow-nodes'
+import type { JobAccount, RecoveryChoice } from './job-journal'
 
 /** M93. A snapshot's metadata: the stamp is the file's name and the restore's key. */
 export interface SnapshotMeta { at: number; bytes: number; workspaces: number; panels: number }
@@ -166,6 +169,31 @@ export const IPC = {
   SESSION_BACKEND: 'session:backend',
   /** Brief #20. Which panels had a session when the window last went away — once. */
   SESSION_LAST_EXIT: 'session:last-exit',
+  /**
+   * M316. The pool's jobs a person should hear about — interrupted,
+   * incomplete, refused, or live in this process after the window came back —
+   * each reconciled against live workers, transcripts and the repository
+   * before it is described (main/job-recovery.ts).
+   */
+  JOB_LIST: 'job:list',
+  /**
+   * M316. One recovery choice for one job: reconnect, continue, retry (named
+   * items only when any was sent and did not finish) or abandon. A finished
+   * item is never run again, and every refusal is named.
+   */
+  JOB_RECOVER: 'job:recover',
+  /**
+   * M320. A task's deliverables, as main can read them: its timeline rows (by
+   * item) and its panels' check runs, each check's recorded facts (never its
+   * output text), the files its reviews named probed under the lane root
+   * (exists, digest now), the receipts that include it, and which captures
+   * are still on disk. The renderer assembles and judges (task-deliverables.ts).
+   */
+  TASK_EVIDENCE: 'task:evidence',
+  /** M320. What search can match per task beyond its card: check commands, reviewed paths, capture titles — references only. */
+  TASK_EVIDENCE_INDEX: 'task:evidence-index',
+  /** M320. The concise task hand-off, through the outward gate, to a file the person names in the save dialog. */
+  TASK_EXPORT_HANDOFF: 'task:export-handoff',
   /**
    * The preset list as the PALETTE needs it — names, availability, which is
    * default, and which are built-in. Availability is main's alone: it is
@@ -602,6 +630,16 @@ export const IPC = {
    */
   COMBINE_RUN: 'combine:run',
   /**
+   * M317. The integration flow's three doors. `inputs` reads each lane's
+   * content fingerprint now (read-only) so a combined result knows when it
+   * is stale; `integrate` lands the checked lanes in order, re-verifying the
+   * fingerprints, the base and the check's own record first, and keeps a
+   * receipt; `receipts` lists those receipts for a repository.
+   */
+  COMBINE_INPUTS: 'combine:inputs',
+  COMBINE_INTEGRATE: 'combine:integrate',
+  COMBINE_RECEIPTS: 'combine:receipts',
+  /**
    * M315. Accept a task: merge its lane's branch into the main tree's branch.
    * `dryRun` reads and refuses by name; the real call re-reads, refuses the
    * same way, and writes only if the lane is still at the HEAD the person saw.
@@ -616,12 +654,20 @@ export const IPC = {
   SETUP_READ: 'setup:read',
   SETUP_SAVE: 'setup:save',
   SETUP_PREPARE: 'setup:prepare',
+  /**
+   * M321. PREFLIGHT — what a start would meet, probed and nothing run: each
+   * named tool looked up on the login PATH, and the ports the next lane of
+   * the repository would be allocated. Answered before any worker exists.
+   */
+  SETUP_PREFLIGHT: 'setup:preflight',
   /** M313. A file at a line, or a worktree, in the person's own editor (`files.editor`). */
   EDITOR_OPEN: 'editor:open',
   /** M314. The person's own recipes; the built-ins are code in `shared/recipes.ts`. */
   RECIPE_LIST: 'recipe:list',
   RECIPE_SAVE: 'recipe:save',
   RECIPE_DELETE: 'recipe:delete',
+  /** M321. Every stored version of one recipe, newest first — what a run's recorded version is compared against. */
+  RECIPE_HISTORY: 'recipe:history',
   /**
    * M65. The spawn sheet: main resolves a preset (absent command included)
    * or a typed command into a template, refuses a directory that does not
@@ -648,6 +694,14 @@ export const IPC = {
   AGENT_SEND: 'agent:send',
   AGENT_INTERRUPT: 'agent:interrupt',
   AGENT_DISPOSE: 'agent:dispose',
+  /**
+   * M319. The two stops that are neither Interrupt nor Dispose: CANCEL drops
+   * the messages queued behind the turn (the turn continues), TERMINATE kills
+   * the process and keeps the session (the next message resumes). Three acts
+   * under one word is how a person "stops" a codex turn and it keeps writing.
+   */
+  AGENT_CANCEL_QUEUED: 'agent:cancel-queued',
+  AGENT_TERMINATE: 'agent:terminate',
   AGENT_ANSWER: 'agent:answer',
   AGENT_LIST: 'agent:list',
   AGENT_TRANSCRIPT: 'agent:transcript',
@@ -868,9 +922,13 @@ export type BoardControlRequest =
   | { op: 'propose'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string }
 export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
 
+/** M316. See JOB_RECOVER. */
+export interface JobRecoverRequest { jobId: string; choice: RecoveryChoice; items?: number[] }
+export type JobRecoverResult = { kind: 'ok'; sentence: string } | { kind: 'refused'; reason: string }
+
 /** M138. See AGENT_POOL_START. */
 export interface PoolStartRequest { templateId: string; key: string; node: PoolNode }
-export type PoolStartResult = { kind: 'started' } | { kind: 'refused'; reason: string }
+export type PoolStartResult = { kind: 'started'; jobId?: string } | { kind: 'refused'; reason: string }
 export interface PoolMintRequest { templateId: string; key: string; cwd: string; prompt: string; item: string; index: number }
 export type PoolMintReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
 export type PoolEvent =
@@ -1730,6 +1788,10 @@ export interface CanvasBridge {
   /** M311. See COMBINE_RUN. */
   combine: {
     run(req: { root: string; lanes: string[] }): Promise<CombineRunResult>
+    /** M317. See COMBINE_INPUTS. */
+    inputs(req: { root: string; lanes: string[] }): Promise<CombineInputsResult>
+    integrate(req: IntegrateRequest): Promise<IntegrateResult>
+    receipts(root: string): Promise<IntegrationReceipt[]>
   }
   /** M315. See LANE_MERGE. */
   lane: {
@@ -1740,6 +1802,8 @@ export interface CanvasBridge {
     read(cwd: string): Promise<SetupReadResult>
     save(setup: RepoSetup): Promise<{ ok: true; setup: RepoSetup } | { ok: false; reason: string }>
     prepare(req: { lane: string }): Promise<PrepareResult>
+    /** M321. See SETUP_PREFLIGHT. */
+    preflight(req: { root: string; tools: readonly string[] }): Promise<{ tools: Record<string, boolean>; ports: Record<string, number | null> | null }>
   }
   /** M313. See EDITOR_OPEN. */
   editor: {
@@ -1750,6 +1814,8 @@ export interface CanvasBridge {
     list(): Promise<Recipe[]>
     save(recipe: Recipe): Promise<{ ok: true; recipe: Recipe } | { ok: false; reason: string }>
     remove(id: string): Promise<boolean>
+    /** M321. See RECIPE_HISTORY. */
+    history(id: string): Promise<Recipe[]>
   }
   ledger: {
     /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
@@ -1783,6 +1849,10 @@ export interface CanvasBridge {
     clipboardFile(): Promise<ClipboardFile>
     /** True when a request was written; false with no turn in flight. */
     interrupt(id: string): Promise<boolean>
+    /** M319. See AGENT_CANCEL_QUEUED: how many queued messages were dropped. */
+    cancelQueued(id: string): Promise<number>
+    /** M319. See AGENT_TERMINATE: false with no process to end. */
+    terminate(id: string): Promise<boolean>
     /** `drop`: also remove the durable transcript (an explicit close, never a quit). */
     dispose(req: { id: string; drop: boolean }): Promise<void>
     /** M98. `scope: 'session'` on an allow also grants the tool for the rest of the session — main grants, then answers. */
@@ -1864,6 +1934,12 @@ export interface CanvasBridge {
     /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */
     generate(req: ToolGenerateRequest): Promise<ToolGenerateResult>
   }
+  /** M320–M321. The task doors — see TASK_EVIDENCE, TASK_EVIDENCE_INDEX, TASK_EXPORT_HANDOFF. */
+  tasks: {
+    evidence(req: TaskEvidenceRequest): Promise<TaskEvidence>
+    index(): Promise<TaskIndexRow[]>
+    exportHandoff(req: { itemId: string; title: string; markdown: string }): Promise<TaskExportResult>
+  }
   diagnostics: {
     /** Main's own numbers only — the IPC send rate. Everything else in the
      * overlay's snapshot is assembled renderer-side from the registry. */
@@ -1879,6 +1955,10 @@ export interface CanvasBridge {
      * ask, after a crash, or on a first launch — and null makes no claim.
      */
     lastExit(): Promise<LastExit | null>
+    /** M316. See JOB_LIST. */
+    jobs(): Promise<JobAccount[]>
+    /** M316. See JOB_RECOVER. */
+    recoverJob(req: JobRecoverRequest): Promise<JobRecoverResult>
     /**
      * Live cwd/command updates. Each subscribe returns its own unsubscribe, so
      * a React effect can clean up without stacking listeners.

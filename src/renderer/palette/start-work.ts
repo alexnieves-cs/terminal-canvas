@@ -36,6 +36,8 @@ import { shortPath } from '@shared/display-path'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { teammateRefusal, workItemRefusal, type WorkItemState } from '@shared/work-items'
 import { SWARM_PRESETS, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
+import { BACKENDS, BACKEND_IDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
+import { backendFit, briefIsReadOnly, briefWantsImages, taskRequirements, type BackendFit, type TaskRequirement } from '@shared/backend-fit'
 
 /** The three inputs, in the order they are asked. */
 export type StartWorkNeedField = 'task' | 'agent' | 'repository'
@@ -59,6 +61,13 @@ export interface StartWorkChoice {
    * `startWorkSwarmRefusal`.
    */
   swarm?: SwarmPresetId
+  /**
+   * M319. THE BACKEND the lane runs on — absent is claude, every start before
+   * M319. Like the arrangement it is not a member of the triple (it always has
+   * an answer), but it can REFUSE: `startWorkBackendFit` decides whether the
+   * chosen CLI can do what this task needs before anything is minted.
+   */
+  backend?: AgentBackend
 }
 
 /**
@@ -76,6 +85,11 @@ export interface StartWorkContext {
   agentAvailable?: boolean
   /** M275. The card's state, when the start is for a card already on the board. Absent is a task about to be minted, which is `todo`. */
   itemState?: WorkItemState
+  /** M319. Discovery's answer per backend CLI. Absent reads as available (a caller with no discovery). */
+  available?: Partial<Record<AgentBackend, boolean>>
+  /** M319. The canvas's enforced ceilings, read live — a budget a backend cannot report to is stated before the start. */
+  budgetUsd?: number
+  windowPercent?: number
 }
 
 export type StartWorkResolution =
@@ -200,5 +214,37 @@ export function startWorkSwarmRefusal(choice: StartWorkChoice, ctx: StartWorkCon
     agentAvailable: ctx.agentAvailable !== false,
     ...(mate === undefined ? {} : { teammate: { name: teammateWord(mate), places: mate.places } }),
     ...(ctx.itemState === undefined ? {} : { item: { state: ctx.itemState } })
+  })
+}
+
+/**
+ * M319. What THIS start asks of its backend: a dispatched lane (always), an
+ * arrangement's seats, the canvas's budget and window ceilings, and what the
+ * brief, criteria and recipe say (an image to read; a tree not to touch).
+ * `text` is everything the person wrote about the task.
+ */
+export function startWorkRequirements(choice: StartWorkChoice, ctx: StartWorkContext, text = ''): TaskRequirement[] {
+  const words = `${choice.title}\n${text}`
+  return taskRequirements({
+    lane: true,
+    swarm: choice.swarm !== undefined,
+    ...(ctx.budgetUsd === undefined ? {} : { budgetUsd: ctx.budgetUsd }),
+    ...(ctx.windowPercent === undefined ? {} : { windowPercent: ctx.windowPercent }),
+    images: briefWantsImages(words),
+    readOnly: briefIsReadOnly(words)
+  })
+}
+
+/** M319. The chosen backend's fit — the sheet's rows, its disabled Start and the executor's last gate read this one answer. */
+export function startWorkBackendFit(choice: StartWorkChoice, ctx: StartWorkContext, text = ''): BackendFit {
+  const backend = choice.backend ?? DEFAULT_BACKEND
+  return backendFit(backend, startWorkRequirements(choice, ctx, text), ctx.available?.[backend] ?? true)
+}
+
+/** M319. Every backend's fit for the picker, in registry order — a row that cannot do the task is offered disabled with why, never dropped. */
+export function startWorkBackendRows(choice: StartWorkChoice, ctx: StartWorkContext, text = ''): { backend: AgentBackend; label: string; fit: BackendFit }[] {
+  return BACKEND_IDS.map((backend) => {
+    const fit = startWorkBackendFit({ ...choice, backend }, ctx, text)
+    return { backend, label: BACKENDS[backend].label, fit }
   })
 }

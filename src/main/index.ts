@@ -18,7 +18,9 @@ import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createWindow, sendToRenderer } from './bootstrap/window'
-import { startAgentRuntime } from './bootstrap/agent-runtime'
+import { startAgentRuntime, createJobDoors } from './bootstrap/agent-runtime'
+import { createTaskDoors } from './bootstrap/task-handlers'
+import { withDigests } from './task-evidence'
 import { initTelemetry } from './bootstrap/telemetry-init'
 import { sweepOrphans } from './bootstrap/orphan-sweep'
 import { createWatchWiring } from './bootstrap/watch-handlers'
@@ -264,7 +266,10 @@ app.whenReady().then(async () => {
     (filter, limit) => stores.runLedger.timeline(filter, limit),
     async (row) => {
       try {
-        await stores.runLedger.append(row)
+        // M320. An artifact row's per-path digests are MAIN's, taken from
+        // the files as they are now, at the moment the row lands — the
+        // reviewed version a later reader compares the live file with.
+        await stores.runLedger.append(await withDigests(row))
         return true
       } catch {
         // A row that did not land is reported as not landed. The caller says
@@ -277,7 +282,12 @@ app.whenReady().then(async () => {
     // M311–M314. The workflow kit: combine, repository setup, editor, recipes.
     kit,
     // Brief #20. What was running when the window last went away, once.
-    () => stores.lastExit.take()
+    () => stores.lastExit.take(),
+    // M316. The job journal's doors: what an interrupted pool left, and the choices.
+    createJobDoors(state, stores),
+    // M320–M321. The task doors: deliverables, their search index, the gated
+    // hand-off export, and the recipe preflight.
+    createTaskDoors(state, stores)
   )
   createWindow(state, stores)
 

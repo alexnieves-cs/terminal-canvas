@@ -2739,6 +2739,26 @@ const WS = [
     })())
 }
 
+// M319 — start.backend.*. The backend is judged against THIS task before
+// anything is minted: the sheet's rows, its disabled Start and the executor
+// read one answer.
+{
+  const ctx = { teammates: [], repos: [], wanted: null, available: { claude: true, codex: true, copilot: false, acp: false }, budgetUsd: 5 }
+  const solo = P.startWorkBackendFit({ title: 'fix it', backend: 'codex' }, ctx)
+  const arr = P.startWorkBackendFit({ title: 'fix it', backend: 'codex', swarm: 'implement' }, ctx)
+  const noCli = P.startWorkBackendFit({ title: 'fix it', backend: 'copilot' }, ctx)
+  const dflt = P.startWorkBackendFit({ title: 'fix it' }, ctx)
+  const shot = P.startWorkBackendFit({ title: 'match the mock' }, ctx, 'see the screenshot attached to the issue')
+  const rows = P.startWorkBackendRows({ title: 'fix it', swarm: 'implement' }, ctx)
+  ok('start.backend.1 an absent backend is claude; a solo codex lane is degraded (runs without an appended prompt, an interrupt and a known cost — the $5 budget cannot see it) while a codex ARRANGEMENT and a copilot row discovery did not find are refused; the picker lists every backend in registry order with its verdict, and an image in the brief becomes a requirement',
+    dflt.backend === 'claude' && dflt.verdict === 'fits' &&
+      solo.verdict === 'degraded' && ['prompt', 'interrupt', 'cost'].every((id) => solo.rows.some((r) => r.id === id && !r.ok)) &&
+      arr.verdict === 'refused' && noCli.verdict === 'refused' && /not found on the login PATH/.test(noCli.refusal) &&
+      rows.map((r) => r.backend).join() === 'claude,codex,copilot,acp' && rows[0].fit.verdict === 'fits' && rows.slice(1).every((r) => r.fit.verdict === 'refused') &&
+      shot.rows.some((r) => r.id === 'images') && !dflt.rows.some((r) => r.id === 'images'),
+    JSON.stringify({ solo, arr: arr.verdict, noCli: noCli.refusal, rows: rows.map((r) => [r.backend, r.fit.verdict]) }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

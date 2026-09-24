@@ -74,6 +74,7 @@ import {
   orchActivityEvents,
   subscribeOrchActivity
 } from './orchestration-activity'
+import { classifyActivity } from '@renderer/shell/task-queue'
 import { ORCH_COS_TILT, ORCH_FIT_FLOOR, ORCH_SIN_TILT, ORCH_ZOOM_RANGE, orchDepthBand, orchFitCamera, orchProjectWorld, type OrchCamera, type OrchDepthBand } from './orchestration-depth'
 import type { OrchCubeSpec, OrchPlatformSpec } from './OrchestrationCubes'
 import { buildOrchLive, type OrchLiveSessionInput, type OrchLiveState } from './orchestration-live'
@@ -94,7 +95,9 @@ import {
   type OrchAttentionRow, type TaskIsland
 } from './orchestration-island'
 import { ORCH_DEP_GROUPING, ORCH_DEP_READ_ONLY, orchBlockedLine, orchDependencyEdges, orchDependencyFocus, type OrchDependencyEdge } from './orchestration-dependency'
-import { orchControls, orchLimits, orchRetryPreview, orchSessionStanding, orchSpendWord } from './orchestration-controls'
+import { orchControls, orchLimits, orchRetryPreview, orchSessionStanding, orchSpendWord, orchStops } from './orchestration-controls'
+import { backendHandoff, type HandoffTurn } from '@shared/backend-fit'
+import { BACKEND_IDS } from '@shared/agent-backends'
 import { useRateLimit } from '@renderer/session/rate-limit-store'
 import { BACKENDS, type AgentBackend } from '@shared/agent-backends'
 import type { WorktreeListRow } from '@shared/ipc-contract'
@@ -185,6 +188,15 @@ export interface OrchestrationViewProps {
    * page is the follow-up composer's `onSend` (M299), owned by the canvas.
    */
   onRetryOnCanvas?: (panelId: string, prompt: string) => void
+  /**
+   * M319. Continue a chat's task on ANOTHER backend: a new chat on `backend`,
+   * in the same folder and as the same teammate, with the reviewed hand-off
+   * INSERTED in its composer (M80's rule — the person sends it). Absent hides
+   * the door.
+   */
+  onContinueOnBackend?: (panelId: string, backend: AgentBackend, text: string) => void
+  /** M319. Discovery's answer per backend CLI, for the hand-off's target list. */
+  backendsAvailable?: Partial<Record<AgentBackend, boolean>>
   /** M299. The workspace's name, for the title row (`Orchestrate / <workspace>`). */
   workspaceName?: string
   /**
@@ -1530,7 +1542,7 @@ function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, onContinueOnBackend, backendsAvailable, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -1623,6 +1635,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [depFocus, setDepFocus] = useState(false)
   // M290. The retry PREVIEW, by panel id; nothing is sent from this page.
   const [retryFor, setRetryFor] = useState<string | null>(null)
+  // M319. The cross-backend hand-off: which chat, to which backend, and the
+  // draft as the person has edited it (null until they touch it — the draft
+  // then follows the target they pick).
+  const [handoffFor, setHandoffFor] = useState<string | null>(null)
+  const [handoffTo, setHandoffTo] = useState<AgentBackend | null>(null)
+  const [handoffEdit, setHandoffEdit] = useState<string | null>(null)
   // M290. The global limits, read off the settings store the way the
   // navigator and the file tree read theirs; re-read when settings change.
   const [limitRows, setLimitRows] = useState<{ maxConcurrent: number; budgetUsd: number; budgetWindowPercent: number } | null>(null)
@@ -1647,6 +1665,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [query, setQuery] = useState('')
   const [metric, setMetric] = useState<OrchMetricId | null>(null)
   const [activityScope, setActivityScope] = useState<OrchActivityScope>('live')
+  // M318. Information vs intervention: the feed can narrow to what needs a person.
+  const [interveneOnly, setInterveneOnly] = useState(false)
   const [pipelineStage, setPipelineStage] = useState<WorkItemState | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [frameTask, setFrameTask] = useState(true)
@@ -2436,6 +2456,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const retryPreview = retryFor !== null && selectedRow !== null && retryFor === selectedRow.id && backendOf(retryFor) !== undefined && lastUserPrompt(retryFor) !== undefined
     ? orchRetryPreview({ title: selectedRow.title, backend: backendOf(retryFor)!, ...(selectedLive?.cwd === undefined || selectedLive.cwd === '' ? {} : { cwd: selectedLive.cwd }), lastPrompt: lastUserPrompt(retryFor)!, ...(selectedChat.lastTurn === undefined ? {} : { lastTurn: selectedChat.lastTurn }) })
     : null
+  // M319. The three stops for the selected chat, and the hand-off draft.
+  const selectedStops = selectedRow === null ? null : orchStops({
+    kind: selectedRow.kind, state: selectedState, queued: selectedChat.snapshot?.queued ?? 0,
+    ...(backendOf(selectedRow.id) === undefined ? {} : { backend: backendOf(selectedRow.id)! }),
+    ...(selectedChat.snapshot === null ? {} : { processUp: selectedChat.snapshot.pid !== undefined })
+  })
+  const handoffFrom = handoffFor !== null && selectedRow !== null && handoffFor === selectedRow.id ? backendOf(handoffFor) : undefined
+  const handoffTargets = handoffFrom === undefined ? [] : BACKEND_IDS.filter((b) => b !== handoffFrom && backendsAvailable?.[b] !== false)
+  const handoffTarget = handoffTo !== null && handoffTargets.includes(handoffTo) ? handoffTo : handoffTargets[0]
+  const handoffItem = island?.itemId === undefined ? undefined : workItems.find((w) => w.id === island.itemId)
+  const handoffDraft = handoffFrom === undefined || handoffTarget === undefined || selectedRow === null ? null : backendHandoff({
+    from: handoffFrom, to: handoffTarget,
+    title: handoffItem?.title ?? selectedRow.title,
+    ...(handoffItem?.brief === undefined ? {} : { brief: handoffItem.brief }),
+    ...(handoffItem?.criteria === undefined ? {} : { criteria: handoffItem.criteria }),
+    ...(selectedLive?.cwd === undefined || selectedLive.cwd === '' ? {} : { cwd: selectedLive.cwd }),
+    turns: selectedChat.turns.map((t): HandoffTurn => ({ role: t.role === 'user' ? 'user' : 'assistant', text: t.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n') }))
+  })
   // M289. The typed relations, from the graph's authored edges and the canvas's
   // recorded outcomes; the focus is the selection's closure.
   const depEdges: OrchDependencyEdge[] = useMemo(() => orchDependencyEdges({
@@ -3136,6 +3174,51 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     {selectedControls.controls.map((c) => <li key={c.id} className="orch__caption"><strong>{c.label.replace('…', '')}</strong> {c.affects}</li>)}
                   </ul>
                 )}
+                {/* M319. THE THREE STOPS, never one word for all of them: Interrupt ends
+                    the turn and keeps the conversation, Cancel drops what is queued,
+                    End process kills the CLI and keeps the session. Each says what it
+                    does to the turn, the process and the conversation — or why not. */}
+                {selectedStops !== null && (
+                  <div className="orch__stops" data-orch-stops={selectedRow.id} role="group" aria-label="Stop">
+                    <span className="orch__roster-actions">
+                      {selectedStops.map((st) => (
+                        <button key={st.kind} type="button" className={`orch__mini${st.kind === 'terminate' ? ' orch__mini--stop' : ''}`} data-orch-stop={st.kind} disabled={!st.available} title={st.effect}
+                          {...shellControl(() => {
+                            if (!st.available) return
+                            if (st.kind === 'interrupt') onInterrupt?.(selectedRow.id)
+                            else if (st.kind === 'cancel') void window.canvas.agentSession.cancelQueued(selectedRow.id)
+                            else void window.canvas.agentSession.terminate(selectedRow.id)
+                          })}>{st.label}</button>
+                      ))}
+                      {onContinueOnBackend !== undefined && (
+                        <button type="button" className="orch__mini" data-orch-handoff-open aria-expanded={handoffFor === selectedRow.id}
+                          {...shellControl(() => { setHandoffEdit(null); setHandoffTo(null); setHandoffFor((cur) => (cur === selectedRow.id ? null : selectedRow.id)) })}>Continue on another backend…</button>
+                      )}
+                    </span>
+                    <ul className="orch__control-notes">{selectedStops.map((st) => <li key={st.kind} className="orch__caption" data-orch-stop-effect={st.kind}><strong>{st.label}</strong> {st.available ? '' : '(not now) '}{st.effect}</li>)}</ul>
+                  </div>
+                )}
+                {handoffDraft !== null && handoffTarget !== undefined && onContinueOnBackend !== undefined && (
+                  <div className="orch__retry" data-orch-handoff={selectedRow.id} role="group" aria-label="Continue on another backend">
+                    <div className="orch__section-title">Continue on another backend — a draft, nothing sent</div>
+                    <label className="orch__caption">To{' '}
+                      <select className="orch__select" data-orch-handoff-to value={handoffTarget} onChange={(e) => { setHandoffTo(e.target.value as AgentBackend); setHandoffEdit(null) }}>
+                        {handoffTargets.map((b) => <option key={b} value={b}>{BACKENDS[b].label}</option>)}
+                      </select>
+                      {' '}— a new conversation in the same folder. {BACKENDS[handoffFrom!].label}'s conversation cannot be resumed there, so only this text carries.
+                    </label>
+                    <textarea className="orch__term-log orch__retry-prompt orch__handoff-text" data-orch-handoff-text aria-label="Hand-off text" rows={10} spellCheck={false}
+                      value={handoffEdit ?? handoffDraft.text}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setHandoffEdit(e.target.value)} />
+                    <p className="orch__caption" data-orch-handoff-dropped>Does not carry: {handoffDraft.dropped.join('; ')}.{handoffDraft.redacted > 0 ? ` ${handoffDraft.redacted} secret${handoffDraft.redacted === 1 ? '' : 's'} redacted.` : ''}</p>
+                    <span className="orch__roster-actions">
+                      <button type="button" className="orch__mini" data-orch-handoff-go
+                        {...shellControl(() => { const text = handoffEdit ?? handoffDraft.text; setHandoffFor(null); onContinueOnBackend(selectedRow.id, handoffTarget, text) })}>Open on {BACKENDS[handoffTarget].label} with this text</button>
+                      <button type="button" className="orch__mini" data-orch-handoff-cancel {...shellControl(() => setHandoffFor(null))}>Cancel</button>
+                    </span>
+                  </div>
+                )}
                 {/* Folded (the critic: seven lines of prose at the rest layer): the summary says how
                     many and which; the reasons open on demand. */}
                 {selectedControls !== null && (selectedRow.kind === 'chat' || selectedRow.kind === 'terminal') && (
@@ -3292,11 +3375,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 </select>
               </label>
               <p className="orch__caption">{orchActivityCoverage(activityScope)}</p>
+              {/* M318. What needs a person, apart from what only informs. */}
+              {(() => {
+                const need = filteredActivity.filter((e) => classifyActivity(e) === 'intervene').length
+                return (
+                  <p className="orch__caption orch__activity-weights" data-orch-activity-weights={need}>
+                    {need === 0 ? 'Nothing here needs you — every row is information.' : `${need} need${need === 1 ? 's' : ''} you · ${filteredActivity.length - need} for information`}
+                    {' '}<button type="button" className="orch__mini" data-orch-activity-intervene={interveneOnly ? 'on' : 'off'} aria-pressed={interveneOnly}
+                      {...shellControl(() => setInterveneOnly(!interveneOnly))}>{interveneOnly ? 'Show everything' : 'Needs you only'}</button>
+                  </p>
+                )
+              })()}
               <ul className="orch__activity" aria-label="Activity feed">
-                {filteredActivity.length === 0 ? (
+                {(interveneOnly ? filteredActivity.filter((e) => classifyActivity(e) === 'intervene') : filteredActivity).length === 0 ? (
                   <li><EmptyState id="orch-activity" /></li>
-                ) : filteredActivity.map((e) => (
-                  <li key={e.id}>
+                ) : (interveneOnly ? filteredActivity.filter((e) => classifyActivity(e) === 'intervene') : filteredActivity).map((e) => (
+                  <li key={e.id} data-activity-weight={classifyActivity(e)}>
                     <button
                       type="button"
                       className="orch__activity-row"
@@ -3311,6 +3405,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                       <span className="orch__event-chip" data-tone={e.tone} aria-hidden="true">{e.kind === 'watcher' ? <KindWatcher /> : e.kind === 'task' ? <KindWork /> : e.kind === 'agent' ? <KindChat /> : <Orbit />}</span>
                       <span className="orch__activity-title">{e.title}</span>
                       <span className="orch__activity-detail">{e.detail}</span>
+                      {classifyActivity(e) === 'intervene' && <span className="orch__activity-need" data-activity-need>{agentWord('wants-you').word}</span>}
                       <time className="orch__activity-time">{formatAgo(e.at)}</time>
                     </button>
                   </li>
@@ -3376,6 +3471,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         output={{ panelId: outputPanelId, title: selectedRow?.title ?? liveSnap.terminalSnippet?.title, command: outputCommand, lines: outputLines }}
         refresh={benchRefresh}
         edges={depEdges}
+        {...(onSend === undefined ? {} : { onSend })}
       />
     </div>
   )

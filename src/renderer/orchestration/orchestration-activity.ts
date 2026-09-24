@@ -19,6 +19,12 @@ export interface OrchActivityEvent {
   title: string
   detail: string
   tone: Tone
+  /**
+   * M318. The producer knows this needs a person although its tone does not
+   * say so — a failed check is `exited`, like a clean exit. Absent is "read
+   * the tone" (`classifyActivity`), so every older producer keeps its meaning.
+   */
+  intervene?: true
 }
 
 export const ORCH_ACTIVITY_CAP = 50
@@ -49,7 +55,8 @@ export function pushOrchActivity(input: Omit<OrchActivityEvent, 'id'> & { id?: s
     detail: input.detail,
     tone: input.tone,
     ...(input.panelId !== undefined ? { panelId: input.panelId } : {}),
-    ...(input.panelKind !== undefined ? { panelKind: input.panelKind } : {})
+    ...(input.panelKind !== undefined ? { panelKind: input.panelKind } : {}),
+    ...(input.intervene === true ? { intervene: true as const } : {})
   }
   events = [event, ...events].slice(0, ORCH_ACTIVITY_CAP)
   notify()

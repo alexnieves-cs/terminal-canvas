@@ -391,6 +391,9 @@ export function applyChatEvent(event: AgentSessionEvent): void {
           status: event.status,
           exitCode: event.status === 'exited' ? event.exitCode : snap.exitCode,
           exitSignal: event.status === 'exited' ? event.exitSignal : snap.exitSignal,
+          // M319. A failed resume rides the exit; any other status clears it
+          // (the next spawn is a fresh conversation, and the sentence is spent).
+          ...(event.status === 'exited' && event.resumeLost !== undefined ? { resumeLost: event.resumeLost } : { resumeLost: undefined }),
           pid: event.status === 'exited' || event.status === 'disposed' ? undefined : (event.status === 'starting' ? snap.pid ?? -1 : snap.pid)
         },
         live: event.status === 'exited' || event.status === 'disposed' ? null : prev.live

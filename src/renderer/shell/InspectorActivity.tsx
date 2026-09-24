@@ -4,6 +4,8 @@ import { StatusDot } from '@renderer/primitives'
 import { KIND_GLYPH, KindTerminal } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 import { formatAgo } from './format-ago'
+import { classifyActivity } from './task-queue'
+import { agentWord } from '@renderer/panels/panel-state'
 
 export interface InspectorActivityProps {
   /** The selected panel, or null for the whole canvas's feed. */
@@ -60,10 +62,11 @@ function InspectorActivityImpl({ panelId, onGoToPanel }: InspectorActivityProps)
             <span className="activity-row__title">{e.title}</span>
             <time className="activity-row__time" dateTime={new Date(e.at).toISOString()}>{formatAgo(e.at, now)}</time>
             <span className="activity-row__detail">{e.detail}</span>
+            {classifyActivity(e) === 'intervene' && <span className="activity-row__need" data-activity-need>{agentWord('wants-you').word}</span>}
           </>
         )
         return (
-          <li key={e.id} className="activity-row" data-tone={e.tone} data-activity-kind={e.kind}>
+          <li key={e.id} className="activity-row" data-tone={e.tone} data-activity-kind={e.kind} data-activity-weight={classifyActivity(e)}>
             {jump
               ? <button type="button" className="activity-row__main activity-row__main--verb" title={`Go to ${e.title}`} onMouseDown={(ev) => ev.preventDefault()} onClick={() => onGoToPanel(e.panelId!)}>{body}</button>
               : <div className="activity-row__main">{body}</div>}
