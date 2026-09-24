@@ -11,11 +11,14 @@ import { importClaudeTranscript } from '../claude-transcript-import'
 import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
-import { type AgentCreateResult, type AgentSessionSpec } from '../../shared/agent-session'
+import { type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
 import type { Places } from './places'
 import type { Stores } from './stores'
 import type { MainState } from './context'
+
+/** M322. What a relaunch says about a message that was still waiting when the app closed. */
+const NOT_DELIVERED_CLOSED = 'not delivered — the app closed before this message was sent'
 
 /**
  * M73. The chat panel's verbs over the runtime and the transcript log.
@@ -32,6 +35,34 @@ import type { MainState } from './context'
  */
 export function createAgentHandlers(state: MainState, stores: Stores, places: Places): AgentHandlers {
   const { layoutStore, agentTranscripts, ptyManager, captureBaseline, dropBaseline } = stores
+
+  const resolveAll = (attachments: readonly ChatAttachment[]): { list: { mediaType: string; base64: string; name: string }[] } | { refused: string } => {
+    const list: { mediaType: string; base64: string; name: string }[] = []
+    for (const attachment of attachments) {
+      const resolved = resolveAttachment(attachment)
+      if (resolved.kind === 'refused') return { refused: resolved.reason }
+      list.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
+    }
+    return { list }
+  }
+  // M118. Every refusal in the SESSION's row's words — the first cut answered codex's for every backend.
+  const answerIn = (id: string, answer: SendResult): SendAnswer => {
+    const row = BACKENDS[state.agents?.get(id)?.backend ?? 'claude']
+    if (answer === 'refused-backend') return { refused: row.reasons.noCli }
+    if (answer === 'refused-sandbox') return { refused: row.reasons.noSandbox }
+    if (answer === 'refused-images') return { refused: row.reasons.noImages }
+    // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
+    if (answer === 'refused-budget') {
+      const windowPct = Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
+      const util = windowUtilization(state.agents?.rateLimit() ?? RATE_LIMIT_NONE)
+      if (windowPct > 0 && util !== undefined && util >= windowPct / 100) {
+        return { refused: `over the ${windowPct}% usage-window budget for this canvas — raise agents.budgetWindowPercent in settings, or wait for a window to reset` }
+      }
+      const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+      return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
+    }
+    return answer
+  }
 
   return {
     create: (spec: AgentSessionSpec): AgentCreateResult => {
@@ -95,29 +126,31 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     // M75. Attachments are resolved HERE (the renderer has no fs): every one
     // must decode or the send is refused whole, naming the one that could not.
     send: (id, text, attachments) => {
-      const images: { mediaType: string; base64: string; name: string }[] = []
-      for (const attachment of attachments) {
-        const resolved = resolveAttachment(attachment)
-        if (resolved.kind === 'refused') return { refused: resolved.reason }
-        images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
-      }
-      const answer = state.agents?.send(id, text, images) ?? 'no-session'
-      // M118. Every refusal in the SESSION's row's words — the first cut answered codex's for every backend.
-      const row = BACKENDS[state.agents?.get(id)?.backend ?? 'claude']
-      if (answer === 'refused-backend') return { refused: row.reasons.noCli }
-      if (answer === 'refused-sandbox') return { refused: row.reasons.noSandbox }
-      if (answer === 'refused-images') return { refused: row.reasons.noImages }
-      // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
-      if (answer === 'refused-budget') {
-        const windowPct = Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
-        const util = windowUtilization(state.agents?.rateLimit() ?? RATE_LIMIT_NONE)
-        if (windowPct > 0 && util !== undefined && util >= windowPct / 100) {
-          return { refused: `over the ${windowPct}% usage-window budget for this canvas — raise agents.budgetWindowPercent in settings, or wait for a window to reset` }
-        }
-        const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
-        return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
-      }
-      return answer
+      const images = resolveAll(attachments)
+      if ('refused' in images) return images
+      return answerIn(id, state.agents?.send(id, text, images.list) ?? 'no-session')
+    },
+    // M322. Stop and send: the same attachment rule and the same refusals.
+    sendCorrection: (id, text, attachments) => {
+      const images = resolveAll(attachments)
+      if ('refused' in images) return { answer: images, interrupted: false }
+      const sent = state.agents?.sendCorrection(id, text, images.list) ?? { result: 'no-session' as const, interrupted: false }
+      return { answer: answerIn(id, sent.result), interrupted: sent.interrupted }
+    },
+    // M322. A turn only the durable log holds (yesterday's undelivered
+    // message, after a relaunch) is dropped from the log here — the session
+    // does not hold it, and the manager rightly answers false for it.
+    queueEdit: (req) => {
+      const manager = state.agents
+      if (manager === null) return false
+      if (req.op === 'edit') return manager.editQueued(req.id, req.turnId, req.text)
+      if (req.op === 'remove') return manager.removeQueued(req.id, req.turnId)
+      if (manager.discardUndelivered(req.id, req.turnId)) return true
+      const logged = agentTranscripts.read(req.id).turns.find((t) => t.id === req.turnId)
+      if (logged === undefined || logged.role !== 'user' || logged.delivery === undefined) return false
+      if (manager.get(req.id)?.queue?.some((q) => q.turnId === req.turnId) === true) return false
+      agentTranscripts.removeTurn(req.id, req.turnId)
+      return true
     },
     clipboardImage: () => {
       const image = clipboard.readImage()
@@ -164,7 +197,13 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     list: () => state.agents?.list() ?? [],
     transcript: (id) => {
       const read = agentTranscripts.read(id)
-      return { turns: read.turns, snapshot: state.agents?.get(id) ?? null, ...(read.meta === undefined ? {} : { meta: read.meta }) }
+      const snapshot = state.agents?.get(id) ?? null
+      // M322. A turn the log still calls `queued` that no live queue holds was
+      // waiting when the app closed: the agent never received it, and the
+      // panel must say so rather than show it as sent or as still waiting.
+      const waiting = new Set((snapshot?.queue ?? []).map((q) => q.turnId))
+      const turns = read.turns.map((t) => (t.delivery === 'queued' && !waiting.has(t.id) ? { ...t, delivery: 'not-delivered' as const, deliveryNote: NOT_DELIVERED_CLOSED } : t))
+      return { turns, snapshot, ...(read.meta === undefined ? {} : { meta: read.meta }) }
     },
     // M74. Open a terminal's session as a chat. Three refusals, each named
     // for its fix; the live check is the one-front-end-at-a-time rule.

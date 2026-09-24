@@ -60,6 +60,8 @@ export interface WorkNodeProps {
   handoff?: ReviewHandoff
   /** Focus the lane's conversation. The `resume` half of Start / Resume / Review. */
   onResume: (itemId: string) => void
+  /** M324. Open the task's focus view. Optional: without it the card draws no Focus verb. */
+  onFocusTask?: (itemId: string) => void
   onAnswer: (panelId: string, requestId: string, allow: boolean) => void
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
@@ -328,6 +330,11 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   older than D08 and recorded, not changed. */}
               <button type="button" className="pf__verb pf__verb--word" data-work-verb="show"
                 title="Frame this task — its conversation, lane, reviews and links; nothing moves" {...shellControl(() => props.onShow(panel.rect.id))}>Show</button>
+              {/* M324. The task's focus view — a page, so like Show it moves no geometry and stays enabled in the merged view. */}
+              {props.onFocusTask !== undefined && (
+                <button type="button" className="pf__verb pf__verb--word" data-work-verb="focus"
+                  title="Open this task beside its conversation — changes, checks, review and preview in one place" {...shellControl(() => props.onFocusTask?.(item.id))}>Focus</button>
+              )}
               {/* M275. The four arrangements, under one verb: a card offers the
                   SHAPES rather than a second teammate list, because the
                   teammate is already the `assign` menu's question and asking it

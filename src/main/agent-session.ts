@@ -29,6 +29,7 @@ import type {
   AgentSessionCounters,
   AgentSessionSnapshot,
   AgentSessionEvent,
+  QueuedMessage,
   SendResult
 } from '@shared/agent-session'
 /**
@@ -205,8 +206,15 @@ interface Session {
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
   abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'terminated' | null
-  /** `auto` marks a continuation the run pushed: dropped with the run, never served after it. */
-  queue: { text: string; images: OutgoingImage[]; auto?: true }[]
+  /**
+   * `auto` marks a continuation the run pushed: dropped with the run, never served after it.
+   * M322. Each entry names the stored user turn that carries it (`turnId`),
+   * so an edit rewrites that turn, a removal withdraws it, and a dequeue
+   * re-stores it — delivered, and at the END — at the moment it is written.
+   */
+  queue: QueueEntry[]
+  /** M322. The stem of this session's user-turn ids, so a relaunch's `u-1` is never yesterday's `u-1` in the log. */
+  turnStem: string
   pending: Map<string, PendingPermission>
   /** M102. Resolvers for the questions that are ours (the broker's), by request id. */
   external: Map<string, (allow: boolean) => void>
@@ -226,6 +234,18 @@ interface Session {
   /** M97. The last resolved run, shown on the chip until the next start or a dispose. */
   autoLast?: AutoStatus
 }
+
+interface QueueEntry {
+  turnId: string
+  text: string
+  images: (OutgoingImage & { name?: string })[]
+  reason: 'in-flight' | 'concurrency'
+  auto?: true
+  correction?: true
+}
+
+/** M322. What the transcript says about a message the agent never received because its process ended. */
+const NOT_DELIVERED_EXIT = 'not delivered — the agent stopped before this message was sent'
 
 interface AutoRun {
   /** True while `send` is being called BY the run, so the queue entry is tagged. */
@@ -296,6 +316,7 @@ export class AgentSessionManager {
       interruptTimer: null,
       abortReason: null,
       queue: [],
+      turnStem: this.now().toString(36),
       pending: new Map(),
       external: new Map(),
       usage: emptyTotals(),
@@ -348,38 +369,171 @@ export class AgentSessionManager {
     }
     const busy = [...this.sessions.values()].filter((s) => s.inFlight).length
     if (limits.maxConcurrent > 0 && !session.inFlight && busy >= limits.maxConcurrent) {
-      this.storeTurn(session, {
-        id: `u-${++session.userTurns}`,
-        role: 'user',
-        blocks: [{ type: 'text', text }, ...images.map((img) => ({ type: 'image' as const, mediaType: img.mediaType, size: Buffer.byteLength(img.base64, 'base64') }))],
-        at: this.now()
-      })
-      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })), ...(session.auto?.sending ? { auto: true as const } : {}) })
-      this.emit({ id, type: 'queued', text, reason: 'concurrency' })
+      this.enqueue(session, text, images, 'concurrency')
       return 'queued'
     }
     // On the transcript the moment it is sent, before the CLI has echoed
     // anything — the echo (`isReplay`) is deliberately NOT stored, or every
     // message would appear twice.
-    this.storeTurn(session, {
-      id: `u-${++session.userTurns}`,
+    // M90. A codex process lingers between its result and its exit; a send in
+    // that window cannot spawn (the thread is still held) and must not be
+    // dropped as sent — it queues, and handleExit serves it.
+    if (session.inFlight || (BACKENDS[session.backend].oneProcessPerTurn && session.proc !== undefined)) {
+      this.enqueue(session, text, images, 'in-flight')
+      return 'queued'
+    }
+    this.storeTurn(session, this.userTurn(`u-${session.turnStem}-${++session.userTurns}`, text, images))
+    this.startTurn(session, text, images)
+    return 'sent'
+  }
+
+  /**
+   * M322. STOP AND SEND: the correction goes FIRST in line and the turn in
+   * flight is interrupted, so the agent's next input is the correction rather
+   * than whatever was already waiting. The interrupted result serves the
+   * queue's head (the ordinary path), so nothing new decides what goes next.
+   * With nothing in flight it is an ordinary send. A backend with no
+   * interrupt door answers `interrupted: false` and the correction still
+   * leads the queue — sent the moment this turn ends — which the composer
+   * says rather than offering a stop that cannot happen.
+   */
+  sendCorrection(id: string, text: string, images: readonly (OutgoingImage & { name?: string })[] = []): { result: SendResult; interrupted: boolean } {
+    const session = this.sessions.get(id)
+    if (!session) return { result: 'no-session', interrupted: false }
+    const result = this.send(id, text, images)
+    if (result !== 'queued') return { result, interrupted: false }
+    const entry = session.queue.pop()
+    if (entry === undefined) return { result, interrupted: false }
+    // Behind any earlier correction (two corrections keep the order they were
+    // typed in), ahead of everything else.
+    const at = session.queue.findIndex((q) => q.correction !== true)
+    session.queue.splice(at < 0 ? session.queue.length : at, 0, { ...entry, correction: true })
+    this.emitQueue(session)
+    return { result, interrupted: this.interrupt(id) }
+  }
+
+  /**
+   * M322. A waiting message's new text. The stored turn is rewritten under its
+   * own id (the log keeps the last line per id), so the transcript, a
+   * relaunch and the wire all read the edited words. False once it has been
+   * sent, or for an empty text — an empty edit is a removal, and says so.
+   */
+  editQueued(id: string, turnId: string, text: string): boolean {
+    const session = this.sessions.get(id)
+    const entry = session?.queue.find((q) => q.turnId === turnId)
+    if (session === undefined || entry === undefined || entry.auto === true || text.trim() === '') return false
+    entry.text = text
+    const turn = session.turns.find((t) => t.id === turnId)
+    if (turn !== undefined) {
+      const first = turn.blocks.findIndex((x) => x.type === 'text')
+      turn.blocks = turn.blocks.map((block, i) => (i === first ? { type: 'text', text } : block))
+      this.emit({ id, type: 'turn', turn: { ...turn, blocks: [...turn.blocks] } })
+    }
+    this.emitQueue(session)
+    return true
+  }
+
+  /** M322. One waiting message withdrawn before it was sent: out of the queue AND off the transcript. False once sent. */
+  removeQueued(id: string, turnId: string): boolean {
+    const session = this.sessions.get(id)
+    const at = session?.queue.findIndex((q) => q.turnId === turnId) ?? -1
+    if (session === undefined || at < 0) return false
+    session.queue.splice(at, 1)
+    this.withdrawTurn(session, turnId)
+    this.emit({ id, type: 'queue-dropped', count: 1 })
+    this.emitQueue(session)
+    return true
+  }
+
+  /**
+   * M322. An UNDELIVERED turn discarded — one the transcript marks
+   * `not-delivered` (a dropped queue). False for a turn this session does not
+   * hold or one that was delivered: what the agent saw is history, and
+   * history is not edited. A turn only the durable log holds (a relaunch) is
+   * main's handler's to drop; this answers false for it.
+   */
+  discardUndelivered(id: string, turnId: string): boolean {
+    const session = this.sessions.get(id)
+    const turn = session?.turns.find((t) => t.id === turnId)
+    if (session === undefined || turn === undefined || turn.delivery !== 'not-delivered') return false
+    this.withdrawTurn(session, turnId)
+    return true
+  }
+
+  private userTurn(turnId: string, text: string, images: readonly OutgoingImage[], delivery?: 'queued'): TranscriptTurn {
+    return {
+      id: turnId,
       role: 'user',
       blocks: [
         { type: 'text', text },
         ...images.map((img) => ({ type: 'image' as const, mediaType: img.mediaType, size: Buffer.byteLength(img.base64, 'base64') }))
       ],
-      at: this.now()
-    })
-    // M90. A codex process lingers between its result and its exit; a send in
-    // that window cannot spawn (the thread is still held) and must not be
-    // dropped as sent — it queues, and handleExit serves it.
-    if (session.inFlight || (BACKENDS[session.backend].oneProcessPerTurn && session.proc !== undefined)) {
-      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })), ...(session.auto?.sending ? { auto: true as const } : {}) })
-      this.emit({ id, type: 'queued', text, reason: 'in-flight' })
-      return 'queued'
+      at: this.now(),
+      ...(delivery === undefined ? {} : { delivery })
     }
-    this.startTurn(session, text, images)
-    return 'sent'
+  }
+
+  /**
+   * M322. The queue entry is pushed and ANNOUNCED before its turn is stored,
+   * so no surface ever holds a `queued` turn that is not in the waiting list
+   * (it would read as undelivered for a frame).
+   */
+  private enqueue(session: Session, text: string, images: readonly (OutgoingImage & { name?: string })[], reason: 'in-flight' | 'concurrency'): void {
+    const turnId = `u-${session.turnStem}-${++session.userTurns}`
+    session.queue.push({ turnId, text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64, ...(img.name === undefined ? {} : { name: img.name }) })), reason, ...(session.auto?.sending ? { auto: true as const } : {}) })
+    this.emitQueue(session)
+    this.storeTurn(session, this.userTurn(turnId, text, images, 'queued'))
+    this.emit({ id: session.id, type: 'queued', text, reason })
+  }
+
+  /**
+   * M322. The queue's head, handed to the agent: its `queued` turn is
+   * withdrawn and stored again DELIVERED, at the end of the transcript —
+   * where it now belongs, after the answer it waited behind.
+   */
+  private takeNext(session: Session): QueueEntry | undefined {
+    const next = session.queue.shift()
+    if (next === undefined) return undefined
+    this.withdrawTurn(session, next.turnId)
+    this.storeTurn(session, this.userTurn(next.turnId, next.text, next.images))
+    this.emitQueue(session)
+    return next
+  }
+
+  private withdrawTurn(session: Session, turnId: string): void {
+    const at = session.turns.findIndex((t) => t.id === turnId)
+    if (at >= 0) session.turns.splice(at, 1)
+    this.emit({ id: session.id, type: 'turn-removed', turnId })
+  }
+
+  /**
+   * M322. A dropped queue's messages are NOT withdrawn: the agent never saw
+   * them, the person may still want them, and the transcript says so on each
+   * one rather than silently showing them as sent.
+   */
+  private markUndelivered(session: Session, entries: readonly QueueEntry[], note: string): void {
+    for (const entry of entries) {
+      const turn = session.turns.find((t) => t.id === entry.turnId)
+      if (turn === undefined) continue
+      turn.delivery = 'not-delivered'
+      turn.deliveryNote = note
+      this.emit({ id: session.id, type: 'turn', turn: { ...turn, blocks: [...turn.blocks] } })
+    }
+  }
+
+  private queueView(session: Session): QueuedMessage[] {
+    return session.queue.map((q) => ({
+      turnId: q.turnId,
+      text: q.text,
+      images: q.images.map((img) => ({ mediaType: img.mediaType, size: Buffer.byteLength(img.base64, 'base64') })),
+      reason: q.reason,
+      ...(q.correction === true ? { correction: true as const } : {}),
+      ...(q.auto === true ? { auto: true as const } : {})
+    }))
+  }
+
+  private emitQueue(session: Session): void {
+    this.emit({ id: session.id, type: 'queue', queue: this.queueView(session) })
   }
 
   /**
@@ -433,8 +587,11 @@ export class AgentSessionManager {
     const session = this.sessions.get(id)
     if (!session || session.queue.length === 0) return 0
     const count = session.queue.length
-    session.queue.length = 0
+    const dropped = session.queue.splice(0)
+    // M322. Cancelled by the person: withdrawn, like a removal of each.
+    for (const entry of dropped) this.withdrawTurn(session, entry.turnId)
     this.emit({ id, type: 'queue-dropped', count })
+    this.emitQueue(session)
     return count
   }
 
@@ -550,9 +707,12 @@ export class AgentSessionManager {
     // a message the user typed mid-turn would otherwise be served after the
     // stop — a paid turn on the auto prompt under a chip that reads stopped.
     const kept = session.queue.filter((q) => q.auto !== true)
-    const dropped = session.queue.length - kept.length
+    const gone = session.queue.filter((q) => q.auto === true)
+    const dropped = gone.length
     session.queue = kept
-    if (dropped > 0) this.emit({ id: session.id, type: 'queue-dropped', count: dropped })
+    // M322. The run's own prompts leave the transcript with it: a person never typed them.
+    for (const entry of gone) this.withdrawTurn(session, entry.turnId)
+    if (dropped > 0) { this.emit({ id: session.id, type: 'queue-dropped', count: dropped }); this.emitQueue(session) }
     session.autoLast = { mode: run.mode, turn: run.turn, limit: run.limit, state, ...(reason === undefined ? {} : { reason }) }
     session.auto = undefined
     this.emit({ id: session.id, type: 'auto', ...session.autoLast })
@@ -855,7 +1015,7 @@ export class AgentSessionManager {
         // Our own message echoed back; already stored at send().
         if (event.replay) return
         this.storeTurn(session, {
-          id: `u-${++session.userTurns}`,
+          id: `u-${session.turnStem}-${++session.userTurns}`,
           role: 'user',
           blocks: event.blocks,
           at: this.now()
@@ -901,7 +1061,7 @@ export class AgentSessionManager {
         // M97. Decide first, serve the queue, then continue: the stop lands
         // whatever is queued, and the continuation lands behind it.
         const continueAuto = this.autoDecide(session, { ok: event.ok, interrupted })
-        const next = session.queue.shift()
+        const next = this.takeNext(session)
         if (next !== undefined) {
           this.writeUser(session, next.text, next.images)
           this.emit({ id, type: 'dequeued', text: next.text })
@@ -961,7 +1121,7 @@ export class AgentSessionManager {
       session.exitCode = undefined
       session.exitSignal = undefined
       this.flushBatch(session)
-      const next = session.queue.shift()
+      const next = this.takeNext(session)
       if (next !== undefined) {
         this.spawnTurnProcess(session, next.text)
         this.emit({ id, type: 'dequeued', text: next.text })
@@ -987,8 +1147,10 @@ export class AgentSessionManager {
     session.abortReason = null
     if (session.queue.length > 0) {
       const count = session.queue.length
-      session.queue.length = 0
+      const dropped = session.queue.splice(0)
+      this.markUndelivered(session, dropped, NOT_DELIVERED_EXIT)
       this.emit({ id, type: 'queue-dropped', count })
+      this.emitQueue(session)
     }
     for (const [requestId, resolve] of [...session.external.entries()]) { session.external.delete(requestId); resolve(false) }
     for (const requestId of [...session.pending.keys()]) {
@@ -1135,6 +1297,7 @@ export class AgentSessionManager {
       costUsd: session.costUsd,
       pending: [...session.pending.values()],
       queued: session.queue.length,
+      queue: this.queueView(session),
       counters: { ...session.counters },
       ...(session.negotiated === undefined ? {} : { negotiated: { ...session.negotiated } }),
       ...(session.awaitingHandshake ? { awaitingHandshake: true as const } : {}),

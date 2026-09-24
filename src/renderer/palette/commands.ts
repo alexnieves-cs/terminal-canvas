@@ -468,6 +468,8 @@ export interface PaletteActions {
   arrangeTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M258. Frame the ACTIVE task — the lens's, else the selected panel's one task. A camera move through the trail; nothing else. */
   fitTask(): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /** M324. Open the focus view of the task a card or member panel belongs to. */
+  focusTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
   runWorkflowNow(templateId: string, caller?: import('@shared/plan').AgentPlanCaller): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
@@ -2159,6 +2161,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // verb itself refuses by name for a panel in no task or in two.
   const taskPanelId = workPanelId ?? (ctx.selectedIds.length === 1 ? ctx.selectedIds[0] : undefined)
   out.push(withReason({ id: 'task.show', title: 'Task: show this task', subtitle: 'frame the selected card\'s task — or the task the selected panel belongs to; nothing moves', group: 'canvas', searchText: 'task show frame related lane conversation work card find navigate where', run: () => { if (taskPanelId !== undefined) { const r = actions.showTask(taskPanelId); if (r.kind === 'refused' || r.partial === true) actions.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'task.focus', title: 'Task: focus this task', subtitle: 'open the task beside its conversation — changes, checks, review and preview on one page; Esc comes back', group: 'canvas', searchText: 'task focus workspace conversation diff review checks preview open page', run: () => { if (taskPanelId !== undefined) { const r = actions.focusTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   out.push(withReason({ id: 'task.related', title: 'Task: show related', subtitle: 'ring the task\'s panels and dim the rest; nothing moves — again to turn it off', group: 'canvas', searchText: 'task related highlight lens dim focus members show', run: () => { if (taskPanelId !== undefined) { const r = actions.showRelated(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   // M258. Fit task — present at rest; the verb itself refuses by name with no task context.
   out.push({ id: 'task.fit', title: 'Fit task', subtitle: 'frame the active task — the one Show related lit, else the selected panel\'s task', group: 'canvas', searchText: 'fit task frame zoom active lens focus camera', run: () => { const r = actions.fitTask(); if (r.kind === 'refused') actions.say(r.reason) } })

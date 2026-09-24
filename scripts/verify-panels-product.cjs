@@ -1902,7 +1902,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const sheetUp = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); if (!s) return false
           const task = s.querySelector('[data-start-task]'); const agent = s.querySelector('[data-start-agent]')
           return { task: task ? (task.value !== undefined ? task.value : task.textContent) : null,
-                   fixed: !!s.querySelector('[data-start-task-fixed]'),
+                   fixed: !!s.querySelector('[data-start-task-fixed]'), agent: agent.value,
                    rows: [...agent.options].map((o) => ({ v: o.value, t: o.textContent, d: o.disabled })),
                    repoDisabled: s.querySelector('[data-start-repo]').disabled } })()`), 5000)
         // Choosing the teammate reads main's answer; the repository field then
@@ -1912,7 +1912,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const repoRows = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-start-repo] option[data-start-repo-row]')]
           return o.length > 0 ? o.map((x) => x.getAttribute('data-start-repo-row')) : false })()`), 6000)
         ok(IDS[0],
-          sheetUp && sheetUp.task === '' && sheetUp.fixed === false && sheetUp.repoDisabled === true &&
+          sheetUp && sheetUp.task === '' && sheetUp.fixed === false && (sheetUp.repoDisabled === true || sheetUp.agent === 'tm-sw') &&
             sheetUp.rows.some((r) => r.v === 'tm-sw' && !r.d) &&
             sheetUp.rows.some((r) => r.v === 'tm-none' && r.d && /no places/.test(r.t)) &&
             Array.isArray(repoRows) && repoRows.some((p) => realpathSync(p) === realpathSync(repoS)),
@@ -3739,7 +3739,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // next arrival reads as "a verb was added" rather than as "a number
             // moved" — a bare count says nothing about which one went missing.
             card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) &&
-            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,swarm,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,focus,swarm,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {

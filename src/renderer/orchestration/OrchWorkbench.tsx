@@ -13,7 +13,7 @@ import { displayPath } from '@shared/display-path'
 import { CheckRunOutput } from '../checks/CheckRunOutput'
 import { agentWorkingOf, verificationOf } from '@shared/review-comments'
 import type { PersistedWorkItem } from '@shared/work-items'
-import type { ReviewDiff, ReviewFile, ReviewResult, ReviewSection } from '@shared/review'
+import type { DiffLine, ReviewDiff, ReviewFile, ReviewResult, ReviewSection } from '@shared/review'
 import type { ReviewIdentity } from '@shared/review-identity'
 import { laneSection, type ReviewHandoff } from '@shared/review-readiness'
 import {
@@ -125,6 +125,26 @@ export interface OrchWorkbenchProps {
   edges?: readonly { from: string; to: string }[]
   /** M317. The follow-up door, so Combine can send a traced failure back to its agent. */
   onSend?: (panelId: string, text: string) => Promise<string | null>
+  /**
+   * M324. A TASK'S FOCUS VIEW hosts this strip as its evidence side. The view
+   * owns the tabs (it adds a preview) and the size (it is a split, not a
+   * strip), so the strip's own tab bar, handle, pin, reading and collapse
+   * controls are not drawn — the rest reads and writes exactly as here.
+   */
+  focus?: {
+    /** The file to open first when the review still lists it, and how far down it was read. */
+    file?: string
+    scroll?: number
+    onFile?: (path: string) => void
+    onScroll?: (path: string, top: number) => void
+    /** A numbered diff line was chosen, to write a review comment on. */
+    onLine?: (path: string, line: DiffLine) => void
+    /** The open file's lines that carry a comment (`side:line`), and the one chosen now. */
+    commented?: ReadonlySet<string>
+    picked?: string
+    /** A failed check's follow-up, composed and handed to the conversation. */
+    onCheckFollowUp?: (check: CheckRecord) => void
+  }
 }
 
 /* ── Changes ─────────────────────────────────────────────────────────────── */
@@ -151,7 +171,7 @@ type DiffRead =
 const NEVER_STARTED_REASK_MS = 1500
 const NEVER_STARTED_REASKS = 6
 
-function useChanges(subject: BenchSubject | null, active: boolean, refresh: number): { read: ChangesRead; diff: DiffRead; openFile: (f: ReviewFile) => void } {
+function useChanges(subject: BenchSubject | null, active: boolean, refresh: number, preferPath?: string): { read: ChangesRead; diff: DiffRead; openFile: (f: ReviewFile) => void } {
   const [read, setRead] = useState<ChangesRead>({ kind: 'idle' })
   const [diff, setDiff] = useState<DiffRead>({ kind: 'none' })
   const key = benchSubjectKey(subject)
@@ -241,7 +261,11 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
     if (read.kind !== 'result' || read.key !== key || diff.kind !== 'none') return
     const r = read.result
     if ((r.kind === 'changes' || r.kind === 'shared') && r.files.length > 0) {
-      const first = fileTree(r.files)[0]?.files[0]
+      // M324. A host that remembers which file was open (a task's focus view)
+      // names it; it is opened when the review still lists it, the first
+      // file otherwise — never a path the review no longer holds.
+      const remembered = preferPath === undefined ? undefined : r.files.find((f) => f.path === preferPath)
+      const first = remembered ?? fileTree(r.files)[0]?.files[0]
       if (first !== undefined) openFile(first)
     }
   }, [read, key]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -640,9 +664,9 @@ function ArtifactsTab({ read, subject, onOpenPath }: { read: TimelineRead; subje
 /* ── The strip ───────────────────────────────────────────────────────────── */
 
 export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
-  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, reading = false, onReading, onChecks, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh, edges, onSend } = props
+  const { subject, current, pinned, onPin, tab, onTab, height, onHeight, open, onOpen, reading = false, onReading, onChecks, panels, workItems, worktrees, taskHandoffOf, onRefreshTaskHandoffs, onPatchWorkItem, onReviewOnCanvas, onOpenPath, onJump, onShowCanvas, output, refresh, edges, onSend, focus } = props
   const [localRefresh, setLocalRefresh] = useState(0)
-  const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh)
+  const changes = useChanges(subject, open && tab === 'changes', refresh + localRefresh, focus?.file)
   // M307. Read on Changes too: the verdict line there needs the same bound checks.
   const checks = useChecks(subject, open && (tab === 'checks' || tab === 'changes'), panels, worktrees, refresh + localRefresh)
   // M300. One read for both new tabs — they are two views of one record, and a
@@ -785,9 +809,14 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const openDiffKey = changes.diff.kind === 'diff' ? changes.diff.key : null
   useLayoutEffect(() => {
     if (openDiffKey === null || diffRef.current === null) return
-    diffRef.current.scrollTop = scrolls.current.get(openDiffKey) ?? 0
-  }, [openDiffKey])
+    // M324. The focus view's remembered position seeds the remembered file's first open.
+    const seeded = focus?.file !== undefined && openDiffKey === `${subjectKey}:${focus.file}` ? focus.scroll ?? 0 : 0
+    diffRef.current.scrollTop = scrolls.current.get(openDiffKey) ?? seeded
+  }, [openDiffKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const openPath = changes.diff.kind === 'none' ? null : changes.diff.key.slice(subjectKey.length + 1)
+  // M324. The file a person opened, handed to the host that remembers it.
+  const onFocusFile = focus?.onFile
+  useEffect(() => { if (openDiffKey !== null && openPath !== null) onFocusFile?.(openPath) }, [openDiffKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const openFileRow = changes.read.kind === 'result' && (changes.read.result.kind === 'changes' || changes.read.result.kind === 'shared')
     ? changes.read.result.files.find((f) => f.path === openPath) : undefined
 
@@ -814,10 +843,10 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
 
   return (
     <section className="orch__bench" data-orch-workbench data-orch-bench-tab={tab} data-orch-bench-open={open || undefined} data-orch-bench-reading-mode={reading || undefined} data-orch-bench-subject={benchSubjectKey(subject)} style={open && !reading ? { height: `${height}px` } : undefined} aria-label="Workbench">
-      {!reading && <div className="orch__bench-handle" role="separator" aria-orientation="horizontal" aria-label="Resize the workbench" data-orch-bench-handle
+      {!reading && focus === undefined && <div className="orch__bench-handle" role="separator" aria-orientation="horizontal" aria-label="Resize the workbench" data-orch-bench-handle
         onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
         onDoubleClick={() => onHeight(clampWorkbenchHeight(WORKBENCH_DEFAULT_HEIGHT))} />}
-      <div className="orch__bench-head">
+      {focus === undefined && <div className="orch__bench-head">
         <div className="orch__tabs orch__tabs--bench" role="tablist" aria-label="Workbench tabs">
           {WORKBENCH_TABS.map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} data-orch-bench-tab-button={t}
@@ -844,7 +873,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
           )}
           {!reading && <button type="button" className="orch__mini" data-orch-bench-toggle={open ? 'close' : 'open'} {...shellControl(() => onOpen(!open))}>{open ? 'Collapse' : 'Expand'}</button>}
         </span>
-      </div>
+      </div>}
 
       {open && <div className="orch__bench-body" data-orch-density="detail">
         {tab === 'combine' ? (
@@ -971,10 +1000,17 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
               {changes.diff.kind === 'diff' && (
                 changes.diff.diff.kind === 'diff' ? (
                   <pre ref={diffRef} className="orch__diff orch__diff--bench" data-orch-diff data-orch-diff-key={changes.diff.key} aria-label="Diff"
-                    onScroll={(e) => { if (openDiffKey !== null) scrolls.current.set(openDiffKey, e.currentTarget.scrollTop) }}>
-                    {changes.diff.diff.lines.map((line, i) => (
-                      <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}`}>{outward(line.text, `panel ${dataSubject}`).text}{'\n'}</span>
-                    ))}
+                    onScroll={(e) => { if (openDiffKey !== null) { scrolls.current.set(openDiffKey, e.currentTarget.scrollTop); if (openPath !== null) focus?.onScroll?.(openPath, e.currentTarget.scrollTop) } }}>
+                    {changes.diff.diff.lines.map((line, i) => {
+                      // M324. In a focus view a numbered line is a comment's
+                      // anchor: a press picks it, and a commented line is marked.
+                      const at = line.newNo !== undefined && line.kind !== 'del' ? `new:${line.newNo}` : line.oldNo !== undefined && line.kind === 'del' ? `old:${line.oldNo}` : null
+                      const pickable = focus?.onLine !== undefined && at !== null && openPath !== null
+                      return (
+                        <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}${pickable ? ' orch__diff-line--pickable' : ''}${at !== null && focus?.commented?.has(at) === true ? ' orch__diff-line--commented' : ''}${at !== null && focus?.picked === at ? ' orch__diff-line--picked' : ''}`}
+                          {...(pickable ? { 'data-orch-diff-line': at, title: 'Comment on this line', onClick: () => { if ((window.getSelection()?.toString() ?? '') !== '') return; focus?.onLine?.(openPath as string, line) } } : {})}>{outward(line.text, `panel ${dataSubject}`).text}{'\n'}</span>
+                      )
+                    })}
                     {changes.diff.diff.truncated > 0 && <span className="orch__diff-line orch__diff-line--meta">{`… ${changes.diff.diff.truncated} more lines — open the review on canvas for the whole diff`}</span>}
                   </pre>
                 ) : <p className="orch__caption">{changes.diff.diff.kind === 'binary' ? 'A binary file — no text diff to show.' : 'The diff could not be read.'}</p>
@@ -1017,6 +1053,11 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                           <span className="orch__activity-detail">{c.source === 'watcher' ? 'watcher' : 'this canvas ran it'} · {displayPath(c.context.cwd).short}{c.context.worktree !== undefined ? ` · ${c.context.worktree}` : ''}{c.note !== undefined ? ` · ${c.note}` : ''}</span>
                         </button>
                         {expandedCheck === c.key && <CheckOutput record={c} />}
+                        {/* M324. A failed check's follow-up, into the conversation beside it. */}
+                        {c.outcome === 'failed' && focus?.onCheckFollowUp !== undefined && (
+                          <button type="button" className="orch__mini" data-orch-check-followup={c.key} title="Compose a follow-up naming this failure and its last lines, in the conversation — you send it"
+                            {...shellControl(() => focus.onCheckFollowUp?.(c))}>Ask the agent to fix this</button>
+                        )}
                       </li>
                     ))}
                   </ul>

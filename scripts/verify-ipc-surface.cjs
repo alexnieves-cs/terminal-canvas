@@ -297,7 +297,9 @@ app.whenReady().then(() => {
   // task's deliverables as main reads them, the search index, the gated export.
   // M321 setup:preflight / recipe:history (172) — tools on PATH and the next
   // lane's ports probed with nothing run, and a recipe's stored versions.
-  const EXPECTED_CHANNELS = 172
+  // M322 agent:queue-edit / agent:send-correction (174) — one waiting message
+  // edited, removed or (undelivered) discarded; and Stop and send.
+  const EXPECTED_CHANNELS = 174
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

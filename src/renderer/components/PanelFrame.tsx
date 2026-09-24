@@ -76,7 +76,7 @@ export interface PanelMarks {
   /** M204 (D08). The task lens: each member's id → why it is one; null or absent when no lens is on. */
   lens?: ReadonlyMap<string, string> | null
   /** M204 (D08). The ⋯ menu's task section: which task this panel is part of, and the three verbs. Absent in a fixture. */
-  task?: { of: (id: string) => TaskMenuFact; show: (id: string) => void; related: (id: string) => void; arrange: (id: string) => void }
+  task?: { of: (id: string) => TaskMenuFact; show: (id: string) => void; related: (id: string) => void; arrange: (id: string) => void; /** M324. Open the task's focus view. */ focus?: (id: string) => void }
   /** Brief #19. The advanced features relevant to THIS panel, asked when the menu opens, and the verb each runs. Absent in a fixture. */
   advanced?: { of: (id: string) => AdvancedDoor[]; run: (id: string, door: AdvancedDoorId) => void }
 }
@@ -319,6 +319,7 @@ export function PanelFrame({
                 return (
                   <div className="pf__menu-task" data-panel-menu-task="one">
                     <div className="pf__note">task · {t.title}</div>
+                    {task.focus !== undefined && <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="focus" title="Open this task beside its conversation — changes, checks, review and preview in one place" {...shellControl(() => { setMenuOpen(false); task.focus?.(id) })}>Focus this task</button>}
                     <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
                     <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
                     <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>

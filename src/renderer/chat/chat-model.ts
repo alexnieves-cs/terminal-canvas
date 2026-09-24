@@ -17,7 +17,8 @@ import { shortPath } from '@renderer/palette/panel-name'
 
 export type ChatRow =
   /** M167. `at` is the turn's record time when it has one; a live row has none — absent stays absent. */
-  | { kind: 'user'; id: string; text: string; at?: number }
+  /** M322. `undelivered`: the transcript's sentence for a message the agent never received. */
+  | { kind: 'user'; id: string; text: string; at?: number; undelivered?: string }
   | { kind: 'text'; id: string; turnId: string; text: string; live: boolean; at?: number }
   | { kind: 'thinking'; id: string; text: string; live: boolean }
   | {
@@ -98,8 +99,11 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
   let storedForLive = 0
   for (const turn of turns) {
     if (turn.role === 'user') {
+      // M322. A message still WAITING is not history yet: it renders in the
+      // composer's waiting list (editable), never in the well as if sent.
+      if (turn.delivery === 'queued') continue
       const text = turn.blocks.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
-      if (text !== '') rows.push({ kind: 'user', id: turn.id, text, ...(typeof turn.at === 'number' ? { at: turn.at } : {}) })
+      if (text !== '') rows.push({ kind: 'user', id: turn.id, text, ...(typeof turn.at === 'number' ? { at: turn.at } : {}), ...(turn.delivery === 'not-delivered' ? { undelivered: turn.deliveryNote ?? 'not delivered — the agent never received this message' } : {}) })
       turn.blocks.forEach((b, i) => { if (b.type === 'image') rows.push({ kind: 'image', id: `${turn.id}:${i}`, mediaType: b.mediaType, size: b.size }) })
       for (const block of turn.blocks) {
         if (block.type !== 'tool_result') continue
@@ -200,6 +204,60 @@ export interface ComposerArm {
  * the first send is what starts the process, and a send after an exit is
  * what resumes it.
  */
+/**
+ * M322. THE TWO MID-TURN VERBS, beside the composer's Send and Interrupt
+ * (whose arms stay exactly as M73–M169 pinned them). `queue` is Send after
+ * this turn: the message waits in the list, editable, and goes when the turn
+ * ends. `correct` is Stop and send: the message goes FIRST and the turn is
+ * interrupted — offered only where the row has an interrupt door, and named
+ * otherwise, never enabled to a queue that only looks like a stop. Both need
+ * a turn in flight and no question open (the question is answered first).
+ */
+export function composerMidTurn(
+  snapshot: AgentSessionSnapshot | null,
+  claudeAvailable: boolean,
+  backend: AgentBackend = DEFAULT_BACKEND
+): { queue: ComposerArm; correct: ComposerArm } {
+  const row = BACKENDS[backend]
+  const idle: ComposerArm = { enabled: false, reason: REASON_CHAT_IDLE }
+  if (!claudeAvailable || !composerLive(snapshot) || snapshot === null) return { queue: idle, correct: idle }
+  if (snapshot.pending.length > 0) {
+    const pending: ComposerArm = { enabled: false, reason: reasonChatPending(row.label) }
+    return { queue: pending, correct: pending }
+  }
+  return {
+    queue: { enabled: true },
+    correct: row.interrupts ? { enabled: true } : { enabled: false, reason: `${row.reasons.noInterrupt} — Send after this turn instead` }
+  }
+}
+
+/** M322. The waiting list as the composer renders it: main's order, the correction first, each row's image count and words. */
+export interface QueueRow {
+  turnId: string
+  text: string
+  images: number
+  editable: boolean
+  /** What the row's tag says: why it waits, or that it is a correction or the auto run's. */
+  tag: string
+}
+export function queueRows(snapshot: AgentSessionSnapshot | null): QueueRow[] {
+  return (snapshot?.queue ?? []).map((q) => ({
+    turnId: q.turnId,
+    text: q.text,
+    images: q.images.length,
+    editable: q.auto !== true,
+    tag: q.correction === true ? 'next — after the stop' : q.auto === true ? 'auto run' : q.reason === 'concurrency' ? 'waiting for a free agent' : 'after this turn'
+  }))
+}
+
+/**
+ * M322. The messages a person actually SENT, for every count that means
+ * "turns": a waiting or undelivered message is not a turn the agent had.
+ */
+export function deliveredUserTurns(turns: readonly TranscriptTurn[]): number {
+  return turns.filter((t) => t.role === 'user' && t.delivery === undefined && t.blocks.some((b) => b.type === 'text')).length
+}
+
 /**
  * M169 (the Act II critic). ONE predicate for "a turn is in flight": the
  * composer's Send/Interrupt arms and the well's `--live` class both read it,

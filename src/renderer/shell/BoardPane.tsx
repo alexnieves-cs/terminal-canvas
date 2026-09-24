@@ -38,6 +38,8 @@ export interface BoardPaneProps {
   onGoTo: (itemId: string) => void
   onSetState: (itemId: string, state: WorkItemState) => void
   onShowOnCanvas: (itemId: string) => void
+  /** M324. Open the task's focus view — conversation beside its evidence. Optional: an older caller draws no button. */
+  onFocusTask?: (itemId: string) => void
 }
 
 /**
@@ -172,6 +174,10 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
                         <span className="board-row__facts" data-board-facts>{[item.key, teammate, laneLabel].filter((x) => x !== undefined).join(' · ')}</span>
                         {/* A working card's note is the one sentence the runtime left (`lane closed`, a refusal). */}
                         {item.note !== undefined && <span className="board-row__note" data-board-note>{item.note}</span>}
+                        {props.onFocusTask !== undefined && (
+                          <button type="button" className="rail-row__verb board-row__focus" data-board-focus title="Open this task beside its conversation — changes, checks and preview in one place"
+                            {...shellControl(() => props.onFocusTask?.(item.id))}>Focus</button>
+                        )}
                         {!carded && (
                           <button type="button" className="rail-row__verb board-row__show" data-board-show title="Show a card for this item at the centre of the canvas" {...shellControl(() => props.onShowOnCanvas(item.id))}>Show on canvas</button>
                         )}

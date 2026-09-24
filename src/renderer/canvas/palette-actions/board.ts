@@ -49,6 +49,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'showRelated'
   | 'arrangeTask'
   | 'fitTask'
+  | 'focusTask'
   | 'addWorkItem'
   | 'beginStartWork'
   | 'beginRepoSetup'
@@ -100,6 +101,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     arrangeTask: (panelId) => boardVerbsRef.current?.arrange?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M258. Fit task reads the lens and the selection, both Canvas's.
     fitTask: () => boardVerbsRef.current?.fitTask?.() ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    // M324. The focus view is Canvas's page; the same delegation.
+    focusTask: (panelId) => boardVerbsRef.current?.focus?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M113. The dedupe lives in upsertWorkItem; the id the caller gets back is
     // the SURVIVING one, which for a second `Add to board` is the first's.
     addWorkItem: (item) => {

@@ -13,6 +13,8 @@ module.exports = {
   ...require('../src/renderer/palette/spawn-sheet'),
   /* M197. The start-work model: which of the triple the app cannot derive. */
   ...require('../src/renderer/palette/start-work'),
+  /* M323. Project-first start: the preselections, Options at rest, the draft. */
+  ...require('../src/renderer/palette/start-work-first'),
   /* M80. The template model: holes, fill, placement, the named refusal. */
   ...require('../src/renderer/palette/template-model'),
   /* M104. The lineups and their preview plan — pure. */

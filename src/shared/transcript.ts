@@ -58,6 +58,16 @@ export interface TranscriptTurn {
   usage?: TokenTotals
   /** Wall-clock ms when the turn was stored. */
   at: number
+  /**
+   * M322. A USER turn that has not reached the agent. Absent is delivered —
+   * every pre-M322 turn, and every turn the agent was actually handed.
+   * `queued`: waiting behind a turn in flight (it can still be edited or
+   * removed). `not-delivered`: the queue was dropped — the process exited,
+   * or the app closed — and `deliveryNote` says which; the agent never saw it.
+   */
+  delivery?: 'queued' | 'not-delivered'
+  /** M322. Why a `not-delivered` turn was not delivered, in one sentence. */
+  deliveryNote?: string
 }
 
 /** What one stdout line parses to. */

@@ -14,7 +14,7 @@ import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import { statSync } from 'node:fs'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
-import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage, QueueEditRequest, CorrectionAnswer } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
@@ -201,6 +201,9 @@ export interface AgentHandlers {
   /** M319. Optional so every harness that builds these handlers by hand still does; absent answers 0 / false. */
   cancelQueued?(id: string): number
   terminate?(id: string): boolean
+  /** M322. Optional for the same reason; absent answers false. */
+  queueEdit?(req: QueueEditRequest): boolean
+  sendCorrection?(id: string, text: string, attachments: ChatAttachment[]): CorrectionAnswer
   dispose(req: { id: string; drop: boolean }): void
   /** M98. `scope: 'session'` grants the request's tool for the rest of the session before answering. */
   answer(req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }): boolean
@@ -663,6 +666,18 @@ export function registerIpcHandlers(
   // M319. Cancel and terminate — the id is the only input, as for interrupt.
   ipcMain.handle(IPC.AGENT_CANCEL_QUEUED, (_event, id: unknown) => (typeof id === 'string' ? (agents.cancelQueued?.(id) ?? 0) : 0))
   ipcMain.handle(IPC.AGENT_TERMINATE, (_event, id: unknown) => (typeof id === 'string' ? (agents.terminate?.(id) ?? false) : false))
+  // M322. The request is checked field by field: an op this version does not
+  // know, or an edit without text, is no edit.
+  ipcMain.handle(IPC.AGENT_QUEUE_EDIT, (_event, req: unknown) => {
+    if (typeof req !== 'object' || req === null) return false
+    const r = req as Record<string, unknown>
+    if (typeof r.id !== 'string' || typeof r.turnId !== 'string') return false
+    if (r.op === 'edit') return typeof r.text === 'string' ? (agents.queueEdit?.({ id: r.id, op: 'edit', turnId: r.turnId, text: r.text }) ?? false) : false
+    if (r.op === 'remove' || r.op === 'discard') return agents.queueEdit?.({ id: r.id, op: r.op, turnId: r.turnId }) ?? false
+    return false
+  })
+  ipcMain.handle(IPC.AGENT_SEND_CORRECTION, (_event, id: string, text: string, attachments: ChatAttachment[] = []) =>
+    agents.sendCorrection?.(id, text, Array.isArray(attachments) ? attachments : []) ?? { answer: 'no-session', interrupted: false })
   ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }) => agents.answer(req))
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))

@@ -161,6 +161,31 @@ check(START, 'fr.sheet.3 Start work has plain labels, its runtime said, and Canc
     /is-primary/.test(submit) && /\bdisabled=""/.test(submit) && />Start task</.test(submit) && /data-start-cancel/.test(html) && /data-sheet-switch-to="panel"/.test(html), detail: { submit } }
 })
 
+// M323. PROJECT FIRST: repository, then task, then who-and-on-what as ONE
+// preselected line with Change, then a closed Options — and the issue route
+// offered beside the task rather than ahead of it.
+check(START, 'startwork-first.dom.1 the sheet opens project-first — Repository before Task, the sole placed teammate preselected and named on a Change line (its picker closed), Options closed and holding criteria, checks, deliverables and the arrangement, and "Start from an issue" offered as the alternate route', (m) => {
+  const ada = { id: 'ada', name: 'ada', brief: '', places: ['/repo'], services: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+  const model = { title: '', titleFixed: false, wanted: null, teammates: [ada], repositories: async () => ({ kind: 'repos', repos: [] }), submit: async () => ({ kind: 'started' }), openTeammates: noop, openPanel: noop, issues: async () => ({ kind: 'items', items: [] }) }
+  const html = renderToStaticMarkup(createElement(m.StartWorkSheet, { model, onDone: noop, onCancel: noop }))
+  const who = html.match(/<details\b[^>]*data-start-who[\s\S]*?<\/details>/)?.[0] ?? ''
+  const opts = html.match(/<details\b[^>]*data-start-options[\s\S]*?<\/details>/)?.[0] ?? ''
+  const openTag = (d) => /^<details\b[^>]*\bopen\b/.test(d)
+  return {
+    pass: html.indexOf('sheet__label">Repository<') < html.indexOf('sheet__label">Task<') && html.indexOf('sheet__label">Task<') < html.indexOf('data-start-who') &&
+      who !== '' && !openTag(who) && /data-start-who-summary[^>]*>ada · Claude Code/.test(who) && /Change/.test(who) && /<option value="ada"[^>]*selected=""/.test(who) &&
+      opts !== '' && !openTag(opts) && ['data-start-criteria', 'data-start-checks', 'data-start-deliverables', 'data-start-swarm'].every((a) => opts.includes(a)) &&
+      /data-start-issue-route="typed"[^>]*>Start from an issue instead/.test(html) && !/data-start-issue-search/.test(html),
+    detail: { who: who.slice(0, 200), opts: opts.slice(0, 160) }
+  }
+})
+check(START, 'startwork-first.dom.2 Options opens by itself when the start arrives holding a choice (an arrangement from a palette row), and who-and-on-what opens by itself when there is no teammate to preselect', (m) => {
+  const mate = (id) => ({ id, name: id, brief: '', places: ['/r'], services: [], memory: id, chats: [], messaging: false, scheduling: false })
+  const model = { title: 'x', titleFixed: false, wanted: null, teammates: [mate('ada'), mate('bo')], swarm: 'test', repositories: async () => ({ kind: 'repos', repos: [] }), submit: async () => ({ kind: 'started' }), openTeammates: noop }
+  const html = renderToStaticMarkup(createElement(m.StartWorkSheet, { model, onDone: noop, onCancel: noop }))
+  return { pass: /<details\b[^>]*data-start-who[^>]*\bopen\b/.test(html) && /<details\b[^>]*data-start-options[^>]*\bopen\b/.test(html) && /Choose who does it/.test(html), detail: html.slice(html.indexOf('data-start-who') - 80, html.indexOf('data-start-who') + 120) }
+})
+
 // Starting the first task, #8: optional setup is grouped and phrased as a benefit, never the amber banner.
 check(LAUNCHER, 'fr.setup.1 persistence is an OPTIONAL improvement — inside a closed "Improve your setup", named "Keep agents running between sessions", tmux only in its How, and no amber banner', (m) => {
   const html = launcher(m, { claude: '/b/claude' }, { tmux: 'no tmux', onDismissTmux: noop })

@@ -273,6 +273,13 @@ export function attachToComposer(id: string, attach: NonNullable<ChatState['inse
   update(id, { ...prev, insert: { seq: ++insertSeq, attach } })
 }
 
+/** M322. A turn only the durable log held (a relaunch's undelivered message), dropped from this mirror once main has dropped it from the log. */
+export function dropTurn(id: string, turnId: string): void {
+  const prev = states.get(id)
+  if (!prev || !prev.turns.some((t) => t.id === turnId)) return
+  update(id, { ...prev, turns: prev.turns.filter((t) => t.id !== turnId) })
+}
+
 export function takeInsert(id: string, seq: number): void {
   const prev = states.get(id)
   if (!prev || !prev.insert || prev.insert.seq !== seq) return
@@ -463,7 +470,17 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       return
     case 'queue-dropped':
       if (!snap) return
-      update(event.id, { ...prev, snapshot: { ...snap, queued: 0 } })
+      // M322. By the event's count: a removal of one, or an auto run's own
+      // prompts, is not the whole queue (the list itself arrives on `queue`).
+      update(event.id, { ...prev, snapshot: { ...snap, queued: Math.max(0, snap.queued - event.count) } })
+      return
+    case 'queue':
+      if (!snap) return
+      // M322. The waiting list, main's own; the count follows it.
+      update(event.id, { ...prev, snapshot: { ...snap, queue: event.queue, queued: event.queue.length } })
+      return
+    case 'turn-removed':
+      update(event.id, { ...prev, turns: prev.turns.filter((t) => t.id !== event.turnId) })
       return
     case 'permission-request':
       if (!snap) return

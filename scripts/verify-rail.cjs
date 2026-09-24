@@ -2595,6 +2595,82 @@ const session = (id, over = {}) => ({
     JSON.stringify({ restored: live(restored), queued: live(queued), fresh: live(fresh), sendRestored: cs(restored, true).send.enabled }))
 }
 
+// M322 — midturn.1 / queue-rows.1 / undelivered.1. The composer takes text
+//     mid-turn through two NAMED arms (Send after this turn, Stop and send),
+//     leaving M73's Send/Interrupt arms exactly as pinned above; a waiting
+//     message is never rendered in the well as sent; an undelivered one says so.
+{
+  const mid = typeof R.composerMidTurn === 'function' ? R.composerMidTurn : () => null
+  const rowsOf = typeof R.queueRows === 'function' ? R.queueRows : () => null
+  const delivered = typeof R.deliveredUserTurns === 'function' ? R.deliveredUserTurns : () => null
+  const snap = (over) => ({ status: 'streaming', queued: 0, turns: 1, pending: [], pid: 1, ...over })
+  const live = mid(snap({}), true)
+  const codex = mid(snap({}), true, 'codex')
+  const asking = mid(snap({ pending: [{ requestId: 'r', toolName: 'Bash', input: {} }] }), true)
+  const rest = mid(snap({ status: 'ready' }), true)
+  ok('midturn.1 mid-turn the composer offers Send after this turn and Stop and send; Stop and send is refused by the row\'s own reason where there is no interrupt door; a question open refuses both; at rest neither is offered',
+    live && live.queue.enabled && live.correct.enabled && codex && codex.queue.enabled && !codex.correct.enabled && /codex/.test(codex.correct.reason) && /Send after this turn/.test(codex.correct.reason) &&
+      asking && !asking.queue.enabled && /allow or deny/.test(asking.queue.reason) && rest && !rest.queue.enabled && !rest.correct.enabled,
+    JSON.stringify({ live, codex, asking, rest }))
+  const q = rowsOf(snap({ queued: 3, queue: [
+    { turnId: 'a', text: 'fix it', images: [], reason: 'in-flight', correction: true },
+    { turnId: 'b', text: 'then this', images: [{ mediaType: 'image/png', size: 9 }], reason: 'in-flight' },
+    { turnId: 'c', text: 'auto', images: [], reason: 'in-flight', auto: true }
+  ] }))
+  ok('queue-rows.1 the waiting list keeps main\'s order, tags a correction and the auto run\'s own prompt by name, counts images, and makes the auto prompt uneditable',
+    q && q.map((r) => r.turnId).join('') === 'abc' && /next/.test(q[0].tag) && q[1].images === 1 && q[2].editable === false && q[0].editable === true && /auto/.test(q[2].tag),
+    JSON.stringify(q))
+  const turns = [
+    { id: 'u1', role: 'user', blocks: [{ type: 'text', text: 'sent' }], at: 1 },
+    { id: 'u2', role: 'user', blocks: [{ type: 'text', text: 'waiting' }], at: 2, delivery: 'queued' },
+    { id: 'u3', role: 'user', blocks: [{ type: 'text', text: 'lost' }], at: 3, delivery: 'not-delivered', deliveryNote: 'not delivered — the app closed before this message was sent' }
+  ]
+  const rows = typeof R.chatRows === 'function' ? R.chatRows(turns, null) : null
+  ok('undelivered.1 a waiting message is not in the well (the list shows it); an undelivered one IS, carrying its sentence; and neither counts as a turn the agent had',
+    rows && rows.length === 2 && rows[0].undelivered === undefined && rows[1].id === 'u3' && /app closed/.test(rows[1].undelivered) && delivered(turns) === 1,
+    JSON.stringify(rows))
+}
+
+// M324 — focus.1–.3. A task's focus view: the per-task prefs parse field by
+//     field and keep the newest; the side it opens on never promises a pane the
+//     task lacks; the header's blocker and next action are the queue's and the
+//     handoff's own words, and the next action's press stays inside the page.
+{
+  const parse = typeof R.parseFocusPrefs === 'function' ? R.parseFocusPrefs : () => null
+  const parseMap = typeof R.parseFocusPrefsMap === 'function' ? R.parseFocusPrefsMap : () => ({})
+  const withP = typeof R.withFocusPrefs === 'function' ? R.withFocusPrefs : () => null
+  const good = parse({ split: 0.9, side: 'checks', file: 'src/a.ts', scroll: 120.4, at: 5 })
+  const bad = parse({ split: 'wide', side: 'nowhere', file: '', scroll: -3 })
+  const many = {}
+  for (let i = 0; i < 60; i += 1) many[`t${i}`] = { split: 0.5, side: 'changes', at: i }
+  const kept = parseMap({ ...many, broken: 'x' })
+  const moved = withP({ split: 0.4, side: 'changes', file: 'a.ts', scroll: 300, at: 1 }, { file: 'b.ts' }, 9)
+  ok('focus.1 per-task prefs: a split is clamped, an unknown side or empty file is dropped by field, a scroll rounds; the map keeps only the newest 50 and drops a non-object; opening another file forgets the old file\'s scroll',
+    good && good.split === 0.7 && good.side === 'checks' && good.file === 'src/a.ts' && good.scroll === 120 &&
+      bad && bad.split === 0.42 && bad.side === 'changes' && bad.file === undefined && bad.scroll === undefined &&
+      Object.keys(kept).length === 50 && kept.t59 !== undefined && kept.t0 === undefined && kept.broken === undefined &&
+      moved && moved.file === 'b.ts' && moved.scroll === undefined && moved.at === 9,
+    JSON.stringify({ good, bad, moved, n: Object.keys(kept).length }))
+  const opening = typeof R.openingSide === 'function' ? R.openingSide : () => null
+  ok('focus.2 the side a task opens on is the one remembered, unless it names a preview or a review the task no longer has — then Changes, never an empty pane',
+    opening({ side: 'preview' }, { page: false, review: true }) === 'changes' && opening({ side: 'preview' }, { page: true, review: true }) === 'preview' &&
+      opening({ side: 'review' }, { page: false, review: false }) === 'changes' && opening({ side: 'checks' }, { page: false, review: false }) === 'checks',
+    'openingSide')
+  const header = typeof R.focusHeaderOf === 'function' ? R.focusHeaderOf : () => null
+  const fromQueue = header({ group: { severity: 'failed', why: 'npm test failed on this version', next: { label: 'Read the failure', evidence: { kind: 'output' } } }, hasConversation: true })
+  const asking = header({ group: { severity: 'blocked', why: 'ada asks to run a command', next: { label: 'Answer', evidence: { kind: 'decision' } } }, hasConversation: true })
+  const toReview = header({ handoff: { action: 'review', detail: '3 files changed', actionLabel: 'Review changes' }, hasConversation: true })
+  const blocked = header({ handoff: { action: 'answer', detail: 'waiting on your approval for Bash', actionLabel: 'Answer', blocker: { kind: 'approval', subject: 'Bash' } }, hasConversation: true })
+  const none = header({ hasConversation: false })
+  ok('focus.3 the header: the queue\'s own why and next label when the task needs the person, its press opening the side that answers (a failed check → Checks, a decision → the conversation); else the handoff\'s words; a task with no conversation says how to start one',
+    fromQueue && fromQueue.blocker === 'npm test failed on this version' && fromQueue.next === 'Read the failure' && fromQueue.go.kind === 'side' && fromQueue.go.side === 'checks' &&
+      asking && asking.go.kind === 'conversation' &&
+      toReview && toReview.blocker === null && toReview.next === 'Review changes' && toReview.go.side === 'changes' &&
+      blocked && blocked.blocker === 'waiting on your approval for Bash' && blocked.go.kind === 'conversation' &&
+      none && none.go === null && /Start work/.test(none.next),
+    JSON.stringify({ fromQueue, asking, toReview, blocked, none }))
+}
+
 // M206 — groups.1. THE RAIL AS OBJECTS AND TASK ROLES: every row lands in exactly one group
 //     (agents · files · reviews · work · workflows · capabilities), in array
 //     order within it; an empty group is omitted; the group order is fixed;

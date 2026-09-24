@@ -390,6 +390,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover
                        agent:cancel-queued / agent:terminate
+                       agent:queue-edit / agent:send-correction
                        task:evidence / task:evidence-index / task:export-handoff
                        setup:preflight / recipe:history
                        setup:read / setup:save / setup:prepare
@@ -1103,6 +1104,9 @@ price of not killing something.
 | M319 | Backend fit before work starts: Start work offers a backend and lists only the capabilities THIS task touches (appended prompt, enforced no-push, interrupt, resume, images, known cost, read-only), refusing a required one it lacks; interrupt, cancel queued and end process are three separate acts (`agent:cancel-queued`, `agent:terminate`); a reviewed text hand-off continues a chat on another backend; a failed resume is recognised from each CLI's recorded output and the next message starts fresh; a run holding a chat has an unknown cost. [Ledger](docs/build-log/m319-m321-backends-deliverables-recipes.md). |
 | M320 | A task's deliverables: files as live references or captured versions (main-side digests at review), captures, check runs, review, merge, receipts and the conversation, each current / modified / missing / superseded / stale / unknown with why and a producer that outlives the panel; search across comments, checks and the record; a hand-off export through the outward gate (`task:evidence`, `task:evidence-index`, `task:export-handoff`). [Ledger](docs/build-log/m319-m321-backends-deliverables-recipes.md). |
 | M321 | Portable recipes: embedded paths lifted to `{repository}` and named parameters, versions assigned by the store with history, the exact definition kept on each run, a preflight of tools, setup, capabilities and ports before any worker (`setup:preflight`, `recipe:history`), and a reuse compared with the last successful run. [Ledger](docs/build-log/m319-m321-backends-deliverables-recipes.md). |
+| M322 | Queued messages are instructions a person controls: each waiting message listed with its images, editable and removable until sent; Send after this turn vs Stop and send (first in line, then the interrupt, where the backend has one); a dropped queue marks each message not delivered with why, with Send again / Discard; the unsent draft survives navigation and relaunch (`agent:queue-edit`, `agent:send-correction`). [Ledger](docs/build-log/m322-m324-queue-startwork-focus.md). |
+| M323 | Start work opens on project + request: teammate and backend preselected from configuration with a visible Change, criteria/checks/deliverables/arrangements under Options, issue search as the alternate route, the draft kept while setting up a repository or teammate. [Ledger](docs/build-log/m322-m324-queue-startwork-focus.md). |
+| M324 | A task's focus view: its conversation beside its changes, checks, review and bound preview, the title, repository, blocker and next action in view; diff-line comments and failed-check follow-ups land in the same conversation; split, side, file and scroll remembered per task; Back returns to the untouched canvas. Opened from the board, the card, the ⋯ menu, the palette and Needs you. [Ledger](docs/build-log/m322-m324-queue-startwork-focus.md). |
 
 ### What's next — the v10 run (D01–D20)
 

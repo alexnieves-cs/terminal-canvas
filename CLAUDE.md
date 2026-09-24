@@ -136,7 +136,7 @@ file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip bo
 canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine:integrate combine:receipts setup:read setup:save
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge
 job:list job:recover agent:cancel-queued agent:terminate task:evidence task:evidence-index
-task:export-handoff setup:preflight recipe:history
+task:export-handoff setup:preflight recipe:history agent:queue-edit agent:send-correction
 ```
 
 Direction is meaning, not convention. `preset:*` are main → renderer because the *menu* is

@@ -2,7 +2,7 @@ import type { PersistedWorkItem } from '@shared/work-items'
 import { carryBackend } from '@shared/agent-backends'
 import { useMemo, type RefObject } from 'react'
 import { useChat, getChat } from '@renderer/chat/chat-store'
-import { chatStateInput, chatHasRun } from '@renderer/chat/chat-model'
+import { chatStateInput, chatHasRun, deliveredUserTurns } from '@renderer/chat/chat-model'
 import type { ChatStateInput } from '@renderer/panels/panel-state'
 import type { Viewport } from './viewport'
 import { orderPanels } from './spatial-order'
@@ -132,7 +132,7 @@ function frontEndFields(p: Panel): { busy?: boolean; turns?: number } {
     ...(p.chat.teammateId === undefined ? {} : { teammateId: p.chat.teammateId }),
     // M97. Absent unless a run is live or just resolved — the palette's Auto rows read it.
     ...(chat.snapshot?.auto === undefined ? {} : { auto: chat.snapshot.auto }),
-    turns: chat.turns.filter((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text')).length
+    turns: deliveredUserTurns(chat.turns)
   }
 }
 

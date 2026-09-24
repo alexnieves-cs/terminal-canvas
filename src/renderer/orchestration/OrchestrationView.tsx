@@ -1494,7 +1494,7 @@ export function orchWebglAvailable(): boolean {
   }
 }
 
-function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | undefined, active: boolean): string[] {
+export function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | undefined, active: boolean): string[] {
   const [lines, setLines] = useState<string[]>([])
   const lastLine = useLastLine(panelId ?? '')
   useEffect(() => {
@@ -1530,7 +1530,7 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
  * M284. The worktree record the task island reads its branch from. A READ of main's
  * list, refetched when the board changes (a dispatch mints a lane), never a watch.
  */
-function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
+export function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
   const [rows, setRows] = useState<readonly WorktreeListRow[]>([])
   useEffect(() => {
     if (typeof window.canvas?.worktree?.list !== 'function') return
@@ -2472,7 +2472,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     ...(handoffItem?.brief === undefined ? {} : { brief: handoffItem.brief }),
     ...(handoffItem?.criteria === undefined ? {} : { criteria: handoffItem.criteria }),
     ...(selectedLive?.cwd === undefined || selectedLive.cwd === '' ? {} : { cwd: selectedLive.cwd }),
-    turns: selectedChat.turns.map((t): HandoffTurn => ({ role: t.role === 'user' ? 'user' : 'assistant', text: t.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n') }))
+    // M322. What the agent SAW: a waiting or undelivered message is not part of the conversation being handed on.
+    turns: selectedChat.turns.filter((t) => t.delivery === undefined).map((t): HandoffTurn => ({ role: t.role === 'user' ? 'user' : 'assistant', text: t.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n') }))
   })
   // M289. The typed relations, from the graph's authored edges and the canvas's
   // recorded outcomes; the focus is the selection's closure.

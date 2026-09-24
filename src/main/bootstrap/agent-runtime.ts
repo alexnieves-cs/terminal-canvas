@@ -135,6 +135,7 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   agents.subscribe((event) => {
     approvals.apply(event)
     if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
+    if (event.type === 'turn-removed') agentTranscripts.removeTurn(event.id, event.turnId)
     if (event.type === 'result') {
       const snap = agents.get(event.id)
       if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns })

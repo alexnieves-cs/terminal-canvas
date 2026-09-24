@@ -59,6 +59,8 @@ export interface DockProps {
   queue?: TaskQueue
   /** M318. Open a decision's evidence — the panel, or the task's review. A check's output opens in place. */
   onEvidence?: (e: QueueEvidence) => void
+  /** M324. Open a task's focus view from its group — the decision and its evidence in one place. */
+  onFocusTask?: (itemId: string) => void
   onSettings: () => void
   /** Backlog #13. The labelled rail is showing — a remembered choice, else Wide's default. */
   expanded: boolean
@@ -95,7 +97,7 @@ function flatQueue(q: TaskQueue): boolean {
 
 function DockImpl({
   navigator, navVisible, onChoose, centerView, onSetCenterView,
-  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onSettings,
+  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onFocusTask, onSettings,
   expanded, onToggleExpanded
 }: DockProps): JSX.Element {
   // M318. KEYBOARD TRAVERSAL — decision → evidence → back. The cursor is the
@@ -349,6 +351,10 @@ function DockImpl({
           <button type="button" className="rail-row__verb queue__next-verb" data-queue-next={g.next.evidence.kind}
             {...shellControl(() => { const d = g.decisions.find((x) => x.evidence === g.next.evidence) ?? g.decisions[0]; if (d !== undefined) openEvidence(d) })}>{g.next.label}</button>
           <span className="queue__after" data-queue-after>{g.after}</span>
+          {g.itemId !== null && onFocusTask !== undefined && (
+            <button type="button" className="rail-row__verb queue__focus" data-queue-focus={g.itemId} title="Open this task beside its conversation — answer, read the evidence and send a correction in one place"
+              {...shellControl(() => { if (g.itemId !== null) onFocusTask?.(g.itemId) })}>Focus task</button>
+          )}
         </div>
         {g.affects.length > 0 && (
           <p className="queue__affects" data-queue-affects={g.affects.length}>Waiting on this task: {g.affects.map((a) => a.title).join(', ')}</p>

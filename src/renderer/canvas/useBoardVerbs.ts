@@ -72,6 +72,8 @@ export interface BoardVerbs {
   related?: (panelId: string) => VerbOutcome
   arrange?: (panelId: string) => VerbOutcome
   fitTask?: () => VerbOutcome
+  /** M324. Open the focus view of the task a card or member panel belongs to. */
+  focus?: (panelId: string) => VerbOutcome
 }
 
 export interface BoardVerbsDeps {

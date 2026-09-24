@@ -1142,6 +1142,7 @@ app.whenReady().then(async () => {
   agentSessions.subscribe((event) => {
     approvalTracker.apply(event)
     if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
+    if (event.type === 'turn-removed') agentTranscripts.removeTurn(event.id, event.turnId)
     if (event.type === 'result') { const snap = agentSessions.get(event.id); if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns }) }
     if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
   })

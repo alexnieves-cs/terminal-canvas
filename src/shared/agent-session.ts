@@ -91,6 +91,11 @@ export interface AgentSessionSnapshot {
   costUsd?: number
   pending: PendingPermission[]
   queued: number
+  /**
+   * M322. The waiting messages themselves, in the order they will be sent —
+   * `queued` is their count, kept so every M82–M319 reader still reads it.
+   */
+  queue?: QueuedMessage[]
   /** M82. Why the last message queued: this session's turn, or the canvas's ceiling. */
   queuedReason?: 'in-flight' | 'concurrency'
   counters: AgentSessionCounters
@@ -104,6 +109,23 @@ export interface AgentSessionSnapshot {
   negotiated?: NegotiatedCapabilities
   /** M119. The handshake has been written and not yet answered: the first send is held. Absent for every other row and once the session opens. */
   awaitingHandshake?: true
+}
+
+/**
+ * M322. One message waiting behind the turn in flight, as a person sees it:
+ * the text (editable while it waits), its images by type and size (never the
+ * bytes), and why it waits. `turnId` is its identity — the stored user turn
+ * that carries `delivery: 'queued'` until it is written to the agent.
+ */
+export interface QueuedMessage {
+  turnId: string
+  text: string
+  images: { mediaType: string; size: number }[]
+  reason: 'in-flight' | 'concurrency'
+  /** Sent with Stop and send: first in line, served when the interrupted turn ends. */
+  correction?: true
+  /** An auto run's own continuation — shown, never edited, dropped with the run. */
+  auto?: true
 }
 
 /** M119. The capabilities a handshake states live; each absent when the agent said nothing about it. */
@@ -142,6 +164,10 @@ export type AgentSessionEvent = { id: string } & (
   /** A queued message written after the result that freed the turn. */
   | { type: 'dequeued'; text: string }
   | { type: 'queue-dropped'; count: number }
+  /** M322. The waiting list after any change to it — edit, remove, a send, a dequeue, a drop. */
+  | { type: 'queue'; queue: QueuedMessage[] }
+  /** M322. A stored turn withdrawn: a waiting message removed before it was sent, or an undelivered one discarded. */
+  | { type: 'turn-removed'; turnId: string }
   | { type: 'permission-answered'; requestId: string; allow: boolean }
   | { type: 'permission-dropped'; requestId: string }
   /** M97. The bounded run's state, main's own count — the chip is a projection of this. */
@@ -164,6 +190,14 @@ export type ChatAttachment =
 
 /** M75. `agent:send`'s answer: the runtime's word, or a refusal naming the attachment that could not go. */
 export type SendAnswer = SendResult | { refused: string }
+
+/** M322. `agent:queue-edit`: one waiting (or undelivered) message, by its turn id. `text` only for `edit`. */
+export type QueueEditRequest =
+  | { id: string; op: 'edit'; turnId: string; text: string }
+  | { id: string; op: 'remove' | 'discard'; turnId: string }
+
+/** M322. `agent:send-correction`'s answer: the send's word, and whether the turn in flight was asked to stop. */
+export interface CorrectionAnswer { answer: SendAnswer; interrupted: boolean }
 
 /**
  * M197. WHY A SEND DID NOT HAPPEN, in one sentence, or null when it did.

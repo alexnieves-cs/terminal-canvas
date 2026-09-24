@@ -2570,6 +2570,108 @@ const isResult = (l) => l.includes('"type":"result"')
   }
 
   {
+    // M322 — the waiting messages as a list a person controls. queue.1 is the
+    // brief's acceptance case: three queued, the second edited, the third
+    // removed, and only the intended messages reach the agent, in order.
+    const RESULT = JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.1, usage: { input_tokens: 1, output_tokens: 1 } })
+    const texts = (proc) => proc.stdin.map((l) => { try { const m = JSON.parse(l); return m.type === 'user' ? m.message.content.filter((b) => b.type === 'text').map((b) => b.text).join('') : null } catch { return null } }).filter((t) => t !== null)
+    const userTexts = (manager, id) => manager.transcript(id).filter((t) => t.role === 'user').map((t) => `${t.blocks[0].text}${t.delivery === undefined ? '' : `(${t.delivery})`}`)
+    {
+      const { manager, spawns, events } = makeManager()
+      manager.create({ id: 'q', cwd: '/w' })
+      manager.send('q', 'one')
+      const p = spawns[0].proc
+      p.emitLines(upTo(fixture('turn.jsonl'), isInit))
+      const r = ['two', 'three', 'four'].map((t) => manager.send('q', t))
+      const listed = manager.get('q').queue.map((x) => x.text)
+      const [, second, third] = manager.get('q').queue
+      const edited = manager.editQueued('q', second.turnId, 'three, corrected')
+      const removed = manager.removeQueued('q', third.turnId)
+      const whileWaiting = userTexts(manager, 'q')
+      p.emitLines([RESULT])
+      await tick(10)
+      p.emitLines([RESULT])
+      await tick(10)
+      p.emitLines([RESULT])
+      await tick(10)
+      const sent = texts(p)
+      const after = userTexts(manager, 'q')
+      const lastQueue = events.filter((e) => e.id === 'q' && e.type === 'queue').pop()
+      ok('queue.1 three queued, the second edited and the third removed: the agent receives one, two, the EDITED second and nothing else, in that order; the transcript never shows the removed one and ends with every message delivered',
+        r.every((x) => x === 'queued') && listed.join('|') === 'two|three|four' && edited === true && removed === true &&
+          whileWaiting.join('|') === 'one|two(queued)|three, corrected(queued)' &&
+          sent.join('|') === 'one|two|three, corrected' && after.join('|') === 'one|two|three, corrected' &&
+          lastQueue !== undefined && lastQueue.queue.length === 0 && manager.get('q').queued === 0 &&
+          manager.editQueued('q', second.turnId, 'too late') === false && manager.removeQueued('q', second.turnId) === false,
+        JSON.stringify({ r, listed, whileWaiting, sent, after }))
+      const delivered = manager.transcript('q').filter((t) => t.role === 'user')
+      ok('queue.2 a delivered message is stored again at the END of the transcript — after the answer it waited behind — and a relaunch never reuses a user turn id (the id carries the session stem)',
+        delivered.every((t) => /^u-[0-9a-z]+-\d+$/.test(t.id)) && events.some((e) => e.id === 'q' && e.type === 'turn-removed' && e.turnId === second.turnId),
+        JSON.stringify(delivered.map((t) => t.id)))
+    }
+    {
+      const { manager, spawns } = makeManager()
+      manager.create({ id: 'c', cwd: '/w' })
+      manager.send('c', 'build it')
+      const p = spawns[0].proc
+      p.emitLines(upTo(fixture('turn.jsonl'), isInit))
+      manager.send('c', 'later')
+      const answer = manager.sendCorrection('c', 'no — use the other file')
+      const order = manager.get('c').queue.map((x) => `${x.text}${x.correction ? '*' : ''}`)
+      const interruptWritten = p.stdin.some((l) => l.includes('"interrupt"'))
+      p.emitLines([RESULT])
+      await tick(10)
+      p.emitLines([RESULT])
+      await tick(10)
+      p.emitLines([RESULT])
+      await tick(10)
+      const idle = manager.sendCorrection('c', 'at rest')
+      ok('queue.correct.1 Stop and send puts the correction FIRST and writes the interrupt; when the turn ends the correction is the next input and the earlier waiting message follows; with nothing in flight it is an ordinary send',
+        answer.result === 'queued' && answer.interrupted === true && interruptWritten && order.join('|') === 'no — use the other file*|later' &&
+          texts(p).join('|') === 'build it|no — use the other file|later|at rest' && idle.result === 'sent' && idle.interrupted === false,
+        JSON.stringify({ answer, order, sent: texts(p), idle }))
+    }
+    {
+      const { manager, spawns } = makeManager()
+      manager.create({ id: 'x', cwd: '/w' })
+      manager.send('x', 'go')
+      const p = spawns[0].proc
+      p.emitLines(upTo(fixture('turn.jsonl'), isInit))
+      manager.send('x', 'and then this')
+      p.exit(1, null, '')
+      const t = manager.transcript('x').find((u) => u.blocks[0].text === 'and then this')
+      const discarded = manager.discardUndelivered('x', t.id)
+      const deliveredRefused = manager.discardUndelivered('x', manager.transcript('x')[0].id)
+      ok('queue.drop.1 a queue dropped by an exit is NOT withdrawn: each message stays in the transcript marked not-delivered with the sentence why; Discard removes it; a delivered turn cannot be discarded',
+        t !== undefined && t.delivery === 'not-delivered' && /never|not delivered/.test(t.deliveryNote) && discarded === true && deliveredRefused === false &&
+          !manager.transcript('x').some((u) => u.blocks[0].text === 'and then this'),
+        JSON.stringify({ t, discarded, deliveredRefused }))
+      manager.send('x', 'one more')
+      manager.send('x', 'waits')
+      const cancelled = manager.cancelQueued('x')
+      ok('queue.drop.2 Cancel withdraws what was waiting (a person chose it), unlike an exit, which leaves it marked',
+        cancelled === 1 && !manager.transcript('x').some((u) => u.blocks[0].text === 'waits'), JSON.stringify(userTexts(manager, 'x')))
+    }
+    if (LOG.createAgentTranscriptLog) {
+      const dir = mkdtempSync(join(tmpdir(), 'tc-queue-log-'))
+      try {
+        const log = LOG.createAgentTranscriptLog({ dir })
+        log.appendTurn('p', { id: 'u-a-1', role: 'user', blocks: [{ type: 'text', text: 'waiting' }], at: 1, delivery: 'queued' })
+        log.appendTurn('p', { id: 'm1', role: 'assistant', blocks: [{ type: 'text', text: 'answer' }], at: 2 })
+        log.appendTurn('p', { id: 'u-a-2', role: 'user', blocks: [{ type: 'text', text: 'removed' }], at: 3, delivery: 'queued' })
+        log.removeTurn('p', 'u-a-1')
+        log.appendTurn('p', { id: 'u-a-1', role: 'user', blocks: [{ type: 'text', text: 'waiting' }], at: 4 })
+        log.removeTurn('p', 'u-a-2')
+        log.appendTurn('p', { id: 'u-a-3', role: 'user', blocks: [{ type: 'text', text: 'lost' }], at: 5, delivery: 'not-delivered', deliveryNote: 'why' })
+        const read = log.read('p')
+        ok('queue.log.1 the transcript log\'s tombstone: a removed turn is gone from every read, one appended again after its removal takes the END position, and delivery and its note survive a read',
+          read.turns.map((t) => t.id).join('|') === 'm1|u-a-1|u-a-3' && read.turns[1].delivery === undefined && read.turns[2].delivery === 'not-delivered' && read.turns[2].deliveryNote === 'why',
+          JSON.stringify(read.turns))
+      } finally { rmSync(dir, { recursive: true, force: true }) }
+    }
+  }
+
+  {
     // resume-lost.* — recorded 2026-09-23 against claude 2.1.281, codex-cli
     // 0.156.1 and GitHub Copilot CLI 1.0.87, each asked to resume an id it
     // never held (scripts/fixtures/agent-session/{,codex/,copilot/}resume-fail.*).

@@ -13,7 +13,7 @@ import type { TemplateSaveResult } from './templates'
 import type { WatchTrigger } from './watch-trigger'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead, UsageRow } from './run-ledger'
 import type { ReviewIdentity } from './review-identity'
-import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult, QueueEditRequest, CorrectionAnswer } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
@@ -702,6 +702,20 @@ export const IPC = {
    */
   AGENT_CANCEL_QUEUED: 'agent:cancel-queued',
   AGENT_TERMINATE: 'agent:terminate',
+  /**
+   * M322. The waiting messages, one at a time: EDIT a message's text or
+   * REMOVE it before it is sent, or DISCARD one the transcript marks not
+   * delivered. Each answers false once the message has reached the agent —
+   * what the agent saw is never edited.
+   */
+  AGENT_QUEUE_EDIT: 'agent:queue-edit',
+  /**
+   * M322. STOP AND SEND: the message goes first in line and the turn in
+   * flight is interrupted, so it is the agent's next input. Answers the send's
+   * word and whether the interrupt was written (false on a backend with no
+   * interrupt door — the message then waits at the head of the queue).
+   */
+  AGENT_SEND_CORRECTION: 'agent:send-correction',
   AGENT_ANSWER: 'agent:answer',
   AGENT_LIST: 'agent:list',
   AGENT_TRANSCRIPT: 'agent:transcript',
@@ -1853,6 +1867,10 @@ export interface CanvasBridge {
     cancelQueued(id: string): Promise<number>
     /** M319. See AGENT_TERMINATE: false with no process to end. */
     terminate(id: string): Promise<boolean>
+    /** M322. See AGENT_QUEUE_EDIT. */
+    queueEdit(req: QueueEditRequest): Promise<boolean>
+    /** M322. See AGENT_SEND_CORRECTION. */
+    sendCorrection(id: string, text: string, attachments?: ChatAttachment[]): Promise<CorrectionAnswer>
     /** `drop`: also remove the durable transcript (an explicit close, never a quit). */
     dispose(req: { id: string; drop: boolean }): Promise<void>
     /** M98. `scope: 'session'` on an allow also grants the tool for the rest of the session — main grants, then answers. */

@@ -42,6 +42,12 @@ export interface AgentTranscriptRead {
 export interface AgentTranscriptLog {
   appendTurn(panelId: string, turn: TranscriptTurn): void
   appendMeta(panelId: string, meta: AgentTranscriptMeta): void
+  /**
+   * M322. A tombstone: the turn is gone from every later read. A turn
+   * appended again under the same id after it takes a NEW position (the end)
+   * — which is how a queued message moves to where it was delivered.
+   */
+  removeTurn(panelId: string, turnId: string): void
   read(panelId: string): AgentTranscriptRead
   drop(panelId: string): void
 }
@@ -78,6 +84,9 @@ export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscript
   return {
     appendTurn(panelId, turn) {
       append(panelId, JSON.stringify({ t: 'turn', turn }))
+    },
+    removeTurn(panelId, turnId) {
+      append(panelId, JSON.stringify({ t: 'drop', id: turnId }))
     },
     appendMeta(panelId, meta) {
       append(panelId, JSON.stringify({ t: 'meta', meta }))
@@ -116,10 +125,14 @@ export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscript
             ...(typeof turn.model === 'string' ? { model: turn.model } : {}),
             ...(isRecord(turn.usage)
               ? { usage: { input: num(turn.usage.input), output: num(turn.usage.output), cacheWrite: num(turn.usage.cacheWrite), cacheRead: num(turn.usage.cacheRead) } }
-              : {})
+              : {}),
+            ...(turn.delivery === 'queued' || turn.delivery === 'not-delivered' ? { delivery: turn.delivery } : {}),
+            ...(typeof turn.deliveryNote === 'string' ? { deliveryNote: turn.deliveryNote } : {})
           }
           if (!byId.has(turn.id)) order.push(turn.id)
           byId.set(turn.id, stored)
+        } else if (parsed.t === 'drop' && typeof parsed.id === 'string') {
+          if (byId.delete(parsed.id)) order.splice(order.indexOf(parsed.id), 1)
         } else if (parsed.t === 'meta' && isRecord(parsed.meta)) {
           const m = parsed.meta
           const usage = isRecord(m.usage) ? m.usage : {}

@@ -2709,6 +2709,73 @@ const WS = [
     JSON.stringify({ noMates, placeless, fine, summary }))
 }
 
+// M323 — startwork-first.*. PROJECT-FIRST START: the sheet opens on the
+// repository and the task with the agent and backend already answered, so in
+// a configured project typing the request and pressing Start is the whole
+// start. Each preselection must be WORKABLE (a guess never lands on a
+// teammate with no places, a backend this task refuses, or a repository the
+// teammate's list no longer holds), or the fast path ends on a disabled Start.
+{
+  const mate = (id, places) => ({ id, name: id, brief: '', places, services: [], memory: id, chats: [], messaging: false, scheduling: false })
+  const ada = mate('ada', ['/w']); const bo = mate('bo', ['/v']); const nell = mate('nell', [])
+  const pick = (ts, given, last) => P.preselectTeammate(ts, given, last)
+  ok('startwork-first.1 the teammate is preselected — the one named by the caller, then the last used (only if it still has places), then the ONLY placed teammate; several with no history is a real question and answers \'\'',
+    typeof P.preselectTeammate === 'function' &&
+      pick([ada, bo], 'bo', { teammateId: 'ada' }) === 'bo' &&
+      pick([ada, bo], undefined, { teammateId: 'bo' }) === 'bo' &&
+      pick([ada, nell], undefined, { teammateId: 'nell' }) === 'ada' &&
+      pick([ada, nell], undefined, null) === 'ada' &&
+      pick([ada, bo], undefined, null) === '' &&
+      pick([ada, bo], 'gone', { teammateId: 'gone' }) === '',
+    JSON.stringify([pick([ada, bo], undefined, null), pick([ada, nell], undefined, { teammateId: 'nell' })]))
+
+  const repos = [{ path: '/w/api' }, { path: '/w/site' }]
+  const root = (rs, o) => P.preselectRoot(rs, o)
+  ok('startwork-first.2 the repository is preselected — a proposal\'s directory (deepest containing repository), then the last used if the list still holds it, then the only one; otherwise it asks',
+    typeof P.preselectRoot === 'function' &&
+      root(repos, { preferRoot: '/w/site/src/x', last: { root: '/w/api' } }) === '/w/site' &&
+      root(repos, { last: { root: '/w/api' } }) === '/w/api' &&
+      root(repos, { last: { root: '/elsewhere' } }) === '' &&
+      root([{ path: '/w/api' }], { last: null }) === '/w/api' &&
+      root(repos, { last: null }) === '',
+    JSON.stringify([root(repos, { last: { root: '/w/api' } }), root(repos, { last: null })]))
+
+  const rows = (verdicts) => Object.entries(verdicts).map(([backend, verdict]) => ({ backend, fit: { verdict, rows: [] } }))
+  ok('startwork-first.3 the backend keeps the first PREFERENCE this task does not refuse (card vendor, last used, default) — a refused preference gives way to the first row that fits, never to a disabled Start',
+    typeof P.preselectBackend === 'function' &&
+      P.preselectBackend(rows({ claude: 'fits', codex: 'fits' }), [undefined, 'codex', 'claude']) === 'codex' &&
+      P.preselectBackend(rows({ claude: 'fits', codex: 'refused' }), ['codex', undefined, 'claude']) === 'claude' &&
+      P.preselectBackend(rows({ claude: 'refused', codex: 'degraded', copilot: 'fits' }), ['claude']) === 'copilot' &&
+      P.preselectBackend(rows({ claude: 'refused', codex: 'degraded' }), ['claude']) === 'codex',
+    'expected card vendor → last used → default, skipping refused rows')
+
+  ok('startwork-first.4 Options rests CLOSED for a plain task and OPEN when it already holds a recipe, an arrangement, an outcome, criteria, checks, deliverables or a parameter — a folded live swarm is how five agents start from a sheet that looked solo',
+    typeof P.optionsOpenAtRest === 'function' &&
+      P.optionsOpenAtRest({}) === false && P.optionsOpenAtRest({ brief: '  ', criteria: '' }) === false &&
+      ['recipeId', 'swarm', 'brief', 'criteria', 'checks', 'deliverables'].every((k) => P.optionsOpenAtRest({ [k]: 'x' }) === true) &&
+      P.optionsOpenAtRest({ params: { path: 'src' } }) === true && P.optionsOpenAtRest({ params: { path: '' } }) === false,
+    'expected closed only when every option is default')
+
+  const d = (raw) => P.parseStartDraft(raw)
+  const full = d({ title: 'fix the flaky test', teammateId: 'ada', root: '/w/api', backend: 'codex', swarm: 'test', checks: 'npm test', params: { a: 'x', b: 3 }, issueKey: '' })
+  ok('startwork-first.5 a stored draft parses field by field — an unknown backend or arrangement is dropped, not trusted; non-string params cost themselves; ids alone (no text, no option) are not a draft; garbage is null',
+    typeof P.parseStartDraft === 'function' &&
+      full !== null && full.title === 'fix the flaky test' && full.backend === 'codex' && full.swarm === 'test' && full.checks === 'npm test' &&
+      JSON.stringify(full.params) === '{"a":"x"}' && full.issueKey === undefined &&
+      d({ title: 'x', backend: 'gpt-9', swarm: 'mob' }).backend === undefined && d({ title: 'x', backend: 'gpt-9', swarm: 'mob' }).swarm === undefined &&
+      d({ title: '', teammateId: 'ada', root: '/w' }) === null && d('nope') === null && d(null) === null &&
+      P.parseStartLast({ teammateId: 'ada', backend: 'nope' }).backend === undefined && P.parseStartLast({}) === null,
+    JSON.stringify(full))
+
+  // The storage wrapper: localStorage absent (plain node) or throwing must
+  // cost the draft, never the sheet.
+  const store = P.startDraftStore
+  let threw = false
+  try { store.save({ title: 'x' }); store.load(); store.clear(); store.last(); store.remember({ teammateId: 'ada' }) } catch { threw = true }
+  ok('startwork-first.6 the draft store never throws when storage is unavailable — the sheet works without it',
+    store !== undefined && threw === false && store.load() === null, `threw=${threw}`)
+}
+
 // Brief #19 — the advanced features, where they become relevant. From what is
 // true of ONE panel: at most three doors, each said as its benefit, none where
 // it does not apply, and each running a verb the palette already holds.

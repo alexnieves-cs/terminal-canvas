@@ -247,6 +247,7 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
+import { FocusTask } from '../focus/FocusTask'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
@@ -3503,7 +3504,7 @@ export function Canvas({
   // the drawers, and every mousedown on Orchestrate would trip it. Read by
   // shouldIgnoreKeys, declared above, only from handlers long after this assignment.
   const canvasCoveredRef = useRef(false)
-  canvasCoveredRef.current = chrome.centerView === 'orchestration'
+  canvasCoveredRef.current = chrome.centerView !== 'canvas'
   // M283. The element that last had focus INSIDE the canvas host, kept so a return from
   // Orchestrate hands the keyboard back — without it the user's next keystroke after the
   // round trip goes nowhere. Cleared when focus moves deliberately to something OUTSIDE
@@ -3541,9 +3542,9 @@ export function Canvas({
     // hidden inspector, whose primary action is a terminal's Restart (orch-page.4 found it).
     // Set here because those components own their roots and forward no attributes.
     for (const region of shellRef.current?.querySelectorAll<HTMLElement>('.shell__rail, .shell__tree, .shell__inspector') ?? []) {
-      region.inert = chrome.centerView === 'orchestration'
+      region.inert = chrome.centerView !== 'canvas'
     }
-    if (chrome.centerView === 'orchestration') {
+    if (chrome.centerView !== 'canvas') {
       // Blurred HERE, explicitly, rather than trusting `inert` to do it: Chromium's
       // focus fixup for an inert subtree runs lazily at a later style pass, and until it
       // does the terminal's textarea still takes a real keystroke (orch-page.3).
@@ -3594,7 +3595,9 @@ export function Canvas({
       const ids = [...cur]
       const shared = ids.length > 1 ? taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => ids.every((id) => m.members.some((x) => x.panelId === id))) : []
       setOrchSelectedId(ids.length === 1 ? ids[0]! : shared.length === 1 ? ids[0]! : null)
-    } else {
+    } else if (centerViewNow === 'orchestration') {
+      // Only Orchestrate hands a selection back; a task's focus view returns
+      // to the canvas exactly as it was left (M324).
       const id = orchSelectedRef.current
       const cur = selectedIdsRef.current
       if (id !== null && !(cur.size === 1 && cur.has(id)) && panelsRef.current.some((p) => p.rect.id === id)) {
@@ -3614,8 +3617,42 @@ export function Canvas({
     setCenterView('canvas')
   }, [setCenterView])
   useEffect(() => {
-    if (palette.open && chrome.centerView === 'orchestration') setCenterView('canvas')
+    if (palette.open && chrome.centerView !== 'canvas') setCenterView('canvas')
   }, [palette.open, chrome.centerView, setCenterView])
+  // M324. A TASK'S FOCUS VIEW — the third center page. It remembers the page it
+  // was opened from (the canvas, or Orchestrate) so Back returns there; the
+  // canvas's camera is never touched, so "there" is exactly where it was.
+  const [focusTask, setFocusTask] = useState<{ itemId: string; from: 'canvas' | 'orchestration' } | null>(null)
+  const openFocusTask = useCallback((itemId: string): void => {
+    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow }))
+    setCenterView('focus')
+  }, [centerViewNow, setCenterView])
+  const closeFocusTask = useCallback((): void => {
+    const from = focusTask?.from ?? 'canvas'
+    setFocusTask(null)
+    setCenterView(from)
+  }, [focusTask, setCenterView])
+  const openFocusTaskRef = useRef(openFocusTask)
+  openFocusTaskRef.current = openFocusTask
+  // M324. The palette's door: a work card names its item; any other panel its
+  // ONE task. Opened a task later — the palette row runs while the palette is
+  // still open, and an open palette returns every covering page to the canvas.
+  boardVerbsRef.current.focus = (panelId: string) => {
+    const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
+    const owners = isWorkPanel(panel) ? [panel.work.itemId] : taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === panelId)).map((m) => m.itemId)
+    if (owners.length === 0) return { kind: 'refused', reason: 'that panel is not part of a task — select a work card or one of its panels' }
+    if (owners.length > 1) return { kind: 'refused', reason: `that panel is part of ${owners.length} tasks — focus one from its card` }
+    const itemId = owners[0]!
+    window.setTimeout(() => openFocusTaskRef.current(itemId), 0)
+    return { kind: 'ran' }
+  }
+  // A focus view with no task to show (deleted, or a workspace switch took it
+  // away) is an empty page — it returns to the canvas instead.
+  useEffect(() => {
+    if (chrome.centerView !== 'focus') return
+    if (focusTask === null || !workItems.some((w) => w.id === focusTask.itemId)) { setFocusTask(null); setCenterView('canvas') }
+  }, [chrome.centerView, focusTask, workItems, setCenterView])
 
   // Backlog #75's diagnostics overlay toggle. Ephemeral, unlike chrome above:
   // this is a debug view, not a persisted preference.
@@ -3768,7 +3805,7 @@ export function Canvas({
     // exists to prevent.
     // M283. And never over Orchestrate: the grid mounts inside the covered canvas host,
     // so it would be invisible, and its release commits a workspace switch.
-    enabled: !palette.open && chrome.centerView !== 'orchestration'
+    enabled: !palette.open && chrome.centerView === 'canvas'
   })
   // Publishes the predicate to the two consumers declared above it — see
   // navGridIsOpenRef's own comment. In an effect rather than a render-time
@@ -5126,7 +5163,12 @@ export function Canvas({
       of: (id: string) => taskMenuRef.current(id),
       show: (id: string) => speak(paletteActionsRef.current?.showTask(id)),
       related: (id: string) => speak(paletteActionsRef.current?.showRelated(id)),
-      arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id))
+      arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id)),
+      // M324. The member's ONE task (the menu offers the verb only then).
+      focus: (id: string) => {
+        const owner = taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === id))
+        if (owner.length === 1) openFocusTaskRef.current(owner[0]!.itemId)
+      }
     }
   }, [])
   const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined || p.skillTrail === 'collapsed' ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}${p.skillTrail === 'collapsed' ? 'T' : ''}` : '')).filter((s) => s !== '').join(',')
@@ -7228,9 +7270,10 @@ export function Canvas({
       onGoTo: goToWorkItem,
       onSetState: setWorkItemState,
       onShowOnCanvas: spawnWorkCard,
+      onFocusTask: openFocusTask,
       onToggle: chrome.toggleNavigator
     }
-  }, [workItems, teammates, railRows, cardItemIds, goToWorkItem, setWorkItemState, spawnWorkCard, chrome.toggleNavigator])
+  }, [workItems, teammates, railRows, cardItemIds, goToWorkItem, setWorkItemState, spawnWorkCard, chrome.toggleNavigator, openFocusTask])
   /* ---------------------------------------------------------- M127: skills --
    * The Skills pane's state: the shelf (a TOP-LEVEL record, read and written
    * through its own pair of invokes — never through the undo history, which
@@ -7713,7 +7756,7 @@ export function Canvas({
         chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
         chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}${
         inspectorPinned ? ' shell--inspector-pinned' : ''}${
-        chrome.centerView === 'orchestration' ? ' shell--center-orch' : ''}${
+        chrome.centerView !== 'canvas' ? ' shell--center-orch' : ''}${
         resumeStrip !== null ? ' shell--strip' : ''}`}
       // (this redesign) The resize handle sets this same custom property live, imperatively,
       // during a drag; this inline value is only what REACT last committed —
@@ -7788,6 +7831,7 @@ export function Canvas({
           if (e.kind === 'review') { boardVerbsRef.current.review?.(e.itemId); return }
           if (e.kind === 'decision' || e.kind === 'panel' || e.kind === 'output') paletteActions.goToPanel(e.panelId)
         }}
+        onFocusTask={openFocusTask}
         onSettings={openSettingsScope}
         expanded={dock.expanded}
         onToggleExpanded={dock.toggle}
@@ -8023,6 +8067,46 @@ export function Canvas({
           />
         </div>
       )}
+      {/* M324. A task's focus view: the same overlay cell as Orchestrate, over
+          the same mounted canvas. A task that no longer exists (deleted,
+          another workspace) falls back to the canvas by the effect below. */}
+      {chrome.centerView === 'focus' && focusTask !== null && (() => {
+        const item = workItems.find((w) => w.id === focusTask.itemId)
+        if (item === undefined) return null
+        const members = taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? []
+        const group = taskQueue.groups.find((g) => g.itemId === item.id)
+        const handoff = taskHandoffOf(item.id)
+        const ctx = taskContextFor(item.id)
+        return (
+          <div className="shell__orch shell__orch--on" data-center-view="focus" role="presentation">
+            <FocusTask
+              item={item}
+              panels={panels}
+              workItems={workItems}
+              memberIds={members}
+              {...(group === undefined ? {} : { group })}
+              {...(handoff === undefined ? {} : { handoff })}
+              {...(ctx === undefined ? {} : { taskContext: ctx })}
+              backendAvailable={(b) => backendAvailable(presetRows, b)}
+              teammateName={(id) => (id === undefined ? undefined : (teammates ?? []).find((t) => t.id === id)?.name ?? id)}
+              taskHandoffOf={taskHandoffOf}
+              onRefreshTaskHandoffs={refreshTaskHandoffs}
+              onPatchWorkItem={patchWorkItem}
+              onBack={closeFocusTask}
+              onShowOnCanvas={(id) => {
+                setFocusTask(null)
+                leaveForCanvas()
+                const it = workItemsRef.current.find((w) => w.id === id)
+                if (it?.panelId !== undefined && panelsRef.current.some((p) => p.rect.id === it.panelId)) frameTaskOf(it.panelId)
+                else goToWorkItem(id)
+              }}
+              onJump={(id) => { setFocusTask(null); leaveForCanvas(); paletteActions.goToPanel(id) }}
+              onOpenPath={(path) => { setFocusTask(null); leaveForCanvas(); openFileAtCentre(path) }}
+              onStartWork={(id) => { setFocusTask(null); leaveForCanvas(); paletteActions.beginStartWork({ itemId: id }) }}
+            />
+          </div>
+        )
+      })()}
       <div
         // `panning` is real React state (flips only at drag begin/end, so no
         // 60Hz cost); spaceHeld.isHeld() reads a ref and is therefore
@@ -8034,14 +8118,14 @@ export function Canvas({
         // never inferred from which panels happen to render summaries.
         data-flipped={flipped ? '' : undefined}
         data-cluster-arrival={clusterArrival ? '' : undefined}
-        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}${chrome.centerView === 'orchestration' ? ' canvas--behind-orch' : ''}`}
+        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}${chrome.centerView !== 'canvas' ? ' canvas--behind-orch' : ''}`}
         ref={hostRef}
-        aria-hidden={chrome.centerView === 'orchestration' ? true : undefined}
+        aria-hidden={chrome.centerView !== 'canvas' ? true : undefined}
         // M283. Covered means out of the tab order and deaf to clicks and keys, not only
         // invisible: an opacity-0 host still takes Tab into a terminal's textarea, and
         // typing there reached the PTY. `inert`, not display:none — a collapsed host
         // refits every xterm and SIGWINCHes each running agent (orch-page.2).
-        inert={chrome.centerView === 'orchestration'}
+        inert={chrome.centerView !== 'canvas'}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
         // own keyboard model (a screen reader must pass keys through, not
@@ -8446,6 +8530,7 @@ export function Canvas({
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // M114/M115. The verbs, through the SAME palette members the rows call.
                 onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
+                onFocusTask={openFocusTask}
                 teammateReason={teammateRefusal}
                 // M275. The card's arrangement door, into the SAME one start
                 // action every other door takes — with the shape chosen, so

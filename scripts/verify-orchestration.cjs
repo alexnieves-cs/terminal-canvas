@@ -804,10 +804,14 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
 // refactor could drop without any red there being obviously about them.
 {
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
-  ok('orch-page.src.1 the canvas host is inert while Orchestrate covers it, and shouldIgnoreKeys reads the cover first',
-    /inert=\{chrome\.centerView === 'orchestration'\}/.test(canvasSrc) &&
+  // M324. A task's focus view is a SECOND covering page, so the cover is read
+  // as "not the canvas" rather than naming Orchestrate — every page that covers
+  // the host makes it inert and gates the shortcuts, not only the first one.
+  ok('orch-page.src.1 the canvas host is inert while any page covers it (Orchestrate, a task\'s focus view), and shouldIgnoreKeys reads the cover first',
+    /inert=\{chrome\.centerView !== 'canvas'\}/.test(canvasSrc) &&
+      /canvasCoveredRef\.current = chrome\.centerView !== 'canvas'/.test(canvasSrc) &&
       /\(\) => canvasCoveredRef\.current \|\| palette\.isOpen\(\)/.test(canvasSrc) &&
-      /enabled: !palette\.open && chrome\.centerView !== 'orchestration'/.test(canvasSrc))
+      /enabled: !palette\.open && chrome\.centerView === 'canvas'/.test(canvasSrc))
 }
 
 // M287 — workbench.1–.3. THE WORKBENCH, pinned as text where behaviour lives

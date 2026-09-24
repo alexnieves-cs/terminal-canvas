@@ -75,5 +75,7 @@ module.exports = {
   ...require('../src/renderer/canvas/inspection-directory'),
   ...require('../src/renderer/shell/inspector-context'),
   ...require('../src/shared/resume-summary'),
-  ...require('../src/shared/retained-outcomes')
+  ...require('../src/shared/retained-outcomes'),
+  /* M324. A task's focus view: its per-task prefs, the side it opens on, the header's words. */
+  ...require('../src/renderer/focus/focus-model')
 }

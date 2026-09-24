@@ -4,8 +4,14 @@ import type { ShellBreakpoint } from './useShellBreakpoint'
 export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board' | 'skills'
 /** M279: `activity` — what the object has done, from the feed. */
 export type ContextTab = 'detail' | 'work' | 'tools' | 'activity'
-/** M268. Which page fills the center column. The canvas host stays mounted either way. */
-export type CenterView = 'canvas' | 'orchestration'
+/**
+ * M268. Which page fills the center column. The canvas host stays mounted either way.
+ * M324. `focus` — one task's focus view. Never persisted: it names a task, and
+ * a relaunch into a page about a task the person did not just choose would be
+ * a place they did not ask to be. Every "is the canvas covered" test reads
+ * `!== 'canvas'`, so a third page is covered the way Orchestrate is.
+ */
+export type CenterView = 'canvas' | 'orchestration' | 'focus'
 
 export interface ShellChrome {
   /** The breakpoint the shell measured for itself; stamped as `data-bp`. */
@@ -155,7 +161,8 @@ export function useShellChrome(deps: {
         if (center) {
           const suppress = bootRef.current
           bootRef.current = false
-          setCenterViewState(center.value === 'orchestration' && !suppress ? 'orchestration' : 'canvas')
+          // M324. A settings re-read never pulls a person out of a focus view.
+          setCenterViewState((cur) => (cur === 'focus' ? cur : center.value === 'orchestration' && !suppress ? 'orchestration' : 'canvas'))
         }
       })
     }
@@ -211,7 +218,8 @@ export function useShellChrome(deps: {
   // The breakpoint rule, in one place.
   const railOpen = railPref ?? !firstWorkspace
   const inspectorOpen = ctxPref ?? (!firstWorkspace && bp === 'wide')
-  const orchestration = centerView === 'orchestration'
+  // M324. "A page covers the canvas" — Orchestrate or a task's focus view.
+  const orchestration = centerView !== 'canvas'
   // M268. Orchestration takes the center full-bleed: hide rail/inspector for
   // room without rewriting their persisted prefs.
   const navVisible = orchestration ? false : (bp === 'compact' ? navDrawer : railOpen)
@@ -224,8 +232,8 @@ export function useShellChrome(deps: {
 
   const setCenterView = useCallback((view: CenterView) => {
     setCenterViewState(view)
-    write('shell.centerView', view)
-    if (view === 'orchestration') {
+    if (view !== 'focus') write('shell.centerView', view)
+    if (view !== 'canvas') {
       setNavDrawer(false)
       setCtxDrawer(false)
       setAttentionOpen(false)

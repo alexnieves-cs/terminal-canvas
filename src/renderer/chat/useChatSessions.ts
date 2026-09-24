@@ -1,4 +1,5 @@
 import { carryBackend } from '@shared/agent-backends'
+import { writeDraft } from './chat-drafts'
 import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel } from '@renderer/panels/panels'
@@ -102,6 +103,9 @@ export function revokeChatGrants(id: string): void {
 export function disposeChat(id: string, drop: boolean): void {
   created.delete(id)
   clearChat(id)
+  // M322. An explicit close drops the draft with the transcript: a panel id
+  // minted again later must not open on a dead conversation's half-message.
+  if (drop) writeDraft(id, '')
   void window.canvas.agentSession.dispose({ id, drop }).catch(() => {})
 }
 

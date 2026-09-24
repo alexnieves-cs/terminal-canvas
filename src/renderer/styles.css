@@ -5422,6 +5422,23 @@ body {
    the corner mid-answer reads which one is there. It is absolutely placed, so
    the wider pill moves nothing in the well. */
 .chat__composer--live .chat__verb--interrupt { width: auto; gap: var(--sp-1); padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-full); font-size: var(--t-sm); font-weight: 600; }
+/* M322. THE WAITING LIST, above the chips: each queued message in the order
+   it goes, its tag (why it waits), its words in the body face, and Edit /
+   Remove as quiet word verbs. Capped in height so a long queue scrolls inside
+   the well instead of pushing the transcript off the panel. */
+.chat__waiting { display: flex; flex-direction: column; gap: var(--sp-1); max-height: 40%; overflow-y: auto; }
+.chat__waiting-head { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.chat__waiting-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.chat__waiting-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); background: var(--s-2); }
+.chat__waiting-tag { font-size: var(--t-sm); color: var(--fg-3); }
+.chat__waiting-text { flex: 1 1 100%; margin: 0; font-family: var(--font-ui); font-size: var(--t-base); color: var(--fg-2); white-space: pre-wrap; word-break: break-word; }
+.chat__waiting-edit { flex: 1 1 100%; resize: vertical; font-family: var(--font-ui); font-size: var(--t-base); color: var(--fg); background: var(--s-1); border: 1px solid var(--iris); border-radius: var(--r-sm); padding: var(--sp-2); }
+/* M322. The two mid-turn verbs: words, in a row of their own under the text
+   (the corner stays Stop's), present for the whole turn so nothing moves. */
+.chat__midturn { display: flex; gap: var(--sp-2); padding-right: calc(var(--sp-8) * 3); }
+/* M322. A message the agent never received: the bubble dashed, the sentence under it. */
+.chat__row--undelivered { border: 1px dashed var(--amber); background: transparent; }
+.chat__undelivered { margin: var(--sp-2) 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); font-size: var(--t-sm); color: var(--amber); }
 /* #13. The status line: always present, always one line, so nothing above or
    below it moves as a turn starts, streams and ends. Its right edge clears the
    anchored Send/Stop control. */
@@ -7411,6 +7428,11 @@ body {
 .sheet__advanced-toggle { cursor: pointer; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); padding: var(--sp-2) 0; }
 .sheet__advanced-toggle:hover { color: var(--fg); }
 .sheet__advanced[open] .sheet__advanced-toggle { margin-bottom: var(--sp-3); }
+/* M323. The preselected teammate and backend are a FACT on one line, not a
+   muted toggle: the name reads at body colour, and only "Change" is quiet. */
+.sheet__who > .sheet__advanced-toggle { color: var(--fg-2); }
+.sheet__who-change { color: var(--fg-4); }
+.sheet__route { margin: calc(-1 * var(--sp-2)) 0 0; }
 .sheet__actions { flex: 1 1 100%; display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-4); }
 .sheet__actions .sheet__keys { flex: 1 1 auto; color: var(--fg-4); }
 .sheet__button { min-height: 32px; padding: 0 var(--sp-6); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 500; cursor: pointer; }
@@ -9213,3 +9235,68 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .sheet__field--how .sheet__how > .sheet__select, .sheet__field--how .sheet__how > .sheet__input { min-width: 9em; }
 /* M315. The Lanes row's checkbox sits beside its words, not a row-width apart. */
 .sheet__check { display: inline-flex; align-items: center; gap: var(--sp-2); }
+
+/* M324. A TASK'S FOCUS VIEW — a page in Orchestrate's overlay cell. The root is
+   `.focus-view`, NEVER `.focus`: xterm puts a `focus` class on a focused
+   terminal, and a bare `.focus` rule padded every focused terminal off its
+   own cell grid (verify:panels:agents hover.1/links.1 went red on it). The header
+   keeps four facts in view (title, repository, blocker, next action); the
+   body is a two-column split whose first column is the conversation and
+   whose width is the person's (inline, remembered per task). The evidence
+   side hosts the workbench in its reading shape: full height, no strip
+   chrome, and the brief column folded away (the Review side carries it). */
+.focus-view {
+  display: flex; flex-direction: column; height: 100%; min-height: 0; box-sizing: border-box;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5); gap: var(--sp-3);
+  font-family: var(--font-ui); color: var(--fg); background: var(--bg);
+}
+.focus__head {
+  display: flex; align-items: center; gap: var(--sp-4); flex-shrink: 0;
+  padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line);
+}
+.focus__back { flex-shrink: 0; min-height: 28px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-2); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); cursor: pointer; }
+.focus__back:hover { background: var(--s-3); }
+.focus__id { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; flex: 1 1 auto; }
+.focus__title { margin: 0; font-size: var(--t-lg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__repo { font-size: var(--t-sm); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__state { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); min-width: 0; max-width: 46%; }
+.focus__blocker { margin: 0; font-size: var(--t-sm); color: var(--amber); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.focus__next { display: inline-flex; align-items: baseline; gap: var(--sp-2); max-width: 100%; min-height: 28px; padding: 0 var(--sp-3); border: 1px solid var(--iris); border-radius: var(--r-sm); background: var(--iris-dim); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__next:disabled { border-color: var(--line); background: transparent; color: var(--fg-2); cursor: default; }
+.focus__next-label { font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.focus__body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.focus__conversation {
+  min-width: 0; min-height: 0; display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); overflow: hidden;
+}
+.focus__conversation > .chat__body { flex: 1 1 auto; min-height: 0; }
+.focus__empty { margin: auto; display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); color: var(--fg-2); font-size: var(--t-md); }
+.focus__split { cursor: col-resize; touch-action: none; position: relative; }
+.focus__split::after { content: ''; position: absolute; top: 50%; left: 3px; width: 2px; height: 40px; transform: translateY(-50%); border-radius: var(--r-sm); background: var(--line); }
+.focus__split:hover::after, .focus__split:active::after { background: var(--iris); }
+.focus__evidence { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.focus__tabs { flex-shrink: 0; margin-bottom: 0; }
+.focus__pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.focus__pane > .orch__bench { flex: 1 1 auto; height: auto; max-height: none; }
+.focus-view .orch__bench-changes { grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); }
+.focus-view .orch__bench-col--brief { display: none; }
+.focus__review { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
+.orch__diff-line--pickable { cursor: pointer; }
+.orch__diff-line--pickable:hover { background: color-mix(in srgb, var(--iris) 10%, transparent); }
+.orch__diff-line--commented { box-shadow: inset 3px 0 0 var(--amber); }
+.orch__diff-line--picked { background: color-mix(in srgb, var(--iris) 18%, transparent); box-shadow: inset 3px 0 0 var(--iris); }
+.focus__comments { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); }
+.focus__comment-new { display: flex; flex-direction: column; gap: var(--sp-2); }
+.focus__comment-place { font-size: var(--t-sm); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__comment-quote { color: var(--fg-3); }
+.focus__comment-input { resize: vertical; font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); background: var(--s-1); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: var(--sp-2); }
+.focus__comment-input:focus { outline: none; border-color: var(--iris); }
+.focus__comment-send { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-2); }
+.focus__comment-send > span { flex: 1; }
+.focus__preview { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.focus__preview-bar { display: flex; align-items: center; gap: var(--sp-2); }
+.focus__preview-bar > :first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus__preview-host { flex: 1 1 auto; min-height: 0; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--s-1); }
+.focus__guest { display: flex; width: 100%; height: 100%; }
+.chat__claimed { margin: auto; padding: var(--sp-5); text-align: center; }
+.board-row__focus { margin-right: var(--sp-2); }

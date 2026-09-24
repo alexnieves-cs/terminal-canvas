@@ -14,6 +14,7 @@ import { startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRef
 import { BACKENDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
 import { fitSummary } from '@shared/backend-fit'
 import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@shared/recipe-portability'
+import { optionsOpenAtRest, preselectBackend, preselectRoot, preselectTeammate, startDraftStore } from './start-work-first'
 
 /**
  * M197 (D05). THE START WORK SHEET — the one place a task, an agent and a
@@ -42,6 +43,13 @@ import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@s
  *
  * **The triple is stated before anything is minted** — the foot's summary,
  * the root in the path rule's words with the full path on the title.
+ *
+ * M323. PROJECT FIRST, PROGRESSIVELY DISCLOSED: the sheet opens on the
+ * repository and the task; the teammate and backend arrive preselected
+ * (`start-work-first.ts`) on one line with Change; everything else is under
+ * Options. Both disclosures are `<details>`, so a closed one still holds its
+ * fields in the DOM — every route and check that sets them still can. The
+ * plain door keeps a draft across the named routes out (setup, Teammates).
  */
 /** M310. An open issue a task can start FROM — the provider's item, by its key. */
 export interface IssueChoice {
@@ -119,29 +127,54 @@ export interface StartWorkSheetProps {
 }
 
 export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps): JSX.Element {
-  const [title, setTitle] = useState(model.title)
-  const [teammateId, setTeammateId] = useState<string>(model.teammateId ?? '')
+  // M323. THE PLAIN DOOR keeps a draft: a typed start with nothing proposed.
+  // A card, a recipe row or `tc task` arrives with its own words, and a draft
+  // restored over them would replace what the caller proposed.
+  const plainDoor = !model.titleFixed && model.title === '' && model.recipeId === undefined
+  const [restored] = useState(() => (plainDoor ? startDraftStore.load() : null))
+  const [last] = useState(() => startDraftStore.last())
+  const [draftShown, setDraftShown] = useState(restored !== null)
+  const [title, setTitle] = useState(restored?.title ?? model.title)
+  // M323. The teammate is PRESELECTED — the caller's, the last used, or the
+  // only one with places — and named on the summary line with a Change control.
+  const [teammateId, setTeammateId] = useState<string>(() => preselectTeammate(model.teammates, model.teammateId ?? restored?.teammateId, last))
   const [root, setRoot] = useState('')
   // M275. '' is the SOLO lane — the start M197 shipped — and it is the
   // default, because a person who opened this sheet to start one task must
   // not get five agents for pressing Enter.
-  const [swarm, setSwarm] = useState<'' | SwarmPresetId>(model.swarm ?? '')
-  // M319. The backend — claude unless the card already runs on another.
-  const [backend, setBackend] = useState<AgentBackend>(model.backend ?? DEFAULT_BACKEND)
+  const [swarm, setSwarm] = useState<'' | SwarmPresetId>(model.swarm ?? restored?.swarm ?? '')
+  // M319/M323. The backend a person PICKED, or null — then it is preselected
+  // below against this task (the card's vendor, the last used, claude), and a
+  // preference the task refuses gives way to one that can do it.
+  const [backendPick, setBackendPick] = useState<AgentBackend | null>(restored?.backend ?? null)
   // M310. The issue this start is FROM, the outcome and the criteria.
   const [issues, setIssues] = useState<{ kind: 'items'; items: IssueChoice[] } | { kind: 'none'; reason: string } | null>(null)
-  const [issueKey, setIssueKey] = useState('')
-  const [brief, setBrief] = useState(model.brief ?? '')
-  const [criteriaText, setCriteriaText] = useState((model.criteria ?? []).join('\n'))
+  const [issueKey, setIssueKey] = useState(restored?.issueKey ?? '')
+  // M323. From an issue is the ALTERNATE route, offered beside the task and not ahead of it.
+  const [route, setRoute] = useState<'typed' | 'issue'>(restored?.issueKey === undefined ? 'typed' : 'issue')
+  const [issueQuery, setIssueQuery] = useState('')
+  const [brief, setBrief] = useState(model.brief ?? restored?.brief ?? '')
+  const [criteriaText, setCriteriaText] = useState(model.criteria !== undefined ? model.criteria.join('\n') : (restored?.criteria ?? ''))
   // M314. The recipe and the one answer that aims it; the rest it fills.
-  const [recipeId, setRecipeId] = useState(model.recipeId ?? '')
-  const [aim, setAim] = useState('')
-  const [checksText, setChecksText] = useState((model.checks ?? []).join('\n'))
-  const [deliverText, setDeliverText] = useState((model.deliverables ?? []).join('\n'))
+  const [recipeId, setRecipeId] = useState(model.recipeId ?? restored?.recipeId ?? '')
+  const [aim, setAim] = useState(restored?.aim ?? '')
+  const [checksText, setChecksText] = useState(model.checks !== undefined ? model.checks.join('\n') : (restored?.checks ?? ''))
+  const [deliverText, setDeliverText] = useState(model.deliverables !== undefined ? model.deliverables.join('\n') : (restored?.deliverables ?? ''))
   const recipe = model.recipes?.find((r) => r.id === recipeId)
   // M321. The recipe's named parameters, as the person has answered them; a
   // parameter left blank takes its default, and one with neither refuses the start.
-  const [params, setParams] = useState<Record<string, string>>({})
+  const [params, setParams] = useState<Record<string, string>>(restored?.params ?? {})
+  // M323. Options rests OPEN when it already holds a choice — never a folded live swarm.
+  const [optionsOpen, setOptionsOpen] = useState(() => optionsOpenAtRest({
+    ...(model.recipeId ?? restored?.recipeId) === undefined ? {} : { recipeId: model.recipeId ?? restored?.recipeId },
+    ...(model.swarm ?? restored?.swarm) === undefined ? {} : { swarm: model.swarm ?? restored?.swarm },
+    ...(model.brief ?? restored?.brief) === undefined ? {} : { brief: model.brief ?? restored?.brief },
+    ...(model.criteria?.join('\n') ?? restored?.criteria) === undefined ? {} : { criteria: model.criteria?.join('\n') ?? restored?.criteria },
+    ...(model.checks?.join('\n') ?? restored?.checks) === undefined ? {} : { checks: model.checks?.join('\n') ?? restored?.checks },
+    ...(model.deliverables?.join('\n') ?? restored?.deliverables) === undefined ? {} : { deliverables: model.deliverables?.join('\n') ?? restored?.deliverables },
+    ...(restored?.params === undefined ? {} : { params: restored.params })
+  }))
+  const [whoOpen, setWhoOpen] = useState(false)
   const rootRef = useRef<string | null>(null)
   const pickRecipe = (id: string, answer: string, values: Record<string, string> = params): void => {
     setRecipeId(id)
@@ -195,6 +228,9 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // M323. The root a restored draft named is offered FIRST, then the last
+  // used — each only if this teammate's list still holds it, and only once.
+  const firstRoot = useRef(restored?.root)
   useEffect(() => {
     setRepos(undefined); setNoPlaces(null); setRoot('')
     if (teammateId === '') return
@@ -203,16 +239,12 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       if (ticket.current !== mine) return
       if (answer.kind === 'repos') {
         setRepos(answer.repos)
-        // M313. A proposal from a terminal names its directory: the repository
-        // that contains it is chosen, the deepest one when repositories nest.
-        const prefer = model.preferRoot
-        if (prefer !== undefined) {
-          const hit = [...answer.repos].filter((r) => prefer === r.path || prefer.startsWith(`${r.path}/`)).sort((a, b) => b.path.length - a.path.length)[0]
-          if (hit !== undefined) { setRoot(hit.path); return }
-        }
-        // M315. One repository this teammate may work in is the answer, not a
-        // question: selected, and still changeable.
-        if (answer.repos.length === 1) setRoot((cur) => (cur === '' ? (answer.repos[0] as { path: string }).path : cur))
+        // M313/M315/M323. A proposal's directory, then the draft's or the last
+        // used repository, then the only one: selected, and still changeable.
+        const remembered = firstRoot.current !== undefined ? { root: firstRoot.current } : last
+        firstRoot.current = undefined
+        const pick = preselectRoot(answer.repos, { ...(model.preferRoot === undefined ? {} : { preferRoot: model.preferRoot }), last: remembered })
+        if (pick !== '') setRoot((cur) => (cur === '' ? pick : cur))
         return
       }
       if (answer.kind === 'no-places') { setRepos([]); setNoPlaces(answer.reason); return }
@@ -230,29 +262,61 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     ...(model.budgetUsd === undefined ? {} : { budgetUsd: model.budgetUsd }),
     ...(model.windowPercent === undefined ? {} : { windowPercent: model.windowPercent })
   }), [model.teammates, repos, wanted, model.agentAvailable, model.itemState, model.available, model.budgetUsd, model.windowPercent])
-  const choice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }), ...(backend === DEFAULT_BACKEND ? {} : { backend }) }
+  // M319. Whether each backend can do what THIS task asks — its rows are the
+  // capabilities the task touches. A row is judged as if it were chosen, so
+  // the rows do not depend on the choice: computed first, the preselection
+  // reads them, and a required capability unmet is a fourth refusal below.
+  const taskText = [brief, criteriaText, checksText, deliverText, recipe?.brief ?? '', recipe?.criteria.join('\n') ?? ''].join('\n')
+  const baseChoice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }) }
+  const backendRows = startWorkBackendRows(baseChoice, ctx, taskText)
+  const backend = backendPick ?? preselectBackend(backendRows, [model.backend, last?.backend, DEFAULT_BACKEND])
+  const choice = { ...baseChoice, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }
   const needs = startWorkNeeds(choice, ctx)
   const blocking = startWorkRefusal(choice, ctx)
   // M275. The arrangement's own refusal is a THIRD kind: the triple can be
   // answered and the shape still not apply. It disables Start by itself, so a
   // swarm cannot half-land and then report why.
   const swarmBlocked = startWorkSwarmRefusal(choice, ctx)
-  // M319. Whether the chosen backend can do what THIS task asks — its rows
-  // are the capabilities the task touches, and a required one unmet is a
-  // fourth refusal that disables Start the same way.
-  const taskText = [brief, criteriaText, checksText, deliverText, recipe?.brief ?? '', recipe?.criteria.join('\n') ?? ''].join('\n')
   const fit = startWorkBackendFit(choice, ctx, taskText)
-  const backendRows = startWorkBackendRows(choice, ctx, taskText)
   const backendBlocked = fit.verdict === 'refused' ? (fit.refusal ?? fitSummary(fit)) : null
   const mate = model.teammates.find((t) => t.id === teammateId)
   const chosenRoot = startWorkRoot(choice, ctx)
   rootRef.current = chosenRoot
   const summary = startWorkSummary(choice, mate, chosenRoot)
+  // M323. Who does it and on what is a QUESTION only when it has no answer —
+  // no teammate yet, or a backend this task refuses. Otherwise it is one line.
+  const whoForced = teammateId === '' || backendBlocked !== null
   // M321. A recipe's `{repository}` follows the repository: re-rendered when it changes.
   useEffect(() => {
     if (recipe !== undefined) pickRecipe(recipe.id, aim)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenRoot])
+  // M323. The draft, written as it changes — so stepping out to set up a
+  // repository or a teammate (both close this sheet) loses nothing.
+  useEffect(() => {
+    if (!plainDoor || busy) return
+    startDraftStore.save({
+      title,
+      ...(teammateId === '' ? {} : { teammateId }),
+      ...(chosenRoot === null ? {} : { root: chosenRoot }),
+      ...(backendPick === null ? {} : { backend: backendPick }),
+      ...(brief === '' ? {} : { brief }),
+      ...(criteriaText === '' ? {} : { criteria: criteriaText }),
+      ...(checksText === '' ? {} : { checks: checksText }),
+      ...(deliverText === '' ? {} : { deliverables: deliverText }),
+      ...(swarm === '' ? {} : { swarm }),
+      ...(recipeId === '' ? {} : { recipeId }),
+      ...(aim === '' ? {} : { aim }),
+      ...(Object.keys(params).length === 0 ? {} : { params }),
+      ...(issueKey === '' ? {} : { issueKey })
+    })
+  }, [plainDoor, busy, title, teammateId, chosenRoot, backendPick, brief, criteriaText, checksText, deliverText, swarm, recipeId, aim, params, issueKey])
+  const discardDraft = (): void => {
+    startDraftStore.clear()
+    setDraftShown(false)
+    setTitle(''); setBrief(''); setCriteriaText(''); setChecksText(''); setDeliverText(''); setSwarm(''); setRecipeId(''); setAim(''); setParams({}); setIssueKey(''); setRoute('typed'); setBackendPick(null)
+    setRefusal(null)
+  }
   // M321. PREFLIGHT — the tools the setup and the checks invoke, looked up on
   // the login PATH, and the ports the next lane would get; nothing runs.
   const checkLines = checksText.split('\n').map((c) => c.trim()).filter((c) => c !== '')
@@ -296,6 +360,17 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     queued: model.ceiling?.queued ?? 0,
     ...(chosenRoot === null ? {} : { rootWords: shortPath(chosenRoot, 2) })
   })
+  const backendLabel = backend === DEFAULT_BACKEND ? 'Claude Code' : BACKENDS[backend].label
+  // What Options holds, said on its closed row so nothing set there is invisible.
+  const optionsHeld = [recipe === undefined ? '' : recipe.name, swarm === '' ? '' : SWARM_PRESETS[swarm].label, brief.trim() === '' ? '' : 'outcome', criteriaText.trim() === '' ? '' : 'done when', checkLines.length === 0 ? '' : 'checks', deliverText.trim() === '' ? '' : 'hand back'].filter((x) => x !== '')
+  const query = issueQuery.trim().toLowerCase()
+  const shownIssues = issues?.kind === 'items' ? issues.items.filter((i) => query === '' || i.key.toLowerCase().includes(query) || i.title.toLowerCase().includes(query)) : []
+  const pickIssue = (key: string): void => {
+    setIssueKey(key)
+    const picked = issues?.kind === 'items' ? issues.items.find((i) => i.key === key) : undefined
+    if (picked !== undefined) setTitle(picked.title)
+    setRoot(''); setRefusal(null)
+  }
 
   const submit = (): void => {
     if (busy || blocking !== null || swarmBlocked !== null || backendBlocked !== null || preflightBlocked !== null || needs.length > 0 || teammateId === '' || chosenRoot === null) return
@@ -316,6 +391,9 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     }).then((result) => {
       setBusy(false)
       if (result.kind === 'refused') { setRefusal(result.reason); return }
+      // M323. Started: the draft is spent, and what it used is the next start's preselection.
+      if (plainDoor) startDraftStore.clear()
+      startDraftStore.remember({ teammateId, root: chosenRoot, backend })
       onDone()
     })
   }
@@ -327,8 +405,9 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     // M262. Enter on a focused BUTTON is that button's own click — Cancel,
     // a Task | Panel tab. Before the footer had buttons every focusable was a
     // field; now Enter-anywhere would make a panel from Cancel (the
-    // launcher's M205 critic, met again).
-    if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.tagName === 'BUTTON') return
+    // launcher's M205 critic, met again). M323: a disclosure's SUMMARY is the
+    // same — Enter on "Options" opens it, it does not start the task.
+    if (event.key === 'Enter' && event.target instanceof HTMLElement && (event.target.tagName === 'BUTTON' || event.target.tagName === 'SUMMARY')) return
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit() }
   }
 
@@ -336,60 +415,57 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     <div className="sheet" data-start-sheet role="form" aria-label="Start work" onKeyDown={onKey}>
       <SheetHeader current="task" onPanel={model.openPanel} />
 
-      {/* M314. THE RECIPE — first, because it fills everything below it. Its
-          one question aims it (which test, which issue); the fields it fills
-          stay editable, and Solo/no-recipe stays the default. */}
-      {model.recipes !== undefined && model.recipes.length > 0 && (
-        <label className="sheet__field">
-          <span className="sheet__label">Recipe</span>
-          <select className="sheet__select" data-start-recipe value={recipeId} aria-label="recipe"
-            onChange={(e) => pickRecipe(e.target.value, aim)}>
-            <option value="" data-start-recipe-row="none">None — describe the task yourself</option>
-            {model.recipes.map((r) => (
-              <option key={r.id} value={r.id} data-start-recipe-row={r.id}>{r.name} — {r.hint}</option>
-            ))}
-          </select>
-        </label>
+      {/* M323. A draft kept from the last time this sheet was left — said, with the way to drop it. */}
+      {draftShown && (
+        <p className="sheet__hint" data-start-draft-restored>
+          Your unfinished task is back where you left it.{' '}
+          <button type="button" className="pf__verb pf__verb--word" data-start-draft-discard
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => { e.preventDefault(); discardDraft() }}>Discard</button>
+        </p>
       )}
-      {recipe !== undefined && !model.titleFixed && (
-        <label className="sheet__field">
-          <span className="sheet__label">{recipe.ask.label.replace(/\?$/, '')}</span>
-          <input className="sheet__input" data-start-recipe-aim value={aim} placeholder={recipe.ask.placeholder} spellCheck={false}
-            onChange={(e) => { setAim(e.target.value); pickRecipe(recipe.id, e.target.value) }} />
-        </label>
-      )}
-      {/* M321. The recipe's parameters — a path it was saved with that is not
-          this repository's, say. Blank takes the default; blank with none
-          refuses the start below, by name. */}
-      {recipe?.params?.map((p) => (
-        <label key={p.name} className="sheet__field">
-          <span className="sheet__label" title={p.label}>{p.name}</span>
-          <input className="sheet__input sheet__input--mono" data-start-recipe-param={p.name} value={params[p.name] ?? ''} placeholder={p.default ?? p.label} spellCheck={false}
-            onChange={(e) => { const next = { ...params, [p.name]: e.target.value }; setParams(next); pickRecipe(recipe.id, aim, next) }} />
-        </label>
-      ))}
 
-      {/* M310. THE FLAGSHIP START: from an open issue. Choosing one names the
-          task and — for GitHub — the repository, the same way a card from
-          that issue would. Optional: a typed task is still a task. */}
-      {!model.titleFixed && model.issues !== undefined && (
-        <label className="sheet__field">
+      {/* M323. PROJECT FIRST — the repository, then what you want done. */}
+      <label className="sheet__field">
+        <span className="sheet__label">Repository</span>
+        <select ref={(el) => { if (model.titleFixed && !whoForced) firstRef.current = el }} className="sheet__select sheet__select--mono" data-start-repo value={root} aria-label="repository"
+          disabled={teammateId === '' || repos === undefined || repos.length === 0}
+          onChange={(e) => { setRoot(e.target.value); setRefusal(null) }}>
+          {/* The `auto` row names the clone it derived rather than saying
+              `auto`: the user is being told which folder the work will happen
+              in, and `auto` is a word about the app, not about the work. */}
+          <option value="">{chosenRoot !== null && root === '' ? `${shortPath(chosenRoot, 2)} — the clone of ${String(wanted)}` : teammateId === '' ? 'choose who does it below first…' : repos === undefined ? 'reading repositories…' : 'choose a repository…'}</option>
+          {(repos ?? []).map((r) => (
+            <option key={r.path} value={r.path} data-start-repo-row={r.path}>{shortPath(r.path, 2)}{r.repo === null ? '' : ` — ${r.repo}`}</option>
+          ))}
+        </select>
+      </label>
+
+      {/* M310/M323. From an issue — the ALTERNATE route. Choosing one names
+          the task and, for GitHub, the repository, the way a card from that
+          issue would. The search narrows a long list by key or title. */}
+      {route === 'issue' && !model.titleFixed && model.issues !== undefined && (
+        <div className="sheet__field" data-start-issue-route-open>
           <span className="sheet__label">From issue</span>
+          <input className="sheet__input" data-start-issue-search value={issueQuery} placeholder="search open issues by key or title" spellCheck={false}
+            disabled={issues === null || issues.kind === 'none'}
+            onKeyDown={(e) => {
+              // Enter picks the first match; it never starts the task from the search box.
+              if (e.key !== 'Enter') return
+              e.preventDefault(); e.stopPropagation()
+              const first = shownIssues[0]
+              if (first !== undefined) pickIssue(first.key)
+            }}
+            onChange={(e) => setIssueQuery(e.target.value)} />
           <select className="sheet__select" data-start-issue value={issueKey} aria-label="issue"
             disabled={issues === null || issues.kind === 'none'}
-            onChange={(e) => {
-              const key = e.target.value
-              setIssueKey(key)
-              const picked = issues?.kind === 'items' ? issues.items.find((i) => i.key === key) : undefined
-              if (picked !== undefined) setTitle(picked.title)
-              setRoot(''); setRefusal(null)
-            }}>
-            <option value="">{issues === null ? 'reading open issues…' : issues.kind === 'none' ? issues.reason : 'none — type the task below'}</option>
-            {issues?.kind === 'items' && issues.items.map((i) => (
+            onChange={(e) => pickIssue(e.target.value)}>
+            <option value="">{issues === null ? 'reading open issues…' : issues.kind === 'none' ? issues.reason : shownIssues.length === 0 ? 'no open issue matches' : 'choose an issue…'}</option>
+            {shownIssues.map((i) => (
               <option key={i.key} value={i.key} data-start-issue-row={i.key}>{i.key} — {i.title}</option>
             ))}
           </select>
-        </label>
+        </div>
       )}
 
       <label className="sheet__field">
@@ -397,128 +473,193 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         {model.titleFixed ? (
           <span className="sheet__input sheet__input--fixed" data-start-task data-start-task-fixed title={model.title}>{model.title}</span>
         ) : (
-          <input ref={(el) => { if (!model.titleFixed) firstRef.current = el }} className="sheet__input" data-start-task value={title} placeholder="what needs doing" spellCheck={false}
+          <input ref={(el) => { if (!model.titleFixed) firstRef.current = el }} className="sheet__input" data-start-task value={title} placeholder="what do you want done?" spellCheck={false}
             onChange={(e) => { setTitle(e.target.value); setRefusal(null) }} />
         )}
       </label>
-
-      <label className="sheet__field">
-        <span className="sheet__label">Agent</span>
-        <select ref={(el) => { if (model.titleFixed) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="teammate"
-          onChange={(e) => { setTeammateId(e.target.value); setRefusal(null) }}>
-          <option value="">choose a teammate…</option>
-          {model.teammates.map((t) => (
-            // A teammate with no places is DISABLED with the fix, never
-            // dropped: a row that vanished would read as a teammate that was
-            // never made, and the grant is the thing to go and give.
-            <option key={t.id} value={t.id} disabled={t.places.length === 0} data-start-agent-row={t.id}>
-              {teammateWord(t)}{t.places.length === 0 ? ' — no places yet' : ''}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="sheet__field">
-        <span className="sheet__label">Repository</span>
-        <select className="sheet__select sheet__select--mono" data-start-repo value={root} aria-label="repository"
-          disabled={teammateId === '' || repos === undefined || repos.length === 0}
-          onChange={(e) => { setRoot(e.target.value); setRefusal(null) }}>
-          {/* The `auto` row names the clone it derived rather than saying
-              `auto`: the user is being told which folder the work will happen
-              in, and `auto` is a word about the app, not about the work. */}
-          <option value="">{chosenRoot !== null && root === '' ? `${shortPath(chosenRoot, 2)} — the clone of ${String(wanted)}` : 'choose a repository…'}</option>
-          {(repos ?? []).map((r) => (
-            <option key={r.path} value={r.path} data-start-repo-row={r.path}>{shortPath(r.path, 2)}{r.repo === null ? '' : ` — ${r.repo}`}</option>
-          ))}
-        </select>
-      </label>
-
-      {/* M310. What "done" means, carried to the agent's first message and
-          to the review: the outcome in the person's words, and one criterion
-          per line. Optional — a start never waits on them. */}
-      <label className="sheet__field">
-        <span className="sheet__label">Outcome</span>
-        <input className="sheet__input" data-start-brief value={brief} placeholder="what should be true when this is done (optional)" spellCheck={false}
-          onChange={(e) => setBrief(e.target.value)} />
-      </label>
-      <label className="sheet__field">
-        <span className="sheet__label">Done when</span>
-        <textarea className="sheet__input sheet__textarea" data-start-criteria value={criteriaText} rows={2} spellCheck={false}
-          placeholder="one acceptance criterion per line (optional)"
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) e.stopPropagation() }}
-          onChange={(e) => setCriteriaText(e.target.value)} />
-      </label>
-
-      {/* M314. What decides "done" and what comes back — a recipe fills them,
-          and a typed task may too. The checks are told to the agent and are
-          what the review's Run checks offers first. */}
-      {(recipe !== undefined || checksText !== '' || deliverText !== '') && (
-        <>
-          <label className="sheet__field">
-            <span className="sheet__label">Checks</span>
-            <textarea className="sheet__input sheet__textarea sheet__input--mono" data-start-checks value={checksText} rows={1} spellCheck={false}
-              placeholder={setupRead?.kind === 'saved' && setupRead.setup.checks.length > 0 ? `the repository's: ${setupRead.setup.checks.join(', ')}` : 'one command per line (optional)'}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) e.stopPropagation() }}
-              onChange={(e) => setChecksText(e.target.value)} />
-          </label>
-          <label className="sheet__field">
-            <span className="sheet__label">Hand back</span>
-            <textarea className="sheet__input sheet__textarea" data-start-deliverables value={deliverText} rows={2} spellCheck={false}
-              placeholder="one deliverable per line (optional)"
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) e.stopPropagation() }}
-              onChange={(e) => setDeliverText(e.target.value)} />
-          </label>
-        </>
+      {!model.titleFixed && model.issues !== undefined && (
+        <p className="sheet__hint sheet__route">
+          <button type="button" className="pf__verb pf__verb--word" data-start-issue-route={route}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => {
+              e.preventDefault()
+              if (route === 'issue') { setRoute('typed'); setIssueKey(''); setIssueQuery(''); setRoot('') } else setRoute('issue')
+            }}>{route === 'issue' ? 'Type the task instead' : 'Start from an issue instead'}</button>
+        </p>
       )}
 
-      {/* M275. THE ARRANGEMENT. Last of the fields, and after the repository
-          on purpose: the seats' folders are that repository's, so a shape
-          chosen before it would preview worktrees of nowhere. Solo is first
-          and selected, because the default must stay the start that shipped. */}
-      <label className="sheet__field">
-        <span className="sheet__label">Arrangement</span>
-        <select className="sheet__select" data-start-swarm value={swarm} aria-label="arrangement"
-          onChange={(e) => { setSwarm(e.target.value as '' | SwarmPresetId); setRefusal(null) }}>
-          <option value="" data-start-swarm-row="solo">Solo — one conversation in its own lane</option>
-          {SWARM_LIST.map((preset) => (
-            <option key={preset.id} value={preset.id} data-start-swarm-row={preset.id}>{preset.label} — {preset.hint}</option>
-          ))}
-        </select>
-      </label>
+      {/* M323. WHO AND ON WHAT — answered already, said on one line, with
+          Change. It opens by itself only when there is no answer (no
+          teammate yet) or the answer cannot do this task. Closed, the
+          pickers stay in the DOM, so every route that sets them still can. */}
+      <details className="sheet__advanced sheet__who" data-start-who open={whoForced || whoOpen}
+        onToggle={(e) => { if (!whoForced) setWhoOpen(e.currentTarget.open) }}>
+        <summary className="sheet__advanced-toggle" data-start-who-summary>
+          {mate === undefined ? 'Choose who does it' : `${teammateWord(mate)} · ${backendLabel}`}
+          {mate !== undefined && <span className="sheet__who-change"> · Change</span>}
+        </summary>
+        <label className="sheet__field">
+          <span className="sheet__label">Agent</span>
+          <select ref={(el) => { if (model.titleFixed && whoForced) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="teammate"
+            onChange={(e) => { setTeammateId(e.target.value); setRefusal(null) }}>
+            <option value="">choose a teammate…</option>
+            {model.teammates.map((t) => (
+              // A teammate with no places is DISABLED with the fix, never
+              // dropped: a row that vanished would read as a teammate that was
+              // never made, and the grant is the thing to go and give.
+              <option key={t.id} value={t.id} disabled={t.places.length === 0} data-start-agent-row={t.id}>
+                {teammateWord(t)}{t.places.length === 0 ? ' — no places yet' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      {/* M319. THE BACKEND, judged against this task. Every row is offered —
-          one that cannot do the task is disabled with why, never dropped —
-          and below it only the capabilities THIS task touches, each met or
-          not, in the vendor's own words. Stated before a session exists. */}
-      <label className="sheet__field">
-        <span className="sheet__label">Backend</span>
-        <select className="sheet__select" data-start-backend value={backend} aria-label="backend"
-          onChange={(e) => { setBackend(e.target.value as AgentBackend); setRefusal(null) }}>
-          {backendRows.map((r) => (
-            <option key={r.backend} value={r.backend} disabled={r.fit.verdict === 'refused'} data-start-backend-row={r.backend} data-start-backend-fit={r.fit.verdict}>
-              {r.label}{r.fit.verdict === 'fits' ? ' — can do everything this task needs' : r.fit.verdict === 'refused' ? ` — cannot: ${r.fit.refusal ?? ''}` : ` — without ${r.fit.rows.filter((x) => !x.ok).length} of what this task asks`}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="sheet__field sheet__field--how" data-start-fit={fit.verdict}>
-        <span className="sheet__label">This task</span>
-        <span className="sheet__defaults sheet__fit">
-          {fit.rows.map((r) => (
-            <span key={r.id} className={`sheet__fit-row${r.ok ? '' : r.level === 'required' ? ' is-refused' : ' is-degraded'}`} data-start-fit-row={r.id} data-start-fit-ok={r.ok ? 'yes' : 'no'} data-start-fit-level={r.level}>
-              {r.ok ? '✓' : r.level === 'required' ? '✕' : '–'} {r.line}
+        {/* M319. THE BACKEND, judged against this task. Every row is offered —
+            one that cannot do the task is disabled with why, never dropped —
+            and below it only the capabilities THIS task touches, each met or
+            not, in the vendor's own words. Stated before a session exists. */}
+        <label className="sheet__field">
+          <span className="sheet__label">Backend</span>
+          <select className="sheet__select" data-start-backend value={backend} aria-label="backend"
+            onChange={(e) => { setBackendPick(e.target.value as AgentBackend); setRefusal(null) }}>
+            {backendRows.map((r) => (
+              <option key={r.backend} value={r.backend} disabled={r.fit.verdict === 'refused'} data-start-backend-row={r.backend} data-start-backend-fit={r.fit.verdict}>
+                {r.label}{r.fit.verdict === 'fits' ? ' — can do everything this task needs' : r.fit.verdict === 'refused' ? ` — cannot: ${r.fit.refusal ?? ''}` : ` — without ${r.fit.rows.filter((x) => !x.ok).length} of what this task asks`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="sheet__field sheet__field--how" data-start-fit={fit.verdict}>
+          <span className="sheet__label">This task</span>
+          <span className="sheet__defaults sheet__fit">
+            {fit.rows.map((r) => (
+              <span key={r.id} className={`sheet__fit-row${r.ok ? '' : r.level === 'required' ? ' is-refused' : ' is-degraded'}`} data-start-fit-row={r.id} data-start-fit-ok={r.ok ? 'yes' : 'no'} data-start-fit-level={r.level}>
+                {r.ok ? '✓' : r.level === 'required' ? '✕' : '–'} {r.line}
+              </span>
+            ))}
+          </span>
+        </div>
+
+        {/* M262. What runs, said: a lane is Claude Code with the CLI's own
+            defaults — nothing on this sheet changes them, and saying so is
+            what stops a person hunting for a knob that is not here. */}
+        <div className="sheet__field sheet__field--how">
+          <span className="sheet__label">Runtime</span>
+          <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine(backendLabel, {})} · {plan === null ? 'in its own worktree' : `${plan.line} · the person opens the pull request`}</span>
+        </div>
+        {/* The route to the grant, named — never a widening from inside a start. */}
+        <button type="button" className="pf__verb pf__verb--word" data-start-open-teammates
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+          onClick={(e) => { e.preventDefault(); model.openTeammates() }}>Open the Teammates pane</button>
+      </details>
+
+      {/* M323. OPTIONS — recipe, outcome, criteria, checks, deliverables and
+          the arrangement. Closed at rest for "fix this bug"; open by itself
+          when any of it already holds something, and its closed row names
+          what it holds. */}
+      <details className="sheet__advanced sheet__options" data-start-options open={optionsOpen}
+        onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
+        <summary className="sheet__advanced-toggle" data-start-options-summary>
+          Options{optionsHeld.length === 0 ? ' — recipe, done when, checks, arrangement' : ` — ${optionsHeld.join(', ')}`}
+        </summary>
+        {/* M314. THE RECIPE — first, because it fills everything below it. Its
+            one question aims it (which test, which issue); the fields it fills
+            stay editable, and Solo/no-recipe stays the default. */}
+        {model.recipes !== undefined && model.recipes.length > 0 && (
+          <label className="sheet__field">
+            <span className="sheet__label">Recipe</span>
+            <select className="sheet__select" data-start-recipe value={recipeId} aria-label="recipe"
+              onChange={(e) => pickRecipe(e.target.value, aim)}>
+              <option value="" data-start-recipe-row="none">None — describe the task yourself</option>
+              {model.recipes.map((r) => (
+                <option key={r.id} value={r.id} data-start-recipe-row={r.id}>{r.name} — {r.hint}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {recipe !== undefined && !model.titleFixed && (
+          <label className="sheet__field">
+            <span className="sheet__label">{recipe.ask.label.replace(/\?$/, '')}</span>
+            <input className="sheet__input" data-start-recipe-aim value={aim} placeholder={recipe.ask.placeholder} spellCheck={false}
+              onChange={(e) => { setAim(e.target.value); pickRecipe(recipe.id, e.target.value) }} />
+          </label>
+        )}
+        {/* M321. The recipe's parameters — a path it was saved with that is not
+            this repository's, say. Blank takes the default; blank with none
+            refuses the start below, by name. */}
+        {recipe?.params?.map((p) => (
+          <label key={p.name} className="sheet__field">
+            <span className="sheet__label" title={p.label}>{p.name}</span>
+            <input className="sheet__input sheet__input--mono" data-start-recipe-param={p.name} value={params[p.name] ?? ''} placeholder={p.default ?? p.label} spellCheck={false}
+              onChange={(e) => { const next = { ...params, [p.name]: e.target.value }; setParams(next); pickRecipe(recipe.id, aim, next) }} />
+          </label>
+        ))}
+
+        {/* M310. What "done" means, carried to the agent's first message and
+            to the review: the outcome in the person's words, and one criterion
+            per line. Optional — a start never waits on them. */}
+        <label className="sheet__field">
+          <span className="sheet__label">Outcome</span>
+          <input className="sheet__input" data-start-brief value={brief} placeholder="what should be true when this is done (optional)" spellCheck={false}
+            onChange={(e) => setBrief(e.target.value)} />
+        </label>
+        <label className="sheet__field">
+          <span className="sheet__label">Done when</span>
+          <textarea className="sheet__input sheet__textarea" data-start-criteria value={criteriaText} rows={2} spellCheck={false}
+            placeholder="one acceptance criterion per line (optional)"
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) e.stopPropagation() }}
+            onChange={(e) => setCriteriaText(e.target.value)} />
+        </label>
+
+        {/* M314. What decides "done" and what comes back — a recipe fills them,
+            and a typed task may too. The checks are told to the agent and are
+            what the review's Run checks offers first. Inside Options they no
+            longer need to hide behind a recipe (M323). */}
+        <label className="sheet__field">
+          <span className="sheet__label">Checks</span>
+          <textarea className="sheet__input sheet__textarea sheet__input--mono" data-start-checks value={checksText} rows={1} spellCheck={false}
+            placeholder={setupRead?.kind === 'saved' && setupRead.setup.checks.length > 0 ? `the repository's: ${setupRead.setup.checks.join(', ')}` : 'one command per line (optional)'}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) e.stopPropagation() }}
+            onChange={(e) => setChecksText(e.target.value)} />
+        </label>
+        <label className="sheet__field">
+          <span className="sheet__label">Hand back</span>
+          <textarea className="sheet__input sheet__textarea" data-start-deliverables value={deliverText} rows={2} spellCheck={false}
+            placeholder="one deliverable per line (optional)"
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) e.stopPropagation() }}
+            onChange={(e) => setDeliverText(e.target.value)} />
+        </label>
+
+        {/* M275. THE ARRANGEMENT. After the repository on purpose: the seats'
+            folders are that repository's, so a shape chosen before it would
+            preview worktrees of nowhere. Solo is first and selected, because
+            the default must stay the start that shipped. */}
+        <label className="sheet__field">
+          <span className="sheet__label">Arrangement</span>
+          <select className="sheet__select" data-start-swarm value={swarm} aria-label="arrangement"
+            onChange={(e) => { setSwarm(e.target.value as '' | SwarmPresetId); setRefusal(null) }}>
+            <option value="" data-start-swarm-row="solo">Solo — one conversation in its own lane</option>
+            {SWARM_LIST.map((preset) => (
+              <option key={preset.id} value={preset.id} data-start-swarm-row={preset.id}>{preset.label} — {preset.hint}</option>
+            ))}
+          </select>
+        </label>
+
+        {/* M275. The seats, one row each, BEFORE anything is minted — the
+            sheet's own rule extended to the shape. A seat names its role and
+            the folder it works in, because those are the two facts a person
+            needs to judge whether the arrangement is the one they meant. */}
+        {plan !== null && (
+          <div className="sheet__field sheet__field--how" data-start-swarm-plan>
+            <span className="sheet__label">Seats</span>
+            <span className="sheet__defaults">
+              {plan.seats.map((seat) => (
+                <span key={seat.key} className="sheet__seat" data-start-swarm-seat={seat.key}>{seat.title} · {seat.role} · {seat.where}</span>
+              ))}
             </span>
-          ))}
-        </span>
-      </div>
-
-      {/* M262. What runs, said: a lane is Claude Code with the CLI's own
-          defaults — nothing on this sheet changes them, and saying so is
-          what stops a person hunting for a knob that is not here. */}
-      <div className="sheet__field sheet__field--how">
-        <span className="sheet__label">Runtime</span>
-        <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine(backend === DEFAULT_BACKEND ? 'Claude Code' : BACKENDS[backend].label, {})} · {plan === null ? 'in its own worktree' : `${plan.line} · the person opens the pull request`}</span>
-      </div>
+          </div>
+        )}
+      </details>
 
       {/* M312. What a new lane of this repository gets before its agent
           starts — the saved setup, or the draft that has not been saved —
@@ -558,21 +699,6 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         </div>
       )}
 
-      {/* M275. The seats, one row each, BEFORE anything is minted — the
-          sheet's own rule extended to the shape. A seat names its role and
-          the folder it works in, because those are the two facts a person
-          needs to judge whether the arrangement is the one they meant. */}
-      {plan !== null && (
-        <div className="sheet__field sheet__field--how" data-start-swarm-plan>
-          <span className="sheet__label">Seats</span>
-          <span className="sheet__defaults">
-            {plan.seats.map((seat) => (
-              <span key={seat.key} className="sheet__seat" data-start-swarm-seat={seat.key}>{seat.title} · {seat.role} · {seat.where}</span>
-            ))}
-          </span>
-        </div>
-      )}
-
       <div className="sheet__foot">
         {/* The triple, before anything is minted. */}
         <span className="sheet__preview" data-start-summary title={chosenRoot ?? undefined}>{summary === '' ? 'a task, the agent to do it and its repository' : summary}</span>
@@ -604,10 +730,6 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           <span className="sheet__hint" data-start-swarm-ceiling>{plan.ceilingLine}</span>
         )}
         {refusal !== null && <span className="sheet__refusal" data-start-refusal role="alert">{refusal}</span>}
-        {/* The route to the grant, named — never a widening from inside a start. */}
-        <button type="button" className="pf__verb pf__verb--word" data-start-open-teammates
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-          onClick={(e) => { e.preventDefault(); model.openTeammates() }}>Open the Teammates pane</button>
         {/* The verb stays `start` while a start is in flight — `starting…`
             is the STATE vocabulary's own word (`verify:rail state.2` pins it
             to `panel-state.ts`, and a panel's state is not what this line is
