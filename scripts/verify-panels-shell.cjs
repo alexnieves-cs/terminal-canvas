@@ -3758,7 +3758,11 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const sentence1 = armed1 === true ? await text('[data-review-node-discard-armed="seed.txt"]') : ''
         const confirmed1 = armed1 === true ? await press('[data-review-node-discard-confirm="seed.txt"]') : false
         const restored = confirmed1 === true
-          ? await waitUntil(async () => readFileSync(modified, 'utf8') === 'seed\n', 8000)
+          // M364. Discard is a `git checkout`, which REPLACES the file: for a
+          // moment it does not exist, and a predicate that threw ENOENT then
+          // ended the whole part as an "infrastructure error" under load. A
+          // file not there yet is "not restored yet", never an error.
+          ? await waitUntil(async () => { try { return readFileSync(modified, 'utf8') === 'seed\n' } catch { return false } }, 8000)
           : false
         const outcome1 = await text('[data-review-node-commit-outcome]')
         const row2 = restored === true ? await rowReady('brand-new.txt') : false
