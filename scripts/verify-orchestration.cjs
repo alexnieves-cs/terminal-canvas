@@ -1253,9 +1253,9 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     // M317 adds OrchCombine: sending a traced integration failure back to an
     // agent is a person's DISPATCH, which main cannot tell from any other
     // message. The landing itself is main's to write (integrator.ts).
-    ok('orch-timeline.6 the renderer writes history through ONE door: only orch-record.ts calls ledger.event, its importers are the three verbs that own a fact main cannot see (dispatch, the permission answer, the review mark) plus the canvas\'s handoff funnel and Combine\'s send-back (a dispatch), and the door itself starts nothing — no send, spawn, create or run',
+    ok('orch-timeline.6 the renderer writes history through ONE door: only orch-record.ts calls ledger.event, its importers are the three verbs that own a fact main cannot see (dispatch, the permission answer, the review mark) plus the canvas\'s handoff funnel, Combine\'s send-back (a dispatch), and M371\'s two decisions — a cap a person set (the cap-agent verb) and a proposal kept or discarded (the task\'s review) — and the door itself starts nothing — no send, spawn, create or run',
       JSON.stringify(writers) === JSON.stringify(['renderer/orchestration/orch-record.ts']) &&
-        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts', 'renderer/orchestration/OrchCombine.tsx']) &&
+        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/caps.ts', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts', 'renderer/orchestration/OrchCombine.tsx', 'renderer/review/TaskReviewPanel.tsx']) &&
         !/agentSession|spawn\.|\.send\(|review\.commit|review\.discard/.test(record),
       JSON.stringify({ writers, importers }))
   }

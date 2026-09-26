@@ -68,3 +68,17 @@ export function parseDecisionRow(raw: unknown): DecisionRow | null {
     ...(typeof raw.scrubbed === 'number' && Number.isInteger(raw.scrubbed) && raw.scrubbed > 0 ? { scrubbed: raw.scrubbed } : {})
   }
 }
+
+/**
+ * M371. The words of the two decisions that recorded nothing before: a cap
+ * set on an agent (the `cap-agent` verb's own note), and a proposed review
+ * comment kept or discarded. One builder each, so the ledger, the task's
+ * history and this audit say them the same way.
+ */
+export function capDecisionTitle(agent: string, note: string, byPerson: boolean): string {
+  return `${byPerson ? 'Set' : 'An agent set'} ${agent}'s own caps — ${note}`
+}
+
+export function proposalDecisionTitle(keep: boolean, proposer: string, place: string): string {
+  return `${keep ? 'Kept' : 'Discarded'} ${proposer}'s proposed comment on ${place}`
+}

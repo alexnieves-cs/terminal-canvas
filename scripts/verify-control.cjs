@@ -678,6 +678,28 @@ const ok = (n, pass, detail = '') => {
         answered.ok === true && answered.audit.rows[0].title === 'Allowed Bash — ls' && asked === 5 && none.ok === false && /no decision audit/.test(none.error),
       JSON.stringify({ built, parsed: parsed.map((p) => p.kind), answered, none }))
   }
+  // M371 — audit.3. The two decisions that recorded nothing before are said
+  //     one way everywhere: a cap a person set (an agent's own lowering is
+  //     the agent's, and never reaches the person audit), and a proposal
+  //     kept or discarded, naming whose it was and where.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc audit3 '))
+    const a = C.createDecisionAudit({ file: join(dir, 'd.jsonl') })
+    const row = (source, title, event) => ({ kind: 'event', runId: 'r', at: 5, event, source, title })
+    const personCap = C.capDecisionTitle('claude — api', 'spend cap $4.10', true)
+    const agentCap = C.capDecisionTitle('claude — api', 'spend cap $1.00', false)
+    const kept = C.proposalDecisionTitle(true, 'review seat', 'src/a.ts:12')
+    a.record(row('person', personCap, 'session'))
+    a.record(row('agent', agentCap, 'session'))
+    a.record(row('person', kept, 'artifact'))
+    const read = a.list(10)
+    rmSync(dir, { recursive: true, force: true })
+    ok('audit.3 a person\'s cap and a kept proposal reach the audit in one set of words; an agent\'s own lowering is the agent\'s and stays out',
+      personCap === "Set claude — api's own caps — spend cap $4.10" && agentCap.startsWith('An agent set') &&
+        kept === "Kept review seat's proposed comment on src/a.ts:12" && C.proposalDecisionTitle(false, 'x', 'y:1').startsWith('Discarded') &&
+        read.rows.map((r) => r.title).join('|') === `${kept}|${personCap}`,
+      JSON.stringify(read.rows))
+  }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

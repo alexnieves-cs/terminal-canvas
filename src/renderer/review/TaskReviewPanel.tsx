@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { proposalDecisionTitle } from '@shared/decision-audit'
+import { adoptedRunId, recordOrchEvent } from '@renderer/orchestration/orch-record'
 import { outward } from '@shared/outward'
 import { checkWords, type CheckRecord } from '@shared/check-evidence'
 import { checkOutputDisplay } from '@shared/check-output'
@@ -67,6 +69,15 @@ export interface TaskReviewPanelProps {
  * `verificationOf` call the panel makes, over the same props, so the two can
  * never disagree.
  */
+
+/** M371. A person's answer to an agent's proposal is a decision: recorded beside the work, never in front of it. */
+function recordProposalAnswer(itemId: string, c: ReviewComment, keep: boolean): void {
+  void recordOrchEvent({
+    runId: adoptedRunId(itemId), itemId, event: 'artifact', source: 'person',
+    title: proposalDecisionTitle(keep, c.proposedBy?.label ?? 'an agent', commentPlace(c))
+  })
+}
+
 export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'standing' | 'checks' | 'comments' | 'criteria' | 'criteriaMet'>): JSX.Element {
   const verification = verificationOf({
     agentWorking: p.agentWorking,
@@ -299,10 +310,10 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
                   <span className="task-review__comment-verbs">
                     <button type="button" className="pf__verb pf__verb--word" data-task-comment-verb="keep"
                       title="Keep it as your comment: it joins the follow-up like any comment of yours"
-                      onMouseDown={p.press(() => p.onComments?.(p.itemId, answerProposal(p.comments ?? [], c.id, true)))}>Keep</button>
+                      onMouseDown={p.press(() => { p.onComments?.(p.itemId, answerProposal(p.comments ?? [], c.id, true)); recordProposalAnswer(p.itemId, c, true) })}>Keep</button>
                     <button type="button" className="pf__verb pf__verb--word" data-task-comment-verb="discard"
                       title="Discard the agent's proposal"
-                      onMouseDown={p.press(() => p.onComments?.(p.itemId, answerProposal(p.comments ?? [], c.id, false)))}>Discard</button>
+                      onMouseDown={p.press(() => { p.onComments?.(p.itemId, answerProposal(p.comments ?? [], c.id, false)); recordProposalAnswer(p.itemId, c, false) })}>Discard</button>
                   </span>
                 )}
               </li>

@@ -17,6 +17,8 @@
  */
 
 import { planCapChange } from '@shared/agent-session'
+import { capDecisionTitle } from '@shared/decision-audit'
+import { adoptedRunId, recordOrchEvent } from '@renderer/orchestration/orch-record'
 import { getChat } from '@renderer/chat/chat-store'
 import { isChatPanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
@@ -25,7 +27,7 @@ import type { ActionCtx } from './types'
 export type CapsActions = Pick<PaletteActions, 'capAgent'>
 
 export function capsActions(ctx: ActionCtx): CapsActions {
-  const { panelsRef, setPanels, commitHistory } = ctx
+  const { panelsRef, setPanels, commitHistory, boardVerbsRef } = ctx
   return {
     capAgent: (panelId, value, origin = 'person') => {
       const target = panelsRef.current.find((p) => p.rect.id === panelId)
@@ -42,6 +44,14 @@ export function capsActions(ctx: ActionCtx): CapsActions {
         })
         commitHistory(next)
         return next
+      })
+      // M371. The decision is recorded where it is made. A person's change is
+      // `person` and reaches the decision audit (M369); a door's lowering is
+      // the agent's or the workflow's, recorded as theirs.
+      void recordOrchEvent({
+        runId: adoptedRunId(panelId), panelId, event: 'session', source: origin === 'person' ? 'person' : 'agent',
+        ...(boardVerbsRef.current?.taskOfPanel?.(panelId) === undefined ? {} : { itemId: boardVerbsRef.current.taskOfPanel(panelId) }),
+        title: capDecisionTitle(target.title ?? panelId, change.note, origin === 'person')
       })
       return { kind: 'ran', note: change.note }
     }
