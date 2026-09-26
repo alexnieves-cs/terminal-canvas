@@ -74,6 +74,17 @@ const {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// M353. Orchestrate's workbench reads its Changes pane from git in the
+// background and says "Reading changes…" until it has. A shot taken inside
+// that window pins a loading caption: under load, M349's UPDATE_GOLDENS wrote
+// two orchestration goldens that way. So every orchestration shot waits it
+// out, and a caption that never resolves is a thrown scene, not a golden.
+async function changesRead(k, scene) {
+  const loading = `[...document.querySelectorAll('.orch__caption[role="status"]')].some((p) => p.textContent.trim() === 'Reading changes…')`
+  for (let i = 0; i < 50 && (await k.js(loading)); i++) await sleep(100)
+  if (await k.js(loading)) throw new Error(`${scene}: the Changes pane still says "Reading changes…" after 5s, so the shot would pin a loading caption`)
+}
+
 // Never touch the real store: this harness spawns real shells.
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'tc-shot-')))
 app.on('window-all-closed', () => {})
@@ -729,6 +740,7 @@ const SCENES = [
         // style stays as the hook, so a future live value has a named place to go.
         await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(600)
+        await changesRead(k, 'orchestration')
         await k.shot('orchestration')
         await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
       } finally {
@@ -742,6 +754,7 @@ const SCENES = [
         await k.theme('dark')
         await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(600)
+        await changesRead(k, 'orchestration-dark')
         await k.shot('orchestration-dark')
       } finally {
         await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
@@ -811,6 +824,7 @@ const SCENES = [
         if (!(await k.js(`!!document.querySelector('.orch__cube--busy')`))) throw new Error('orchestration-working: no cube took the busy tone, so the lit ring this scene exists to show is not in the frame')
         await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(700)
+        await changesRead(k, 'orchestration-working')
         await k.shot('orchestration-working')
       } finally {
         for (const id of seeded) k.wc.send('agent:state', { panelId: id, state: 'idle' })
@@ -864,6 +878,7 @@ const SCENES = [
         await sleep(1150)
         const painted = await k.js(`(() => { const r = document.querySelector('[data-orch-live]'); return r ? { towers: r.dataset.orchLiveTowers, events: r.dataset.orchLiveEvents } : null })()`)
         if (!painted || Number(painted.towers) < 3) throw new Error(`orchestration-watch: expected at least 3 towers, got ${JSON.stringify(painted)}`)
+        await changesRead(k, 'orchestration-watch')
         await k.shot('orchestration-watch')
       } finally {
         k.wc.send('agent:state', { panelId: 'chat', state: 'idle' })
