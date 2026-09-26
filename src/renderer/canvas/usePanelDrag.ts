@@ -1,19 +1,31 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import { applyDrag, type DragState } from './panel-interaction'
+import { applyDrag, arrangeable, changedFields, type CanvasWriteThrough, type DragState } from './panel-interaction'
 import { screenToWorld, type Viewport, type WorldRect } from './viewport'
 
 export interface PanelDragDeps {
   hostRef: RefObject<HTMLElement | null>
   /** Read through a ref: viewport changes on every wheel event. */
   viewportRef: RefObject<Viewport>
-  /** Called on every move with the rect this gesture implies, and the gesture itself (M50: a snap needs to know a resize's moving edges). */
-  onDrag(panelId: string, rect: WorldRect, state: DragState): void
+  /**
+   * Called on every move with the rect this gesture implies, and the gesture
+   * itself (M50: a snap needs to know a resize's moving edges). Returns the
+   * rect it SETTLED on — after snapping — when it has one, so the
+   * write-through sends where the panel is, not where the cursor is.
+   */
+  onDrag(panelId: string, rect: WorldRect, state: DragState): WorldRect | void
   /**
    * Called once on release for the whole gesture. A group move carries one
    * immutable state per member, so this is the one place its history entry
    * can be committed exactly once.
    */
   onCommit(states: readonly DragState[]): void
+  /**
+   * The shared canvas (panel-interaction.ts's CanvasWriteThrough). Read
+   * through a ref at use: the workspace's share and this person's role change
+   * underneath an installed listener. Null — or an absent ref — is an
+   * unshared canvas.
+   */
+  writeThroughRef?: RefObject<CanvasWriteThrough | null>
 }
 
 /**
@@ -34,6 +46,8 @@ export interface PanelDragDeps {
  */
 export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]) => void {
   const dragRef = useRef<readonly DragState[] | null>(null)
+  /** Per member, the rect last written through — so a frame sends only what moved. */
+  const writtenRef = useRef(new Map<string, WorldRect>())
   const settleTimersRef = useRef(new Map<string, number>())
   const movedRef = useRef(false)
   // Mirrored so the document listeners, installed once, always call the
@@ -118,8 +132,15 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       // Every member is handed its own UNCHANGED state every frame, so each
       // rect is derived from its mousedown origin rather than the preceding
       // frame or a group bounding box — see applyDrag's own note.
+      const through = depsRef.current.writeThroughRef?.current ?? null
       for (const member of state) {
-        depsRef.current.onDrag(member.panelId, applyDrag(member, world), member)
+        const implied = applyDrag(member, world)
+        const settled = depsRef.current.onDrag(member.panelId, implied, member) ?? implied
+        if (through === null) continue
+        const fields = changedFields(writtenRef.current.get(member.panelId) ?? member.originRect, settled)
+        if (Object.keys(fields).length === 0) continue
+        writtenRef.current.set(member.panelId, settled)
+        through.write(member.panelId, fields)
       }
     }
 
@@ -137,7 +158,12 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
     }
   }, [])
 
-  return useCallback((states: readonly DragState[]) => {
+  return useCallback((requested: readonly DragState[]) => {
+    // A role that may not arrange a panel never lifts it: the gesture is
+    // refused before the first frame, not undone after it.
+    const states = arrangeable(requested, depsRef.current.writeThroughRef?.current ?? null)
+    writtenRef.current.clear()
+    if (states.length === 0) return
     for (const state of states) {
       const previous = settleTimersRef.current.get(state.panelId)
       if (previous !== undefined) window.clearTimeout(previous)

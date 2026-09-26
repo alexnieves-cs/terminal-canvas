@@ -299,7 +299,22 @@ app.whenReady().then(() => {
   // lane's ports probed with nothing run, and a recipe's stored versions.
   // M322 agent:queue-edit / agent:send-correction (174) — one waiting message
   // edited, removed or (undelivered) discarded; and Stop and send.
-  const EXPECTED_CHANNELS = 174
+  // auth:login / auth:logout / auth:sessions (177) — the Terminal Canvas
+  // account, signed in through GitHub via Supabase; metadata only.
+  // presence:local / presence:rosters (179) — the renderer's cursor, viewport
+  // and selection in, every workspace's Yjs awareness roster out.
+  // team:list / team:observe (181) — the Team view: the org's rows through
+  // the account, and a read-only attach to one member's workspace.
+  // canvas:op / canvas:shared-view / workspace:share / workspace:shares /
+  // workspace:open-share / workspace:share-member (187) — the shared canvas:
+  // a gesture's write-through op, the active view, and the share doors.
+  // text:open / text:close / text:update (190) — shared text: the renderer's
+  // y-monaco replica of a shared doc, every update gated in main.
+  // relay:spawn / relay:attach / relay:detach / relay:input / relay:resize /
+  // relay:control / relay:kill / relay:list / relay:view (199) — the pty
+  // relay: a terminal whose process runs on the team's relay VM, the socket
+  // and token held in main (main/relay/relay-client.ts).
+  const EXPECTED_CHANNELS = 199
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

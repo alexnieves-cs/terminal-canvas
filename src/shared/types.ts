@@ -115,6 +115,8 @@ export type AgentState = 'starting' | 'busy' | 'idle' | 'wants-you' | 'exited'
 export interface AgentStateUpdate {
   panelId: PanelId
   state: AgentState
+  /** The Supabase user whose agent this is, stamped at the send (see AgentSessionEvent's `owner`). Absent when signed out. */
+  owner?: string
 }
 
 /**

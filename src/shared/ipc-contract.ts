@@ -124,6 +124,11 @@ export interface ControlCanvasModel {
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult , LaneStatus } from './review'
 import type { CredentialMeta } from './credential-schema'
+import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, ShareListResult, ShareMemberResult, ShareResult } from './account'
+import type { CanvasOp, CanvasSharedView, SharedSaveMeta, SharedTextOpen, SharedTextPush, Verdict, WorkspaceRole } from './canvas-ops'
+import type { LocalPresence, PresenceRoster } from './presence'
+import type { RelayControlState, RelayRole, RelaySessionMeta } from './relay-protocol'
+import type { TeamListResult, TeamObserved, TeamObserveRequest } from './team'
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
@@ -444,6 +449,92 @@ export const IPC = {
   CREDENTIAL_DELETE: 'credential:delete',
   /** Uses the token to make one request; returns what the service said. */
   CREDENTIAL_VERIFY: 'credential:verify',
+  /**
+   * The Terminal Canvas account (a Supabase session signed in through GitHub).
+   * Metadata only, like credential:* — a session's tokens stay in main's
+   * credential store and no member of the bridge returns one. `login` opens
+   * the browser and resolves when the loopback callback lands (or times out).
+   */
+  AUTH_LOGIN: 'auth:login',
+  /** Signs out one GitHub account on this Mac, or every one when none is named. */
+  AUTH_LOGOUT: 'auth:logout',
+  /** The accounts signed in on this Mac, newest (the active one) first. */
+  AUTH_SESSIONS: 'auth:sessions',
+  /**
+   * Presence (shared/presence.ts). The renderer's own facts — cursor,
+   * viewport, selection, focused panel, mode — for one workspace, already
+   * throttled to PRESENCE_RENDER_HZ. Main adds identity and agent status and
+   * publishes them as that workspace's Yjs awareness.
+   */
+  PRESENCE_LOCAL: 'presence:local',
+  /** Every workspace's roster now, for a renderer that just loaded; afterwards PRESENCE_REMOTE pushes. */
+  PRESENCE_ROSTERS: 'presence:rosters',
+  /**
+   * The Team view (shared/team.ts): the org's members, presence rows and
+   * recent activity, read through the account's session in main. Metadata
+   * only — the token stays in main (account.ts's rule).
+   */
+  TEAM_LIST: 'team:list',
+  /**
+   * Observer mode: attach READ-ONLY to one member's workspace — main joins
+   * that workspace's Y.Doc, publishes itself as an observer (so the person
+   * sees who is watching), and pushes TEAM_OBSERVED. Null detaches.
+   */
+  TEAM_OBSERVE: 'team:observe',
+  /**
+   * The shared canvas (presence/canvas-sync.ts). One write-through op from a
+   * gesture on the ACTIVE workspace — a move/resize as it happens, or removing
+   * a placeholder — authorised against this person's workspace role before it
+   * reaches the doc. Answers the verdict; a refused move is snapped back by a
+   * CANVAS_SHARED push. Inert (ok) on a workspace that is not shared.
+   */
+  CANVAS_OP: 'canvas:op',
+  /** The active workspace's shared view now, or null — for a renderer that just loaded. */
+  CANVAS_SHARED_VIEW: 'canvas:shared-view',
+  /** Share the ACTIVE workspace into an organization (Supabase workspace_shares); this person becomes its owner. */
+  WORKSPACE_SHARE: 'workspace:share',
+  /** The shares this person is a member of. */
+  WORKSPACE_SHARES: 'workspace:shares',
+  /** Open a share as a new local workspace bound to its room. Does not activate it, like workspace:create. */
+  WORKSPACE_OPEN_SHARE: 'workspace:open-share',
+  /** The share's owner sets a member's role (editor/viewer), or removes them. */
+  WORKSPACE_SHARE_MEMBER: 'workspace:share-member',
+  /**
+   * Shared text (canvas-sync.ts's header): the renderer opens a REPLICA of a
+   * shared workspace's doc for y-monaco — the doc's state now, then TEXT_REMOTE
+   * pushes. Null when the workspace is not shared or its room is not open.
+   */
+  TEXT_OPEN: 'text:open',
+  /** The renderer's last shared editor on a workspace closed: stop pushing to it. */
+  TEXT_CLOSE: 'text:close',
+  /**
+   * One update from the replica, gated in main like the collab server gates
+   * main's: inspectUpdate, then authorizeCanvasOp, and only file-create and
+   * text-edit pass. A refusal means the replica diverged and re-opens.
+   */
+  TEXT_UPDATE: 'text:update',
+  /**
+   * The pty relay (main/relay/relay-client.ts → server/relay on the team's VM):
+   * a terminal whose process runs on the relay, not on this Mac. Main holds the
+   * socket and the token; the renderer sends keystrokes and gets RELAY_DATA and
+   * RELAY_STATE. Spawn names an ALLOWLISTED program — the relay's programs.json
+   * decides what that runs, and no path or argv ever crosses this bridge.
+   */
+  RELAY_SPAWN: 'relay:spawn',
+  /** Attach a panel to an existing relay session (a teammate's, shared through a workspace). */
+  RELAY_ATTACH: 'relay:attach',
+  RELAY_DETACH: 'relay:detach',
+  /** Keystrokes. Gated in main on the control state, and again per frame by the relay. */
+  RELAY_INPUT: 'relay:input',
+  /** Only the controller's resize is sent; everyone else renders at the controller's size. */
+  RELAY_RESIZE: 'relay:resize',
+  /** request / release / revoke, or grant / deny a named person. */
+  RELAY_CONTROL: 'relay:control',
+  RELAY_KILL: 'relay:kill',
+  /** The relay sessions this person owns. */
+  RELAY_LIST: 'relay:list',
+  /** A panel's view now, and a full replay pushed after it — for a renderer that just (re)loaded. */
+  RELAY_VIEW: 'relay:view',
   /** Main reads the authenticated user's assigned Jira work. */
   JIRA_LIST: 'jira:list',
   /** M88. The issues assigned to you and the pull requests waiting on you, through the injected GitHub client. */
@@ -1039,6 +1130,18 @@ export const IPC_EVENTS = {
    * token never costs a render.
    */
   AGENT_EVENT: 'agent:event',
+  /** Presence: one workspace's remote peers, pushed on every awareness update and on the 30s heartbeat. */
+  PRESENCE_REMOTE: 'presence:remote',
+  /** Observer mode: the observed member's awareness and canvas snapshot, pushed on every change. */
+  TEAM_OBSERVED: 'team:observed',
+  /** The shared canvas: the active workspace's view after a peer's change, a refusal, or a switch; null when not shared. */
+  CANVAS_SHARED: 'canvas:shared',
+  /** Shared text: a doc update for an open replica, or `reset` when its room closed or reopened. */
+  TEXT_REMOTE: 'text:remote',
+  /** Relay terminal bytes for one panel; `reset` clears the terminal first (a replay follows). */
+  RELAY_DATA: 'relay:data',
+  /** A relay panel's view — connection, role, the control picture — on every change. */
+  RELAY_STATE: 'relay:state',
   /** M84. One watcher's state, sent as it changes (the tail is batched by the runner's own flush). */
   WATCHER_STATE: 'watcher:state',
   /** M85. Something under the vault root changed (debounced in main); the renderer re-reads. */
@@ -1656,7 +1759,8 @@ export interface CanvasBridge {
   layout: {
     /** Called ONCE, before React mounts. See renderer/main.tsx. */
     load(): Promise<CanvasState>
-    save(state: CanvasState): Promise<void>
+    /** `meta` only while the workspace is shared: the last CANVAS_SHARED seq applied (canvas-sync.ts's write-back guard). */
+    save(state: CanvasState, meta?: SharedSaveMeta): Promise<void>
   }
   canvas: {
     /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
@@ -2057,6 +2161,65 @@ export interface CanvasBridge {
     remove(service: string): Promise<boolean>
     verify(service: string): Promise<CredentialSetResult>
   }
+  /** See AUTH_LOGIN. No member returns a token; see account.ts's header. */
+  auth: {
+    login(): Promise<AccountLoginResult>
+    logout(githubId?: string): Promise<AccountLogoutResult>
+    sessions(): Promise<AccountSessionMeta[]>
+  }
+  /** See PRESENCE_LOCAL. Carries no token and no identity the renderer did not already show. */
+  presence: {
+    report(local: LocalPresence): Promise<void>
+    rosters(): Promise<PresenceRoster[]>
+    onRemote(listener: (roster: PresenceRoster) => void): () => void
+  }
+  /**
+   * See CANVAS_OP / CANVAS_SHARED. The renderer never holds the Y.Doc: it
+   * sends ops and gets views, and speaks canvas-ops.ts only.
+   */
+  sharedCanvas: {
+    op(op: CanvasOp): Promise<Verdict>
+    view(): Promise<CanvasSharedView | null>
+    onView(listener: (view: CanvasSharedView | null) => void): () => void
+    share(req?: { orgId?: string }): Promise<ShareResult>
+    shares(): Promise<ShareListResult>
+    open(shareId: string): Promise<{ kind: 'ok'; workspaceId: string } | { kind: 'refused' | 'failed'; reason: string }>
+    setMember(req: { shareId: string; userId: string; role: WorkspaceRole | null }): Promise<ShareMemberResult>
+  }
+  /**
+   * See TEXT_OPEN / TEXT_UPDATE / TEXT_REMOTE. Bytes, not ops: y-monaco edits
+   * a Y.Text, and the only honest record of that is the Yjs update itself.
+   * Reached only from renderer/shared-text/, the renderer's one yjs door.
+   */
+  sharedText: {
+    open(workspaceId: string): Promise<SharedTextOpen | null>
+    close(workspaceId: string): Promise<void>
+    update(workspaceId: string, update: Uint8Array): Promise<Verdict>
+    onRemote(listener: (push: SharedTextPush) => void): () => void
+  }
+  /**
+   * See RELAY_SPAWN. No member returns or takes a token; `userId` in a view is
+   * the signed-in person's own id, which the renderer already shows.
+   */
+  relay: {
+    spawn(req: RelaySpawnRequest): Promise<RelayOpenResult>
+    attach(req: { panelId: string; sessionId: string }): Promise<RelayOpenResult>
+    detach(panelId: string): Promise<void>
+    input(panelId: string, data: string): Promise<boolean>
+    resize(req: { panelId: string; cols: number; rows: number }): Promise<void>
+    control(req: RelayControlRequest): Promise<void>
+    kill(panelId: string): Promise<void>
+    list(): Promise<RelayListResult>
+    view(panelId: string): Promise<RelayView | null>
+    onData(listener: (data: RelayData) => void): () => void
+    onState(listener: (view: RelayView) => void): () => void
+  }
+  /** See TEAM_LIST / TEAM_OBSERVE / TEAM_OBSERVED. */
+  team: {
+    list(orgId?: string): Promise<TeamListResult>
+    observe(req: TeamObserveRequest | null): Promise<void>
+    onObserved(listener: (observed: TeamObserved) => void): () => void
+  }
   /** M89. See BROKER_AUDIT. */
   broker: {
     audit(limit: number, service?: string): Promise<{ rows: BrokerAuditRowWire[]; skipped: number }>
@@ -2220,3 +2383,34 @@ export interface CanvasBridge {
   /** A FIELD like `telemetry`: main's app.getVersion(), stamped as argv; '' if absent. */
   appVersion: string
 }
+
+// ---- the pty relay (main/relay/relay-client.ts) --------------------------------
+
+export type RelayConnection = 'connecting' | 'open' | 'reconnecting' | 'closed'
+
+/** What the renderer draws a relay panel from. Carries no token. */
+export interface RelayView {
+  panelId: string
+  sessionId: string | null
+  connection: RelayConnection
+  userId: string | null
+  role: RelayRole | null
+  control: RelayControlState | null
+  /** Whether this person may type now: the renderer's input gate. */
+  canType: boolean
+  canRequest: boolean
+  program: string | null
+  exited: boolean
+  /** The last refusal or failure, by name; cleared by the next good attach. */
+  reason: string | null
+}
+
+/** Terminal bytes for one panel. `reset`: clear the terminal before writing — a full replay follows. */
+export interface RelayData { panelId: string; data: Uint8Array; reset: boolean }
+
+export interface RelaySpawnRequest { panelId: string; program: string; cols: number; rows: number; shareId?: string }
+export type RelayOpenResult = { kind: 'ok'; sessionId: string } | { kind: 'refused'; reason: string }
+export type RelayControlRequest =
+  | { panelId: string; action: 'request' | 'release' | 'revoke' }
+  | { panelId: string; action: 'grant' | 'deny'; userId: string }
+export type RelayListResult = { kind: 'ok'; sessions: RelaySessionMeta[] } | { kind: 'refused'; reason: string }

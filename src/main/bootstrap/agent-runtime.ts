@@ -10,6 +10,7 @@ import { expandTilde } from '../pty-manager'
 import { requestFromRendererWith } from '../ipc'
 import { resolveTranscript } from '../transcript-reader'
 import { windowUtilization } from '../../shared/rate-limit'
+import type { AgentSessionEvent } from '../../shared/agent-session'
 import { IPC_EVENTS, type PoolMintReply, type PoolMintRequest } from '../../shared/ipc-contract'
 import type { PanelTokens, MainState } from './context'
 import type { Stores } from './stores'
@@ -124,7 +125,10 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   // second author. The label is the chat's directory name.
   const approvals = createApprovalTracker({
     sink: attention.forAgents,
-    emitState: (panelId, agentState) => { state.window?.webContents.send(IPC_EVENTS.AGENT_STATE, { panelId, state: agentState }) },
+    emitState: (panelId, agentState) => {
+      const owner = state.currentUserId()
+      state.window?.webContents.send(IPC_EVENTS.AGENT_STATE, { panelId, state: agentState, ...(owner === null ? {} : { owner }) })
+    },
     label: (id) => { const cwd = agents.get(id)?.cwd ?? id; return cwd.replace(/\/+$/, '').split('/').pop() || cwd }
   })
   state.approvals = approvals
@@ -132,7 +136,12 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   // M73. The durable transcript, written from the manager's own events so
   // the renderer never has to echo a turn back; and every event forwarded
   // to the renderer on ONE channel, already batched at the manager.
-  agents.subscribe((event) => {
+  agents.subscribe((raw) => {
+    // Every event carries its owner — read at the moment of the event, so a
+    // sign-in mid-session owns what runs from then on. Stamped HERE, the one
+    // fan-out, so presence, the renderer and anything later read one answer.
+    const owner = state.currentUserId()
+    const event: AgentSessionEvent = owner === null ? raw : { ...raw, owner }
     approvals.apply(event)
     if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
     if (event.type === 'turn-removed') agentTranscripts.removeTurn(event.id, event.turnId)
@@ -140,6 +149,10 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
       const snap = agents.get(event.id)
       if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns })
     }
+    // Presence folds each workspace's agents into its awareness payload's
+    // agentStatus/statusLine. Read at use: the hub may be off (not configured,
+    // not signed in), and then this is a no-op.
+    state.presence?.agentEvent(event)
     state.window?.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
   })
 }

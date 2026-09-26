@@ -2,6 +2,8 @@ import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
 import type { CheckOutputRead } from '../shared/check-output'
 import type { LastExit } from '../shared/persistence'
 import { INERT_JOBS, type JobHandlers } from './job-recovery'
+import type { RelayClient } from './relay/relay-client'
+import { RELAY_SESSION_ID } from '../shared/relay-protocol'
 import { INERT_TASKS, type TaskHandlers } from './task-evidence'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
@@ -52,6 +54,11 @@ import type { PluginDetailsResult } from '@shared/skills'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
+import { accountOfCredentialKey } from '../shared/credential-schema'
+import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, ShareListResult, ShareMemberResult, ShareResult } from '../shared/account'
+import { parseRendererOp, parseWorkspaceRole, type CanvasOp, type CanvasSharedView, type SharedTextOpen, type Verdict, type WorkspaceRole } from '../shared/canvas-ops'
+import { parseTextCursor, type LocalPresence, type PresenceRoster } from '../shared/presence'
+import { OBSERVING_MODE, type TeamListResult, type TeamObserveRequest } from '../shared/team'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
 import {
   commentOnWorkItem,
@@ -396,6 +403,176 @@ const INERT_WORKTREES: WorktreeHandlers = {
   reveal: () => false
 }
 
+/**
+ * The Terminal Canvas account's three doors (main/account-session.ts). Inert
+ * by default for every collaborator's reason, and the defaults are REFUSALS:
+ * a harness that did not wire accounts never opens a browser.
+ */
+export interface AccountHandlers {
+  login(): Promise<AccountLoginResult>
+  logout(githubId?: string): Promise<AccountLogoutResult>
+  sessions(): AccountSessionMeta[]
+}
+export const INERT_ACCOUNT: AccountHandlers = {
+  login: async () => ({ kind: 'refused', reason: 'accounts are not available here' }),
+  logout: async () => ({ kind: 'refused', reason: 'accounts are not available here' }),
+  sessions: () => []
+}
+
+/**
+ * Presence's two doors (main/presence/presence-hub.ts). Inert by default: a
+ * report goes nowhere and every roster is empty, so a harness that did not
+ * wire presence connects to no server.
+ */
+export interface PresenceHandlers {
+  local(report: LocalPresence): void
+  rosters(): PresenceRoster[]
+  /**
+   * The Team view's two doors ride presence's collaborator rather than a new
+   * positional parameter (src/main/CLAUDE.md rule 3): they are presence's
+   * facts — the org's rows through the account, and one read-only room.
+   */
+  team(orgId?: string): Promise<TeamListResult>
+  observe(req: TeamObserveRequest | null): void
+  /**
+   * The shared canvas (presence/canvas-sync.ts) rides here too, for the same
+   * reason: the workspace's Y.Doc is the presence room's doc.
+   */
+  canvasOp(op: Extract<CanvasOp, { kind: 'rect' | 'delete' }>): Verdict
+  canvasView(): CanvasSharedView | null
+  /** After layout:save stored the active workspace. */
+  canvasSaved(sharedAck: number | undefined): void
+  /** After a workspace switch. */
+  canvasActivated(): void
+  share(req: { orgId?: string }): Promise<ShareResult>
+  shares(): Promise<ShareListResult>
+  openShare(shareId: string): Promise<{ kind: 'ok'; workspaceId: string } | { kind: 'refused' | 'failed'; reason: string }>
+  setShareMember(req: { shareId: string; userId: string; role: WorkspaceRole | null }): Promise<ShareMemberResult>
+  /** Shared text's replica doors (canvas-sync.ts). Inert: no doc to open, every update refused. */
+  textOpen(workspaceId: string): SharedTextOpen | null
+  textClose(workspaceId: string): void
+  textUpdate(workspaceId: string, update: Uint8Array): Verdict
+}
+const SHARING_NOT_WIRED = 'sharing is not wired in this build'
+export const INERT_PRESENCE: PresenceHandlers = {
+  local: () => {}, rosters: () => [], observe: () => {},
+  team: async () => ({ kind: 'refused', reason: 'the Team view is not wired in this build' }),
+  canvasOp: () => ({ ok: true }), canvasView: () => null, canvasSaved: () => {}, canvasActivated: () => {},
+  share: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
+  shares: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
+  openShare: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
+  setShareMember: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
+  textOpen: () => null, textClose: () => {},
+  textUpdate: () => ({ ok: false, reason: SHARING_NOT_WIRED })
+}
+
+/**
+ * The pty relay's doors (main/relay/relay-client.ts). Inert by default — every
+ * open refused by name, every keystroke dropped — so a harness that did not
+ * wire the relay opens no socket to anything.
+ */
+export type RelayHandlers = Pick<RelayClient, 'spawn' | 'attach' | 'detach' | 'input' | 'resize' | 'control' | 'kill' | 'list' | 'view' | 'replay'>
+const RELAY_NOT_WIRED = 'the relay is not wired in this build'
+export const INERT_RELAY: RelayHandlers = {
+  spawn: async () => ({ kind: 'refused', reason: RELAY_NOT_WIRED }),
+  attach: async () => ({ kind: 'refused', reason: RELAY_NOT_WIRED }),
+  detach: () => {}, input: () => false, resize: () => {}, control: () => {}, kill: () => {},
+  list: async () => ({ kind: 'refused', reason: RELAY_NOT_WIRED }),
+  view: () => null, replay: () => {}
+}
+
+const RELAY_PANEL = /^[A-Za-z0-9_-]{1,128}$/
+const RELAY_USER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/**
+ * Every argument is untrusted renderer input and is typed here; the relay's
+ * own parser (relay-protocol.ts) types it again on the other end. Input is
+ * capped per call: a paste larger than that is the renderer's to chunk.
+ */
+function registerRelayHandlers(relay: RelayHandlers): void {
+  const panel = (v: unknown): string | undefined => (typeof v === 'string' && RELAY_PANEL.test(v) ? v : undefined)
+  const dim = (v: unknown, hi: number): number | undefined => (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= hi ? v : undefined)
+  ipcMain.handle(IPC.RELAY_SPAWN, (_event, raw: unknown) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const id = panel(r['panelId']), cols = dim(r['cols'], 1000), rows = dim(r['rows'], 500)
+    const program = typeof r['program'] === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(r['program']) ? r['program'] : undefined
+    const shareId = typeof r['shareId'] === 'string' && RELAY_USER.test(r['shareId']) ? r['shareId'] : undefined
+    if (id === undefined || program === undefined || cols === undefined || rows === undefined) return { kind: 'refused', reason: 'not a relay spawn' }
+    return relay.spawn(id, { program, cols, rows, ...(shareId === undefined ? {} : { shareId }) })
+  })
+  ipcMain.handle(IPC.RELAY_ATTACH, (_event, raw: unknown) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const id = panel(r['panelId'])
+    const sessionId = typeof r['sessionId'] === 'string' && RELAY_SESSION_ID.test(r['sessionId']) ? r['sessionId'] : undefined
+    if (id === undefined || sessionId === undefined) return { kind: 'refused', reason: 'not a relay session' }
+    return relay.attach(id, sessionId)
+  })
+  ipcMain.handle(IPC.RELAY_DETACH, (_event, id: unknown) => { const p = panel(id); if (p !== undefined) relay.detach(p) })
+  ipcMain.handle(IPC.RELAY_INPUT, (_event, id: unknown, data: unknown) => {
+    const p = panel(id)
+    return p !== undefined && typeof data === 'string' && data.length <= 64 * 1024 ? relay.input(p, data) : false
+  })
+  ipcMain.handle(IPC.RELAY_RESIZE, (_event, raw: unknown) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const p = panel(r['panelId']), cols = dim(r['cols'], 1000), rows = dim(r['rows'], 500)
+    if (p !== undefined && cols !== undefined && rows !== undefined && cols >= 2) relay.resize(p, cols, rows)
+  })
+  ipcMain.handle(IPC.RELAY_CONTROL, (_event, raw: unknown) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const p = panel(r['panelId']), action = r['action']
+    if (p === undefined) return
+    if (action === 'request' || action === 'release' || action === 'revoke') relay.control(p, action)
+    else if ((action === 'grant' || action === 'deny') && typeof r['userId'] === 'string' && RELAY_USER.test(r['userId'])) relay.control(p, action, r['userId'])
+  })
+  ipcMain.handle(IPC.RELAY_KILL, (_event, id: unknown) => { const p = panel(id); if (p !== undefined) relay.kill(p) })
+  ipcMain.handle(IPC.RELAY_LIST, () => relay.list())
+  ipcMain.handle(IPC.RELAY_VIEW, (_event, id: unknown) => {
+    const p = panel(id)
+    if (p === undefined) return null
+    // The view now, and the whole screen again right after it: a reloaded
+    // renderer has an empty xterm and the relay's ring is the only copy.
+    const v = relay.view(p)
+    if (v !== null) queueMicrotask(() => relay.replay(p))
+    return v
+  })
+}
+
+/** A workspace id as the layout store mints them (ID_PATTERN's bound), for the text doors. */
+const WORKSPACE_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** `team:observe`'s body: two bounded ids, or null to stop. */
+function parseObserve(raw: unknown): TeamObserveRequest | null | undefined {
+  if (raw === null) return null
+  const r = raw as Record<string, unknown> | undefined
+  if (r === undefined || typeof r !== 'object') return undefined
+  const w = r['workspaceId'], u = r['userId']
+  if (typeof w !== 'string' || typeof u !== 'string' || w === '' || u === '' || w.length > 128 || u.length > 128) return undefined
+  return { workspaceId: w, userId: u }
+}
+
+/** A renderer report, shape-checked here and bounded; the hub trusts nothing it did not parse. */
+function parseLocalPresence(raw: unknown): LocalPresence | undefined {
+  const r = raw as Record<string, unknown> | null
+  if (r === null || typeof r !== 'object' || typeof r['workspaceId'] !== 'string') return undefined
+  const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+  const c = r['cursor'] as Record<string, unknown> | null
+  const v = r['viewport'] as Record<string, unknown> | null
+  return {
+    workspaceId: r['workspaceId'],
+    currentPanelId: typeof r['currentPanelId'] === 'string' ? r['currentPanelId'] : null,
+    cursor: c !== null && typeof c === 'object' && fin(c['x']) && fin(c['y']) ? { x: c['x'], y: c['y'] } : null,
+    viewport: v !== null && typeof v === 'object' && fin(v['x']) && fin(v['y']) && fin(v['scale']) ? { x: v['x'], y: v['y'], scale: v['scale'] } : null,
+    selection: Array.isArray(r['selection']) ? r['selection'].filter((s): s is string => typeof s === 'string').slice(0, 200) : [],
+    textCursor: parseTextCursor(r['textCursor']),
+    // OBSERVING_MODE is the hub's own word for an observer room; a canvas
+    // report never claims it, or peers would publish snapshots to nobody.
+    mode: typeof r['mode'] === 'string' && r['mode'] !== OBSERVING_MODE ? r['mode'].slice(0, 32) : 'canvas',
+    currentTask: typeof r['currentTask'] === 'string' ? r['currentTask'].slice(0, 140) : ''
+  }
+}
+
 export function registerIpcHandlers(
   ptyManager: PtyManager,
   layoutStore: LayoutStore,
@@ -577,8 +754,62 @@ export function registerIpcHandlers(
    * positional parameter, one harness mirror). Inert by default: nothing
    * recorded, every export refused by name.
    */
-  tasks: TaskHandlers = INERT_TASKS
+  tasks: TaskHandlers = INERT_TASKS,
+  /** The account: sign in through GitHub. Appended last, like every collaborator before it. */
+  account: AccountHandlers = INERT_ACCOUNT,
+  /** Presence. Appended last, like every collaborator before it. */
+  presence: PresenceHandlers = INERT_PRESENCE,
+  /** The pty relay. Appended last, like every collaborator before it. */
+  relay: RelayHandlers = INERT_RELAY
 ): void {
+  registerRelayHandlers(relay)
+  ipcMain.handle(IPC.PRESENCE_LOCAL, (_event, raw: unknown) => {
+    const report = parseLocalPresence(raw)
+    if (report !== undefined) presence.local(report)
+  })
+  ipcMain.handle(IPC.PRESENCE_ROSTERS, () => presence.rosters())
+  ipcMain.handle(IPC.TEAM_LIST, (_event, orgId?: unknown) =>
+    presence.team(typeof orgId === 'string' && /^[0-9a-f-]{36}$/i.test(orgId) ? orgId : undefined))
+  ipcMain.handle(IPC.TEAM_OBSERVE, (_event, raw: unknown) => {
+    const req = parseObserve(raw)
+    if (req !== undefined) presence.observe(req)
+  })
+  ipcMain.handle(IPC.CANVAS_OP, (_event, raw: unknown): Verdict => {
+    const op = parseRendererOp(raw)
+    return op === undefined ? { ok: false, reason: 'not a canvas operation' } : presence.canvasOp(op)
+  })
+  ipcMain.handle(IPC.CANVAS_SHARED_VIEW, () => presence.canvasView())
+  ipcMain.handle(IPC.TEXT_OPEN, (_event, id: unknown) => (typeof id === 'string' && WORKSPACE_ID.test(id) ? presence.textOpen(id) : null))
+  ipcMain.handle(IPC.TEXT_CLOSE, (_event, id: unknown) => { if (typeof id === 'string' && WORKSPACE_ID.test(id)) presence.textClose(id) })
+  ipcMain.handle(IPC.TEXT_UPDATE, (_event, id: unknown, update: unknown): Verdict => {
+    if (typeof id !== 'string' || !WORKSPACE_ID.test(id) || !(update instanceof Uint8Array)) return { ok: false, reason: 'not a shared text update' }
+    // Bounded before Yjs parses it: a replica's honest update is one burst of
+    // typing, and a paste of a whole file is still far under this.
+    if (update.byteLength > 8 * 1024 * 1024) return { ok: false, reason: 'that update is too large' }
+    return presence.textUpdate(id, update)
+  })
+  ipcMain.handle(IPC.WORKSPACE_SHARE, (_event, raw: unknown) => {
+    const orgId = (raw as { orgId?: unknown } | undefined)?.orgId
+    return presence.share(typeof orgId === 'string' && UUID.test(orgId) ? { orgId } : {})
+  })
+  ipcMain.handle(IPC.WORKSPACE_SHARES, () => presence.shares())
+  ipcMain.handle(IPC.WORKSPACE_OPEN_SHARE, (_event, shareId: unknown) =>
+    typeof shareId === 'string' && UUID.test(shareId) ? presence.openShare(shareId) : Promise.resolve({ kind: 'refused' as const, reason: 'not a share id' }))
+  ipcMain.handle(IPC.WORKSPACE_SHARE_MEMBER, (_event, raw: unknown) => {
+    const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+    const shareId = r['shareId'], userId = r['userId']
+    const role = r['role'] === null ? null : parseWorkspaceRole(r['role'])
+    if (typeof shareId !== 'string' || !UUID.test(shareId) || typeof userId !== 'string' || !UUID.test(userId) || role === undefined || role === 'owner') {
+      return Promise.resolve({ kind: 'refused' as const, reason: 'a share, a person and editor, viewer or none' })
+    }
+    return presence.setShareMember({ shareId, userId, role })
+  })
+  ipcMain.handle(IPC.AUTH_LOGIN, () => account.login())
+  // A GitHub id is digits; anything else is refused as "no such session" by the
+  // service, never used to build a key that names something else.
+  ipcMain.handle(IPC.AUTH_LOGOUT, (_event, githubId?: unknown) =>
+    account.logout(typeof githubId === 'string' && githubId !== '' ? githubId : undefined))
+  ipcMain.handle(IPC.AUTH_SESSIONS, () => account.sessions())
   // M320. Shape-checked here; main re-checks every path against its root.
   ipcMain.handle(IPC.TASK_EVIDENCE, (_event, req: unknown) => {
     const r = req as { itemId?: unknown; panelIds?: unknown; root?: unknown } | null
@@ -822,8 +1053,12 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.LAYOUT_LOAD, () => layoutStore.initial())
 
-  ipcMain.handle(IPC.LAYOUT_SAVE, (_event, state: CanvasState) => {
+  ipcMain.handle(IPC.LAYOUT_SAVE, (_event, state: CanvasState, meta?: unknown) => {
     layoutStore.save(state)
+    // After the store, never before: the shared canvas diffs the STORE's copy
+    // (restore settings applied), not the renderer's raw state.
+    const ack = (meta as { sharedAck?: unknown } | undefined)?.sharedAck
+    presence.canvasSaved(typeof ack === 'number' && Number.isSafeInteger(ack) && ack >= 0 ? ack : undefined)
   })
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
@@ -951,8 +1186,11 @@ export function registerIpcHandlers(
 
   ipcMain.handle(
     IPC.WORKSPACE_ACTIVATE,
-    (_event, id: string, outgoing: CanvasState) =>
-      layoutStore.activateWorkspace(id, outgoing)
+    (_event, id: string, outgoing: CanvasState) => {
+      const result = layoutStore.activateWorkspace(id, outgoing)
+      presence.canvasActivated()
+      return result
+    }
   )
 
   ipcMain.handle(IPC.WORKSPACE_CREATE, (_event, name: string) =>
@@ -1006,7 +1244,12 @@ export function registerIpcHandlers(
   // that as source text because no runtime behaviour can observe the
   // difference — everything keeps working, and the renderer simply holds a
   // secret it should never have.
-  ipcMain.handle(IPC.CREDENTIAL_LIST, () => credentialStore.list())
+  //
+  // Account sessions share the store but not these doors: they are minted by
+  // the sign-in flow and listed by auth:sessions. Filtered here, so the
+  // Credentials palette never offers a paste or a delete for one — a pasted
+  // "session" would be a forged identity.
+  ipcMain.handle(IPC.CREDENTIAL_LIST, () => credentialStore.list().filter((m) => accountOfCredentialKey(m.service) === undefined))
 
   ipcMain.handle(IPC.CREDENTIAL_SET, (_event, req: { service: string; token: string }) => {
     // A malformed payload must refuse like any other rejection, not throw: an
@@ -1017,11 +1260,12 @@ export function registerIpcHandlers(
     if (typeof req?.service !== 'string' || typeof req?.token !== 'string') {
       return { ok: false, reason: 'malformed request' }
     }
+    if (accountOfCredentialKey(req.service) !== undefined) return { ok: false, reason: 'an account is signed in, never pasted' }
     return credentialStore.set(req.service, req.token)
   })
 
   ipcMain.handle(IPC.CREDENTIAL_DELETE, (_event, service: string) =>
-    credentialStore.delete(service))
+    typeof service === 'string' && accountOfCredentialKey(service) === undefined && credentialStore.delete(service))
 
   // The one caller of credentialStore.read(), and it never returns what it
   // reads: read() supplies the token to a request and verifyCredential

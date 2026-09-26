@@ -197,6 +197,13 @@ export interface FileNodeProps {
    */
   readOnly?: boolean
   /**
+   * The active workspace's id while it is SHARED (useSharedCanvas's view), so
+   * this panel's draft binds to the file's shared text — a teammate's edits
+   * arrive as unsaved changes, and only this machine saves them to disk.
+   * Absent on an unshared workspace: the draft is what it always was.
+   */
+  sharedWorkspaceId?: string
+  /**
    * Begins a link drag from one of this node's four port handles (M35,
    * Task 7). Required on TerminalPanel's own `onBeginLink`'s precedent: an
    * optional prop here compiles clean on a missed wiring and produces "the
@@ -254,7 +261,7 @@ const SAVED_SHOWN_MS = 2400
  */
 function FileNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, restoreFocus, focusedId,
-  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true, onImportReviewed,
+  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true, onImportReviewed, sharedWorkspaceId,
   docFocused = false, onDocFocus
 }: FileNodeProps): JSX.Element {
   const { rect, z } = panel
@@ -613,9 +620,18 @@ function FileNodeImpl({
   // Escape on a DIRTY draft arms rather than discards — the textarea's rule,
   // shared with Rich mode so the most reflexive key behaves the same in both.
   const onEditorEscape = (): void => {
-    if (!dirty || discardArmed) { disarm(); closeDraft(); return }
+    if (!dirty || discardArmed) {
+      // A shared draft's discard is everyone's: the text goes back to the
+      // file on disk, or the next draft here (and every teammate's editor)
+      // would still hold what was just thrown away.
+      if (dirty) sharedRevertRef.current?.(seedRef.current)
+      disarm(); closeDraft(); return
+    }
     arm('discard')
   }
+  const sharedRevertRef = useRef<((text: string) => void) | null>(null)
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
 
   return (
     <PanelFrame
@@ -908,6 +924,10 @@ function FileNodeImpl({
                 onEscape={onEditorEscape}
                 path={path}
                 readOnly={readOnly === true}
+                {...(sharedWorkspaceId !== undefined && readOnly !== true ? {
+                  shared: { workspaceId: sharedWorkspaceId, panelId: id, hosted: true, preferLocal: () => dirtyRef.current },
+                  sharedRevertRef
+                } : {})}
               />
             )}
           </>

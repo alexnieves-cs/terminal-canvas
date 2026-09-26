@@ -64,6 +64,7 @@ export type {
   Prompt,
   RestoreSettings,
   Workspace,
+  WorkspaceShare,
   WorktreeRecord
 } from './layout-schema/types'
 

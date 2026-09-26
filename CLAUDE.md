@@ -137,6 +137,12 @@ canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge
 job:list job:recover agent:cancel-queued agent:terminate task:evidence task:evidence-index
 task:export-handoff setup:preflight recipe:history agent:queue-edit agent:send-correction
+auth:login auth:logout auth:sessions presence:local presence:rosters presence:remote
+team:list team:observe team:observed canvas:op canvas:shared-view canvas:shared
+workspace:share workspace:shares workspace:open-share workspace:share-member
+text:open text:close text:update text:remote
+relay:spawn relay:attach relay:detach relay:input relay:resize relay:control relay:kill
+relay:list relay:view relay:data relay:state
 ```
 
 Direction is meaning, not convention. `preset:*` are main → renderer because the *menu* is

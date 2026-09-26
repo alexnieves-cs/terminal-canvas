@@ -8,6 +8,8 @@
  *   tc memory list [--root <dir> | --teammate <id>] [--limit <n>]
  *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir> | --teammate <id>]
  *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
+ *   tc login | tc logout [--user <github-id>]
+ *   tc invite --role <member|admin> [--org <org-id>] | tc join <code>
  *
  * Exit 0 on ok, 1 on a refusal (the app answered no), 2 when nothing is
  * listening — three answers, because "the app said no" and "there is no
@@ -33,7 +35,10 @@ export const USAGE = [
   '       tc memory list [--root <dir> | --teammate <id>] [--limit <n>]',
   '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir> | --teammate <id>]',
   '       tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]',
+  '       tc login | tc logout [--user <github-id>]',
+  '       tc invite --role <member|admin> [--org <org-id>] | tc join <code>',
   '',
+  'login and join ask in the app before they act; login opens your browser and waits for it.',
   'api exits 1 when the service answered 4xx or 5xx, so a script can test $? — the reply',
   'carries the status and body either way.',
   '',
@@ -195,6 +200,31 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       if (token !== undefined && token !== '') fields.token = token
       return { kind: 'ok', line: JSON.stringify(fields) }
     }
+    // The account verbs. The app confirms login and join with the person at
+    // the screen, so an agent running these gets a dialog, not a session.
+    case 'login':
+      return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb: 'login' }) } : { kind: 'usage', error: 'login takes no arguments' }
+    case 'logout': {
+      if (rest.length === 0) return { kind: 'ok', line: JSON.stringify({ verb: 'logout' }) }
+      if (rest.length === 2 && rest[0] === '--user' && rest[1] !== '') return { kind: 'ok', line: JSON.stringify({ verb: 'logout', githubId: rest[1] }) }
+      return { kind: 'usage', error: 'logout takes nothing, or --user <github-id>' }
+    }
+    case 'invite': {
+      const fields: Record<string, string> = { verb: 'invite' }
+      for (let i = 0; i < rest.length; i += 1) {
+        const flag = rest[i]!
+        const value = rest[i + 1]
+        if ((flag === '--role' || flag === '--org') && value !== undefined && value !== '') {
+          fields[flag === '--role' ? 'role' : 'orgId'] = value
+          i += 1
+        } else return { kind: 'usage', error: `unexpected argument ${flag}` }
+      }
+      // No default role: who gets to do what in an organization is said, not assumed.
+      if (fields.role !== 'member' && fields.role !== 'admin') return { kind: 'usage', error: 'invite needs --role member or --role admin' }
+      return { kind: 'ok', line: JSON.stringify(fields) }
+    }
+    case 'join':
+      return rest.length === 1 && rest[0] !== '' ? { kind: 'ok', line: JSON.stringify({ verb: 'join', code: rest[0] }) } : { kind: 'usage', error: 'join takes exactly one invite code' }
     case 'list':
     case 'status':
     case 'ping':

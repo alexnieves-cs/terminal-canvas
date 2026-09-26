@@ -438,8 +438,11 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   const readers = readdirSync(dir).filter((f) => f.endsWith('.ts'))
     .filter((f) => /\bstore\s*\.\s*read\s*\(|credentialStore\s*\.\s*read\s*\(|deps\.store\.read\s*\(/.test(stripComments(read(`${dir}/${f}`) ?? '')))
     .sort()
-  const expected = ['broker.ts', 'credential-verify.ts', 'jira-client.ts']
-  ok('readers.1 exactly three modules read a credential\'s plaintext — credential-verify, jira-client and the broker, the last reader',
+  // account-session.ts is the fourth: the Terminal Canvas account's session
+  // (supabase:github:<id>) is attached to requests to the account server and
+  // returned by no function there — verify:account login.3 pins that.
+  const expected = ['account-session.ts', 'broker.ts', 'credential-verify.ts', 'jira-client.ts']
+  ok('readers.1 exactly four modules read a credential\'s plaintext — credential-verify, jira-client, the broker and the account session',
     JSON.stringify(readers) === JSON.stringify(expected),
     JSON.stringify(readers))
 }

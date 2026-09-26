@@ -5,6 +5,8 @@ import type { AgentSessionManager } from '../agent-session'
 import type { ApprovalTracker } from '../approvals'
 import type { PoolCaller } from '../pool-caller'
 import type { ControlServer } from '../control-server'
+import type { PresenceHub } from '../presence/presence-hub'
+import type { CanvasSync } from '../presence/canvas-sync'
 
 /**
  * EVERY FIELD HERE IS READ LATE, AND THAT IS THE WHOLE POINT OF THE OBJECT.
@@ -77,6 +79,12 @@ export interface MainState {
   controlServer: ControlServer | null
   /** M84. The watcher runner, once it exists — read by the quit sequence. */
   watchRunner: { disposeAll(): void } | null
+  /** Presence: one Y.Doc per workspace on the Hocuspocus server. Read by the agent:event fan-out and the quit sequence. */
+  presence: PresenceHub | null
+  /** The shared canvas's binding (presence/canvas-sync.ts). Read by the hub's bindCanvas and by layout:save. */
+  canvasSync: CanvasSync | null
+  /** The signed-in person's user id, or null — what every agent event is stamped with. Replaced in index.ts once the account exists. */
+  currentUserId: () => string | null
 }
 
 export function createMainState(): MainState {
@@ -94,7 +102,10 @@ export function createMainState(): MainState {
     telemetryOn: false,
     probedAt: 0,
     controlServer: null,
-    watchRunner: null
+    watchRunner: null,
+    presence: null,
+    canvasSync: null,
+    currentUserId: () => null
   }
 }
 

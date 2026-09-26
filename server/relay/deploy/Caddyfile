@@ -1,0 +1,8 @@
+# /etc/caddy/Caddyfile — TLS for the relay. Caddy gets a Let's Encrypt
+# certificate for the name on its own; the relay itself listens on loopback
+# only. Replace relay.example.com with the DNS name pointing at the VM.
+relay.example.com {
+	@relay path /relay /healthz
+	reverse_proxy @relay 127.0.0.1:7681
+	respond 404
+}

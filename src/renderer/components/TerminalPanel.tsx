@@ -5,7 +5,7 @@ import type { PanelSession } from '@renderer/session/panel-session'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { noteStateWord, useLastActive } from '@renderer/session/last-active-store'
-import { useAgentState } from '@renderer/session/agent-state-store'
+import { useAgentOwner, useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
 import { useTierFade } from '@renderer/canvas/tier-fade'
@@ -149,6 +149,7 @@ function TerminalPanelImpl({
   // ignores PTY data on purpose so a chatty agent cannot drive the canvas at
   // 60Hz — see agent-state-store.ts.
   const agentState = useAgentState(session.id)
+  const agentOwner = useAgentOwner(session.id)
   const agentClass = glow && agentState ? ` panel--agent-${agentState}` : ''
   // M63. The one state word for this panel, applied to the pill, the card's
   // state line, the summary tier, the block tier and the frame's edge.
@@ -225,6 +226,7 @@ function TerminalPanelImpl({
 
   return (
     <PanelFrame
+      owner={agentOwner}
       id={session.id}
       kind="terminal"
       rect={rect}

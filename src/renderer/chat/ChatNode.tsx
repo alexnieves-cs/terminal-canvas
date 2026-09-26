@@ -104,6 +104,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
 
   return (
     <PanelFrame
+      owner={chat.owner}
       id={id}
       kind="chat"
       rect={panel.rect}

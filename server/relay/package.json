@@ -1,0 +1,11 @@
+{
+  "name": "tc-relay",
+  "private": true,
+  "description": "Terminal Canvas pty relay — the runtime deps the VM installs next to out/relay/main.cjs (npm run relay:build). node-pty is native, so it is built ON the VM for its node and arch, never copied from the Mac.",
+  "main": "main.cjs",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "node-pty": "1.1.0",
+    "ws": "^8.21.3"
+  }
+}

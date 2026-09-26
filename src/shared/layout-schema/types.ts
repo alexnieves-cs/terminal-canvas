@@ -30,6 +30,7 @@ import type { ChatSource } from '../chat-panel'
 import { type LinkAutomation } from '../handoff'
 import { type WatchTrigger } from '../watch-trigger'
 import { type PersistedGroup } from '../groups'
+import type { WorkspaceRole } from '../canvas-ops'
 import { type PersistedRun } from '../runs'
 import { type PersistedTemplate } from '../templates'
 import { type PersistedTeammate } from '../teammates'
@@ -503,6 +504,28 @@ export interface PersistedBookmark {
 export interface Workspace extends CanvasState {
   id: string
   name: string
+  /**
+   * A workspace shared through Supabase (workspace_shares): its room is
+   * `tc:workspace:<share id>` rather than the per-machine local id, which is
+   * what lets two people's copies meet in one doc. `role` is a CACHE of this
+   * person's workspace_members row, refreshed on every bind — the server
+   * checks its own copy, so a stale cache can only refuse too much locally.
+   * ABSENT on every unshared workspace, and never sent to the renderer.
+   */
+  share?: WorkspaceShare
+  /**
+   * The shared canvas's Y.Doc state (Y.encodeStateAsUpdate, base64), written
+   * in the SAME file and the same atomic write as `panels` — so the doc is
+   * never older than the layout it was diffed against (canvas-sync.ts).
+   * Present only beside `share`. Never sent to the renderer.
+   */
+  crdt?: string
+}
+
+export interface WorkspaceShare {
+  id: string
+  orgId: string
+  role: WorkspaceRole
 }
 
 export interface LayoutSnapshot {

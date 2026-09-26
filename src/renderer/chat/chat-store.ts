@@ -38,6 +38,8 @@ export interface ChatState {
    */
   /** M98. Tools main answered from a session grant this launch, in order — the quiet row's source. */
   granted?: string[]
+  /** Whose agent this is — the `owner` main stamps on every agent event. The colour its activity is drawn in. */
+  owner?: string
   insert?: { seq: number; text?: string; /** M205. Hold the keyboard once sending re-enables — asked for explicitly, never implied. */ focus?: true; attach?:{ kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
   /** M122. Ask the panel to scroll a stored turn into view — a search hit's flight. */
   scrollTo?: { seq: number; turnIndex: number }
@@ -382,11 +384,17 @@ export function lastAssistantText(id: string): string {
 }
 
 export function applyChatEvent(event: AgentSessionEvent): void {
-  const prev = states.get(event.id)
+  let prev = states.get(event.id)
   // An event for a panel this renderer never seeded (another workspace's,
   // or a race with dispose) must not mint a state: that is the recycled-id
   // door. The hook seeds first.
   if (!prev) return
+  // Every event carries its owner; only a CHANGE is a state update, so a
+  // stream of tokens does not re-render for a fact that never moved.
+  if (event.owner !== undefined && prev.owner !== event.owner) {
+    update(event.id, { ...prev, owner: event.owner })
+    prev = states.get(event.id)!
+  }
   const snap = prev.snapshot
   switch (event.type) {
     case 'status':

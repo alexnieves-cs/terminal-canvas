@@ -103,7 +103,8 @@ export function TopBar({
         // stays first: it is what the dock, the palette and the docs call it.
         options={[
           { id: 'canvas', label: <><span className="shell__center-name">Canvas</span><span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
-          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Orchestrate — monitor and review: what the agents are doing, and what is ready for you', className: 'shell__center-btn' }
+          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Orchestrate — monitor and review: what the agents are doing, and what is ready for you', className: 'shell__center-btn' },
+          { id: 'team', label: <><span className="shell__center-name">Team</span><span className="shell__center-purpose">See who is working</span></>, title: 'Team — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }
         ]}
       />
 

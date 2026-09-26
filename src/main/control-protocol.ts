@@ -50,6 +50,17 @@ export type ControlRequest =
    * through the URL door: a web page can pre-fill a form, never act.
    */
   | { verb: 'task'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string }
+  /**
+   * The Terminal Canvas account. SOCKET ONLY — the URL door's host list is
+   * `open` and `task`, so a web page can never sign someone in, out, or into
+   * an organization. `login` and `join` PROPOSE: main puts a dialog in front
+   * of a person before either acts, because any agent in any terminal can
+   * reach this socket. `invite` and `logout` act, and answer with metadata.
+   */
+  | { verb: 'login' }
+  | { verb: 'logout'; githubId?: string }
+  | { verb: 'invite'; role: 'member' | 'admin'; orgId?: string }
+  | { verb: 'join'; code: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -151,6 +162,26 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
           ...(recipe === undefined ? {} : { recipe: recipe.slice(0, 80) })
         }
       }
+    }
+    case 'login':
+      return { kind: 'ok', req: { verb: 'login' } }
+    case 'logout': {
+      const githubId = optionalString(fields['githubId'])
+      if (githubId === null || (githubId !== undefined && !/^[1-9][0-9]{0,19}$/.test(githubId))) return { kind: 'bad', error: 'githubId must be a numeric GitHub user id' }
+      return { kind: 'ok', req: githubId === undefined ? { verb: 'logout' } : { verb: 'logout', githubId } }
+    }
+    case 'invite': {
+      const role = fields['role']
+      if (role !== 'member' && role !== 'admin') return { kind: 'bad', error: 'invite needs a role — member or admin' }
+      const orgId = optionalString(fields['orgId'])
+      if (orgId === null || (orgId !== undefined && !/^[0-9a-f-]{36}$/i.test(orgId))) return { kind: 'bad', error: 'orgId must be an organization id (a uuid)' }
+      return { kind: 'ok', req: orgId === undefined ? { verb: 'invite', role } : { verb: 'invite', role, orgId } }
+    }
+    case 'join': {
+      const code = optionalString(fields['code'])
+      if (code === null || code === undefined) return { kind: 'bad', error: 'join needs an invite code' }
+      if (code.length > 128) return { kind: 'bad', error: 'that invite code is too long' }
+      return { kind: 'ok', req: { verb: 'join', code } }
     }
     case 'board': {
       const op = fields['op']

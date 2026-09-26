@@ -1,0 +1,34 @@
+# /etc/systemd/system/tc-relay.service — installed by deploy/setup.sh.
+# The relay runs as its own unprivileged user; every pty it spawns runs as that
+# user too, so the sandbox below is the sandbox every shared shell lives in.
+[Unit]
+Description=Terminal Canvas pty relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tc-relay
+Group=tc-relay
+WorkingDirectory=/opt/tc-relay
+EnvironmentFile=/etc/tc-relay/relay.env
+ExecStart=/usr/bin/node /opt/tc-relay/main.cjs
+Restart=on-failure
+RestartSec=2
+# A restart kills every pty (they are children); systemd must not leave them behind either.
+KillMode=control-group
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindPaths=/home/tc-relay
+ReadWritePaths=/var/log/tc-relay
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

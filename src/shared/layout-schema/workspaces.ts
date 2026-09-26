@@ -22,6 +22,7 @@ import { GROUP_COLOURS, type PersistedGroup } from '../groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from '../runs'
 import { parseShelf, type Shelf } from '../skills'
 import { isNum, isRecord, isStr } from './fields'
+import { parseWorkspaceRole } from '../canvas-ops'
 import type {
   LayoutSnapshot,
   PersistedBookmark,
@@ -345,8 +346,37 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     // M181. The starter record: absent stays absent; malformed dropped by name.
     ...(() => { const s = parseStarter(raw.starter, warnings); return s === undefined ? {} : { starter: s } })(),
     // M287. Orchestrate's per-workspace layout: the same rules.
-    ...(() => { const o = parseOrchestrate(raw.orchestrate, warnings); return o === undefined ? {} : { orchestrate: o } })()
+    ...(() => { const o = parseOrchestrate(raw.orchestrate, warnings); return o === undefined ? {} : { orchestrate: o } })(),
+    // The shared canvas: absent stays absent; a malformed share is dropped by
+    // name, and its doc with it — a doc with no room to belong to is bytes
+    // that can only ever be re-seeded from `panels` anyway.
+    ...parseShareFields(raw, id, warnings)
   }
+}
+
+const SHARE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
+/** 8 MB of doc: far past any canvas's geometry, short of a file that stalls the parse. */
+const CRDT_MAX_CHARS = 8 * 1024 * 1024
+
+function parseShareFields(raw: Record<string, unknown>, id: string, warnings: string[]): Pick<Workspace, 'share' | 'crdt'> {
+  if (raw.share === undefined) {
+    if (raw.crdt !== undefined) warnings.push(`dropped workspace ${id}'s shared canvas state: the workspace is not shared`)
+    return {}
+  }
+  const s = raw.share
+  const role = isRecord(s) ? parseWorkspaceRole(s.role) : undefined
+  if (!isRecord(s) || !isStr(s.id) || !SHARE_ID.test(s.id) || !isStr(s.orgId) || !SHARE_ID.test(s.orgId) || role === undefined) {
+    warnings.push(`dropped workspace ${id}'s share: malformed`)
+    return {}
+  }
+  const share = { id: s.id, orgId: s.orgId, role }
+  if (raw.crdt === undefined) return { share }
+  if (!isStr(raw.crdt) || raw.crdt.length > CRDT_MAX_CHARS || !BASE64.test(raw.crdt)) {
+    warnings.push(`dropped workspace ${id}'s shared canvas state: malformed`)
+    return { share }
+  }
+  return { share, crdt: raw.crdt }
 }
 
 /**

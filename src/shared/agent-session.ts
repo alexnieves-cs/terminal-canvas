@@ -150,7 +150,13 @@ export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
   interrupted: boolean
 }
 
-export type AgentSessionEvent = { id: string } & (
+/**
+ * `owner`: the Supabase user id of the person whose agent this is, stamped on
+ * EVERY event at main's one fan-out (bootstrap/agent-runtime.ts) — the colour
+ * agent activity is drawn in, here and on a teammate's shared canvas. Absent
+ * when signed out: an unowned agent draws in the canvas's own accent.
+ */
+export type AgentSessionEvent = { id: string; owner?: string } & (
   | Exclude<TranscriptEvent, { type: 'result' | 'assistant' | 'user' | 'ignored' }>
   | ResultEvent
   /** M319. `resumeLost`: the CLI said the conversation it was asked to resume does not exist — the next message starts a new one. */

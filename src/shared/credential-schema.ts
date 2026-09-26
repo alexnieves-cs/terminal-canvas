@@ -77,3 +77,33 @@ export interface CredentialMeta {
 export function findService(id: string): CredentialService | undefined {
   return SERVICES.find((s) => s.id === id)
 }
+
+/**
+ * The Terminal Canvas account: a Supabase session, signed in through GitHub.
+ * One entry PER GitHub account, keyed `supabase:github:<numeric id>`, so two
+ * people signing in on one Mac never overwrite each other's session.
+ *
+ * NOT a member of SERVICES, on purpose: SERVICES is what the Credentials
+ * palette builds its paste rows from, and a session is minted by the sign-in
+ * flow, never pasted. The key is still not free-form — it is one declared
+ * shape with a numeric tail, so a typo is refused exactly as an undeclared
+ * service id is (verify:layout 67's rule).
+ */
+export const ACCOUNT_SERVICE = 'supabase'
+const ACCOUNT_KEY = /^supabase:github:([1-9][0-9]{0,19})$/
+
+export function accountCredentialKey(githubId: string): string {
+  return `${ACCOUNT_SERVICE}:github:${githubId}`
+}
+
+/** The GitHub user id an account key names, or undefined for any other key. */
+export function accountOfCredentialKey(id: string): string | undefined {
+  return ACCOUNT_KEY.exec(id)?.[1]
+}
+
+/** What the store may hold: a declared service, or an account key. */
+export function describeCredentialKey(id: string): { label: string } | undefined {
+  const service = findService(id)
+  if (service !== undefined) return { label: service.label }
+  return accountOfCredentialKey(id) === undefined ? undefined : { label: 'Terminal Canvas account' }
+}

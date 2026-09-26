@@ -1565,7 +1565,18 @@ export class PtyManager {
     if (this.scrollback.enabled()) this.scrollback.append(session.panelId, data)
   }
 
+  /**
+   * Whose agents these are — every agent:state is stamped with it at the one
+   * send below. Set by main's composition root once the account exists; the
+   * default stamps nothing, which is every harness and every signed-out Mac.
+   */
+  ownerOf: () => string | null = () => null
+
   private send(channel: string, payload: unknown): void {
+    if (channel === IPC_EVENTS.AGENT_STATE) {
+      const owner = this.ownerOf()
+      if (owner !== null) payload = { ...(payload as object), owner }
+    }
     const now = Date.now()
     this.ipcSendTimestamps.push(now)
     // Trim to the last 1000ms in place: this runs on every send, so an array

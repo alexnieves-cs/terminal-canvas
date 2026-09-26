@@ -15,9 +15,10 @@
  *     already shows. Writing every render's `value` back in would fight the
  *     user's own typing, since `onChange` is what produced that `value`.
  */
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX, type MutableRefObject } from 'react'
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { registerEditor } from './editor-registry'
+import type { SharedTextTarget } from '../shared-text/target'
 
 /**
  * Monaco is ~3MB and this app opens on a canvas, not on a file. So it is
@@ -44,9 +45,17 @@ type Props = {
   path: string
   /** Read-only, for a merged view's lane — the same word ReviewNode and FileNode use. */
   readOnly?: boolean
+  /**
+   * Bind this editor's text to a shared file's Y.Text (shared-text/binding.ts)
+   * while the workspace is shared. Read once, at mount, like everything the
+   * editor is created with; absent, the editor is exactly what it was.
+   */
+  shared?: SharedTextTarget
+  /** Filled while bound: the owner's discard, putting the shared text back for everyone. */
+  sharedRevertRef?: MutableRefObject<((text: string) => void) | null>
 }
 
-export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly }: Props): JSX.Element {
+export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly, shared, sharedRevertRef }: Props): JSX.Element {
   /**
    * TWO elements, and the split is load-bearing. `rootRef` carries
    * `data-file-node-editor` and holds the pre-paint below, so React owns its
@@ -67,6 +76,11 @@ export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly }
    * into a box with no editor behind it and reading an empty draft as a bug.
    */
   const [ready, setReady] = useState(false)
+  /** The shared binding's state, as `data-shared-text` — for the reader's marker and the checks. */
+  const [sharedState, setSharedState] = useState<string | null>(null)
+  const sharedRef = useRef(shared)
+  const revertRef = useRef(sharedRevertRef)
+  revertRef.current = sharedRevertRef
   /**
    * The three callbacks, read through a ref by the editor's own listeners.
    * Monaco's listeners are registered once for the editor's life (rule 1), so
@@ -188,6 +202,25 @@ export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly }
        */
       editor.focus()
       setReady(true)
+
+      // Shared text, AFTER the editor exists and its own change listener is
+      // on: y-monaco's first act may be replacing the model with the doc's
+      // text, and that must reach `onChange` (it is how a teammate's unsaved
+      // edits become the owner's dirty draft). Its own lazy chunk: yjs and
+      // y-monaco are paid for only by a shared workspace.
+      const target = sharedRef.current
+      if (target !== undefined) {
+        void import('../shared-text/binding').then(({ bindSharedText }) => {
+          if (cancelled) return
+          const binding = bindSharedText(monaco, editor, target, setSharedState)
+          if (revertRef.current) revertRef.current.current = (text) => { binding.revert(text) }
+          // Pushed after the model's disposer, so it runs BEFORE it (reverse order).
+          disposers.push(() => {
+            if (revertRef.current) revertRef.current.current = null
+            binding.dispose()
+          })
+        })
+      }
     })
 
     return () => {
@@ -226,6 +259,7 @@ export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly }
       className="file-node__editor"
       data-file-node-editor
       {...(ready ? {} : { 'data-file-node-editor-loading': '' })}
+      {...(sharedState === null ? {} : { 'data-shared-text': sharedState })}
       /* The panel is draggable by its body in places; a mousedown that starts
          a selection inside the editor must not also start a panel drag. */
       onMouseDown={(event) => { event.stopPropagation() }}

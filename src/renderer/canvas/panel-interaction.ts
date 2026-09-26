@@ -67,3 +67,33 @@ export function applyDrag(state: DragState, world: Point): WorldRect {
     h: growsY ? Math.max(MIN_PANEL_H, r.h + dy) : r.h
   }
 }
+
+/**
+ * The shared canvas's interposition point. While the workspace is shared, a
+ * gesture WRITES THROUGH to the workspace doc as it happens (main's
+ * canvas-sync.ts, over `canvas:op`) rather than only reaching it on the next
+ * layout:save — so a teammate sees the panel travel, not jump — and a role
+ * that may not arrange never lifts the panel at all.
+ *
+ * Absent (`null`) on an unshared workspace: every gesture behaves exactly as
+ * it always has. Pure, like the rest of this file: the renderer's bridge call
+ * is the implementation's business, not the gesture's.
+ */
+export interface CanvasWriteThrough {
+  /** False for a viewer: the gesture does not start. */
+  canArrange(panelId: string): boolean
+  /** Only the fields that changed since the last write of this gesture. */
+  write(panelId: string, fields: Partial<Record<'x' | 'y' | 'w' | 'h', number>>): void
+}
+
+/** The fields of `next` that differ from `prev` — what one frame writes through. */
+export function changedFields(prev: WorldRect | null, next: WorldRect): Partial<Record<'x' | 'y' | 'w' | 'h', number>> {
+  const out: Partial<Record<'x' | 'y' | 'w' | 'h', number>> = {}
+  for (const k of ['x', 'y', 'w', 'h'] as const) if (prev === null || prev[k] !== next[k]) out[k] = next[k]
+  return out
+}
+
+/** The members of a gesture this person may move. A group drag keeps what it may, rather than refusing all. */
+export function arrangeable(states: readonly DragState[], through: CanvasWriteThrough | null): DragState[] {
+  return through === null ? [...states] : states.filter((s) => through.canArrange(s.panelId))
+}

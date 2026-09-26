@@ -23,6 +23,7 @@
     "src/main/**/*",
     "src/cli/**/*",
     "src/preload/**/*",
-    "src/shared/**/*"
+    "src/shared/**/*",
+    "server/**/*"
   ]
 }

@@ -8,6 +8,7 @@ import type { WorldRect } from '@renderer/canvas/viewport'
 import type { Panel } from '@renderer/panels/panels'
 import type { PanelStateWord } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
+import { colorOf } from '@shared/presence'
 import { PanelPorts } from './PanelPorts'
 import { Close, KIND_GLYPH, Lock, Maximize, Pin, Restore } from '@renderer/icons'
 import { shellControl } from '@renderer/shell/shell-control'
@@ -126,13 +127,21 @@ export interface PanelFrameProps {
   onBeginDrag: (state: DragState) => void
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   children: ReactNode
+  /**
+   * The Supabase user whose agent this is, from the owner stamped on every
+   * agent event (main's agent-runtime fan-out). Sets `--agent-owner`, which
+   * the stylesheet reads for the WORKING tone only: activity is drawn in its
+   * owner's colour, while needs-you stays amber and an error stays red — a
+   * teammate's colour must never be mistaken for a state.
+   */
+  owner?: string
 }
 
 /** M69. The word a sessionless kind shows in its summary's state slot. */
 const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note' }
 
 export function PanelFrame({
-  id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState,
+  id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState, owner,
   close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore, menuDetail
 }: PanelFrameProps): JSX.Element {
   // M233. Subscribed per panel id, so a frame re-renders for its OWN
@@ -257,7 +266,7 @@ export function PanelFrame({
   ) : (
     <div className="pf__tier-layer pf__tier-layer--out" style={{ top: layerTop }} aria-hidden="true" inert={true} data-tier-ghost>{renderFar(leaving)}</div>
   )
-  const style: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }
+  const style = { left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z, ...(owner === undefined ? {} : { '--agent-owner': colorOf(owner) }) } as CSSProperties
   const beginMove = (event: ReactMouseEvent): void => {
     // Chrome selects, and starts a move. stopPropagation keeps the canvas
     // from reading this as a background click and deselecting;
@@ -434,6 +443,7 @@ export function PanelFrame({
       // M63. The state edge reads this: a terminal supplies its tone through
       // rootAttrs; every other kind is its kind.
       data-tone={tone}
+      data-agent-owner={owner}
       // M233. A join arrival landed HERE. It flashes `.pf::before` — M109's
       // state-edge glow — rather than adding a second mechanism for
       // "something reached me": the flash inherits that pseudo-element's

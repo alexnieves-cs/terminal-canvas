@@ -273,6 +273,14 @@ import type { PanelSearchResult } from '@shared/ipc-contract'
 import { skillEditorFocused } from '../skills/editor-focus'
 import { adoptedRunId, isSettledHandoff, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
 import { arrangementTemplate } from '../orchestration/orch-arrangement'
+import { PresenceLayer } from '../presence/PresenceLayer'
+import { useSharedCanvas } from '../shared-canvas/useSharedCanvas'
+import { SharedPlaceholderLayer } from '../shared-canvas/SharedPlaceholderLayer'
+import type { SharedPanel } from '@shared/canvas-ops'
+import { notifyRefused } from '../shell/toast'
+import { RosterStrip } from '../presence/RosterStrip'
+import { usePresenceReport } from '../presence/usePresenceReport'
+import { TeamView } from '../team/TeamView'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
 const EMPTY_SHELF: Shelf = { columns: [] }
@@ -1602,7 +1610,7 @@ export function Canvas({
   // receiving and discarding every other panel's updates — the same argument
   // the single Cmd+C/Cmd+V subscription above makes.
   useEffect(() => window.canvas.agent.onState((update) => {
-    applyAgentState(update.panelId, update.state)
+    applyAgentState(update.panelId, update.state, update.owner)
   }), [])
 
   /**
@@ -2250,23 +2258,38 @@ export function Canvas({
     return out.rect
   }, [])
 
+  // The shared canvas (presence/canvas-sync.ts in main): a peer's move lands
+  // in `panels` here without a history entry, a teammate's panels are inert
+  // placeholders, and every gesture below writes through as it happens.
+  const shared = useSharedCanvas({ setPanels, setGroups, refit: (id) => registry.refit(id) })
+  const sharedRef = useRef(shared)
+  sharedRef.current = shared
+
   const beginDrag = usePanelDrag({
     hostRef,
     viewportRef,
+    writeThroughRef: shared.writeThroughRef,
     onDrag: useCallback(
       (id: string, rect: WorldRect, state: DragState) => {
         const resize = state.mode.kind === 'resize'
           ? { growsX: state.mode.edge === 'e' || state.mode.edge === 'se', growsY: state.mode.edge === 's' || state.mode.edge === 'se' }
           : undefined
         const snapped = snapNow(rect, new Set([id]), resize)
+        // A teammate's placeholder is not in `panels`: it moves in the shared
+        // layer, and the drag's write-through carries it to the doc.
+        if (sharedRef.current.isPlaceholder(id)) { sharedRef.current.movePlaceholder(id, snapped); return snapped }
         // M92. The first move or resize clears the maximised mark: its
         // restore rect would lie once the user has placed the panel by hand.
         setPanels((current) => setPanelRect(current, id, snapped).map((p) => (p.rect.id === id && p.maximised !== undefined ? (({ maximised: _m, ...rest }) => rest as Panel)(p) : p)))
+        return snapped
       },
       [snapNow]
     ),
     onCommit: useCallback((states: readonly DragState[]) => {
       setSnapGuides([])
+      // A placeholder-only gesture changed nothing of ours: no history entry,
+      // or Cmd+Z would spend a press undoing nothing.
+      if (states.every((state) => sharedRef.current.isPlaceholder(state.panelId))) return
       // One history entry per gesture. onDrag (above) called setPanels ~60
       // times during the drag; pushing there would make a single drag take
       // sixty Cmd+Z presses to undo. This runs exactly once, on mouseup,
@@ -2324,6 +2347,8 @@ export function Canvas({
 
   const onBeginGroupDrag = useCallback((group: CanvasGroup, event: MouseEvent<HTMLElement>) => {
     if (mergedRef.current) return
+    // A viewer of a shared workspace arranges nothing, a group included.
+    if (sharedRef.current.view !== null && !sharedRef.current.mayArrange) return
     const host = hostRef.current
     if (!host) return
     const bounds = host.getBoundingClientRect()
@@ -2335,6 +2360,22 @@ export function Canvas({
     setPanels((current) => raiseGroup(current, group))
     beginGroupDrag(groupDragState(group, panelsRef.current, origin))
   }, [beginGroupDrag])
+
+  // A teammate's placeholder, moved by its header through the SAME gesture a
+  // panel uses — so the same write-through, snap and role gate apply.
+  const onBeginPlaceholderDrag = useCallback((p: SharedPanel, event: MouseEvent<HTMLElement>) => {
+    if (mergedRef.current) return
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const origin = screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewportRef.current)
+    beginDrag([{ panelId: p.id, mode: { kind: 'move' }, originRect: { id: p.id, x: p.x, y: p.y, w: p.w, h: p.h }, originWorld: origin }])
+  }, [beginDrag])
+  const onRemovePlaceholder = useCallback((p: SharedPanel) => {
+    void sharedRef.current.removePlaceholder(p.id).then((verdict) => {
+      if (!verdict.ok) notifyRefused('Not removed from the shared canvas', verdict.reason)
+    })
+  }, [])
 
   // M61. The same two pure transitions the palette's group.toggle row runs
   // (usePaletteActions), so the frame's button and the row cannot disagree.
@@ -2704,8 +2745,8 @@ export function Canvas({
       ...(retainedOutcomes.length === 0 ? {} : { retainedOutcomes }),
       ...(starter === undefined ? {} : { starter }),
       ...(orchestrate === undefined ? {} : { orchestrate })
-    })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, retainedOutcomes, starter, orchestrate])
+    }, shared.saveMeta)
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, retainedOutcomes, starter, orchestrate, shared.saveMeta])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -3651,7 +3692,7 @@ export function Canvas({
   // failing check, the changes to review); absent, the task's remembered side.
   const [focusTask, setFocusTask] = useState<{ itemId: string; from: 'canvas' | 'orchestration'; side?: FocusSide; at: number } | null>(null)
   const openFocusTask = useCallback((itemId: string, side?: FocusSide): void => {
-    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
+    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow === 'team' ? 'canvas' : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
     setCenterView('focus')
   }, [centerViewNow, setCenterView])
   const closeFocusTask = useCallback((): void => {
@@ -5074,6 +5115,26 @@ export function Canvas({
     })
     return memberships
   }
+  // Presence: this window's cursor, viewport, selection and mode, to main at
+  // 15Hz for the active workspace's awareness (renderer/presence/). It creates
+  // no ref any earlier hook depends on. It sits AFTER taskMemberships, which
+  // presenceTask calls during render: placed beside activeWorkspaceId it read
+  // that const inside its temporal dead zone, and the canvas threw
+  // `Cannot access 'taskMemberships' before initialization` on the first
+  // render with a focused panel (verify:panels:core 6 found it).
+  // The task for the Team view's tile: the focused panel's task, else the one
+  // in progress — the same "focused" pick Orchestrate's taskMemberIds makes.
+  const presenceTask = useMemo(() => {
+    const own = focusedId === null ? undefined : taskMemberships(panels, workItems).find((m) => m.members.some((x) => x.panelId === focusedId))
+    const item = (own === undefined ? undefined : workItems.find((w) => w.id === own.itemId))
+      ?? workItems.find((w) => w.state === WORK_ITEM_STATES[1])
+    return item?.title ?? ''
+  }, [focusedId, panels, workItems])
+  usePresenceReport({
+    hostRef, workspaceId: activeWorkspaceId, viewport, focusedId, selectedIds: selectedPanelIds,
+    mode: annotating ? 'annotate' : merged ? 'merged' : chrome.centerView,
+    currentTask: presenceTask
+  })
   // M303 (Quiet instrument). The hulls are computed at EVERY tier now: far
   // out they are M270's filled silhouettes; nearer in, the task ones are
   // drawn as quiet dashed regions (TaskClusterLayer's `region`), so a task
@@ -8131,6 +8192,13 @@ export function Canvas({
           />
         </div>
       )}
+      {/* The Team view: the same overlay cell, over the same mounted canvas.
+          It reads nothing from the canvas — its tiles are people. */}
+      {chrome.centerView === 'team' && (
+        <div className="shell__orch shell__orch--on" data-center-view="team" role="presentation">
+          <TeamView />
+        </div>
+      )}
       {/* M324. A task's focus view: the same overlay cell as Orchestrate, over
           the same mounted canvas. A task that no longer exists (deleted,
           another workspace) falls back to the canvas by the effect below. */}
@@ -8324,6 +8392,12 @@ export function Canvas({
               note could be placed on the ground but never on a panel. */}
           {annotating && <div className="annotate-sheet" data-annotate-sheet />}
           <SnapGuides guides={snapGuides} />
+          {/* The shared canvas: teammates' panels, inert, at the doc's rects. */}
+          {!merged && (
+            <SharedPlaceholderLayer placeholders={shared.placeholders} workspaceId={activeWorkspaceId}
+              mayArrange={shared.mayArrange} mayRemove={shared.mayRemove} files={shared.view?.files ?? []}
+              onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder} />
+          )}
           {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
           <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft} merged={merged}
             onSelect={merged ? undefined : setSelectedAnnotation} onBeginEdit={merged ? undefined : setEditingAnnotation} onCommitEdit={commitAnnotation} onCancelEdit={(id) => { const a = annotationsRef.current.find((x) => x.id === id); commitAnnotation(id, a?.text ?? '') }} />
@@ -8445,6 +8519,7 @@ export function Canvas({
                   vaultReady={vaultReady}
                   onImportReviewed={setImportReviewed}
                   {...(noteVault !== null && panel.source.path.startsWith(`${noteVault.root}/`) ? { vault: noteVault } : {})}
+                  {...(shared.view !== null && activeWorkspaceId !== undefined ? { sharedWorkspaceId: activeWorkspaceId } : {})}
                 />
               )
             }
@@ -8787,6 +8862,11 @@ export function Canvas({
             Marquee.tsx. It renders null at rest, so there is no "no marquee"
             element for anything to find. */}
         <Marquee rect={marquee} />
+        {/* Presence: remote selections and cursors on their own 2D canvas, and
+            the roster of who else is here. Siblings of .world like Marquee —
+            screen-pinned, and a remote update repaints this layer only. */}
+        <PresenceLayer workspaceId={activeWorkspaceId} viewport={viewport} rects={rects} />
+        <RosterStrip workspaceId={activeWorkspaceId} />
         {/* A SIBLING of .world, like EdgeIndicators above: .world carries the
             one translate()/scale() transform, and an overlay inside it would
             pan and zoom away with the canvas it is pinned to. */}

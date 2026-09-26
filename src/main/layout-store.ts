@@ -16,6 +16,7 @@ import {
   type Prompt,
   type RestoreSettings,
   type Workspace,
+  type WorkspaceShare,
   type WorktreeRecord, RECENT_DIRECTORIES_CAP, TEMPLATES_MAX, type PersistedTemplate } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 import { TEAMMATES_MAX, carryTeammate, type PersistedTeammate } from '../shared/teammates'
@@ -23,6 +24,7 @@ import { SHELF_COLUMNS_MAX, carryShelf, type Shelf } from '../shared/skills'
 import { ROUTINES_MAX, carryRoutine, type PersistedRoutine } from '../shared/routines'
 import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
 import type { ReviewBaseline } from '../shared/review'
+import { GROUP_COLOURS, type GroupColour } from '../shared/groups'
 
 /**
  * Owns layout.json.
@@ -160,6 +162,20 @@ export interface LayoutStore {
    * switching is a transaction with its own rules (see activateWorkspace).
    */
   createWorkspace(name: string): string
+  /**
+   * The shared canvas's store half (presence/canvas-sync.ts). The store stays
+   * the one choke point for what reaches disk: a peer's move is written HERE
+   * first, whichever workspace is on screen, and the doc's own bytes ride the
+   * same atomic write as the panels they describe.
+   */
+  activeWorkspaceId(): string
+  workspaceShare(id: string): WorkspaceShare | undefined
+  /** Null unshares: the share AND its doc go, together. False when the id names nothing. */
+  setWorkspaceShare(id: string, share: WorkspaceShare | null): boolean
+  sharedState(id: string): Uint8Array | null
+  setSharedState(id: string, state: Uint8Array): void
+  /** Peer geometry for panels hosted here, and the whole group list when a peer changed it. */
+  applySharedLayout(id: string, change: { rects: Array<{ id: string; x: number; y: number; w: number; h: number; z: number }>; groups?: Array<{ id: string; label: string; colour: string; panelIds: string[]; collapsed?: boolean }> }): void
   /** M93. The layout as main holds it now — what a restore is computed against. */
   current(): LayoutSnapshot
   /** M93. Adds a fully-formed workspace record beside the others without activating it (the renderer switches, as it does for create). */
@@ -823,6 +839,55 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     },
     addWorkspaceRecord(workspace) {
       snapshot.workspaces = [...snapshot.workspaces, workspace]
+      scheduleWrite()
+    },
+
+    activeWorkspaceId() {
+      return activeWorkspace().id
+    },
+    workspaceShare(id) {
+      const s = snapshot.workspaces.find((w) => w.id === id)?.share
+      return s === undefined ? undefined : { ...s }
+    },
+    setWorkspaceShare(id, share) {
+      const w = snapshot.workspaces.find((x) => x.id === id)
+      if (w === undefined) return false
+      if (share === null) { delete w.share; delete w.crdt }
+      else {
+        // A different share is a different room: the old room's doc is not this one's.
+        if (w.share !== undefined && w.share.id !== share.id) delete w.crdt
+        w.share = { ...share }
+      }
+      scheduleWrite()
+      return true
+    },
+    sharedState(id) {
+      const b64 = snapshot.workspaces.find((w) => w.id === id)?.crdt
+      return b64 === undefined ? null : new Uint8Array(Buffer.from(b64, 'base64'))
+    },
+    setSharedState(id, state) {
+      const w = snapshot.workspaces.find((x) => x.id === id)
+      // Only beside a share — parseWorkspace drops a doc with no room anyway.
+      if (w === undefined || w.share === undefined) return
+      w.crdt = Buffer.from(state).toString('base64')
+      scheduleWrite()
+    },
+    applySharedLayout(id, change) {
+      const w = snapshot.workspaces.find((x) => x.id === id)
+      if (w === undefined) return
+      const rects = new Map(change.rects.map((r) => [r.id, r]))
+      if (rects.size > 0) {
+        w.panels = w.panels.map((p) => {
+          const r = rects.get(p.id)
+          return r === undefined ? p : { ...p, x: r.x, y: r.y, w: r.w, h: r.h, z: r.z }
+        })
+      }
+      if (change.groups !== undefined) {
+        // A colour this build does not know is not a group this build can draw.
+        w.groups = change.groups
+          .filter((g) => (GROUP_COLOURS as readonly string[]).includes(g.colour))
+          .map((g) => ({ id: g.id, label: g.label, colour: g.colour as GroupColour, panelIds: [...g.panelIds], ...(g.collapsed === true ? { collapsed: true } : {}) }))
+      }
       scheduleWrite()
     },
 

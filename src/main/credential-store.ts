@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { findService, type CredentialMeta } from '../shared/credential-schema'
+import { describeCredentialKey, type CredentialMeta } from '../shared/credential-schema'
 
 /**
  * Injected so verify:credentials can drive the whole store — including the
@@ -70,7 +70,8 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
         const e = value as Partial<Entry>
         // An id the schema does not declare is DROPPED with a warning rather
         // than carried forward as a permanent typo — verify:layout 67's rule.
-        if (!findService(id)) {
+        // An account key (`supabase:github:<id>`) is declared by its shape.
+        if (!describeCredentialKey(id)) {
           warn(`dropped credential for unknown service ${JSON.stringify(id)}`)
           continue
         }
@@ -136,7 +137,7 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
     list: () => Object.entries(entries).map(([service, e]) => metaOf(service, e)),
 
     set(service, token) {
-      const def = findService(service)
+      const def = describeCredentialKey(service)
       if (!def) return { ok: false, reason: `unknown service ${service}` }
       if (token.trim().length === 0) return { ok: false, reason: 'the token was empty' }
       // Refuses, never falls back. See the spec's §3.

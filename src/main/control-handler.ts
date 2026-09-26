@@ -16,6 +16,7 @@ import { resolveOpen, type ControlRequest } from './control-protocol'
 import { unreviewedPresetReason } from './presets'
 import type { ControlReply } from './control-server'
 import type { AgentPlanCaller, AgentPlanReply } from '../shared/plan'
+import type { AccountService } from './account-session'
 
 export interface ControlSessionRow {
   panelId: string
@@ -56,6 +57,11 @@ export interface ControlHandlerDeps {
    * `null` is "no window answered" — a named refusal, never a silent ok.
    */
   board?: (req: BoardControlRequest) => Promise<{ kind: 'ok'; id: string } | { kind: 'refused'; reason: string } | null>
+  /**
+   * The Terminal Canvas account. Absent means every account verb is refused by
+   * name. `login`/`join` are called with `askFirst`, so a person confirms.
+   */
+  account?: Pick<AccountService, 'login' | 'logout' | 'invite' | 'join'>
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -152,6 +158,20 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         const answer = await deps.board(req.op === 'add' ? { op: 'add', title: req.title } : { op: 'done', id: req.id }).catch(() => null)
         if (answer === null) return { ok: false, error: 'no canvas is open to add to — open the app first' }
         return answer.kind === 'ok' ? { ok: true, id: answer.id } : { ok: false, error: answer.reason }
+      }
+      case 'login':
+      case 'logout':
+      case 'invite':
+      case 'join': {
+        if (deps.account === undefined) return { ok: false, error: 'accounts are not available here' }
+        // Each arm's result is metadata by construction (shared/account.ts):
+        // an invite's code is the one plaintext, and it is the person's to share.
+        const r = req.verb === 'login' ? await deps.account.login({ askFirst: true })
+          : req.verb === 'logout' ? await deps.account.logout(req.githubId)
+          : req.verb === 'invite' ? await deps.account.invite({ role: req.role, ...(req.orgId === undefined ? {} : { orgId: req.orgId }) })
+          : await deps.account.join({ code: req.code, askFirst: true })
+        if ('reason' in r) return { ok: false, error: r.reason, kind: r.kind }
+        return { ok: true, ...r }
       }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or

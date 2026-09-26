@@ -372,6 +372,15 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        git:root
                        credential:list / credential:set / credential:delete
                        credential:verify
+                       auth:login / auth:logout / auth:sessions
+                       presence:local / presence:rosters
+                       team:list / team:observe
+                       canvas:op / canvas:shared-view
+                       workspace:share / workspace:shares
+                       workspace:open-share / workspace:share-member
+                       text:open / text:close / text:update
+                       relay:spawn / relay:attach / relay:detach / relay:input
+                       relay:resize / relay:control / relay:kill / relay:list / relay:view
                        github:list / broker:audit
                        jira:list / jira:transitions
                        jira:comment / jira:transition
@@ -430,6 +439,9 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        session:recover
                        settings:changed / spawn:open-sheet
                        agent:event (batched ~16ms) / watcher:state / vault:changed
+                       presence:remote / team:observed / canvas:shared
+                       text:remote
+                       relay:data / relay:state
                        routine:fire
                        canvas:tidy / canvas:flip
                        canvas:feedback
@@ -452,6 +464,11 @@ ever returns a stored secret — there is deliberately no `credential:get`, and
 service said. A renderer-side reconstruction of any of
 them would drift from main's answer silently, and the two would then disagree
 only in the cases nobody tests.
+
+The three `auth:*` channels follow the same rule for the Terminal Canvas account (a
+Supabase session signed in through GitHub; setup in [docs/accounts.md](docs/accounts.md)):
+the session lives in the same encrypted store under `supabase:github:<id>`, and the
+channels answer with who is signed in, never with a token.
 
 `canvas:counts` is the one event that runs the other way: main sends it and the renderer
 replies on an ephemeral `canvas:counts:reply:<timestamp>` channel that is invented per call
@@ -1112,6 +1129,12 @@ price of not killing something.
 | M327 | A task's execution plan: steps with owner, dependencies, directory, expected output and actual result, derived from the sessions and witnessed checks — stopped responding, finished and verified kept apart — with Start, Assign, Cancel, Retry, Verify and Run beside each step; one implement-and-verify workflow. [Ledger](docs/build-log/m325-m328-tasks-workspace-plan.md). |
 | M328 | A restrained visual system: tighter radii, no glow, a neutral ground, sans-serif task headings, one filled action per context. [Ledger](docs/build-log/m325-m328-tasks-workspace-plan.md). |
 | M329 | One decision queue: every "needs you" indicator lands on the specific request — a permission opens in the queue, a question's turn scrolls into view, a failed check opens at its output — each decision says what its action affects, and a task keeps the decisions it already had answered. [Ledger](docs/build-log/m329-one-decision-queue.md). |
+| M330 | Accounts: GitHub sign-in through Supabase-managed PKCE on a loopback callback, the session in the encrypted credential store and never across the bridge, personal and shared organizations, one-time invites stored as a hash (`auth:*`, `tc login` / `logout` / `invite` / `join`, each socket verb confirmed by the person). [Ledger](docs/build-log/m330-m335-collaboration.md). |
+| M331 | Presence: one Yjs doc per workspace on a Hocuspocus server, awareness with a 30 s heartbeat plus live cursor, viewport, selection and agent status at up to 15 Hz, idle and offline judged on the receiver's clock; a roster strip and one cursor-layer canvas (`presence:*`). [Ledger](docs/build-log/m330-m335-collaboration.md). |
+| M332 | The Team view: a tile per organization member with health, task and agents; a read-only look at a member's canvas from a scrubbed snapshot carried in the workspace doc while someone watches, and F to follow their viewport (`team:*`). [Ledger](docs/build-log/m330-m335-collaboration.md). |
+| M333 | The shared canvas: a workspace shared into an organization with owner / editor / viewer roles, its panels and groups as per-field last-writer-wins maps with tombstones, gestures written through as they happen, teammates' panels as inert placeholders, agent activity in its owner's colour, roles enforced in the renderer, main and `server/collab` (`canvas:op`, `workspace:share*`). [Ledger](docs/build-log/m330-m335-collaboration.md). |
+| M334 | Shared text: one Y.Text per shared file panel, bound through y-monaco on a renderer replica whose every update main re-judges, teammates' carets from presence, the disk still the owner's (`text:*`). [Ledger](docs/build-log/m330-m335-collaboration.md). |
+| M335 | The pty relay: a terminal on the team's VM that several people attach to and one controls at a time, the token in main and in the subprotocol list, spawning by allowlist, attaching by the share's role, a replay ring with per-viewer backpressure, every hand-off audited (`relay:*`); not yet deployed and not yet a panel kind. [Ledger](docs/build-log/m330-m335-collaboration.md). |
 
 ### What's next — the v10 run (D01–D20)
 

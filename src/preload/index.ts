@@ -1,7 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { hookupIpc } from '@sentry/electron/preload-namespaced'
-import type { WatcherStateEvent } from '@shared/ipc-contract'
+import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
+import type { PresenceRoster } from '../shared/presence'
+import type { TeamObserved } from '../shared/team'
+import type { CanvasSharedView, SharedSaveMeta, SharedTextPush } from '../shared/canvas-ops'
 import type { PersistedRoutine } from '../shared/routines'
 import {
   IPC,
@@ -97,7 +100,7 @@ const bridge: CanvasBridge = {
   },
   layout: {
     load: () => ipcRenderer.invoke(IPC.LAYOUT_LOAD),
-    save: (state: CanvasState) => ipcRenderer.invoke(IPC.LAYOUT_SAVE, state)
+    save: (state: CanvasState, meta?: SharedSaveMeta) => ipcRenderer.invoke(IPC.LAYOUT_SAVE, state, meta)
   },
   canvas: {
     // canvas:counts is a main -> renderer REQUEST, not an invoke: main sends a
@@ -387,6 +390,49 @@ const bridge: CanvasBridge = {
     set: (req: { service: string; token: string }) => ipcRenderer.invoke(IPC.CREDENTIAL_SET, req),
     remove: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_DELETE, service),
     verify: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_VERIFY, service)
+  },
+  auth: {
+    login: () => ipcRenderer.invoke(IPC.AUTH_LOGIN),
+    logout: (githubId?: string) => ipcRenderer.invoke(IPC.AUTH_LOGOUT, githubId),
+    sessions: () => ipcRenderer.invoke(IPC.AUTH_SESSIONS)
+  },
+  presence: {
+    report: (local) => ipcRenderer.invoke(IPC.PRESENCE_LOCAL, local),
+    rosters: () => ipcRenderer.invoke(IPC.PRESENCE_ROSTERS),
+    onRemote: (listener) => subscribe<PresenceRoster>(IPC_EVENTS.PRESENCE_REMOTE, listener)
+  },
+  sharedCanvas: {
+    op: (op) => ipcRenderer.invoke(IPC.CANVAS_OP, op),
+    view: () => ipcRenderer.invoke(IPC.CANVAS_SHARED_VIEW),
+    onView: (listener) => subscribe<CanvasSharedView | null>(IPC_EVENTS.CANVAS_SHARED, listener),
+    share: (req) => ipcRenderer.invoke(IPC.WORKSPACE_SHARE, req),
+    shares: () => ipcRenderer.invoke(IPC.WORKSPACE_SHARES),
+    open: (shareId) => ipcRenderer.invoke(IPC.WORKSPACE_OPEN_SHARE, shareId),
+    setMember: (req) => ipcRenderer.invoke(IPC.WORKSPACE_SHARE_MEMBER, req)
+  },
+  sharedText: {
+    open: (workspaceId) => ipcRenderer.invoke(IPC.TEXT_OPEN, workspaceId),
+    close: (workspaceId) => ipcRenderer.invoke(IPC.TEXT_CLOSE, workspaceId),
+    update: (workspaceId, update) => ipcRenderer.invoke(IPC.TEXT_UPDATE, workspaceId, update),
+    onRemote: (listener) => subscribe<SharedTextPush>(IPC_EVENTS.TEXT_REMOTE, listener)
+  },
+  relay: {
+    spawn: (req) => ipcRenderer.invoke(IPC.RELAY_SPAWN, req),
+    attach: (req) => ipcRenderer.invoke(IPC.RELAY_ATTACH, req),
+    detach: (panelId) => ipcRenderer.invoke(IPC.RELAY_DETACH, panelId),
+    input: (panelId, data) => ipcRenderer.invoke(IPC.RELAY_INPUT, panelId, data),
+    resize: (req) => ipcRenderer.invoke(IPC.RELAY_RESIZE, req),
+    control: (req) => ipcRenderer.invoke(IPC.RELAY_CONTROL, req),
+    kill: (panelId) => ipcRenderer.invoke(IPC.RELAY_KILL, panelId),
+    list: () => ipcRenderer.invoke(IPC.RELAY_LIST),
+    view: (panelId) => ipcRenderer.invoke(IPC.RELAY_VIEW, panelId),
+    onData: (listener) => subscribe<RelayData>(IPC_EVENTS.RELAY_DATA, listener),
+    onState: (listener) => subscribe<RelayView>(IPC_EVENTS.RELAY_STATE, listener)
+  },
+  team: {
+    list: (orgId) => ipcRenderer.invoke(IPC.TEAM_LIST, orgId),
+    observe: (req) => ipcRenderer.invoke(IPC.TEAM_OBSERVE, req),
+    onObserved: (listener) => subscribe<TeamObserved>(IPC_EVENTS.TEAM_OBSERVED, listener)
   },
   broker: {
     audit: (limit, service) => ipcRenderer.invoke(IPC.BROKER_AUDIT, limit, service)

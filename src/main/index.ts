@@ -17,6 +17,9 @@ import { createStores } from './bootstrap/stores'
 import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { createControlWiring } from './bootstrap/control-wiring'
+import { createAccountWiring } from './bootstrap/account-handlers'
+import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring } from './bootstrap/presence-wiring'
+import { createRelayWiring } from './bootstrap/relay-wiring'
 import { createWindow, sendToRenderer } from './bootstrap/window'
 import { startAgentRuntime, createJobDoors } from './bootstrap/agent-runtime'
 import { createTaskDoors } from './bootstrap/task-handlers'
@@ -102,7 +105,20 @@ const which = (command: string): string | null => whichFromEnv(command, state.lo
 
 const places = createPlaces(stores)
 const menu = createMenuActions(state, stores, which)
-const control = createControlWiring(state, stores, places, tokens)
+const account = createAccountWiring(state, stores)
+state.currentUserId = () => account.currentUserId()
+stores.ptyManager.ownerOf = () => account.currentUserId()
+// Presence rides the account's identity; built here, started after the env probe.
+state.presence = createPresenceWiring(state, stores, account)
+// The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
+state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'))
+const shareDoors = createShareDoors(state, stores, account)
+// The Team view's server rows, written from the hub's summary on its own slow beat.
+const teamReporter = createTeamReporterWiring(state.presence, account)
+// The pty relay: terminals whose process runs on the team's relay VM. Built
+// here; opens no socket until a relay panel asks, so nothing to start.
+const relay = createRelayWiring(state, account)
+const control = createControlWiring(state, stores, places, tokens, account)
 // M311–M314. Built at module scope with the other collaborators; every
 // closure inside reads `state` at the point of use (context.ts's rule).
 const kit = createKitHandlers(state, stores, app.getPath('userData'))
@@ -150,6 +166,12 @@ app.whenReady().then(async () => {
   // M71/M76/M138. The agent runtime, its approval tracker and the pool caller
   // — all three onto `state`, all three needing the env probe above.
   startAgentRuntime(state, stores, tokens)
+
+  // Presence after the probe: TC_PRESENCE_URL may live only in the login
+  // shell's env. Not awaited — a slow account refresh must not hold the window.
+  void state.presence?.start()
+    .then(() => teamReporter.start())
+    .catch((error: unknown) => console.warn('[presence] could not start', error))
 
   // After the env probe, because tmux must be resolved from the LOGIN PATH:
   // launchd gives a GUI app a bare PATH and /opt/homebrew/bin is not on it.
@@ -287,7 +309,28 @@ app.whenReady().then(async () => {
     createJobDoors(state, stores),
     // M320–M321. The task doors: deliverables, their search index, the gated
     // hand-off export, and the recipe preflight.
-    createTaskDoors(state, stores)
+    createTaskDoors(state, stores),
+    // The account: sign in through GitHub, sign out, the sessions on this Mac.
+    account,
+    // Presence: the renderer's reports in, every workspace's roster out.
+    {
+      local: (r) => state.presence?.local(r),
+      rosters: () => state.presence?.rosters() ?? [],
+      // The Team view: the org's rows through the account, and one read-only room.
+      team: (orgId) => account.team(orgId),
+      observe: (req) => state.presence?.observe(req),
+      // The shared canvas: the workspace doc is the presence room's doc.
+      canvasOp: (op) => state.canvasSync?.op(op) ?? { ok: true },
+      canvasView: () => state.canvasSync?.view() ?? null,
+      canvasSaved: (ack) => state.canvasSync?.saved(ack),
+      canvasActivated: () => state.canvasSync?.activated(),
+      textOpen: (id) => state.canvasSync?.textOpen(id) ?? null,
+      textClose: (id) => state.canvasSync?.textClose(id),
+      textUpdate: (id, update) => state.canvasSync?.textUpdate(id, update) ?? { ok: false, reason: 'sharing is not wired in this build' },
+      ...shareDoors
+    },
+    // The pty relay: one socket per relay panel, held in main with the token.
+    relay
   )
   createWindow(state, stores)
 
@@ -344,6 +387,15 @@ app.on('before-quit', () => {
   // M54. Unlink the socket on the way out; a stale file is replaced at the
   // next listen anyway, but a clean quit should not leave a door on disk.
   void state.controlServer?.close()
+
+  // Presence: our awareness state removed on the way out, so peers see us
+  // leave now rather than after y-protocols' 30s timeout.
+  state.presence?.stop()
+  // Relay sockets closed as detaches would be: a quit is not a network drop,
+  // so a guest's control is handed back now rather than after the 60s grace.
+  relay.dispose()
+  // Offline in the org's rows too; not awaited — quit does not wait on a network.
+  void teamReporter.stop()
 
   // The file watchers are the renderer's, not a session's, and go either way.
   try {

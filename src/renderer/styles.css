@@ -273,6 +273,9 @@
   --aura-working:   rgba(47, 107, 216, 0);
   --aura-needs-you: rgba(160, 108, 8, 0);
   --on-iris:    #ffffff;
+  /* Presence: the ink on a person's own colour (shared/presence.ts colorOf,
+     a mid-lightness hue), the same in both themes because the hue is. */
+  --on-peer:    #10131a;
   --bubble:     #eceef2;   /* M162. The user turn's ground: one step from the panel. M328: neutral, not a blue tint */
   --blur:       blur(12px) saturate(120%);
 
@@ -415,6 +418,7 @@
   --aura-working:   rgba(122, 167, 232, 0);
   --aura-needs-you: rgba(232, 180, 76, 0);
   --on-iris:    #06222a;
+  --on-peer:    #10131a;
   --bubble:     #1f242d;
   --blur:       blur(14px) saturate(140%);
 
@@ -9462,3 +9466,238 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .fplan__deps legend { padding: 0; margin-bottom: var(--sp-1); }
 .fplan__dep { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--fg); }
 .fplan__remove { justify-self: start; }
+
+/* ===================== Presence ===================== */
+/* The cursor layer: ONE screen-space 2D canvas over the world, repainted at
+   15Hz by PresenceLayer and never a click target. Above the panels (it draws
+   outlines around them), below every floating sheet. */
+.presence-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; }
+/* Who else is here: initials in cells of each person's colour, top centre —
+   the minimap holds the top-right and the command pill the bottom. The cell
+   takes the person's colour through --peer (set inline from colorOf). Idle
+   and away change the FILL, never the text's opacity: an idle cell is a
+   tint of the colour, an away one only its outline. */
+.roster-strip {
+  position: absolute; top: var(--sp-5); left: 50%; transform: translateX(-50%); z-index: 20;
+  display: flex; gap: var(--sp-2); margin: 0; padding: var(--sp-2);
+  list-style: none; border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  background: var(--s-1);
+}
+.roster-strip__cell {
+  --peer: var(--fg-4); /* the fallback; RosterStrip sets it inline per person */
+  position: relative; display: grid; place-items: center; width: 24px; height: 24px;
+  border: 1px solid var(--peer); border-radius: var(--r-md);
+  background: var(--peer); color: var(--on-peer);
+  font: 600 var(--t-xs)/1 var(--font-ui); letter-spacing: var(--track-caps); cursor: default;
+  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+.roster-strip__cell[data-state="idle"] { background: color-mix(in srgb, var(--peer) 40%, var(--s-1)); }
+.roster-strip__cell[data-state="away"] { background: transparent; color: var(--fg-3); }
+.roster-strip__agent {
+  position: absolute; right: -3px; bottom: -3px; width: 8px; height: 8px;
+  border-radius: var(--r-full); background: var(--tone); box-shadow: 0 0 0 2px var(--s-1);
+}
+
+/* ===================== Team view ===================== */
+/* The Team center view (renderer/team/TeamView.tsx), in the Orchestrate
+   overlay cell. A tile is one person: the avatar takes their colour through
+   --peer (colorOf, like the roster strip); the left rail is their HEALTH —
+   the person — and the dot beside the agent word is their agents' tone, the
+   canvas's own [data-tone] vocabulary. Two colours, because a person can be
+   away with an agent still working, and one colour would hide which. */
+.team {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+  padding: var(--sp-7); gap: var(--sp-6); overflow: auto; background: var(--bg);
+  font-family: var(--font-ui);
+}
+.team__head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; min-width: 0; }
+.team__title { margin: 0; font: 600 var(--t-lg)/1.2 var(--font-ui); color: var(--fg); }
+.team__org, .team__org-name { font: var(--t-sm)/1.2 var(--font-ui); color: var(--fg-3); }
+.team__org { background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); color: var(--fg-2); }
+.team__note, .team__status { font-size: var(--t-sm); color: var(--fg-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team__empty { margin: var(--sp-8) auto; max-width: 42ch; text-align: center; color: var(--fg-3); font-size: var(--t-md); }
+.team__grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-5);
+  margin: 0; padding: 0; list-style: none;
+}
+.team-tile {
+  --peer: var(--fg-4);
+  --health: var(--line-strong);
+  display: flex; align-items: flex-start; gap: var(--sp-5); width: 100%; min-width: 0;
+  padding: var(--sp-5) var(--sp-6); text-align: left; font: inherit; color: var(--fg);
+  background: var(--s-1); border: 1px solid var(--line); border-left: 3px solid var(--health);
+  border-radius: var(--r-lg); cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.team-tile:hover:not(:disabled), .team-tile:focus-visible { background: var(--s-3); border-color: var(--line-strong); border-left-color: var(--health); }
+.team-tile:disabled { cursor: default; color: var(--fg-3); }
+.team-tile[data-health="healthy"] { --health: var(--green); }
+.team-tile[data-health="waiting"] { --health: var(--amber); }
+.team-tile[data-health="failing"] { --health: var(--red); }
+.team-tile[data-health="away"] { --health: var(--line-strong); }
+.team-tile[data-health="offline"] { --health: var(--line); }
+.team-tile__avatar {
+  flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px;
+  border-radius: var(--r-full); background: var(--peer); color: var(--on-peer);
+  font: 600 var(--t-sm)/1 var(--font-ui); letter-spacing: var(--track-caps);
+}
+.team-tile[data-health="offline"] .team-tile__avatar,
+.team-tile[data-health="away"] .team-tile__avatar { background: transparent; color: var(--fg-3); box-shadow: inset 0 0 0 1.5px var(--peer); }
+.team-tile__avatar--sm { width: 24px; height: 24px; font-size: var(--t-xs); background: var(--peer); color: var(--on-peer); border-radius: var(--r-full); display: grid; place-items: center; }
+.team-tile__body { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; flex: 1 1 auto; }
+.team-tile__name { display: flex; align-items: baseline; gap: var(--sp-3); font-weight: 600; font-size: var(--t-md); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-tile__role { font-weight: 400; font-size: var(--t-xs); color: var(--fg-3); }
+.team-tile__task { font-size: var(--t-sm); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-tile__task--past { color: var(--fg-3); }
+.team-tile__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); font-size: var(--t-xs); color: var(--fg-3); }
+.team-tile__agent { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.team-tile__dot { width: 8px; height: 8px; border-radius: var(--r-full); background: var(--tone); }
+
+/* Observer mode: a read-only look at one member's canvas. The surface is a
+   camera over their published snapshot — no verb on any panel, nothing to
+   click but the camera — and follow locks even that (the cursor says so). */
+.team--observing { padding: 0; gap: 0; overflow: hidden; }
+.team--observing .team__head { padding: var(--sp-5) var(--sp-6); border-bottom: 1px solid var(--line); background: var(--s-2); }
+.team__back, .team__follow {
+  display: inline-flex; align-items: center; gap: var(--sp-2); font: var(--t-sm)/1 var(--font-ui);
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); border: 1px solid var(--line);
+  background: var(--s-1); color: var(--fg-2); cursor: pointer;
+}
+.team__follow { margin-left: auto; }
+.team__follow[aria-pressed="true"] { border-color: var(--peer); color: var(--fg); box-shadow: inset 0 0 0 1px var(--peer); }
+.team__follow:disabled { cursor: default; color: var(--fg-4); }
+.team__follow kbd { font: 600 var(--t-xs)/1 var(--font-ui); color: var(--fg-3); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.team__chip { font-size: var(--t-xs); color: var(--fg-3); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); }
+.team__surface { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; cursor: grab; touch-action: none; }
+.team__surface--locked { cursor: default; }
+.team__world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.team__surface--locked .team__world { transition: transform var(--dur-2) var(--ease); }
+.team__edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.team__edges line { stroke: var(--line-strong); stroke-width: 2; }
+.team__panel {
+  position: absolute; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-4) var(--sp-5);
+  background: var(--s-1); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden;
+  font-size: var(--t-md); color: var(--fg-2); pointer-events: none;
+}
+.team__panel[data-peer-selected="true"] { border-color: var(--peer); box-shadow: 0 0 0 1px var(--peer); }
+.team__panel[data-peer-focused="true"] { border-color: var(--peer); box-shadow: 0 0 0 2px var(--peer); }
+.team__panel-kind { font-size: var(--t-xs); color: var(--fg-3); text-transform: capitalize; }
+.team__panel-title { font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team__panel-state { font-size: var(--t-xs); color: var(--fg-3); }
+.team__cursor { position: absolute; transform-origin: 0 0; pointer-events: none; display: flex; align-items: flex-start; gap: var(--sp-2); }
+.team__cursor svg path { fill: var(--peer); stroke: var(--s-1); stroke-width: 1; }
+.team__cursor-name { margin-top: var(--sp-6); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm); background: var(--peer); color: var(--on-peer); font-size: var(--t-xs); white-space: nowrap; }
+.team__banner {
+  position: absolute; top: var(--sp-5); left: 50%; transform: translateX(-50%); z-index: 2;
+  padding: var(--sp-3) var(--sp-5); border-radius: var(--r-full); border: 1px solid var(--peer);
+  background: var(--s-3); color: var(--fg-2); font-size: var(--t-sm); white-space: nowrap; pointer-events: none;
+}
+.team__banner strong { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) {
+  .team__surface--locked .team__world { transition: none; }
+  .team-tile { transition: none; }
+}
+
+/* The shared canvas: an agent's ACTIVITY in its owner's colour.
+   `--agent-owner` is set inline per panel (PanelFrame's `owner`) from the
+   owner stamped on every agent event; the declaration here is only the
+   fallback the token check needs. The WORKING tone only — needs-you stays
+   amber and an error stays red, because a teammate's hue must never read as a
+   state. No owner (signed out): no attribute, and the tone's own blue. */
+.pf[data-agent-owner] { --agent-owner: var(--blue); }
+.pf[data-agent-owner][data-tone="working"],
+.pf[data-agent-owner] [data-tone="working"] {
+  --tone: var(--agent-owner);
+  --tone-dim: color-mix(in srgb, var(--agent-owner) 32%, transparent);
+}
+.pf[data-agent-owner] .chat__status[data-chat-status="answering"],
+.pf[data-agent-owner] .chat__status[data-chat-status="sending"] { color: var(--agent-owner); }
+
+/* A teammate's panel on the shared canvas: inert, drawn where the doc says,
+   its header in its owner's colour (`--owner`, set inline from colorOf; the
+   declaration is the fallback). Not a .panel — none of the panel rules
+   (tiers, chrome, ports) reach it, on purpose. */
+.shared-placeholder {
+  --owner: var(--fg-4);
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border: 1px dashed color-mix(in srgb, var(--owner) 60%, var(--line));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--owner) 6%, var(--s-1));
+  color: var(--fg-2);
+  overflow: hidden;
+}
+.shared-placeholder__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: var(--sp-8);
+  padding: 0 var(--sp-5);
+  border-bottom: 1px solid color-mix(in srgb, var(--owner) 30%, var(--line));
+  font-size: var(--t-sm);
+  cursor: default;
+  user-select: none;
+}
+.shared-placeholder__head[data-arrange] { cursor: grab; }
+.shared-placeholder__owner { width: var(--sp-4); height: var(--sp-4); border-radius: 50%; background: var(--owner); flex: none; }
+.shared-placeholder__title { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.shared-placeholder__who { color: var(--owner); white-space: nowrap; }
+.shared-placeholder__remove { display: inline-flex; border: 0; background: none; color: var(--fg-2); cursor: pointer; padding: 0 var(--sp-1); }
+.shared-placeholder__remove:hover { color: var(--fg); }
+.shared-placeholder__body { padding: var(--sp-5); font-size: var(--t-sm); display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-4); }
+.shared-placeholder__open { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font: inherit; padding: var(--sp-1) var(--sp-4); cursor: pointer; }
+.shared-placeholder__open:hover { border-color: var(--owner); }
+/* A teammate's shared file open here: the editor fills the body, as a file panel's does. */
+.shared-placeholder__draft { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shared-placeholder__note { padding: var(--sp-2) var(--sp-5); font-size: var(--t-sm); color: var(--fg-2); border-top: 1px solid var(--line); }
+
+/* Shared text (shared-text/binding.ts): a teammate's caret and selection in a
+   shared file. The colour is the person's (--peer, set through CSSOM on the
+   widget); the selection is one neutral tint, because Monaco decorations take
+   a class and a class cannot carry a per-person colour without a rule each. */
+.shared-text__caret {
+  --peer: var(--fg-2);
+  position: relative;
+  width: 0;
+  border-left: 2px solid var(--peer);
+  pointer-events: none;
+}
+.shared-text__caret-name {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-sm);
+  background: var(--peer);
+  color: var(--s-0);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+  white-space: nowrap;
+}
+.shared-text__selection { background: color-mix(in srgb, var(--iris) 22%, transparent); }
+
+/* The relay terminal (renderer/relay/RelayTerminal.tsx): the xterm to the
+   edge, and one strip above it saying who is in control. A viewer's screen is
+   dimmed a step — the one visual cue that keys will not reach this pty — and
+   never hidden: watching is the point of attaching. */
+.relay-term { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
+.relay-term__strip {
+  display: flex; align-items: center; gap: var(--s-gap, 8px); flex: none;
+  padding: 4px 8px; font: var(--t-xs)/var(--lh-tight) var(--font-ui); color: var(--fg-3);
+  border-bottom: 1px solid var(--line); background: var(--s-2);
+}
+.relay-term__line { color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.relay-term__program { font-family: var(--font-mono); color: var(--fg-4); }
+.relay-term__actions { margin-left: auto; display: flex; gap: 6px; }
+.relay-term__btn {
+  font: inherit; color: var(--fg-2); background: var(--s-3); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: 2px 8px; cursor: pointer;
+}
+.relay-term__btn:hover { background: var(--s-4); }
+.relay-term__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.relay-term__btn:disabled { cursor: default; color: var(--fg-4); background: transparent; }
+.relay-term__btn--grant { color: var(--iris); border-color: var(--iris-dim); }
+.relay-term__btn--kill { color: var(--red); }
+.relay-term__screen { flex: 1; min-height: 0; overflow: hidden; }
+.relay-term__screen--watching { opacity: .88; }

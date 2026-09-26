@@ -1,0 +1,4 @@
+{
+  "shell": { "file": "/bin/bash", "args": ["-l"], "cwd": "/home/tc-relay/work" },
+  "claude": { "file": "/usr/bin/claude", "args": [], "cwd": "/home/tc-relay/work" }
+}

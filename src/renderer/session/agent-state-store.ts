@@ -26,8 +26,19 @@ function notify(panelId: PanelId): void {
   for (const listener of set) listener()
 }
 
+/**
+ * Whose agent each panel runs — the `owner` main stamps on every agent:state
+ * update (pty-manager's send, agent-runtime's approvals). Rides the same
+ * per-id notify: an owner is a fact about one panel.
+ */
+const owners = new Map<PanelId, string>()
+
 /** Called by the one IPC subscription in Canvas.tsx. */
-export function applyAgentState(panelId: PanelId, state: AgentState): void {
+export function applyAgentState(panelId: PanelId, state: AgentState, owner?: string): void {
+  if (owner !== undefined && owners.get(panelId) !== owner) {
+    owners.set(panelId, owner)
+    notify(panelId)
+  }
   const prev = states.get(panelId)
   if (prev === state) return
   states.set(panelId, state)
@@ -58,6 +69,7 @@ export function onAgentTransition(listener: TransitionListener): () => void {
  * would inherit a dead panel's border.
  */
 export function clearAgentState(panelId: PanelId): void {
+  owners.delete(panelId)
   if (!states.has(panelId)) return
   states.delete(panelId)
   notify(panelId)
@@ -149,5 +161,14 @@ export function useAttentionIds(): PanelId[] {
     },
     () => attentionSnapshot,
     () => attentionSnapshot
+  )
+}
+
+/** The panel's agent owner, or undefined when signed out (or never stamped). */
+export function useAgentOwner(panelId: PanelId): string | undefined {
+  return useSyncExternalStore(
+    (listener) => subscribe(panelId, listener),
+    () => owners.get(panelId),
+    () => owners.get(panelId)
   )
 }
