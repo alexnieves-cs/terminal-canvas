@@ -3,7 +3,7 @@ import type { ChatPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { BACKENDS, backendOf } from '@shared/agent-backends'
-import { autoChipWords } from '@shared/auto'
+import { autoChipParts, autoChipWords } from '@shared/auto'
 import { chatHeaderLine, SANDBOX_HEADER } from '@renderer/shell/rail-rows'
 import { panelState, autoTone, TONE_WORKING } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
@@ -169,14 +169,19 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           const a = snapshot.auto
           return <span className={`badge pf__word chat__auto${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
             {a.state === 'running' && <span className="chat__auto-ring" aria-hidden="true" />}
-            {/* M121. The WORDS are the flex item that gives: text-overflow lives on a block, not on an inline-flex row's anonymous text. */}
-            <span className="chat__auto-label">{autoChipWords(a)}</span>
+            {/* M121. The WORDS are the flex item that gives: text-overflow lives on a block, not on an inline-flex row's anonymous text.
+                M356. A resolved chip's head never clips; only its tail does. */}
+            {(() => { const parts = autoChipParts(a); return <><span className="chat__auto-head">{parts.head}</span>{parts.tail !== '' && <span className="chat__auto-label">{parts.tail}</span>}</> })()}
             {a.state !== 'running' && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__auto-dismiss" data-chat-auto-dismiss aria-label="Dismiss the auto result" title="Dismiss" {...shellControl(() => dismissAuto(id))}>dismiss</button>}
           </span>
         })()}
         {/* M97. The door to the Auto rows: opens the palette on them (the
             rename verb's idiom), so no second menu is grown. */}
-        {props.readOnly !== true && snapshot?.auto?.state !== 'running' && (
+        {/* M356. Hidden while ANY chip shows: a resolved chip already names the
+            run in this slot, and a header with both pushed its controls past
+            the frame. Dismissing the chip brings the door back; the palette's
+            Auto rows are there throughout. */}
+        {props.readOnly !== true && snapshot?.auto === undefined && (
           <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns — Complete, Harden, Review, or a task of yours" aria-label="Auto…"
             {...shellControl(() => props.onOpenAuto?.(id))}>auto</button>
         )}

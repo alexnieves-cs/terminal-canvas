@@ -117,6 +117,22 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
 }
 
 /** The chip's words: one function, every surface. */
+/**
+ * M356. A RESOLVED chip's words in two parts, for a header that has no room:
+ * the head (what the run came to) never clips, the tail (the mode, or why it
+ * stuck) gives first. The whole sentence stays `autoChipWords`, on the chip's
+ * title. A running chip is one part: its count is its head, and it has the
+ * header to itself, because the Auto door is hidden while a run runs.
+ */
+export function autoChipParts(s: AutoStatus): { head: string; tail: string } {
+  switch (s.state) {
+    case 'running': return { head: autoChipWords(s), tail: '' }
+    case 'done': return { head: 'auto done', tail: ` · ${s.mode}` }
+    case 'stopped': return { head: 'auto stopped', tail: ` · ${s.mode}` }
+    case 'stuck': return { head: 'auto stuck', tail: ` — ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}` }
+  }
+}
+
 export function autoChipWords(s: AutoStatus): string {
   switch (s.state) {
     case 'running': return `auto · ${s.mode} · ${s.turn}/${s.limit}`

@@ -1031,7 +1031,7 @@ const SCENES = [
       await sleep(300)
       await k.shot('shared-offline')
     } },
-  { name: 'inspector-caps', intent: 'M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent\'s cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record\'s 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb\'s own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent\'s process is still alive (a hold keeps the agent; closing would end it); the auto run\'s chip read `auto · complete · stuck — cap reached` (the scene asserts it) and was dismissed as a person would, because a resolved chip crowds the chat header (owed, its own defect). DISCLOSED: the cap was written through the fields and Set (the verb\'s canvas door); the hold is the pushes main\'s agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes.',
+  { name: 'inspector-caps', intent: 'M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent\'s cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record\'s 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb\'s own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent\'s process is still alive (a hold keeps the agent; closing would end it); the auto run\'s resolved chip stays in the header beside the pill and reads `auto stuck` with its dismiss (M356: what the run came to never clips; its reason, `— cap reached`, gives first, and the whole sentence with its mode is the chip\'s title), the Auto… door is hidden while the chip shows, and every control in the header is painted inside the chat\'s frame (the scene hit-tests each). DISCLOSED: the cap was written through the fields and Set (the verb\'s canvas door); the hold is the pushes main\'s agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes.',
     run: async (k) => {
       const meter = (m) => k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'meter', meter: m })
       const fill = (sel, text) => k.js(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); if (!i) return false
@@ -1059,12 +1059,22 @@ const SCENES = [
       const said = await k.js(`document.querySelector('[data-caps-said]')?.textContent ?? ''`)
       const held = await k.js(`document.querySelector('[data-caps-held]')?.textContent ?? ''`)
       if (said !== 'spend cap $2.00' || !/own cap/.test(held)) throw new Error(`inspector-caps scene: said ${JSON.stringify(said)}, held ${JSON.stringify(held)}`)
-      // The run's stuck chip is ASSERTED, then dismissed as a person would: a
-      // resolved chip crowds the chat header past its close button (owed, its
-      // own defect), and this scene's subject is the Work tab.
-      const chip = await k.js(`document.querySelector('.panel[data-panel-id="chat"] [data-chat-auto]')?.textContent ?? ''`)
+      // M356. The run's stuck chip STAYS: a held agent's header carries it,
+      // and every control beside it must still be painted inside the frame.
+      // A control pushed past the panel's right edge is clipped by `.panel`'s
+      // overflow: hidden and painted nowhere, so each one is hit-tested at its
+      // centre, never judged by its rect alone.
+      const chip = await k.js(`document.querySelector('.panel[data-panel-id="chat"] [data-chat-auto]')?.getAttribute('title') ?? ''`)
       if (!/stuck — cap reached/.test(chip)) throw new Error(`inspector-caps scene: the auto chip reads ${JSON.stringify(chip)}`)
-      await k.click('.panel[data-panel-id="chat"] [data-chat-auto-dismiss]'); await sleep(300)
+      const outside = await k.js(`(() => { const panel = document.querySelector('.panel[data-panel-id="chat"]'); const box = panel.getBoundingClientRect(); const out = []
+        for (const c of panel.querySelectorAll('.pf__chrome button, .pf__chrome .pf__word')) {
+          const r = c.getBoundingClientRect(); if (r.width === 0) continue
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+          if (r.right > box.right + 0.5 || !(hit === c || c.contains(hit))) out.push(c.getAttribute('aria-label') || c.textContent.trim().slice(0, 32))
+        }
+        return JSON.stringify(out) })()`)
+      if (outside !== '[]') throw new Error(`inspector-caps scene: header controls painted outside the chat's frame — ${outside}`)
+      if (process.env.SHOT_PROBE) console.log('PROBE chat header', await k.js(`JSON.stringify({ panel: Math.round(document.querySelector('.panel[data-panel-id="chat"]').getBoundingClientRect().width), items: [...document.querySelectorAll('.panel[data-panel-id="chat"] .pf__chrome .pf__title, .panel[data-panel-id="chat"] .pf__chrome button, .panel[data-panel-id="chat"] .pf__chrome .pf__word, .panel[data-panel-id="chat"] .pf__chrome .pf__kind')].map((e) => [(e.getAttribute('aria-label') || e.textContent).trim().slice(0, 18), Math.round(e.getBoundingClientRect().width)]) })`))
       await k.js(`document.querySelector('.context__panel[data-context-panel="work"]')?.scrollTo(0, 99999), true`); await sleep(200)
       await k.shot('inspector-caps')
       // The cap cleared through the same door, so the store the harness leaves holds no cap.

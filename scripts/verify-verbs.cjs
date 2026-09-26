@@ -364,6 +364,20 @@ const FACTS = {
     ok('auto.2 the chip reads `auto · <mode> · n/limit` while running, `done` when done, and `stuck — <why>` with a reason a person can act on',
       running === 'auto · complete · 2/8' && done === 'auto · harden · done' && /^auto · review · stuck — limit/.test(stuck) && /permission/.test(perm),
       JSON.stringify({ running, done, stuck, perm }))
+    // M356 — auto.parts.1. A resolved chip in a narrow header keeps what the
+    //     run came to (the head never clips) and gives its tail first; a
+    //     running chip keeps its whole words. The title keeps autoChipWords.
+    const P = A.autoChipParts
+    const parts = [
+      P({ mode: 'complete', turn: 2, limit: 8, state: 'running' }),
+      P({ mode: 'harden', turn: 3, limit: 8, state: 'done' }),
+      P({ mode: 'review', turn: 4, limit: 4, state: 'stopped' }),
+      P({ mode: 'complete', turn: 0, limit: 8, state: 'stuck', reason: 'cap' })
+    ]
+    ok('auto.parts.1 a resolved chip\'s head says what the run came to (auto done, auto stopped, auto stuck) and its tail the mode or why; a running chip is one part, its whole words',
+      parts[0].head === running && parts[0].tail === '' && parts[1].head === 'auto done' && parts[1].tail === ' · harden' &&
+        parts[2].head === 'auto stopped' && parts[3].head === 'auto stuck' && parts[3].tail === ' — cap reached',
+      JSON.stringify(parts))
   }
 
   // M149 — executor.1 (the Act II critic). Every verb the table advertises has

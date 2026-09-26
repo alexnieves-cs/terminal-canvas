@@ -6213,6 +6213,21 @@ body {
    full title lives in the title attribute and the ⋯ menu. */
 .pf__title { min-width: 8ch; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf__chrome .pf__verb, .pf__chrome .pf__close, .pf__chrome .pf__word, .pf__chrome .pf__kind { flex: 0 0 auto; }
+/* M356. The chat's auto chip is a `pf__word` too, and the rule above (0,2,0)
+   beat its own `.chat__auto { flex: 1 1 auto; min-width: 0 }` (0,1,0): the
+   chip never shrank, M121's ellipsis on its label never ran, and a resolved
+   chip ("auto · complete · stuck — cap reached · dismiss") pushed the
+   header's controls past the panel's right edge, where `.panel`'s
+   overflow: hidden painted them nowhere. The chip gives before the
+   controls: its words clip, and its dismiss (a `pf__verb`) stays whole. */
+.pf__chrome .chat__auto { flex: 0 1 auto; min-width: 0; }
+.chat__auto-head { flex: 0 0 auto; }
+/* The dismiss inside the chip is a WORD, not a second bordered box inside a
+   bordered pill: that box's border, padding and margin cost the ~14px a
+   560px chat needed, and the chip then clipped its own dismiss (a chip with
+   overflow: hidden has an automatic minimum of 0, so no min-width can floor
+   it at head + dismiss without also flooring it at the tail). */
+.pf__chrome .chat__auto .chat__auto-dismiss { border: 0; margin-left: 0; padding: 0 var(--sp-1); min-height: 0; background: transparent; }
 /* The ⋯ menu spans the frame beneath the chrome — the CHROME is its containing
    block — because `.panel` clips its overflow and a menu hung off the ⋯ button
    was cut at the frame's left edge on a narrow panel. */
