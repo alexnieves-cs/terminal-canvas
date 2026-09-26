@@ -1,4 +1,5 @@
 import type { AgentState } from '@shared/types'
+import { PLAN_TOOL } from '@shared/transcript'
 import { WORK_ITEM_STATES, type WorkItemState } from '@shared/work-items'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel, isTerminalPanel, isWorkPanel } from '@renderer/panels/panels'
@@ -102,7 +103,10 @@ export function inspectorPrimaryApplies(input: {
 export function buildInspectorContext(input: InspectorContextInput): InspectorContextBand {
   const { panel, approvalTool, agentState, workItem, execution, handoff, related } = input
   let nextAction: string | undefined
-  if (approvalTool !== undefined && approvalTool !== '') {
+  if (approvalTool === PLAN_TOOL) {
+    // M359. A plan is read, then approved or sent back.
+    nextAction = 'read the plan, then approve it or keep planning'
+  } else if (approvalTool !== undefined && approvalTool !== '') {
     nextAction = `Allow or deny ${approvalTool}`
   } else if (execution?.blocker?.kind === 'cap') {
     // M367. A held agent is answered by a cap, never by a reply.

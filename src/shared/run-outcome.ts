@@ -1,5 +1,6 @@
 import type { PersistedRun } from './runs'
 import { holdWords, type AgentSessionStatus, type CapHold } from './agent-session'
+import { PLAN_TOOL } from './transcript'
 
 /**
  * M184. A RUN'S OUTCOME ON THE DIAGRAM, pure over the run's own record: one
@@ -65,7 +66,8 @@ export function projectSession(panelId: string, fact: RunLiveFact): RunNodeSuper
   if (fact.attention === true) {
     if (approval !== undefined) return {
       panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', approval,
-      blocker: { kind: 'approval', subject: approval.toolName }, detail: `${approval.toolName} asks to use ${approval.argument}`
+      // M359. A plan waits to be approved; it is not a tool asking to be used.
+      blocker: { kind: 'approval', subject: approval.toolName }, detail: approval.toolName === PLAN_TOOL ? `a plan waits for your approval — ${approval.argument}` : `${approval.toolName} asks to use ${approval.argument}`
     }
     // M367. A HELD agent is not waiting at its keyboard: it asked nothing, and
     // an answer typed into it is refused. Its blocker is the cap, in the

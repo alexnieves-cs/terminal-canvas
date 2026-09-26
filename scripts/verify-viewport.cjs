@@ -2408,6 +2408,12 @@ console.log('\n' + '='.repeat(60))
       held.word === 'needs you' && held.blocker?.kind === 'cap' && held.detail === 'the agent is held at its $2.00 spend cap ($2.10 reported) — allow it more from Needs you, or stop it' &&
         !/keyboard/.test(held.detail) && heldAsked.blocker?.kind === 'approval' && heldGone.result === 'passed',
       JSON.stringify({ held, heldAsked: heldAsked.blocker, heldGone: heldGone.result }))
+    // M359 — run.plan.1. A plan request is still the approval blocker (its
+    //     answer path is the permission's), but its words are a plan's.
+    const planned = V.projectSession('p-plan', { status: 'ready', attention: true, approvals: [{ requestId: 'pl', toolName: 'ExitPlanMode', argument: 'Add rate limiting' }] })
+    ok('run.plan.1 a plan request projects the approval blocker in a plan\'s words, never "ExitPlanMode asks to use"',
+      planned.blocker?.kind === 'approval' && planned.detail === 'a plan waits for your approval — Add rate limiting' && !/ExitPlanMode/.test(planned.detail),
+      JSON.stringify(planned))
   }
 }
 

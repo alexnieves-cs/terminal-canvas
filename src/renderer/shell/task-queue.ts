@@ -1,4 +1,5 @@
 import type { Inbox, InboxItem } from './decision-inbox'
+import { PLAN_TOOL } from '@shared/transcript'
 import { downstreamOf } from './decision-inbox'
 import type { ReviewHandoffState, ReviewStanding } from '@shared/review-readiness'
 import type { Tone } from '@renderer/panels/panel-state'
@@ -224,6 +225,8 @@ const clip = (s: string, n = 60): string => { const t = s.replace(/\s+/g, ' ').t
 function inboxAffects(item: InboxItem): string {
   const behind = item.unblocks > 0 ? `, and ${item.unblocks} more ${item.unblocks === 1 ? 'waits' : 'wait'} behind it` : ''
   const a = item.approval
+  // M359. Nothing the agent would do is approved until its plan is.
+  if (a !== undefined && a.toolName === PLAN_TOOL) return `Affects everything ${item.label} does next — it starts nothing until its plan is approved${behind}.`
   if (a !== undefined) {
     const what = a.argument === '' ? `one ${a.toolName} call` : `${a.toolName} \`${clip(a.argument)}\``
     const askers = item.members.length > 1 ? `${item.members.length} agents' turns wait` : `${item.label}'s turn waits`
@@ -247,6 +250,16 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
   const first = (k: QueueKind): QueueDecision | undefined => d.find((x) => x.kind === k)
   const waiters = group.affects.length === 0 ? '' : ` ${group.affects.map((a) => a.title).join(', ')} ${group.affects.length === 1 ? 'waits' : 'wait'} on this task and can go on once it finishes.`
   const perm = first('permission'), q = first('question'), cap = first('cap'), check = first('check'), review = first('review'), lost = first('lost')
+  if (perm !== undefined && perm.inbox?.approval?.toolName === PLAN_TOOL) {
+    // M359. A plan is read, then approved or sent back.
+    const who = perm.inbox?.label ?? 'an agent'
+    return {
+      severity: 'blocked',
+      why: `Stopped — ${who} has a plan waiting for your approval${d.length > 1 ? `, and ${d.length - 1} more ${d.length === 2 ? 'thing needs' : 'things need'} you here` : ''}.`,
+      next: { label: `Read ${who}'s plan`, evidence: perm.evidence },
+      after: `Approve it and the agent leaves plan mode and starts on it; keep planning and it revises the plan and asks again.${waiters}`
+    }
+  }
   if (perm !== undefined) {
     const a = perm.inbox?.approval
     return {

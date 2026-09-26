@@ -1,5 +1,6 @@
 import type { PendingApproval, RailAttention } from './rail-sections'
 import { holdWords, type CapHold } from '@shared/agent-session'
+import { PLAN_TOOL } from '@shared/transcript'
 
 /**
  * M308. THE DECISION INBOX — the Needs-you queue as decisions rather than a
@@ -153,7 +154,8 @@ export function buildInbox(input: InboxInput): Inbox {
         approval: a,
         moreFromPanel: Math.max(0, mine.length - 1),
         ...(task === undefined ? {} : { task }),
-        blocker: `wants to use ${a.toolName}${a.argument === '' ? '' : ` — ${a.argument}`}`,
+        // M359. A plan is waiting to be approved, not a tool to be allowed.
+        blocker: a.toolName === PLAN_TOOL ? `has a plan to approve${a.argument === '' ? '' : ` — ${a.argument}`}` : `wants to use ${a.toolName}${a.argument === '' ? '' : ` — ${a.argument}`}`,
         ...(a.cwd === undefined ? {} : { context: a.cwd }),
         since, unblocks
       }

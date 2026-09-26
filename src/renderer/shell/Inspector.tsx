@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { PLAN_TOOL } from '@shared/transcript'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { formatCpu, formatMemory, useMachineCost, useMachineSeries } from '@renderer/session/machine-cost-store'
 import { MachineChart } from './MachineChart'
@@ -679,7 +680,8 @@ function InspectorPanel({
               for the grid's button still finds exactly one. */}
           {model.kind === 'chat' && model.approval !== undefined && (
             <div className="inspector__context-resolve" data-inspector-resolve>
-              <span className="inspector__context-request">Waiting on you: {model.approval.toolName} · <code>{model.approval.argument}</code></span>
+              {/* M359. A plan is named as a plan, by its first line. */}
+              <span className="inspector__context-request">Waiting on you: {model.approval.toolName === PLAN_TOOL ? 'plan' : model.approval.toolName} · <code>{model.approval.argument}</code></span>
               <button
                 type="button"
                 className="inspector__action"
@@ -1189,7 +1191,7 @@ function InspectorPanel({
               : `Open Needs you on ${model.approval.toolName} — ${model.approval.argument}`}
             {...shellControl(() => { if (model.approval !== undefined) onReviewApproval(model.approval.requestId) })}
           >
-            {model.approval === undefined ? 'Review request' : `Review ${model.approval.toolName} request`}
+            {model.approval === undefined ? 'Review request' : model.approval.toolName === PLAN_TOOL ? 'Read the plan' : `Review ${model.approval.toolName} request`}
           </button>
         )}
         {/*

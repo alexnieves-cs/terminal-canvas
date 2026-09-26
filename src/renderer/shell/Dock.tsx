@@ -13,6 +13,7 @@ import { SNOOZE_CHOICES, waitedWords, type Inbox, type InboxItem } from './decis
 import { snoozeDecision, wakeDecision } from './useDecisionInbox'
 import { outward } from '@shared/outward'
 import { allowMore } from '@shared/agent-session'
+import { PLAN_TOOL } from '@shared/transcript'
 import { stepCursor, traversalOrder, type QueueDecision, type QueueEvidence, type TaskGroup, type TaskQueue } from './task-queue'
 import { dismissLost, setQueueCursor, useQueueCursor } from './useTaskQueue'
 import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
@@ -317,10 +318,11 @@ function DockImpl({
                             </div>
                           ) : (
                             <div className="rail-attention__summary">
-                              <span className="rail-attention__argument">{a.toolName} · {a.argument}</span>
+                              {/* M359. A plan's summary is its first line, and its verb reads it. */}
+                              <span className="rail-attention__argument">{a.toolName === PLAN_TOOL ? 'plan' : a.toolName} · {a.argument}</span>
                               <button type="button" className="rail-row__verb" data-rail-expand={a.requestId} aria-expanded={false}
-                                title={`Show ${row.label}'s ${a.toolName} request in full`}
-                                {...shellControl(() => setOpenRequest(a.requestId))}>Review</button>
+                                title={a.toolName === PLAN_TOOL ? `Read ${row.label}'s plan before approving it` : `Show ${row.label}'s ${a.toolName} request in full`}
+                                {...shellControl(() => setOpenRequest(a.requestId))}>{a.toolName === PLAN_TOOL ? 'Read plan' : 'Review'}</button>
                             </div>
                           )}
                         </div>

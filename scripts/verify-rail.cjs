@@ -3790,6 +3790,9 @@ console.log('\n' + '='.repeat(60))
   // M367 — hold.inspector.1. The Inspector's next action for a held agent is
   //     the cap's fix, never "open it and answer".
   const heldCtx = R.buildInspectorContext({ panel: { kind: 'chat', rect: { id: 'c', x: 0, y: 0, w: 1, h: 1 } }, agentState: 'wants-you', execution: { execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', blocker: { kind: 'cap', subject: 'c' }, detail: 'the agent is held at its $2.00 spend cap ($2.10 reported) — allow it more from Needs you, or stop it' } })
+  const planCtx = R.buildInspectorContext({ panel: { kind: 'chat', rect: { id: 'c', x: 0, y: 0, w: 1, h: 1 } }, approvalTool: 'ExitPlanMode', agentState: 'wants-you' })
+  ok('plan.inspector.1 a plan request\'s next action is to read it and approve it or keep planning, never "Allow or deny ExitPlanMode"',
+    planCtx.nextAction === 'read the plan, then approve it or keep planning', JSON.stringify(planCtx))
   ok('hold.inspector.1 a held agent\'s next action is to allow it more or raise its cap, and its blocker line is the hold\'s',
     heldCtx.nextAction === 'allow it more from Needs you, or raise its cap on the Work tab' && /held at its \$2\.00 spend cap/.test(heldCtx.blocker ?? '') && !/open it and answer/.test(heldCtx.nextAction),
     JSON.stringify(heldCtx))
@@ -4007,6 +4010,18 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
       /stays held, spending nothing more/.test(t4.after) && /until its cap is raised/.test(t4.decisions[0].affects) &&
       kept.length === 1 && kept[0].kind === 'cap' && R.parseRemembered(kept).length === 1,
     JSON.stringify({ kinds: t4.decisions.map((d) => d.kind), why: t4.why, next: t4.next.label, after: t4.after, kept }))
+  // M359 — plan.queue.1. A plan waiting on a person is said as a plan in
+  //     every word the queue has: "wants to use ExitPlanMode" names a tool a
+  //     person never asked for, and "Allow" is not what approving a plan is.
+  const planAppr = { id: 'chatA', requestId: 'rp', toolName: 'ExitPlanMode', argument: 'Add rate limiting', action: '# Add rate limiting', cwd: '/r' }
+  const planInbox = R.buildInbox({ now: 10_000, rows: [{ id: 'chatA', label: 'builder', approval: planAppr }], approvals: [planAppr], kindOf: () => 'chat' })
+  const pq = R.buildTaskQueue({ now: 10_000, tasks, inbox: planInbox, labelOf: (id) => id })
+  const t1 = pq.groups.find((x) => x.itemId === 'T1')
+  ok('plan.queue.1 a plan request is "has a plan to approve — <its first line>", its task is stopped on a plan waiting for approval, the next step reads the plan, and it affects everything the agent does next',
+    planInbox.items[0].kind === 'permission' && planInbox.items[0].blocker === 'has a plan to approve — Add rate limiting' &&
+      t1.why === 'Stopped — builder has a plan waiting for your approval.' && t1.next.label === 'Read builder\'s plan' &&
+      /keep planning and it revises the plan/.test(t1.after) && /starts nothing until its plan is approved/.test(t1.decisions[0].affects),
+    JSON.stringify({ blocker: planInbox.items[0].blocker, why: t1.why, next: t1.next.label, after: t1.after, affects: t1.decisions[0].affects }))
   ok('queue.2 order: an agent stopped on you first (the one more tasks wait on ahead), then a failed check, then a review; each group says why, the next step and where it goes, what happens after — naming the tasks that wait on it — and the headline counts each',
     q.groups.map((x) => x.itemId).join() === 'T1,T2,,T3,T4' &&
       /needs your permission to use Bash/.test(g('T1').why) && g('T1').next.label === 'Answer Bash request' && g('T1').next.evidence.requestId === 'r1' &&
