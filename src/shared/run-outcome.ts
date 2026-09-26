@@ -1,5 +1,5 @@
 import type { PersistedRun } from './runs'
-import type { AgentSessionStatus } from './agent-session'
+import { holdWords, type AgentSessionStatus, type CapHold } from './agent-session'
 
 /**
  * M184. A RUN'S OUTCOME ON THE DIAGRAM, pure over the run's own record: one
@@ -55,6 +55,8 @@ export interface RunLiveFact {
   attention?: boolean
   /** Arrival order; the first is the question every other attention surface shows. */
   approvals?: readonly RunLiveApproval[]
+  /** M367. Main's hold at a cap (M350), when the agent is held. A hold is a needs-you (M355). */
+  hold?: CapHold
 }
 
 /** M200. The same live table for a task's linked conversation. */
@@ -64,6 +66,13 @@ export function projectSession(panelId: string, fact: RunLiveFact): RunNodeSuper
     if (approval !== undefined) return {
       panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', approval,
       blocker: { kind: 'approval', subject: approval.toolName }, detail: `${approval.toolName} asks to use ${approval.argument}`
+    }
+    // M367. A HELD agent is not waiting at its keyboard: it asked nothing, and
+    // an answer typed into it is refused. Its blocker is the cap, in the
+    // hold's own words, and its fix is the queue's Allow or its Work tab.
+    if (fact.hold !== undefined) return {
+      panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you',
+      blocker: { kind: 'cap', subject: panelId }, detail: `the agent ${holdWords(fact.hold)} — allow it more from Needs you, or stop it`
     }
     return { panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', blocker: { kind: 'keyboard', subject: panelId }, detail: 'this session needs you at its keyboard — open it to answer' }
   }
@@ -94,7 +103,7 @@ export interface RunNodeSupervision {
   tone: string
   detail: string
   queueReason?: RunQueueReason
-  blocker?: { kind: 'approval' | 'keyboard'; subject: string }
+  blocker?: { kind: 'approval' | 'keyboard' | 'cap'; subject: string }
   /** Present only for a live structured request, never reconstructed from history. */
   approval?: RunLiveApproval
 }

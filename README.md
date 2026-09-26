@@ -1162,6 +1162,7 @@ price of not killing something.
 | M363 | The `routine` scene's times are pinned to a clock (`clockAt(6, 6)`, `clockAt(6, 16)`, the most recent such moment) instead of `Date.now()` minus an hour, so its golden no longer pins the hour it was painted; the committed golden is unchanged. [Ledger](docs/build-log/m363-routine-clock.md). |
 | M364 | `verify:panels:shell`'s review-node Discard check waits for its restored file without reading it mid-replace: `git checkout` replaces the file, and a bare `readFileSync` in the wait predicate threw ENOENT and ended the part as an infrastructure error under load. [Ledger](docs/build-log/m364-discard-restore-race.md). |
 | M357 | A held agent is answered in the decision queue: `Allow $2.00 more` grants the same allowance again from what it reached, through the `cap-agent` verb as a person (`allowMore`), so main releases it and serves what it kept first, and `Stop` ends its process with the conversation and main's hold kept; the `queue-hold` scene clicks Allow and asserts main's answer. [Ledger](docs/build-log/m357-hold-answers.md). |
+| M367 | A hold's words wherever a needs-you is said: M199's blocker vocabulary gains a `cap` kind, projected from the hold that now rides each chat's live fact, so the Inspector's next action and blocker line, the resume card and a lane's review node say the agent is held at its cap and how to answer it, never "needs you at its keyboard". [Ledger](docs/build-log/m367-hold-words-everywhere.md). |
 
 ### What's next — the v10 run (D01–D20)
 

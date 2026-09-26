@@ -392,7 +392,10 @@ function renderTask(
           which is where the person can see what they are agreeing to. */}
       {h.blocker !== undefined && (
         <p className="pf__note review-node__note" data-review-task-blocker={h.blocker.kind} role="status">
-          unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard — ${h.blocker.subject}`} — answer it in the conversation, then review
+          {/* M367. A hold is not answered in the conversation: its cap is raised, or the agent is stopped. */}
+          {h.blocker.kind === 'cap'
+            ? <>unresolved: the lane's agent is held at its cap — allow it more from Needs you, or stop it, then review</>
+            : <>unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard — ${h.blocker.subject}`} — answer it in the conversation, then review</>}
         </p>
       )}
     </div>

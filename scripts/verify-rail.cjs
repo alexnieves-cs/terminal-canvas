@@ -3773,6 +3773,12 @@ console.log('\n' + '='.repeat(60))
   ok('m270.inspector.1 context band names the next action from facts; Restart does not apply to a file',
     ctx?.nextAction !== undefined && /waiting/.test(ctx.nextAction) && applies?.restart === false && applies?.savePreset === false,
     JSON.stringify({ ctx, applies }))
+  // M367 — hold.inspector.1. The Inspector's next action for a held agent is
+  //     the cap's fix, never "open it and answer".
+  const heldCtx = R.buildInspectorContext({ panel: { kind: 'chat', rect: { id: 'c', x: 0, y: 0, w: 1, h: 1 } }, agentState: 'wants-you', execution: { execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', blocker: { kind: 'cap', subject: 'c' }, detail: 'the agent is held at its $2.00 spend cap ($2.10 reported) — allow it more from Needs you, or stop it' } })
+  ok('hold.inspector.1 a held agent\'s next action is to allow it more or raise its cap, and its blocker line is the hold\'s',
+    heldCtx.nextAction === 'allow it more from Needs you, or raise its cap on the Work tab' && /held at its \$2\.00 spend cap/.test(heldCtx.blocker ?? '') && !/open it and answer/.test(heldCtx.nextAction),
+    JSON.stringify(heldCtx))
 }
 // M258 — last-active.1 / last-active.2. A dormant panel's "last active"
 // signal: a word from a KNOWN time only (absent stays absent — never

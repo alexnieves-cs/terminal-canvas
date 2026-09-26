@@ -3820,6 +3820,8 @@ export function Canvas({
         const snapshot = getChat(id).snapshot
         out[id] = {
           ...(snapshot === null ? {} : { status: snapshot.status, turns: snapshot.turns, exitCode: snapshot.exitCode, exitSignal: snapshot.exitSignal, queued: snapshot.queued, queuedReason: snapshot.queuedReason }),
+          // M367. The hold rides the fact, so every surface projecting it says a cap, not a keyboard.
+          ...(snapshot?.meter?.held === undefined ? {} : { hold: snapshot.meter.held }),
           attention: waitingIds.includes(id), approvals
         }
       } else if (waitingIds.includes(id)) out[id] = { attention: true }

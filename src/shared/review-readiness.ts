@@ -114,7 +114,7 @@ export interface ReviewHandoff {
    * re-derives nothing about it and invents no third vocabulary. Present only
    * in the `blocked` state; absent, never a placeholder.
    */
-  blocker?: { kind: 'approval' | 'keyboard'; subject: string }
+  blocker?: { kind: 'approval' | 'keyboard' | 'cap'; subject: string }
 }
 
 /** The persisted mark's shape, mirrored from `PersistedWorkItem.reviewed`. */

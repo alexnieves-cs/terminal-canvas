@@ -104,6 +104,9 @@ export function buildInspectorContext(input: InspectorContextInput): InspectorCo
   let nextAction: string | undefined
   if (approvalTool !== undefined && approvalTool !== '') {
     nextAction = `Allow or deny ${approvalTool}`
+  } else if (execution?.blocker?.kind === 'cap') {
+    // M367. A held agent is answered by a cap, never by a reply.
+    nextAction = 'allow it more from Needs you, or raise its cap on the Work tab'
   } else if (agentState === 'wants-you') {
     nextAction = 'the agent is waiting — open it and answer'
   } else if (handoff !== undefined && handoff.actionLabel.trim() !== '') {

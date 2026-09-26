@@ -2395,6 +2395,19 @@ console.log('\n' + '='.repeat(60))
       p.turn.tone === 'none' && p.ok.tone === 'none' &&
       JSON.stringify(run).includes('requestId') === false,
       JSON.stringify({ compact, sealedUnknown: sealed.unknown, taskApproval, taskAfter, taskTurn, taskBefore }))
+    // M367 — run.hold.1. A HELD agent is a needs-you with a CAP blocker in the
+    //     hold's own words, never "needs you at its keyboard": it asked
+    //     nothing, and a reply typed into it is refused. A question it asked
+    //     first is still the approval; a hold with no attention (an exit
+    //     cleared it) projects its status as before.
+    const hold = { unit: 'usd', spent: 2.1, limit: 2 }
+    const held = V.projectSession('p-held', { status: 'ready', turns: 3, attention: true, approvals: [], hold })
+    const heldAsked = V.projectSession('p-held', { status: 'ready', attention: true, approvals: [{ requestId: 'q', toolName: 'Bash', argument: 'ls' }], hold })
+    const heldGone = V.projectSession('p-held', { status: 'exited', exitCode: 0, attention: false, hold })
+    ok('run.hold.1 a held agent projects a cap blocker in the hold\'s words (never the keyboard sentence); a question it asked is still the approval; a hold with no attention projects its status',
+      held.word === 'needs you' && held.blocker?.kind === 'cap' && held.detail === 'the agent is held at its $2.00 spend cap ($2.10 reported) — allow it more from Needs you, or stop it' &&
+        !/keyboard/.test(held.detail) && heldAsked.blocker?.kind === 'approval' && heldGone.result === 'passed',
+      JSON.stringify({ held, heldAsked: heldAsked.blocker, heldGone: heldGone.result }))
   }
 }
 
