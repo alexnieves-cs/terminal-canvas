@@ -34,6 +34,7 @@ buildSync({
       "  store: require('./src/main/layout-store.ts'),",
       "  auth: require('./server/collab/auth.ts'),",
       "  server: require('./server/collab/server.ts'),",
+      "  value: require('./src/renderer/shared-text/value.ts'),",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -336,14 +337,17 @@ async function until(pred, ms = 3000) {
     ok('cs.door.1 no renderer module imports y-protocols, Hocuspocus or canvas-doc: the renderer speaks canvas-ops and main holds the doc', bad.length === 0, JSON.stringify(bad))
     // Shared text's one exception (canvas-sync.ts's header): y-monaco needs a
     // Y.Text in the editor's own process, so a REPLICA lives here, gated by main.
-    const DOOR = ['src/renderer/shared-text/binding.ts', 'src/renderer/shared-text/replica.ts']
+    // M339 adds value.ts (Rich mode's binding: yjs only, reached only through binding.ts).
+    const DOOR = ['src/renderer/shared-text/binding.ts', 'src/renderer/shared-text/replica.ts', 'src/renderer/shared-text/value.ts']
     const yjsUsers = files.filter((f) => /from ['"](yjs|y-monaco)['"]/.test(readFileSync(f, 'utf8'))).map(rel).sort()
-    ok('text.door.1 yjs and y-monaco are imported in the renderer by shared-text/binding.ts and replica.ts only', JSON.stringify(yjsUsers) === JSON.stringify(DOOR), JSON.stringify(yjsUsers))
+    ok('text.door.1 yjs and y-monaco are imported in the renderer by shared-text/binding.ts, replica.ts and value.ts only', JSON.stringify(yjsUsers) === JSON.stringify(DOOR), JSON.stringify(yjsUsers))
     // Statically reached, the replica would pull yjs + y-monaco into whatever
     // chunk reached it — Canvas.tsx's first chunk, through FileNode.
-    const staticReach = files.filter((f) => !DOOR.includes(rel(f)) && /from ['"][./]+(shared-text\/)?(binding|replica)['"]/.test(readFileSync(f, 'utf8'))).map(rel)
-    const lazy = /import\(['"]\.\.\/shared-text\/binding['"]\)/.test(readFileSync(join(root, 'src/renderer/file/CodeEditor.tsx'), 'utf8'))
-    ok('text.door.2 the shared-text chunk is reached only by CodeEditor\'s lazy import(), never statically', staticReach.length === 0 && lazy, JSON.stringify({ staticReach, lazy }))
+    const staticReach = files.filter((f) => !DOOR.includes(rel(f)) && /from ['"][./]+(shared-text\/)?(binding|replica|value)['"]/.test(readFileSync(f, 'utf8'))).map(rel)
+    // The two lazy doors: CodeEditor (Source mode) and useSharedValue (M339, Rich mode).
+    const lazyFrom = files.filter((f) => /import\(['"][./]+(shared-text\/)?binding['"]\)/.test(readFileSync(f, 'utf8'))).map(rel).sort()
+    const lazy = JSON.stringify(lazyFrom) === JSON.stringify(['src/renderer/file/CodeEditor.tsx', 'src/renderer/shared-text/useSharedValue.ts'])
+    ok('text.door.2 the shared-text chunk is reached only by lazy import() from CodeEditor and useSharedValue, never statically', staticReach.length === 0 && lazy, JSON.stringify({ staticReach, lazyFrom }))
   }
 
   // ── shared text: one Y.Text per shared file, gated per update ───────────
@@ -401,6 +405,60 @@ async function until(pred, ms = 3000) {
       M.presence.parsePresence({ userId: UB, displayName: 'B', textCursor: { ...caret, head: 'x'.repeat(400) } })?.textCursor === null &&
       M.presence.parsePresence({ userId: UB, displayName: 'B', textCursor: { ...caret, file: '../x' } })?.textCursor === null &&
       ![...TA.doc.share.keys()].some((k) => /cursor|selection|awareness/.test(k)), JSON.stringify({ abs: abs?.index, keys: [...TA.doc.share.keys()] }))
+
+    // M339. Rich mode's value binding (shared-text/value.ts) over the same replicas.
+    {
+      const seen = []
+      const vA = M.value.bindValue(RA.files().get('hosta1_n1'), (t) => seen.push(t), false)
+      RB.files().get('hosta1_n1').insert(0, '# ')
+      await tick()
+      const peer = seen.slice()
+      seen.length = 0
+      const base = RA.files().get('hosta1_n1').toString()
+      vA.push(`${base} (done)`)
+      await tick()
+      ok('text.value.1 a Rich draft bound to the shared text: a teammate\'s change arrives as the whole text, and a Rich commit reaches every doc without echoing back',
+        peer.length === 1 && peer[0] === base && base.startsWith('# ') && seen.length === 0 && lastVerdict(RA)?.ok === true &&
+        textOf(TB.doc, 'hosta1_n1') === `${base} (done)`, JSON.stringify({ peer, seen, base, b: textOf(TB.doc, 'hosta1_n1') }))
+      // Concurrent: the teammate types at the front while the owner's commit
+      // changes the end. A whole-text replace would drop one of them.
+      const now = RA.files().get('hosta1_n1').toString()
+      RB.files().get('hosta1_n1').insert(0, 'X')
+      // The harness relays synchronously, so X is ALREADY in RA's text: the
+      // commit below was computed on `now`, which is stale — the real race.
+      const stale = RA.files().get('hosta1_n1').toString() !== now
+      seen.length = 0
+      vA.push(now.replace('(done)', '(really done)'), now)
+      await tick()
+      const merged = textOf(TA.doc, 'hosta1_n1')
+      ok('text.value.2 a Rich commit computed on a text a teammate has since changed is REBASED: their keystroke elsewhere survives, and the draft is told the merged text',
+        stale && merged === `X${now.replace('(done)', '(really done)')}` && RB.files().get('hosta1_n1').toString() === merged && seen.at(-1) === merged,
+        JSON.stringify({ stale, merged, seen }))
+      seen.length = 0
+      vA.revert('from disk')
+      await tick()
+      ok('text.value.3 the owner\'s Reload/discard puts the shared text back to the disk text for everyone, and the bound draft is told',
+        textOf(TA.doc, 'hosta1_n1') === 'from disk' && textOf(TB.doc, 'hosta1_n1') === 'from disk' && seen.at(-1) === 'from disk', JSON.stringify({ seen, a: textOf(TA.doc, 'hosta1_n1') }))
+      vA.dispose()
+      seen.length = 0
+      RB.files().get('hosta1_n1').insert(0, 'late ')
+      await tick()
+      const RV2 = replicaOf(TV)
+      const vV = M.value.bindValue(RV2.files().get('hosta1_n1'), () => {}, true)
+      vV.push('viewer wrote this')
+      await tick()
+      ok('text.value.4 a disposed binding hears nothing more, and a viewer\'s Rich push is dropped before it reaches main',
+        seen.length === 0 && RV2.verdicts.length === 0 && textOf(TA.doc, 'hosta1_n1') === 'late from disk', JSON.stringify({ seen, v: RV2.verdicts, a: textOf(TA.doc, 'hosta1_n1') }))
+      vV.dispose()
+      // The FileNode side, read as text (no harness here mounts a shared note):
+      // Rich pushes through the binding, the owner-wins-once rule reads the
+      // unsynced flag rather than `dirty`, and Reload reverts before closing.
+      const fileNode = readFileSync(join(root, 'src/renderer/file/FileNode.tsx'), 'utf8')
+      ok('text.value.5 FileNode binds Rich mode (useSharedValue + push on commit), both bindings prefer the local draft only when it holds unsynced typing, and Reload (discard mine) reverts the shared text',
+        /useSharedValue\(/.test(fileNode) && /onChange=\{\(text\) => \{ const base = richBaseRef\.current \?\? text; richBaseRef\.current = text; editDraft\(text\); pushShared\(text, base\) \}\}/.test(fileNode) &&
+        (fileNode.match(/preferLocal: \(\) => unsyncedRef\.current/g) ?? []).length === 2 && !/preferLocal: \(\) => dirtyRef/.test(fileNode) &&
+        /data-file-node-reload[\s\S]{0,900}sharedRevertRef\.current\?\.\([\s\S]{0,120}closeDraft\(\)/.test(fileNode))
+    }
 
     RV.files().get('hosta1_n1').insert(0, 'V')
     ok('text.viewer.1 a viewer\'s replica edit is refused in main and never reaches the doc', lastVerdict(RV)?.ok === false && /viewer/.test(lastVerdict(RV).reason) &&

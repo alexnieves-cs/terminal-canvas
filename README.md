@@ -1141,6 +1141,7 @@ price of not killing something.
 | M336 | The account picker: the top bar's account menu (initials, or Sign in), every account on this Mac as a radio set whose checked one is the account every door acts as, kept in `userData/account-active`; a sign-in or switch restarts presence and tells the renderer (`auth:use`, `auth:status`, `auth:changed`); `tc accounts`, `tc use`. [Ledger](docs/build-log/m336-m338-account-share-relay.md). |
 | M337 | Sharing in the app: the share dialog (share into an org, the owner's role picker, open a share here) behind four doors that only open it, and `tc shares/share/open-share/share-role` behind dialogs that name what they act on (`workspace:share-members`). [Ledger](docs/build-log/m336-m338-account-share-relay.md). |
 | M338 | The relay terminal as a panel kind: persisted by program, session and share, re-attaching on relaunch rather than spawning twice, off the terminal partition, created through the four creation doors, with its header, New session, clipboard and theme. [Ledger](docs/build-log/m336-m338-account-share-relay.md). |
+| M339 | Shared text, both gaps closed: a note in Rich mode is live-bound to its shared Y.Text (a block commit written through as one minimal edit, rebased when a teammate's change landed first; theirs arriving as the whole draft), the owner's draft wins at bind time only for typing no binding carried, and Reload (discard mine) puts the shared text back to the disk's for everyone. [Ledger](docs/build-log/m339-shared-text-rich-and-reload.md). |
 
 ### What's next — the v10 run (D01–D20)
 

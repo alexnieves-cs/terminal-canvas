@@ -8,7 +8,7 @@ never imported ambiently. That is the rule; the modules are where to look:
 
 | Library | Its one door | Why the confinement is load-bearing |
 |---|---|---|
-| `yjs` + `y-monaco` | `shared-text/replica.ts` + `shared-text/binding.ts`, lazily `import()`ed by `CodeEditor` | Shared text only: y-monaco needs the Y.Text in the editor's process, so this is a REPLICA whose every update main re-judges (`main/presence/canvas-sync.ts`). Carets ride awareness, never the doc. Everything else stays yjs-free and speaks `canvas-ops.ts` (`verify:canvas-sync cs.door.1`, `text.door.1/.2`). |
+| `yjs` + `y-monaco` | `shared-text/replica.ts` + `shared-text/binding.ts` (+ M339's `value.ts`, yjs only), lazily `import()`ed by `CodeEditor` (Source) and `shared-text/useSharedValue.ts` (Rich) | Shared text only: y-monaco needs the Y.Text in the editor's process, so this is a REPLICA whose every update main re-judges (`main/presence/canvas-sync.ts`). Carets ride awareness, never the doc. Everything else stays yjs-free and speaks `canvas-ops.ts` (`verify:canvas-sync cs.door.1`, `text.door.1/.2`). |
 | `monaco-editor` | `file/monaco.ts`, lazily `import()`ed by `CodeEditor` | A static import from anything `Canvas.tsx` reaches puts ~6MB in the first chunk, silently. `file/editor-registry.ts` exists precisely so the harness door can be installed without it. |
 | `zod` | `shared/workflow-graph-schema.ts` | Adopted at the boundaries that had NO reader — **not** a retrofit of `parseTemplates`, which stays the layout file's hand-written reader. |
 | `sonner` | `shell/toast.ts` + `shell/CanvasToaster.tsx` | `toast.door.1` pins the importer set so it cannot be walked around. A toast is for what is FINISHED; the attention system stays the source of truth for what is still outstanding. |

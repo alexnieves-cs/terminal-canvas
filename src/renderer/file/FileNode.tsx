@@ -11,6 +11,7 @@ import { displayPath } from '@shared/display-path'
 import { useRepoRoot } from '@renderer/shell/useRepoRoot'
 import { importedNoteReason } from '@shared/imported-note'
 import { RichNoteEditor, type RichNoteHandle } from './RichNoteEditor'
+import { useSharedValue } from '../shared-text/useSharedValue'
 import { CodeEditor } from './CodeEditor'
 
 /**
@@ -630,8 +631,43 @@ function FileNodeImpl({
     arm('discard')
   }
   const sharedRevertRef = useRef<((text: string) => void) | null>(null)
-  const dirtyRef = useRef(dirty)
-  dirtyRef.current = dirty
+
+  // M339. Whether the draft holds typing that no shared binding carried —
+  // typed before the shared-text chunk loaded, or while nothing was bound.
+  // That, not `dirty`, is what makes the owner's draft win over the doc's
+  // once at bind time: a draft that is dirty only with edits the doc ALREADY
+  // holds (a teammate's, or ours in the other mode) must take the doc's
+  // text, or switching Source ↔ Rich would write a stale draft over whatever a
+  // teammate typed during the switch.
+  const sharedLiveRef = useRef(false)
+  const unsyncedRef = useRef(false)
+  const editDraft = (text: string): void => {
+    if (!sharedLiveRef.current) unsyncedRef.current = true
+    setDraft(text)
+  }
+  const onSharedState = (state: string | null): void => {
+    sharedLiveRef.current = state === 'live' || state === 'read-only'
+    // Bound: the draft and the shared text are one text from here on.
+    if (sharedLiveRef.current) unsyncedRef.current = false
+  }
+  const sharing = sharedWorkspaceId !== undefined && readOnly !== true
+  // M339. Rich mode is live-bound too (before, only Source was, through
+  // CodeEditor). A teammate's change arrives as the whole new draft; Rich's
+  // own reseed rule (a block whose source moved under an edit is refused and
+  // reopened as source) keeps an in-progress block from being overwritten.
+  // The text Rich's next commit is computed on: what it was last rendered
+  // with, or its own last commit if it commits twice before re-rendering.
+  const richBaseRef = useRef(draft)
+  richBaseRef.current = draft
+  const pushShared = useSharedValue(
+    sharing && editing && model.prose && mode === 'rich'
+      ? { workspaceId: sharedWorkspaceId, panelId: id, hosted: true, preferLocal: () => unsyncedRef.current }
+      : null,
+    draft,
+    (text) => { setDraft(text) },
+    onSharedState,
+    sharedRevertRef
+  )
 
   return (
     <PanelFrame
@@ -842,7 +878,18 @@ function FileNodeImpl({
                     differently for a file with no text left to load. */}
                 <button
                   type="button"
-                  onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); closeDraft() }}
+                  data-file-node-reload
+                  onMouseDown={(event) => {
+                    event.stopPropagation(); event.preventDefault()
+                    // M339. A shared draft is everyone's (the Escape-discard
+                    // rule above), so discarding it puts the shared text back
+                    // to what is on disk NOW — the text this panel is about to
+                    // show — or, with nothing readable left there, to what the
+                    // draft was opened from. Before, the teammates' editors
+                    // kept the discarded text and the next draft here got it back.
+                    if (dirty) sharedRevertRef.current?.(result?.kind === 'text' ? result.content : seedRef.current)
+                    closeDraft()
+                  }}
                 >
                   Reload (discard mine)
                 </button>
@@ -903,7 +950,7 @@ function FileNodeImpl({
               >{dirty ? (discardArmed ? 'Discard?' : 'Discard') : 'Done'}</button>
             </div>
             {model.prose && mode === 'rich' ? (
-              <RichNoteEditor text={draft} onChange={setDraft} handleRef={richRef} onSave={() => save(false)} onEscape={onEditorEscape} />
+              <RichNoteEditor text={draft} onChange={(text) => { const base = richBaseRef.current ?? text; richBaseRef.current = text; editDraft(text); pushShared(text, base) }} handleRef={richRef} onSave={() => save(false)} onEscape={onEditorEscape} />
             ) : (
               /* M276. Monaco, in the textarea's place and under the textarea's
                  contract: the same controlled `draft`, the same ⌘S, and the
@@ -919,14 +966,15 @@ function FileNodeImpl({
                  `restoreFocus` above. */
               <CodeEditor
                 value={draft}
-                onChange={setDraft}
+                onChange={editDraft}
                 onSave={() => save(false)}
                 onEscape={onEditorEscape}
                 path={path}
                 readOnly={readOnly === true}
-                {...(sharedWorkspaceId !== undefined && readOnly !== true ? {
-                  shared: { workspaceId: sharedWorkspaceId, panelId: id, hosted: true, preferLocal: () => dirtyRef.current },
-                  sharedRevertRef
+                {...(sharing ? {
+                  shared: { workspaceId: sharedWorkspaceId, panelId: id, hosted: true, preferLocal: () => unsyncedRef.current },
+                  sharedRevertRef,
+                  onSharedState
                 } : {})}
               />
             )}

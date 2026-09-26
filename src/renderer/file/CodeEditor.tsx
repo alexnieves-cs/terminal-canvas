@@ -53,9 +53,11 @@ type Props = {
   shared?: SharedTextTarget
   /** Filled while bound: the owner's discard, putting the shared text back for everyone. */
   sharedRevertRef?: MutableRefObject<((text: string) => void) | null>
+  /** M339. The binding's state as it changes (null once it lets go) — FileNode's record of whether its draft is carried. */
+  onSharedState?: (state: string | null) => void
 }
 
-export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly, shared, sharedRevertRef }: Props): JSX.Element {
+export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly, shared, sharedRevertRef, onSharedState }: Props): JSX.Element {
   /**
    * TWO elements, and the split is load-bearing. `rootRef` carries
    * `data-file-node-editor` and holds the pre-paint below, so React owns its
@@ -81,6 +83,8 @@ export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly, 
   const sharedRef = useRef(shared)
   const revertRef = useRef(sharedRevertRef)
   revertRef.current = sharedRevertRef
+  const sharedStateRef = useRef(onSharedState)
+  sharedStateRef.current = onSharedState
   /**
    * The three callbacks, read through a ref by the editor's own listeners.
    * Monaco's listeners are registered once for the editor's life (rule 1), so
@@ -212,12 +216,13 @@ export function CodeEditor({ value, onChange, onSave, onEscape, path, readOnly, 
       if (target !== undefined) {
         void import('../shared-text/binding').then(({ bindSharedText }) => {
           if (cancelled) return
-          const binding = bindSharedText(monaco, editor, target, setSharedState)
+          const binding = bindSharedText(monaco, editor, target, (state) => { setSharedState(state); sharedStateRef.current?.(state) })
           if (revertRef.current) revertRef.current.current = (text) => { binding.revert(text) }
           // Pushed after the model's disposer, so it runs BEFORE it (reverse order).
           disposers.push(() => {
             if (revertRef.current) revertRef.current.current = null
             binding.dispose()
+            sharedStateRef.current?.(null)
           })
         })
       }
