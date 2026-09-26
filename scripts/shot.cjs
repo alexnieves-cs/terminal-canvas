@@ -1429,20 +1429,23 @@ app.whenReady().then(async () => {
       : { kind: 'unreadable', why: 'only the trail scene has a transcript here' }),
     // M123. No harness reaches the network: the third state, by name.
     { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) },
+    // Positions 28–35 (preview … publisher) take their defaults. The counts
+    // in this tail matter: the parameter list is POSITIONAL (src/main/CLAUDE.md
+    // rule 3). Until M340 the two ledger functions below sat HERE, at 28/29,
+    // so `preview` and `assets` received functions and the ledger doors kept
+    // their empty defaults — every Artifacts and Timeline shot from M300 to
+    // M338 photographed an unwired record.
+    ...Array(8).fill(undefined),
     // M300. The durable record, so the Artifacts and Timeline tabs photograph
     // what they actually show rather than "the record could not be read". The
     // rows are the SCENE's own, written by the scene that needs them; an
     // unwired door here would have made every shot of those two tabs a
-    // picture of an unwired build.
+    // picture of an unwired build. Positions 36/37: ledgerTimeline, ledgerEvent.
     (filter, limit) => shotLedger.timeline(filter, limit),
     async (row) => { try { await shotLedger.append(row); return true } catch { return false } },
-    // Positions 30–42 (nodes … tasks) take their defaults. The count matters:
-    // the parameter list is POSITIONAL (src/main/CLAUDE.md rule 3), and these
-    // three are 43–45. (The two ledger functions just above sit at 28/29 —
-    // `preview` and `assets` — not at `ledgerTimeline`/`ledgerEvent` (36/37);
-    // that predates M336 and is left for its own change, since correcting it
-    // repaints the Artifacts and Timeline goldens.)
-    ...Array(13).fill(undefined),
+    // Positions 38–42 (checkOutput … tasks) take their defaults, so the three
+    // below land at 43–45.
+    ...Array(5).fill(undefined),
     // M336–M338. See shotAccount above.
     shotAccountDoors,
     shotPresence,
