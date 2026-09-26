@@ -1127,6 +1127,31 @@ const SCENES = [
       await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
       await fill('[data-caps-input="usd"]', ''); await k.click('[data-caps-set]'); meter({}); await sleep(300)
     } },
+  { name: 'plan-approval', intent: 'M358. PLAN BEFORE EXECUTION. An agent in plan mode has finished its plan and asks to start: in the chat\'s composer well the request is a plan, not a tool call — "claude has a plan and starts on it only when you approve it", the plan rendered as Markdown in its own scroll (a heading, a numbered list, inline code), and two answers, `Approve plan` and `Keep planning`, with NO "for session" grant. The Needs you pane shows the same request expanded: the headline says the agent asks to start on this plan, the plan in a bordered scroll, `Approve plan` and `Keep planning`, and a sentence saying what each does (the detail is scrolled so its answers are in view). The chat\'s stuck auto chip from the caps scenes is dismissed first, as a person would. KNOWN, owed as M359: the queue\'s row and task group, the Inspector\'s band and the resume card still word the request as a tool (`ExitPlanMode`) rather than a plan. DISCLOSED: the request is the permission request main forwards when claude calls ExitPlanMode, and the wants-you its approval tracker says, sent as those two pushes; it is dropped after the shot, so nothing is answered.',
+    run: async (k) => {
+      // The caps scenes left the stuck auto chip on this chat; this story is
+      // a plan, so it is dismissed first, as a person would.
+      if (await k.js(`!!document.querySelector('.panel[data-panel-id="chat"] [data-chat-auto-dismiss]')`)) { await k.click('.panel[data-panel-id="chat"] [data-chat-auto-dismiss]'); await sleep(300) }
+      const plan = '# Add rate limiting to the API\n\n1. Read `src/server.ts` and find where routes are registered.\n2. Add a token-bucket middleware (60 requests a minute per key) in `src/rate-limit.ts`.\n3. Register it before the routes, and return **429** with a `Retry-After` header.\n4. Add a test that the 61st request in a minute is refused.\n\nNothing outside `src/` changes.'
+      k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'permission-request', requestId: 'plan-shot', toolName: 'ExitPlanMode', input: { plan }, toolUseId: 'toolu_plan_shot' })
+      k.wc.send('agent:state', { panelId: 'chat', state: 'wants-you' })
+      await sleep(400)
+      await k.dock('attention'); await sleep(500)
+      await k.click('[data-rail-expand="plan-shot"]'); await sleep(400)
+      const seen = JSON.parse(await k.js(`JSON.stringify({ card: !!document.querySelector('[data-chat-plan] [data-chat-plan-text] h1, [data-chat-plan] [data-chat-plan-text] ol'), cardVerbs: [...document.querySelectorAll('[data-chat-plan] button')].map((b) => b.textContent), session: !!document.querySelector('[data-chat-plan] [data-chat-allow-session]'), detail: !!document.querySelector('[data-approval-plan] ol'), detailVerbs: [...document.querySelectorAll('[data-approval="plan-shot"] .approval__verbs button')].map((b) => b.textContent), headline: document.querySelector('[data-approval="plan-shot"] [data-approval-headline]')?.textContent ?? '' })`))
+      if (!seen.card || seen.cardVerbs.join() !== 'Approve plan,Keep planning' || seen.session || !seen.detail || seen.detailVerbs.join() !== 'Approve plan,Keep planning' || !/start on this plan/.test(seen.headline)) throw new Error(`plan-approval scene: ${JSON.stringify(seen)}`)
+      // The detail is taller than the popover: its answers are scrolled into view.
+      await k.js(`(() => { const v = document.querySelector('[data-approval="plan-shot"] .approval__verbs'); if (v) v.scrollIntoView({ block: 'center' }); return !!v })()`)
+      await sleep(250)
+      // The detail's answers must be PAINTED, not only scrolled: hit-tested at their centre.
+      const answersPainted = await k.js(`(() => { const b = document.querySelector('[data-approval="plan-shot"] [data-approval-plan-approve]'); if (!b) return false; const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit === b || b.contains(hit) })()`)
+      if (!answersPainted) throw new Error('plan-approval scene: the detail\'s Approve plan is not the element painted at its centre')
+      await k.shot('plan-approval')
+      // Dropped, never answered: main's own session asked nothing.
+      k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'permission-dropped', requestId: 'plan-shot' })
+      k.wc.send('agent:state', { panelId: 'chat', state: 'idle' })
+      await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'

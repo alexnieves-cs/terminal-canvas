@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type JSX, type
 import type { ChatPanel } from '@renderer/panels/panels'
 import { displayPath } from '@shared/display-path'
 import { sendRefusalSentence, type AgentSessionSnapshot, type ChatAttachment } from '@shared/agent-session'
+import { planOf } from '@shared/transcript'
 import type { DirResult } from '@shared/fs-tree'
 import type { ReviewDiff } from '@shared/review'
 import { matchReviewPath } from '@shared/tool-index'
@@ -12,7 +13,7 @@ import { takeInsert, useChat, useApprovals, isAnswered, markAnswered, unmarkAnsw
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
 import { noteApprovalOutcome, withdrawApprovalOutcome } from '@renderer/shell/approval-outcome'
-import { chatRows, composerState, composerMidTurn, queueRows, deliveredUserTurns, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive, composerStatus } from './chat-model'
+import { chatRows, composerState, composerMidTurn, queueRows, deliveredUserTurns, toolArgument, denyMessageFor, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive, composerStatus } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
@@ -228,7 +229,7 @@ export function answerRequest(id: string, snapshot: AgentSessionSnapshot | null,
   // #14. The same acknowledgment the queue shows, whichever route answered.
   const asked = snapshot?.pending.find((p) => p.requestId === requestId)
   if (asked !== undefined) noteApprovalOutcome({ requestId, panelId: id, agent, toolName: asked.toolName, kind: !allow ? 'deny' : scope === 'session' ? 'session' : 'once' })
-  void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
+  void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: denyMessageFor(asked?.toolName) }, ...(scope === undefined ? {} : { scope }) })
     .then((accepted) => { if (accepted === false) withdrawApprovalOutcome(requestId); if (scope !== undefined) refreshChatGrants(id) }, () => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId) })
 }
 
@@ -670,7 +671,22 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
       {/* `--live` is composerLive — the ONE predicate composerState reads, so Send is never hidden while it is enabled (the Act II critic). */}
       <div className={`chat__composer${composerLive(snapshot) ? ' chat__composer--live' : ''}`} data-chat-composer>
       {openPending.length > 0 && <div className="chat__questions" data-chat-questions>
-        {openPending.map((p) => (
+        {openPending.map((p) => {
+          // M358. A plan is approved or sent back, never granted for a session,
+          // and is read whole before either (it scrolls inside the well).
+          const plan = planOf(p.toolName, p.input)
+          if (plan !== undefined) return (
+            <div key={p.requestId} className="chat__permission chat__permission--plan" data-chat-permission={p.requestId} data-chat-plan role="group" aria-label={`${BACKENDS[backend].label} has a plan to approve`}>
+              <span className="chat__role">plan</span>
+              <p className="chat__permission-sentence">{BACKENDS[backend].label} has a plan and starts on it only when you approve it.</p>
+              <div className="chat__plan chat__prose" data-chat-plan-text tabIndex={0}><Markdown text={plan} /></div>
+              <div className="chat__permission-verbs">
+                <button type="button" className="chat__verb chat__verb--allow" data-chat-allow data-chat-plan-approve title="Approve the plan: the agent leaves plan mode and starts on it" {...shellControl(() => answer(p.requestId, true))}>Approve plan</button>
+                <button type="button" className="chat__verb chat__verb--deny" data-chat-deny data-chat-plan-keep title="Keep planning: the agent is told to revise the plan and present it again" {...shellControl(() => answer(p.requestId, false))}>Keep planning</button>
+              </div>
+            </div>
+          )
+          return (
           <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>
             {/* M169. A SENTENCE and two buttons (the brief, Codex): the tool and
                 its argument are the sentence's object; the role stays as the
@@ -684,7 +700,8 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
               <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title="Deny this tool call" {...shellControl(() => answer(p.requestId, false))}>Deny</button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>}
         {chat.refusal !== null ? (
           <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>

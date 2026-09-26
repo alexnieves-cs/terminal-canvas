@@ -19,7 +19,7 @@ import { approvals, isAnswered, markAnswered, reportedModels, scrollToTurn, unma
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { withdrawApprovalOutcome } from '@renderer/shell/approval-outcome'
 import { normaliseTypedUrl } from '@shared/browser-panel'
-import { DENY_MESSAGE } from '@renderer/chat/chat-model'
+import { denyMessageFor } from '@renderer/chat/chat-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { getLiveSession } from '@renderer/session/live-session-store'
@@ -609,7 +609,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       const asked = approvals().find((a) => a.id === id && a.requestId === requestId)
       const itemId = boardVerbsRef.current?.taskOfPanel?.(id)
       markAnswered(id, requestId)
-      void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
+      void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: denyMessageFor(asked?.toolName) }, ...(scope === undefined ? {} : { scope }) })
         .catch(() => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId); return undefined })
         .then((accepted) => {
           if (accepted === undefined) return

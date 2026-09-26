@@ -1,4 +1,4 @@
-import type { ContentBlock, TranscriptTurn } from '@shared/transcript'
+import { PLAN_TOOL, type ContentBlock, type TranscriptTurn } from '@shared/transcript'
 import type { AgentBackend, AgentSessionSnapshot } from '@shared/agent-session'
 import { BACKENDS, DEFAULT_BACKEND } from '@shared/agent-backends'
 import type { ChatStateInput } from '@renderer/panels/panel-state'
@@ -179,10 +179,22 @@ export function chatHasRun(state: { snapshot: AgentSessionSnapshot | null; turns
 
 /** M76. The one deny message, whichever surface says it. */
 export const DENY_MESSAGE = 'denied from the canvas'
+/**
+ * M358. "Keep planning" is a deny of `ExitPlanMode`, and its message is what
+ * the agent reads next, so it says what the person wants instead of a bare
+ * no: the plan again, revised, before anything runs.
+ */
+/** M358. The deny message for a request: a plan's says "keep planning", every other tool's is M76's one. */
+export function denyMessageFor(toolName: string | undefined): string {
+  return toolName === PLAN_TOOL ? KEEP_PLANNING_MESSAGE : DENY_MESSAGE
+}
+export const KEEP_PLANNING_MESSAGE = 'Keep planning: the person has not approved this plan. Revise it (ask what they want changed if that is unclear) and present it again before you start.'
 /** M76. A question is open: the composer names the fix, which is above it. */
 /** M119. The row's label, not `claude`: acp is the first other row that asks. */
 export const REASON_CHAT_PENDING = 'claude is waiting for your answer — allow or deny above'
-export const reasonChatPending = (label: string): string => `${label} is waiting for your answer — allow or deny above`
+// M358. A plan is approved or sent back, never "allowed or denied".
+export const reasonChatPending = (label: string, toolName?: string): string =>
+  toolName === PLAN_TOOL ? `${label} has a plan waiting — approve it or keep planning above` : `${label} is waiting for your answer — allow or deny above`
 export const reasonChatHandshake = (label: string): string => `waiting for ${label} to open its session — the first message goes when it answers`
 export const REASON_CHAT_HANDSHAKE_INTERRUPT = 'the agent has not opened its session yet — close the panel to stop it'
 /** M99: claude's own `noCli` row, under the name every M73 door imports. */
@@ -222,7 +234,7 @@ export function composerMidTurn(
   const idle: ComposerArm = { enabled: false, reason: REASON_CHAT_IDLE }
   if (!claudeAvailable || !composerLive(snapshot) || snapshot === null) return { queue: idle, correct: idle }
   if (snapshot.pending.length > 0) {
-    const pending: ComposerArm = { enabled: false, reason: reasonChatPending(row.label) }
+    const pending: ComposerArm = { enabled: false, reason: reasonChatPending(row.label, snapshot.pending[0]?.toolName) }
     return { queue: pending, correct: pending }
   }
   return {
@@ -329,6 +341,8 @@ export function approvalHeadline(toolName: string): string {
     case 'WebFetch': return 'fetch a web page'
     case 'WebSearch': return 'search the web'
     case 'Glob': case 'Grep': return 'search files'
+    // M358. Allowing ExitPlanMode is approving the plan it carries.
+    case 'ExitPlanMode': return 'start on this plan'
     default: return `use ${toolName}`
   }
 }
@@ -348,7 +362,7 @@ export function composerState(
   // with the fix (closing the panel kills the process), never enabled to a no-op.
   const noInterrupt: ComposerArm = row.interrupts ? { enabled: true } : { enabled: false, reason: row.reasons.noInterrupt }
   const streaming = composerLive(snapshot)
-  if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: reasonChatPending(row.label) }, interrupt: noInterrupt }
+  if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: reasonChatPending(row.label, snapshot.pending[0]?.toolName) }, interrupt: noInterrupt }
   // M119. A handshake in flight is its own state: Send waits, Interrupt cannot reach a session that has not opened (the manager refuses it), so both say so.
   if (snapshot !== null && snapshot.awaitingHandshake === true) return { send: { enabled: false, reason: reasonChatHandshake(row.label) }, interrupt: { enabled: false, reason: REASON_CHAT_HANDSHAKE_INTERRUPT } }
   if (streaming) return { send: { enabled: false, reason: REASON_CHAT_STREAMING }, interrupt: noInterrupt }
@@ -394,6 +408,11 @@ export function toolArgument(input: Record<string, unknown>, keep = 2): string {
   if (typeof pathLike === 'string') return shortPath(pathLike, keep)
   const first = input.command ?? input.pattern ?? input.url ?? input.description ?? input.query
   if (typeof first === 'string') return first.length > 96 ? first.slice(0, 93) + '…' : first
+  // M358. A plan's row-sized argument is its first line (a heading, usually).
+  if (typeof input.plan === 'string') {
+    const line = input.plan.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).find((l) => l !== '') ?? 'a plan'
+    return line.length > 96 ? line.slice(0, 93) + '…' : line
+  }
   const keys = Object.keys(input)
   return keys.length === 0 ? '' : keys.join(', ')
 }
@@ -410,6 +429,8 @@ export function toolArgument(input: Record<string, unknown>, keep = 2): string {
  * repeat the command under a second heading.
  */
 export function approvalAction(input: Record<string, unknown>): { action: string; code: boolean; rest?: string } {
+  // M358. A plan is prose to read whole, never a JSON-escaped string.
+  if (typeof input.plan === 'string' && Object.keys(input).every((k) => k === 'plan')) return { action: input.plan, code: false }
   const primaryKey = ['command', 'file_path', 'path', 'notebook_path', 'url', 'pattern', 'query', 'description']
     .find((k) => typeof input[k] === 'string')
   // `description` is the request's own prose and is shown as context, so it

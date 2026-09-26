@@ -2,6 +2,8 @@ import { memo, useState, type JSX } from 'react'
 import type { PendingApproval } from './rail-sections'
 import { shellControl } from './shell-control'
 import { approvalHeadline } from '@renderer/chat/chat-model'
+import { Markdown } from '@renderer/chat/Markdown'
+import { PLAN_TOOL } from '@shared/transcript'
 import { approvalOutcomeWords, noteApprovalOutcome, useApprovalOutcomes, type ApprovalOutcome } from './approval-outcome'
 
 export interface ApprovalDetailProps {
@@ -45,6 +47,9 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
     onAnswer(allow, scope)
   }
   const where = approval.cwd === undefined ? '' : approval.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'
+  // M358. Approving a plan is allowing ExitPlanMode ONCE: there is no session
+  // grant for it (main refuses one too), or every later plan would run unread.
+  const isPlan = approval.toolName === PLAN_TOOL
   return (
     <div className="approval" data-approval={approval.requestId}>
       {/* #14. ONE sentence first — who, what will happen, where — so the facts
@@ -59,7 +64,10 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
         <div className="approval__fact"><dt>Wants</dt><dd data-approval-tool>{approval.toolName}</dd></div>
       </dl>
       {approval.description !== undefined && <p className="approval__why" data-approval-why>{approval.description}</p>}
-      {action !== '' && (
+      {/* M358. A plan is read as the agent wrote it: Markdown, whole, in a scroll. */}
+      {isPlan ? (
+        <div className="approval__plan chat__prose" data-approval-action data-approval-plan tabIndex={0}><Markdown text={action} /></div>
+      ) : action !== '' && (
         <pre className={`approval__action${approval.actionIsCode === false ? ' approval__action--prose' : ''}`} data-approval-action><code>{action}</code></pre>
       )}
       {approval.rest !== undefined && (
@@ -74,20 +82,38 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
         <p className="approval__sent" role="status">Answer sent — waiting for the agent</p>
       ) : (
         <div className="approval__verbs" role="group" aria-label={`Answer ${agent}'s ${approval.toolName} request`}>
-          <button type="button" className="approval__verb approval__verb--primary" data-approval-verb="once"
-            title={`Allow this one ${approval.toolName} call — the next one asks again`}
-            {...shellControl(() => decide(true))}>Allow once</button>
-          <button type="button" className="approval__verb" data-approval-verb="session"
-            title={`Allow every ${approval.toolName} call in this conversation until it closes — held in memory, so a relaunch asks again; revoke it in the inspector's Detail`}
-            {...shellControl(() => decide(true, 'session'))}>Allow {approval.toolName} for this session</button>
-          <button type="button" className="approval__verb approval__verb--deny" data-approval-verb="deny"
-            title={`Deny this ${approval.toolName} call — the agent is told it was denied`}
-            {...shellControl(() => decide(false))}>Deny</button>
+          {isPlan ? (
+            <>
+              <button type="button" className="approval__verb approval__verb--primary" data-approval-verb="once" data-approval-plan-approve
+                title="Approve the plan: the agent leaves plan mode and starts on it"
+                {...shellControl(() => decide(true))}>Approve plan</button>
+              <button type="button" className="approval__verb approval__verb--deny" data-approval-verb="deny" data-approval-plan-keep
+                title="Keep planning: the agent is told to revise the plan and present it again"
+                {...shellControl(() => decide(false))}>Keep planning</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="approval__verb approval__verb--primary" data-approval-verb="once"
+                title={`Allow this one ${approval.toolName} call — the next one asks again`}
+                {...shellControl(() => decide(true))}>Allow once</button>
+              <button type="button" className="approval__verb" data-approval-verb="session"
+                title={`Allow every ${approval.toolName} call in this conversation until it closes — held in memory, so a relaunch asks again; revoke it in the inspector's Detail`}
+                {...shellControl(() => decide(true, 'session'))}>Allow {approval.toolName} for this session</button>
+              <button type="button" className="approval__verb approval__verb--deny" data-approval-verb="deny"
+                title={`Deny this ${approval.toolName} call — the agent is told it was denied`}
+                {...shellControl(() => decide(false))}>Deny</button>
+            </>
+          )}
         </div>
       )}
       {/* #14. The scope of each verb in words, not only on hover: what a
           person is agreeing to is the decision. */}
-      {!sent && (
+      {!sent && isPlan && (
+        <p className="approval__scope" data-approval-scope>
+          Approve and the agent leaves plan mode and starts on this plan. Keep planning and it revises the plan and asks again; nothing runs until a plan is approved.
+        </p>
+      )}
+      {!sent && !isPlan && (
         <p className="approval__scope" data-approval-scope>
           Once answers only this call. For this session allows every {approval.toolName} call in this conversation until it closes — a relaunch asks again.
         </p>

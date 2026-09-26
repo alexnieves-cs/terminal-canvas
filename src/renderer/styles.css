@@ -1570,6 +1570,10 @@ body {
 .approval__why { margin: 0; font-size: var(--t-xs); color: var(--fg-2); }
 .approval__action { margin: 0; max-height: 12rem; overflow: auto; padding: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .approval__action--prose { font-family: var(--font-ui); }
+/* M358. A plan is read whole: the agent's Markdown in the chat's own prose
+   type, in a bordered scroll the same size as an action block, so a long plan
+   never pushes the two answers out of the popover. */
+.approval__plan { max-height: 16rem; overflow: auto; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); font-size: var(--t-sm); color: var(--fg); overflow-wrap: anywhere; }
 .approval__rest-toggle { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .approval__rest-toggle:hover { color: var(--fg); }
 .approval__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
@@ -5566,6 +5570,9 @@ body {
 .chat__chip--verb { cursor: pointer; }
 .chat__chip--verb:hover { color: var(--fg); background: var(--s-3); }
 .chat__permission-sentence { margin: 0; font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
+/* M358. The plan inside the composer's well: its own scroll, so the well
+   keeps its answers in reach however long the plan is. */
+.chat__plan { max-height: 14rem; overflow: auto; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); font-size: var(--t-sm); overflow-wrap: anywhere; }
 .chat__questions { display: flex; flex-direction: column; gap: var(--sp-2); }
 
 /* M111. A RAISED FIELD: the one place in the panel that asks to be typed
@@ -9380,6 +9387,10 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    the scroll edge, sliced in half, reading as broken. It belongs to the whole
    popover, so it stays pinned while the list scrolls above it. */
 .dock__popover-foot { position: sticky; bottom: calc(-1 * var(--sp-2)); background: var(--s-3); z-index: 1; }
+/* M358. The sticky foot covers the popover's bottom edge, so a control scrolled
+   into view there (Tab into a tall plan's Approve) landed underneath it.
+   Scrolling and focus now stop above the foot. */
+.dock__popover { scroll-padding-bottom: 56px; }
 /* M315. The dim behind the palette and the New task / New panel sheets covers
    the whole window's work area. Absolute inside the canvas host, it stopped at
    the host's right edge (short of the drawer margin) and left the Resume strip

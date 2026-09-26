@@ -1,5 +1,6 @@
 import type { AttentionSink } from './pty-manager'
 import { holdWords, type AgentSessionEvent } from '@shared/agent-session'
+import { PLAN_TOOL } from '@shared/transcript'
 
 /**
  * M76. MAIN OWNS PENDING, AND SAYS SO ONCE.
@@ -45,7 +46,7 @@ import { holdWords, type AgentSessionEvent } from '@shared/agent-session'
  * dispose drops the hold from the union — a stopped agent is not waiting on
  * anyone — though main's hold itself stays until a cap is raised.
  *
- * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`, `hold.attention.1`.
+ * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`, `hold.attention.1`, `plan.grant.1`.
  */
 
 export interface ApprovalTrackerDeps {
@@ -161,6 +162,10 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
     pendingIds: () => [...pending.keys()],
     heldIds: () => [...held],
     grant(id, toolName) {
+      // M358. A plan is approved each time it is presented. A session grant
+      // for ExitPlanMode would pre-answer every later plan unread, and the
+      // manager's preAnswer would never even let it reach a person.
+      if (toolName === PLAN_TOOL) return
       const set = grants.get(id)
       if (set) { set.add(toolName); return }
       grants.set(id, new Set([toolName]))

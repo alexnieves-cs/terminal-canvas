@@ -1066,6 +1066,32 @@ const isResult = (l) => l.includes('"type":"result"')
         exitStates.length === 3 && exitStates[2][1] === 'idle' && exitTracker.pendingIds().length === 0,
       JSON.stringify(exitStates))
 
+    // M358 — plan.grant.1. PLAN BEFORE EXECUTION. claude's ExitPlanMode
+    //     arrives as an ordinary can_use_tool request (the line below is the
+    //     recorded permission.jsonl request with the CLI's plan tool and its
+    //     documented `{ plan }` input — constructed, not recorded: owed), and
+    //     allowing it is approving the plan. So no session grant may answer
+    //     it: main's tracker refuses the grant, and the manager's preAnswer
+    //     leaves the NEXT plan pending for a person.
+    {
+      const planLine = JSON.stringify({ type: 'control_request', request_id: 'plan-1', request: { subtype: 'can_use_tool', tool_name: 'ExitPlanMode', display_name: 'ExitPlanMode', input: { plan: '# Plan\n\n1. Read the code' }, permission_suggestions: [], tool_use_id: 'toolu_plan1' } })
+      const parsed = T.parseStreamLine(planLine)
+      const pt = P.createApprovalTracker({ sink: { ...sink, notify() {}, beep() {}, badge() {} }, emitState() {}, label: () => 'x' })
+      pt.grant('pl', 'ExitPlanMode')
+      pt.grant('pl', 'Bash')
+      const r = makeManager({ preAnswer: (id, tool) => pt.granted(id, tool) })
+      r.manager.create({ id: 'pl', cwd: '/r' })
+      r.manager.send('pl', 'plan it')
+      r.spawns[0].proc.emitLines([planLine])
+      await tick(5)
+      const pending = r.manager.get('pl').pending
+      ok('plan.grant.1 an ExitPlanMode request parses as a permission request carrying the plan, main refuses a session grant for it (a Bash grant still holds), and a later plan stays pending for a person',
+        parsed.type === 'permission-request' && parsed.toolName === 'ExitPlanMode' && parsed.input.plan === '# Plan\n\n1. Read the code' &&
+          pt.granted('pl', 'ExitPlanMode') === false && pt.granted('pl', 'Bash') === true && pt.grantsOf('pl').join() === 'Bash' &&
+          pending.length === 1 && pending[0].toolName === 'ExitPlanMode' && !r.spawns[0].proc.stdin.some((l) => l.includes('"behavior":"allow"')),
+        JSON.stringify({ parsed, grants: pt.grantsOf('pl'), pending, stdin: r.spawns[0].proc.stdin.slice(-2) }))
+    }
+
     // M355 — hold.attention.1. A HOLD IS A NEEDS-YOU TOO. A panel is waiting
     // while it is pending OR held: entry to either says wants-you once and
     // notifies once in the hold's own words; an answered question on a held

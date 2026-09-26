@@ -464,6 +464,23 @@ export function interruptLine(requestId: string): string {
 export type PermissionAnswer = { allow: true } | { allow: false; message: string }
 
 /**
+ * M358. PLAN BEFORE EXECUTION. claude in plan mode (`--permission-mode plan`,
+ * the spawn sheet's `plan`) reads and plans, and ends its plan with ONE tool
+ * call, `ExitPlanMode`, whose input is the plan as Markdown (`{ plan }`). It
+ * reaches this app as an ordinary `can_use_tool` request, so ALLOWING it is
+ * approving the plan: the CLI leaves plan mode and starts on it. That makes
+ * it a decision no grant may answer — an `Allow for this session` on this
+ * tool would approve every later plan unread — and one whose words are the
+ * plan's, not a tool's. The name is the CLI's own.
+ */
+export const PLAN_TOOL = 'ExitPlanMode'
+
+/** M358. The plan an `ExitPlanMode` request carries, or undefined for any other request. */
+export function planOf(toolName: string, input: Record<string, unknown>): string | undefined {
+  return toolName === PLAN_TOOL && typeof input.plan === 'string' ? input.plan : undefined
+}
+
+/**
  * The answer to a `can_use_tool` request. `updatedInput` echoes the input
  * unchanged: the CLI's contract lets a host rewrite the tool's input on
  * allow, and this app never does, so the echo is the whole of that field.

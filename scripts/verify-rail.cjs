@@ -2450,6 +2450,20 @@ const session = (id, over = {}) => ({
   ok('approval-headline.1 an approval\'s headline verb is the tool\'s action in words (Bash runs a command, Edit edits a file, WebFetch fetches a page) and an unknown tool is named, not guessed',
     head('Bash') === 'run a command' && head('Edit') === 'edit a file' && head('Write') === 'write a file' && head('WebFetch') === 'fetch a web page' && head('mcp__jira__create') === 'use mcp__jira__create',
     JSON.stringify([head('Bash'), head('Edit'), head('mcp__x')]))
+
+  // M358 — plan.read.1. A plan is read, not decoded: ExitPlanMode's `{ plan }`
+  //     was a JSON-escaped string in the action block and a key name in the
+  //     row. Its headline says what approving does; "Keep planning" sends a
+  //     message that asks for the plan again, not M76's bare deny, and every
+  //     other tool keeps that one message.
+  const plan = '# Add rate limiting\n\n1. Read `server.ts`\n2. Add a token bucket'
+  const planAction = R.approvalAction({ plan })
+  ok('plan.read.1 a plan request reads as its Markdown whole (prose, not code), its row argument is its first line without the heading marks, approving it is "start on this plan", and its deny asks for the plan again while every other tool keeps the one deny message',
+    planAction.action === plan && planAction.code === false && planAction.rest === undefined &&
+      R.toolArgument({ plan }) === 'Add rate limiting' && head('ExitPlanMode') === 'start on this plan' &&
+      /present it again before you start/.test(R.denyMessageFor('ExitPlanMode')) && R.denyMessageFor('Bash') === R.DENY_MESSAGE && R.denyMessageFor(undefined) === R.DENY_MESSAGE &&
+      R.reasonChatPending('claude', 'ExitPlanMode') === 'claude has a plan waiting — approve it or keep planning above' && /allow or deny above/.test(R.reasonChatPending('claude', 'Bash')),
+    JSON.stringify({ planAction, arg: R.toolArgument({ plan }), deny: R.denyMessageFor('ExitPlanMode') }))
 }
 
 // #13 — composer-status.1. The composer's ONE status line, by priority: the
