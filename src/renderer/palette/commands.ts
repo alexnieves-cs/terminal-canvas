@@ -4,6 +4,7 @@ import type { PersistedWorkItem } from '@shared/work-items'
 import type { StartWorkOutcome } from './start-work'
 import { SWARM_LIST, SWARM_PRESETS, type SwarmPresetId } from '@shared/swarm'
 import type { ToolScope } from '@shared/toolbox'
+import { CAPABILITY_ORDER, capabilityWords, normalizeCapability } from '@shared/toolbox-query'
 import type { Command } from './palette-model'
 // Type-only: SettingValue is Task 4's settings-schema addition.
 // Erased by esbuild, so it costs verify:palette nothing that the bundle
@@ -1643,6 +1644,27 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // routing it through Canvas.tsx would make the canvas a stakeholder in which
   // rows the palette is currently showing — and the view has to know BEFORE it
   // runs the row, because running one normally closes the overlay.
+  // M365. The capability query's door, and its rows: one per panel with a
+  // toolbox directory, in answer order (has, inactive, unknown, lacks). Each
+  // row carries the typed name in its searchText, so the scope's own filter
+  // never hides an answer for not containing the name in its title.
+  out.push({ id: 'capability.open', title: 'Which agents can…', subtitle: 'type a skill, command, agent or MCP server name — each agent\'s own toolbox answers', group: 'panel', entersScope: 'capability', searchText: 'capability can skill command agent mcp server toolbox which agents who can', run: () => {} })
+  {
+    // Scope-bound rows: filterCommands shows them only inside `capability`.
+    const q = ctx.capabilityQuery ?? ''
+    if (normalizeCapability(q) === '') {
+      out.push(withReason({ id: 'capability.hint', title: 'Type a name', subtitle: 'a skill, a /command, an @agent or an MCP server', group: 'panel', scope: 'capability', hiddenAtRest: true, run: () => {} }, 'type the name to ask about'))
+    } else if (ctx.capability === undefined || ctx.capability === null) {
+      out.push(withReason({ id: 'capability.reading', title: 'Reading each agent\'s toolbox…', group: 'panel', scope: 'capability', hiddenAtRest: true, searchText: q, run: () => {} }, 'reading'))
+    } else if (ctx.capability.length === 0) {
+      out.push(withReason({ id: 'capability.none', title: 'No agent on this canvas has a toolbox to ask', group: 'panel', scope: 'capability', hiddenAtRest: true, searchText: q, run: () => {} }, 'open a conversation or an agent terminal in a folder first'))
+    } else {
+      const sorted = [...ctx.capability].sort((a, b) => CAPABILITY_ORDER[a.answer.kind] - CAPABILITY_ORDER[b.answer.kind])
+      for (const r of sorted) {
+        out.push({ id: `capability.${r.panelId}`, title: r.label, subtitle: capabilityWords(q, r.answer), group: 'panel', scope: 'capability', hiddenAtRest: true, searchText: q, run: () => actions.goToPanel(r.panelId) })
+      }
+    }
+  }
   out.push({
     id: 'manage.presets',
     title: 'Manage presets…',

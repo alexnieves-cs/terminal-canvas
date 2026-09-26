@@ -177,6 +177,9 @@ export interface PaletteProps {
   scrollbackEnabled: boolean
   /** M42. Called with the live query WHILE the scope is `search`, so Canvas can ask main. */
   onSearchQuery: (query: string) => void
+  /** M365. The capability scope's answers (null before the first), and the query reported while that scope is open. */
+  capability?: { panelId: string; label: string; answer: import('@shared/toolbox-query').CapabilityAnswer }[] | null
+  onCapabilityQuery?: (query: string) => void
 }
 
 const SCOPE_LABEL: Record<PaletteScope, string> = {
@@ -188,7 +191,8 @@ const SCOPE_LABEL: Record<PaletteScope, string> = {
   worktrees: 'Worktrees',
   'agent-mode': 'Permission mode',
   search: 'Search',
-  environment: 'Environment'
+  environment: 'Environment',
+  capability: 'Which agents can'
 }
 
 const sectionLabel = (id: SectionId): string =>
@@ -263,13 +267,16 @@ export function Palette(props: PaletteProps): JSX.Element {
         searchQuery: scope === 'search' ? query : '',
         searchResults: props.searchResults,
         ...(props.workSearch === undefined ? {} : { workSearch: props.workSearch }),
+        // M365. The query is the capability NAME only inside its scope.
+        capabilityQuery: scope === 'capability' ? query : '',
+        ...(scope === 'capability' && props.capability !== undefined ? { capability: props.capability } : {}),
         scrollbackEnabled: props.scrollbackEnabled,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
      props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
-     query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled]
+     query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 
@@ -285,6 +292,11 @@ export function Palette(props: PaletteProps): JSX.Element {
     // trap CLAUDE.md names for the Canvas split-out hooks. onSearchQuery is a
     // stable useCallback, so this fires only on a real scope/query change.
   }, [scope, query, onSearchQuery])
+  // M365. The capability scope reports its query the same way; '' on leaving it, so Canvas drops its answers.
+  const onCapabilityQuery = props.onCapabilityQuery
+  useEffect(() => {
+    onCapabilityQuery?.(scope === 'capability' ? query : '')
+  }, [scope, query, onCapabilityQuery])
 
   // Rule 1: opening focuses the input. This is what takes the keyboard off
   // xterm — nothing else in this component does it, and without it the user's

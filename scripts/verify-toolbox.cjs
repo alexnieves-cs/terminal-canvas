@@ -1115,6 +1115,41 @@ const write = (rel, text) => {
   }
 }
 
+  // M365 — capability.1. "Which of these agents can actually do X", per
+  //     panel, in FOUR answers: an ACTIVE entry by the name (`has`), one that
+  //     is off or waiting (`inactive` — never `has`, which sends someone to an
+  //     agent that will refuse), a whole read with no such name (`lacks`,
+  //     counting the plugins this app does not read), and no answer
+  //     (`unknown`: unread, failed, or cut at a cap, where the name may be
+  //     among what was dropped). A panel with no directory answers nothing.
+  {
+    const entry = (kind, name, active = { kind: 'active' }, scope = 'project') => ({ id: JSON.stringify([kind, name, scope]), kind, name, scope, active, source: '/x', shadows: [] })
+    const inv = (entries, over = {}, plugins = []) => ({ kind: 'inventory', inventory: { cwd: '/r', readAt: 1, entries, permissions: [], sources: [], pluginsEnabled: plugins, pluginsDisabledCount: 0, unresolved: { enabled: [], disabled: [] }, overflow: { skills: 0, commands: 0, agents: 0, mcp: 0, hooks: 0, total: 0, ...over }, freshness: { kind: 'fresh' } } })
+    const C = (q, r) => T.capabilityOf(q, r)
+    const has = C('/Review', inv([entry('command', 'git:review'), entry('skill', 'deploy')]))
+    const off = C('deploy', inv([entry('skill', 'deploy', { kind: 'disabled', by: '/r/.claude/settings.json' })]))
+    const mcp = C('@github', inv([entry('mcp', 'github', { kind: 'needs-approval' })]))
+    const lacks = C('review', inv([entry('skill', 'deploy')], {}, ['p1', 'p2']))
+    const lacksClean = C('review', inv([]))
+    const cut = C('review', inv([entry('skill', 'deploy')], { skills: 3 }))
+    const hook = C('pretooluse', inv([{ id: 'h', kind: 'hook', scope: 'user', active: { kind: 'active' }, source: '/x', shadows: [], event: 'PreToolUse' }]))
+    ok('capability.1 an active entry by the name (a namespaced command, a leading / or @, any case) HAS it; a disabled or waiting one is INACTIVE, never has; a whole read without it LACKS it and counts the plugins not read; a read cut at a cap, a failed or an unread one is UNKNOWN; hooks have no names; a panel with no directory answers nothing',
+      has.kind === 'has' && has.matches[0].name === 'git:review' && off.kind === 'inactive' && off.matches[0].active.kind === 'disabled' &&
+        mcp.kind === 'inactive' && mcp.matches[0].kind === 'mcp' && lacks.kind === 'lacks' && lacks.pluginsUnread === 2 &&
+        lacksClean.kind === 'lacks' && lacksClean.pluginsUnread === 0 && cut.kind === 'unknown' && /cut at its cap — 3 entries/.test(cut.why) &&
+        hook.kind === 'lacks' && C('x', undefined).kind === 'unknown' && C('x', { kind: 'unavailable', reason: 'no answer' }).why === 'no answer' &&
+        C('x', { kind: 'no-cwd' }) === null,
+      JSON.stringify({ has, off, mcp, lacks, cut, hook }))
+    const words = [
+      T.capabilityWords('review', has), T.capabilityWords('deploy', off), T.capabilityWords('review', lacks), T.capabilityWords('review', lacksClean), T.capabilityWords('review', cut)
+    ]
+    ok('capability.2 each answer is one line: what it has and where, what is off and why, "no <name>" with the plugins that may still provide it, and "unknown — <why>"',
+      words[0] === 'has command git:review · project' && words[1] === 'skill deploy · project — disabled' &&
+        words[2] === 'no review — 2 plugins not read may provide it' && words[3] === 'no review' && /^unknown — the toolbox was cut/.test(words[4]) &&
+        T.CAPABILITY_ORDER.has < T.CAPABILITY_ORDER.inactive && T.CAPABILITY_ORDER.unknown < T.CAPABILITY_ORDER.lacks,
+      JSON.stringify(words))
+  }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

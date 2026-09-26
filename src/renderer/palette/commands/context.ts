@@ -17,6 +17,7 @@ import type { CanvasGroup } from '@renderer/groups/groups'
 import type { UpdateState } from '@renderer/session/update-store'
 import type { EnvReport } from '@shared/env-report'
 import type { WorkSearchResult } from '@shared/work-search'
+import type { CapabilityAnswer } from '@shared/toolbox-query'
 
 export interface PaletteContext {
   /** M92. How many panels are pinned on this canvas — the ninth pin is refused by count. */
@@ -75,6 +76,14 @@ export interface PaletteContext {
   /** D13. Tasks and retained outcomes matching the same query; absent means nobody supplied them. */
   workSearch?: WorkSearchResult | null
   scrollbackEnabled: boolean
+  /**
+   * M365. The capability scope's inputs, filled by Canvas only while the
+   * scope is `capability`: the name typed, and one answer per panel that has
+   * a toolbox directory (null before the first answer). The query IS the
+   * name, as the search scope's is its term.
+   */
+  capabilityQuery?: string
+  capability?: { panelId: string; label: string; answer: CapabilityAnswer }[] | null
   /**
    * Panel ids currently in wants-you, from the renderer's own attention set.
    * Intersected with each row's panelIds — which is why WORKSPACE_LIST returns

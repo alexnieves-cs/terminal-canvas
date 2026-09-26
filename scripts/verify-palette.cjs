@@ -343,6 +343,35 @@ const byId = (list, id) => list.find((c) => c.id === id)
     JSON.stringify(rows.map((r) => [r.id, r.title, r.disabledReason])))
 }
 
+// M365 — capability.rows.1. "Which agents can…": the scope's query is the
+// capability NAME, so each answer row must survive the scope's own filter
+// though its title (a panel's name) never contains it; rows come in answer
+// order (has, inactive, unknown, lacks), a row goes to its panel, an empty
+// name is a hint, and no answer yet is "reading", never "none".
+{
+  const went = []
+  const actions = { ...spyActions(), goToPanel: (id) => { went.push(id) } }
+  const answers = [
+    { panelId: 'p-lack', label: 'shell — docs', answer: { kind: 'lacks', pluginsUnread: 0 } },
+    { panelId: 'p-has', label: 'claude — api', answer: { kind: 'has', matches: [{ kind: 'skill', name: 'review', scope: 'project', active: { kind: 'active' } }] } },
+    { panelId: 'p-unk', label: 'claude — web', answer: { kind: 'unknown', why: 'not read yet' } },
+    { panelId: 'p-off', label: 'claude — ops', answer: { kind: 'inactive', matches: [{ kind: 'skill', name: 'review', scope: 'user', active: { kind: 'disabled', by: '/x' } }] } }
+  ]
+  const scoped = (over) => P.filterCommands(P.buildCommands(ctx({ actions, ...over })), over.capabilityQuery ?? '', 'capability')
+  const rows = scoped({ capabilityQuery: 'review', capability: answers })
+  const hint = scoped({ capabilityQuery: '', capability: null })
+  const reading = scoped({ capabilityQuery: 'review', capability: null })
+  const door = P.filterCommands(P.buildCommands(ctx({ actions })), 'which agents')
+  const first = rows.find((r) => r.id === 'capability.p-has')
+  if (first !== undefined) first.run()
+  ok('capability.rows.1 the scope lists every answer under a name its titles do not contain, has first, then inactive, unknown and lacks; a row goes to its panel; an empty name is a hint, an unanswered one is reading; the door is found by its words',
+    rows.map((r) => r.id).join() === 'capability.p-has,capability.p-off,capability.p-unk,capability.p-lack' &&
+      rows[0].subtitle === 'has skill review · project' && went[0] === 'p-has' &&
+      hint.map((r) => r.id).join() === 'capability.hint' && reading.map((r) => r.id).join() === 'capability.reading' &&
+      door.some((r) => r.id === 'capability.open' && r.entersScope === 'capability'),
+    JSON.stringify({ rows: rows.map((r) => [r.id, r.subtitle]), hint: hint.map((r) => r.id), reading: reading.map((r) => r.id) }))
+}
+
 const SHELL = { id: 'shell', name: 'Login shell', available: true, builtIn: true, isDefault: true, subtitle: '~' }
 const CLAUDE = { id: 'claude', name: 'Claude', available: false, builtIn: true, isDefault: false, subtitle: '~' }
 const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: false, isDefault: false, subtitle: '~/work' }

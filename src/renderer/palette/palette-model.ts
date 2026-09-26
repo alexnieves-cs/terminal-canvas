@@ -66,6 +66,8 @@ export type PaletteScope =
   | 'agent-mode'
   /** M42. Search across every panel's durable log; the query box IS the term. */
   | 'search'
+  /** M365. Which agents can do X: the query box IS the capability name, answered by each panel's toolbox. */
+  | 'capability'
   /** M48. The environment report: what main found at startup, one row per fact. */
   | 'environment'
 

@@ -10,6 +10,8 @@
  */
 module.exports = {
   ...require('../src/shared/toolbox'),
+  // M365. The cross-panel capability query: pure, over an inventory.
+  ...require('../src/shared/toolbox-query.ts'),
   ...require('../src/shared/skills.ts'),
   // M129. The editor's two halves: the pure round-trip and main's four
   // writers, whose every refusal must run under plain node — including the

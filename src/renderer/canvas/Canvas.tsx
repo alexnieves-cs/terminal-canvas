@@ -43,6 +43,7 @@ import { panelName } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { inspectionDirectory } from './inspection-directory'
+import { capabilityOf, normalizeCapability, type CapabilityAnswer } from '@shared/toolbox-query'
 import { useVault } from './useVault'
 import { buildIntegrationRows, INTEGRATION_AUDIT_ROWS } from '@renderer/shell/integration-model'
 import { SERVICES } from '@shared/credential-schema'
@@ -4737,6 +4738,34 @@ export function Canvas({
       })
     }, 120)
   }, [])
+  // M365. The capability query: while the palette's `capability` scope is
+  // open, every panel with a toolbox directory (the inspector's own rule,
+  // `inspectionDirectory(…, 'tools')`, asked rather than copied — M194) is
+  // answered from main's toolbox read, one read per distinct directory. The
+  // reads are main's cached ones (ToolboxCache), and only the LATEST query's
+  // answers land. '' clears them, so a reopened scope starts from none.
+  const [capability, setCapability] = useState<{ panelId: string; label: string; answer: CapabilityAnswer }[] | null>(null)
+  const capabilityQueryRef = useRef('')
+  const onCapabilityQuery = useCallback((query: string) => {
+    capabilityQueryRef.current = query
+    if (normalizeCapability(query) === '') { setCapability(null); return }
+    const asked = panelsRef.current.flatMap((p) => {
+      const d = inspectionDirectory(p, 'tools')
+      return d.kind === 'known' ? [{ panelId: p.rect.id, label: panelName(p), cwd: d.cwd }] : []
+    })
+    const byCwd = new Map<string, string>()
+    for (const a of asked) if (!byCwd.has(a.cwd)) byCwd.set(a.cwd, a.panelId)
+    void Promise.all([...byCwd].map(async ([cwd, panelId]) => {
+      try { return [cwd, await window.canvas.toolbox.read({ panelId, cwd })] as const } catch { return [cwd, { kind: 'unavailable', reason: 'the toolbox read did not answer' } as const] as const }
+    })).then((pairs) => {
+      if (capabilityQueryRef.current !== query) return
+      const read = new Map<string, ToolInventoryResult>(pairs)
+      setCapability(asked.flatMap((a) => {
+        const answer = capabilityOf(query, read.get(a.cwd))
+        return answer === null ? [] : [{ panelId: a.panelId, label: a.label, answer }]
+      }))
+    })
+  }, [])
   const workSearch = useMemo(() => {
     if (workSearchQuery.trim() === '') return null
     const cards = new Map<string, string>()
@@ -9230,6 +9259,8 @@ export function Canvas({
             workSearch={workSearch}
             scrollbackEnabled={scrollbackPersist}
             onSearchQuery={onSearchQuery}
+            capability={capability}
+            onCapabilityQuery={onCapabilityQuery}
           />
         )}
       </div>
