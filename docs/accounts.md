@@ -77,8 +77,24 @@ states the three rules. Membership and consumed invites are written only by
 client can insert a membership, read another organization's rows, read an invite's
 hash, or invite an owner. Only an owner can invite an admin.
 `verify:account` covers the app side under plain node. The SQL was exercised
-against PGlite (Postgres in WASM, with a stubbed `auth` schema), not against a
-live Supabase project.
+against PGlite (Postgres in WASM, with a stubbed `auth` schema).
+
+**The live project, from outside (M342).** `npm run supabase:probe` reads the project
+named by `TC_SUPABASE_URL` with the app's own anon key. It checks two things:
+- every table and RPC the three migrations create exists;
+- the anon key (the one that ships) can read, write and call nothing: each answers
+  `42501 permission denied`, which is not the same answer as "not in the schema cache".
+
+It also confirms the GitHub provider is on. With `TC_PROBE_ACCESS_TOKEN` (a signed-in
+person's access token, copied by that person from their own session) it also reads as
+that person:
+- their organizations come back;
+- someone else's organization reads as nothing;
+- `workspace_role` for a share they are not in answers null.
+
+The probe never writes a row. Its only writes are empty inserts the grants must refuse.
+The first run (2026-09-26) passed 37/37 anonymous checks. The `member.*` checks are
+still owed a real sign-in.
 
 ## Presence
 
@@ -213,5 +229,6 @@ dialog.
 
 `verify:canvas-sync` covers the binding with two machines over a relay, the schema, the
 store, the auth lookup, and a **real Hocuspocus server with real providers** on
-loopback. Only Supabase is stubbed. The migration has not been run against a live
-Supabase project.
+loopback. Only Supabase is stubbed. The migration is applied on the live project, and
+its tables and RPCs refuse the anon key there (`npm run supabase:probe`, M342). Its
+authenticated paths have not been driven live.

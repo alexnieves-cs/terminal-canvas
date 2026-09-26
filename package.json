@@ -30,6 +30,7 @@
     "lb": "node scripts/lb.cjs",
     "affected": "node scripts/affected.cjs",
     "collab": "node scripts/collab-server.cjs",
+    "supabase:probe": "node scripts/supabase-probe.cjs",
     "verify:meta": "node scripts/verify-meta.cjs",
     "verify:package": "node scripts/verify-package.cjs",
     "verify:packaged": "unset ELECTRON_RUN_AS_NODE && node scripts/verify-packaged.cjs",
