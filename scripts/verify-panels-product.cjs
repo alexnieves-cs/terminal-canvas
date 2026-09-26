@@ -11,7 +11,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 const WATCHDOG_MS = 230000 // measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -5668,5 +5668,62 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ptyManager.write = origWrite
       wc.removeListener('console-message', onPillLog)
     }
+  }
+
+  // M345 — account.click.1 / share.click.1. The account menu and the share
+  // dialog, driven the way a person drives them: REAL input events (Radix's
+  // trigger and items listen for pointer events a dispatched click never
+  // makes), what is PAINTED hit-tested, and Escape as a real key. LAST in the
+  // part on purpose: turning the account on grows the top bar an avatar, and
+  // every check above was written against the top bar without one (the shot
+  // harness's rule for its account scenes). Nothing here signs in or shares:
+  // the harness's doors refuse both by name.
+  {
+    const click = async (sel) => {
+      const at = await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return null; const r = b.getBoundingClientRect(); if (r.width === 0 || r.height === 0) return null; return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (at === null) return false
+      wc.focus()
+      // A person's pointer ARRIVES before it presses: Radix menus track the
+      // hovered row through pointermove, and a press with no arrival is not a
+      // gesture a real mouse makes.
+      wc.sendInputEvent({ type: 'mouseMove', ...at })
+      await sleep(60)
+      wc.sendInputEvent({ type: 'mouseDown', ...at, button: 'left', clickCount: 1 })
+      wc.sendInputEvent({ type: 'mouseUp', ...at, button: 'left', clickCount: 1 })
+      return true
+    }
+    harnessAccount.turnOn(wc)
+    const avatar = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__account-avatar')?.textContent ?? false`), 5000)
+    const opened = avatar !== false && await click('.shell__account-trigger') &&
+      await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('.shell__account-menu:not([hidden])')`), 3000)
+    const menu = opened ? await wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__account-menu')
+      const share = m.querySelector('.shell__account-share'); const r = share ? share.getBoundingClientRect() : null
+      const hit = r ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null
+      return { rows: [...m.querySelectorAll('.shell__account-row')].map((x) => x.textContent.trim()), sharePainted: hit !== null && share.contains(hit),
+        open: !!m.querySelector('.shell__account-open-share'), signout: (m.querySelector('.shell__account-signout') || {}).textContent || null } })()`) : null
+    ok('account.click.1 a real click on the top bar\'s account opens its menu, painted: the signed-in account, both sharing doors and Sign out',
+      avatar === 'AL' && opened === true && menu !== null && menu.rows.length === 1 && /ada-lovelace/.test(menu.rows[0]) && menu.sharePainted === true && menu.open === true && /Sign out ada-lovelace/.test(menu.signout || ''),
+      JSON.stringify({ avatar, opened, menu }))
+    // Every mode the dialog passes through, so a red says whether it never
+    // opened or opened and was dismissed.
+    await wc.executeJavaScript(`(() => { window.__shareModes = []; const d = document.querySelector('.share-dialog'); if (!d) { window.__shareModes.push('no dialog'); return }
+      new MutationObserver(() => window.__shareModes.push(d.getAttribute('data-share-mode'))).observe(d, { attributes: true, attributeFilter: ['data-share-mode'] }) })()`)
+    const shared = opened === true && await click('.shell__account-share')
+    const dialog = shared ? await waitUntil(() => wc.executeJavaScript(`(() => { const d = document.querySelector('.share-dialog__card'); if (!d) return false
+      const org = d.querySelector('.share-dialog__org'); if (!org || org.options.length === 0) return false
+      const r = d.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 24)
+      const got = { title: (d.querySelector('.share-dialog__title') || {}).textContent || null, orgs: [...org.options].map((o) => o.textContent), painted: hit !== null && d.contains(hit),
+        menuGone: document.querySelector('.shell__account-menu:not([hidden])') === null, focusInside: d.contains(document.activeElement) }
+      // Settled means the menu has finished leaving; until then its modal layer
+      // still owns the pointer, and a hit-test would measure the departure.
+      return got.menuGone ? got : false })()`), 4000) : false
+    // What the dialog actually says, for the detail when the check is red.
+    const seen = await wc.executeJavaScript(`(() => { const d = document.querySelector('.share-dialog__card'); return { text: d ? d.textContent.slice(0, 200) : null, modes: window.__shareModes, focus: document.activeElement ? document.activeElement.className : null } })()`)
+    wc.focus()
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+    const closed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.share-dialog__card') === null`), 3000)
+    ok('share.click.1 the menu\'s Share this workspace… opens the share dialog, painted over the canvas with focus inside it, naming the workspace and offering the organization; the menu closes and Escape closes the dialog',
+      dialog !== false && /^Share /.test(dialog.title || '') && dialog.orgs.includes('Acme') && dialog.painted === true && dialog.menuGone === true && dialog.focusInside === true && closed === true,
+      JSON.stringify({ shared, dialog, closed, seen }))
   }
 })

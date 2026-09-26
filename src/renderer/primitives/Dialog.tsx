@@ -64,9 +64,14 @@ export interface DialogContentProps extends ComponentPropsWithoutRef<'div'> {
 export function DialogContent({ children, ...rest }: DialogContentProps): JSX.Element {
   const { open, onExitComplete } = useContext(DialogOpen)
   return (
+    // M345. NOT force-mounted. Dialog above already keeps Radix open until
+    // Motion's exit completes (`mounted`), so the content cannot vanish before
+    // its departure is seen. Force-mounted, its dismiss layer and focus scope
+    // lived from app start: the scope never "mounted" on open, so focus stayed
+    // behind the modal, and a closed force-mounted MENU registered later
+    // outranked it as the highest layer and swallowed Escape (share.click.1).
     <Radix.Content
       asChild
-      forceMount
       onMouseDown={(event) => event.stopPropagation()}
       // Radix wants a Description too and warns when there is none. These
       // surfaces are labelled, not described, and a hidden paragraph invented

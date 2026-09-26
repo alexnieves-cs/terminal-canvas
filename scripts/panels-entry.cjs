@@ -115,6 +115,7 @@ module.exports = {
   createRecipeStore: require('../src/main/recipe-store').createRecipeStore,
   createEditorOpener: require('../src/main/kit').createEditorOpener,
   INERT_KIT: require('../src/main/kit').INERT_KIT,
+  colorOf: require('../src/shared/presence').colorOf,
   // M315/M317. Accept's merger, and the integrator that lands checked lanes through it.
   createLaneMerger: require('../src/main/lane-merge').createLaneMerger,
   createIntegrator: require('../src/main/integrator').createIntegrator,

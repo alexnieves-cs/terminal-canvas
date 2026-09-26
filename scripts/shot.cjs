@@ -69,7 +69,7 @@ const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
   createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey, createRunLedger, INERT_PRESENCE,
-  createRepoSetupStore, INERT_KIT
+  createRepoSetupStore, INERT_KIT, colorOf
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -943,6 +943,58 @@ const SCENES = [
       await sleep(600)
       await k.shot('relay')
     } },
+  { name: 'shared-canvas', intent: 'M343–M345. A SHARED workspace from its owner\'s seat, with a teammate (sam) working in it from another Mac. The roster strip shows sam in sam\'s colour, and sam\'s cursor sits on the canvas with a name tag. Beneath the owner\'s own relay terminal, two of sam\'s panels stand as inert placeholders, each header wearing sam\'s colour and name: sam\'s RELAY terminal reads `sam\'s terminal on the team relay · shell` and offers Attach (the session id crossed the doc; the relay still decides by role), and sam\'s terminal reads `Terminal on sam\'s machine — nothing runs here`. Nothing of sam\'s runs here, and nothing is started by showing it. DISCLOSED: the view and the roster are the pushes main\'s canvas-sync and presence hub would send, sent as those pushes — no doc and no network in the harness.',
+    run: async (k) => {
+      const sh = k.shared
+      const wsId = sh.store.current().activeWorkspaceId
+      sh.store.setWorkspaceShare(wsId, { id: sh.share, orgId: sh.org.id, role: 'owner' })
+      // The relay scene left the owner's relay panel (720x460, world rect read
+      // off its own style) at the viewport's centre. sam's two panels go in a
+      // row BENEATH it, the same total width, and the camera then moves up with
+      // a real wheel so the three fit the window.
+      const at = await k.js(`(() => { const p = document.querySelector('.panel[data-panel-kind="relay"]'); if (!p) return null; return { x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: parseFloat(p.style.width), h: parseFloat(p.style.height) } })()`)
+      if (at === null) throw new Error('shared-canvas scene: the relay scene left no relay panel to stand beneath')
+      const place = (id, kind, title, x, y, w, h, extra = {}) => ({ id, kind, title, owner: sh.sam, host: 'hostsam1', x, y, w, h, z: 50, ...extra })
+      const half = (at.w - 30) / 2
+      sh.state.view = {
+        shareId: sh.share, role: 'owner', seq: 1, rects: [], files: [],
+        placeholders: [
+          place('hostsam1_r1', 'relay', 'relay · shell', at.x, at.y + at.h + 30, half, 190, { relay: { session: 'samRelaySession000001', program: 'shell' } }),
+          place('hostsam1_n1', 'terminal', 'tests — api', at.x + half + 30, at.y + at.h + 30, half, 190)
+        ]
+      }
+      const samPresence = {
+        // The colour a real peer carries: derived from the user id (presence.ts colorOf), the same the placeholders read.
+        userId: sh.sam, displayName: 'sam', initials: 'S', color: colorOf(sh.sam), currentPanelId: null,
+        cursor: { x: at.x + half + 150, y: at.y + at.h + 150 }, viewport: null, selection: [], textCursor: null,
+        mode: 'canvas', agentStatus: 'working', statusLine: '', currentTask: 'Watchdog fires under load', observing: null, lastActivity: Date.now()
+      }
+      sh.state.roster = { workspaceId: wsId, connection: 'connected', peers: [{ clientId: 7, presence: samPresence, status: 'active', idleForMs: 0, live: true }] }
+      sh.state.on = true
+      k.wc.send(sh.events.CANVAS_SHARED, sh.state.view)
+      k.wc.send(sh.events.PRESENCE_REMOTE, sh.state.roster)
+      // The workspace rows reload on a palette open (Canvas.tsx), which is how
+      // the share becomes a row fact the share dialog below can read.
+      await k.press('k', { metaKey: true }); await sleep(300); await k.closePalette(); await sleep(300)
+      // Up by 110 screen px — the relay's header stays below the roster strip —
+      // over the empty ground at the canvas's left edge
+      // (a wheel over a panel would be the panel's).
+      const ground = await k.js(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(c.left + 40), y: Math.round(c.top + c.height / 2) } })()`)
+      k.wc.sendInputEvent({ type: 'mouseWheel', x: ground.x, y: ground.y, deltaX: 0, deltaY: -110 }); await sleep(500)
+      for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-shared-relay-attach]')`)); i++) await sleep(100)
+      if (!(await k.js(`!!document.querySelector('[data-shared-relay-attach]')`))) throw new Error('shared-canvas scene: sam\'s relay placeholder did not offer Attach')
+      await sleep(500)
+      await k.shot('shared-canvas')
+    } },
+  { name: 'share-members', intent: 'M337/M345. The share dialog on a workspace that IS shared, opened by its owner: the title `“api” is shared`, the owner\'s one-sentence role, and the Members list of the share\'s organization — `ada-lovelace (you)` as owner with no picker on themselves, `sam` with an Editor picker, `lin` with a Viewer picker and `octocat`, in the organization but not in the share, with the picker at Not in. One opaque card over a dimmed canvas; nothing changes until a person picks.',
+    run: async (k) => {
+      await k.press('k', { metaKey: true }); await sleep(400); await k.type('Share this workspace'); await sleep(400); await k.enter()
+      for (let i = 0; i < 40 && !(await k.js(`document.querySelectorAll('.share-dialog__member').length >= 4`)); i++) await sleep(100)
+      if (!(await k.js(`document.querySelectorAll('.share-dialog__member').length >= 4`))) throw new Error('share-members scene: the Members view did not list the organization')
+      await sleep(400)
+      await k.shot('share-members')
+      await k.press('Escape'); await sleep(300)
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'
@@ -1289,11 +1341,34 @@ app.whenReady().then(async () => {
     use: () => ({ kind: 'refused', reason: HARNESS_NO }),
     status: () => (shotAccount.on ? { configured: true } : { configured: false, reason: 'accounts are off in the harness' })
   }
+  // M345. A SHARED workspace, from the owner's seat — off until the last two
+  // scenes turn it on, like the account above. sam is a teammate on another
+  // Mac: two placeholders on the canvas (a relay terminal with a session, so
+  // it offers Attach, and a terminal), a peer in the presence roster (named,
+  // coloured, with a live cursor), and a member in the share's Members list.
+  // Nothing here opens a doc or reaches a network: the view and the roster
+  // are what main's canvas-sync and presence hub WOULD push, sent as those
+  // pushes (the rule the working Orchestrate scene follows for agent:state).
+  const SHOT_SHARE = '5ca1ab1e-0000-4000-8000-000000000345'
+  const SHOT_SAM = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  const shotShared = { on: false, view: null, roster: null }
+  const shotSharedMembers = [
+    { userId: SHOT_ME, login: 'ada-lovelace', role: 'owner', me: true },
+    { userId: SHOT_SAM, login: 'sam', role: 'editor', me: false },
+    { userId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', login: 'lin', role: 'viewer', me: false },
+    { userId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', login: 'octocat', role: null, me: false }
+  ]
   const shotPresence = {
     ...INERT_PRESENCE,
     team: async () => (shotAccount.on
       ? { kind: 'ok', me: SHOT_ME, org: SHOT_ORG, orgs: [SHOT_ORG, { id: '33333333-3333-3333-3333-333333333333', name: 'ada-lovelace' }], members: [], presence: [], activity: [] }
-      : { kind: 'refused', reason: 'the Team view is not wired in this build' })
+      : { kind: 'refused', reason: 'the Team view is not wired in this build' }),
+    rosters: () => (shotShared.on && shotShared.roster !== null ? [shotShared.roster] : []),
+    canvasView: () => (shotShared.on ? shotShared.view : null),
+    shareMembers: async (shareId) => (shotShared.on && shareId === SHOT_SHARE
+      ? { kind: 'ok', orgId: SHOT_ORG.id, members: shotSharedMembers }
+      : { kind: 'refused', reason: 'this share is not in the harness' }),
+    setShareMember: async () => ({ kind: 'refused', reason: 'the screenshot harness does not change roles' })
   }
   const SHOT_RELAY_SESSION = 'shotRelaySession0001'
   const SHOT_RELAY_SCREEN = 'ada@relay:~$ uptime\r\n 14:02:11 up 12 days,  3:41,  2 users,  load average: 0.08, 0.12, 0.09\r\nada@relay:~$ ls deploy\r\nCaddyfile  relay.env.example  setup.sh  tc-relay.service\r\nada@relay:~$ '
@@ -1475,6 +1550,8 @@ app.whenReady().then(async () => {
   const js = (code) => wc.executeJavaScript(code)
   const kit = {
     js,
+    // M345. The shared-workspace scenes turn the share on through these.
+    shared: { state: shotShared, store: layoutStore, share: SHOT_SHARE, sam: SHOT_SAM, org: SHOT_ORG, me: SHOT_ME, events: SHOT_EVENTS },
     // M149. The window's webContents, for the scenes that set a REAL
     // condition through the DevTools protocol (media, device scale).
     wc,
