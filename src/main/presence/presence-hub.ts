@@ -34,7 +34,7 @@ import {
 } from '../../shared/team'
 import {
   PRESENCE_FIELD, PRESENCE_HEARTBEAT_MS, colorOf, createPresenceTracker, foldAgentStatus, initialsOf, parsePresence,
-  type LocalPresence, type PanelAgentState, type PresencePayload, type PresenceRoster, type PresenceTracker, type RemotePeer
+  type LocalPresence, type PanelAgentState, type PresenceAgent, type PresencePayload, type PresenceRoster, type PresenceTracker, type RemotePeer, PRESENCE_AGENTS_MAX
 } from '../../shared/presence'
 
 export type PresenceConfigRead = { kind: 'ok'; url: string } | { kind: 'missing'; reason: string }
@@ -50,8 +50,12 @@ export interface PresenceConnection { destroy(): void }
 export interface PresenceHubDeps {
   config: () => PresenceConfigRead
   identity: () => Promise<PresenceIdentity>
-  /** Every open workspace and its panels — the layout store's list, read at each reconcile. */
-  workspaces: () => Array<{ id: string; panelIds: string[] }>
+  /**
+   * Every open workspace and its panels — the layout store's list, read at each
+   * reconcile. M349: `titles` names a panel for the roster when it runs an agent
+   * (scrubbed here before it is published).
+   */
+  workspaces: () => Array<{ id: string; panelIds: string[]; titles?: Record<string, string> }>
   connect: (req: {
     url: string
     name: string
@@ -131,6 +135,8 @@ interface Room {
   local: Omit<LocalPresence, 'workspaceId'>
   lastActivity: number
   panelIds: Set<string>
+  /** M349. Panel titles, for naming this room's agents on the roster. */
+  titles: Record<string, string>
   /** The last agent fold published, so an unrelated event does not republish. */
   agentKey: string
   /** The last snapshot this machine published into the doc (sans time), so an unchanged canvas is not re-sent. */
@@ -175,6 +181,19 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
   const foldFor = (room: Room): ReturnType<typeof foldAgentStatus> =>
     foldAgentStatus([...room.panelIds].map((id) => agentStates.get(id)).filter((s): s is PanelAgentState => s !== undefined))
 
+  /**
+   * M349. The room's agents as roster citizens: every panel here with an agent
+   * state, in canvas order, cut at PRESENCE_AGENTS_MAX. The name is the panel's
+   * title — the person's own words — so it goes through the outward gate's
+   * scrubber before it leaves, like the task title below.
+   */
+  const agentsFor = (room: Room): PresenceAgent[] =>
+    [...room.panelIds].filter((id) => agentStates.has(id)).slice(0, PRESENCE_AGENTS_MAX).map((id) => ({
+      id, name: redactSecrets(room.titles[id] || 'agent').text.slice(0, 60), status: agentStates.get(id) as PresenceAgent['status']
+    }))
+  const agentKeyOf = (room: Room, fold: ReturnType<typeof foldAgentStatus>): string =>
+    `${fold.agentStatus}|${fold.statusLine}|${agentsFor(room).map((a) => `${a.id}:${a.status}:${a.name}`).join(',')}`
+
   const payloadOf = (room: Room): PresencePayload | null => {
     if (identity === null) return null
     const { currentTask, textCursor, ...local } = room.local
@@ -190,7 +209,8 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
       // the outward gate's scrubber, before it is published.
       currentTask: redactSecrets(currentTask ?? '').text.slice(0, 140),
       observing: observer?.shared === room ? observer.req.userId : null,
-      lastActivity: room.lastActivity
+      lastActivity: room.lastActivity,
+      agents: agentsFor(room)
     }
   }
 
@@ -218,7 +238,9 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
   const observerPayload = (req: TeamObserveRequest): PresencePayload | null => identity === null ? null : ({
     userId: identity.userId, displayName: identity.displayName, initials: initialsOf(identity.displayName), color: colorOf(identity.userId),
     currentPanelId: null, cursor: null, viewport: null, selection: [], textCursor: null, mode: OBSERVING_MODE,
-    agentStatus: 'none', statusLine: 'observing (read-only)', currentTask: '', observing: req.userId, lastActivity: now()
+    agentStatus: 'none', statusLine: 'observing (read-only)', currentTask: '', observing: req.userId, lastActivity: now(),
+    // An observer runs nothing in the room it watches.
+    agents: []
   })
 
   const detach = (): void => {
@@ -327,7 +349,7 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
   const publish = (room: Room): void => {
     const payload = payloadOf(room)
     if (payload === null) return
-    room.agentKey = `${payload.agentStatus}|${payload.statusLine}`
+    room.agentKey = agentKeyOf(room, foldFor(room))
     room.awareness.setLocalStateField(PRESENCE_FIELD, payload)
   }
 
@@ -353,7 +375,7 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
     const tracker = createPresenceTracker()
     const room: Room = {
       id, name: docName(id), unbind: () => {}, doc, awareness, tracker, state: 'connecting', unsynced: 0, local: { ...EMPTY_LOCAL }, lastActivity: now(),
-      panelIds: new Set(panelIds), agentKey: '', snapshotKey: '', snapshotBusy: false,
+      panelIds: new Set(panelIds), titles: deps.workspaces().find((w) => w.id === id)?.titles ?? {}, agentKey: '', snapshotKey: '', snapshotBusy: false,
       connection: { destroy() {} }
     }
     rooms.set(id, room)
@@ -432,6 +454,7 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
       if (room !== undefined && room.name !== docName(w.id)) { close(room); room = undefined }
       if (room === undefined) { open(w.id, w.panelIds); continue }
       room.panelIds = new Set(w.panelIds)
+      room.titles = w.titles ?? {}
     }
   }
 
@@ -449,7 +472,7 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
     for (const room of rooms.values()) {
       if (!room.panelIds.has(panelId)) continue
       const fold = foldFor(room)
-      if (`${fold.agentStatus}|${fold.statusLine}` !== room.agentKey) publish(room)
+      if (agentKeyOf(room, fold) !== room.agentKey) publish(room)
     }
   }
 

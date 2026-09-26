@@ -9584,7 +9584,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 .sync-chip[data-sync-chip='disconnected'], .sync-chip[data-sync-chip='off'] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line-strong)); }
 .roster-strip {
-  display: flex; gap: var(--sp-2); margin: 0; padding: var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: var(--sp-2);
   list-style: none; border: 1px solid var(--line-strong); border-radius: var(--r-lg);
   background: var(--s-1);
 }
@@ -9598,6 +9598,20 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 .roster-strip__cell[data-state="idle"] { background: color-mix(in srgb, var(--peer) 40%, var(--s-1)); }
 .roster-strip__cell[data-state="away"] { background: transparent; color: var(--fg-3); }
+/* M349. A person's agent, beside them: a CIRCLE ringed (never filled) in the
+   owner's colour, with the agent's own state as the tone of its text. The
+   shape is what says "agent": a person is a rounded square, and an away
+   person is ALSO drawn as a dashed ring (M348), so an outline alone could not
+   tell the two apart (the M349 critic). It takes the strip's whole gap: the
+   owner's presence dot overhangs their tile's corner towards it. */
+.roster-strip__agent-cell {
+  --peer: var(--fg-4);
+  display: grid; place-items: center; width: 20px; height: 20px;
+  border: 1px dashed var(--peer); border-radius: var(--r-full);
+  background: var(--s-1); color: var(--fg-2);
+  font: 600 var(--t-xs)/1 var(--font-ui); cursor: default;
+}
+.roster-strip__agent-cell[data-tone] { color: var(--tone); }
 /* M348. Away must READ as away: a dashed, desaturated ring, not the person's
    full colour (the shared-offline critic read the plain outline as present). */
 .roster-strip__cell[data-state="away"] { border-style: dashed; border-color: color-mix(in srgb, var(--peer) 40%, var(--line-strong)); }

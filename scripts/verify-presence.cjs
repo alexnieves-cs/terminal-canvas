@@ -105,7 +105,7 @@ const tick = () => new Promise((r) => setImmediate(r))
     // currentTask and observing joined with the Team view (verify:team pins what they carry);
     // textCursor with shared text (verify:canvas-sync text.caret.1).
     ok('presence.payload.1 the payload carries exactly the named fields',
-      JSON.stringify(keys) === JSON.stringify(['agentStatus', 'color', 'currentPanelId', 'currentTask', 'cursor', 'displayName', 'initials', 'lastActivity', 'mode', 'observing', 'selection', 'statusLine', 'textCursor', 'userId', 'viewport']), JSON.stringify(keys))
+      JSON.stringify(keys) === JSON.stringify(['agentStatus', 'agents', 'color', 'currentPanelId', 'currentTask', 'cursor', 'displayName', 'initials', 'lastActivity', 'mode', 'observing', 'selection', 'statusLine', 'textCursor', 'userId', 'viewport']), JSON.stringify(keys))
     ok('presence.payload.2 a local report reaches the peer at once, not at the next beat',
       peerA?.presence.cursor?.x === 10 && peerA.presence.selection[0] === 'p2' && peerA.presence.currentPanelId === 'p1')
     ok('presence.payload.3 initials and colour are derived, stable per userId',
@@ -262,6 +262,42 @@ const tick = () => new Promise((r) => setImmediate(r))
       /onUnsyncedChanges: \(\{ number \}\) => \{ onUnsynced\?\.\(number\) \}/.test(provider) &&
       /<SyncChip workspaceId=\{activeWorkspaceId\} shared=\{shared\.view !== null\} \/>/.test(canvas))
     c.h.stop()
+  }
+
+  // ── M349: a person's agents are roster citizens ─────────────────────────
+  {
+    const clock = { t: 7_000_000 }
+    const relay = createRelay()
+    const SECRET = 'ghp_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'
+    const ws = [{ id: 'w1', panelIds: ['c1', 'c2', 't3'], titles: { c1: 'claude — tests', c2: `fix with ${SECRET}` } }]
+    const f = hub(relay, { clock, userId: 'user-f', name: 'fay', workspaces: ws })
+    const g = hub(relay, { clock, userId: 'user-g', name: 'gil' })
+    await f.h.start(); await g.h.start(); await tick()
+    f.h.agentEvent({ id: 'c1', type: 'status', status: 'streaming' })
+    f.h.agentEvent({ id: 'c2', type: 'status', status: 'idle' })
+    await tick()
+    const seen = g.last()?.peers.find((p) => p.presence.userId === 'user-f')?.presence.agents ?? []
+    ok('agents.payload.1 a person\'s agents ride their payload as WHOs — each panel with an agent, named by its title, with its own state — and a title leaves through the scrubber',
+      seen.length === 2 && seen[0].id === 'c1' && seen[0].name === 'claude — tests' && seen[0].status === 'working' &&
+      seen[1].status === 'idle' && !seen[1].name.includes(SECRET) && /\[redacted/.test(seen[1].name), JSON.stringify(seen))
+    const before = g.emitted.length
+    // The fold stays `working` (c1 still works) — only c2's own state moves.
+    f.h.agentEvent({ id: 'c2', type: 'status', status: 'streaming' })
+    await tick()
+    const after = g.last()?.peers.find((p) => p.presence.userId === 'user-f')?.presence.agents ?? []
+    ok('agents.payload.2 one agent\'s change is published even when the owner\'s folded status does not change (two agents working reads the same fold as one)',
+      g.emitted.length > before && after.find((a) => a.id === 'c2')?.status === 'working', JSON.stringify(after))
+    const parsed = P.parsePresence({ userId: 'u', displayName: 'U', agents: [
+      ...Array.from({ length: 20 }, (_, i) => ({ id: `a${i}`, name: 'x'.repeat(200), status: 'working' })),
+      { id: '', name: 'bad', status: 'working' }, { id: 'z', name: 'bad', status: 'none' }, 'not an object'] })
+    ok('agents.parse.1 a received agent list is bounded: at most PRESENCE_AGENTS_MAX, names capped, a malformed or status-less entry dropped (never the whole payload)',
+      parsed?.agents.length === P.PRESENCE_AGENTS_MAX && parsed.agents.every((a) => a.name.length <= 60) && P.parsePresence({ userId: 'u', displayName: 'U', agents: 'nope' })?.agents.length === 0,
+      JSON.stringify({ n: parsed?.agents.length }))
+    const { readFileSync: rf } = require('node:fs')
+    const strip = rf(join(root, 'src/renderer/presence/RosterStrip.tsx'), 'utf8')
+    ok('agents.strip.1 the roster strip draws each live peer\'s agents beside them, named with whose they are and what they are doing, and none for an away peer',
+      /state !== 'away' && p\.presence\.agents\.map/.test(strip) && /data-roster-agent=\{a\.id\}/.test(strip) && /'s agent, \$\{agentWord\(AGENT_STATE\[a\.status\]\)\.word\}/.test(strip))
+    f.h.stop(); g.h.stop()
   }
 
   const failures = results.filter((r) => !r.pass)

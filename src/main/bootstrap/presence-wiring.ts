@@ -26,7 +26,17 @@ export function createPresenceWiring(state: MainState, stores: Stores, account: 
   return createPresenceHub({
     config: () => readPresenceConfig(process.env, state.loginEnv),
     identity: () => account.presenceIdentity(),
-    workspaces: () => stores.layoutStore.workspaces().map((w) => ({ id: w.id, panelIds: w.panelIds })),
+    // M349. With each panel's title, so the roster names a person's agents by
+    // their panels (the hub scrubs a title before it is published).
+    workspaces: () => {
+      const records = stores.layoutStore.current().workspaces
+      return stores.layoutStore.workspaces().map((w) => {
+        const ws = records.find((r) => r.id === w.id)
+        const titles: Record<string, string> = {}
+        for (const p of ws?.panels ?? []) if (typeof p.title === 'string' && p.title !== '') titles[p.id] = p.title
+        return { id: w.id, panelIds: w.panelIds, titles }
+      })
+    },
     connect: hocuspocusConnect,
     // A shared workspace meets its teammates' copies under the SHARE's id;
     // an unshared one keeps its per-machine room, for presence only.

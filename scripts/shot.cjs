@@ -943,7 +943,7 @@ const SCENES = [
       await sleep(600)
       await k.shot('relay')
     } },
-  { name: 'shared-canvas', intent: 'M343–M345. A SHARED workspace from its owner\'s seat, with a teammate (sam) working in it from another Mac. The roster strip shows sam in sam\'s colour, and sam\'s cursor sits on the canvas with a name tag. Beneath the owner\'s own relay terminal, two of sam\'s panels stand as inert placeholders, each header wearing sam\'s colour and name: sam\'s RELAY terminal reads `sam\'s terminal on the team relay · shell` and offers Attach (the session id crossed the doc; the relay still decides by role), and sam\'s terminal reads `Terminal on sam\'s machine — nothing runs here`. Nothing of sam\'s runs here, and nothing is started by showing it. DISCLOSED: the view and the roster are the pushes main\'s canvas-sync and presence hub would send, sent as those pushes — no doc and no network in the harness.',
+  { name: 'shared-canvas', intent: 'M343–M345. A SHARED workspace from its owner\'s seat, with a teammate (sam) working in it from another Mac. The roster strip shows sam in sam\'s colour, and (M349) sam\'s one agent beside sam as a smaller CIRCLE of its own (people are rounded squares): a dashed ring in sam\'s colour, never filled (a filled tile is a person), its initial in the working tone, named in full on hover (`claude — tests — sam\'s agent, working`). sam\'s cursor sits on the canvas with a name tag. Beneath the owner\'s own relay terminal, two of sam\'s panels stand as inert placeholders, each header wearing sam\'s colour and name: sam\'s RELAY terminal reads `sam\'s terminal on the team relay · shell` and offers Attach (the session id crossed the doc; the relay still decides by role), and sam\'s terminal reads `Terminal on sam\'s machine — nothing runs here`. Nothing of sam\'s runs here, and nothing is started by showing it. DISCLOSED: the view and the roster are the pushes main\'s canvas-sync and presence hub would send, sent as those pushes — no doc and no network in the harness.',
     run: async (k) => {
       const sh = k.shared
       const wsId = sh.store.current().activeWorkspaceId
@@ -967,7 +967,9 @@ const SCENES = [
         // The colour a real peer carries: derived from the user id (presence.ts colorOf), the same the placeholders read.
         userId: sh.sam, displayName: 'sam', initials: 'S', color: colorOf(sh.sam), currentPanelId: null,
         cursor: { x: at.x + half + 150, y: at.y + at.h + 130 }, viewport: null, selection: [], textCursor: null,
-        mode: 'canvas', agentStatus: 'working', statusLine: '', currentTask: 'Watchdog fires under load', observing: null, lastActivity: Date.now()
+        mode: 'canvas', agentStatus: 'working', statusLine: '', currentTask: 'Watchdog fires under load', observing: null, lastActivity: Date.now(),
+        // M349. sam's agent, as sam's machine publishes it: the panel's id, its scrubbed title, its state.
+        agents: [{ id: 'n7', name: 'claude — tests', status: 'working' }]
       }
       sh.state.roster = { workspaceId: wsId, connection: 'connected', peers: [{ clientId: 7, presence: samPresence, status: 'active', idleForMs: 0, live: true }] }
       sh.state.on = true
@@ -1002,7 +1004,7 @@ const SCENES = [
       await k.click('.share-dialog__foot .share-dialog__btn'); await sleep(400)
       if (await k.js(`!!document.querySelector('.share-dialog__card')`)) throw new Error('share-members scene: the dialog did not close')
     } },
-  { name: 'shared-offline', intent: 'M348. The same shared workspace with its collab server gone: under the roster strip (sam, as before), one amber chip says `Offline — 3 changes waiting to sync` — the provider\'s own count of edits the server has not acknowledged. sam\'s tile dims and sam\'s cursor is gone: offline, this seat cannot know where sam is. The canvas stays editable, sam\'s placeholders stay where they were, and nothing claims the changes are lost (main keeps them; they go when the server is back). DISCLOSED: the roster is the push main\'s presence hub would send for a disconnected room, sent as that push.',
+  { name: 'shared-offline', intent: 'M348. The same shared workspace with its collab server gone: under the roster strip (sam, as before), one amber chip says `Offline — 3 changes waiting to sync` — the provider\'s own count of edits the server has not acknowledged. sam\'s tile dims, and sam\'s cursor and sam\'s agent tile are gone: offline, this seat cannot know where sam is or what sam\'s agents are doing. The canvas stays editable, sam\'s placeholders stay where they were, and nothing claims the changes are lost (main keeps them; they go when the server is back). DISCLOSED: the roster is the push main\'s presence hub would send for a disconnected room, sent as that push.',
     run: async (k) => {
       const sh = k.shared
       // What the hub sends for a disconnected room (M348): the count, and every

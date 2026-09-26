@@ -47,9 +47,26 @@ export interface PresencePayload {
   observing: string | null
   /** The publisher's own clock, ms. NEVER compared against a receiver's clock — see `PresenceTracker`. */
   lastActivity: number
+  /** M349. This person's agents in the room, in canvas order, at most PRESENCE_AGENTS_MAX. */
+  agents: PresenceAgent[]
 }
 
 export type AgentPresenceStatus = 'none' | 'idle' | 'working' | 'needs-you' | 'error'
+
+/**
+ * M349. One of a person's agents, as the people in the room see it — a WHO on
+ * the roster beside its owner, not only a fold into the owner's status. Only
+ * what the roster needs crosses: the panel's id on its owner's machine, a
+ * scrubbed short name (the panel's title, through redactSecrets in the hub),
+ * and its state. No command, cwd or transcript.
+ */
+export interface PresenceAgent {
+  id: string
+  name: string
+  status: Exclude<AgentPresenceStatus, 'none'>
+}
+/** At most this many of a person's agents ride their payload (the hub keeps the first, in canvas order). */
+export const PRESENCE_AGENTS_MAX = 12
 
 export interface TextCursor { file: string; anchor: string; head: string }
 
@@ -204,8 +221,24 @@ export function parsePresence(raw: unknown): PresencePayload | undefined {
     statusLine: str(r['statusLine'], 140) ?? '',
     currentTask: str(r['currentTask'], 140) ?? '',
     observing: str(r['observing'], 128) ?? null,
-    lastActivity: finite(r['lastActivity']) ? r['lastActivity'] : 0
+    lastActivity: finite(r['lastActivity']) ? r['lastActivity'] : 0,
+    agents: parseAgents(r['agents'])
   }
+}
+
+/** M349. Bounded like the rest of the payload: at most PRESENCE_AGENTS_MAX, each field capped, a bad entry dropped (never the whole payload). */
+function parseAgents(raw: unknown): PresenceAgent[] {
+  if (!Array.isArray(raw)) return []
+  const out: PresenceAgent[] = []
+  for (const a of raw.slice(0, PRESENCE_AGENTS_MAX)) {
+    const r = a as Record<string, unknown> | null
+    if (r === null || typeof r !== 'object') continue
+    const id = str(r['id'], 64), name = str(r['name'], 60)
+    const status = r['status']
+    if (id === undefined || id === '' || name === undefined || typeof status !== 'string' || status === 'none' || !AGENT_STATUSES.includes(status as AgentPresenceStatus)) continue
+    out.push({ id, name, status: status as PresenceAgent['status'] })
+  }
+  return out
 }
 
 /**
