@@ -3909,9 +3909,9 @@ try {
   const capItem = capped.items.find((i) => i.panelId === 'c')
   ok('inbox.cap.1 a held chat is a cap decision in the hold\'s own words with whose cap it is as context, keyed like the panel\'s question; a held agent\'s pending question is still a permission first',
     capItem.kind === 'cap' && capItem.key === 'q:c' && capItem.blocker === 'is held at its own $2.00 spend cap ($2.10 reported)' &&
-      /own cap — raise it on its Work tab/.test(capItem.context) && capItem.hold.limit === 2 &&
+      capItem.context === 'this agent\'s own cap' && capItem.hold.limit === 2 &&
       capped.items.find((i) => i.panelId === 'b').kind === 'permission' && capped.items.find((i) => i.panelId === 'a').kind === 'question' &&
-      I.buildInbox({ now: 1, rows: [rows[2]], approvals: [], holds: [{ id: 'c', held: { unit: 'context', spent: 160000, limit: 150000 } }], kindOf: () => 'chat' }).items[0].context.includes('agents.nodeCapContextK'),
+      I.buildInbox({ now: 1, rows: [rows[2]], approvals: [], holds: [{ id: 'c', held: { unit: 'context', spent: 160000, limit: 150000 } }], kindOf: () => 'chat' }).items[0].context === 'Settings cap · agents.nodeCapContextK',
     JSON.stringify(capped.items.map((i) => [i.panelId, i.kind, i.blocker, i.context])))
 }
 

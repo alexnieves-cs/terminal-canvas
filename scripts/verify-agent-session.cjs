@@ -1404,6 +1404,25 @@ const isResult = (l) => l.includes('"type":"result"')
           bad.kind === 'refused' && /lots is not a cap/.test(bad.reason) && tooBig.kind === 'refused' && twice.kind === 'refused' && clash.kind === 'refused',
         JSON.stringify({ both, dollar, raise, lower, doorUp, doorZero, doorNone, doorUncapped, none, clear, resetOne, bad, tooBig, twice, clash }))
     }
+    // M357 — allow.more.1. The queue's "Allow more" is a cap-agent value a
+    //      PERSON sends, counted from what the agent reached, so one click
+    //      releases the hold it was offered for; past the verb's range it is
+    //      not offered at all.
+    {
+      const A = M.sharedSession.allowMore
+      const usd = A({ unit: 'usd', spent: 2.1, limit: 2 })
+      const ctx = A({ unit: 'context', spent: 160000, limit: 150000, own: true })
+      const small = A({ unit: 'context', spent: 21000, limit: 20000 })
+      const setUsd = M.sharedSession.planCapChange(undefined, usd.value, 'person', { usd: 2, context: 0 })
+      const setCtx = M.sharedSession.planCapChange({ contextK: 150 }, ctx.value, 'person', { usd: 0, context: 150000 })
+      const releases = M.sharedSession.capCrossing({ spentUsd: 2.1 }, { usd: setUsd.caps.usd, context: 0 }) === null &&
+        M.sharedSession.capCrossing({ context: 160000 }, { usd: 0, context: setCtx.caps.contextK * 1000 }) === null
+      ok('allow.more.1 "Allow more" is the same allowance again from what the agent reached ($2.00 more at $2.10 is a $4.10 cap; a quarter of a 150k context cap in 5k steps), the verb takes it as a person, it releases the hold, and past the verb\'s range nothing is offered',
+        usd.value === '4.10usd' && usd.words === 'Allow $2.00 more' && ctx.value === '200k' && ctx.words === 'Allow 40k more' &&
+          small.words === 'Allow 10k more' && setUsd.kind === 'set' && setUsd.caps.usd === 4.1 && setCtx.kind === 'set' && setCtx.caps.contextK === 200 &&
+          releases && A({ unit: 'usd', spent: 600, limit: 500 }) === null && A({ unit: 'context', spent: 1900000, limit: 1900000 }) === null,
+        JSON.stringify({ usd, ctx, small, setUsd, setCtx, releases }))
+    }
     // M354 — cap.carry.1. A relaunch re-creates every chat by id, and its
     //      meter picks up from the panel's own log through a REAL file round
     //      trip. The spend is the runtime's carried field, never `costUsd`

@@ -9051,6 +9051,11 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .inbox__unblocks { color: var(--iris); font-weight: 600; }
 .inbox__group-verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .inbox__snooze { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); }
+/* M357. A hold's two answers sit on the row's own indent, on one line with
+   Snooze: the approval's group verbs (whose top margin they borrow nothing
+   from) live inside the request's detail, these live in the row. */
+.inbox__hold-verbs { margin-top: 0; align-items: center; padding: 0 0 var(--sp-2) calc(var(--sp-3) + 14px); }
+.inbox__hold-verbs + .inbox__snooze { padding-left: var(--sp-2); }
 .inbox__snooze-label { font-size: var(--t-xs); color: var(--fg-3); }
 .inbox__snoozed { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); }
 .inbox__snoozed .rail-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); }

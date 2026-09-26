@@ -304,6 +304,28 @@ export function holdWords(hold: CapHold): string {
 }
 
 /**
+ * M357. The decision queue's "Allow more" for a hold, as a `cap-agent` value
+ * a PERSON sends: the same allowance again, counted from what the agent has
+ * already reached. A $2.00 spend cap at $2.10 reported allows $2.00 more, so
+ * the agent's own cap becomes $4.10. A context hold gets a quarter of its cap
+ * (at least 10k, in steps of 5k) more. It sets the agent's OWN cap even when the Settings cap
+ * held it, because the decision is about this one agent. Null when the new
+ * figure would pass the verb's own range, and then no button offers it.
+ */
+export function allowMore(hold: CapHold): { value: string; words: string } | null {
+  if (hold.unit === 'usd') {
+    const cap = Math.ceil((hold.spent + hold.limit) * 100) / 100
+    if (cap > CAP_USD_MAX) return null
+    return { value: `${cap.toFixed(2)}usd`, words: `Allow $${hold.limit.toFixed(2)} more` }
+  }
+  // In steps of 5k, so a button reads "40k more", never "38k more".
+  const moreK = Math.max(10, Math.round(hold.limit / 20000) * 5)
+  const capK = Math.ceil(hold.spent / 1000) + moreK
+  if (capK > CAP_CONTEXT_K_MAX) return null
+  return { value: `${capK}k`, words: `Allow ${moreK}k more` }
+}
+
+/**
  * M322. One message waiting behind the turn in flight, as a person sees it:
  * the text (editable while it waits), its images by type and size (never the
  * bytes), and why it waits. `turnId` is its identity — the stored user turn

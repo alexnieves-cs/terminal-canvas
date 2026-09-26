@@ -7995,6 +7995,9 @@ export function Canvas({
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={goToPanelOrRequest}
         onAnswer={paletteActions.answerApproval}
+        // M357. A hold's answers: the verb as a person (a refusal says why), and main's terminate.
+        onAllowMore={(id, value) => { const r = paletteActions.capAgent(id, value, 'person'); if (r.kind === 'refused') notifyRefused(r.reason) }}
+        onStopAgent={(id) => { void window.canvas.agentSession.terminate(id) }}
         attentionFocus={chrome.attentionFocus}
         taskTitleOf={approvalTaskOf}
         inbox={inbox}

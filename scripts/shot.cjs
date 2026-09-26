@@ -1090,6 +1090,37 @@ const SCENES = [
       // The cap cleared through the same door, so the store the harness leaves holds no cap.
       await fill('[data-caps-input="usd"]', ''); await k.click('[data-caps-set]'); meter({}); await sleep(300)
     } },
+  { name: 'queue-hold', intent: 'M355/M357. The Needs you popover with an agent main HOLDS at the spend cap every agent shares: the conversation\'s row is a hold, not a question — it reads that the agent is held at its $2.00 spend cap ($2.10 reported) — with whose cap it is as its context (`Settings cap · agents.nodeCapUsd`), its task group saying the task is stopped on it with `Raise … cap` as the next step, how long it has waited, what raising it affects, and its two answers beside Snooze: `Allow $2.00 more` and a red-outlined `Stop`. KNOWN, owed as M367: the Inspector\'s header and the resume card still word this needs-you as a question ("needs you at its keyboard — open it to answer"), because M199\'s blocker vocabulary has no hold yet; the earlier `Before the restart` row is the fixture\'s own lost decision from the scenes before. DISCLOSED: the hold is the meter main\'s agent runtime sends when a result crosses the cap, and the `wants-you` its approval tracker says for it, sent as those two pushes. The scene then CLICKS `Allow $2.00 more`, which runs the real cap-agent verb as a person, and asserts that the agent\'s own cap on its record became $4.10 (the Work tab\'s Spend cap field reads it); the shot is taken before the click.',
+    run: async (k) => {
+      const meter = (m) => k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'meter', meter: m })
+      const fill = (sel, text) => k.js(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); if (!i) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(text)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+      // After inspector-caps, from its state: the chat selected, its own cap
+      // cleared. What main sends when a result crosses the SETTINGS cap: the
+      // meter with the hold, and its tracker's wants-you (M355).
+      meter({ spentUsd: 2.1, context: 118000, held: { unit: 'usd', spent: 2.1, limit: 2 }, caps: { usd: 2, context: 0, ownUsd: false, ownContext: false } })
+      k.wc.send('agent:state', { panelId: 'chat', state: 'wants-you' })
+      await sleep(400)
+      await k.dock('attention'); await sleep(600)
+      const read = async () => JSON.parse(await k.js(`(() => { const r = document.querySelector('[data-rail-attention="chat"]'); return JSON.stringify(r === null ? null : { kind: r.getAttribute('data-inbox-kind'), blocker: r.querySelector('.inbox__blocker')?.textContent ?? '', allow: r.querySelector('[data-inbox-allow-more]')?.textContent ?? '', stop: r.querySelector('[data-inbox-stop]') !== null }) })()`))
+      const row = await read()
+      if (row === null || row.kind !== 'cap' || row.blocker !== 'is held at its $2.00 spend cap ($2.10 reported)' || row.allow !== 'Allow $2.00 more' || !row.stop) throw new Error(`queue-hold scene: the row reads ${JSON.stringify(row)}`)
+      await k.shot('queue-hold')
+      // The click-through: the queue's Allow runs the REAL cap-agent verb as a
+      // person, which writes the agent's own cap on its chat's record. The
+      // Work tab's Spend cap field reads that record, so it must say 4.10.
+      // (Main re-reading the save and releasing the hold is M351's
+      // `verify:agent-session cap.changed.1`: this harness's main has no caps
+      // dependency to re-read, and mirroring bootstrap's here would test a copy.)
+      await k.click('[data-inbox-allow-more="chat"]')
+      let own = ''
+      for (let i = 0; i < 40 && !/^4\.10?$/.test(own); i++) { await sleep(100); own = await k.js(`document.querySelector('[data-caps-input="usd"]')?.value ?? ''`) }
+      if (!/^4\.10?$/.test(own)) throw new Error(`queue-hold scene: Allow did not write the agent's own $4.10 cap — the Spend cap field reads ${JSON.stringify(own)}`)
+      // Cleared as the scene above clears it, so the store holds no cap.
+      k.wc.send('agent:state', { panelId: 'chat', state: 'idle' })
+      await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
+      await fill('[data-caps-input="usd"]', ''); await k.click('[data-caps-set]'); meter({}); await sleep(300)
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'

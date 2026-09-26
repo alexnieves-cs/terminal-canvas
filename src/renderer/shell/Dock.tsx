@@ -12,6 +12,7 @@ import { useApprovalOutcomes } from './approval-outcome'
 import { SNOOZE_CHOICES, waitedWords, type Inbox, type InboxItem } from './decision-inbox'
 import { snoozeDecision, wakeDecision } from './useDecisionInbox'
 import { outward } from '@shared/outward'
+import { allowMore } from '@shared/agent-session'
 import { stepCursor, traversalOrder, type QueueDecision, type QueueEvidence, type TaskGroup, type TaskQueue } from './task-queue'
 import { dismissLost, setQueueCursor, useQueueCursor } from './useTaskQueue'
 import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
@@ -36,6 +37,10 @@ export interface DockProps {
   onGoToPanel: (id: string) => void
   /** M76. Answer a chat's pending request from the popover, without going to it. `scope` is M98's session grant. */
   onAnswer: (id: string, requestId: string, allow: boolean, scope?: 'session') => void
+  /** M357. A held agent's "Allow more": the `cap-agent` verb as a person, with `allowMore`'s value. */
+  onAllowMore?: (id: string, value: string) => void
+  /** M357. A held agent's "Stop": its process ends; the conversation and main's hold stay. */
+  onStopAgent?: (id: string) => void
   /**
    * #16. The request a navigation shortcut (the inspector's "Review request")
    * opened the queue on — expanded in place of the default, which is the
@@ -97,7 +102,7 @@ function flatQueue(q: TaskQueue): boolean {
 
 function DockImpl({
   navigator, navVisible, onChoose, centerView, onSetCenterView,
-  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onFocusTask, onSettings,
+  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onAllowMore, onStopAgent, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onFocusTask, onSettings,
   expanded, onToggleExpanded
 }: DockProps): JSX.Element {
   // M318. KEYBOARD TRAVERSAL — decision → evidence → back. The cursor is the
@@ -320,6 +325,29 @@ function DockImpl({
                           )}
                         </div>
                     )}
+                    {/* M357. A hold's two answers, HERE. Allow grants the same
+                        allowance again through the cap-agent verb, as a person;
+                        Stop ends the agent's process, and its conversation and
+                        main's hold stay. Leaving it is an answer too: a held
+                        agent spends nothing, and Snooze puts the row off. */}
+                    {item.kind === 'cap' && item.hold !== undefined && (() => {
+                      const more = allowMore(item.hold)
+                      if ((onAllowMore === undefined || more === null) && onStopAgent === undefined) return null
+                      return (
+                        <div className="inbox__group-verbs inbox__hold-verbs" data-inbox-hold={row.id}>
+                          {onAllowMore !== undefined && more !== null && (
+                            <button type="button" className="approval__verb" data-inbox-allow-more={row.id}
+                              title={`${more.words}: sets ${row.label}'s own cap (cap-agent ${more.value}), and what it kept waiting goes first`}
+                              {...shellControl(() => onAllowMore(row.id, more.value))}>{more.words}</button>
+                          )}
+                          {onStopAgent !== undefined && (
+                            <button type="button" className="approval__verb approval__verb--deny" data-inbox-stop={row.id}
+                              title={`End ${row.label}'s process. The conversation and its hold stay, and it resumes once the cap is raised`}
+                              {...shellControl(() => onStopAgent(row.id))}>Stop</button>
+                          )}
+                        </div>
+                      )
+                    })()}
                     {/* M308. Put a decision off — until a time, never forever. */}
                     {inbox !== undefined && (
                       <div className="inbox__snooze" data-inbox-snooze={item.key}>

@@ -172,7 +172,8 @@ export function buildInbox(input: InboxInput): Inbox {
         moreFromPanel: 0,
         ...(task === undefined ? {} : { task }),
         blocker: holdWords(hold),
-        context: hold.own === true ? 'this agent\'s own cap — raise it on its Work tab, or end the agent' : `the Settings cap every agent shares — ${hold.unit === 'usd' ? 'agents.nodeCapUsd' : 'agents.nodeCapContextK'}, or this agent's own cap on its Work tab`,
+        // M357. Whose cap, in a line that fits: the row's own Allow is where it is raised now.
+        context: hold.own === true ? 'this agent\'s own cap' : `Settings cap · ${hold.unit === 'usd' ? 'agents.nodeCapUsd' : 'agents.nodeCapContextK'}`,
         since, unblocks
       })
       return
