@@ -4,7 +4,7 @@ import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
 import { isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
-  isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, type Panel } from './panels'
+  isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, isRelayPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -107,6 +107,9 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // M103. The browser pane: one field, copied by name.
     // M185/M195. An ABSENT device and an ABSENT preview binding stay absent through both copy sites — a spread writing `device: undefined` survives IPC and reads as present.
     if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url, ...(p.device === undefined ? {} : { device: p.device }), ...(p.preview === undefined ? {} : { preview: p.preview }) }
+    // M338. Copied field by field, absent staying absent — a restored relay
+    // panel re-attaches by sessionId and must never fall through to terminal.
+    if (p.kind === 'relay') return { ...base, kind: 'relay' as const, relay: { program: p.relay.program, ...(p.relay.sessionId === undefined ? {} : { sessionId: p.relay.sessionId }), ...(p.relay.shareId === undefined ? {} : { shareId: p.relay.shareId }) } }
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
     // M181. The image panel: one field, copied by name.
@@ -212,6 +215,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     }
     // M103. Same no-cwd/no-args rule as every branch above.
     if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url, ...(panel.device === undefined ? {} : { device: panel.device }), ...(panel.preview === undefined ? {} : { preview: panel.preview }) }
+    if (isRelayPanel(panel)) return { ...base, kind: 'relay' as const, relay: { program: panel.relay.program, ...(panel.relay.sessionId === undefined ? {} : { sessionId: panel.relay.sessionId }), ...(panel.relay.shareId === undefined ? {} : { shareId: panel.relay.shareId }) } }
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
     // M181. Same rule; the path is the record's whole identity.

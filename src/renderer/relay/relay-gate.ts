@@ -14,6 +14,7 @@
  *           the relay would refuse is never drawn.
  */
 import type { RelayView } from '@shared/ipc-contract'
+import type { RelayOpen } from './relay-terminal'
 
 export const relayMayType = (view: RelayView | null): boolean => view !== null && view.canType
 
@@ -57,4 +58,20 @@ export function relayControlLine(view: RelayView | null, nameOf: (userId: string
   if (c.controllerId === null) return `Nobody is in control${reconnecting}`
   if (c.controllerId === view.userId) return `You are in control${reconnecting}`
   return `${nameOf(c.controllerId)} is in control${reconnecting}`
+}
+
+/**
+ * M338. How a relay PANEL opens: a recorded session is ATTACHED — a relaunch
+ * must never start a second process — and only a panel with none spawns its
+ * program, bound to its share when it has one.
+ */
+export function relayOpenOf(panel: { relay: { program: string; sessionId?: string; shareId?: string } }): RelayOpen {
+  return panel.relay.sessionId !== undefined
+    ? { kind: 'attach', sessionId: panel.relay.sessionId }
+    : { kind: 'spawn', program: panel.relay.program, ...(panel.relay.shareId === undefined ? {} : { shareId: panel.relay.shareId }) }
+}
+
+/** M338. Whether the header offers a fresh session: the old one ended, or the relay refused the attach by name. */
+export function relayMayRestart(view: RelayView | null): boolean {
+  return view !== null && (view.exited || (view.connection === 'closed' && view.reason !== null))
 }

@@ -373,11 +373,13 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        credential:list / credential:set / credential:delete
                        credential:verify
                        auth:login / auth:logout / auth:sessions
+                       auth:use / auth:status
                        presence:local / presence:rosters
                        team:list / team:observe
                        canvas:op / canvas:shared-view
                        workspace:share / workspace:shares
                        workspace:open-share / workspace:share-member
+                       workspace:share-members
                        text:open / text:close / text:update
                        relay:spawn / relay:attach / relay:detach / relay:input
                        relay:resize / relay:control / relay:kill / relay:list / relay:view
@@ -440,6 +442,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        settings:changed / spawn:open-sheet
                        agent:event (batched ~16ms) / watcher:state / vault:changed
                        presence:remote / team:observed / canvas:shared
+                       auth:changed
                        text:remote
                        relay:data / relay:state
                        routine:fire
@@ -1135,6 +1138,9 @@ price of not killing something.
 | M333 | The shared canvas: a workspace shared into an organization with owner / editor / viewer roles, its panels and groups as per-field last-writer-wins maps with tombstones, gestures written through as they happen, teammates' panels as inert placeholders, agent activity in its owner's colour, roles enforced in the renderer, main and `server/collab` (`canvas:op`, `workspace:share*`). [Ledger](docs/build-log/m330-m335-collaboration.md). |
 | M334 | Shared text: one Y.Text per shared file panel, bound through y-monaco on a renderer replica whose every update main re-judges, teammates' carets from presence, the disk still the owner's (`text:*`). [Ledger](docs/build-log/m330-m335-collaboration.md). |
 | M335 | The pty relay: a terminal on the team's VM that several people attach to and one controls at a time, the token in main and in the subprotocol list, spawning by allowlist, attaching by the share's role, a replay ring with per-viewer backpressure, every hand-off audited (`relay:*`); not yet deployed and not yet a panel kind. [Ledger](docs/build-log/m330-m335-collaboration.md). |
+| M336 | The account picker: the top bar's account menu (initials, or Sign in), every account on this Mac as a radio set whose checked one is the account every door acts as, kept in `userData/account-active`; a sign-in or switch restarts presence and tells the renderer (`auth:use`, `auth:status`, `auth:changed`); `tc accounts`, `tc use`. [Ledger](docs/build-log/m336-m338-account-share-relay.md). |
+| M337 | Sharing in the app: the share dialog (share into an org, the owner's role picker, open a share here) behind four doors that only open it, and `tc shares/share/open-share/share-role` behind dialogs that name what they act on (`workspace:share-members`). [Ledger](docs/build-log/m336-m338-account-share-relay.md). |
+| M338 | The relay terminal as a panel kind: persisted by program, session and share, re-attaching on relaunch rather than spawning twice, off the terminal partition, created through the four creation doors, with its header, New session, clipboard and theme. [Ledger](docs/build-log/m336-m338-account-share-relay.md). |
 
 ### What's next — the v10 run (D01–D20)
 

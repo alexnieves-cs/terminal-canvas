@@ -124,7 +124,7 @@ export interface ControlCanvasModel {
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult , LaneStatus } from './review'
 import type { CredentialMeta } from './credential-schema'
-import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, ShareListResult, ShareMemberResult, ShareResult } from './account'
+import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, AccountStatus, AccountUseResult, ShareListResult, ShareMemberResult, ShareMembersResult, ShareResult } from './account'
 import type { CanvasOp, CanvasSharedView, SharedSaveMeta, SharedTextOpen, SharedTextPush, Verdict, WorkspaceRole } from './canvas-ops'
 import type { LocalPresence, PresenceRoster } from './presence'
 import type { RelayControlState, RelayRole, RelaySessionMeta } from './relay-protocol'
@@ -458,8 +458,12 @@ export const IPC = {
   AUTH_LOGIN: 'auth:login',
   /** Signs out one GitHub account on this Mac, or every one when none is named. */
   AUTH_LOGOUT: 'auth:logout',
-  /** The accounts signed in on this Mac, newest (the active one) first. */
+  /** The accounts signed in on this Mac, the active one first (the person's choice, else the newest). */
   AUTH_SESSIONS: 'auth:sessions',
+  /** M336. Make one signed-in account the active one. This Mac's choice; no network. */
+  AUTH_USE: 'auth:use',
+  /** M336. Whether accounts are configured here, so the account menu can say why before sign-in refuses. */
+  AUTH_STATUS: 'auth:status',
   /**
    * Presence (shared/presence.ts). The renderer's own facts — cursor,
    * viewport, selection, focused panel, mode — for one workspace, already
@@ -499,6 +503,8 @@ export const IPC = {
   WORKSPACE_OPEN_SHARE: 'workspace:open-share',
   /** The share's owner sets a member's role (editor/viewer), or removes them. */
   WORKSPACE_SHARE_MEMBER: 'workspace:share-member',
+  /** M337. The share's organization's people with their role in the share — what the owner's role picker lists. */
+  WORKSPACE_SHARE_MEMBERS: 'workspace:share-members',
   /**
    * Shared text (canvas-sync.ts's header): the renderer opens a REPLICA of a
    * shared workspace's doc for y-monaco — the doc's state now, then TEXT_REMOTE
@@ -1136,6 +1142,12 @@ export const IPC_EVENTS = {
   TEAM_OBSERVED: 'team:observed',
   /** The shared canvas: the active workspace's view after a peer's change, a refusal, or a switch; null when not shared. */
   CANVAS_SHARED: 'canvas:shared',
+  /**
+   * M336. The signed-in accounts changed — a sign-in, a sign-out or a new
+   * active choice, from the app OR from `tc` in a terminal. Carries the same
+   * metadata auth:sessions answers, the active one first. Never a token.
+   */
+  AUTH_CHANGED: 'auth:changed',
   /** Shared text: a doc update for an open replica, or `reset` when its room closed or reopened. */
   TEXT_REMOTE: 'text:remote',
   /** Relay terminal bytes for one panel; `reset` clears the terminal first (a replay follows). */
@@ -1510,6 +1522,12 @@ export interface WorkspaceRow {
   name: string
   panelIds: string[]
   active: boolean
+  /**
+   * M337. Present on a shared workspace: the share's id and this person's
+   * cached role. The same two facts CANVAS_SHARED's view already carries —
+   * the org, the Y.Doc bytes and the record itself stay in main.
+   */
+  share?: { id: string; role: WorkspaceRole }
 }
 
 /**
@@ -2166,6 +2184,9 @@ export interface CanvasBridge {
     login(): Promise<AccountLoginResult>
     logout(githubId?: string): Promise<AccountLogoutResult>
     sessions(): Promise<AccountSessionMeta[]>
+    use(githubId: string): Promise<AccountUseResult>
+    status(): Promise<AccountStatus>
+    onChanged(listener: (sessions: AccountSessionMeta[]) => void): () => void
   }
   /** See PRESENCE_LOCAL. Carries no token and no identity the renderer did not already show. */
   presence: {
@@ -2185,6 +2206,7 @@ export interface CanvasBridge {
     shares(): Promise<ShareListResult>
     open(shareId: string): Promise<{ kind: 'ok'; workspaceId: string } | { kind: 'refused' | 'failed'; reason: string }>
     setMember(req: { shareId: string; userId: string; role: WorkspaceRole | null }): Promise<ShareMemberResult>
+    members(shareId: string): Promise<ShareMembersResult>
   }
   /**
    * See TEXT_OPEN / TEXT_UPDATE / TEXT_REMOTE. Bytes, not ops: y-monaco edits

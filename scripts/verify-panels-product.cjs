@@ -1229,7 +1229,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         writeFileSync(join(wDir, 'code.txt'), '2')
         writeFileSync(join(wDir, 'src', 'a.txt'), 'three\n')
         const failed = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="w1"]'); if (!n || n.getAttribute('data-watcher-status') !== 'exited') return false; return { last: n.querySelector('[data-watcher-last]')?.textContent ?? null, tone: n.getAttribute('data-tone') } })()`), 15000)
-        const rows = await runLedger.list('w1', 50)
+        // The node's `exited` and the ledger append are separate writes, so
+        // one read straight after the DOM flips can miss the exit-2 row
+        // (measured: red 2 of 3 runs). Wait for it; a timeout still reds.
+        const rows = (await waitUntil(async () => { const r = await runLedger.list('w1', 50); return r.some((x) => x.exitCode === 2) ? r : null }, 5000)) ?? await runLedger.list('w1', 50)
         const killsBefore = killedPanelIds.length
         await clickPanelClose(wc, 'w1')
         await settle()

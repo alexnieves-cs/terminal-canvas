@@ -22,13 +22,10 @@ import {
 } from '@shared/team'
 import type { AgentPresenceStatus, PresenceRoster } from '@shared/presence'
 import { allRosters, onRoster } from '../presence/presence-store'
+import { TONE } from '../presence/RosterStrip'
 import { observe, useObserved, type ObservedView } from './team-store'
 import { ChevronLeft } from '../icons'
 
-/** The agent status as the canvas's tone vocabulary (styles.css [data-tone]) — RosterStrip's table. */
-const TONE: Record<AgentPresenceStatus, string | undefined> = {
-  none: undefined, idle: 'idle', working: 'working', 'needs-you': 'needs-you', error: 'exited'
-}
 const AGENT_WORD: Record<AgentPresenceStatus, string> = {
   none: 'no agents', idle: 'agents idle', working: 'agents working', 'needs-you': 'needs someone', error: 'agent stopped'
 }

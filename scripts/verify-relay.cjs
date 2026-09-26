@@ -186,6 +186,18 @@ function connect(port, tok, opts = {}) {
       G.relayControlLine(v(OWNER), (u) => u === GUEST ? 'sam' : '?') === 'sam is in control' &&
       G.relayControlLine(v(GUEST), () => '') === 'You are in control' &&
       G.relayControlLine(v(GUEST, { connection: 'closed', reason: 'the token has expired' }), () => '') === 'the token has expired')
+    // M338. The PANEL's two decisions. A recorded session attaches, so a
+    // relaunch never starts a second process on the relay; only a panel with
+    // no session spawns, carrying its share when it has one.
+    const SHARE = '22222222-2222-2222-2222-222222222222'
+    ok('relay.panel.1 a panel with a session ATTACHES; one without spawns its program, with its share only when it has one',
+      JSON.stringify(G.relayOpenOf({ relay: { program: 'shell', sessionId: 'S'.repeat(20), shareId: SHARE } })) === JSON.stringify({ kind: 'attach', sessionId: 'S'.repeat(20) }) &&
+      JSON.stringify(G.relayOpenOf({ relay: { program: 'shell', shareId: SHARE } })) === JSON.stringify({ kind: 'spawn', program: 'shell', shareId: SHARE }) &&
+      JSON.stringify(G.relayOpenOf({ relay: { program: 'htop' } })) === JSON.stringify({ kind: 'spawn', program: 'htop' }))
+    ok('relay.panel.2 New session is offered only once the session ended or the relay refused by name — never while live or reconnecting',
+      G.relayMayRestart(v(OWNER, { exited: true })) && G.relayMayRestart(v(OWNER, { connection: 'closed', reason: 'no such session' })) &&
+      !G.relayMayRestart(v(OWNER)) && !G.relayMayRestart(v(OWNER, { connection: 'reconnecting' })) && !G.relayMayRestart(null) &&
+      !G.relayMayRestart(v(OWNER, { connection: 'closed', reason: null })))
   }
 
   // ── JWT at the upgrade ────────────────────────────────────────────────────

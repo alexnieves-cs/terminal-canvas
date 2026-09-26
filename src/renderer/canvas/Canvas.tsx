@@ -130,7 +130,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeRelayPanel, isRelayPanel, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE,
@@ -179,6 +179,9 @@ import { setWatcherFiredHandler } from '@renderer/watcher/useWatchers'
 import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
+import { RelayNode } from '@renderer/relay/RelayNode'
+import { applyRelayTheme, disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
+import { RELAY_PROGRAM, RELAY_SESSION_ID } from '@shared/relay-protocol'
 import { ImageNode } from '@renderer/image/ImageNode'
 import { NoteNode } from '@renderer/note/NoteNode'
 import { clearDraft, getDraft, markDraftRead, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
@@ -281,6 +284,8 @@ import { notifyRefused } from '../shell/toast'
 import { RosterStrip } from '../presence/RosterStrip'
 import { usePresenceReport } from '../presence/usePresenceReport'
 import { TeamView } from '../team/TeamView'
+import { useAccounts } from '../account/useAccounts'
+import { ShareDialog } from '../account/ShareDialog'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
 const EMPTY_SHELF: Shelf = { columns: [] }
@@ -1037,7 +1042,7 @@ export function Canvas({
         // panel can be redone, and the redone panel carries the same session
         // id — its transcript must still be there to render. Only an
         // explicit close, a reset and a workspace delete drop the file.
-        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id) }
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id); disposeRelayTerminal(panel.rect.id) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -1934,7 +1939,7 @@ export function Canvas({
         clearFileResult(panel.rect.id)
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
-        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id)
+        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id); disposeRelayTerminal(panel.rect.id)
         markLaneClosed(panel.rect.id)
         continue
       }
@@ -2471,7 +2476,8 @@ export function Canvas({
       // is still not a registry.dispose call site: the close ends the
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
-      disposeChat(id, true); disposeWatcher(id); clearBrowser(id)
+      // M338. A relay panel DETACHES; the relay reaps a session nobody is attached to.
+      disposeChat(id, true); disposeWatcher(id); clearBrowser(id); disposeRelayTerminal(id)
       // M114. The lane's card stays, its state stays: `lane closed` is a note,
       // never a silent trip back to todo.
       markLaneClosed(id)
@@ -2951,6 +2957,9 @@ export function Canvas({
   // reload on below, and every row that needs `attentionIds` reads it from
   // this same state and loader rather than a second one.
   const [workspaceRows, setWorkspaceRows] = useState<WorkspaceRow[]>(EMPTY_WORKSPACES)
+  // M336. Who is signed in, the active one first; the top bar's account menu
+  // and M337's share dialog read the same hook, kept live by auth:changed.
+  const accounts = useAccounts()
   /**
    * Which workspaces EXIST, as a value that only changes when one of them
    * does — the merged refetch's dep, and see that effect for what a stale
@@ -3204,6 +3213,8 @@ export function Canvas({
   const resolvedTheme = useTheme(settingRows)
   useEffect(() => {
     registry.applyTerminalOptions({ theme: terminalTheme(resolvedTheme) })
+    // M338. Relay xterms are not in the registry (their pty is remote); same switch.
+    applyRelayTheme(terminalTheme(resolvedTheme))
   }, [resolvedTheme])
 
   // M49: the global terminal font size, read the way glow is, and fanned
@@ -5563,7 +5574,7 @@ export function Canvas({
     // move restores the chat panel, and it must render its turns. The
     // ordinary close path would drop the file, so this is the one removal
     // that does not go through it.
-    disposeChat(id, false); disposeWatcher(id); clearBrowser(id)
+    disposeChat(id, false); disposeWatcher(id); clearBrowser(id); disposeRelayTerminal(id)
     setPanels((current) => { const next = removePanel(current, id); commitHistory(next); return next })
     setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
     setFocusedId((current) => (current === id ? null : current))
@@ -6054,6 +6065,31 @@ export function Canvas({
     })
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
+  /** M338. A relay terminal at `at`: a fresh session of `program`, or an attach to a session the relay already has. */
+  const openRelayPanel = useCallback((relay: { program: string; sessionId?: string; shareId?: string }, at?: Point): void => {
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const relayId = `r${nextIdRef.current++}`
+    setPanels((current) => {
+      const made = makeRelayPanel(relayId, at ?? cascadeCentre(centre, current), nextZ(current), relay)
+      const next = [...current, relay.sessionId === undefined ? made : { ...made, relay: { ...made.relay, sessionId: relay.sessionId } }]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(relayId)
+  }, [commitHistory, selectOnly])
+  /**
+   * M338. The relay minted this panel's session (or it was forgotten, for a
+   * new one): written to the record so a relaunch attaches instead of starting
+   * a second process. Not an undo step — the person did nothing; the relay
+   * answered — so the history is left alone, the rule a browser's navigation follows.
+   */
+  const setRelaySession = useCallback((panelId: string, sessionId: string | undefined): void => {
+    setPanels((current) => current.map((p) => {
+      if (p.rect.id !== panelId || !isRelayPanel(p) || p.relay.sessionId === sessionId) return p
+      const { sessionId: _old, ...rest } = p.relay
+      return { ...p, relay: sessionId === undefined ? rest : { ...rest, sessionId } }
+    }))
+  }, [])
   /**
    * M190. FEEDBACK — a DRAFT in the person's own browser, never a submission.
    * The facts are chosen by type (a version, a platform, engine words, panel
@@ -6808,6 +6844,9 @@ export function Canvas({
   }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
+  // M338. The active workspace's share, for a relay session started in it.
+  const creationShareRef = useRef<string | undefined>(undefined)
+  creationShareRef.current = workspaceRows.find((w) => w.active)?.share?.id
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
     const entry = CREATABLE_OBJECTS.find((item) => item.id === kind)
     if (!entry) return { kind: 'refused', reason: `unknown object kind: ${kind}` }
@@ -6875,6 +6914,30 @@ export function Canvas({
         openBrowserPanel(parsed.url, undefined, at)
         return { kind: 'ran' }
       },
+      relay: async (value) => {
+        // Asked FIRST: a relay that is not set up, or a person not signed in,
+        // is refused by name here rather than as a dead panel on the canvas.
+        const listed = await window.canvas.relay.list()
+        if (!current()) return refused()
+        if (listed.kind === 'refused') return { kind: 'refused', reason: listed.reason }
+        const typed = value?.trim() ?? ''
+        const attach = /^attach\s+(\S+)$/.exec(typed)
+        if (attach !== null) {
+          const sessionId = attach[1]!
+          if (!RELAY_SESSION_ID.test(sessionId)) return { kind: 'refused', reason: 'that is not a relay session id' }
+          const meta = listed.sessions.find((s) => s.sessionId === sessionId)
+          if (meta === undefined) return { kind: 'refused', reason: 'no session by that id that you may attach to — it may have ended' }
+          openRelayPanel({ program: meta.program, sessionId, ...(meta.shareId === null ? {} : { shareId: meta.shareId }) }, at)
+          return { kind: 'ran' }
+        }
+        const program = typed === '' ? 'shell' : typed
+        if (!RELAY_PROGRAM.test(program)) return { kind: 'refused', reason: 'name a program on the relay (like shell), or attach <session id>' }
+        // A shared workspace's session is bound to its share, so its members
+        // may attach by their role; an unshared one is the owner's alone.
+        const shareId = creationShareRef.current
+        openRelayPanel({ program, ...(shareId === undefined ? {} : { shareId }) }, at)
+        return { kind: 'ran' }
+      },
       tool: async (description) => {
         const folder = noteRootRef.current
         if (!folder) return { kind: 'refused', reason: 'select a panel with a workspace folder first — a tool is made inside one' }
@@ -6893,7 +6956,7 @@ export function Canvas({
     }
     try { const result = await entry.create(host, value); if (result.kind === 'refused') paletteActionsRef.current?.say(result.reason); return result }
     catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
-  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel, arriveTool, palette])
+  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel, openRelayPanel, arriveTool, palette])
   /**
    * M205 (D09). THE FIRST START — the launcher's primary. A sentence and a
    * folder, run through D05's own executor (`startWork` → `dispatchWorkItem`),
@@ -7966,7 +8029,10 @@ export function Canvas({
         running={inspectorSummary.running}
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
+        accounts={accounts}
       />
+      <ShareDialog accounts={accounts} workspaces={workspaceRows}
+        onOpened={(id) => { void switchWorkspace(id) }} onWorkspacesChanged={reloadWorkspaces} />
       {resumeStrip}
       <Navigator
         onResizeHandleDown={onNavResizeDown}
@@ -8572,6 +8638,24 @@ export function Canvas({
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   onNavigated={onBrowserNavigated}
+                />
+              )
+            }
+            // M338. A relay terminal: sessionless here, its pty on the relay VM.
+            if (isRelayPanel(panel)) {
+              return (
+                <RelayNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  onSession={setRelaySession}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }

@@ -11,6 +11,7 @@
  * Reads ./fields and ./types. Read by ./workspaces, which owns the panel LIST.
  */
 
+import { RELAY_PROGRAM, RELAY_SESSION_ID } from '../relay-protocol'
 import { MIN_PANEL_H, MIN_PANEL_W } from '../panel-geometry'
 import { parseChecklistView } from '../checklist'
 import { parseImportedNote } from '../imported-note'
@@ -539,6 +540,25 @@ export function parsePanel(
     }
     const preview = parsePreviewBinding((raw as Record<string, unknown>).preview, id, warnings)
     return { ...base, kind: 'browser', url, ...(device === undefined ? {} : { device }), ...(preview === undefined ? {} : { preview }) }
+  }
+  if (kind === 'relay') {
+    const relay = (raw as Record<string, unknown>).relay as Record<string, unknown> | undefined
+    const program = relay?.program
+    if (typeof relay !== 'object' || relay === null || !isStr(program) || !RELAY_PROGRAM.test(program)) {
+      warnings.push(`dropped relay panel ${id}: relay.program ${JSON.stringify(program)} is not a program name`)
+      return null
+    }
+    let sessionId: string | undefined
+    if (relay.sessionId !== undefined) {
+      if (isStr(relay.sessionId) && RELAY_SESSION_ID.test(relay.sessionId)) sessionId = relay.sessionId
+      else warnings.push(`relay panel ${id}: relay.sessionId is malformed — the panel is kept and starts a new session`)
+    }
+    let shareId: string | undefined
+    if (relay.shareId !== undefined) {
+      if (isStr(relay.shareId) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(relay.shareId)) shareId = relay.shareId
+      else warnings.push(`relay panel ${id}: relay.shareId is malformed — the panel is kept, unshared`)
+    }
+    return { ...base, kind: 'relay', relay: { program, ...(sessionId === undefined ? {} : { sessionId }), ...(shareId === undefined ? {} : { shareId }) } }
   }
   if (kind === 'work') {
     // M116. The item id is the card's only identity, so an unusable one

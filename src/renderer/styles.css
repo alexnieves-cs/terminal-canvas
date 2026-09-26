@@ -966,6 +966,71 @@ body {
 .shell__top .shell__view-menu button > kbd { margin-left: auto; }
 .shell__view-heading { padding: var(--sp-3) var(--sp-4) var(--sp-1); color: var(--fg-4); font-size: var(--t-xs); font-weight: 600; }
 .shell__view-check { display: inline-flex; width: 16px; justify-content: center; color: var(--iris); }
+/* M336. The account control: the active account's initials at rest, the
+   View menu's surface when open. A circle, not a pill — it names a person. */
+.shell__account { position: relative; -webkit-app-region: no-drag; }
+.shell__top .shell__account-trigger { padding-inline: var(--sp-2); }
+.shell__account[data-account-state="sign-in"] .shell__account-trigger { padding-inline: var(--sp-3); color: var(--fg); border-color: var(--line); }
+.shell__account-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: var(--r-full);
+  background: var(--iris-dim); color: var(--iris);
+  font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps);
+}
+.shell__account-menu { width: 248px; }
+.shell__view-heading:empty { padding: 0; margin-block: var(--sp-1); border-top: 1px solid var(--line); }
+.shell__account-section { margin-top: var(--sp-1); border-top: 1px solid var(--line); }
+
+/* M337. The share dialog: a centred card over the shell's own dim. Modal on
+   purpose — sharing is a decision that owns the window until it is made. */
+.share-dialog {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh;
+  background: var(--scrim);
+}
+.share-dialog__card {
+  width: min(500px, 92vw);
+  padding: var(--sp-6);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--s-1);
+  box-shadow: var(--e-3);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-md);
+  display: flex; flex-direction: column; gap: var(--sp-4);
+}
+.share-dialog__title { margin: 0; font-size: var(--t-lg); font-weight: 600; letter-spacing: var(--track-tight); }
+.share-dialog__lede { margin: 0; color: var(--fg-2); line-height: var(--lh-body); }
+.share-dialog__note { margin: 0; color: var(--fg-3); font-size: var(--t-sm); }
+.share-dialog__note--refused { color: var(--amber); }
+.share-dialog__field { display: flex; align-items: center; gap: var(--sp-4); color: var(--fg-2); font-size: var(--t-sm); }
+.share-dialog__select {
+  flex: 1; font: inherit; font-size: var(--t-sm); color: var(--fg);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-1) var(--sp-3);
+}
+.share-dialog__members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-md); }
+.share-dialog__member { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4); }
+.share-dialog__member + .share-dialog__member { border-top: 1px solid var(--line); }
+.share-dialog__member--proposed { background: var(--iris-dim); }
+.share-dialog__login { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-dialog__role { color: var(--fg-3); font-size: var(--t-sm); }
+.share-dialog__member .share-dialog__select { flex: 0 0 auto; }
+.share-dialog__proposal { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--iris-dim); font-size: var(--t-sm); }
+.share-dialog__proposal > span { flex: 1; }
+.share-dialog__foot { display: flex; justify-content: flex-end; }
+.share-dialog__btn {
+  align-self: flex-start;
+  font: inherit; font-size: var(--t-sm); color: var(--fg-2);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-4); cursor: pointer;
+}
+.share-dialog__btn:hover:not(:disabled) { color: var(--fg); border-color: var(--line-strong); }
+.share-dialog__btn:disabled { color: var(--fg-4); cursor: default; }
+.share-dialog__btn--primary { color: var(--on-iris); background: var(--iris); border-color: var(--iris); }
+.share-dialog__btn--primary:hover:not(:disabled) { color: var(--on-iris); filter: brightness(1.08); }
 
 /* M279. Below 1600px the live status keeps its dot and count and drops the
    word — the count is the fact, the word is on the title — so two pills
@@ -6483,6 +6548,8 @@ body {
      image             the source, and Replace
      note (sticky)     the tint controls
      deck              slide N of M, and the proposed-change count (M248)
+     relay             that it runs on the relay, not this Mac, and New
+                       session once the old one ended (M338)
 
    A rule with an exception list is fine; a rule that is silently per-kind is
    how the frame drifted before M47 unified it, which is why this list is
@@ -9681,23 +9748,36 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    edge, and one strip above it saying who is in control. A viewer's screen is
    dimmed a step — the one visual cue that keys will not reach this pty — and
    never hidden: watching is the point of attaching. */
+/* M338. The relay terminal as a panel: the body is the M335 attachment, edge
+   to edge under the header, so the strip and the xterm fill what the frame gives. */
+.relay-node__body { display: flex; flex-direction: column; min-height: 0; padding: 0; }
+.relay-node__body > .relay-term { flex: 1; }
+/* The well, as a local terminal's slot has it: the rows xterm does not fill
+   read as the terminal, not as a band of frame. Flush, never padded — the
+   slot rule above says why an inset breaks clicks at a zoomed-out scale. */
+.relay-node .relay-term__screen { background: var(--well); border-radius: 0 0 var(--r-lg) var(--r-lg); }
 .relay-term { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
 .relay-term__strip {
-  display: flex; align-items: center; gap: var(--s-gap, 8px); flex: none;
-  padding: 4px 8px; font: var(--t-xs)/var(--lh-tight) var(--font-ui); color: var(--fg-3);
+  display: flex; align-items: center; gap: var(--sp-4); flex: none;
+  padding: var(--sp-2) var(--sp-4); font: var(--t-xs)/var(--lh-tight) var(--font-ui); color: var(--fg-3);
   border-bottom: 1px solid var(--line); background: var(--s-2);
 }
 .relay-term__line { color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .relay-term__program { font-family: var(--font-mono); color: var(--fg-4); }
-.relay-term__actions { margin-left: auto; display: flex; gap: 6px; }
+.relay-term__actions { margin-left: auto; display: flex; gap: var(--sp-3); }
 .relay-term__btn {
   font: inherit; color: var(--fg-2); background: var(--s-3); border: 1px solid var(--line);
-  border-radius: var(--r-sm); padding: 2px 8px; cursor: pointer;
+  border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-4); cursor: pointer;
 }
 .relay-term__btn:hover { background: var(--s-4); }
 .relay-term__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .relay-term__btn:disabled { cursor: default; color: var(--fg-4); background: transparent; }
 .relay-term__btn--grant { color: var(--iris); border-color: var(--iris-dim); }
 .relay-term__btn--kill { color: var(--red); }
-.relay-term__screen { flex: 1; min-height: 0; overflow: hidden; }
-.relay-term__screen--watching { opacity: .88; }
+.relay-term__screen { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+/* Watching (no input): a veil in a declared colour over the screen, the M204
+   lens-veil way — never a fractional opacity (verify:styles 3). */
+.relay-term__screen--watching::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: color-mix(in srgb, var(--well) 12%, transparent);
+}

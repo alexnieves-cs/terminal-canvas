@@ -1579,6 +1579,19 @@ ok('74 a panel with no kind is not a review panel',
     `terminal=${V.isTerminalPanel(t)} legacy=${V.isTerminalPanel(legacy)} toolbox=${V.isTerminalPanel(tb)} chat=${ch && V.isTerminalPanel(ch)}`)
 }
 
+// M338 — relay.kind.1. A relay terminal LOOKS like a terminal and must never
+// be partitioned as one: isTerminalPanel admitting it would hand assignTiers
+// and registry.ensure a panel with no spec, and the registry would spawn a
+// LOCAL shell for a pty that lives on the relay VM.
+{
+  const rp = V.makeRelayPanel('r1', { x: 100, y: 50 }, 2, { program: 'shell' })
+  const shared = V.makeRelayPanel('r2', { x: 0, y: 0 }, 3, { program: 'shell', shareId: '22222222-2222-2222-2222-222222222222' })
+  ok('relay.kind.1 makeRelayPanel centres on the point with an absent shareId kept absent; isRelayPanel is true for it and isTerminalPanel false',
+    rp.kind === 'relay' && rp.rect.x === 100 - V.RELAY_W / 2 && rp.rect.y === 50 - V.RELAY_H / 2 && !('shareId' in rp.relay) && !('sessionId' in rp.relay) &&
+      shared.relay.shareId !== undefined && V.isRelayPanel(rp) === true && V.isTerminalPanel(rp) === false && !('spec' in rp),
+    JSON.stringify({ rp, terminal: V.isTerminalPanel(rp) }))
+}
+
 // chat.1 — makeChatPanel centres exactly (makePanel's contract, check 48,
 // inherited by a SIXTH constructor), copies its source rather than sharing
 // the caller's object, never stamps the minted id into it, and keeps an

@@ -359,6 +359,119 @@ void (async () => {
     B(['join']).kind === 'usage' && B(['join', 'a', 'b']).kind === 'usage' &&
     JSON.parse(B(['logout', '--user', '101']).line).githubId === '101' && B(['login', 'x']).kind === 'usage')
 
+  // ── M336. the account picker ──────────────────────────────────────────────
+  {
+    const h = harness()
+    await h.svc.login()
+    // A second account, signed in LATER — newest-first alone would make it active.
+    await new Promise((res) => setTimeout(res, 5))
+    h.store.set('supabase:github:202', JSON.stringify({ v: 1, accessToken: 'ACCESS-SECRET-eyJ-bob', refreshToken: 'REFRESH-SECRET-bob', expiresAt: 1_800_000_000 + 3600, userId: 'uuid-bob', githubId: '202', githubLogin: 'bob' }))
+    h.store.setLabel('supabase:github:202', 'bob')
+    const order = () => h.svc.sessions().map((m) => m.githubId).join(',')
+    ok('picker.1 the account a person signed in with is ACTIVE until they choose another, even when a newer one exists',
+      order() === '101,202' && h.svc.currentUserId() === 'uuid-alice', order())
+    const used = h.svc.use('202')
+    ok('picker.2 use() makes an account active: first in sessions(), and the user every event is stamped with',
+      used.kind === 'ok' && used.session.githubLogin === 'bob' && order() === '202,101' && h.svc.currentUserId() === 'uuid-bob', order())
+    const bad = h.svc.use('999')
+    ok('picker.3 an account not signed in here is refused by name and changes nothing', bad.kind === 'refused' && order() === '202,101')
+    await h.svc.logout('202')
+    ok('picker.4 signing out the active account hands "active" to the next (the choice goes with the account)',
+      order() === '101' && h.svc.currentUserId() === 'uuid-alice', order())
+    const leaked = JSON.stringify([used, bad, h.svc.sessions(), h.svc.status()])
+    ok('picker.5 status says configured (or names the missing variables), and no picker answer carries a token',
+      h.svc.status().configured === true && harness({ env: {} }).svc.status().configured === false &&
+      !leaked.includes('SECRET'), leaked.slice(0, 200))
+  }
+  // ── M337. the share's people ─────────────────────────────────────────────
+  {
+    const SHARE = '22222222-2222-2222-2222-222222222222'
+    const server = fakeServer({
+      'GET /rest/v1/workspace_shares': () => [200, [{ org_id: '11111111-1111-1111-1111-111111111111' }]],
+      'GET /rest/v1/organization_members': () => [200, [{ user_id: 'uuid-carol', users: { github_login: 'carol' } }, { user_id: 'uuid-alice', users: { github_login: 'alice' } }, { user_id: 'uuid-bob', users: { github_login: 'bob' } }]],
+      'GET /rest/v1/workspace_members': () => [200, [{ user_id: 'uuid-alice', role: 'owner' }, { user_id: 'uuid-bob', role: 'viewer' }]]
+    })
+    const h = harness({ server })
+    await h.svc.login()
+    const m = await h.svc.shareMembers(SHARE)
+    ok('share.members.1 every person in the share\'s org, owner first, then who is in, then who could be; me marked; no token',
+      m.kind === 'ok' && m.members.map((r) => `${r.login}:${r.role}${r.me ? '*' : ''}`).join(',') === 'alice:owner*,bob:viewer,carol:null' &&
+      !JSON.stringify(m).includes('SECRET'), JSON.stringify(m))
+  }
+  // ── M336–M337. the `tc` picker and sharing verbs ─────────────────────────
+  {
+    const SHARE = '22222222-2222-2222-2222-222222222222'
+    const calls = []
+    let answer = false
+    const asked = []
+    const sessions = [{ githubId: '101', githubLogin: 'alice', userId: 'uuid-alice' }, { githubId: '202', githubLogin: 'bob', userId: 'uuid-bob' }]
+    const sc = A.createShareControl({
+      account: {
+        sessions: () => sessions,
+        use: (id) => { calls.push(['use', id]); return { kind: 'ok', session: sessions.find((s) => s.githubId === id) } },
+        shareMembers: async () => ({ kind: 'ok', orgId: 'o', members: [{ userId: 'uuid-bob', login: 'bob', role: 'viewer', me: false }] }),
+        team: async (orgId) => (orgId === undefined || orgId === 'o' ? { kind: 'ok', me: 'uuid-alice', org: { id: 'o', name: 'Acme' }, orgs: [{ id: 'o', name: 'Acme' }], members: [], presence: [], activity: [] } : { kind: 'refused', reason: `you are not a member of organization ${orgId}` })
+      },
+      doors: {
+        share: async (r) => { calls.push(['share', r]); return { kind: 'ok', share: { id: SHARE, orgId: 'o', name: 'W', role: 'owner' } } },
+        shares: async () => ({ kind: 'ok', shares: [{ id: SHARE, orgId: 'o', name: 'Team canvas', role: 'editor' }] }),
+        openShare: async (id) => { calls.push(['open', id]); return { kind: 'ok', workspaceId: 'w9' } },
+        setShareMember: async (r) => { calls.push(['role', r]); return { kind: 'ok' } }
+      },
+      activeWorkspaceName: () => 'W',
+      confirm: async (ask) => { asked.push(ask.message); return answer }
+    })
+    const declined = [await sc.use('bob'), await sc.share(), await sc.openShare(SHARE), await sc.shareRole({ shareId: SHARE, who: 'bob', role: 'editor' })]
+    ok('share.control.1 from the socket, use/share/open-share/share-role each ASK first, and a decline changes nothing',
+      declined.every((r) => r.ok === false && r.kind === 'declined') && calls.length === 0 && asked.length === 4, JSON.stringify({ calls, asked }))
+    answer = true
+    const done = [await sc.use('BOB'), await sc.share(), await sc.openShare(SHARE), await sc.shareRole({ shareId: SHARE, who: 'bob', role: null })]
+    ok('share.control.2 confirmed, each acts once — a login resolves case-insensitively to its id, a member\'s login to their user id',
+      done.every((r) => r.ok === true) && JSON.stringify(calls) === JSON.stringify([['use', '202'], ['share', { orgId: 'o' }], ['open', SHARE], ['role', { shareId: SHARE, userId: 'uuid-bob', role: null }]]), JSON.stringify(calls))
+    ok('share.control.7 the dialogs NAME what they act on: the organization a share goes into, and the shared workspace a role changes in',
+      asked.some((m) => m === 'Share “W” with Acme?') && asked.some((m) => m === 'Remove bob from “Team canvas”?'), JSON.stringify(asked))
+    const before = asked.length
+    const unknown = [await sc.use('mallory'), await sc.openShare('33333333-3333-3333-3333-333333333333'), await sc.shareRole({ shareId: SHARE, who: 'mallory', role: 'viewer' }),
+      await sc.share('44444444-4444-4444-4444-444444444444'), await sc.shareRole({ shareId: '33333333-3333-3333-3333-333333333333', who: 'bob', role: 'viewer' })]
+    ok('share.control.3 an unknown account, share, person or organization is refused by name WITHOUT a dialog', unknown.every((r) => r.ok === false && r.kind === 'refused') && asked.length === before)
+    const listed = sc.accounts()
+    ok('share.control.4 tc accounts lists the active one first, ids and logins only', listed.ok && listed.active === 'alice' && listed.accounts.length === 2 && !('userId' in listed.accounts[0]))
+  }
+  {
+    const SHARE = '22222222-2222-2222-2222-222222222222'
+    const P = (o) => A.parseControlLine(JSON.stringify(o))
+    ok('share.control.5 the socket parses the six verbs and refuses a bad id or role; the URL door refuses all six',
+      ['accounts', 'shares'].every((v) => P({ verb: v }).kind === 'ok') && P({ verb: 'use', who: 'bob' }).kind === 'ok' &&
+      P({ verb: 'share', orgId: SHARE }).kind === 'ok' && P({ verb: 'share', orgId: 'x' }).kind === 'bad' &&
+      P({ verb: 'open-share', shareId: SHARE }).kind === 'ok' && P({ verb: 'open-share', shareId: 'x' }).kind === 'bad' &&
+      P({ verb: 'share-role', shareId: SHARE, who: 'bob', role: 'none' }).req?.role === null && P({ verb: 'share-role', shareId: SHARE, who: 'bob', role: 'owner' }).kind === 'bad' &&
+      ['accounts', 'use?who=bob', 'shares', 'share', `open-share?shareId=${SHARE}`, `share-role?shareId=${SHARE}&who=bob&role=viewer`].every((h) => A.parseControlUrl(`terminal-canvas://${h}`).kind === 'bad'))
+    const B = (argv) => A.buildRequest(argv, {})
+    ok('share.cli.1 tc builds the six verbs; share takes only --org; share-role takes exactly three arguments',
+      JSON.parse(B(['use', 'bob']).line).who === 'bob' && JSON.parse(B(['share', '--org', SHARE]).line).orgId === SHARE &&
+      B(['share', 'x']).kind === 'usage' && JSON.parse(B(['open-share', SHARE]).line).shareId === SHARE &&
+      JSON.parse(B(['share-role', SHARE, 'bob', 'viewer']).line).role === 'viewer' && B(['share-role', SHARE, 'bob']).kind === 'usage' &&
+      B(['accounts', 'x']).kind === 'usage')
+    const bare = A.createControlHandler({ presets: () => [], defaultId: () => null, spawn: () => {}, list: () => [], focus: () => false })
+    ok('share.control.6 no sharing wired is a named refusal', (await bare({ verb: 'shares' })).ok === false)
+  }
+  // ── M336–M337. what the menu and dialog say ──────────────────────────────
+  {
+    const s = (id, login) => ({ githubId: id, githubLogin: login, userId: `u-${id}`, expiresAt: '', addedAt: '' })
+    ok('menu.1 the trigger is absent unconfigured-and-signed-out, "Sign in" configured, and initials once signed in (with a count of the others)',
+      A.accountTrigger(null, []).kind === 'hidden' && A.accountTrigger({ configured: false, reason: 'x' }, []).kind === 'hidden' &&
+      A.accountTrigger({ configured: true }, []).kind === 'sign-in' &&
+      JSON.stringify(A.accountTrigger({ configured: false, reason: 'x' }, [s('1', 'ada-lovelace'), s('2', 'octocat')])) === JSON.stringify({ kind: 'account', login: 'ada-lovelace', initials: 'AL', others: 1 }) &&
+      A.initialsOf('octocat') === 'OC')
+    const row = (role, me = false) => ({ userId: 'u', login: 'x', role, me })
+    ok('menu.2 only an owner is offered choices, never for themself or the owner, and never "owner" itself',
+      JSON.stringify(A.roleChoices('owner', row('viewer'))) === JSON.stringify(['editor', 'viewer', null]) &&
+      JSON.stringify(A.roleChoices('owner', row(null))) === JSON.stringify(['editor', 'viewer', null]) &&
+      A.roleChoices('owner', row('owner')).length === 0 && A.roleChoices('owner', row('editor', true)).length === 0 &&
+      A.roleChoices('editor', row('viewer')).length === 0)
+    ok('menu.3 the dialog\'s promise names what crosses and what does not', /card/.test(A.SHARE_SENDS) && /No command, folder or transcript leaves/.test(A.SHARE_SENDS))
+  }
+
   const failures = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
   process.exitCode = failures.length ? 1 : 0

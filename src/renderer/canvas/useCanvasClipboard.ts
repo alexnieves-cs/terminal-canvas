@@ -1,3 +1,4 @@
+import { existingRelayTerminal } from '@renderer/relay/RelayTerminal'
 import { useEffect, useRef, type RefObject } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
 import { isChatPanel, type Panel } from '@renderer/panels/panels'
@@ -51,6 +52,9 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       // A text draft has the keyboard: its selection, not the terminal's.
       if (serveDraftEdit('copy')) return
       const id = focusedIdRef.current
+      // M338. A relay terminal's xterm is not in the registry — its pty is remote.
+      const relay = id === null ? undefined : existingRelayTerminal(id)
+      if (relay !== undefined) { const chosen = relay.getSelection(); if (chosen) void navigator.clipboard.writeText(chosen); return }
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
       if (selection) void navigator.clipboard.writeText(selection)
@@ -65,6 +69,10 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       // field's, never the running agent's behind it.
       if (serveDraftEdit('paste', text)) return
       const id = focusedIdRef.current
+      // M338. Into a relay terminal only as TEXT, through its own gate; an
+      // image path would name a file on this Mac that the relay VM cannot read.
+      const relay = id === null ? undefined : existingRelayTerminal(id)
+      if (relay !== undefined) { if (text) relay.paste(text); return }
       const session = id ? registry.get(id) : undefined
       if (text) { session?.handle.paste(text); return }
       // M145 (backlog #13's bytes case). No TEXT on the clipboard: an image

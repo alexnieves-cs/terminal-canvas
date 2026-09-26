@@ -1,10 +1,12 @@
 import { useEffect, useState, type CSSProperties, type JSX } from 'react'
 import type { AgentPresenceStatus, PresenceRoster, RemotePeer } from '@shared/presence'
 import { latestRoster, onRoster } from './presence-store'
+import { TONE_WORKING } from '../panels/panel-state'
 
-/** The agent status as the canvas's own tone vocabulary (styles.css [data-tone]). */
-const TONE: Record<AgentPresenceStatus, string | undefined> = {
-  none: undefined, idle: 'idle', working: 'working', 'needs-you': 'needs-you', error: 'exited'
+/** The agent status as the canvas's own tone vocabulary (styles.css [data-tone]).
+ *  TONE_WORKING, not the literal: panel-state.ts owns the state words (verify:rail state.2). */
+export const TONE: Record<AgentPresenceStatus, string | undefined> = {
+  none: undefined, idle: 'idle', working: TONE_WORKING, 'needs-you': 'needs-you', error: 'exited'
 }
 
 /**

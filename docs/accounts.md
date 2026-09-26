@@ -53,7 +53,21 @@ tc login                                  # dialog, then browser; first sign-in 
 tc logout [--user <github-id>]            # this Mac only (scope=local); all accounts if none named
 tc invite --role member|admin [--org <id>]  # prints the code once; only sha256(code) is stored
 tc join <tcinv_…>                         # previews the org, dialog, then joins
+tc accounts                               # the accounts on this Mac, the active one first
+tc use <github-login>                     # dialog, then that account is the one every door acts as
 ```
+
+### In the app (M336)
+
+The top bar's last control is the account menu: the active account's initials, or
+**Sign in** when accounts are configured and nobody is. With accounts unconfigured and
+nobody signed in it is absent, and the palette's *Account: sign in with GitHub…* row
+names the missing variables. The menu lists every account signed in on this Mac as a
+radio set — the checked one is **active**: presence, sharing and the relay act as it.
+The choice is kept in `userData/account-active` (a GitHub id, not a secret); signing in
+makes the new account active, and signing out the active one hands it to the newest.
+Main tells the renderer on every change (`auth:changed`, metadata only) and restarts
+presence as the new person.
 
 ## The schema's boundary
 
@@ -175,7 +189,27 @@ Apply `supabase/migrations/20260924140000_workspace_shares.sql`. Its RPCs are
 `create_workspace_share`, `workspace_role` and `set_workspace_member` (owner only,
 editor/viewer/none, members of the share's org only). The app's doors are
 `workspace:share` (the active workspace), `workspace:shares`, `workspace:open-share` and
-`workspace:share-member`. So far there is only the bridge: no UI and no `tc` verb.
+`workspace:share-member`, plus `workspace:share-members` (M337: the share's org with
+each person's role, for the owner's picker).
+
+**In the app (M337)**, the account menu's *Share this workspace…* and *Open a shared
+workspace…* open the share dialog. Sharing, opening and every role change is a click in
+that dialog. The verbs `share-workspace`, `open-share` and `share-role` take all four
+doors (the account menu, the palette, `tc plan …`, a workflow action node), and every
+one of them only OPENS the dialog, prefilled — an agent proposes, the person commits.
+
+**From a terminal:**
+
+```
+tc shares                                          # the shared workspaces you are in
+tc share [--org <org-id>]                          # dialog NAMING the org, then share the active workspace
+tc open-share <share-id>                           # dialog, then add it here as a workspace
+tc share-role <share-id> <login|user-id> <editor|viewer|none>   # dialog naming the share, then set
+```
+
+Each dialog names what it acts on (the organization, the shared workspace), because the
+id a terminal passes need not be the one on screen. An unknown id is refused before any
+dialog.
 
 `verify:canvas-sync` covers the binding with two machines over a relay, the schema, the
 store, the auth lookup, and a **real Hocuspocus server with real providers** on

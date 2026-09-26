@@ -68,7 +68,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey, createRunLedger
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey, createRunLedger, INERT_PRESENCE
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -909,6 +909,39 @@ const SCENES = [
       await sleep(800)
       await k.shot('starter')
     } },
+  // M336–M338. After the starter, on purpose: these turn the harness's account
+  // ON, and every scene above must keep its top bar exactly as its golden has it.
+  { name: 'account-menu', intent: 'M336. The account menu open from the top bar\'s last control — the active account\'s initials (`AL`) in a circle. Under `Active account`, the two GitHub accounts signed in on this Mac as a radio set, `ada-lovelace` checked; `Add another account…`; under `Sharing`, `Share this workspace…` and `Open a shared workspace…`; below a rule, `Sign out ada-lovelace`. The menu is the View menu\'s own surface.',
+    run: async (k) => {
+      await k.emptyCanvas()
+      k.accountOn()
+      for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.shell__account-avatar')`)); i++) await sleep(100)
+      const point = await k.js(`(() => { const b = document.querySelector('.shell__account-trigger'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (point === null) throw new Error('account-menu scene: no account trigger in the top bar')
+      k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.shell__account-menu:not([hidden])')`)); i++) await sleep(100)
+      await sleep(400)
+      await k.shot('account-menu')
+      await k.press('Escape'); await sleep(300)
+    } },
+  { name: 'share-dialog', intent: 'M337. The share dialog over a dimmed canvas, for a workspace that is not shared yet: `Share “Main”` as its title; one sentence saying exactly what crosses (cards: place, kind, a scrubbed title and owner) and what never does (no command, folder or transcript); an `Organization` select reading `Acme`; the note that you become its owner and nobody is in until you add them; the primary `Share`, and `Done` at the foot.',
+    run: async (k) => {
+      await k.press('k', { metaKey: true }); await sleep(400); await k.type('Share this workspace'); await sleep(400); await k.enter()
+      for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('.share-dialog__org')`)); i++) await sleep(100)
+      await sleep(400)
+      await k.shot('share-dialog')
+      await k.press('Escape'); await sleep(300)
+      await k.js(`(() => { const b = [...document.querySelectorAll('.share-dialog__btn')].find((x) => x.textContent === 'Done'); if (b) b.click(); return true })()`); await sleep(300)
+    } },
+  { name: 'relay', intent: 'M338. A relay terminal on an otherwise empty canvas: a panel that KEEPS its header — the relay glyph, `relay · shell` as its title and the kind word `relay` — over the M335 attachment. The strip reads `You are in control` with the program `shell` in mono and one verb, `End session`; below it the remote shell\'s screen (`ada@relay:~$ uptime`, a load line, an `ls` of the deploy folder) in the terminal well, cursor live because this person is the one typing.',
+    run: async (k) => {
+      await k.press('k', { metaKey: true }); await sleep(400); await k.type('New Relay terminal'); await sleep(400); await k.enter()
+      for (let i = 0; i < 40 && !(await k.js(`(() => { const s = document.querySelector('[data-relay-node] .xterm-rows'); return !!s && s.textContent.includes('ada@relay') })()`)); i++) await sleep(100)
+      if (!(await k.js(`!!document.querySelector('[data-relay-node]')`))) throw new Error('relay scene: no relay panel on the canvas')
+      await k.closePalette()
+      await sleep(600)
+      await k.shot('relay')
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'
@@ -1223,6 +1256,58 @@ app.whenReady().then(async () => {
   // M300. The shot run's own run ledger, in a temp dir — never the real
   // userData — so a scene can write the rows its tab is meant to show.
   const shotLedger = createRunLedger({ file: join(mkdtempSync(join(tmpdir(), 'tc shot ledger ')), 'ledger.jsonl') })
+  // M336–M338. The account, the org the share dialog reads, and the relay —
+  // OFF for every scene until the last three turn them on, so no earlier
+  // golden grows an avatar in its top bar. Nothing here reaches a network:
+  // sign-in, use and every relay write are refused or recorded by name.
+  const SHOT_ORG = { id: '11111111-1111-1111-1111-111111111111', name: 'Acme' }
+  const SHOT_ME = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  const shotAccount = {
+    on: false,
+    sessions: [
+      { githubId: '101', githubLogin: 'ada-lovelace', userId: SHOT_ME, expiresAt: '2099-01-01T00:00:00.000Z', addedAt: '2026-09-01T00:00:00.000Z' },
+      { githubId: '202', githubLogin: 'octocat', userId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', expiresAt: '2099-01-01T00:00:00.000Z', addedAt: '2026-08-01T00:00:00.000Z' }
+    ]
+  }
+  const HARNESS_NO = 'the screenshot harness does not sign in'
+  const shotAccountDoors = {
+    login: async () => ({ kind: 'refused', reason: HARNESS_NO }),
+    logout: async () => ({ kind: 'refused', reason: HARNESS_NO }),
+    sessions: () => (shotAccount.on ? shotAccount.sessions : []),
+    use: () => ({ kind: 'refused', reason: HARNESS_NO }),
+    status: () => (shotAccount.on ? { configured: true } : { configured: false, reason: 'accounts are off in the harness' })
+  }
+  const shotPresence = {
+    ...INERT_PRESENCE,
+    team: async () => (shotAccount.on
+      ? { kind: 'ok', me: SHOT_ME, org: SHOT_ORG, orgs: [SHOT_ORG, { id: '33333333-3333-3333-3333-333333333333', name: 'ada-lovelace' }], members: [], presence: [], activity: [] }
+      : { kind: 'refused', reason: 'the Team view is not wired in this build' })
+  }
+  const SHOT_RELAY_SESSION = 'shotRelaySession0001'
+  const SHOT_RELAY_SCREEN = 'ada@relay:~$ uptime\r\n 14:02:11 up 12 days,  3:41,  2 users,  load average: 0.08, 0.12, 0.09\r\nada@relay:~$ ls deploy\r\nCaddyfile  relay.env.example  setup.sh  tc-relay.service\r\nada@relay:~$ '
+  const shotRelayPanels = new Set()
+  const shotRelayView = (panelId) => ({
+    panelId, sessionId: SHOT_RELAY_SESSION, connection: 'open', userId: SHOT_ME, role: 'owner',
+    control: { sessionId: SHOT_RELAY_SESSION, ownerId: SHOT_ME, controllerId: SHOT_ME, requests: [], peers: [{ userId: SHOT_ME, sockets: 1 }], cols: 96, rows: 24 },
+    canType: true, canRequest: true, program: 'shell', exited: false, reason: null
+  })
+  const shotRelayArrive = (panelId) => {
+    shotRelayPanels.add(panelId)
+    setTimeout(() => {
+      wc.send(SHOT_EVENTS.RELAY_STATE, shotRelayView(panelId))
+      wc.send(SHOT_EVENTS.RELAY_DATA, { panelId, data: new Uint8Array(Buffer.from(SHOT_RELAY_SCREEN)), reset: true })
+    }, 50)
+    return { kind: 'ok', sessionId: SHOT_RELAY_SESSION }
+  }
+  const shotRelay = {
+    spawn: async (panelId) => shotRelayArrive(panelId),
+    attach: async (panelId) => shotRelayArrive(panelId),
+    detach: (panelId) => { shotRelayPanels.delete(panelId) },
+    input: () => false, resize: () => {}, control: () => {}, kill: () => {},
+    list: async () => (shotAccount.on ? { kind: 'ok', sessions: [] } : { kind: 'refused', reason: 'the relay is not wired in this build' }),
+    view: (panelId) => (shotRelayPanels.has(panelId) ? shotRelayView(panelId) : null),
+    replay: (panelId) => { if (shotRelayPanels.has(panelId)) wc.send(SHOT_EVENTS.RELAY_DATA, { panelId, data: new Uint8Array(Buffer.from(SHOT_RELAY_SCREEN)), reset: true }) }
+  }
   registerIpcHandlers(
     ptyManager, layoutStore,
     () => { const b = backend(); return { kind: b.kind, reason: b.reason } },
@@ -1350,7 +1435,18 @@ app.whenReady().then(async () => {
     // unwired door here would have made every shot of those two tabs a
     // picture of an unwired build.
     (filter, limit) => shotLedger.timeline(filter, limit),
-    async (row) => { try { await shotLedger.append(row); return true } catch { return false } }
+    async (row) => { try { await shotLedger.append(row); return true } catch { return false } },
+    // Positions 30–42 (nodes … tasks) take their defaults. The count matters:
+    // the parameter list is POSITIONAL (src/main/CLAUDE.md rule 3), and these
+    // three are 43–45. (The two ledger functions just above sit at 28/29 —
+    // `preview` and `assets` — not at `ledgerTimeline`/`ledgerEvent` (36/37);
+    // that predates M336 and is left for its own change, since correcting it
+    // repaints the Artifacts and Timeline goldens.)
+    ...Array(13).fill(undefined),
+    // M336–M338. See shotAccount above.
+    shotAccountDoors,
+    shotPresence,
+    shotRelay
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })
@@ -1388,6 +1484,8 @@ app.whenReady().then(async () => {
     // M181. An EMPTY canvas with no starter record — the first run the
     // starter scene begins from. Saved through the store's own path (absent
     // stays absent), then reloaded the way loadMain reloads.
+    // M336–M338. The harness's account switch, for the three scenes after the starter.
+    accountOn: () => { shotAccount.on = true; wc.send(SHOT_EVENTS.AUTH_CHANGED, shotAccount.sessions) },
     emptyCanvas: async () => {
       layoutStore.save({ panels: [], groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null, bookmarks: [], runs: [] })
       const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve))

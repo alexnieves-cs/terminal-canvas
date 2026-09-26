@@ -5279,6 +5279,44 @@ try {
   } catch (e) { ok('persist.5 (threw)', false, String(e)) }
 }
 
+// M338 — relay.parse.1/.2. THE RELAY TERMINAL ON DISK. `kind: 'relay'` and a
+// `relay` record — no cwd, no args, no spec, because the pty is on the relay
+// VM. A malformed PROGRAM drops the panel by id (it could never start); a
+// malformed sessionId or shareId costs the FIELD with a warning, so the panel
+// can still start a fresh session. And it must round-trip through the
+// renderer's shapes as a relay panel, never falling through to a terminal —
+// that fall-through would spawn a LOCAL shell with no cwd.
+{
+  const SHARE = '22222222-2222-2222-2222-222222222222'
+  const SESSION = 'AbCdEfGhIjKlMnOpQrStUvWx'
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'r1', kind: 'relay', x: 1, y: 2, w: 720, h: 460, z: 3, relay: { program: 'shell', sessionId: SESSION, shareId: SHARE } },
+      { id: 'r2', kind: 'relay', x: 0, y: 0, w: 720, h: 460, z: 4, relay: { program: '/bin/bash' } },
+      { id: 'r3', kind: 'relay', x: 0, y: 0, w: 720, h: 460, z: 5, relay: { program: 'shell', sessionId: 'no', shareId: 'nope' } },
+      { id: 'r4', kind: 'relay', x: 0, y: 0, w: 720, h: 460, z: 6 },
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 8, cwd: '~', args: [] }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const named = (id) => out.warnings.some((w) => w.includes(id))
+  const r1 = panels.find((p) => p.id === 'r1'), r3 = panels.find((p) => p.id === 'r3')
+  ok('relay.parse.1 a relay panel keeps program, sessionId and shareId with no cwd/args; a path for a program and a missing record drop their own panel; a bad session or share id costs only that field',
+    panels.map((p) => p.id).join(',') === 'r1,r3,n1' &&
+      r1.kind === 'relay' && r1.relay.program === 'shell' && r1.relay.sessionId === SESSION && r1.relay.shareId === SHARE && !('cwd' in r1) && !('args' in r1) &&
+      r3.kind === 'relay' && JSON.stringify(r3.relay) === JSON.stringify({ program: 'shell' }) &&
+      named('r2') && named('r3') && named('r4') && !named('r1'),
+    JSON.stringify({ ids: panels.map((p) => p.id), r1, r3, warnings: out.warnings }))
+  const live = L.toPanels(panels)
+  const back = L.fromPanels(live)
+  const lr1 = live.find((p) => p.rect.id === 'r1')
+  ok('relay.parse.2 toPanels/fromPanels carry a relay panel as a relay panel, absent fields staying absent — never a terminal with no cwd',
+    lr1.kind === 'relay' && !('spec' in lr1) && JSON.stringify(back.find((p) => p.id === 'r1').relay) === JSON.stringify({ program: 'shell', sessionId: SESSION, shareId: SHARE }) &&
+      JSON.stringify(back.find((p) => p.id === 'r3').relay) === JSON.stringify({ program: 'shell' }) && back.find((p) => p.id === 'r3').kind === 'relay',
+    JSON.stringify(back.filter((p) => p.kind === 'relay')))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

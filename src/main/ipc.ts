@@ -55,7 +55,7 @@ import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { accountOfCredentialKey } from '../shared/credential-schema'
-import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, ShareListResult, ShareMemberResult, ShareResult } from '../shared/account'
+import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, AccountStatus, AccountUseResult, ShareListResult, ShareMemberResult, ShareMembersResult, ShareResult } from '../shared/account'
 import { parseRendererOp, parseWorkspaceRole, type CanvasOp, type CanvasSharedView, type SharedTextOpen, type Verdict, type WorkspaceRole } from '../shared/canvas-ops'
 import { parseTextCursor, type LocalPresence, type PresenceRoster } from '../shared/presence'
 import { OBSERVING_MODE, type TeamListResult, type TeamObserveRequest } from '../shared/team'
@@ -412,11 +412,15 @@ export interface AccountHandlers {
   login(): Promise<AccountLoginResult>
   logout(githubId?: string): Promise<AccountLogoutResult>
   sessions(): AccountSessionMeta[]
+  use(githubId: string): AccountUseResult
+  status(): AccountStatus
 }
 export const INERT_ACCOUNT: AccountHandlers = {
   login: async () => ({ kind: 'refused', reason: 'accounts are not available here' }),
   logout: async () => ({ kind: 'refused', reason: 'accounts are not available here' }),
-  sessions: () => []
+  sessions: () => [],
+  use: () => ({ kind: 'refused', reason: 'accounts are not available here' }),
+  status: () => ({ configured: false, reason: 'accounts are not available here' })
 }
 
 /**
@@ -448,6 +452,7 @@ export interface PresenceHandlers {
   shares(): Promise<ShareListResult>
   openShare(shareId: string): Promise<{ kind: 'ok'; workspaceId: string } | { kind: 'refused' | 'failed'; reason: string }>
   setShareMember(req: { shareId: string; userId: string; role: WorkspaceRole | null }): Promise<ShareMemberResult>
+  shareMembers(shareId: string): Promise<ShareMembersResult>
   /** Shared text's replica doors (canvas-sync.ts). Inert: no doc to open, every update refused. */
   textOpen(workspaceId: string): SharedTextOpen | null
   textClose(workspaceId: string): void
@@ -462,6 +467,7 @@ export const INERT_PRESENCE: PresenceHandlers = {
   shares: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
   openShare: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
   setShareMember: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
+  shareMembers: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
   textOpen: () => null, textClose: () => {},
   textUpdate: () => ({ ok: false, reason: SHARING_NOT_WIRED })
 }
@@ -810,6 +816,11 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AUTH_LOGOUT, (_event, githubId?: unknown) =>
     account.logout(typeof githubId === 'string' && githubId !== '' ? githubId : undefined))
   ipcMain.handle(IPC.AUTH_SESSIONS, () => account.sessions())
+  ipcMain.handle(IPC.AUTH_USE, (_event, githubId: unknown) =>
+    typeof githubId === 'string' && /^\d{1,20}$/.test(githubId) ? account.use(githubId) : { kind: 'refused', reason: 'not a GitHub user id' })
+  ipcMain.handle(IPC.AUTH_STATUS, () => account.status())
+  ipcMain.handle(IPC.WORKSPACE_SHARE_MEMBERS, (_event, shareId: unknown) =>
+    typeof shareId === 'string' && UUID.test(shareId) ? presence.shareMembers(shareId) : Promise.resolve({ kind: 'refused' as const, reason: 'not a share id' }))
   // M320. Shape-checked here; main re-checks every path against its root.
   ipcMain.handle(IPC.TASK_EVIDENCE, (_event, req: unknown) => {
     const r = req as { itemId?: unknown; panelIds?: unknown; root?: unknown } | null

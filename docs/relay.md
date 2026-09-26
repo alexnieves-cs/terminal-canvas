@@ -82,6 +82,28 @@ owner decides who types.
 fake pty and minted keys. A real node-pty + bash run was done by hand on macOS
 (output, size, no `TC_*` in the pty env, audit file mode). Not yet exercised: the
 VM itself, Caddy/TLS, Supabase's real JWKS and RLS answer, and the xterm strip in
-a live window. **The relay terminal is not yet a canvas panel kind** — the
-component (`renderer/relay/RelayTerminal.tsx`) exists, but no door opens one;
-making it a kind means the four doors, persistence and goldens.
+a live window.
+
+## The panel kind (M338)
+
+`relay` is a canvas kind. Create it like any object — the create sheet's *Relay
+terminal*, the palette's *New Relay terminal*, `tc plan create-relay [program]` or an
+action node — with a program name from `programs.json` (default `shell`), or
+`attach <session id>` to join one you may attach to. Creation asks `relay:list` first,
+so a relay that is not set up is refused by name rather than left as a dead panel. In a
+shared workspace the session is bound to the share, so members attach by their role.
+
+- **Persistence.** The record is `{ kind: 'relay', relay: { program, sessionId?, shareId? } }`
+  and nothing else — no cwd, no spec. The first session id the relay mints is written
+  back, so a relaunch ATTACHES; it never starts a second process. A bad program drops
+  the panel; a bad session or share id costs only that field.
+- **Not a terminal here.** It is on `isTerminalPanel`'s exclusion list: admitting it
+  would hand the registry a panel with no spec and spawn a LOCAL shell.
+- **The frame keeps its header** — it is the only place that says the terminal runs on
+  the relay — and offers *New session* once the old one ended or the relay refused it.
+- **Close detaches**; the relay reaps a session nobody is attached to. *End session* in
+  the strip is the kill. A merged view never attaches.
+- **⌘V / ⌘C** reach it through `useCanvasClipboard` (text only, through the input
+  gate); it follows the app theme through `applyRelayTheme`.
+- It does not travel in a portable export, and a teammate's placeholder of one carries no
+  session id, so joining a teammate's relay session is `create-relay attach <id>`.

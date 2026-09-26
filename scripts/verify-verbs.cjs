@@ -49,7 +49,7 @@ const FACTS = {
 
 ;(async () => {
   ok('creation.registry.1 one registry describes every creation pill and its executable four doors',
-    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist', 'sheet', 'deck', 'tool'].every((id) =>
+    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist', 'sheet', 'deck', 'tool', 'relay'].every((id) =>
       V.CREATABLE_OBJECTS.some((entry) => entry.id === id && typeof entry.create === 'function' && entry.icon && V.V9_DOORS[entry.verb])))
   // tool.door.1 (M252). "I've read this" is a PERSON'S act and has no door:
   // every verb, palette row, agent line and action node runs through these

@@ -52,7 +52,7 @@ function SharedDraft({ p, workspaceId, who, onClose }: { p: SharedPanel; workspa
   )
 }
 
-const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture' }
+const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture', relay: 'Relay terminal' }
 
 /** Display names from the roster, so a placeholder names a person rather than a uuid. */
 function useNames(workspaceId: string | undefined): ReadonlyMap<string, string> {

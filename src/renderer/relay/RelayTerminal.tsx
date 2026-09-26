@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { RelayView } from '@shared/ipc-contract'
+import type { ITheme } from '@xterm/xterm'
 import { relayActions, relayControlLine, type RelayAction } from './relay-gate'
 import { createRelayTerminal, type RelayOpen, type RelayTerminal as Controller } from './relay-terminal'
 
@@ -12,11 +13,23 @@ import { createRelayTerminal, type RelayOpen, type RelayTerminal as Controller }
  * detaches from the relay — an unmount just takes the host away.
  */
 const controllers = new Map<string, Controller>()
+/** M338. The theme every relay xterm wears — set by Canvas beside registry.applyTerminalOptions, remembered for the next one made. */
+let theme: ITheme | undefined
 
 export function relayTerminalFor(panelId: string): Controller {
   let c = controllers.get(panelId)
-  if (c === undefined) { c = createRelayTerminal(panelId); controllers.set(panelId, c) }
+  if (c === undefined) { c = createRelayTerminal(panelId, window.canvas.relay, theme); controllers.set(panelId, c) }
   return c
+}
+
+export function applyRelayTheme(next: ITheme): void {
+  theme = next
+  for (const c of controllers.values()) c.setTheme(next)
+}
+
+/** The controller a mounted relay panel already has, or undefined — never creates one (the clipboard asks). */
+export function existingRelayTerminal(panelId: string): Controller | undefined {
+  return controllers.get(panelId)
 }
 
 /** Closing the panel for good: detach from the relay and free the xterm. */

@@ -314,7 +314,10 @@ app.whenReady().then(() => {
   // relay:control / relay:kill / relay:list / relay:view (199) — the pty
   // relay: a terminal whose process runs on the team's relay VM, the socket
   // and token held in main (main/relay/relay-client.ts).
-  const EXPECTED_CHANNELS = 199
+  // auth:use / auth:status / workspace:share-members (202) — M336–M337: the
+  // account picker's active choice, whether accounts are configured, and the
+  // share's people with their roles for the owner's picker.
+  const EXPECTED_CHANNELS = 202
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

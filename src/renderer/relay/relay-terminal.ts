@@ -14,6 +14,7 @@
  */
 import { attachTerminal, createTerminal, disposeTerminal, type TerminalHandles } from '@renderer/terminal/create-terminal'
 import type { RelayView } from '@shared/ipc-contract'
+import type { ITheme } from '@xterm/xterm'
 import { relayGrid, relayMayType } from './relay-gate'
 
 type Bridge = Window['canvas']['relay']
@@ -28,11 +29,17 @@ export interface RelayTerminal {
   onView(listener: (view: RelayView | null) => void): () => void
   /** Opens the attachment once; later calls are no-ops, so a remount never spawns twice. */
   open(how: RelayOpen): Promise<{ kind: 'ok' } | { kind: 'refused'; reason: string }>
+  /** M338. ⌘V arrives as edit:paste, never natively: through xterm's paste (bracketed), so the input gate still decides. */
+  paste(text: string): void
+  /** M338. ⌘C: the xterm's selection. Anyone may copy what they can see. */
+  getSelection(): string
+  /** M338. The app's light/dark switch, the one registry.applyTerminalOptions gives local terminals. */
+  setTheme(theme: ITheme): void
   dispose(): void
 }
 
-export function createRelayTerminal(panelId: string, bridge: Bridge = window.canvas.relay): RelayTerminal {
-  const handles: TerminalHandles = createTerminal()
+export function createRelayTerminal(panelId: string, bridge: Bridge = window.canvas.relay, theme?: ITheme): RelayTerminal {
+  const handles: TerminalHandles = createTerminal(theme)
   const term = handles.term
   let host: HTMLElement | null = null
   let observer: ResizeObserver | null = null
@@ -106,6 +113,13 @@ export function createRelayTerminal(panelId: string, bridge: Bridge = window.can
       ).then((r) => (r.kind === 'ok' ? { kind: 'ok' as const } : r))
       return opened
     },
+    paste(text) {
+      // term.paste emits onData, which the gate above already guards: a viewer's
+      // paste dies at the same line a viewer's keystroke does.
+      if (relayMayType(current)) term.paste(text)
+    },
+    getSelection: () => term.getSelection(),
+    setTheme(theme) { term.options.theme = theme },
     dispose() {
       offData(); offState(); offInput.dispose(); offBinary.dispose()
       observer?.disconnect()

@@ -10,6 +10,9 @@
  *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
  *   tc login | tc logout [--user <github-id>]
  *   tc invite --role <member|admin> [--org <org-id>] | tc join <code>
+ *   tc accounts | tc use <github-login>
+ *   tc shares | tc share [--org <org-id>] | tc open-share <share-id>
+ *   tc share-role <share-id> <login|user-id> <editor|viewer|none>
  *
  * Exit 0 on ok, 1 on a refusal (the app answered no), 2 when nothing is
  * listening — three answers, because "the app said no" and "there is no
@@ -37,8 +40,12 @@ export const USAGE = [
   '       tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]',
   '       tc login | tc logout [--user <github-id>]',
   '       tc invite --role <member|admin> [--org <org-id>] | tc join <code>',
+  '       tc accounts | tc use <github-login>',
+  '       tc shares | tc share [--org <org-id>] | tc open-share <share-id>',
+  '       tc share-role <share-id> <login|user-id> <editor|viewer|none>',
   '',
   'login and join ask in the app before they act; login opens your browser and waits for it.',
+  'use, share, open-share and share-role ask in the app too; accounts and shares only list.',
   'api exits 1 when the service answered 4xx or 5xx, so a script can test $? — the reply',
   'carries the status and body either way.',
   '',
@@ -225,6 +232,21 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     }
     case 'join':
       return rest.length === 1 && rest[0] !== '' ? { kind: 'ok', line: JSON.stringify({ verb: 'join', code: rest[0] }) } : { kind: 'usage', error: 'join takes exactly one invite code' }
+    // M336–M337. The picker and sharing verbs; the app asks before any change.
+    case 'accounts':
+    case 'shares':
+      return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }
+    case 'use':
+      return rest.length === 1 && rest[0] !== '' ? { kind: 'ok', line: JSON.stringify({ verb: 'use', who: rest[0] }) } : { kind: 'usage', error: 'use takes one GitHub login — `tc accounts` lists them' }
+    case 'share': {
+      if (rest.length === 0) return { kind: 'ok', line: JSON.stringify({ verb: 'share' }) }
+      if (rest.length === 2 && rest[0] === '--org' && rest[1] !== '') return { kind: 'ok', line: JSON.stringify({ verb: 'share', orgId: rest[1] }) }
+      return { kind: 'usage', error: 'share takes nothing, or --org <org-id>' }
+    }
+    case 'open-share':
+      return rest.length === 1 && rest[0] !== '' ? { kind: 'ok', line: JSON.stringify({ verb: 'open-share', shareId: rest[0] }) } : { kind: 'usage', error: 'open-share takes one shared workspace id — `tc shares` lists them' }
+    case 'share-role':
+      return rest.length === 3 ? { kind: 'ok', line: JSON.stringify({ verb: 'share-role', shareId: rest[0], who: rest[1], role: rest[2] }) } : { kind: 'usage', error: 'share-role takes a share id, a login or user id, and editor, viewer or none' }
     case 'list':
     case 'status':
     case 'ping':

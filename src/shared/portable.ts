@@ -54,7 +54,9 @@ const CANNOT_TRAVEL: Readonly<Record<string, string>> = {
   github: 'a GitHub panel reads through this machine\'s own credential',
   jira: 'a Jira panel reads through this machine\'s own credential',
   memory: 'a memory panel reads this machine\'s own project memory',
-  toolbox: 'a toolbox panel reads this machine\'s own permissions'
+  toolbox: 'a toolbox panel reads this machine\'s own permissions',
+  // M338. The session is the team relay's, reached by this person's account.
+  relay: 'a relay terminal is a session on your team\'s relay, reached through your own sign-in'
 }
 
 /**

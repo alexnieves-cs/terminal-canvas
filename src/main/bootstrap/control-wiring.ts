@@ -10,6 +10,7 @@ import { TEAMMATE_ROOT, teammateSlug, type Places } from './places'
 import type { Stores } from './stores'
 import type { MainState, PanelTokens } from './context'
 import type { AccountService } from '../account-session'
+import type { ShareControl } from '../share-control'
 
 /**
  * M87. The broker over the credential store — the store's LAST reader — with
@@ -25,7 +26,7 @@ export interface ControlWiring {
   teammateOfPanel(panelId: string): string | undefined
 }
 
-export function createControlWiring(state: MainState, stores: Stores, places: Places, tokens: PanelTokens, account?: AccountService): ControlWiring {
+export function createControlWiring(state: MainState, stores: Stores, places: Places, tokens: PanelTokens, account?: AccountService, sharing?: ShareControl): ControlWiring {
   const { layoutStore, credentialStore, brokerAudit, ptyManager, memoryStore, teammateMemory } = stores
 
   // M102. A panel's teammate is MAIN's own record (the chat's `teammateId`),
@@ -60,6 +61,8 @@ export function createControlWiring(state: MainState, stores: Stores, places: Pl
     broker,
     // The account verbs; login and join confirm with a person (account-session.ts).
     ...(account === undefined ? {} : { account }),
+    // M336–M337. The picker and sharing verbs; every change asks a person (share-control.ts).
+    ...(sharing === undefined ? {} : { sharing }),
     teammateOf: teammateOfPanel,
     panelOfToken: (token) => tokens.panelOf(token),
     presets: () => allPresets(layoutStore.presets()),

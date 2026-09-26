@@ -418,6 +418,14 @@ export interface PaletteActions {
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
   prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M337. Open the share dialog to share the active workspace (an org prefilled). The dialog's click shares; this never does. */
+  shareWorkspace(org?: string): Promise<CreationResult>
+  /** M337. Open the share dialog's list of shared workspaces (one prefilled). Opening is the person's click. */
+  openSharedWorkspace(share?: string): Promise<CreationResult>
+  /** M337. Open the share dialog with a role change proposed; Apply is the person's. `who` is a user id or a GitHub login. */
+  proposeShareRole(who?: string, role?: string): Promise<CreationResult>
+  /** M336. Sign in with GitHub (or add another account). Excluded from every verb: an account is the person's. */
+  signIn(): Promise<CreationResult>
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M251. A Markdown file panel's deck as .pptx, through main's save dialog; the note is the export sentence. */
   exportDeck(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2110,6 +2118,12 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M190. Feedback: a DRAFT, opened in the person's own browser. The row says
   // what the door does, because "Send feedback" would promise a send this app
   // never makes.
+  // M336–M337. The account and sharing rows. The three sharing rows open the
+  // share dialog; the dialog is where anything is shared, opened or changed.
+  out.push({ id: 'account.sign-in', title: 'Account: sign in with GitHub…', subtitle: 'to share workspaces and see your team; add another account the same way', group: 'canvas', searchText: 'account sign in login github supabase add another switch', run: () => { void actions.signIn() } })
+  out.push({ id: 'share.workspace', title: 'Share this workspace…', subtitle: 'put it in one of your organizations — teammates see cards, never commands or transcripts', group: 'canvas', searchText: 'share workspace team organization collaborate invite members', run: () => { void actions.shareWorkspace() } })
+  out.push({ id: 'share.open', title: 'Open a shared workspace…', subtitle: 'the workspaces your teammates shared with you', group: 'canvas', searchText: 'open shared workspace team join room', run: () => { void actions.openSharedWorkspace() } })
+  out.push({ id: 'share.role', title: 'Shared workspace: members and roles…', subtitle: 'who is in, and whether they edit or watch — the owner decides', group: 'canvas', searchText: 'share role member editor viewer remove permission access', run: () => { void actions.proposeShareRole() } })
   out.push({ id: 'feedback.open', title: 'Prepare feedback…', subtitle: 'a scrubbed draft in your browser — you read it and send it, this app does not', group: 'canvas', searchText: 'feedback issue bug report problem help github', run: () => { void actions.prepareFeedback() } })
   // M189. The portable file's two rows. Export writes what is on this canvas
   // (pictures only when the person asks, through the verb line); Import makes

@@ -61,10 +61,24 @@ export type ControlRequest =
   | { verb: 'logout'; githubId?: string }
   | { verb: 'invite'; role: 'member' | 'admin'; orgId?: string }
   | { verb: 'join'; code: string }
+  /**
+   * M336–M337. The account picker and sharing (share-control.ts). SOCKET ONLY,
+   * like the account verbs above. The lists answer at once; `use`, `share`,
+   * `open-share` and `share-role` PROPOSE — a dialog asks a person first.
+   * `who` is a GitHub login or id (an account) or a login or user id (a member).
+   */
+  | { verb: 'accounts' }
+  | { verb: 'use'; who: string }
+  | { verb: 'shares' }
+  | { verb: 'share'; orgId?: string }
+  | { verb: 'open-share'; shareId: string }
+  | { verb: 'share-role'; shareId: string; who: string; role: 'editor' | 'viewer' | null }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
   | { kind: 'bad'; error: string }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const CONTROL_SCHEME = 'terminal-canvas'
 
@@ -182,6 +196,33 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       if (code === null || code === undefined) return { kind: 'bad', error: 'join needs an invite code' }
       if (code.length > 128) return { kind: 'bad', error: 'that invite code is too long' }
       return { kind: 'ok', req: { verb: 'join', code } }
+    }
+    case 'accounts':
+    case 'shares':
+      return { kind: 'ok', req: { verb } }
+    case 'use': {
+      const who = optionalString(fields['who'])
+      if (who === null || who === undefined || !/^[A-Za-z0-9-]{1,39}$/.test(who)) return { kind: 'bad', error: 'use needs a GitHub login or user id' }
+      return { kind: 'ok', req: { verb: 'use', who } }
+    }
+    case 'share': {
+      const orgId = optionalString(fields['orgId'])
+      if (orgId === null || (orgId !== undefined && !UUID_RE.test(orgId))) return { kind: 'bad', error: 'orgId must be an organization id (a uuid)' }
+      return { kind: 'ok', req: orgId === undefined ? { verb: 'share' } : { verb: 'share', orgId } }
+    }
+    case 'open-share': {
+      const shareId = optionalString(fields['shareId'])
+      if (shareId === null || shareId === undefined || !UUID_RE.test(shareId)) return { kind: 'bad', error: 'open-share needs a shared workspace id (a uuid) — `tc shares` lists them' }
+      return { kind: 'ok', req: { verb: 'open-share', shareId } }
+    }
+    case 'share-role': {
+      const shareId = optionalString(fields['shareId'])
+      const who = optionalString(fields['who'])
+      const role = fields['role']
+      if (shareId === null || shareId === undefined || !UUID_RE.test(shareId)) return { kind: 'bad', error: 'share-role needs a shared workspace id (a uuid)' }
+      if (who === null || who === undefined || !/^[A-Za-z0-9-]{1,39}$|^[0-9a-f-]{36}$/i.test(who)) return { kind: 'bad', error: 'share-role needs a GitHub login or user id' }
+      if (role !== 'editor' && role !== 'viewer' && role !== 'none') return { kind: 'bad', error: 'a role is editor, viewer or none' }
+      return { kind: 'ok', req: { verb: 'share-role', shareId, who, role: role === 'none' ? null : role } }
     }
     case 'board': {
       const op = fields['op']

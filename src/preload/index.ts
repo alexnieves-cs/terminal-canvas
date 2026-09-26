@@ -4,6 +4,7 @@ import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contra
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
 import type { TeamObserved } from '../shared/team'
+import type { AccountSessionMeta } from '../shared/account'
 import type { CanvasSharedView, SharedSaveMeta, SharedTextPush } from '../shared/canvas-ops'
 import type { PersistedRoutine } from '../shared/routines'
 import {
@@ -394,7 +395,10 @@ const bridge: CanvasBridge = {
   auth: {
     login: () => ipcRenderer.invoke(IPC.AUTH_LOGIN),
     logout: (githubId?: string) => ipcRenderer.invoke(IPC.AUTH_LOGOUT, githubId),
-    sessions: () => ipcRenderer.invoke(IPC.AUTH_SESSIONS)
+    sessions: () => ipcRenderer.invoke(IPC.AUTH_SESSIONS),
+    use: (githubId: string) => ipcRenderer.invoke(IPC.AUTH_USE, githubId),
+    status: () => ipcRenderer.invoke(IPC.AUTH_STATUS),
+    onChanged: (listener) => subscribe<AccountSessionMeta[]>(IPC_EVENTS.AUTH_CHANGED, listener)
   },
   presence: {
     report: (local) => ipcRenderer.invoke(IPC.PRESENCE_LOCAL, local),
@@ -408,7 +412,8 @@ const bridge: CanvasBridge = {
     share: (req) => ipcRenderer.invoke(IPC.WORKSPACE_SHARE, req),
     shares: () => ipcRenderer.invoke(IPC.WORKSPACE_SHARES),
     open: (shareId) => ipcRenderer.invoke(IPC.WORKSPACE_OPEN_SHARE, shareId),
-    setMember: (req) => ipcRenderer.invoke(IPC.WORKSPACE_SHARE_MEMBER, req)
+    setMember: (req) => ipcRenderer.invoke(IPC.WORKSPACE_SHARE_MEMBER, req),
+    members: (shareId) => ipcRenderer.invoke(IPC.WORKSPACE_SHARE_MEMBERS, shareId)
   },
   sharedText: {
     open: (workspaceId) => ipcRenderer.invoke(IPC.TEXT_OPEN, workspaceId),

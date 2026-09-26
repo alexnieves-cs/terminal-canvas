@@ -23,8 +23,8 @@ import {
 import {
   INVITE_ROLES, NOT_SIGNED_IN,
   type AccountInviteResult, type AccountJoinResult, type AccountLoginResult,
-  type AccountLogoutResult, type AccountSessionMeta, type InviteRole,
-  type ShareListResult, type ShareMemberResult, type ShareResult
+  type AccountLogoutResult, type AccountSessionMeta, type AccountStatus, type AccountUseResult, type InviteRole,
+  type ShareListResult, type ShareMemberResult, type ShareMembersResult, type ShareResult
 } from '../shared/account'
 import type { CredentialStore } from './credential-store'
 import { parseTeamRows, type TeamListResult, type TeamOrg, type TeamPresenceStatus } from '../shared/team'
@@ -57,12 +57,25 @@ export interface AccountDeps {
   /** Injected so verify:account can use a free port and a short wait. */
   listen?: (port: number, timeoutMs: number) => Promise<CallbackServer>
   loginTimeoutMs?: number
+  /**
+   * M336. Which signed-in account is ACTIVE, by GitHub id — the person's
+   * choice, kept outside the credential store because it is not a secret and
+   * must survive a refresh re-saving the session. Absent (or naming an account
+   * no longer signed in), the newest sign-in is active, which was the only
+   * rule before there was a picker. In memory when not injected.
+   */
+  activePointer?: { read(): string | undefined; write(githubId: string | undefined): void }
 }
 
 export interface AccountService {
   login(opts?: { askFirst?: boolean }): Promise<AccountLoginResult>
   logout(githubId?: string): Promise<AccountLogoutResult>
+  /** Every account signed in on this Mac, the ACTIVE one first, then newest first. */
   sessions(): AccountSessionMeta[]
+  /** M336. Make a signed-in account the active one. No network: the choice is this Mac's. */
+  use(githubId: string): AccountUseResult
+  /** M336. Whether accounts are configured at all — so a UI can say why sign-in would refuse before it is pressed. */
+  status(): AccountStatus
   invite(req: { role: InviteRole; orgId?: string }): Promise<AccountInviteResult>
   join(req: { code: string; askFirst?: boolean }): Promise<AccountJoinResult>
   /**
@@ -97,6 +110,12 @@ export interface AccountService {
   listShares(): Promise<ShareListResult>
   /** This person's role in one share now, or null when they have none (or the server could not say). */
   workspaceRole(shareId: string): Promise<WorkspaceRole | null>
+  /**
+   * M337. The share's organization's people, each with their role in the
+   * share or null — the rows the owner's role picker is drawn from. RLS
+   * answers only for a share this person is in.
+   */
+  shareMembers(shareId: string): Promise<ShareMembersResult>
   /** An owner sets (or, with null, removes) a member's role. The server refuses anyone else. */
   setShareMember(req: { shareId: string; userId: string; role: WorkspaceRole | null }): Promise<ShareMemberResult>
 }
@@ -105,6 +124,7 @@ export interface AccountService {
 interface StoredSession { v: 1; accessToken: string; refreshToken: string; expiresAt: number; userId: string; githubId: string; githubLogin: string }
 
 const INVITE_TTL_DAYS = 7
+const rank = (role: 'owner' | 'editor' | 'viewer' | null): number => role === 'owner' ? 0 : role === 'editor' ? 1 : role === 'viewer' ? 2 : 3
 /** Refresh this long before expiry, so a request never races the clock. */
 const REFRESH_SKEW_S = 60
 
@@ -113,6 +133,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
   const random = deps.random ?? randomBytes
   const listen = deps.listen ?? startCallbackServer
   const loginTimeoutMs = deps.loginTimeoutMs ?? 5 * 60 * 1000
+  let memoryPointer: string | undefined
+  const pointer = deps.activePointer ?? { read: () => memoryPointer, write: (id: string | undefined) => { memoryPointer = id } }
   let inFlight: Promise<AccountLoginResult> | null = null
 
   const accountKeys = (): string[] =>
@@ -150,10 +172,18 @@ export function createAccountService(deps: AccountDeps): AccountService {
     return { githubId: s.githubId, githubLogin: s.githubLogin, userId: s.userId, expiresAt: new Date(s.expiresAt * 1000).toISOString(), addedAt: m.addedAt }
   }
 
-  const sessions = (): AccountSessionMeta[] =>
-    accountKeys().map(metaOf).filter((m): m is AccountSessionMeta => m !== undefined)
-      // Newest first: the ACTIVE account is the one signed in last.
+  const sessions = (): AccountSessionMeta[] => {
+    const all = accountKeys().map(metaOf).filter((m): m is AccountSessionMeta => m !== undefined)
+      // Newest first: with no choice made, the ACTIVE account is the one signed in last.
       .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+    // M336. The person's choice goes first. Every caller reads `[0]` as the
+    // active account (active() below, currentUserId, the renderer's
+    // useSharedCanvas), so ordering IS the pointer — one rule, not two.
+    const chosen = pointer.read()
+    const at = chosen === undefined ? -1 : all.findIndex((m) => m.githubId === chosen)
+    if (at > 0) all.unshift(...all.splice(at, 1))
+    return all
+  }
 
   const clientOr = (): { kind: 'ok'; client: AuthClient } | { kind: 'refused'; reason: string } => {
     const cfg = deps.config()
@@ -220,6 +250,9 @@ export function createAccountService(deps: AccountDeps): AccountService {
     if (!ex.ok) return { kind: 'failed', reason: `the sign-in code was not accepted: ${ex.reason}` }
     const saved = save(ex.value)
     if (!saved.ok) return { kind: 'refused', reason: saved.reason }
+    // Signing in is choosing: the account just added becomes the active one,
+    // even when an older choice is on record.
+    pointer.write(ex.value.githubId)
     // A first sign-in owns a personal organization, so `tc invite` has
     // somewhere to invite into. Idempotent server-side; a failure here is
     // reported beside the sign-in, never instead of it.
@@ -250,6 +283,18 @@ export function createAccountService(deps: AccountDeps): AccountService {
 
   return {
     sessions,
+
+    use(githubId) {
+      const hit = sessions().find((m) => m.githubId === githubId)
+      if (hit === undefined) return { kind: 'refused', reason: `no session for GitHub user ${githubId} on this Mac` }
+      pointer.write(githubId)
+      return { kind: 'ok', session: hit }
+    },
+
+    status() {
+      const cfg = deps.config()
+      return cfg.kind === 'missing' ? { configured: false, reason: cfg.reason } : { configured: true }
+    },
 
     async team(orgId) {
       const c = clientOr()
@@ -351,6 +396,40 @@ export function createAccountService(deps: AccountDeps): AccountService {
       return r.ok ? parseWorkspaceRole(r.value) ?? null : null
     },
 
+    async shareMembers(shareId) {
+      const c = clientOr()
+      if (c.kind === 'refused') return c
+      const a = await active(c.client)
+      if (a.kind === 'refused') return a
+      const q = encodeURIComponent(shareId)
+      const share = await c.client.rest(a.s.accessToken, 'GET', `workspace_shares?select=org_id&id=eq.${q}`)
+      if (!share.ok) return { kind: 'failed', reason: `could not read the shared workspace: ${share.reason}` }
+      const org = (Array.isArray(share.value) ? share.value[0] : undefined) as { org_id?: unknown } | undefined
+      if (typeof org?.org_id !== 'string') return { kind: 'refused', reason: 'you are not a member of that shared workspace' }
+      const [people, roles] = await Promise.all([
+        c.client.rest(a.s.accessToken, 'GET', `organization_members?select=user_id,users(github_login)&org_id=eq.${encodeURIComponent(org.org_id)}`),
+        c.client.rest(a.s.accessToken, 'GET', `workspace_members?select=user_id,role&share_id=eq.${q}`)
+      ])
+      if (!people.ok) return { kind: 'failed', reason: `could not read the organization's members: ${people.reason}` }
+      if (!roles.ok) return { kind: 'failed', reason: `could not read the shared workspace's members: ${roles.reason}` }
+      const roleOf = new Map<string, 'owner' | 'editor' | 'viewer'>()
+      for (const r of (Array.isArray(roles.value) ? roles.value : []) as Array<{ user_id?: unknown; role?: unknown }>) {
+        const role = parseWorkspaceRole(r.role)
+        if (typeof r.user_id === 'string' && role !== undefined) roleOf.set(r.user_id, role)
+      }
+      const members = ((Array.isArray(people.value) ? people.value : []) as Array<{ user_id?: unknown; users?: { github_login?: unknown } | null }>)
+        .filter((p) => typeof p.user_id === 'string')
+        .map((p) => ({
+          userId: p.user_id as string,
+          login: typeof p.users?.github_login === 'string' ? p.users.github_login : (p.user_id as string).slice(0, 8),
+          role: roleOf.get(p.user_id as string) ?? null,
+          me: p.user_id === a.s.userId
+        }))
+        // The owner first, then who is in, then who could be — a roster reads top-down.
+        .sort((x, y) => rank(x.role) - rank(y.role) || x.login.localeCompare(y.login))
+      return { kind: 'ok', orgId: org.org_id, members }
+    },
+
     async setShareMember(req) {
       const c = clientOr()
       if (c.kind === 'refused') return c
@@ -401,6 +480,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
         deps.store.delete(key)
         const id = accountOfCredentialKey(key)
         if (id !== undefined) out.push(id)
+        // The choice goes with the account: the next-newest becomes active.
+        if (id !== undefined && pointer.read() === id) pointer.write(undefined)
       }
       return { kind: 'signed-out', githubIds: out }
     },

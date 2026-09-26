@@ -5,6 +5,8 @@ import { shellControl } from './shell-control'
 import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
 import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem, SegmentedControl } from '@renderer/primitives'
 import { LiveStatus } from './LiveStatus'
+import { AccountMenu } from '../account/AccountMenu'
+import type { Accounts } from '../account/useAccounts'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -37,6 +39,8 @@ export interface TopBarProps {
   running: number
   waiting: number
   onJumpWaiting: () => void
+  /** M336. The signed-in accounts; the menu is absent when accounts are unconfigured and nobody is signed in. */
+  accounts?: Accounts
 }
 
 
@@ -60,7 +64,7 @@ export interface TopBarProps {
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
   workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
-  centerView, onSetCenterView, running, waiting, onJumpWaiting
+  centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -211,6 +215,9 @@ export function TopBar({
           </MenuContent>
         </Menu>
       </div>
+      {/* M336. Last in the bar, where an account lives in every Mac app with
+          one: WHO the doors act as is a fact about the window, not the canvas. */}
+      {accounts !== undefined && <AccountMenu accounts={accounts} />}
     </header>
   )
 }

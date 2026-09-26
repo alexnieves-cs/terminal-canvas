@@ -90,6 +90,7 @@ module.exports = {
   // where the credential check itself runs.
   credentialDir,
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
+  INERT_PRESENCE: require('../src/main/ipc').INERT_PRESENCE,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   // registerIpcHandlers' two trailing M16 parameters need a real watcher
   // manager and a window getter, the same shape ptyManager/mainWindow already

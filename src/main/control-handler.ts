@@ -17,6 +17,7 @@ import { unreviewedPresetReason } from './presets'
 import type { ControlReply } from './control-server'
 import type { AgentPlanCaller, AgentPlanReply } from '../shared/plan'
 import type { AccountService } from './account-session'
+import type { ShareControl } from './share-control'
 
 export interface ControlSessionRow {
   panelId: string
@@ -62,6 +63,8 @@ export interface ControlHandlerDeps {
    * name. `login`/`join` are called with `askFirst`, so a person confirms.
    */
   account?: Pick<AccountService, 'login' | 'logout' | 'invite' | 'join'>
+  /** M336–M337. The account picker and sharing verbs (share-control.ts). Absent means refused by name. */
+  sharing?: ShareControl
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -172,6 +175,21 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
           : await deps.account.join({ code: req.code, askFirst: true })
         if ('reason' in r) return { ok: false, error: r.reason, kind: r.kind }
         return { ok: true, ...r }
+      }
+      case 'accounts':
+      case 'use':
+      case 'shares':
+      case 'share':
+      case 'open-share':
+      case 'share-role': {
+        if (deps.sharing === undefined) return { ok: false, error: 'accounts are not available here' }
+        const sh = deps.sharing
+        return req.verb === 'accounts' ? sh.accounts()
+          : req.verb === 'use' ? sh.use(req.who)
+          : req.verb === 'shares' ? sh.shares()
+          : req.verb === 'share' ? sh.share(req.orgId)
+          : req.verb === 'open-share' ? sh.openShare(req.shareId)
+          : sh.shareRole({ shareId: req.shareId, who: req.who, role: req.role })
       }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or

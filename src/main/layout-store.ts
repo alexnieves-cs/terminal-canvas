@@ -688,7 +688,10 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
         // Copied out for the reason presets() copies: a caller must not be
         // able to mutate the snapshot the store is about to serialise.
         panelIds: w.panels.map((p) => p.id),
-        active: w.id === snapshot.activeWorkspaceId
+        active: w.id === snapshot.activeWorkspaceId,
+        // M337. The share's id and this person's cached role, for the share
+        // dialog and the rail's mark — never the org or the doc's bytes.
+        ...(w.share === undefined ? {} : { share: { id: w.share.id, role: w.share.role } })
       })),
 
     // Every workspace's panels, for the merged view. workspaces() carries

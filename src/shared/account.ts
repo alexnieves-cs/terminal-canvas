@@ -27,6 +27,14 @@ export type AccountLoginResult =
   | { kind: 'declined'; reason: string }
   | { kind: 'refused' | 'failed'; reason: string }
 
+/** M336. Choosing the active account among several signed in on this Mac. */
+export type AccountUseResult =
+  | { kind: 'ok'; session: AccountSessionMeta }
+  | { kind: 'refused'; reason: string }
+
+/** M336. Whether accounts are configured here at all; `reason` names the missing variable. */
+export type AccountStatus = { configured: true } | { configured: false; reason: string }
+
 export type AccountLogoutResult =
   | { kind: 'signed-out'; githubIds: string[] }
   | { kind: 'refused'; reason: string }
@@ -59,6 +67,11 @@ export type ShareResult =
   | { kind: 'refused' | 'failed'; reason: string }
 export type ShareListResult =
   | { kind: 'ok'; shares: WorkspaceShareRow[] }
+  | { kind: 'refused' | 'failed'; reason: string }
+/** M337. One person in the share's organization, and their role in the share (null: not in it). */
+export interface ShareMemberRow { userId: string; login: string; role: 'owner' | 'editor' | 'viewer' | null; me: boolean }
+export type ShareMembersResult =
+  | { kind: 'ok'; orgId: string; members: ShareMemberRow[] }
   | { kind: 'refused' | 'failed'; reason: string }
 export type ShareMemberResult =
   | { kind: 'ok' }

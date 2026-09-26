@@ -22,7 +22,7 @@ import { WORK_ITEM_STATES, type WorkItemState } from '@shared/work-items'
  */
 
 /** The display kind, `Panel['kind']` plus M27's `note` — see rail-rows.ts. */
-export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image'
+export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image' | 'relay'
 
 /**
  * Backlog #90. `done` is a process that exited 0 — the word stays `exited 0`,

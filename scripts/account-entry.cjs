@@ -8,5 +8,8 @@ module.exports = {
   ...require('../src/main/account-session'),
   ...require('../src/main/control-protocol'),
   ...require('../src/main/control-handler'),
-  ...require('../src/cli/tc')
+  ...require('../src/cli/tc'),
+  // M336–M337. The picker and sharing verbs, and what the menu and dialog say.
+  ...require('../src/main/share-control'),
+  ...require('../src/renderer/account/account-model')
 }

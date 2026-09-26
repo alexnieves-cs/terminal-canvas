@@ -151,6 +151,7 @@ export function createShareDoors(state: MainState, stores: Stores, account: Acco
       state.presence?.reconcile()
       return { kind: 'ok' as const, workspaceId }
     },
-    setShareMember: (req: { shareId: string; userId: string; role: 'owner' | 'editor' | 'viewer' | null }) => account.setShareMember(req)
+    setShareMember: (req: { shareId: string; userId: string; role: 'owner' | 'editor' | 'viewer' | null }) => account.setShareMember(req),
+    shareMembers: (shareId: string) => account.shareMembers(shareId)
   }
 }

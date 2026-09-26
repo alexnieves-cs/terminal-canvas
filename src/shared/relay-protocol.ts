@@ -41,7 +41,9 @@ export type RelayRole = 'owner' | 'controller' | 'viewer'
 export const RELAY_SESSION_ID = /^[A-Za-z0-9_-]{16,64}$/
 const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHARE_ID = USER_ID
-const PROGRAM = /^[a-z][a-z0-9-]{0,31}$/
+/** A program's NAME in the relay's programs.json allowlist — never a path. Exported for the relay panel's record (M338). */
+export const RELAY_PROGRAM = /^[a-z][a-z0-9-]{0,31}$/
+const PROGRAM = RELAY_PROGRAM
 
 export interface RelayPeer {
   userId: string

@@ -276,7 +276,20 @@ export interface NotePanel extends PanelBase {
   note: { form: NoteForm; text: string; tint?: NoteTint }
 }
 
-export type Panel = NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel
+/**
+ * M338. The relay terminal — a terminal whose pty runs on the team's relay VM.
+ * Sessionless on THIS machine (no spec, no PTY, no tier), which is exactly why
+ * it joins isTerminalPanel's exclusion list rather than being a terminal: a
+ * relay panel reaching assignTiers or registry.ensure would spawn a LOCAL
+ * shell with no cwd. The record re-attaches after a relaunch (sessionId), or
+ * starts `program` — a name on the relay's allowlist, never a path.
+ */
+export interface RelayPanel extends PanelBase {
+  kind: 'relay'
+  relay: { program: string; sessionId?: string; shareId?: string }
+}
+
+export type Panel = NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel | RelayPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -323,6 +336,10 @@ export function isWatcherPanel(panel: Panel): panel is WatcherPanel {
 
 export function isBrowserPanel(panel: Panel): panel is BrowserPanel {
   return panel.kind === 'browser'
+}
+
+export function isRelayPanel(panel: Panel): panel is RelayPanel {
+  return panel.kind === 'relay'
 }
 
 export function isWorkPanel(panel: Panel): panel is WorkPanel {
@@ -415,7 +432,10 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
     !isImagePanel(panel) &&
     // M187. The sixteenth kind, same reason: a note has no spec and must never
     // reach assignTiers or registry.ensure as one.
-    !isNotePanel(panel)
+    !isNotePanel(panel) &&
+    // M338. A relay terminal LOOKS like a terminal and is not one here: its
+    // pty is on the relay VM. Satisfying this would spawn a local shell.
+    !isRelayPanel(panel)
   )
 }
 
@@ -945,6 +965,21 @@ export function makeBrowserPanel(id: string, centre: Point, z: number, url: stri
     // bound to nothing, and writing `preview: undefined` would put the key in
     // layout.json where `'preview' in panel` reads true.
     ...(preview === undefined ? {} : { preview })
+  }
+}
+
+export const RELAY_W = 720
+export const RELAY_H = 460
+
+/** M338. A relay terminal at the cascade centre: a fresh session of `program`, bound to a share when the workspace is shared. */
+export function makeRelayPanel(id: string, centre: Point, z: number, relay: { program: string; shareId?: string }): RelayPanel {
+  return {
+    kind: 'relay',
+    rect: { id, x: centre.x - RELAY_W / 2, y: centre.y - RELAY_H / 2, w: RELAY_W, h: RELAY_H },
+    z,
+    // Absent stays ABSENT, the browser's `preview` rule: an unshared workspace's
+    // session is the owner's alone, and `shareId: undefined` would read as present.
+    relay: { program: relay.program, ...(relay.shareId === undefined ? {} : { shareId: relay.shareId }) }
   }
 }
 

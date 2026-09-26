@@ -240,7 +240,7 @@ is most likely to undo:
   `workspace_shares`) has been applied to a live project. The `team_activity` RLS is untested,
   and the other RLS was exercised only on PGlite. No real sign-in has been done.
 - **A live two-machine run** of presence, the shared canvas and shared text.
-- **UI:**
+- **UI:** DONE in M336–M338 ([m336-m338-account-share-relay.md](m336-m338-account-share-relay.md)):
   - sign-in and an account picker for choosing the active account among several;
   - share, open share and set role, which today exist as the bridge only, with no UI and no `tc`
     verb;

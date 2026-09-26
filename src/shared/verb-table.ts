@@ -61,6 +61,12 @@ export interface CreationHost {
   browser(url?: string): Promise<CreationResult>
   /** M252. Describe a tool: with no description, ask for one; with one, generate — and what arrives is inert. */
   tool(description?: string): Promise<CreationResult>
+  /**
+   * M338. A terminal on the team's relay VM: a program NAME from the relay's
+   * allowlist (default `shell`), or `attach <session id>` to join a session
+   * this person may attach to. Refused by name when the relay is not set up.
+   */
+  relay(value?: string): Promise<CreationResult>
 }
 export interface CreationAvailability { merged?: boolean; noteRoot: string | null; agentReason?: string }
 const creation = (id: string, label: string, icon: string, create: (host: CreationHost, value?: string) => Promise<CreationResult>, requires: 'none' | 'folder' | 'agent' = 'none') => ({
@@ -83,7 +89,14 @@ export const CREATABLE_OBJECTS = [
   creation('deck', 'Deck', 'deck', (h, value) => h.document('deck', value), 'folder'),
   // M252. 'folder' because a tool is MADE somewhere: a mini app's files go
   // under <folder>/tools/, and a workflow's blocks work in that folder.
-  creation('tool', 'Describe a tool', 'tool', (h, value) => h.tool(value), 'folder')
+  creation('tool', 'Describe a tool', 'tool', (h, value) => h.tool(value), 'folder'),
+  // M338. 'none': the pty is on the relay, so no folder here is its home.
+  // All four doors on purpose, with no dialog: a local terminal is creatable
+  // from an agent line and a workflow node too, and that is a STRONGER power
+  // (a shell on this Mac). What limits a relay session is the relay itself —
+  // TC_RELAY_SPAWNERS decides who may spawn at all, programs.json what a name
+  // runs — and an attach reaches only a session the relay's roles allow.
+  creation('relay', 'Relay terminal', 'relay', (h, value) => h.relay(value))
 ] as const
 
 export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context: CreationAvailability): string | undefined {
@@ -111,6 +124,11 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'agent-links', label: 'Agent links: show or hide', args: [{ name: 'state', kind: 'value' }], destructive: false, actions: ['setAgentLinks'], target: 'canvas', hint: 'on, off or toggle the lines from each agent to what it read, wrote or drafted' },
   { id: 'sheet-review', label: 'Sheet: keep or discard draft cells', args: [panel(), { name: 'operation', kind: 'value' }, { name: 'target', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['reviewSheet'], target: 'panel', hint: 'keep or discard a cell, a range like B2:C4, or all of a pending draft' },
   ...CREATABLE_OBJECTS.map((entry): VerbDef => ({ id: entry.verb, label: `New ${entry.label}`, args: [{ name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['createObject'], target: 'canvas', hint: `create ${entry.label.toLowerCase()} at the viewport centre` })),
+  // M337. Sharing. Each OPENS the share dialog, prefilled — the person's click
+  // there shares, opens or changes a role, whichever door ran the verb.
+  { id: 'share-workspace', label: 'Share this workspace', args: [{ name: 'org', kind: 'value', optional: true }], destructive: false, actions: ['shareWorkspace'], target: 'canvas', hint: 'opens the share dialog, an organization id prefilled; the person shares there' },
+  { id: 'open-share', label: 'Open a shared workspace', args: [{ name: 'share', kind: 'value', optional: true }], destructive: false, actions: ['openSharedWorkspace'], target: 'canvas', hint: 'opens the list of workspaces shared with you, one prefilled; the person opens it there' },
+  { id: 'share-role', label: 'Shared workspace: propose a role', args: [{ name: 'who', kind: 'value', optional: true }, { name: 'role', kind: 'value', optional: true }], destructive: false, actions: ['proposeShareRole'], target: 'canvas', hint: 'a GitHub login or user id, then editor, viewer or none; the owner applies it in the share dialog' },
   { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
   // M182. The template editor's operations as verbs — the same six functions the diagram's drag calls.
   { id: 'workflow-add', label: 'Workflow: add node', args: [{ name: 'template', kind: 'key' }, { name: 'kind', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'add a terminal, chat, pool, orchestrator or collect node to the draft' },
@@ -266,6 +284,9 @@ export const VERBS: readonly VerbDef[] = [
  * list, so adding an action means choosing.
  */
 export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
+  // M336. WHO the app acts as is the person's: `tc login` asks in a dialog,
+  // and no plan line, workflow node or palette verb may sign in for them.
+  signIn: 'signing in is the person\'s — the account menu, the palette row, or `tc login` behind a confirm dialog',
   // M149. A sentence on the palette's feedback line, for a refusal that a
   // keystroke (a paste) has no other place to say — nothing runs, so no plan
   // may name it.
@@ -426,6 +447,9 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'agent-links': { canvas: 'the links button in the canvas HUD\'s zoom cluster', palette: 'canvas.agent-links', agent: 'tc plan agent-links off', workflow: 'an action node whose line is: agent-links off' },
   'sheet-review': { canvas: 'Keep / Discard selected, Keep all / Discard all on a sheet\'s draft strip', palette: 'sheet.review', agent: 'tc plan sheet-review f1 discard all', workflow: 'an action node whose line is: sheet-review f1 keep B2' },
   ...Object.fromEntries(CREATABLE_OBJECTS.map((entry) => [entry.verb, entry.doors])),
+  'share-workspace': { canvas: 'the account menu\'s Share this workspace…', palette: 'share.workspace', agent: 'tc plan share-workspace', workflow: 'an action node whose line is: share-workspace' },
+  'open-share': { canvas: 'the account menu\'s Open a shared workspace…', palette: 'share.open', agent: 'tc plan open-share', workflow: 'an action node whose line is: open-share' },
+  'share-role': { canvas: 'a member\'s role picker in the share dialog', palette: 'share.role', agent: 'tc plan share-role octocat viewer', workflow: 'an action node whose line is: share-role octocat viewer' },
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: 'an action node whose line is: check-readiness' },
   'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: 'an action node whose line is: new-chat' },
   starter: { canvas: 'launcher Start a conversation on a first run; the Starter canvas… line', palette: 'starter.open', agent: 'tc plan starter', workflow: 'an action node whose line is: starter' },

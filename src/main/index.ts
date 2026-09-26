@@ -20,6 +20,8 @@ import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
+import { createShareControl } from './share-control'
+import { confirm } from './bootstrap/dialogs'
 import { createWindow, sendToRenderer } from './bootstrap/window'
 import { startAgentRuntime, createJobDoors } from './bootstrap/agent-runtime'
 import { createTaskDoors } from './bootstrap/task-handlers'
@@ -105,7 +107,7 @@ const which = (command: string): string | null => whichFromEnv(command, state.lo
 
 const places = createPlaces(stores)
 const menu = createMenuActions(state, stores, which)
-const account = createAccountWiring(state, stores)
+const account = createAccountWiring(state, stores, app.getPath('userData'))
 state.currentUserId = () => account.currentUserId()
 stores.ptyManager.ownerOf = () => account.currentUserId()
 // Presence rides the account's identity; built here, started after the env probe.
@@ -118,7 +120,19 @@ const teamReporter = createTeamReporterWiring(state.presence, account)
 // The pty relay: terminals whose process runs on the team's relay VM. Built
 // here; opens no socket until a relay panel asks, so nothing to start.
 const relay = createRelayWiring(state, account)
-const control = createControlWiring(state, stores, places, tokens, account)
+// M336–M337. `tc accounts|use|shares|share|open-share|share-role`: the same
+// account and share doors the app's menu and dialog use, each change behind a
+// Cancel-default dialog.
+const shareControl = createShareControl({
+  account,
+  doors: shareDoors,
+  activeWorkspaceName: () => {
+    const id = stores.layoutStore.activeWorkspaceId()
+    return stores.layoutStore.workspaces().find((w) => w.id === id)?.name ?? 'this workspace'
+  },
+  confirm: (ask) => confirm(state.window, ask)
+})
+const control = createControlWiring(state, stores, places, tokens, account, shareControl)
 // M311–M314. Built at module scope with the other collaborators; every
 // closure inside reads `state` at the point of use (context.ts's rule).
 const kit = createKitHandlers(state, stores, app.getPath('userData'))

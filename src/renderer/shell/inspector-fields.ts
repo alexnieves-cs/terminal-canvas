@@ -25,7 +25,7 @@ import { railLabel } from './rail-rows'
 import type { PendingApproval } from './rail-sections'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { noteSummary } from '@shared/notes'
-import { isNotePanel } from '@renderer/panels/panels'
+import { isNotePanel, isRelayPanel } from '@renderer/panels/panels'
 
 /**
  * What the inspector renders, as plain data.
@@ -540,7 +540,8 @@ export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
   file: 'A file panel',
   toolbox: 'A toolbox node',
   jira: 'A Jira panel',
-  chat: 'A chat panel'
+  chat: 'A chat panel',
+  relay: 'A relay terminal'
 }
 
 /**
@@ -952,6 +953,16 @@ export function buildInspectorModelBare(
       { key: 'url', label: 'url', value: panel.url },
       { key: 'preview-source', label: 'preview source', value: previewSourceLine(panel.preview, sourcePanel === undefined ? undefined : railLabel(sourcePanel, undefined)) },
       ...reachFields
+    ] }
+  }
+  // M338. A relay terminal's configuration and provenance: what it runs, on
+  // which session, shared or not. No process metrics — the pty is on the
+  // relay VM, and a pid or cwd from THIS Mac would be a confident wrong answer.
+  if (isRelayPanel(panel)) {
+    return { kind: 'relay', reviewable: false, state: { kind: 'relay', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
+      { key: 'relay-program', label: 'program', value: panel.relay.program },
+      { key: 'relay-session', label: 'session', value: panel.relay.sessionId ?? 'not started yet' },
+      { key: 'relay-share', label: 'shared', value: panel.relay.shareId === undefined ? 'no — only you can attach' : 'with this workspace\'s members, by their role' }
     ] }
   }
   // M187. The sixteenth kind: what it IS and what changes it — its form, its
