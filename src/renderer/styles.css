@@ -9569,8 +9569,21 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    takes the person's colour through --peer (set inline from colorOf). Idle
    and away change the FILL, never the text's opacity: an idle cell is a
    tint of the colour, an away one only its outline. */
-.roster-strip {
+/* M348. The top-centre column the roster strip and the sync chip share; it
+   takes the strip's old place exactly, so the strip does not move. The column
+   itself takes no pointer: only what is in it does. */
+.presence-top {
   position: absolute; top: var(--sp-5); left: 50%; transform: translateX(-50%); z-index: 20;
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  pointer-events: none;
+}
+.presence-top > * { pointer-events: auto; }
+.sync-chip {
+  margin: 0; padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  background: var(--s-1); color: var(--fg-2); font-size: var(--t-sm); white-space: nowrap;
+}
+.sync-chip[data-sync-chip='disconnected'], .sync-chip[data-sync-chip='off'] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line-strong)); }
+.roster-strip {
   display: flex; gap: var(--sp-2); margin: 0; padding: var(--sp-2);
   list-style: none; border: 1px solid var(--line-strong); border-radius: var(--r-lg);
   background: var(--s-1);
@@ -9585,6 +9598,9 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 .roster-strip__cell[data-state="idle"] { background: color-mix(in srgb, var(--peer) 40%, var(--s-1)); }
 .roster-strip__cell[data-state="away"] { background: transparent; color: var(--fg-3); }
+/* M348. Away must READ as away: a dashed, desaturated ring, not the person's
+   full colour (the shared-offline critic read the plain outline as present). */
+.roster-strip__cell[data-state="away"] { border-style: dashed; border-color: color-mix(in srgb, var(--peer) 40%, var(--line-strong)); }
 .roster-strip__agent {
   position: absolute; right: -3px; bottom: -3px; width: 8px; height: 8px;
   border-radius: var(--r-full); background: var(--tone); box-shadow: 0 0 0 2px var(--s-1);

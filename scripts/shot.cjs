@@ -959,14 +959,14 @@ const SCENES = [
       sh.state.view = {
         shareId: sh.share, role: 'owner', seq: 1, rects: [], files: [],
         placeholders: [
-          place('hostsam1_r1', 'relay', 'relay · shell', at.x, at.y + at.h + 30, half, 190, { relay: { session: 'samRelaySession000001', program: 'shell' } }),
-          place('hostsam1_n1', 'terminal', 'tests — api', at.x + half + 30, at.y + at.h + 30, half, 190)
+          place('hostsam1_r1', 'relay', 'relay · shell', at.x, at.y + at.h + 30, half, 160, { relay: { session: 'samRelaySession000001', program: 'shell' } }),
+          place('hostsam1_n1', 'terminal', 'tests — api', at.x + half + 30, at.y + at.h + 30, half, 160)
         ]
       }
       const samPresence = {
         // The colour a real peer carries: derived from the user id (presence.ts colorOf), the same the placeholders read.
         userId: sh.sam, displayName: 'sam', initials: 'S', color: colorOf(sh.sam), currentPanelId: null,
-        cursor: { x: at.x + half + 150, y: at.y + at.h + 150 }, viewport: null, selection: [], textCursor: null,
+        cursor: { x: at.x + half + 150, y: at.y + at.h + 130 }, viewport: null, selection: [], textCursor: null,
         mode: 'canvas', agentStatus: 'working', statusLine: '', currentTask: 'Watchdog fires under load', observing: null, lastActivity: Date.now()
       }
       sh.state.roster = { workspaceId: wsId, connection: 'connected', peers: [{ clientId: 7, presence: samPresence, status: 'active', idleForMs: 0, live: true }] }
@@ -976,11 +976,13 @@ const SCENES = [
       // The workspace rows reload on a palette open (Canvas.tsx), which is how
       // the share becomes a row fact the share dialog below can read.
       await k.press('k', { metaKey: true }); await sleep(300); await k.closePalette(); await sleep(300)
-      // Up by 110 screen px — the relay's header stays below the roster strip —
-      // over the empty ground at the canvas's left edge
+      // Up by 80 screen px, so the relay's header clears the roster strip AND
+      // the sync chip under it (a chip sitting on a panel's edge read as that
+      // panel's status — the shared-offline critic) — over the empty ground at
+      // the canvas's left edge
       // (a wheel over a panel would be the panel's).
       const ground = await k.js(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(c.left + 40), y: Math.round(c.top + c.height / 2) } })()`)
-      k.wc.sendInputEvent({ type: 'mouseWheel', x: ground.x, y: ground.y, deltaX: 0, deltaY: -110 }); await sleep(500)
+      k.wc.sendInputEvent({ type: 'mouseWheel', x: ground.x, y: ground.y, deltaX: 0, deltaY: -80 }); await sleep(500)
       for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-shared-relay-attach]')`)); i++) await sleep(100)
       if (!(await k.js(`!!document.querySelector('[data-shared-relay-attach]')`))) throw new Error('shared-canvas scene: sam\'s relay placeholder did not offer Attach')
       await sleep(500)
@@ -993,7 +995,24 @@ const SCENES = [
       if (!(await k.js(`document.querySelectorAll('.share-dialog__member').length >= 4`))) throw new Error('share-members scene: the Members view did not list the organization')
       await sleep(400)
       await k.shot('share-members')
-      await k.press('Escape'); await sleep(300)
+      // Closed by its Done, not Escape: `press` dispatches on window, and
+      // Radix listens for Escape on the document, so the key never reached
+      // it (the share-dialog scene above closes only when the next scene's
+      // palette takes focus).
+      await k.click('.share-dialog__foot .share-dialog__btn'); await sleep(400)
+      if (await k.js(`!!document.querySelector('.share-dialog__card')`)) throw new Error('share-members scene: the dialog did not close')
+    } },
+  { name: 'shared-offline', intent: 'M348. The same shared workspace with its collab server gone: under the roster strip (sam, as before), one amber chip says `Offline — 3 changes waiting to sync` — the provider\'s own count of edits the server has not acknowledged. sam\'s tile dims and sam\'s cursor is gone: offline, this seat cannot know where sam is. The canvas stays editable, sam\'s placeholders stay where they were, and nothing claims the changes are lost (main keeps them; they go when the server is back). DISCLOSED: the roster is the push main\'s presence hub would send for a disconnected room, sent as that push.',
+    run: async (k) => {
+      const sh = k.shared
+      // What the hub sends for a disconnected room (M348): the count, and every
+      // peer not live — this seat cannot know where sam is now.
+      sh.state.roster = { ...sh.state.roster, connection: 'disconnected', unsynced: 3, peers: sh.state.roster.peers.map((p) => ({ ...p, live: false })) }
+      k.wc.send(sh.events.PRESENCE_REMOTE, sh.state.roster)
+      for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-sync-chip="disconnected"]')`)); i++) await sleep(100)
+      if (!(await k.js(`(document.querySelector('[data-sync-chip]') || {}).textContent === 'Offline — 3 changes waiting to sync'`))) throw new Error('shared-offline scene: the sync chip did not say the three changes are waiting')
+      await sleep(300)
+      await k.shot('shared-offline')
     } },
 ]
 

@@ -99,6 +99,31 @@ export interface PresenceRoster {
   /** Why presence is off, by name (not configured, not signed in); absent when on. */
   reason?: string
   peers: RemotePeer[]
+  /**
+   * M348. Local changes to the room's doc the server has not acknowledged yet
+   * (the provider's own count). Absent when there are none. They are not at
+   * risk: main keeps the doc in layout.json as it changes, and the provider
+   * sends what the server lacks when it reconnects — this says they are
+   * WAITING, so a person offline is never told nothing.
+   */
+  unsynced?: number
+}
+
+/**
+ * M348. The one line a SHARED workspace shows about its sync, or null when
+ * there is nothing to say (the rest layer states no zero-value fact).
+ * An unshared workspace's room is presence only: it has nothing to sync.
+ */
+export function syncLine(roster: Pick<PresenceRoster, 'connection' | 'reason' | 'unsynced'> | undefined, shared: boolean): string | null {
+  if (!shared || roster === undefined) return null
+  const n = roster.unsynced ?? 0
+  const changes = `${n} change${n === 1 ? '' : 's'}`
+  switch (roster.connection) {
+    case 'connected': return n > 0 ? `Syncing ${changes}…` : null
+    case 'connecting': return n > 0 ? `Reconnecting — ${changes} waiting` : 'Reconnecting…'
+    case 'disconnected': return n > 0 ? `Offline — ${changes} waiting to sync` : 'Offline — changes sync when the server is back'
+    case 'off': return `Not syncing — ${roster.reason ?? 'presence is off'}`
+  }
 }
 
 /** The full payload is re-published on this beat even when nothing changed — the heartbeat. */

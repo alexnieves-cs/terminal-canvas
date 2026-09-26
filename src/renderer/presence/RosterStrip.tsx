@@ -48,7 +48,8 @@ export function RosterStrip({ workspaceId }: { workspaceId: string | undefined }
           <li key={p.clientId} className="roster-strip__cell" data-roster-cell={p.presence.userId} data-state={state}
             style={{ '--peer': p.presence.color } as CSSProperties} title={detail} aria-label={detail}>
             {p.presence.initials}
-            {TONE[p.presence.agentStatus] !== undefined && <span className="roster-strip__agent" data-tone={TONE[p.presence.agentStatus]} aria-hidden="true" />}
+            {/* M348. Not for an away peer: their agents' state is not known from here (offline, or gone quiet). */}
+            {state !== 'away' && TONE[p.presence.agentStatus] !== undefined && <span className="roster-strip__agent" data-tone={TONE[p.presence.agentStatus]} aria-hidden="true" />}
           </li>
         )
       })}

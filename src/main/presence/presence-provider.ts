@@ -11,7 +11,7 @@
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import type { PresenceHubDeps } from './presence-hub'
 
-export const hocuspocusConnect: PresenceHubDeps['connect'] = ({ url, name, document, awareness, token, onStatus }) => {
+export const hocuspocusConnect: PresenceHubDeps['connect'] = ({ url, name, document, awareness, token, onStatus, onUnsynced }) => {
   const provider = new HocuspocusProvider({
     url,
     name,
@@ -23,7 +23,10 @@ export const hocuspocusConnect: PresenceHubDeps['connect'] = ({ url, name, docum
     onStatus: ({ status }) => onStatus(status as 'connecting' | 'connected' | 'disconnected'),
     // A rejected token is a disconnected room, said once; the provider keeps
     // retrying, and a later sign-in is picked up through `token`.
-    onAuthenticationFailed: ({ reason }) => { console.warn(`[presence] ${name}: authentication failed — ${reason}`); onStatus('disconnected') }
+    onAuthenticationFailed: ({ reason }) => { console.warn(`[presence] ${name}: authentication failed — ${reason}`); onStatus('disconnected') },
+    // M348. How many local changes the server has not acknowledged: the
+    // provider sends them on reconnect; the renderer says they are waiting.
+    onUnsyncedChanges: ({ number }) => { onUnsynced?.(number) }
   })
   return { destroy: () => provider.destroy() }
 }

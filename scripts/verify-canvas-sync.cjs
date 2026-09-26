@@ -790,6 +790,71 @@ async function until(pred, ms = 3000) {
     await pg.close()
   }
 
+  // ── M348: local-first — an offline edit survives a crash and reaches the room ──
+  // Real providers, a real (persisted) server, main's own canvas-sync on each
+  // machine. The server goes away; the owner moves a panel offline (the
+  // provider counts it unacknowledged); the owner's app "crashes" and relaunches
+  // from the bytes main kept (layout.json's crdt); the server comes back on the
+  // same store; the teammate ends with the move. Nothing was lost, and nothing
+  // needed a second persistence layer: the doc lives in main, so y-indexeddb
+  // (a renderer's IndexedDB) would be the wrong layer.
+  {
+    const { PGlite } = require('@electric-sql/pglite')
+    const pg = new PGlite()
+    await pg.exec('create role anon; create role authenticated;')
+    await pg.exec(readFileSync(join(root, 'supabase/migrations/20260926120000_collab_documents.sql'), 'utf8'))
+    const store = M.persistence.createPgDocStore((t, p) => pg.query(t, p))
+    const people = { towner: { userId: UA, role: 'owner' }, teditor: { userId: UB, role: 'editor' } }
+    const serve = async (port) => {
+      const srv = M.server.createCollabServer({ port, address: '127.0.0.1', quiet: true, store, snapshotEveryMs: 60 * 60 * 1000, debounceMs: 40,
+        authenticate: async (token, documentName) => { const x = people[token]; if (x === undefined) throw new M.auth.Refused('no'); return { ...x, shareId: SHARE, documentName } } })
+      await srv.listen()
+      return srv
+    }
+    const attach = (m, port, token) => {
+      const st = { synced: false, unsynced: 0 }
+      const p = new HocuspocusProvider({ url: `ws://127.0.0.1:${port}`, name: `tc:workspace:${SHARE}`, document: m.doc, token,
+        onSynced: () => { st.synced = true }, onUnsyncedChanges: ({ number }) => { st.unsynced = number } })
+      return { p, st }
+    }
+    const port1 = await freePort()
+    let srv = await serve(port1)
+    const A = machine({ host: 'hosta1', userId: UA, role: 'owner', panels: [panel('n1', 0)] })
+    const B = machine({ host: 'hostb1', userId: UB, role: 'editor' })
+    A.bind(); B.bind()
+    const pa = attach(A, port1, 'towner'), pb = attach(B, port1, 'teditor')
+    const joined = await until(() => pa.st.synced && pb.st.synced && field(B.doc, 'hosta1_n1', 'x') === 0, 5000)
+    // The server goes away (a deploy, a crash) — the providers retry quietly.
+    await srv.destroy()
+    await new Promise((r) => setTimeout(r, 150))
+    A.ws.panels = A.ws.panels.map((q) => (q.id === 'n1' ? { ...q, x: 777 } : q))
+    A.sync.saved(A.view()?.seq ?? 0)
+    await tick()
+    const queued = pa.st.unsynced
+    const keptOffline = (() => { const d = new Y.Doc(); if (A.store.crdt) Y.applyUpdate(d, A.store.crdt); return field(d, 'hosta1_n1', 'x') })()
+    // The owner's app dies; it relaunches from what main kept.
+    pa.p.destroy(); A.unbind()
+    const A2 = machine({ host: 'hosta1', userId: UA, role: 'owner', panels: A.ws.panels, crdt: A.store.crdt })
+    A2.bind()
+    const relaunched = field(A2.doc, 'hosta1_n1', 'x')
+    // The server comes back on the same store; everyone reconnects.
+    pb.p.destroy()
+    const port2 = await freePort()
+    srv = await serve(port2)
+    const pa2 = attach(A2, port2, 'towner'), pb2 = attach(B, port2, 'teditor')
+    const reached = await until(() => pa2.st.synced && pb2.st.synced && field(B.doc, 'hosta1_n1', 'x') === 777, 6000)
+    const stored = await (async () => { const b = await store.load(`tc:workspace:${SHARE}`); if (b === null) return null; const d = new Y.Doc(); Y.applyUpdate(d, b); return field(d, 'hosta1_n1', 'x') })()
+    ok('offline.1 an edit made while the server is gone is counted as waiting, kept by main as it happens, survives the app crashing and relaunching, and reaches the teammate — and the room\'s store — when the server is back',
+      joined === true && queued > 0 && keptOffline === 777 && relaunched === 777 && reached === true,
+      JSON.stringify({ joined, queued, keptOffline, relaunched, reached, bx: field(B.doc, 'hosta1_n1', 'x') }))
+    await new Promise((r) => setTimeout(r, 200))
+    const storedLater = await (async () => { const b = await store.load(`tc:workspace:${SHARE}`); if (b === null) return null; const d = new Y.Doc(); Y.applyUpdate(d, b); return field(d, 'hosta1_n1', 'x') })()
+    ok('offline.2 the returning edit is stored by the server too, so a third person arriving later is served it without the owner online', storedLater === 777, JSON.stringify({ stored, storedLater }))
+    pa2.p.destroy(); pb2.p.destroy(); A2.unbind(); B.unbind()
+    await srv.destroy()
+    await pg.close()
+  }
+
   // ── M347: the uptime watcher's rules, walked through an outage ──────────
   {
     const H = M.health

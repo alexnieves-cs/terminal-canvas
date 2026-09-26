@@ -59,6 +59,8 @@ export interface PresenceHubDeps {
     awareness: Awareness
     token: () => Promise<string>
     onStatus: (s: ConnectionState) => void
+    /** M348. The provider's count of local doc changes the server has not acknowledged. */
+    onUnsynced?: (n: number) => void
   }) => PresenceConnection
   emit: (roster: PresenceRoster) => void
   /**
@@ -124,6 +126,8 @@ interface Room {
   connection: PresenceConnection
   tracker: PresenceTracker
   state: ConnectionState
+  /** M348. Changes waiting for the server (the provider's count). */
+  unsynced: number
   local: Omit<LocalPresence, 'workspaceId'>
   lastActivity: number
   panelIds: Set<string>
@@ -327,8 +331,18 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
     room.awareness.setLocalStateField(PRESENCE_FIELD, payload)
   }
 
-  const rosterOf = (room: Room): PresenceRoster =>
-    ({ workspaceId: room.id, connection: room.state, peers: room.tracker.peers(now()) })
+  // M348. While OUR room is not connected, nothing about anyone else can be
+  // known: every peer is reported not live (away — the strip dims them, the
+  // cursor layer stops painting them) rather than frozen as they last were,
+  // which read as a teammate present in real time through a dead connection.
+  const rosterOf = (room: Room): PresenceRoster => {
+    const peers = room.tracker.peers(now())
+    return {
+      workspaceId: room.id, connection: room.state,
+      peers: room.state === 'connected' ? peers : peers.map((p) => ({ ...p, live: false })),
+      ...(room.unsynced > 0 ? { unsynced: room.unsynced } : {})
+    }
+  }
 
   const emitRoom = (room: Room): void => { deps.emit(rosterOf(room)) }
 
@@ -338,7 +352,7 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
     const awareness = new Awareness(doc)
     const tracker = createPresenceTracker()
     const room: Room = {
-      id, name: docName(id), unbind: () => {}, doc, awareness, tracker, state: 'connecting', local: { ...EMPTY_LOCAL }, lastActivity: now(),
+      id, name: docName(id), unbind: () => {}, doc, awareness, tracker, state: 'connecting', unsynced: 0, local: { ...EMPTY_LOCAL }, lastActivity: now(),
       panelIds: new Set(panelIds), agentKey: '', snapshotKey: '', snapshotBusy: false,
       connection: { destroy() {} }
     }
@@ -379,6 +393,11 @@ export function createPresenceHub(deps: PresenceHubDeps): PresenceHub {
         // Our own state again on every (re)connect: a server that restarted
         // holds nothing for us until we publish.
         if (s === 'connected') publish(room)
+        emitRoom(room)
+      },
+      onUnsynced: (n) => {
+        if (rooms.get(id) !== room || room.unsynced === n) return
+        room.unsynced = n
         emitRoom(room)
       }
     })

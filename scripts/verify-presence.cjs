@@ -210,6 +210,60 @@ const tick = () => new Promise((r) => setImmediate(r))
     ok('presence.parse.2 no userId is no peer', P.parsePresence({ displayName: 'x' }) === undefined && P.parsePresence(null) === undefined)
   }
 
+  // ── M348: a shared workspace says when its sync is waiting ─────────────
+  {
+    const clock = { t: 5_000_000 }
+    const relay = createRelay()
+    let req = null
+    const c = hub({ ...relay, connect: (r) => { req = r; return relay.connect(r) } }, { clock, userId: 'user-c', name: 'cy' })
+    await c.h.start(); await tick()
+    req.onUnsynced(3); await tick()
+    const r3 = c.last()
+    const before = c.emitted.length
+    req.onUnsynced(3); await tick()
+    const repeated = c.emitted.length - before
+    req.onUnsynced(0); await tick()
+    const r0 = c.last()
+    ok('sync.roster.1 the provider\'s count of unacknowledged changes rides the roster, emitted when it CHANGES (not again for the same count), and absent at zero',
+      r3?.unsynced === 3 && repeated === 0 && r0 !== undefined && !('unsynced' in r0), JSON.stringify({ r3: r3?.unsynced, repeated, r0 }))
+    // Offline, nothing about anyone else can be known: a peer is not LIVE.
+    const relay2 = createRelay()
+    let reqD = null
+    const clockD = { t: 6_000_000 }
+    const d = hub({ ...relay2, connect: (r) => { reqD = r; return relay2.connect(r) } }, { clock: clockD, userId: 'user-d', name: 'di' })
+    const e = hub(relay2, { clock: clockD, userId: 'user-e', name: 'ed' })
+    await d.h.start(); await e.h.start(); await tick()
+    const liveBefore = d.last()?.peers.find((p) => p.presence.userId === 'user-e')?.live
+    reqD.onStatus('disconnected'); await tick()
+    const offline = d.last()
+    const liveOffline = offline?.peers.find((p) => p.presence.userId === 'user-e')?.live
+    reqD.onStatus('connected'); await tick()
+    const liveAgain = d.last()?.peers.find((p) => p.presence.userId === 'user-e')?.live
+    ok('sync.roster.2 while our own room is disconnected every peer is reported NOT live (the strip dims them, the cursor layer stops painting them) — never frozen as live through a dead connection — and live again on reconnect',
+      liveBefore === true && offline?.connection === 'disconnected' && liveOffline === false && liveAgain === true, JSON.stringify({ liveBefore, liveOffline, liveAgain }))
+    // Each room's Awareness holds a live interval: a hub left running keeps the suite from exiting.
+    d.h.stop(); e.h.stop()
+    const L = P.syncLine
+    const at = (connection, unsynced, reason) => ({ connection, ...(unsynced === undefined ? {} : { unsynced }), ...(reason === undefined ? {} : { reason }) })
+    const table = [
+      [L(at('connected'), true), null], [L(at('connected', 2), true), 'Syncing 2 changes…'],
+      [L(at('connecting'), true), 'Reconnecting…'], [L(at('connecting', 1), true), 'Reconnecting — 1 change waiting'],
+      [L(at('disconnected', 3), true), 'Offline — 3 changes waiting to sync'], [L(at('disconnected'), true), 'Offline — changes sync when the server is back'],
+      [L(at('off', undefined, 'not signed in'), true), 'Not syncing — not signed in'],
+      [L(at('disconnected', 3), false), null], [L(undefined, true), null]
+    ]
+    const wrong = table.filter(([got, want]) => got !== want)
+    ok('sync.line.1 a SHARED workspace says what its sync is doing — offline with N waiting, reconnecting, catching up, off and why — and says nothing when connected and caught up, or when the workspace is not shared',
+      wrong.length === 0, JSON.stringify(wrong))
+    const { readFileSync } = require('node:fs')
+    const canvas = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    const provider = readFileSync(join(root, 'src/main/presence/presence-provider.ts'), 'utf8')
+    ok('sync.wire.1 the provider reports its unacknowledged count to the hub, and the canvas shows the chip under the roster, told whether the workspace is shared',
+      /onUnsyncedChanges: \(\{ number \}\) => \{ onUnsynced\?\.\(number\) \}/.test(provider) &&
+      /<SyncChip workspaceId=\{activeWorkspaceId\} shared=\{shared\.view !== null\} \/>/.test(canvas))
+    c.h.stop()
+  }
+
   const failures = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
   process.exitCode = failures.length ? 1 : 0

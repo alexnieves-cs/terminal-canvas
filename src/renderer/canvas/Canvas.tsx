@@ -282,6 +282,7 @@ import { SharedPlaceholderLayer } from '../shared-canvas/SharedPlaceholderLayer'
 import type { SharedPanel } from '@shared/canvas-ops'
 import { notifyRefused } from '../shell/toast'
 import { RosterStrip } from '../presence/RosterStrip'
+import { SyncChip } from '../presence/SyncChip'
 import { usePresenceReport } from '../presence/usePresenceReport'
 import { useRosterNames } from '../presence/useRosterNames'
 import { relayNameOf } from '../relay/relay-gate'
@@ -8959,7 +8960,12 @@ export function Canvas({
             the roster of who else is here. Siblings of .world like Marquee —
             screen-pinned, and a remote update repaints this layer only. */}
         <PresenceLayer workspaceId={activeWorkspaceId} viewport={viewport} rects={rects} />
-        <RosterStrip workspaceId={activeWorkspaceId} />
+        {/* M348. One top-centre column: who is here, then — on a shared
+            workspace that is offline or catching up — what its sync is doing. */}
+        <div className="presence-top">
+          <RosterStrip workspaceId={activeWorkspaceId} />
+          <SyncChip workspaceId={activeWorkspaceId} shared={shared.view !== null} />
+        </div>
         {/* A SIBLING of .world, like EdgeIndicators above: .world carries the
             one translate()/scale() transform, and an overlay inside it would
             pan and zoom away with the canvas it is pinned to. */}
