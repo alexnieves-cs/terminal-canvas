@@ -74,6 +74,16 @@ const {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// M363. A fixture time the page prints as a CLOCK ("missed at 06:16 AM") is
+// pinned to that clock, never `Date.now() - n`: the routine scene's golden read
+// the hour it was painted and failed whenever it was run at another one. The
+// most recent such moment, so it is always in the past, as a run must be.
+function clockAt(h, m) {
+  const d = new Date(); d.setHours(h, m, 0, 0)
+  if (d.getTime() > Date.now()) d.setDate(d.getDate() - 1)
+  return d.getTime()
+}
+
 // M353. Orchestrate's workbench reads its Changes pane from git in the
 // background and says "Reading changes…" until it has. A shot taken inside
 // that window pins a loading caption: under load, M349's UPDATE_GOLDENS wrote
@@ -1245,7 +1255,7 @@ app.whenReady().then(async () => {
       { id: 'bo', name: 'bo', brief: '', places: [], services: [], skills: [], memory: 'bo', chats: [], messaging: true, scheduling: false }
     ],
     routines: [
-      { id: 'nightly', name: 'nightly review', teammateId: 'ada', everyMs: 600000, prompt: 'Summarise what changed in the repository since the last run and list anything that looks unfinished.', plan: 'focus chat', paused: false, lastRun: { at: Date.now() - 3600000, outcome: 'started', panelId: 'chat' }, missed: { at: Date.now() - 3000000 } },
+      { id: 'nightly', name: 'nightly review', teammateId: 'ada', everyMs: 600000, prompt: 'Summarise what changed in the repository since the last run and list anything that looks unfinished.', plan: 'focus chat', paused: false, lastRun: { at: clockAt(6, 6), outcome: 'started', panelId: 'chat' }, missed: { at: clockAt(6, 16) } },
       { id: 'weekly', name: 'weekly tidy', teammateId: 'ada', everyMs: 3600000, prompt: 'Draft a tidy-up plan.', paused: true }
     ],
     worktrees: [
