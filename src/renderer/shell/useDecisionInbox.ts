@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { RailAttention } from './rail-sections'
 import { buildInbox, inboxKeyOf, type Inbox } from './decision-inbox'
 import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
-import { lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
+import { lastAssistantText, useApprovals, useHolds } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
 import { rememberedSince } from './useTaskQueue'
 
@@ -45,6 +45,8 @@ const LAST_LINE_MAX = 160
 export function useDecisionInbox(deps: InboxDeps): Inbox {
   const { rows, panels, taskOf } = deps
   const approvals = useApprovals()
+  // M355. Its own subscription: a hold arrives AFTER the wants-you it causes.
+  const holds = useHolds()
   // Hand-offs that FIRE — an enabled `handoff` rule. A bare link or a
   // restart rule holds nothing downstream up, so it unblocks nothing.
   const handoffs = useMemo(() => panels.flatMap((p) => (p.links ?? [])
@@ -103,11 +105,11 @@ export function useDecisionInbox(deps: InboxDeps): Inbox {
     return () => clearInterval(t)
   }, [rows.length])
   return useMemo(() => buildInbox({
-    now, rows, approvals, kindOf,
+    now, rows, approvals, holds, kindOf,
     ...(taskOf === undefined ? {} : { taskOf }),
     handoffs,
     firstSeen: new Map(liveKeys.map((k) => [k, firstSeen.get(k) ?? now])),
     lastLineOf,
     snoozes: new Map(snoozes)
-  }), [rows, approvals, handoffs, kinds, termLines, v, tick, liveKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rows, approvals, holds, handoffs, kinds, termLines, v, tick, liveKey]) // eslint-disable-line react-hooks/exhaustive-deps
 }

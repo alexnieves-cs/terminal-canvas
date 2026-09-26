@@ -3898,6 +3898,21 @@ try {
       JSON.stringify(order) === JSON.stringify(['b', 'c', 'new']) &&
       I.waitedWords(0, 30_000) === 'just now' && I.waitedWords(0, 4 * 60_000) === '4m' && I.waitedWords(0, 3 * 3600_000) === '3h',
     JSON.stringify({ items: sz.items.map((i) => i.key), snoozed: sz.snoozed, order }))
+
+  // M355 — inbox.cap.1. A held chat is waiting on a CAP, not a reply: without
+  //      the hold, the row main's wants-you makes reads "is waiting for your
+  //      reply" and a person answers a question nobody asked. A question the
+  //      held agent asked first is still answered first; whose cap it is,
+  //      and where it is raised, is the row's context.
+  const holds = [{ id: 'c', held: { unit: 'usd', spent: 2.1, limit: 2, own: true } }, { id: 'b', held: { unit: 'context', spent: 160000, limit: 150000 } }]
+  const capped = I.buildInbox({ now: 1000, rows, approvals: [appr('b', 'rb', 'npm install')], holds, kindOf: () => 'chat' })
+  const capItem = capped.items.find((i) => i.panelId === 'c')
+  ok('inbox.cap.1 a held chat is a cap decision in the hold\'s own words with whose cap it is as context, keyed like the panel\'s question; a held agent\'s pending question is still a permission first',
+    capItem.kind === 'cap' && capItem.key === 'q:c' && capItem.blocker === 'is held at its own $2.00 spend cap ($2.10 reported)' &&
+      /own cap — raise it on its Work tab/.test(capItem.context) && capItem.hold.limit === 2 &&
+      capped.items.find((i) => i.panelId === 'b').kind === 'permission' && capped.items.find((i) => i.panelId === 'a').kind === 'question' &&
+      I.buildInbox({ now: 1, rows: [rows[2]], approvals: [], holds: [{ id: 'c', held: { unit: 'context', spent: 160000, limit: 150000 } }], kindOf: () => 'chat' }).items[0].context.includes('agents.nodeCapContextK'),
+    JSON.stringify(capped.items.map((i) => [i.panelId, i.kind, i.blocker, i.context])))
 }
 
 
@@ -3959,6 +3974,19 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
       g('T4').decisions.map((d) => d.kind).join() === 'review' && /3 files/.test(g('T4').decisions[0].text) &&
       g('T5') === undefined && q.quiet === 1,
     JSON.stringify(q.groups.map((x) => [x.itemId, x.decisions.map((d) => d.key)])))
+  // M355 — queue.cap.1. A hold files under its agent's task as a blocked
+  //     decision that says what raising the cap does, ranked after a question
+  //     and before a review, and survives a relaunch in the remembered list.
+  const capInbox = R.buildInbox({ now: 10_000, rows: [{ id: 'chatD', label: 'designer' }], approvals: [], holds: [{ id: 'chatD', held: { unit: 'usd', spent: 2.1, limit: 2 } }], kindOf: () => 'chat' })
+  const cq = R.buildTaskQueue({ now: 10_000, tasks, inbox: capInbox, labelOf: (id) => id })
+  const t4 = cq.groups.find((x) => x.itemId === 'T4')
+  const kept = R.rememberDecisions([], capInbox, () => 'T4', new Set(['q:chatD']))
+  ok('queue.cap.1 a held agent is a blocked cap decision under its task, ahead of that task\'s review, saying what raising the cap does; it is remembered across a relaunch and parsed back',
+    t4.decisions.map((d) => d.kind).join() === 'cap,review' && t4.severity === 'blocked' &&
+      t4.why === 'Stopped — designer is held at its $2.00 spend cap ($2.10 reported).' && t4.next.label === 'Raise designer\'s cap' &&
+      /stays held, spending nothing more/.test(t4.after) && /until its cap is raised/.test(t4.decisions[0].affects) &&
+      kept.length === 1 && kept[0].kind === 'cap' && R.parseRemembered(kept).length === 1,
+    JSON.stringify({ kinds: t4.decisions.map((d) => d.kind), why: t4.why, next: t4.next.label, after: t4.after, kept }))
   ok('queue.2 order: an agent stopped on you first (the one more tasks wait on ahead), then a failed check, then a review; each group says why, the next step and where it goes, what happens after — naming the tasks that wait on it — and the headline counts each',
     q.groups.map((x) => x.itemId).join() === 'T1,T2,,T3,T4' &&
       /needs your permission to use Bash/.test(g('T1').why) && g('T1').next.label === 'Answer Bash request' && g('T1').next.evidence.requestId === 'r1' &&

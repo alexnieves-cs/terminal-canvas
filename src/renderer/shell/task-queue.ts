@@ -41,7 +41,8 @@ import type { Tone } from '@renderer/panels/panel-state'
  * Pure: types and one value import from a pure module. `verify:rail queue.*`.
  */
 
-export type QueueKind = 'permission' | 'question' | 'check' | 'review' | 'lost'
+/** M355. `cap`: an agent main holds at its spend or context cap. */
+export type QueueKind = 'permission' | 'question' | 'cap' | 'check' | 'review' | 'lost'
 
 export type QueueEvidence =
   | { kind: 'decision'; panelId: string; requestId?: string }
@@ -167,7 +168,7 @@ export interface HistoryEvent {
 /** A decision that was waiting when the app last closed (decision memory). */
 export interface RememberedDecision {
   key: string
-  kind: 'permission' | 'question'
+  kind: 'permission' | 'question' | 'cap'
   itemId: string | null
   label: string
   text: string
@@ -228,6 +229,8 @@ function inboxAffects(item: InboxItem): string {
     const askers = item.members.length > 1 ? `${item.members.length} agents' turns wait` : `${item.label}'s turn waits`
     return `Affects ${what}${whereOf(a.cwd)} — ${askers} on it${behind}.`
   }
+  // M355. A hold spends nothing more while it waits, and serves what it kept first once raised.
+  if (item.kind === 'cap') return `Affects ${item.label}'s next turn — nothing runs, or is spent, until its cap is raised${behind}.`
   return `Affects ${item.label}'s next turn — nothing runs until you reply${behind}.`
 }
 
@@ -243,7 +246,7 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
   const d = group.decisions
   const first = (k: QueueKind): QueueDecision | undefined => d.find((x) => x.kind === k)
   const waiters = group.affects.length === 0 ? '' : ` ${group.affects.map((a) => a.title).join(', ')} ${group.affects.length === 1 ? 'waits' : 'wait'} on this task and can go on once it finishes.`
-  const perm = first('permission'), q = first('question'), check = first('check'), review = first('review'), lost = first('lost')
+  const perm = first('permission'), q = first('question'), cap = first('cap'), check = first('check'), review = first('review'), lost = first('lost')
   if (perm !== undefined) {
     const a = perm.inbox?.approval
     return {
@@ -259,6 +262,14 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
       why: `Stopped — ${q.text}.`,
       next: { label: `Reply to ${q.inbox?.label ?? 'the agent'}`, evidence: q.evidence },
       after: `Your reply starts its next turn.${waiters}`
+    }
+  }
+  if (cap !== undefined) {
+    return {
+      severity: 'blocked',
+      why: `Stopped — ${cap.text}.`,
+      next: { label: `Raise ${cap.inbox?.label ?? 'the agent'}'s cap`, evidence: cap.evidence },
+      after: `Raise the cap and what it kept goes first; leave it and it stays held, spending nothing more.${waiters}`
     }
   }
   if (check !== undefined) {
@@ -344,7 +355,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     if (h.length > 0) history[t.itemId] = h
   }
 
-  const kindRank: Record<QueueKind, number> = { permission: 0, question: 1, check: 2, review: 3, lost: 4 }
+  const kindRank: Record<QueueKind, number> = { permission: 0, question: 1, cap: 2, check: 3, review: 4, lost: 5 }
   const groups: TaskGroup[] = [...byTask.entries()].map(([itemId, decisions]) => {
     decisions.sort((a, b) => kindRank[a.kind] - kindRank[b.kind] || a.since - b.since)
     const title = itemId === null ? 'Not in a task' : input.tasks.find((t) => t.itemId === itemId)?.title ?? 'A task'
@@ -461,7 +472,7 @@ export function parseRemembered(raw: unknown): RememberedDecision[] {
   return raw.flatMap((r): RememberedDecision[] => {
     if (typeof r !== 'object' || r === null) return []
     const o = r as Record<string, unknown>
-    if (typeof o.key !== 'string' || (o.kind !== 'permission' && o.kind !== 'question') || typeof o.label !== 'string' || typeof o.text !== 'string' || typeof o.since !== 'number' || typeof o.panelId !== 'string') return []
+    if (typeof o.key !== 'string' || (o.kind !== 'permission' && o.kind !== 'question' && o.kind !== 'cap') || typeof o.label !== 'string' || typeof o.text !== 'string' || typeof o.since !== 'number' || typeof o.panelId !== 'string') return []
     return [{ key: o.key, kind: o.kind, itemId: typeof o.itemId === 'string' ? o.itemId : null, label: o.label, text: o.text, since: o.since, panelId: o.panelId }]
   })
 }

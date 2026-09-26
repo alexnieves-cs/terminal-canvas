@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { addTotals } from '@shared/cost'
-import type { AgentSessionEvent, AgentSessionSnapshot } from '@shared/agent-session'
+import type { AgentSessionEvent, AgentSessionSnapshot, CapHold } from '@shared/agent-session'
 import type { TranscriptTurn } from '@shared/transcript'
 import type { AutoStatus } from '@shared/auto'
 import { approvalAction, toolArgument, type LiveMessage } from './chat-model'
@@ -92,6 +92,41 @@ function update(id: string, next: ChatState): void {
   notify(id)
   for (const cb of versionListeners) cb()
   syncApprovals()
+  syncHolds()
+}
+
+/**
+ * M355. Every chat main HOLDS at a cap, for the decision queue: a hold is a
+ * needs-you (main's tracker says `wants-you` for it), and the queue has to
+ * say WHICH needs-you, or a held agent reads "is waiting for your reply".
+ * Published on its own, like `useApprovals`, because main says `wants-you`
+ * on `agent:state` BEFORE the `meter` event that carries the hold reaches
+ * this store: an inbox that read the hold only when the row appeared would
+ * build it without one. Rebuilt only when a hold starts, ends or changes
+ * its figures, so a streaming chat never re-renders the dock.
+ */
+export interface ChatHold { id: string; held: CapHold }
+let holdSnapshot: ChatHold[] = []
+let holdKey = ''
+const holdListeners = new Set<() => void>()
+function syncHolds(): void {
+  const next: ChatHold[] = []
+  for (const [id, state] of states) {
+    const held = state.snapshot?.meter?.held
+    if (held !== undefined) next.push({ id, held })
+  }
+  const key = JSON.stringify(next)
+  if (key === holdKey) return
+  holdKey = key
+  holdSnapshot = next
+  for (const cb of holdListeners) cb()
+}
+export function useHolds(): readonly ChatHold[] {
+  return useSyncExternalStore(
+    (cb) => { holdListeners.add(cb); return () => { holdListeners.delete(cb) } },
+    () => holdSnapshot,
+    () => holdSnapshot
+  )
 }
 
 /**
@@ -300,6 +335,7 @@ export function dismissAuto(id: string): void {
 export function clearChat(id: string): void {
   states.delete(id)
   syncApprovals()
+  syncHolds()
   notify(id)
 }
 

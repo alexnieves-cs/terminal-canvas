@@ -292,6 +292,18 @@ export function capSentence(hold: CapHold): string {
 }
 
 /**
+ * M355. A hold at rest-layer length, after the agent's name: the decision
+ * queue's row ("api is held at its $2.00 spend cap ($2.10 reported)") and the
+ * notification say it, and `capSentence` keeps the fix for the composer.
+ */
+export function holdWords(hold: CapHold): string {
+  const whose = hold.own === true ? 'its own' : 'its'
+  return hold.unit === 'usd'
+    ? `is held at ${whose} $${hold.limit.toFixed(2)} spend cap ($${hold.spent.toFixed(2)} reported)`
+    : `is held at ${whose} ${Math.round(hold.limit / 1000)}k-token context cap (${Math.round(hold.spent / 1000)}k in the conversation)`
+}
+
+/**
  * M322. One message waiting behind the turn in flight, as a person sees it:
  * the text (editable while it waits), its images by type and size (never the
  * bytes), and why it waits. `turnId` is its identity — the stored user turn

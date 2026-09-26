@@ -1,5 +1,5 @@
 import type { AttentionSink } from './pty-manager'
-import type { AgentSessionEvent } from '@shared/agent-session'
+import { holdWords, type AgentSessionEvent } from '@shared/agent-session'
 
 /**
  * M76. MAIN OWNS PENDING, AND SAYS SO ONCE.
@@ -35,7 +35,17 @@ import type { AgentSessionEvent } from '@shared/agent-session'
  * is pending, so a granted tool never reaches this tracker's pending set
  * and never lights attention.
  *
- * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`.
+ * M355. A HOLD IS A NEEDS-YOU TOO. An agent main holds at its spend or
+ * context cap (M350) cannot go on until a person raises the cap or stops
+ * it — the same fact as a question nobody answered. So the tracker keeps a
+ * second set, held panels, read from the `meter` events that carry a hold,
+ * and a panel needs you while it is in EITHER set: entry to the union says
+ * `wants-you` once (and notifies, naming the cap); leaving both says `idle`;
+ * an answered question on a held agent keeps it waiting. An exit or a
+ * dispose drops the hold from the union — a stopped agent is not waiting on
+ * anyone — though main's hold itself stays until a cap is raised.
+ *
+ * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`, `hold.attention.1`.
  */
 
 export interface ApprovalTrackerDeps {
@@ -57,6 +67,8 @@ export interface ApprovalTracker {
   resync(id: string): void
   /** Panel ids with at least one pending request, in entry order. */
   pendingIds(): string[]
+  /** M355. Panel ids main holds at a cap, in entry order. */
+  heldIds(): string[]
   /** M98. Allow `toolName` for the rest of this session, without asking. */
   grant(id: string, toolName: string): void
   /** M98. Whether `toolName` is granted for `id` — what the manager's `preAnswer` asks. */
@@ -72,20 +84,30 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
   // M98. Insertion-ordered per session, so the inspector lists grants in
   // the order they were given.
   const grants = new Map<string, Set<string>>()
-  const badge = (): void => { deps.sink.badge(pending.size) }
+  // M355. Held at a cap, in entry order; the hold's words for the notification.
+  const held = new Set<string>()
+  const waiting = (id: string): boolean => pending.has(id) || held.has(id)
+  const waitingCount = (): number => { let n = held.size; for (const id of pending.keys()) if (!held.has(id)) n++; return n }
+  const badge = (): void => { deps.sink.badge(waitingCount()) }
+  /** Entry to needs-you: the ONE place that says it, notifies and beeps. */
+  const enter = (id: string, what: string): void => {
+    deps.emitState(id, 'wants-you')
+    badge()
+    if (!deps.sink.windowFocused() && deps.sink.notifyEnabled()) {
+      deps.sink.notify(id, what, waitingCount(), `${deps.label(id)} needs you`)
+    }
+    if (deps.sink.soundEnabled()) deps.sink.beep()
+  }
   return {
     apply(event) {
       switch (event.type) {
         case 'permission-request': {
           const set = pending.get(event.id)
           if (set) { set.add(event.requestId); return }
+          const was = waiting(event.id)
           pending.set(event.id, new Set([event.requestId]))
-          deps.emitState(event.id, 'wants-you')
-          badge()
-          if (!deps.sink.windowFocused() && deps.sink.notifyEnabled()) {
-            deps.sink.notify(event.id, `claude asks to run ${event.toolName}`, pending.size, `${deps.label(event.id)} needs you`)
-          }
-          if (deps.sink.soundEnabled()) deps.sink.beep()
+          if (was) { badge(); return }
+          enter(event.id, `claude asks to run ${event.toolName}`)
           return
         }
         case 'permission-answered':
@@ -95,8 +117,24 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
           set.delete(event.requestId)
           if (set.size > 0) return
           pending.delete(event.id)
-          deps.emitState(event.id, 'idle')
+          // M355. A held agent is still waiting once its question is answered.
+          if (!held.has(event.id)) deps.emitState(event.id, 'idle')
           badge()
+          return
+        }
+        case 'meter': {
+          const hold = event.meter.held
+          if (hold !== undefined && !held.has(event.id)) {
+            const was = waiting(event.id)
+            held.add(event.id)
+            if (was) { badge(); return }
+            enter(event.id, `claude ${holdWords(hold)}`)
+            return
+          }
+          if (hold === undefined && held.delete(event.id)) {
+            if (!pending.has(event.id)) deps.emitState(event.id, 'idle')
+            badge()
+          }
           return
         }
         case 'status': {
@@ -104,7 +142,14 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
           // M98. Grants outlive an exit (the conversation resumes) and die
           // with the session; pending dies with either.
           if (event.status === 'disposed') grants.delete(event.id)
-          if (!pending.delete(event.id)) return
+          const hadHold = held.delete(event.id)
+          const hadPending = pending.delete(event.id)
+          if (!hadHold && !hadPending) return
+          // M355. An exit keeps the panel on the canvas. A question is dropped
+          // before it (and that said idle); nothing drops a hold first, so
+          // the exit says it, or the panel stays a phantom needs-you. A
+          // dispose removes the panel, and says nothing (above).
+          if (event.status === 'exited' && hadHold) deps.emitState(event.id, 'idle')
           badge()
           return
         }
@@ -112,8 +157,9 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
           return
       }
     },
-    resync(id) { if (pending.has(id)) deps.emitState(id, 'wants-you') },
+    resync(id) { if (waiting(id)) deps.emitState(id, 'wants-you') },
     pendingIds: () => [...pending.keys()],
+    heldIds: () => [...held],
     grant(id, toolName) {
       const set = grants.get(id)
       if (set) { set.add(toolName); return }

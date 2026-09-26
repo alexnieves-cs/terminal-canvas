@@ -377,6 +377,9 @@ export class AgentSessionManager {
     session.held = capCrossing(this.meterOf(session), this.capsOf(session)) ?? undefined
     session.meterKey = this.meterKeyOf(session)
     this.sessions.set(spec.id, session)
+    // M355. A carried hold is SAID, once: the approval tracker hears only
+    // events, and it is what puts a held agent in the decision queue.
+    if (session.held !== undefined) this.emit({ id: spec.id, type: 'meter', meter: this.meterOf(session) })
     return this.snapshot(session)
   }
 

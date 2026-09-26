@@ -3612,6 +3612,25 @@ assistant turn that reported usage, because a turn's usage is one message's (M35
 carried figure past its cap is held at `create`, with nothing to interrupt.
 `verify:agent-session cap.carry.1`.
 
+**A held agent is a needs-you, said by main's approval tracker from `meter` events, and the
+decision queue learns WHICH needs-you from a holds snapshot of its own
+(`main/approvals.ts`, `chat/chat-store.ts useHolds`, M355).** The tracker's two sets,
+pending and held, make one union. Entry to it says `wants-you` once, and leaving it says
+`idle`. An answered question on a held agent says nothing, because the agent is still
+waiting. Two orders fail silently:
+- Main's fan-out applies the tracker BEFORE it forwards the event. So `wants-you` reaches
+  the renderer ahead of the `meter` that carries the hold. An inbox that looked for the
+  hold only when the row appeared built it as "is waiting for your reply", and nothing
+  rebuilt it. `useHolds` is a subscription of its own, so the row is rebuilt when the
+  hold lands.
+- A question is DROPPED before its agent exits (approve.4), and the drop says `idle`.
+  Nothing drops a hold first, so the tracker's `exited` arm says `idle` for a hold, or
+  a stopped agent stays a needs-you with no decision behind it. `create` says a carried
+  hold (M354) as a `meter` event for the same reason: the tracker hears only events.
+
+`verify:agent-session hold.attention.1`, `verify:rail inbox.cap.1`, `queue.cap.1`,
+`verify:orchestration board.cap.1`.
+
 **The repository ROOT is resolved in ONE place, and it is main (`main/bootstrap/places.ts`'s
 `scopeResolver`/`memoryScope`).** A memory node is opened on a panel's directory, a chat carries its own
 `cwd`, and `tc memory add` passes whatever the agent's shell was standing in — three doors

@@ -1554,6 +1554,18 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         row('fail')?.action.kind === 'open' && row('fail')?.action.side === 'checks' &&
         row('rev')?.action.kind === 'open' && row('rev')?.action.side === 'changes',
       JSON.stringify(['perm', 'untasked:c9', 'fail', 'rev'].map((k) => row(k)?.action)))
+    // M355 — board.cap.1. A held agent's cap is raised on the agent (its Work
+    //     tab), so its row JUMPS to it; falling through to "open" would land
+    //     on the task's page, where no cap can be raised.
+    const capBoard = build({
+      items: [{ id: 'capd', title: 'Budget', state: 'working', panelId: 'c1' }],
+      groups: [{ itemId: 'capd', title: 'Budget', severity: 'blocked', why: 'Stopped — build is held at its $2.00 spend cap ($2.10 reported).', next: { label: 'Raise build\'s cap', evidence: { kind: 'decision', panelId: 'c1' } }, decisions: [{ key: 'q:c1', kind: 'cap', text: 'x', since: 1, evidence: { kind: 'decision', panelId: 'c1' } }], oldest: 1 }],
+      membersOf: () => ['c1'], agentOf: (id) => agents[id], checks: {}, handoffOf: () => undefined, planOf: () => undefined
+    })
+    const capRow = capBoard.groups.flatMap((x) => x.rows).find((r) => r.key === 'capd')
+    ok('board.cap.1 a held agent\'s row jumps to the agent, whose Work tab raises the cap, with the queue\'s next step as its label',
+      capRow?.action.kind === 'jump' && capRow.action.panelId === 'c1' && capRow.action.label === 'Raise build\'s cap',
+      JSON.stringify(capRow?.action))
     ok('board.3 the row\'s status is the queue\'s why when it has one, else a concrete sentence from the agents and the lane ("ui is working; 1 idle — 4 files changed so far"); idle agents are counted, not listed, and a card is not an agent; checks read "2 passed" / "1 failed · 2 passed" / "No checks run"; a plan says its progress',
       row('perm')?.status === groups[0].why && row('perm')?.agents.map((a) => a.id).join() === 'c1' && row('perm')?.idle === 1 &&
         row('run')?.status === 'ui is working; 1 idle — 4 files changed so far.' &&

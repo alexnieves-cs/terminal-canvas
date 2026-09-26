@@ -260,7 +260,8 @@ function DockImpl({
                     {inbox !== undefined && (
                       <div className="inbox__why" data-inbox-why={item.key}>
                         <p className="inbox__blocker">{item.blocker}</p>
-                        {item.kind === 'question' && item.context !== undefined && (
+                        {/* M355. A hold's context is whose cap it is and where it is raised. */}
+                        {(item.kind === 'question' || item.kind === 'cap') && item.context !== undefined && (
                           <p className="inbox__context" data-inbox-context>{outward(item.context, `panel ${row.id}`).text}</p>
                         )}
                         <p className="inbox__meta">

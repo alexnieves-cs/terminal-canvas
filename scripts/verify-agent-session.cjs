@@ -1065,6 +1065,53 @@ const isResult = (l) => l.includes('"type":"result"')
       beforeExit.length === 1 && beforeExit[0][1] === 'wants-you' && resynced.length === 2 && resynced[1][1] === 'wants-you' &&
         exitStates.length === 3 && exitStates[2][1] === 'idle' && exitTracker.pendingIds().length === 0,
       JSON.stringify(exitStates))
+
+    // M355 — hold.attention.1. A HOLD IS A NEEDS-YOU TOO. A panel is waiting
+    // while it is pending OR held: entry to either says wants-you once and
+    // notifies once in the hold's own words; an answered question on a held
+    // agent keeps it waiting; a release says idle; an exit (the panel stays)
+    // says idle and a dispose says nothing; the badge counts panels, not
+    // reasons. And the REAL manager says a hold carried at create (M354), so
+    // a relaunched held agent reaches the queue with no send.
+    {
+      const hCalls = []
+      const hStates = []
+      const hSink = { ...sink, notify: (id, label, count) => hCalls.push(['notify', id, label, count]), badge: (n) => hCalls.push(['badge', n]), beep() {} }
+      const t = P.createApprovalTracker({ sink: hSink, emitState: (id, state) => hStates.push([id, state]), label: (id) => id })
+      const meter = (id, held) => ({ id, type: 'meter', meter: held === undefined ? { spentUsd: 1 } : { spentUsd: held.spent, held } })
+      const hold = { unit: 'usd', spent: 2.1, limit: 2 }
+      t.apply(meter('h1', hold))
+      t.apply(meter('h1', { ...hold, spent: 2.2 }))
+      t.apply(req('h1', 'r1'))
+      const whileBoth = { states: hStates.slice(), badge: hCalls.filter((c) => c[0] === 'badge').pop() }
+      t.apply({ id: 'h1', type: 'permission-answered', requestId: 'r1', allow: true })
+      const afterAnswer = hStates.slice()
+      t.apply(meter('h1', undefined))
+      const afterRelease = hStates.slice()
+      t.apply(meter('h2', { unit: 'context', spent: 160000, limit: 150000, own: true }))
+      t.apply({ id: 'h2', type: 'status', status: 'exited' })
+      t.apply(meter('h3', hold))
+      t.apply({ id: 'h3', type: 'status', status: 'disposed' })
+      const notes = hCalls.filter((c) => c[0] === 'notify').map((c) => c[2])
+      const lastBadge = hCalls.filter((c) => c[0] === 'badge').pop()
+
+      const carriedStates = []
+      const ct = P.createApprovalTracker({ sink: { ...sink, notify() {}, beep() {}, badge() {} }, emitState: (id, state) => carriedStates.push([id, state]), label: () => 'x' })
+      const r = makeManager({ caps: () => ({ usd: 2, context: 0 }), carried: (id) => (id === 'held' ? { spentUsd: 2.5 } : undefined) })
+      r.manager.subscribe((e) => ct.apply(e))
+      r.manager.create({ id: 'held', cwd: '/r' })
+      r.manager.create({ id: 'fine', cwd: '/r' })
+      ct.resync('held')
+      ok('hold.attention.1 a hold is a needs-you: entry says wants-you and notifies once in its own words, an answered question keeps a held agent waiting, a release or an exit says idle, a dispose says nothing, the badge counts panels, and a hold carried at create is said',
+        whileBoth.states.length === 1 && whileBoth.states[0][1] === 'wants-you' && whileBoth.badge[1] === 1 &&
+          afterAnswer.length === 1 && afterRelease.length === 2 && afterRelease[1][1] === 'idle' &&
+          hStates.length === 5 && hStates[2].join() === 'h2,wants-you' && hStates[3].join() === 'h2,idle' && hStates[4].join() === 'h3,wants-you' &&
+          notes.length === 3 && notes[0] === 'claude is held at its $2.00 spend cap ($2.10 reported)' &&
+          notes[1] === 'claude is held at its own 150k-token context cap (160k in the conversation)' &&
+          lastBadge[1] === 0 && t.heldIds().length === 0 &&
+          carriedStates.length === 2 && carriedStates.every((s) => s[0] === 'held' && s[1] === 'wants-you'),
+        JSON.stringify({ hStates, notes, lastBadge, whileBoth, carriedStates }))
+    }
   }
 
   // M81 — supervisor.1. The system-prompt append: a chat can be created with

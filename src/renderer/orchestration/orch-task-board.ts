@@ -165,6 +165,11 @@ function actionFromGroup(g: Pick<TaskGroup, 'next' | 'decisions'>, hasItem: bool
   if (first?.kind === 'question' && first.evidence.kind === 'decision') {
     return { kind: 'reply', panelId: first.evidence.panelId, label: g.next.label }
   }
+  // M355. A cap is raised on the agent itself (its Work tab's Caps fields),
+  // so the row goes to the agent on the canvas, not to the task's page.
+  if (first?.kind === 'cap' && first.evidence.kind === 'decision') {
+    return { kind: 'jump', panelId: first.evidence.panelId, label: g.next.label }
+  }
   if (!hasItem) {
     const ev = g.next.evidence
     const panelId = ev.kind === 'review' ? '' : ev.panelId

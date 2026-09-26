@@ -1,4 +1,5 @@
 import type { PendingApproval, RailAttention } from './rail-sections'
+import { holdWords, type CapHold } from '@shared/agent-session'
 
 /**
  * M308. THE DECISION INBOX — the Needs-you queue as decisions rather than a
@@ -29,7 +30,12 @@ import type { PendingApproval, RailAttention } from './rail-sections'
  * Pure: types only. `verify:rail inbox.1–.4`.
  */
 
-export type InboxKind = 'permission' | 'question'
+/**
+ * M355. `cap`: an agent main HOLDS at its spend or context cap (M350). Its
+ * needs-you is a fact like a question's, but the answer is a person's
+ * decision about money or context, not a reply, so it is said as a hold.
+ */
+export type InboxKind = 'permission' | 'question' | 'cap'
 
 export interface InboxMember {
   panelId: string
@@ -38,7 +44,7 @@ export interface InboxMember {
 }
 
 export interface InboxItem {
-  /** Stable while the decision is the same one: a request id, or the panel for a question. */
+  /** Stable while the decision is the same one: a request id, or the panel for a question or a hold. */
   key: string
   kind: InboxKind
   /** The longest-waiting member — where a jump goes. */
@@ -47,6 +53,8 @@ export interface InboxItem {
   /** Everyone asking for THIS decision. One unless duplicates were grouped. */
   members: InboxMember[]
   approval?: PendingApproval
+  /** M355. The hold, for a `cap` item: its figures and whose cap it is. */
+  hold?: CapHold
   /** The panel's own requests beyond the one shown. */
   moreFromPanel: number
   /** The task the asking panel belongs to, by title. */
@@ -65,6 +73,8 @@ export interface InboxInput {
   rows: readonly RailAttention[]
   /** Every pending request on this renderer, arrival order per panel. */
   approvals: readonly PendingApproval[]
+  /** M355. Every chat main holds at a cap (`useHolds`). Absent → none. */
+  holds?: readonly { id: string; held: CapHold }[]
   kindOf: (panelId: string) => 'chat' | 'terminal' | 'other'
   taskOf?: (panelId: string) => string | undefined
   /** Automation-carrying links, source → target. */
@@ -118,6 +128,7 @@ export function buildInbox(input: InboxInput): Inbox {
     if (list === undefined) byPanel.set(a.id, [a])
     else list.push(a)
   }
+  const holdOf = new Map((input.holds ?? []).map((h) => [h.id, h.held]))
   const built: InboxItem[] = []
   const groups = new Map<string, InboxItem>()
   input.rows.forEach((row) => {
@@ -148,6 +159,22 @@ export function buildInbox(input: InboxInput): Inbox {
       }
       groups.set(dup, item)
       built.push(item)
+      return
+    }
+    // M355. A held chat is waiting on a cap, not a reply. A question it asked
+    // first is answered first (the approval branch above); then this row.
+    const hold = holdOf.get(row.id)
+    if (hold !== undefined) {
+      built.push({
+        key, kind: 'cap', panelId: row.id, label: row.label,
+        members: [{ panelId: row.id, label: row.label }],
+        hold,
+        moreFromPanel: 0,
+        ...(task === undefined ? {} : { task }),
+        blocker: holdWords(hold),
+        context: hold.own === true ? 'this agent\'s own cap — raise it on its Work tab, or end the agent' : `the Settings cap every agent shares — ${hold.unit === 'usd' ? 'agents.nodeCapUsd' : 'agents.nodeCapContextK'}, or this agent's own cap on its Work tab`,
+        since, unblocks
+      })
       return
     }
     const kind = input.kindOf(row.id)
