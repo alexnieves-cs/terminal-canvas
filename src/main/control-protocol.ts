@@ -24,6 +24,11 @@ export type ControlRequest =
   /** M81. READ-ONLY: the canvas model, for a supervisor that answers about it. */
   | { verb: 'status' }
   /**
+   * M369. READ-ONLY: the decision audit, newest first — what a person decided,
+   * scrubbed on its way to disk. Socket only, like `status`.
+   */
+  | { verb: 'audit'; limit?: number }
+  /**
    * M83. The project memory. `add` is the first control verb that WRITES,
    * and it writes only into that store — it cannot spawn, focus or run.
    */
@@ -126,6 +131,12 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       return { kind: 'ok', req: { verb: 'ping' } }
     case 'status':
       return { kind: 'ok', req: { verb: 'status' } }
+    case 'audit': {
+      const limitRaw = fields['limit']
+      if (limitRaw === undefined) return { kind: 'ok', req: { verb: 'audit' } }
+      if (typeof limitRaw !== 'number' || !Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 1000) return { kind: 'bad', error: 'limit must be a whole number from 1 to 1000' }
+      return { kind: 'ok', req: { verb: 'audit', limit: limitRaw } }
+    }
     case 'memory': {
       const op = fields['op']
       if (op === 'list') {

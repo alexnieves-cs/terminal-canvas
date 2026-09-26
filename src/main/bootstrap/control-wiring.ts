@@ -101,6 +101,8 @@ export function createControlWiring(state: MainState, stores: Stores, places: Pl
         return memoryStore.add({ ...req, root: resolved.root })
       }
     },
+    // M369. The decision audit, read from main's own file.
+    audit: (limit) => stores.decisionAudit.list(limit),
     canvas: async () => {
       const wc = state.window?.webContents
       if (!wc) return null

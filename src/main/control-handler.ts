@@ -10,6 +10,7 @@
  * symptom is two panels rendering as one).
  */
 import { existsSync } from 'node:fs'
+import type { DecisionRow } from '../shared/decision-audit'
 import type { Preset } from '../shared/layout-schema'
 import type { BoardControlRequest, ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
@@ -46,6 +47,8 @@ export interface ControlHandlerDeps {
    * answer in time" — a third state, never an empty model with no note.
    */
   canvas?: () => Promise<ControlCanvasModel | null>
+  /** M369. The decision audit, newest first. Absent: this window keeps none. */
+  audit?: (limit: number) => { rows: DecisionRow[]; skipped: number }
   /** M102. The teammate a panel speaks as, from main's own records — never the CLI's claim. */
   teammateOf?: (panelId: string) => string | undefined
   /** M102. The panel a session token was minted for; undefined for a token this window never minted. */
@@ -190,6 +193,11 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
           : req.verb === 'share' ? sh.share(req.orgId)
           : req.verb === 'open-share' ? sh.openShare(req.shareId)
           : sh.shareRole({ shareId: req.shareId, who: req.who, role: req.role })
+      }
+      case 'audit': {
+        // READ-ONLY by construction, like `status`: one read of main's own file.
+        if (deps.audit === undefined) return { ok: false, error: 'this window keeps no decision audit' }
+        return { ok: true, audit: deps.audit(req.limit ?? 50) }
       }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or

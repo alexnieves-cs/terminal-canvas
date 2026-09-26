@@ -8,6 +8,9 @@ module.exports = {
   ...require('../src/main/control-handler'),
   ...require('../src/main/launcher'),
   ...require('../src/cli/tc'),
+  /* M369. The decision audit behind `tc audit`: node:fs only. */
+  ...require('../src/shared/decision-audit'),
+  ...require('../src/main/decision-audit'),
   /* M81. The word producers `tc status` reports in — checked here so drift
      is caught where it would happen, not where it passes through. */
   ...require('../src/renderer/panels/panel-state'),

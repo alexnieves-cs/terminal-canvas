@@ -4,7 +4,7 @@
  * is the four-line entry that supplies the real socket.
  *
  *   tc open [--preset <name|id>] [--cwd <dir>]
- *   tc list | tc focus <id> | tc ping | tc status
+ *   tc list | tc focus <id> | tc ping | tc status | tc audit [--limit <n>]
  *   tc memory list [--root <dir> | --teammate <id>] [--limit <n>]
  *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir> | --teammate <id>]
  *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
@@ -34,6 +34,7 @@ export const USAGE = [
   '       tc focus <panel-id>',
   '       tc ping',
   '       tc status',
+  '       tc audit [--limit <n>]',
   '       tc plan "focus n3; read n3"',
   '       tc memory list [--root <dir> | --teammate <id>] [--limit <n>]',
   '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir> | --teammate <id>]',
@@ -248,6 +249,16 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     case 'share-role':
       return rest.length === 3 ? { kind: 'ok', line: JSON.stringify({ verb: 'share-role', shareId: rest[0], who: rest[1], role: rest[2] }) } : { kind: 'usage', error: 'share-role takes a share id, a login or user id, and editor, viewer or none' }
     case 'list':
+    // M369. `tc audit [--limit N]`: what a person decided, newest first.
+    case 'audit': {
+      if (rest.length === 0) return { kind: 'ok', line: JSON.stringify({ verb: 'audit' }) }
+      if (rest.length === 2 && rest[0] === '--limit') {
+        const n = Number(rest[1])
+        if (!Number.isInteger(n) || n < 1 || n > 1000) return { kind: 'usage', error: `--limit takes a whole number from 1 to 1000, not ${rest[1]}` }
+        return { kind: 'ok', line: JSON.stringify({ verb: 'audit', limit: n }) }
+      }
+      return { kind: 'usage', error: 'audit takes only --limit N' }
+    }
     case 'status':
     case 'ping':
       return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }

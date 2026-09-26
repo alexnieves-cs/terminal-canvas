@@ -18,6 +18,7 @@ import { createBaselineCapture } from '../baseline-capture'
 import { createGitRunner } from '../git-runner'
 import { createMemoryStore } from '../memory-store'
 import { createBrokerAudit } from '../broker-audit'
+import { createDecisionAudit, type DecisionAudit } from '../decision-audit'
 import { createLastExitStore, type LastExitStore } from '../last-exit'
 import { createJobStore, type JobStore } from '../job-store'
 import { createAttentionUnion } from '../approvals'
@@ -68,6 +69,8 @@ export interface Stores {
   memoryStore: ReturnType<typeof createMemoryStore>
   teammateMemory: ReturnType<typeof createMemoryStore>
   brokerAudit: ReturnType<typeof createBrokerAudit>
+  /** M369. Every person-sourced ledger row, scrubbed, outliving the ledger's trim. */
+  decisionAudit: DecisionAudit
   attention: ReturnType<typeof createAttentionUnion>
   /** M54. Declared ABOVE the manager, which carries them into every spawn's env. */
   controlSocketPath: string
@@ -344,6 +347,7 @@ export function createStores(state: MainState): Stores {
    * else.
    */
   const brokerAudit = createBrokerAudit({ file: join(userData, 'broker-audit.jsonl') })
+  const decisionAudit = createDecisionAudit({ file: join(userData, 'decision-audit.jsonl') })
   // Brief #20. Read and deleted HERE, at construction — see last-exit.ts.
   const lastExit = createLastExitStore({ file: join(userData, 'last-exit.json') })
   // M316. Built here, before any pool can start — see job-store.ts.
@@ -353,7 +357,7 @@ export function createStores(state: MainState): Stores {
     layoutStore, layoutSnapshots, credentialStore, gitRunner, reviewEngine,
     reviewDiscard, reviewCommit, baselineCapture, captureBaseline, dropBaseline,
     runLedger, checkOutputs, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
-    fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit,
+    fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit, decisionAudit,
     attention, controlSocketPath, launcherDir, lastExit, jobs
   }
 }

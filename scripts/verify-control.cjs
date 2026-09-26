@@ -637,6 +637,47 @@ const ok = (n, pass, detail = '') => {
       calls.length === 1 && !('personConfirmed' in calls[0]) && answered.ok === false && /no one was asked/.test(answered.error),
       JSON.stringify({ calls, answered }))
   }
+  // M369 — audit.1. THE DECISION AUDIT keeps a PERSON's decisions only (an
+  //     agent's rows never), scrubs each row's words on the way to disk with
+  //     the count on the row, reads newest first skipping a torn line, and
+  //     trims the oldest at its cap — never editing a row.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc audit '))
+    const file = join(dir, 'decision-audit.jsonl')
+    const a = C.createDecisionAudit({ file, max: 3 })
+    const ev = (at, source, title, extra = {}) => ({ kind: 'event', runId: 'r', at, event: 'permission', source, title, ...extra })
+    a.record(ev(1, 'agent', 'agent ran npm test'))
+    a.record(ev(2, 'person', 'Allowed Bash — curl -H "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789" api', { itemId: 'T1', panelId: 'c1' }))
+    a.record(ev(3, 'person', 'Reviewed 3 changed files', { event: 'check' }))
+    require('node:fs').appendFileSync(file, 'not json\n')
+    const read = a.list(10)
+    for (let i = 4; i <= 205; i += 1) a.record(ev(i, 'person', `decision ${i}`))
+    const trimmed = a.list(10)
+    const onDisk = require('node:fs').readFileSync(file, 'utf8')
+    rmSync(dir, { recursive: true, force: true })
+    ok('audit.1 the decision audit keeps a person\'s decisions only, scrubs a token from a row\'s words with the count on the row, reads newest first skipping a torn line, and trims the oldest at its cap',
+      read.rows.length === 2 && read.rows[0].title === 'Reviewed 3 changed files' && read.rows[1].itemId === 'T1' && read.rows[1].scrubbed === 1 &&
+        !/ghp_abcdefghijklmnop/.test(read.rows[1].title) && read.skipped === 1 && !read.rows.some((r) => /agent ran/.test(r.title)) &&
+        trimmed.rows[0].title === 'decision 205' && onDisk.split('\n').filter((l) => l.trim() !== '').length <= 8 && !/ghp_abcdefghijklmnop/.test(onDisk),
+      JSON.stringify({ read, first: trimmed.rows.slice(0, 2) }))
+  }
+
+  // M369 — audit.2. `tc audit` is one read-only door: the CLI builds it (a
+  //     bad limit refused by name), the protocol parses it, and the handler
+  //     answers from main's store — or says this window keeps none.
+  {
+    const built = [C.buildRequest(['audit'], {}), C.buildRequest(['audit', '--limit', '5'], {}), C.buildRequest(['audit', '--limit', '0'], {}), C.buildRequest(['audit', 'x'], {})]
+    const parsed = [C.parseControlLine('{"verb":"audit"}'), C.parseControlLine('{"verb":"audit","limit":5}'), C.parseControlLine('{"verb":"audit","limit":0}')]
+    const base = { presets: () => [], defaultId: () => null, exists: () => true, spawn: () => {}, list: () => [], focus: () => true }
+    let asked = 0
+    const answered = await C.createControlHandler({ ...base, audit: (limit) => { asked = limit; return { rows: [{ at: 1, event: 'permission', title: 'Allowed Bash — ls' }], skipped: 0 } } })({ verb: 'audit', limit: 5 })
+    const none = await C.createControlHandler(base)({ verb: 'audit' })
+    ok('audit.2 tc audit builds and parses (a limit outside 1–1000 refused by name), answers from main\'s store with the limit asked, and a window with no audit says so',
+      built[0].kind === 'ok' && JSON.parse(built[0].line).verb === 'audit' && JSON.parse(built[1].line).limit === 5 && built[2].kind === 'usage' && built[3].kind === 'usage' &&
+        parsed[0].kind === 'ok' && parsed[1].kind === 'ok' && parsed[1].req.limit === 5 && parsed[2].kind === 'bad' &&
+        answered.ok === true && answered.audit.rows[0].title === 'Allowed Bash — ls' && asked === 5 && none.ok === false && /no decision audit/.test(none.error),
+      JSON.stringify({ built, parsed: parsed.map((p) => p.kind), answered, none }))
+  }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

@@ -306,6 +306,10 @@ app.whenReady().then(async () => {
         // the files as they are now, at the moment the row lands — the
         // reviewed version a later reader compares the live file with.
         await stores.runLedger.append(await withDigests(row))
+        // M369. A person's decision is mirrored, scrubbed, into the audit
+        // that outlives the ledger's trim. After the ledger: a row the
+        // ledger refused is not a decision this app recorded.
+        stores.decisionAudit.record(row)
         return true
       } catch {
         // A row that did not land is reported as not landed. The caller says
