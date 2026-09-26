@@ -1169,6 +1169,113 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ budgetEvents, interrupts, killed: two.spawns.map((s) => s.proc.killed), afterSecond }))
   }
 
+  // M350 — cap.*. EACH NODE'S OWN CAPS, enforced by main outside the agent
+  //      loop. cap.meter.1: a node's spend is CARRIED across its processes
+  //      (the CLI's figure restarts at 0 in a new one) while `costUsd` keeps
+  //      its M82 meaning, and the canvas budget now sums the carried figure.
+  //      cap.context.1: context is measured per message, set (never summed)
+  //      and said once. cap.hold.1: a message that crosses the context cap
+  //      INTERRUPTS its own turn (never kills), holds the node, keeps what was
+  //      queued unsent, and refuses a send storing nothing. cap.release.1: a
+  //      cap raised above the figure releases the node at the next send, and
+  //      the held message goes FIRST. cap.usd.1: the spend cap holds at the
+  //      result, stops an auto run with its own reason, and the canvas budget
+  //      is not what refused.
+  {
+    const result = (usd) => JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: usd, usage: { input_tokens: 1, output_tokens: 1 } })
+    const assistant = (id, usage) => JSON.stringify({ type: 'assistant', isSidechain: false, message: { id, model: 'claude-x', role: 'assistant', content: [{ type: 'text', text: 'hi' }], usage } })
+    const meters = (evs, id) => evs.filter((e) => e.id === id && e.type === 'meter').map((e) => e.meter)
+
+    const limits = { maxConcurrent: 0, budgetUsd: 0 }
+    const a = makeManager({ limits: () => limits })
+    a.manager.create({ id: 'm1', cwd: '/r' })
+    a.manager.create({ id: 'm0', cwd: '/r' })
+    a.manager.send('m1', 'one')
+    a.spawns[0].proc.emitLines([result(0.5)])
+    await tick(5)
+    a.spawns[0].proc.exit(1, null)
+    await tick(5)
+    a.manager.send('m1', 'two')
+    a.spawns[1].proc.emitLines([result(0.2)])
+    await tick(5)
+    const snap = a.manager.get('m1')
+    limits.budgetUsd = 0.6
+    const overBudget = a.manager.send('m1', 'three')
+    ok('cap.meter.1 a node\'s spend is carried across its processes (0.5 then a new process\'s 0.2 is 0.7, never 0.2), costUsd keeps the current process\'s figure, an unpriced node has no meter, and the canvas budget sums the carried figure',
+      a.spawns.length === 2 && snap.meter && Math.abs(snap.meter.spentUsd - 0.7) < 1e-9 && snap.costUsd === 0.2 &&
+        a.manager.get('m0').meter === undefined && overBudget === 'refused-budget',
+      JSON.stringify({ meter: snap.meter, costUsd: snap.costUsd, m0: a.manager.get('m0').meter, overBudget }))
+
+    const b = makeManager()
+    b.manager.create({ id: 'c1', cwd: '/r' })
+    b.manager.send('c1', 'go')
+    const usage = { input_tokens: 1000, cache_read_input_tokens: 50000, cache_creation_input_tokens: 2000, output_tokens: 500 }
+    b.spawns[0].proc.emitLines([assistant('msg1', usage), assistant('msg1', usage), assistant('msg1', usage)])
+    await tick(5)
+    const said = meters(b.events, 'c1')
+    ok('cap.context.1 context is measured on each message as every input class plus what it wrote, set rather than summed, and a message\'s repeated blocks say the meter once',
+      said.length === 1 && said[0].context === 53500 && b.manager.get('c1').meter.context === 53500,
+      JSON.stringify(said))
+
+    const caps = { usd: 0, context: 50000 }
+    const c = makeManager({ caps: () => caps })
+    c.manager.create({ id: 'h1', cwd: '/r' })
+    c.manager.send('h1', 'long task')
+    const queued = c.manager.send('h1', 'and then this')
+    const proc = c.spawns[0].proc
+    proc.emitLines([assistant('big', usage)])
+    await tick(5)
+    const interruptsWritten = proc.stdin.filter((l) => l.includes('interrupt')).length
+    const heldMeter = c.manager.get('h1').meter
+    proc.emitLines([JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, total_cost_usd: 0.1, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(5)
+    const afterResult = c.manager.get('h1')
+    const userTurnsBefore = c.manager.transcript('h1').filter((t) => t.role === 'user').length
+    const refused = c.manager.send('h1', 'please continue')
+    const userTurnsAfter = c.manager.transcript('h1').filter((t) => t.role === 'user').length
+    // Transitions INTO a hold: the meter is said again while held (the result's spend), which is not a second hold.
+    const holds = meters(c.events, 'h1').filter((m, i, all) => m.held !== undefined && (i === 0 || all[i - 1].held === undefined)).length
+    ok('cap.hold.1 a message that crosses the context cap interrupts its own turn (never kills), holds the node once, keeps the queued message unsent, and refuses a send storing nothing',
+      queued === 'queued' && interruptsWritten === 1 && proc.killed === 0 && heldMeter.held && heldMeter.held.unit === 'context' &&
+        heldMeter.held.spent === 53500 && heldMeter.held.limit === 50000 && afterResult.queued === 1 &&
+        !c.events.some((e) => e.id === 'h1' && e.type === 'dequeued') && refused === 'refused-cap' && userTurnsAfter === userTurnsBefore && holds === 1,
+      JSON.stringify({ queued, interruptsWritten, killed: proc.killed, heldMeter, queuedNow: afterResult.queued, refused, userTurnsBefore, userTurnsAfter, holds }))
+
+    caps.context = 100000
+    const writesBefore = proc.stdin.length
+    const released = c.manager.send('h1', 'carry on')
+    const served = proc.stdin.slice(writesBefore).map((l) => { try { return JSON.parse(l).message.content } catch { return null } })
+    const dq = c.events.filter((e) => e.id === 'h1' && e.type === 'dequeued').map((e) => e.text)
+    const releasedMeter = c.manager.get('h1').meter
+    ok('cap.release.1 a cap raised above the figure releases the node at the next send, the message it held goes first, and the new one queues behind it',
+      released === 'queued' && dq.length === 1 && dq[0] === 'and then this' && JSON.stringify(served).includes('and then this') &&
+        !JSON.stringify(served).includes('carry on') && releasedMeter.held === undefined && c.manager.get('h1').queued === 1,
+      JSON.stringify({ released, dq, served, releasedMeter, queued: c.manager.get('h1').queued }))
+
+    const ucaps = { usd: 1, context: 0 }
+    const d = makeManager({ caps: () => ucaps, limits: () => ({ maxConcurrent: 0, budgetUsd: 0 }) })
+    d.manager.create({ id: 'u1', cwd: '/r' })
+    const started = d.manager.startAuto('u1', { mode: 'complete', task: 'finish it' })
+    d.spawns[0].proc.emitLines([result(1.25)])
+    await tick(10)
+    const uSnap = d.manager.get('u1')
+    const autoEvents = d.events.filter((e) => e.id === 'u1' && e.type === 'auto')
+    const lastAuto = autoEvents[autoEvents.length - 1]
+    const uRefused = d.manager.send('u1', 'more')
+    ok('cap.usd.1 the spend cap holds the node at the result that crosses it (nothing to interrupt), stops an auto run stuck with its own reason, and it is the cap that refuses — not the canvas budget',
+      started.kind === 'started' && uSnap.meter.held && uSnap.meter.held.unit === 'usd' && uSnap.meter.held.limit === 1 &&
+        d.spawns[0].proc.stdin.filter((l) => l.includes('interrupt')).length === 0 &&
+        lastAuto && lastAuto.state === 'stuck' && lastAuto.reason === 'cap' && uRefused === 'refused-cap' && d.spawns.length === 1,
+      JSON.stringify({ started, meter: uSnap.meter, lastAuto, uRefused, spawns: d.spawns.length }))
+    const S2 = M.sharedSession
+    const words = [S2.capSentence({ unit: 'usd', spent: 1.25, limit: 1 }), S2.capSentence({ unit: 'context', spent: 53500, limit: 50000 })]
+    ok('cap.words.1 a hold is refused in its own figures and names the setting that releases it, and the bare word has a sentence too',
+      words[0].includes('$1.00 spend cap') && words[0].includes('$1.25') && words[0].includes('agents.nodeCapUsd') &&
+        words[1].includes('50k-token cap') && words[1].includes('54k') && words[1].includes('agents.nodeCapContextK') &&
+        typeof S2.sendRefusalSentence('refused-cap') === 'string',
+      JSON.stringify(words))
+  }
+
   {
     // Live rate-limit state on the manager: emit the event, keep none/allowed/
     // limited, and stop at N% of the binding window through the SAME budget path.

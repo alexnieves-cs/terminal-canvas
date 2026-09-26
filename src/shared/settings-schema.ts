@@ -196,6 +196,31 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M350. Each agent's OWN caps, beside the canvas's (M82): a canvas under
+    // budget can still hold one agent that has spent or filled its share. Main
+    // enforces both, outside the agent loop; 0 is no cap.
+    id: 'agents.nodeCapUsd',
+    label: 'Spend cap for each agent',
+    description: 'hold an agent when its own reported cost reaches this many dollars — across every process it has run; a send to it is refused by name until raised; 0 is no cap',
+    keywords: ['cap', 'spend', 'cost', 'dollars', 'budget', 'per agent', 'node', 'limit', 'ceiling', 'hold'],
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 1000,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'agents.nodeCapContextK',
+    label: 'Context cap for each agent (thousands of tokens)',
+    description: 'stop an agent\'s turn when its conversation reaches this many thousand tokens, and hold it until raised — measured on every message, so the turn that crosses it is the one stopped; 0 is no cap',
+    keywords: ['cap', 'context', 'tokens', 'window', 'per agent', 'node', 'limit', 'ceiling', 'hold', 'compact'],
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 2000,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.bell',
     planWritable: true,
     label: 'Detect the terminal bell',

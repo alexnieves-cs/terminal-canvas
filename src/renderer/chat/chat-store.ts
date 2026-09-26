@@ -466,6 +466,11 @@ export function applyChatEvent(event: AgentSessionEvent): void {
     case 'turn-aborted':
       update(event.id, { ...prev, live: null, lastTurn: { kind: 'aborted', at: Date.now(), reason: event.reason } })
       return
+    case 'meter':
+      // M350. Main's whole meter each time (spend, context, a hold): replaced, never merged.
+      if (!snap) return
+      update(event.id, { ...prev, snapshot: { ...snap, meter: event.meter } })
+      return
     case 'queued':
       if (!snap) return
       // M82. The REASON rides the snapshot so the panel can say which queue it

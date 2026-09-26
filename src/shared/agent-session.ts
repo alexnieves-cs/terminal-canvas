@@ -109,6 +109,69 @@ export interface AgentSessionSnapshot {
   negotiated?: NegotiatedCapabilities
   /** M119. The handshake has been written and not yet answered: the first send is held. Absent for every other row and once the session opens. */
   awaitingHandshake?: true
+  /** M350. This agent's own meter (spend across its processes, context, a cap's hold). Absent until main has measured anything. */
+  meter?: NodeMeter
+}
+
+/**
+ * M350. What stopped ONE agent at its own cap. M82's budget is the canvas's
+ * ceiling over every agent; this is one node's, and the two never share a
+ * latch: a canvas under budget can hold one agent that has spent its share.
+ */
+export interface CapHold {
+  unit: 'usd' | 'context'
+  /** Dollars for `usd`, tokens for `context`: the figure that crossed. */
+  spent: number
+  limit: number
+}
+
+/**
+ * M350. One agent's own telemetry, measured by MAIN outside the agent loop.
+ *
+ * - `spentUsd`: the CLI's reported cost across EVERY process this node has
+ *   run. A CLI's figure is cumulative for its current process only, so a
+ *   respawn (an exit, a relaunch, codex's process per turn) starts it at 0
+ *   again; main carries the finished processes' figures forward. Absent
+ *   until priced: a backend that reports no cost has no spend to cap.
+ * - `context`: tokens in the conversation as of its latest message (what it
+ *   was sent, cached or not, plus what it wrote). Absent until a message
+ *   reports usage.
+ * - `held`: present while the node is held at a cap.
+ */
+export interface NodeMeter {
+  spentUsd?: number
+  context?: number
+  held?: CapHold
+}
+
+/** M350. The caps main enforces on every node. 0 is no cap, for both (every canvas that never set one). */
+export interface NodeCaps {
+  usd: number
+  /** Tokens, not thousands: the setting is in thousands and converted where it is read. */
+  context: number
+}
+
+/** M350. The tokens a message's usage says are in the conversation: every input class plus what it wrote. */
+export function contextTokens(usage: TokenTotals): number {
+  return usage.input + usage.cacheWrite + usage.cacheRead + usage.output
+}
+
+/**
+ * M350. The cap a meter has reached, or null. Spend first: dollars are the
+ * explicit hard stop, as in M82's budgetCrossing. An unmeasured figure
+ * crosses nothing: "unknown" is never "over".
+ */
+export function capCrossing(meter: Pick<NodeMeter, 'spentUsd' | 'context'>, caps: NodeCaps): CapHold | null {
+  if (caps.usd > 0 && meter.spentUsd !== undefined && meter.spentUsd >= caps.usd) return { unit: 'usd', spent: meter.spentUsd, limit: caps.usd }
+  if (caps.context > 0 && meter.context !== undefined && meter.context >= caps.context) return { unit: 'context', spent: meter.context, limit: caps.context }
+  return null
+}
+
+/** M350. A hold in one sentence: what crossed, and what a person does about it. */
+export function capSentence(hold: CapHold): string {
+  return hold.unit === 'usd'
+    ? `this agent reached its $${hold.limit.toFixed(2)} spend cap ($${hold.spent.toFixed(2)} reported) — raise agents.nodeCapUsd in Settings, then send again`
+    : `this agent's context reached its ${Math.round(hold.limit / 1000)}k-token cap (${Math.round(hold.spent / 1000)}k) — raise agents.nodeCapContextK in Settings, or start a fresh conversation`
 }
 
 /**
@@ -162,11 +225,14 @@ export type AgentSessionEvent = { id: string; owner?: string } & (
   /** M319. `resumeLost`: the CLI said the conversation it was asked to resume does not exist — the next message starts a new one. */
   | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string; resumeLost?: string }
   | { type: 'turn'; turn: TranscriptTurn }
-  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'terminated' }
+  /** M350. `cap`: this node reached its own cap mid-turn (its context), and main stopped the turn. */
+  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'cap' | 'terminated' }
   /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
   | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
   /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */
   | { type: 'budget'; spent: number; limit: number; interrupted: number; unit?: 'usd' | 'window' }
+  /** M350. This node's meter changed (its spend, its context, or a hold set or released) — the whole meter, each time. */
+  | { type: 'meter'; meter: NodeMeter }
   /** A queued message written after the result that freed the turn. */
   | { type: 'dequeued'; text: string }
   | { type: 'queue-dropped'; count: number }
@@ -187,7 +253,7 @@ export type AgentSessionEvent = { id: string; owner?: string } & (
  * reached the ceiling its owner set, and the message was NOT stored — a
  * refused message is not a turn.
  */
-export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-backend' | 'refused-images' | 'refused-sandbox'
+export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-cap' | 'refused-backend' | 'refused-images' | 'refused-sandbox'
 
 /** M75. What the composer attaches: a dropped image's path (main reads it) or pasted bytes. */
 export type ChatAttachment =
@@ -221,6 +287,8 @@ export function sendRefusalSentence(answer: SendAnswer | undefined): string | nu
   if (typeof answer === 'object' && answer !== null && 'refused' in answer) return answer.refused
   switch (answer) {
     case 'refused-budget': return 'the budget ceiling was reached — raise agents.budgetUsd or agents.budgetWindowPercent in Settings, then send again'
+    // M350. Main answers with capSentence's figures (agent-handlers.ts answerIn); this is the bare word's fallback.
+    case 'refused-cap': return 'this agent reached its own cap — raise agents.nodeCapUsd or agents.nodeCapContextK in Settings, then send again'
     case 'refused-backend': return 'this engine cannot take the message'
     case 'refused-images': return 'this engine cannot take images'
     case 'refused-sandbox': return 'this engine has no read-only mode, and the conversation has no folder'

@@ -3580,6 +3580,26 @@ budget.2` drives two sessions and a second result.
 manager without `limits`, and every canvas that has never opened the settings page, behaves
 exactly as before M82 — the arms are unreachable rather than merely lenient.
 
+**A node's spend is CARRIED across its processes, in fields of its own; `costUsd` keeps its
+per-process meaning (`main/agent-session.ts` `procUsd`/`priorUsd`, M350).** The CLI's
+`total_cost_usd` is cumulative for the PROCESS. A respawn (an exit, `--resume`, codex's
+process per turn) starts it at 0 again, and taking the latest value (the entry above) then
+forgets everything the node spent before. M82's canvas budget summed `costUsd`, so it could be
+spent again after every respawn with nothing on screen wrong. `spawn` moves the finished
+process's figure into `priorUsd`, and `spent()` and the pool's spend sum the carried figure.
+`costUsd` was left alone: Orchestrate's "$X reported by" and the transcript meta read it as
+the current process's figure. The premise that a resumed claude process restarts at 0 comes
+from that field's own contract. It is measured within one process, not yet across a resume
+(M350 Owed). `verify:agent-session cap.meter.1`.
+
+**A node's cap is enforced in MAIN, per message for context, and holds rather than kills
+(`enforceCap`, `holdAtSend`, M350).** Context is read from each assistant message's usage, so
+the turn that crosses the cap is the one interrupted. Reading it at the result would let a
+long tool loop run to its end past the cap. A hold latches like the budget, and is released
+only by a cap read LIVE at a send. The messages it kept are served FIRST, or a new send would
+jump ahead of what the person queued before the hold. `verify:agent-session cap.hold.1`,
+`cap.release.1`.
+
 **The repository ROOT is resolved in ONE place, and it is main (`main/bootstrap/places.ts`'s
 `scopeResolver`/`memoryScope`).** A memory node is opened on a panel's directory, a chat carries its own
 `cwd`, and `tc memory add` passes whatever the agent's shell was standing in — three doors

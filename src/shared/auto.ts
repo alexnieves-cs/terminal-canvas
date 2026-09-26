@@ -96,7 +96,7 @@ export function validateAutoMode(mode: AutoMode, facts: PlanFacts, panelId = fac
 }
 
 export type AutoState = 'running' | 'done' | 'stuck' | 'stopped'
-export type AutoStuckReason = 'limit' | 'permission' | 'exit' | 'budget' | 'error'
+export type AutoStuckReason = 'limit' | 'permission' | 'exit' | 'budget' | 'cap' | 'error'
 
 export interface AutoStatus {
   mode: AutoModeId
@@ -111,6 +111,8 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
   permission: 'a permission question went unanswered',
   exit: 'the agent exited',
   budget: 'the budget refused a send',
+  // M350. The agent's own cap, not the canvas's budget: a different fix, so a different word.
+  cap: 'the agent reached its own cap',
   error: 'a turn ended in an error'
 }
 

@@ -91,7 +91,7 @@ export type PoolStartResult = { kind: 'started'; jobId?: string } | { kind: 'ref
 // The named members, and any OTHER word the manager may answer with (its
 // send returns a string it owns) — typed so the named members survive as
 // documentation instead of collapsing the union to `string`.
-export type PoolSendResult = 'sent' | 'queued' | 'no-session' | 'refused-backend' | 'refused-sandbox' | 'refused-images' | 'refused-budget' | (string & Record<never, never>)
+export type PoolSendResult = 'sent' | 'queued' | 'no-session' | 'refused-backend' | 'refused-sandbox' | 'refused-images' | 'refused-budget' | 'refused-cap' | (string & Record<never, never>)
 
 export interface PoolAgents {
   send: (id: string, text: string) => PoolSendResult | { kind?: string }

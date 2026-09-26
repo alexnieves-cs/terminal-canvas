@@ -56,6 +56,12 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
       budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0,
       budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
     }),
+    // M350. Each node's own caps, read LIVE the same way. The context cap is
+    // set in thousands, and enforced in tokens.
+    caps: () => ({
+      usd: Number(layoutStore.getSetting('agents.nodeCapUsd')) || 0,
+      context: (Number(layoutStore.getSetting('agents.nodeCapContextK')) || 0) * 1000
+    }),
     // M98. Resolved at CALL time through `state.approvals`: the tracker is
     // created after the manager (it subscribes to it), so a captured
     // reference here would be null for the life of the app.
@@ -105,7 +111,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
       budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0,
       budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
     }),
-    spend: () => agents.list().reduce((sum, snap) => sum + (snap.costUsd ?? 0), 0),
+    // M350. Each node's spend carried across its processes, as the manager's own budget reads it.
+    spend: () => agents.list().reduce((sum, snap) => sum + (snap.meter?.spentUsd ?? snap.costUsd ?? 0), 0),
     windowUtil: () => windowUtilization(agents.rateLimit()),
     emit: (event) => { state.window?.webContents.send(IPC_EVENTS.POOL_EVENT, event) },
     // M316. Every transition written through to userData/jobs.json, so a

@@ -11,7 +11,7 @@ import { importClaudeTranscript } from '../claude-transcript-import'
 import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
-import { type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
+import { capSentence, type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
 import type { Places } from './places'
 import type { Stores } from './stores'
@@ -60,6 +60,11 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
       }
       const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
       return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
+    }
+    // M350. This agent's own cap, in the figures that crossed it.
+    if (answer === 'refused-cap') {
+      const held = state.agents?.get(id)?.meter?.held
+      return held === undefined ? answer : { refused: capSentence(held) }
     }
     return answer
   }

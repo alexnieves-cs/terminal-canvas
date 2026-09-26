@@ -12,7 +12,7 @@ import {
 } from '@shared/transcript'
 import { BACKEND_ADAPTERS } from './backend-adapters'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
-import { imagesAllowed } from '@shared/agent-session'
+import { capCrossing, contextTokens, imagesAllowed } from '@shared/agent-session'
 import {
   budgetCrossing,
   foldRateLimit,
@@ -30,7 +30,10 @@ import type {
   AgentSessionSnapshot,
   AgentSessionEvent,
   QueuedMessage,
-  SendResult
+  SendResult,
+  CapHold,
+  NodeCaps,
+  NodeMeter
 } from '@shared/agent-session'
 /**
  * M71. A main-process object that represents an agent CONVERSATION — a
@@ -99,6 +102,12 @@ export interface AgentSessionDeps {
    * usage window); `budgetUsd` stays for API-key spend. Both reuse one stop path.
    */
   limits?: () => { maxConcurrent: number; budgetUsd: number; budgetWindowPercent?: number }
+  /**
+   * M350. Each node's own caps, read LIVE like `limits` (a cap raised in
+   * Settings releases a held node at its next send). 0 is no cap; absent is
+   * no caps at all, which is every caller that does not pass this.
+   */
+  caps?: () => NodeCaps
   runner: AgentRunner
   /** The resolved path of the `claude` binary. */
   command: string
@@ -205,7 +214,7 @@ interface Session {
   inFlight: boolean
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
-  abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'terminated' | null
+  abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | 'cap' | 'terminated' | null
   /**
    * `auto` marks a continuation the run pushed: dropped with the run, never served after it.
    * M322. Each entry names the stored user turn that carries it (`turnId`),
@@ -220,6 +229,20 @@ interface Session {
   external: Map<string, (allow: boolean) => void>
   usage: TokenTotals
   costUsd?: number
+  /**
+   * M350. The node's meter, kept apart from `costUsd` (which every M82–M349
+   * reader reads as the current process's figure). `procUsd` is the current
+   * process's reported cost; `priorUsd` carries the finished processes'.
+   * Both absent until priced.
+   */
+  procUsd?: number
+  priorUsd?: number
+  /** M350. Tokens in the conversation as of the latest message that reported usage. */
+  context?: number
+  /** M350. Set when the node crosses a cap, cleared only when a cap read live no longer holds it. */
+  held?: CapHold
+  /** M350. The last meter said, so an unchanged one is not said again. */
+  meterKey: string
   turnCount: number
   userTurns: number
   counters: AgentSessionCounters
@@ -320,6 +343,7 @@ export class AgentSessionManager {
       pending: new Map(),
       external: new Map(),
       usage: emptyTotals(),
+      meterKey: '',
       turnCount: 0,
       userTurns: 0,
       counters: { ignored: 0, unknown: 0, malformed: 0 },
@@ -367,6 +391,10 @@ export class AgentSessionManager {
       // held it would show the user a message the agent never received.
       return 'refused-budget'
     }
+    // M350. This node's own cap, re-read live. Refused like the budget, and
+    // stored nowhere; a cap raised above the figure releases the node here,
+    // and whatever it was holding goes first.
+    if (this.holdAtSend(session) !== null) return 'refused-cap'
     const busy = [...this.sessions.values()].filter((s) => s.inFlight).length
     if (limits.maxConcurrent > 0 && !session.inFlight && busy >= limits.maxConcurrent) {
       this.enqueue(session, text, images, 'concurrency')
@@ -675,9 +703,9 @@ export class AgentSessionManager {
     session.auto.sending = true
     const sent = this.send(id, prompts.opening)
     if (session.auto) session.auto.sending = false
-    if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'refused-sandbox' || sent === 'no-session') {
-      this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : 'error')
-      return { kind: 'refused', reason: sent === 'refused-budget' ? 'the budget refused the opening send' : 'the send was refused' }
+    if (sent === 'refused-budget' || sent === 'refused-cap' || sent === 'refused-backend' || sent === 'refused-sandbox' || sent === 'no-session') {
+      this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : sent === 'refused-cap' ? 'cap' : 'error')
+      return { kind: 'refused', reason: sent === 'refused-budget' ? 'the budget refused the opening send' : sent === 'refused-cap' ? 'the agent is held at its own cap' : 'the send was refused' }
     }
     return { kind: 'started', limit }
   }
@@ -746,6 +774,7 @@ export class AgentSessionManager {
     const sent = this.send(session.id, run.continuation)
     if (session.auto === run) run.sending = false
     if (sent === 'refused-budget') this.resolveAuto(session, 'stuck', 'budget')
+    else if (sent === 'refused-cap') this.resolveAuto(session, 'stuck', 'cap')
     else if (sent !== 'sent' && sent !== 'queued') this.resolveAuto(session, 'stuck', 'error')
   }
 
@@ -881,6 +910,12 @@ export class AgentSessionManager {
     session.exitSignal = undefined
     session.resumeLost = undefined
     session.abortReason = null
+    // M350. A new process reports its cost from 0 again: the last one's
+    // figure is carried, so the node's spend never goes backwards.
+    if (session.procUsd !== undefined) {
+      session.priorUsd = (session.priorUsd ?? 0) + session.procUsd
+      session.procUsd = undefined
+    }
     proc.onData((chunk) => {
       if (this.sessions.get(session.id) !== session || session.proc !== proc) return
       const { events, carry } = adapter.parseChunk(chunk, session.carry, { sessionId: session.sessionId })
@@ -992,6 +1027,15 @@ export class AgentSessionManager {
         // M119. History an ACP session/load replays: stored already (the
         // transcript file), so storing it again doubles every turn on relaunch.
         if (event.replay === true) return
+        // M350. Each API call's usage says how full the conversation is NOW —
+        // measured per message, so a cap can stop the turn it is crossed in.
+        // The per-block records repeat one message's usage, so this is set,
+        // never summed.
+        if (event.usage !== undefined) {
+          session.context = contextTokens(event.usage)
+          this.meterChanged(session)
+          this.enforceCap(session)
+        }
         const last = session.turns[session.turns.length - 1]
         if (last && last.role === 'assistant' && last.id === event.messageId) {
           last.blocks.push(...event.blocks)
@@ -1038,7 +1082,11 @@ export class AgentSessionManager {
         if (lost !== null) { session.resumeLost = lost; session.everSpawned = false }
         if (lost === null) session.turnCount += 1
         if (event.usage) session.usage = addTotals(session.usage, event.usage)
-        if (event.costUsd !== undefined) session.costUsd = event.costUsd
+        if (event.costUsd !== undefined) { session.costUsd = event.costUsd; session.procUsd = event.costUsd }
+        this.meterChanged(session)
+        // M350. The node's own cap, after the canvas's (M82) and before the
+        // queue: a held node keeps what is waiting and sends none of it.
+        this.enforceCap(session)
         // M82. A result is where the canvas's spend changes, so it is where a
         // crossing is noticed — once, and by INTERRUPTING (never killing): a
         // killed agent loses its turn, and the budget is a stop, not a loss.
@@ -1061,7 +1109,7 @@ export class AgentSessionManager {
         // M97. Decide first, serve the queue, then continue: the stop lands
         // whatever is queued, and the continuation lands behind it.
         const continueAuto = this.autoDecide(session, { ok: event.ok, interrupted })
-        const next = this.takeNext(session)
+        const next = session.held === undefined ? this.takeNext(session) : undefined
         if (next !== undefined) {
           this.writeUser(session, next.text, next.images)
           this.emit({ id, type: 'dequeued', text: next.text })
@@ -1121,7 +1169,8 @@ export class AgentSessionManager {
       session.exitCode = undefined
       session.exitSignal = undefined
       this.flushBatch(session)
-      const next = this.takeNext(session)
+      // M350. A held node serves nothing until a cap releases it.
+      const next = session.held === undefined ? this.takeNext(session) : undefined
       if (next !== undefined) {
         this.spawnTurnProcess(session, next.text)
         this.emit({ id, type: 'dequeued', text: next.text })
@@ -1239,11 +1288,93 @@ export class AgentSessionManager {
     for (const cb of this.listeners) cb(event)
   }
 
-  /** M82. The canvas's reported spend: the CLI's own cumulative figures, summed. */
+  /**
+   * M82. The canvas's reported spend: the CLI's own cumulative figures, summed.
+   * M350: each node's figure CARRIED across its processes. The sum of
+   * `costUsd` forgot a node's spend each time its process was replaced, so a
+   * canvas budget could be spent more than once.
+   */
   private spent(): number {
     let total = 0
-    for (const s of this.sessions.values()) total += s.costUsd ?? 0
+    for (const s of this.sessions.values()) total += this.nodeUsd(s) ?? 0
     return total
+  }
+
+  /** M350. One node's spend across its processes, or undefined while nothing has been priced. */
+  private nodeUsd(session: Session): number | undefined {
+    if (session.priorUsd === undefined && session.procUsd === undefined) return undefined
+    return (session.priorUsd ?? 0) + (session.procUsd ?? 0)
+  }
+
+  private meterOf(session: Session): NodeMeter {
+    const spentUsd = this.nodeUsd(session)
+    return {
+      ...(spentUsd === undefined ? {} : { spentUsd }),
+      ...(session.context === undefined ? {} : { context: session.context }),
+      ...(session.held === undefined ? {} : { held: { ...session.held } })
+    }
+  }
+
+  private meterKeyOf(session: Session): string {
+    const m = this.meterOf(session)
+    return m.spentUsd === undefined && m.context === undefined && m.held === undefined ? '' : JSON.stringify(m)
+  }
+
+  /** M350. Says the meter when it CHANGED — a stream of blocks repeating one message's usage says it once. */
+  private meterChanged(session: Session): void {
+    const key = this.meterKeyOf(session)
+    if (key === session.meterKey) return
+    session.meterKey = key
+    this.emit({ id: session.id, type: 'meter', meter: this.meterOf(session) })
+  }
+
+  private caps(): NodeCaps {
+    return this.deps.caps?.() ?? { usd: 0, context: 0 }
+  }
+
+  /**
+   * M350. ONE node's cap, enforced here in main, outside the agent loop:
+   * whatever the agent decides, a turn that crosses its context cap is
+   * stopped (interrupted, or killed on a backend with no interrupt), and every
+   * later send is refused until a person raises the cap. Latched like M82's
+   * budget: a hold is set once and said once. Nothing the agent does
+   * releases it.
+   */
+  private enforceCap(session: Session): void {
+    const hold = capCrossing(this.meterOf(session), this.caps())
+    if (hold === null || session.held !== undefined) return
+    session.held = hold
+    if (session.inFlight) {
+      if (!BACKENDS[session.backend].interrupts) {
+        if (session.proc) { session.abortReason = 'cap'; session.proc.kill() }
+      } else this.interrupt(session.id)
+    }
+    if (session.auto !== undefined) this.resolveAuto(session, 'stuck', 'cap')
+    this.meterChanged(session)
+  }
+
+  /**
+   * M350. The hold as a send sees it, re-read against the caps NOW. A cap
+   * lowered below the figure holds an idle node; a cap raised above it (or
+   * cleared) releases one, and the messages it held are served first, in
+   * order, so the new send queues behind them rather than jumping ahead.
+   */
+  private holdAtSend(session: Session): CapHold | null {
+    const hold = capCrossing(this.meterOf(session), this.caps())
+    if (hold !== null) {
+      if (session.held === undefined) { session.held = hold; this.meterChanged(session) }
+      return hold
+    }
+    if (session.held === undefined) return null
+    session.held = undefined
+    this.meterChanged(session)
+    const idle = !session.inFlight && !(BACKENDS[session.backend].oneProcessPerTurn && session.proc !== undefined)
+    const next = idle ? this.takeNext(session) : undefined
+    if (next !== undefined) {
+      this.startTurn(session, next.text, next.images)
+      this.emit({ id: session.id, type: 'dequeued', text: next.text })
+    }
+    return null
   }
 
   /**
@@ -1301,6 +1432,7 @@ export class AgentSessionManager {
       counters: { ...session.counters },
       ...(session.negotiated === undefined ? {} : { negotiated: { ...session.negotiated } }),
       ...(session.awaitingHandshake ? { awaitingHandshake: true as const } : {}),
+      ...(this.meterKeyOf(session) === '' ? {} : { meter: this.meterOf(session) }),
       ...(session.auto !== undefined ? { auto: { mode: session.auto.mode, turn: session.auto.turn, limit: session.auto.limit, state: 'running' as const } } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
     }
   }
