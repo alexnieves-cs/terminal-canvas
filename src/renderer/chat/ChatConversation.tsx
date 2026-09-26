@@ -784,7 +784,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
                           onChange={(e) => setEditing({ turnId: q.turnId, text: e.target.value })}
                           onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); setEditing(null) } if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveEdit() } }} />
                       ) : (
-                        <pre className="chat__waiting-text" data-chat-waiting-text>{q.text}{q.images > 0 ? `\n+ ${q.images} image${q.images === 1 ? '' : 's'}` : ''}</pre>
+                        <pre className="chat__waiting-text" data-chat-waiting-text title={q.text}>{q.text}{q.images > 0 ? `\n+ ${q.images} image${q.images === 1 ? '' : 's'}` : ''}</pre>
                       )}
                       {props.readOnly !== true && q.editable && (editing?.turnId === q.turnId ? <>
                         <button type="button" className="pf__verb pf__verb--word" data-chat-waiting-save title="Save the new words — ⌘↩" {...shellControl(saveEdit)}>Save</button>

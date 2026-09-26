@@ -367,7 +367,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
   if (review > 0) parts.push(`${review} to review`)
   const headline = groups.length === 0
     ? (quiet > 0 ? `Nothing needs you — ${quiet} task${quiet === 1 ? ' is' : 's are'} working or done.` : 'Nothing needs you.')
-    : `${parts.join(' · ')}${quiet > 0 ? ` — ${quiet} other${quiet === 1 ? '' : 's'} need nothing` : ''}.`
+    : `${parts.join(' · ')}${quiet > 0 ? ` — ${quiet} other${quiet === 1 ? ' needs' : 's need'} nothing` : ''}.`
   const checks: Record<string, CheckTally> = {}
   const runs: Record<string, QueueCheckRun[]> = {}
   for (const t of input.tasks) {

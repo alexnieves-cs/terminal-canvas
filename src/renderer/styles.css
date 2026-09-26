@@ -5504,12 +5504,25 @@ body {
    it goes, its tag (why it waits), its words in the body face, and Edit /
    Remove as quiet word verbs. Capped in height so a long queue scrolls inside
    the well instead of pushing the transcript off the panel. */
-.chat__waiting { display: flex; flex-direction: column; gap: var(--sp-1); max-height: 40%; overflow-y: auto; }
+/* M341. Never less than one whole row: 40% of a short chat is less than a
+   row, and the scroll edge then cut the row's Edit and Remove (the `auto`
+   scene). The floor is one row (tag line + two text lines) plus the head. */
+.chat__waiting { display: flex; flex-direction: column; gap: var(--sp-1); max-height: max(40%, 7.5rem); overflow-y: auto; }
 .chat__waiting-head { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
 .chat__waiting-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .chat__waiting-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); background: var(--s-2); }
 .chat__waiting-tag { font-size: var(--t-sm); color: var(--fg-3); }
-.chat__waiting-text { flex: 1 1 100%; margin: 0; font-family: var(--font-ui); font-size: var(--t-base); color: var(--fg-2); white-space: pre-wrap; word-break: break-word; }
+/* M341. The row's verbs ride its TAG line (order), so a row is the tag line
+   plus at most two lines of text — the text wraps under them (flex-basis 100%). */
+.chat__waiting-row > .pf__verb { order: 1; }
+.chat__waiting-row > .pf__verb:first-of-type { margin-left: auto; }
+.chat__waiting-row > .chat__waiting-text, .chat__waiting-row > .chat__waiting-edit { order: 2; }
+/* M341. Two lines, ellipsised. Unclamped, a long queued message filled the
+   box's 40% and its scroll edge cut a line through its glyphs, with the
+   row's Edit and Remove out of view — a person saw part of a message and no
+   way to act on it. The whole text is the row's title and opens in Edit. */
+.chat__waiting-text { flex: 1 1 100%; margin: 0; font-family: var(--font-ui); font-size: var(--t-base); color: var(--fg-2); white-space: pre-wrap; word-break: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .chat__waiting-edit { flex: 1 1 100%; resize: vertical; font-family: var(--font-ui); font-size: var(--t-base); color: var(--fg); background: var(--s-1); border: 1px solid var(--iris); border-radius: var(--r-sm); padding: var(--sp-2); }
 /* M322. The two mid-turn verbs: words, in a row of their own under the text
    (the corner stays Stop's), present for the whole turn so nothing moves. */
@@ -5821,7 +5834,9 @@ body {
 .work-node__blocker, .workflow-node__blocker { padding: var(--sp-2); border: 1px solid var(--tone, var(--line)); border-radius: var(--r-sm); }
 .work-node__blocker p, .workflow-node__blocker p { margin: 0; }
 .work-node__blocker-verbs, .workflow-node__blocker-verbs { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
-.work-node__verbs { display: flex; align-items: center; gap: var(--sp-2); position: relative; }
+/* M341. Wraps: the row grew a verb (Focus, M324) and its last one, Done, was
+   clipped at the card's edge in every scene with a work card. */
+.work-node__verbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); position: relative; }
 .work-node__menu { position: absolute; top: 100%; left: 0; z-index: 30; margin: var(--sp-1) 0 0; padding: var(--sp-2); list-style: none; min-width: 160px; display: flex; flex-direction: column; gap: var(--sp-1); background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .work-node__menu-empty { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
 
@@ -7492,6 +7507,9 @@ body {
 .sheet__explain { margin: calc(var(--sp-2) * -1) 0 0 calc(5.5em + var(--sp-5)); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--fg-3); }
 .sheet__defaults { flex: 1 1 100%; font-size: var(--t-sm); color: var(--fg); padding: var(--sp-2) 0; }
 [data-start-sheet] .sheet__defaults { flex: 1; }
+/* M341. The setup line's verb stands off its sentence (it had 1px when the
+   harness first read a real setup and the button appeared). */
+[data-start-setup] > [data-start-edit-setup] { margin-left: var(--sp-2); }
 /* M275. The arrangement's seats: one row per seat, so a person reads the
    shape down the sheet rather than across a wrapped sentence. `block` and not
    a flex column because these are sentences, not controls, and a sentence
@@ -9046,6 +9064,13 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* M318. Information vs intervention in the feeds: an intervention row says so
    in words (never colour alone), and an information row steps back. */
 .orch__activity-need, .activity-row__need { flex: none; font-size: var(--t-xs); font-weight: 600; color: var(--amber); }
+/* M341. Placed, not auto-placed: with no cell of its own the word fell into a
+   third row's FIRST column, which widened the glyph column and pushed a
+   needs-you row's title ~32px right of every other row's (the `wide` scene). */
+.activity-row__need { grid-column: 3; grid-row: 2; justify-self: end; }
+/* The age right-aligns in its column, which the need word can widen. */
+.activity-row__time { justify-self: end; }
+.activity-row__main:has(.activity-row__need) .activity-row__detail { grid-column: 2; }
 [data-activity-weight='info'] .orch__activity-title, .activity-row[data-activity-weight='info'] .activity-row__title { color: var(--fg-2); }
 .orch__activity-weights { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
 .dock__return { position: absolute; left: calc(100% + var(--sp-2)); bottom: 0; z-index: 940; white-space: nowrap; font-size: var(--t-xs); color: var(--fg-2); background: var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-2); cursor: pointer; }

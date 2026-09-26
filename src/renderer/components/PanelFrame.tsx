@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
 import type { CardDetail } from '@renderer/canvas/card-detail'
@@ -176,6 +176,36 @@ export function PanelFrame({
     const first = menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
     first?.focus({ preventScroll: true })
   }, [menuOpen])
+  // M341. Bounded by the VISIBLE canvas too. M315 bounded the menu by its own
+  // panel and let it scroll, which is right until the panel itself runs past
+  // the window's foot: then the bound is off-screen as well, and the last rows
+  // (Verbs in ⌘K, close) sat below the window (the `header` scene). It cannot
+  // open upward instead — `.panel` clips with overflow: hidden, and a menu above
+  // its header was measured present and painted nowhere. So its height is also
+  // capped at the room between the header and the canvas's foot, in the menu's
+  // own (world) pixels. Measured before the first paint AND on every frame the
+  // menu stays open: the camera can move under an open menu (a pan, or a
+  // jump's flight still landing — the `header` scene opened its menu mid-
+  // flight, and a once-per-opening measure capped it for a place the panel
+  // then left). One rect read per frame, and a state change only on a real move.
+  const [menuRoom, setMenuRoom] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (!menuOpen) { setMenuRoom(null); return }
+    const measure = (): void => {
+      const menu = menuRef.current
+      if (menu === null || menu.offsetHeight === 0) return
+      const view = (menu.closest('.canvas') ?? document.documentElement).getBoundingClientRect()
+      const box = menu.getBoundingClientRect()
+      // From the menu's OWN top edge: it hangs below the chrome's padding, not
+      // at the ⋯ button's foot (the first version measured from there and still
+      // overhung the window by the difference).
+      const room = (Math.min(view.bottom, window.innerHeight) - box.top) / (box.height / menu.offsetHeight) - 8
+      setMenuRoom((prev) => (prev !== null && Math.abs(prev - room) < 1 ? prev : room))
+    }
+    measure()
+    let frame = requestAnimationFrame(function follow() { measure(); frame = requestAnimationFrame(follow) })
+    return () => cancelAnimationFrame(frame)
+  }, [menuOpen])
   const onMenuKey = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     const rows = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
     const at = rows.indexOf(document.activeElement as HTMLButtonElement)
@@ -311,7 +341,8 @@ export function PanelFrame({
               // M315. Bounded by its own panel: the menu grows down from the
               // header, and on a short panel near the window's foot its last
               // rows (Verbs in ⌘K, close) ran off-screen. It scrolls instead.
-              style={{ maxHeight: Math.max(160, rect.h - 40), overflowY: 'auto' }}>
+              // M341: and by the visible canvas below the header (menuRoom), never under three rows.
+              style={{ maxHeight: Math.max(96, Math.min(Math.max(160, rect.h - 40), menuRoom ?? Infinity)), overflowY: 'auto' }}>
               <div className="pf__menu-title" data-panel-menu-title>{title}</div>
               <div className="pf__note">{kind}</div>
               {menuDetail !== undefined && <div className="pf__note pf__menu-detail" data-panel-menu-detail>{menuDetail}</div>}

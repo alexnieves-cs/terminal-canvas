@@ -68,7 +68,8 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey, createRunLedger, INERT_PRESENCE
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey, createRunLedger, INERT_PRESENCE,
+  createRepoSetupStore, INERT_KIT
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -1140,6 +1141,17 @@ app.whenReady().then(async () => {
     // M86. The scene's two worktree records, as main wires them.
     worktreesOf: (root) => layoutStore.worktrees().filter((w) => w.root === root).map((w) => ({ path: w.path, branch: w.branch, panelId: w.panelId, ...(w.panelId === 'live' ? { panelTitle: 'claude — api' } : {}) }))
   })
+  // M341. The start sheet's setup line, read for real over the fixture
+  // repository. INERT_KIT's setupRead answers `not-a-repo` — a false claim —
+  // so until this the `start-work` scene printed "Setup: not a repository"
+  // under the repository field that named one.
+  const shotSetup = createRepoSetupStore({
+    dir: join(mkdtempSync(join(tmpdir(), 'tc shot setup ')), 'repo-setup'),
+    mainRootOf: async (cwd) => { const a = await reviewEngine.resolveRepo(cwd); return a.kind === 'root' ? reviewEngine.commonRootOf(a.root) : null },
+    lanesOf: (root) => layoutStore.worktrees().filter((w) => w.root === root).map((w) => w.path),
+    loginEnv: () => loginEnv
+  })
+  const shotKit = { ...INERT_KIT, setupRead: (cwd) => shotSetup.read(cwd) }
   const baselineCapture = createBaselineCapture({
     baselineOf: (panelId) => layoutStore.baseline(panelId),
     setBaseline: (panelId, baseline) => layoutStore.setBaseline(panelId, baseline),
@@ -1443,9 +1455,12 @@ app.whenReady().then(async () => {
     // picture of an unwired build. Positions 36/37: ledgerTimeline, ledgerEvent.
     (filter, limit) => shotLedger.timeline(filter, limit),
     async (row) => { try { await shotLedger.append(row); return true } catch { return false } },
-    // Positions 38–42 (checkOutput … tasks) take their defaults, so the three
-    // below land at 43–45.
-    ...Array(5).fill(undefined),
+    // Position 38 (checkOutput) takes its default; 39 is the kit (M341, the
+    // real setup read above); 40–42 (lastExit, jobs, tasks) take their
+    // defaults, so the three below land at 43–45.
+    undefined,
+    shotKit,
+    ...Array(3).fill(undefined),
     // M336–M338. See shotAccount above.
     shotAccountDoors,
     shotPresence,

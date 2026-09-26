@@ -3945,7 +3945,7 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
       g('T1').affects.map((a) => a.itemId).join() === 'T3' && /Deploy waits on this task/.test(g('T1').after) &&
       g('T3').severity === 'failed' && /`npm test` exited 1 in chatC/.test(g('T3').why) && g('T3').next.evidence.kind === 'output' &&
       g('T4').severity === 'review' && g('T4').next.evidence.kind === 'review' &&
-      /^3 stopped on you · 1 with a failed check · 1 to review — 1 other need nothing\.$/.test(q.headline),
+      /^3 stopped on you · 1 with a failed check · 1 to review — 1 other needs nothing\.$/.test(q.headline),
     JSON.stringify({ order: q.groups.map((x) => x.itemId), why: q.groups.map((x) => x.why), headline: q.headline }))
 
   // Restart: what the last launch left, what comes back, what was resolved here.

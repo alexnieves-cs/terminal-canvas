@@ -3617,6 +3617,49 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           const back = await wc.executeJavaScript(`document.activeElement === document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]')`)
           return { open, focusFirst, walked, closed, back }
         })()
+        // M341 — menu.room.1. A panel whose header sits near the canvas's foot
+        // opens its ⋯ menu wholly inside the canvas, scrolling, and its LAST
+        // row can be brought into view and is the element painted there.
+        // Before, the menu grew past the window (the `header` scene). What is
+        // painted is hit-tested, never inferred from a rect: the first try at
+        // this opened the menu UPWARD, the rect check passed, and `.panel`'s
+        // overflow: hidden had clipped it to nothing. The pan is a real wheel;
+        // where the header lands is measured, and is part of the detail.
+        const menuRoom = await (async () => {
+          const at = () => wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="hdA"] .pf__menu-host'); const c = document.querySelector('.canvas'); if (!h || !c) return null
+            const a = h.getBoundingClientRect(), v = c.getBoundingClientRect(); return { head: a.bottom, vtop: v.top, vbottom: v.bottom, cx: v.left + 40, cy: v.top + v.height / 2 } })()`)
+          const wheel = (dy, p) => wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); c.dispatchEvent(new WheelEvent('wheel', { deltaY: ${dy}, deltaMode: 0, clientX: ${p.cx}, clientY: ${p.cy}, bubbles: true, cancelable: true })); return true })()`)
+          const before = await at()
+          if (before === null) return { before }
+          const want = before.vbottom - 120
+          // OPENED FIRST, then the camera moves under it: the menu must follow
+          // (the `header` scene opened one mid-flight, and a once-per-opening
+          // measure kept the room of a place the panel had already left).
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') !== null`), 3000)
+          await wheel(before.head - want, before)
+          const moved = await waitUntil(async () => { const a = await at(); return a !== null && Math.abs(a.head - want) < 40 ? a : false }, 3000)
+          const menu = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]'); const c = document.querySelector('.canvas'); if (!m || !c) return false
+            // With the menu's own margin to spare, not merely inside: the first
+            // version passed at 864 of 866 and overhung the real window.
+            if (m.getBoundingClientRect().bottom > c.getBoundingClientRect().bottom - 4) return false
+            const v = c.getBoundingClientRect(), r = m.getBoundingClientRect()
+            const painted = (el) => { const q = el.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return hit !== null && m.contains(hit) }
+            const rows = [...m.querySelectorAll('button:not(:disabled)')]; const last = rows[rows.length - 1]
+            const titleSeen = painted(m.querySelector('[data-panel-menu-title]'))
+            if (last) last.scrollIntoView({ block: 'nearest' })
+            const lr = last ? last.getBoundingClientRect() : null
+            return { top: r.top, bottom: r.bottom, vbottom: v.bottom, scrolls: m.scrollHeight > m.clientHeight, titleSeen, lastSeen: last ? painted(last) : false, lastInside: lr !== null && lr.bottom <= v.bottom + 1, lastText: last ? last.textContent : null } })()`), 3000)
+          await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]'); if (m) m.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return true })()`)
+          await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') === null`), 3000)
+          const after = await at()
+          if (after !== null) await wheel(after.head - before.head, after)
+          await waitUntil(async () => { const a = await at(); return a !== null && Math.abs(a.head - before.head) < 40 }, 3000)
+          return { moved, menu }
+        })()
+        ok('menu.room.1 an open ⋯ menu whose panel the camera carries to the canvas foot stays inside the canvas and scrolls: its title and, scrolled to, its last row are the elements painted there',
+          menuRoom.moved !== false && menuRoom.menu !== false && menuRoom.menu?.bottom <= menuRoom.menu.vbottom + 1 && menuRoom.menu.scrolls === true &&
+          menuRoom.menu.titleSeen === true && menuRoom.menu.lastSeen === true && menuRoom.menu.lastInside === true, JSON.stringify(menuRoom))
         ok('menu.keys.1 the ⋯ menu is keyboard-reachable: opening focuses its first row, ArrowDown walks, Fill view is a row, Escape closes it and returns focus to the ⋯ button',
           menuKeys.open === true && menuKeys.focusFirst === true && menuKeys.walked?.second === true && menuKeys.walked?.fill === 'Fill view' && menuKeys.closed === true && menuKeys.back === true,
           JSON.stringify(menuKeys))
