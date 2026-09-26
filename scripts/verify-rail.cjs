@@ -3259,6 +3259,26 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ none: none.grants, some: some.grants, codex: codex.grants, unknown: unknown.grants }))
 }
 
+// M352 — caps.field.1. The chat inspector's Caps lines say main's figure against
+// the cap main enforces, and whose that cap is: never "$0.00" for unreported, a
+// "no cap" that is a setting and not a zero, a hold in its own sentence, and the
+// record's own figures for the form to start from.
+{
+  const chat = (over = {}) => ({ kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/r', sessionId: 'u', ...over } })
+  const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  const base = { state: { status: 'ready', pending: 0, hasHistory: true }, usage, turns: 2 }
+  const bare = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, base)
+  const capped = R.buildInspectorModel(chat({ caps: { usd: 2 } }), undefined, undefined, [], undefined, undefined, undefined, false,
+    { ...base, meter: { spentUsd: 0.42, context: 118000, caps: { usd: 2, context: 150000, ownUsd: true, ownContext: false } } })
+  const held = R.buildInspectorModel(chat({ caps: { usd: 2 } }), undefined, undefined, [], undefined, undefined, undefined, false,
+    { ...base, meter: { spentUsd: 2.1, held: { unit: 'usd', spent: 2.1, limit: 2, own: true }, caps: { usd: 2, context: 0, ownUsd: true, ownContext: false } } })
+  ok('caps.field.1 the chat inspector carries Caps lines in main\'s figures and whose cap each is, "not reported yet" rather than $0.00, "no cap" rather than a zero, a hold in its own sentence naming its own fix, and the record\'s figures for the form',
+    bare.caps && bare.caps.spend === 'not reported yet — no spend cap' && bare.caps.context === 'not measured yet — no context cap' && bare.caps.held === undefined && bare.caps.own === undefined &&
+      capped.caps.spend === '$0.42 of $2.00 — this agent\'s cap' && capped.caps.context === '118k tokens of 150k — Settings cap' && capped.caps.own.usd === 2 &&
+      held.caps.held && /\$2\.00 spend cap/.test(held.caps.held) && /its own cap/.test(held.caps.held) && !/agents\.nodeCapUsd/.test(held.caps.held),
+    JSON.stringify({ bare: bare.caps, capped: capped.caps, held: held.caps }))
+}
+
 // M105 — lastline.1. THE RAIL SAYS WHAT IS HAPPENING: a chat row carries the
 // agent's LAST LINE SAID (the transcript's last complete text block, one line,
 // cut from the right — prose, not a path) and an UNREAD mark when its turn

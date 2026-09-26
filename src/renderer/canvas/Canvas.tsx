@@ -9242,6 +9242,8 @@ export function Canvas({
         onFrontEnd={onFrontEnd}
         onReviewApproval={chrome.openAttentionAt}
         onRevokeGrants={revokeChatGrants}
+        // M352. The Caps fields are a PERSON's door: raising a cap is theirs to do.
+        onCap={(id, value) => paletteActions.capAgent(id, value, 'person')}
         onOpenReview={paletteActions.openReview}
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}

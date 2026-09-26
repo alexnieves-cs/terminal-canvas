@@ -123,6 +123,8 @@ export interface CapHold {
   /** Dollars for `usd`, tokens for `context`: the figure that crossed. */
   spent: number
   limit: number
+  /** M352. The cap is this agent's own (its chat's record), not the Settings one: a different fix. */
+  own?: true
 }
 
 /**
@@ -191,6 +193,79 @@ export function parseAgentCaps(raw: unknown): AgentCaps | undefined {
   return { ...(usd === undefined ? {} : { usd }), ...(contextK === undefined ? {} : { contextK }) }
 }
 
+/** M352. `cap-agent`'s answer: the record's caps to write (undefined clears them), or why not. */
+export type CapChange = { kind: 'set'; caps: AgentCaps | undefined; note: string } | { kind: 'refused'; reason: string }
+
+/** M352. Why a door may not loosen a cap: said by every refusal that is about WHO asked. */
+export const CAP_DOOR_REASON = 'raising or removing a cap is a person\'s decision — set it in the Inspector\'s Work tab or type cap-agent in the palette; an agent or a workflow may only lower one'
+
+const CAP_USD_MAX = 1000
+const CAP_CONTEXT_K_MAX = 2000
+
+function capWords(caps: AgentCaps | undefined): string {
+  if (caps === undefined) return 'its own caps cleared — the Settings caps apply'
+  const parts = [
+    ...(caps.usd === undefined ? [] : [caps.usd === 0 ? 'no spend cap' : `spend cap $${caps.usd.toFixed(2)}`]),
+    ...(caps.contextK === undefined ? [] : [caps.contextK === 0 ? 'no context cap' : `context cap ${caps.contextK}k`])
+  ]
+  return parts.join(', ')
+}
+
+/**
+ * M352. `cap-agent`'s value against an agent's own caps, and whether the door
+ * it came through may make the change. The value is one token, comma-joined:
+ * `5usd` (or `$5`) for spend, `200k` for context, both as `5usd,200k`; `0usd`
+ * or `0k` for no cap of that kind on this agent; `none` for neither; `default`
+ * to clear its own caps so the Settings caps apply, or `default-usd` /
+ * `default-k` for one of them (the Inspector's blank field).
+ *
+ * `origin: 'door'` is an agent's `tc plan` or a workflow's action node. Such a
+ * door may only TIGHTEN: each figure it sets must be above 0 and at or under
+ * the cap in force (`current`, main's own view from the meter). Otherwise a
+ * cap would bind an agent only for as long as the agent agreed to it. A person
+ * (the palette, the Inspector) may set anything.
+ */
+export function planCapChange(own: AgentCaps | undefined, value: string, origin: 'person' | 'door', current: NodeCaps): CapChange {
+  const tokens = value.trim().toLowerCase().split(',').map((t) => t.trim()).filter((t) => t !== '')
+  if (tokens.length === 0) return { kind: 'refused', reason: 'say a cap — 5usd for spend, 200k for context, both as 5usd,200k, none, or default' }
+  if (tokens.length === 1 && (tokens[0] === 'none' || tokens[0] === 'default')) {
+    if (origin === 'door') return { kind: 'refused', reason: CAP_DOOR_REASON }
+    const caps = tokens[0] === 'none' ? { usd: 0, contextK: 0 } : undefined
+    return { kind: 'set', caps, note: tokens[0] === 'none' ? 'no caps for this agent' : capWords(undefined) }
+  }
+  const patch: AgentCaps = {}
+  const reset = new Set<keyof AgentCaps>()
+  for (const t of tokens) {
+    if (t === 'default-usd' || t === 'default-k') {
+      if (origin === 'door') return { kind: 'refused', reason: CAP_DOOR_REASON }
+      reset.add(t === 'default-usd' ? 'usd' : 'contextK')
+      continue
+    }
+    const usd = /^\$(\d+(?:\.\d+)?)$/.exec(t) ?? /^(\d+(?:\.\d+)?)(?:usd|\$)$/.exec(t)
+    const ctx = /^(\d+(?:\.\d+)?)k$/.exec(t)
+    if (usd !== null) {
+      if (patch.usd !== undefined) return { kind: 'refused', reason: 'one spend cap at a time' }
+      const n = Number(usd[1])
+      if (n > CAP_USD_MAX) return { kind: 'refused', reason: `a spend cap is at most $${CAP_USD_MAX}` }
+      patch.usd = n
+    } else if (ctx !== null) {
+      if (patch.contextK !== undefined) return { kind: 'refused', reason: 'one context cap at a time' }
+      const n = Number(ctx[1])
+      if (n > CAP_CONTEXT_K_MAX) return { kind: 'refused', reason: `a context cap is at most ${CAP_CONTEXT_K_MAX}k` }
+      patch.contextK = n
+    } else return { kind: 'refused', reason: `${t} is not a cap — 5usd for spend, 200k for context, none, or default` }
+  }
+  if (origin === 'door') {
+    if (patch.usd !== undefined && (patch.usd === 0 || (current.usd > 0 && patch.usd > current.usd))) return { kind: 'refused', reason: CAP_DOOR_REASON }
+    if (patch.contextK !== undefined && (patch.contextK === 0 || (current.context > 0 && patch.contextK * 1000 > current.context))) return { kind: 'refused', reason: CAP_DOOR_REASON }
+  }
+  if ((patch.usd !== undefined && reset.has('usd')) || (patch.contextK !== undefined && reset.has('contextK'))) return { kind: 'refused', reason: 'a cap cannot be set and reset at once' }
+  const merged: AgentCaps = { ...own, ...patch }
+  for (const key of reset) delete merged[key]
+  const caps = merged.usd === undefined && merged.contextK === undefined ? undefined : merged
+  return { kind: 'set', caps, note: capWords(caps) }
+}
+
 /** M350. The tokens a message's usage says are in the conversation: every input class plus what it wrote. */
 export function contextTokens(usage: TokenTotals): number {
   return usage.input + usage.cacheWrite + usage.cacheRead + usage.output
@@ -201,17 +276,19 @@ export function contextTokens(usage: TokenTotals): number {
  * explicit hard stop, as in M82's budgetCrossing. An unmeasured figure
  * crosses nothing: "unknown" is never "over".
  */
-export function capCrossing(meter: Pick<NodeMeter, 'spentUsd' | 'context'>, caps: NodeCaps): CapHold | null {
-  if (caps.usd > 0 && meter.spentUsd !== undefined && meter.spentUsd >= caps.usd) return { unit: 'usd', spent: meter.spentUsd, limit: caps.usd }
-  if (caps.context > 0 && meter.context !== undefined && meter.context >= caps.context) return { unit: 'context', spent: meter.context, limit: caps.context }
+export function capCrossing(meter: Pick<NodeMeter, 'spentUsd' | 'context'>, caps: NodeCaps & Partial<Pick<NodeCapsView, 'ownUsd' | 'ownContext'>>): CapHold | null {
+  if (caps.usd > 0 && meter.spentUsd !== undefined && meter.spentUsd >= caps.usd) return { unit: 'usd', spent: meter.spentUsd, limit: caps.usd, ...(caps.ownUsd === true ? { own: true as const } : {}) }
+  if (caps.context > 0 && meter.context !== undefined && meter.context >= caps.context) return { unit: 'context', spent: meter.context, limit: caps.context, ...(caps.ownContext === true ? { own: true as const } : {}) }
   return null
 }
 
 /** M350. A hold in one sentence: what crossed, and what a person does about it. */
 export function capSentence(hold: CapHold): string {
+  // M352. An agent's OWN cap is raised on the agent, not in Settings.
+  const fix = hold.own === true ? 'raise its own cap in the Inspector\'s Work tab (or cap-agent in the palette)' : hold.unit === 'usd' ? 'raise agents.nodeCapUsd in Settings' : 'raise agents.nodeCapContextK in Settings'
   return hold.unit === 'usd'
-    ? `this agent reached its $${hold.limit.toFixed(2)} spend cap ($${hold.spent.toFixed(2)} reported) — raise agents.nodeCapUsd in Settings, then send again`
-    : `this agent's context reached its ${Math.round(hold.limit / 1000)}k-token cap (${Math.round(hold.spent / 1000)}k) — raise agents.nodeCapContextK in Settings, or start a fresh conversation`
+    ? `this agent reached its $${hold.limit.toFixed(2)} spend cap ($${hold.spent.toFixed(2)} reported) — ${fix}, then send again`
+    : `this agent's context reached its ${Math.round(hold.limit / 1000)}k-token cap (${Math.round(hold.spent / 1000)}k) — ${fix}, or start a fresh conversation`
 }
 
 /**

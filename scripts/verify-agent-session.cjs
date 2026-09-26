@@ -1322,6 +1322,41 @@ const isResult = (l) => l.includes('"type":"result"')
           k2 && k2.held === undefined && k2.caps.context === 1000 && k2.caps.ownContext === true,
         JSON.stringify({ heldBefore, servedNow, k1Meter, interruptedMidTurn, k1Now: e.manager.get('k1').meter, k2 }))
     }
+    // M352 — cap.plan.1. `cap-agent`'s value against an agent's own caps, and
+    //      WHO may make the change. A person may set, clear or remove any cap;
+    //      a door (an agent's plan, a workflow node) may only LOWER one — never
+    //      raise it, never 0, none, default or a per-figure reset — or the cap
+    //      binds only while the agent agrees to it.
+    {
+      const P = M.sharedSession.planCapChange
+      const cur = { usd: 5, context: 200000 }
+      const both = P(undefined, '3usd,150k', 'person', cur)
+      const dollar = P({ contextK: 100 }, '$4', 'person', cur)
+      const raise = P(undefined, '9usd', 'person', cur)
+      const lower = P({ usd: 5 }, '3usd', 'door', cur)
+      const doorUp = P({ usd: 5 }, '9usd', 'door', cur)
+      const doorZero = P(undefined, '0usd', 'door', cur)
+      const doorNone = P(undefined, 'none', 'door', cur)
+      const doorDefault = P({ usd: 1 }, 'default', 'door', cur)
+      const doorReset = P({ usd: 1 }, 'default-usd', 'door', cur)
+      const doorUncapped = P(undefined, '100k', 'door', { usd: 0, context: 0 })
+      const none = P({ usd: 3 }, 'none', 'person', cur)
+      const clear = P({ usd: 3 }, 'default', 'person', cur)
+      const resetOne = P({ usd: 3, contextK: 90 }, 'default-usd', 'person', cur)
+      const bad = P(undefined, 'lots', 'person', cur)
+      const tooBig = P(undefined, '5000usd', 'person', cur)
+      const twice = P(undefined, '1usd,2usd', 'person', cur)
+      const clash = P({ usd: 1 }, '2usd,default-usd', 'person', cur)
+      const refusedByWho = [doorUp, doorZero, doorNone, doorDefault, doorReset].every((r) => r.kind === 'refused' && r.reason === M.sharedSession.CAP_DOOR_REASON)
+      ok('cap.plan.1 a person may set, raise, clear and remove an agent\'s caps; a door may only lower one (never raise, 0, none, default or a reset), may cap an uncapped agent, and every bad value is refused by name',
+        both.kind === 'set' && both.caps.usd === 3 && both.caps.contextK === 150 && dollar.kind === 'set' && dollar.caps.usd === 4 && dollar.caps.contextK === 100 &&
+          raise.kind === 'set' && raise.caps.usd === 9 && lower.kind === 'set' && lower.caps.usd === 3 && refusedByWho &&
+          doorUncapped.kind === 'set' && doorUncapped.caps.contextK === 100 &&
+          none.kind === 'set' && none.caps.usd === 0 && none.caps.contextK === 0 && clear.kind === 'set' && clear.caps === undefined &&
+          resetOne.kind === 'set' && resetOne.caps.usd === undefined && resetOne.caps.contextK === 90 &&
+          bad.kind === 'refused' && /lots is not a cap/.test(bad.reason) && tooBig.kind === 'refused' && twice.kind === 'refused' && clash.kind === 'refused',
+        JSON.stringify({ both, dollar, raise, lower, doorUp, doorZero, doorNone, doorUncapped, none, clear, resetOne, bad, tooBig, twice, clash }))
+    }
     const S2 = M.sharedSession
     const words = [S2.capSentence({ unit: 'usd', spent: 1.25, limit: 1 }), S2.capSentence({ unit: 'context', spent: 53500, limit: 50000 })]
     ok('cap.words.1 a hold is refused in its own figures and names the setting that releases it, and the bare word has a sentence too',

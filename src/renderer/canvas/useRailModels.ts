@@ -376,6 +376,8 @@ export function useRailModels(deps: RailModelsDeps) {
             state: chatStateInput(snap, selectedChat.turns.length > 0) as ChatStateInput,
             usage: useMeta ? meta.usage : snap.usage,
             costUsd: useMeta ? meta.costUsd : snap.costUsd,
+            // M352. Main's meter, whatever this launch has priced: its caps bind from the first turn.
+            ...(snap.meter === undefined ? {} : { meter: snap.meter }),
             model: snap.model ?? selectedChat.turns.find((t) => t.model !== undefined)?.model,
             turns: useMeta ? meta.turns : snap.turns,
             // M77. The ONE definition the palette row uses too.

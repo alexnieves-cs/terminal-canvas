@@ -3,7 +3,7 @@ import { useAgentState } from '@renderer/session/agent-state-store'
 import { formatCpu, formatMemory, useMachineCost, useMachineSeries } from '@renderer/session/machine-cost-store'
 import { MachineChart } from './MachineChart'
 import { UsageChart } from './UsageChart'
-import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
+import type { CapsField, InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import type { InspectorContextBand, TaskChainStep } from './inspector-context'
 import { agentStateLabel, formatRateLimitGauge, formatRateLimitReset, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
@@ -108,6 +108,8 @@ export interface InspectorProps {
   onReviewApproval: (requestId: string) => void
   /** M98. Drop every session grant for the chat; absent leaves the Revoke control disabled by name. */
   onRevokeGrants?: (id: string) => void
+  /** M352. `cap-agent` from the Work tab's Caps fields (a person's door); absent leaves the fields read-only. */
+  onCap?: CapVerb
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -179,8 +181,70 @@ export interface InspectorProps {
  * The toggle stays mounted when the inspector is collapsed, for the same
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
+/** M352. The verb's own answer comes back to the fields: set, or refused by name. */
+type CapVerb = (id: string, value: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+
+/**
+ * M352. An agent's meter against its caps, and `cap-agent`'s canvas door: two
+ * fields a person fills (dollars, thousands of tokens) and one Set. A blank
+ * field is "the Settings cap", and 0 is "no cap for this agent". Set sends ONE
+ * verb value (one undo), and what comes back is the verb's own sentence. The
+ * lines are main's figures, so the fields are never the only word on what is
+ * enforced.
+ */
+function CapsSection({ id, caps, onCap }: { id: string; caps: CapsField; onCap?: CapVerb }): JSX.Element {
+  const ownUsd = caps.own?.usd === undefined ? '' : String(caps.own.usd)
+  const ownK = caps.own?.contextK === undefined ? '' : String(caps.own.contextK)
+  const [usd, setUsd] = useState(ownUsd)
+  const [k, setK] = useState(ownK)
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+  // Another panel, or its record changed under us (an undo, an agent's lower cap): start from the record.
+  useEffect(() => { setUsd(ownUsd); setK(ownK) }, [id, ownUsd, ownK])
+  useEffect(() => { setSaid(null) }, [id])
+  const set = (): void => {
+    if (onCap === undefined) return
+    const u = usd.trim()
+    const c = k.trim()
+    const parts = [
+      u === '' ? (caps.own?.usd === undefined ? null : 'default-usd') : `${u}usd`,
+      c === '' ? (caps.own?.contextK === undefined ? null : 'default-k') : `${c}k`
+    ].filter((x): x is string => x !== null)
+    if (parts.length === 0) { setSaid({ ok: true, text: 'nothing to change — the Settings caps apply' }); return }
+    const out = onCap(id, parts.join(','))
+    setSaid(out.kind === 'ran' ? { ok: true, text: out.note ?? 'set' } : { ok: false, text: out.reason })
+  }
+  return (
+    <section className="inspector__section" data-work-section="caps">
+      <h3 className="inspector__section-heading">Caps</h3>
+      <dl className="inspector__caps">
+        <dt>Spend</dt><dd data-caps-line="spend">{caps.spend}</dd>
+        <dt>Context</dt><dd data-caps-line="context">{caps.context}</dd>
+      </dl>
+      {caps.held !== undefined && <p className="inspector__caps-held" role="status" data-caps-held>{caps.held}</p>}
+      {/* Each field NAMED on screen, not only by its unit (the M352 critic): a
+          blank field reads "Settings", which is what it means. */}
+      <form className="inspector__caps-form" onSubmit={(e) => { e.preventDefault(); set() }}>
+        <label className="inspector__caps-field">
+          <span className="inspector__caps-name">Spend cap</span>
+          <span className="inspector__caps-unit">$</span>
+          <input className="inspector__input inspector__caps-input" inputMode="decimal" value={usd} placeholder="Settings" aria-label="This agent's spend cap in dollars" data-caps-input="usd" onChange={(e) => setUsd(e.target.value)} />
+        </label>
+        <label className="inspector__caps-field">
+          <span className="inspector__caps-name">Context cap</span>
+          {/* The same slot the dollar sign takes, empty, so the two fields line up. */}
+          <span className="inspector__caps-unit" aria-hidden="true" />
+          <input className="inspector__input inspector__caps-input" inputMode="numeric" value={k} placeholder="Settings" aria-label="This agent's context cap in thousands of tokens" data-caps-input="k" onChange={(e) => setK(e.target.value)} />
+          <span>k tokens</span>
+        </label>
+        <button type="submit" className="inspector__action inspector__action--secondary inspector__caps-set" disabled={onCap === undefined} data-caps-set>Set</button>
+      </form>
+      {said !== null && <p className={said.ok ? 'inspector__arm' : 'inspector__arm inspector__arm--refused'} data-caps-said={said.ok ? 'ran' : 'refused'}>{said.text}</p>}
+    </section>
+  )
+}
+
 function InspectorImpl({
-  onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
+  onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown,
   contextBand, onShowRelated, onShowTask, onChainStep, onGoToPanel
 }: InspectorProps): JSX.Element {
@@ -223,6 +287,7 @@ function InspectorImpl({
             onFrontEnd={onFrontEnd}
             onReviewApproval={onReviewApproval}
             onRevokeGrants={onRevokeGrants}
+            onCap={onCap}
             panelRun={panelRun ?? null}
             onRunAgain={onRunAgain ?? (() => {})}
             onOpenReview={onOpenReview}
@@ -490,7 +555,7 @@ function InspectorEmpty({ summary, onGoToPanel }: { summary: InspectorSummary; o
  */
 function InspectorPanel({
   tab, onSelectTab, automations, templateOf, onTestNode,
-  model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onChainStep, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
+  model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onChainStep, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   templateOf?: (id: string) => PersistedTemplate | undefined
@@ -526,6 +591,7 @@ function InspectorPanel({
   onFrontEnd: (id: string) => void
   onReviewApproval: (requestId: string) => void
   onRevokeGrants?: (id: string) => void
+  onCap?: CapVerb
   panelRun: PanelRunLine | null
   onRunAgain: (id: string) => void
   onOpenReview: (id: string) => void
@@ -1027,6 +1093,7 @@ function InspectorPanel({
           )}
         </section>
       )}
+      {model.caps !== undefined && <CapsSection id={model.id} caps={model.caps} onCap={onCap} />}
       </section>
       {/* M279. The object's feed — deep detail, so it is here and on no frame. */}
       <section className="context__panel" data-context-panel="activity" role="tabpanel" hidden={tab !== 'activity'}>

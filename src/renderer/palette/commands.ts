@@ -426,6 +426,11 @@ export interface PaletteActions {
   proposeShareRole(who?: string, role?: string): Promise<CreationResult>
   /** M336. Sign in with GitHub (or add another account). Excluded from every verb: an account is the person's. */
   signIn(): Promise<CreationResult>
+  /**
+   * M352. Set an agent's own caps (its chat's record). `origin: 'door'` (an
+   * agent's plan, a workflow node) may only lower one — see planCapChange.
+   */
+  capAgent(panelId: string, value: string, origin?: 'person' | 'door'): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M251. A Markdown file panel's deck as .pptx, through main's save dialog; the note is the export sentence. */
   exportDeck(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2124,6 +2129,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'share.workspace', title: 'Share this workspace…', subtitle: 'put it in one of your organizations — teammates see cards, never commands or transcripts', group: 'canvas', searchText: 'share workspace team organization collaborate invite members', run: () => { void actions.shareWorkspace() } })
   out.push({ id: 'share.open', title: 'Open a shared workspace…', subtitle: 'the workspaces your teammates shared with you', group: 'canvas', searchText: 'open shared workspace team join room', run: () => { void actions.openSharedWorkspace() } })
   out.push({ id: 'share.role', title: 'Shared workspace: members and roles…', subtitle: 'who is in, and whether they edit or watch — the owner decides', group: 'canvas', searchText: 'share role member editor viewer remove permission access', run: () => { void actions.proposeShareRole() } })
+  // M352. The verb line, like note.tint: the value is typed, and a person's line may raise a cap.
+  const chatPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'chat')?.id
+  out.push(withReason({ id: 'agent.cap', title: 'Cap this agent…', subtitle: 'its own spend and context caps — type cap-agent <panel> 5usd,200k (none, or default for the Settings caps)', group: 'canvas', searchText: 'agent cap spend budget cost context tokens limit hold stop dollars', run: () => actions.beginRunVerb() }, chatPanelId === undefined ? 'select an agent conversation first' : undefined))
   out.push({ id: 'feedback.open', title: 'Prepare feedback…', subtitle: 'a scrubbed draft in your browser — you read it and send it, this app does not', group: 'canvas', searchText: 'feedback issue bug report problem help github', run: () => { void actions.prepareFeedback() } })
   // M189. The portable file's two rows. Export writes what is on this canvas
   // (pictures only when the person asks, through the verb line); Import makes

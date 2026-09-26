@@ -2109,6 +2109,23 @@ body {
    under its field in the state tone. */
 .inspector__input { display: block; width: 100%; box-sizing: border-box; margin-top: var(--sp-1); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
 .inspector__input:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 3px var(--iris-dim); }
+/* M352. An agent's caps on the Work tab: main's two lines (figure of cap, and whose),
+   a hold in amber, and cap-agent's fields. The fields are the inspector's own
+   input, narrowed to a figure; the lines use tabular figures so they align. */
+.inspector__caps { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-2); font-size: var(--t-xs); }
+.inspector__caps dt { color: var(--fg-3); }
+.inspector__caps dd { margin: 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+/* The amber is mixed a quarter towards the text colour: plain --amber measured
+   ~4.2:1 on the light pane, under AA for this size (the M352 critic). The mix
+   darkens it on light and lightens it on dark, so it holds on both themes. */
+.inspector__caps-held { margin: 0 0 var(--sp-2); color: color-mix(in srgb, var(--amber) 75%, var(--fg)); font-size: var(--t-xs); }
+.inspector__caps-form { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0 0 var(--sp-2); }
+.inspector__caps-field { grid-column: 1; display: flex; align-items: center; gap: var(--sp-1); color: var(--fg-3); font-size: var(--t-xs); white-space: nowrap; }
+.inspector__caps-name { min-width: 5.75em; color: var(--fg-3); }
+.inspector__caps-unit { width: 0.75em; text-align: right; }
+.inspector__caps-input { display: inline-block; width: 4.75em; margin-top: 0; font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.inspector__caps-set { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.inspector__arm--refused { color: color-mix(in srgb, var(--amber) 75%, var(--fg)); }
 .inspector__input.inspector__value--mono { font-family: var(--font-mono); }
 .inspector__reason { color: var(--red); margin-top: var(--sp-1); }
 /* M183. The node editor is ITS OWN section, not another run of fields: the

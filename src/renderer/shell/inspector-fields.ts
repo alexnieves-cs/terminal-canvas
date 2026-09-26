@@ -9,6 +9,7 @@ import { watchStateInput } from '@renderer/watcher/watcher-store'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
+import { capSentence, type AgentCaps, type NodeMeter } from '@shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolEntry, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
@@ -69,6 +70,8 @@ export interface InspectorModel {
   approval?: PendingApproval
   /** M98. The chat's session grants — four arms, never absent on a chat. See GrantsField. */
   grants?: GrantsField
+  /** M352. A chat's meter and caps, as main measures and enforces them. Absent on every other kind. */
+  caps?: CapsField
   /**
    * Which kind of panel this model describes. `'review'` is what gates
    * Inspector.tsx's Restart and Save-as-preset controls — an optional
@@ -572,6 +575,8 @@ export interface ChatInspectorInput {
   state: ChatStateInput
   usage: TokenTotals
   costUsd?: number
+  /** M350–M352. Main's meter for this agent (spend across its processes, context, a hold, the caps in force). */
+  meter?: NodeMeter
   model?: string
   turns: number
   /** M76. The oldest pending permission request, when one is. */
@@ -580,6 +585,33 @@ export interface ChatInspectorInput {
   ran?: boolean
   /** M98. Main's granted tools, when it has answered. Absent reads `unknown`, never `none`. */
   grants?: string[]
+}
+
+/**
+ * M352. A chat's meter and caps as the Work tab says them, in the inspector
+ * layer (configuration and outcomes). Each line is the figure main measured
+ * against the cap main enforces, and whose that cap is. "not reported yet" is
+ * never "$0.00", and "no cap" is a setting, not a zero. `own` is the record's
+ * figures, which the form starts from.
+ */
+export interface CapsField {
+  spend: string
+  context: string
+  /** The hold in one sentence (capSentence), present only while held. */
+  held?: string
+  own: AgentCaps | undefined
+}
+
+const kTokens = (n: number): string => `${Math.round(n / 1000)}k`
+
+export function capsField(meter: NodeMeter | undefined, own: AgentCaps | undefined): CapsField {
+  const caps = meter?.caps
+  const whose = (isOwn: boolean | undefined): string => (isOwn === true ? 'this agent\'s cap' : 'Settings cap')
+  const spentWord = meter?.spentUsd === undefined ? 'not reported yet' : `$${meter.spentUsd.toFixed(2)}`
+  const spend = caps !== undefined && caps.usd > 0 ? `${spentWord} of $${caps.usd.toFixed(2)} — ${whose(caps.ownUsd)}` : `${spentWord} — no spend cap`
+  const ctxWord = meter?.context === undefined ? 'not measured yet' : `${kTokens(meter.context)} tokens`
+  const context = caps !== undefined && caps.context > 0 ? `${ctxWord} of ${kTokens(caps.context)} — ${whose(caps.ownContext)}` : `${ctxWord} — no context cap`
+  return { spend, context, ...(meter?.held === undefined ? {} : { held: capSentence(meter.held) }), own }
 }
 
 /**
@@ -717,6 +749,7 @@ export function buildInspectorModelBare(
       ...(chatReviewable ? {} : { reviewReason: REASON_CHAT_NO_BASELINE }),
       ...(chat?.approval === undefined ? {} : { approval: chat.approval }),
       grants: chatGrantsField(panel.chat, chat),
+      caps: capsField(chat?.meter, panel.chat.caps),
       frontEnd: {
         verb: 'open-in-terminal',
         enabled: !chatBusy && chatTurns > 0,

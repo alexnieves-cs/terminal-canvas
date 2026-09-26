@@ -129,6 +129,9 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'share-workspace', label: 'Share this workspace', args: [{ name: 'org', kind: 'value', optional: true }], destructive: false, actions: ['shareWorkspace'], target: 'canvas', hint: 'opens the share dialog, an organization id prefilled; the person shares there' },
   { id: 'open-share', label: 'Open a shared workspace', args: [{ name: 'share', kind: 'value', optional: true }], destructive: false, actions: ['openSharedWorkspace'], target: 'canvas', hint: 'opens the list of workspaces shared with you, one prefilled; the person opens it there' },
   { id: 'share-role', label: 'Shared workspace: propose a role', args: [{ name: 'who', kind: 'value', optional: true }, { name: 'role', kind: 'value', optional: true }], destructive: false, actions: ['proposeShareRole'], target: 'canvas', hint: 'a GitHub login or user id, then editor, viewer or none; the owner applies it in the share dialog' },
+  // M352. An agent's OWN caps (its chat's record, M351). Main enforces them; a
+  // door (an agent, a workflow) may only lower one — planCapChange refuses the rest.
+  { id: 'cap-agent', label: 'Agent: set its own caps', args: [{ name: 'panel', kind: 'panel' }, { name: 'cap', kind: 'value' }], destructive: false, actions: ['capAgent'], target: 'panel', hint: '5usd for spend, 200k for context, 5usd,200k for both, none, or default (the Settings caps) — an agent or a workflow may only lower a cap' },
   { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
   // M182. The template editor's operations as verbs — the same six functions the diagram's drag calls.
   { id: 'workflow-add', label: 'Workflow: add node', args: [{ name: 'template', kind: 'key' }, { name: 'kind', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'add a terminal, chat, pool, orchestrator or collect node to the draft' },
@@ -450,6 +453,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'share-workspace': { canvas: 'the account menu\'s Share this workspace…', palette: 'share.workspace', agent: 'tc plan share-workspace', workflow: 'an action node whose line is: share-workspace' },
   'open-share': { canvas: 'the account menu\'s Open a shared workspace…', palette: 'share.open', agent: 'tc plan open-share', workflow: 'an action node whose line is: open-share' },
   'share-role': { canvas: 'a member\'s role picker in the share dialog', palette: 'share.role', agent: 'tc plan share-role octocat viewer', workflow: 'an action node whose line is: share-role octocat viewer' },
+  'cap-agent': { canvas: 'the Caps fields in a chat\'s Cost section, on the Inspector\'s Work tab', palette: 'agent.cap', agent: 'tc plan cap-agent ch1 5usd', workflow: 'an action node whose line is: cap-agent ch1 200k' },
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: 'an action node whose line is: check-readiness' },
   'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: 'an action node whose line is: new-chat' },
   starter: { canvas: 'launcher Start a conversation on a first run; the Starter canvas… line', palette: 'starter.open', agent: 'tc plan starter', workflow: 'an action node whose line is: starter' },

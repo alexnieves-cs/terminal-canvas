@@ -1016,6 +1016,45 @@ const SCENES = [
       await sleep(300)
       await k.shot('shared-offline')
     } },
+  { name: 'inspector-caps', intent: 'M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent\'s cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record\'s 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb\'s own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent\'s process is still alive (a hold keeps the agent; closing would end it); the auto run\'s chip read `auto · complete · stuck — cap reached` (the scene asserts it) and was dismissed as a person would, because a resolved chip crowds the chat header (owed, its own defect). DISCLOSED: the cap was written through the fields and Set (the verb\'s canvas door); the hold is the pushes main\'s agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes.',
+    run: async (k) => {
+      const meter = (m) => k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'meter', meter: m })
+      const fill = (sel, text) => k.js(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); if (!i) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(text)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+      // LAST in the sequence, from the fixture: nothing after it can inherit its
+      // cap, its meter or its selection. The share (the scenes above) is off.
+      k.shared.state.on = false
+      await k.loadMain(); await k.dock('panels'); await k.context(true)
+      await k.selectRail('chat'); await k.tab('work'); await sleep(400)
+      if (!(await fill('[data-caps-input="usd"]', '2'))) {
+        const seen = await k.js(`JSON.stringify({ rows: [...document.querySelectorAll('.rail-row[data-rail-row]')].map((r) => r.getAttribute('data-rail-row')).slice(0, 30), selected: document.querySelector('.rail-row[aria-selected="true"], .rail-row.is-selected')?.getAttribute('data-rail-row') ?? null, work: document.querySelector('[data-context-panel="work"]')?.innerText.slice(0, 400) ?? null })`)
+        throw new Error(`inspector-caps scene: no Caps fields on the chat's Work tab — ${seen}`)
+      }
+      await k.click('[data-caps-set]'); await sleep(400)
+      // What main sends when this agent's result crosses its own cap (enforceCap):
+      // the turn is over (ready), the auto run the M97 scene left running goes
+      // stuck with reason `cap` and its continuation is dropped with it, and the
+      // meter says the hold. All four, or the scene would show a held agent
+      // whose auto run is still counting.
+      k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'status', status: 'ready' })
+      k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'auto', mode: 'complete', turn: 0, limit: 8, state: 'stuck', reason: 'cap' })
+      k.wc.send(k.shared.events.AGENT_EVENT, { id: 'chat', type: 'queue', queue: [] })
+      meter({ spentUsd: 2.1, context: 118000, held: { unit: 'usd', spent: 2.1, limit: 2, own: true }, caps: { usd: 2, context: 150000, ownUsd: true, ownContext: false } })
+      await sleep(500)
+      const said = await k.js(`document.querySelector('[data-caps-said]')?.textContent ?? ''`)
+      const held = await k.js(`document.querySelector('[data-caps-held]')?.textContent ?? ''`)
+      if (said !== 'spend cap $2.00' || !/own cap/.test(held)) throw new Error(`inspector-caps scene: said ${JSON.stringify(said)}, held ${JSON.stringify(held)}`)
+      // The run's stuck chip is ASSERTED, then dismissed as a person would: a
+      // resolved chip crowds the chat header past its close button (owed, its
+      // own defect), and this scene's subject is the Work tab.
+      const chip = await k.js(`document.querySelector('.panel[data-panel-id="chat"] [data-chat-auto]')?.textContent ?? ''`)
+      if (!/stuck — cap reached/.test(chip)) throw new Error(`inspector-caps scene: the auto chip reads ${JSON.stringify(chip)}`)
+      await k.click('.panel[data-panel-id="chat"] [data-chat-auto-dismiss]'); await sleep(300)
+      await k.js(`document.querySelector('.context__panel[data-context-panel="work"]')?.scrollTo(0, 99999), true`); await sleep(200)
+      await k.shot('inspector-caps')
+      // The cap cleared through the same door, so the store the harness leaves holds no cap.
+      await fill('[data-caps-input="usd"]', ''); await k.click('[data-caps-set]'); meter({}); await sleep(300)
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'

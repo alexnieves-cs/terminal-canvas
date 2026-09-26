@@ -97,6 +97,8 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'share-workspace': return self.shareWorkspace(a.org)
       case 'open-share': return self.openSharedWorkspace(a.share)
       case 'share-role': return self.proposeShareRole(a.who, a.role)
+      // M352. `origin` is what makes this safe through a door: planCapChange lets a door only lower a cap.
+      case 'cap-agent': return self.capAgent(a.panel!, a.cap!, origin)
       case 'export-canvas': return self.exportCanvas(a.path, a.pictures)
       case 'deck-export-pptx': return self.exportDeck(step.args.panel as string)
       case 'import-canvas': return self.importCanvas(a.path)

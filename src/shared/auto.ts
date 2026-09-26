@@ -112,7 +112,7 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
   exit: 'the agent exited',
   budget: 'the budget refused a send',
   // M350. The agent's own cap, not the canvas's budget: a different fix, so a different word.
-  cap: 'the agent reached its own cap',
+  cap: 'cap reached',
   error: 'a turn ended in an error'
 }
 
