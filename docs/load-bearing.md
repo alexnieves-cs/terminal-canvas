@@ -3600,6 +3600,18 @@ only by a cap read LIVE at a send. The messages it kept are served FIRST, or a n
 jump ahead of what the person queued before the hold. `verify:agent-session cap.hold.1`,
 `cap.release.1`.
 
+**A relaunched chat's meter is read from its own transcript log's `spentUsd`, a field only
+the runtime's result path writes, never from `costUsd` (`main/agent-transcript-log.ts`
+`carriedMeter`, `create`'s `carried` dependency, M354).** Without it, every chat came back
+from a relaunch unmeasured. Quitting the app released every held agent, and M82's canvas
+budget could be spent again after every launch. The last meta line's `costUsd` looks like
+the figure to seed from, but it is one PROCESS's cost, so it forgets every process before
+the last. `importSession` also writes `costUsd`, for spend made in a terminal outside this
+app, and seeding from it would count that spend against a cap here. Context is the last
+assistant turn that reported usage, because a turn's usage is one message's (M350). A
+carried figure past its cap is held at `create`, with nothing to interrupt.
+`verify:agent-session cap.carry.1`.
+
 **The repository ROOT is resolved in ONE place, and it is main (`main/bootstrap/places.ts`'s
 `scopeResolver`/`memoryScope`).** A memory node is opened on a panel's directory, a chat carries its own
 `cwd`, and `tc memory add` passes whatever the agent's shell was standing in — three doors

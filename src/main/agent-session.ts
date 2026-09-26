@@ -136,6 +136,14 @@ export interface AgentSessionDeps {
    * the thread its record names rather than starting a new one silently.
    */
   hasTurns?: (id: string) => boolean
+  /**
+   * M354. What this panel's earlier runs of the app measured: its spend
+   * carried across every process, and its context at its last message. Read
+   * once, at `create`: a relaunch re-creates every chat by id, and without
+   * this each came back unmeasured, so a held agent was released by quitting
+   * the app and a canvas budget could be spent again after every launch.
+   */
+  carried?: (id: string) => { spentUsd?: number; context?: number } | undefined
   /** The login environment every PTY gets — how the CLI finds its config. */
   env: Record<string, string>
   /**
@@ -357,6 +365,17 @@ export class AgentSessionManager {
       batch: [],
       batchTimer: null
     }
+    // M354. The meter picks up where the last launch left it. A figure the
+    // earlier runs measured is carried; one they never measured stays
+    // unmeasured, because "unknown" is never "over".
+    const carried = this.deps.carried?.(spec.id)
+    if (carried?.spentUsd !== undefined && carried.spentUsd > 0) session.priorUsd = carried.spentUsd
+    if (carried?.context !== undefined && carried.context > 0) session.context = carried.context
+    // A carried figure already past its cap is held at rest, so the Work tab
+    // says the hold before a send is refused, not after. Nothing is in
+    // flight at create, so there is nothing to interrupt.
+    session.held = capCrossing(this.meterOf(session), this.capsOf(session)) ?? undefined
+    session.meterKey = this.meterKeyOf(session)
     this.sessions.set(spec.id, session)
     return this.snapshot(session)
   }

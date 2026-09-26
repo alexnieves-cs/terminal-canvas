@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { contextTokens } from '@shared/agent-session'
 import type { TokenTotals } from '@shared/cost'
 import type { TranscriptTurn } from '@shared/transcript'
 
@@ -31,6 +32,14 @@ import type { TranscriptTurn } from '@shared/transcript'
 export interface AgentTranscriptMeta {
   usage: TokenTotals
   costUsd?: number
+  /**
+   * M354. The panel's spend CARRIED across every process it ran (M350's
+   * `priorUsd + procUsd`), not `costUsd`, which is one process's figure. The
+   * runtime's result path is its only writer: an imported conversation's
+   * meta has none, so spend made outside this app never counts against a
+   * cap here.
+   */
+  spentUsd?: number
   turns: number
 }
 
@@ -50,6 +59,23 @@ export interface AgentTranscriptLog {
   removeTurn(panelId: string, turnId: string): void
   read(panelId: string): AgentTranscriptRead
   drop(panelId: string): void
+}
+
+/**
+ * M354. The meter a relaunched chat starts from: the spend the last result
+ * carried, and the context of the last assistant message that reported usage
+ * (each message's usage is the conversation's size at that call, M350).
+ * `costUsd` is never read here: it is one process's figure, and an import
+ * writes it for spend made outside this app. A figure never measured is
+ * absent, never 0.
+ */
+export function carriedMeter(read: AgentTranscriptRead): { spentUsd?: number; context?: number } {
+  let context: number | undefined
+  for (let i = read.turns.length - 1; i >= 0 && context === undefined; i--) {
+    const turn = read.turns[i]
+    if (turn.role === 'assistant' && turn.usage !== undefined) context = contextTokens(turn.usage)
+  }
+  return { ...(read.meta?.spentUsd === undefined ? {} : { spentUsd: read.meta.spentUsd }), ...(context === undefined ? {} : { context }) }
 }
 
 function isRecord(raw: unknown): raw is Record<string, unknown> {
@@ -139,6 +165,7 @@ export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscript
           meta = {
             usage: { input: num(usage.input), output: num(usage.output), cacheWrite: num(usage.cacheWrite), cacheRead: num(usage.cacheRead) },
             ...(typeof m.costUsd === 'number' && Number.isFinite(m.costUsd) ? { costUsd: m.costUsd } : {}),
+            ...(typeof m.spentUsd === 'number' && Number.isFinite(m.spentUsd) && m.spentUsd >= 0 ? { spentUsd: m.spentUsd } : {}),
             turns: num(m.turns)
           }
         }

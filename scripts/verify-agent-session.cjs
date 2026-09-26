@@ -1357,6 +1357,47 @@ const isResult = (l) => l.includes('"type":"result"')
           bad.kind === 'refused' && /lots is not a cap/.test(bad.reason) && tooBig.kind === 'refused' && twice.kind === 'refused' && clash.kind === 'refused',
         JSON.stringify({ both, dollar, raise, lower, doorUp, doorZero, doorNone, doorUncapped, none, clear, resetOne, bad, tooBig, twice, clash }))
     }
+    // M354 — cap.carry.1. A relaunch re-creates every chat by id, and its
+    //      meter picks up from the panel's own log through a REAL file round
+    //      trip. The spend is the runtime's carried field, never `costUsd`
+    //      (an import writes that one for spend made outside the app); the
+    //      context is the last assistant message's that reported usage; a
+    //      carried figure past its cap is held at rest; the next process's
+    //      spend adds to what was carried.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc carry '))
+      const log = LOG.createAgentTranscriptLog({ dir })
+      const totals = { input: 1, output: 1, cacheWrite: 0, cacheRead: 0 }
+      log.appendTurn('p1', { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'go' }], at: 0 })
+      log.appendTurn('p1', { id: 'a1', role: 'assistant', blocks: [], at: 1, usage: { input: 10, output: 5, cacheWrite: 0, cacheRead: 100 } })
+      log.appendTurn('p1', { id: 'a2', role: 'assistant', blocks: [], at: 2, usage: { input: 1000, output: 500, cacheWrite: 2000, cacheRead: 116500 } })
+      log.appendTurn('p1', { id: 'a3', role: 'assistant', blocks: [], at: 3 })
+      log.appendMeta('p1', { usage: totals, costUsd: 0.4, spentUsd: 1.7, turns: 1 })
+      log.appendMeta('p1', { usage: totals, costUsd: 0.4, spentUsd: 2.1, turns: 2 })
+      log.appendMeta('imp', { usage: totals, costUsd: 3, turns: 1 })
+      const carried = LOG.carriedMeter(log.read('p1'))
+      const imported = LOG.carriedMeter(log.read('imp'))
+      const never = LOG.carriedMeter(log.read('none'))
+      const caps = { usd: 2, context: 0 }
+      const r = makeManager({ caps: () => caps, carried: (id) => LOG.carriedMeter(log.read(id)) })
+      const snap = r.manager.create({ id: 'p1', cwd: '/r' })
+      const fresh = r.manager.create({ id: 'imp', cwd: '/r' })
+      const refused = r.manager.send('p1', 'more')
+      const spawnsWhileHeld = r.spawns.length
+      caps.usd = 5
+      const sent = r.manager.send('p1', 'more')
+      r.spawns[0].proc.emitLines([result(0.3)])
+      await tick(5)
+      const after = r.manager.get('p1')
+      rmSync(dir, { recursive: true, force: true })
+      ok('cap.carry.1 a relaunched chat\'s meter picks up from its own log: the carried spend (never costUsd, so an import carries nothing) and the last reporting message\'s context, held at rest when past its cap, and the next process adds to it',
+        carried.spentUsd === 2.1 && carried.context === 120000 && Object.keys(imported).length === 0 && Object.keys(never).length === 0 &&
+          snap.meter && snap.meter.spentUsd === 2.1 && snap.meter.context === 120000 && snap.meter.held && snap.meter.held.unit === 'usd' &&
+          fresh.meter && fresh.meter.spentUsd === undefined && fresh.meter.held === undefined &&
+          refused === 'refused-cap' && spawnsWhileHeld === 0 && sent === 'sent' &&
+          Math.abs(after.meter.spentUsd - 2.4) < 1e-9 && after.costUsd === 0.3 && after.meter.held === undefined,
+        JSON.stringify({ carried, imported, never, snap: snap.meter, fresh: fresh.meter, refused, spawnsWhileHeld, sent, after: after.meter, costUsd: after.costUsd }))
+    }
     const S2 = M.sharedSession
     const words = [S2.capSentence({ unit: 'usd', spent: 1.25, limit: 1 }), S2.capSentence({ unit: 'context', spent: 53500, limit: 50000 })]
     ok('cap.words.1 a hold is refused in its own figures and names the setting that releases it, and the bare word has a sentence too',

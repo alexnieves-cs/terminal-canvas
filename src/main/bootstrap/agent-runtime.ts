@@ -9,6 +9,7 @@ import { createApprovalTracker } from '../approvals'
 import { expandTilde } from '../pty-manager'
 import { requestFromRendererWith } from '../ipc'
 import { resolveTranscript } from '../transcript-reader'
+import { carriedMeter } from '../agent-transcript-log'
 import { windowUtilization } from '../../shared/rate-limit'
 import { effectiveCaps, type AgentCaps, type AgentSessionEvent } from '../../shared/agent-session'
 import { IPC_EVENTS, type PoolMintReply, type PoolMintRequest } from '../../shared/ipc-contract'
@@ -50,6 +51,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     // M118/M119. Present only when found, like codex: the copilot binary serves both its JSONL row and its ACP row.
     ...(state.copilotPath === null ? {} : { binaries: { copilot: { command: state.copilotPath }, acp: { command: state.copilotPath } } }),
     hasTurns: (id) => agentTranscripts.read(id).turns.length > 0,
+    // M354. The meter a relaunch starts from, read from the panel's own log.
+    carried: (id) => carriedMeter(agentTranscripts.read(id)),
     env,
     newSessionId: () => randomUUID(),
     // M73. Whether the CLI already holds a transcript for a session id —
@@ -164,7 +167,7 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     if (event.type === 'turn-removed') agentTranscripts.removeTurn(event.id, event.turnId)
     if (event.type === 'result') {
       const snap = agents.get(event.id)
-      if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns })
+      if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, ...(snap.meter?.spentUsd === undefined ? {} : { spentUsd: snap.meter.spentUsd }), turns: snap.turns })
     }
     // Presence folds each workspace's agents into its awareness payload's
     // agentStatus/statusLine. Read at use: the hub may be off (not configured,
