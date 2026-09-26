@@ -145,8 +145,13 @@ canvas:groups  Y.Map< <host>_<group id>, Y.Map<field, value> >   label colour pa
   so two Macs mint the same ids. The prefix is a random install id kept in
   `userData/canvas-host-id`.
 - **Other people's panels are inert placeholders.** Only geometry, kind, a scrubbed
-  title and the owner cross over. No command, cwd or transcript does. A placeholder
-  starts nothing, and it is a card, not a panel.
+  title and the owner cross over, plus, for a relay panel (M343), its relay session's
+  id and program NAME. No command, cwd or transcript does. A placeholder starts
+  nothing, and it is a card, not a panel. A relay placeholder offers **Attach**, the
+  person's click, which opens a relay panel on their own canvas joined to that session.
+  The id grants nothing by itself: the relay admits an attach by the share's role,
+  checked on its side against the person's token. Only the panel's owner may bind or
+  re-point the id (`relay-bind` in the role table).
 - **A peer removing your panel** takes it off the *shared* canvas only. It keeps
   running here.
 

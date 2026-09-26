@@ -44,7 +44,17 @@ export interface SharedPanel {
   w: number
   h: number
   z: number
+  /**
+   * M343. A relay panel's session on the team relay, so a teammate's
+   * placeholder can offer Attach. Only the id and the program's NAME cross:
+   * an id grants nothing — the relay admits an attach by the share's role,
+   * checked on its own side against the person's token.
+   */
+  relay?: SharedRelay
 }
+
+/** M343. A relay session as the shared doc carries it (`relaySession` / `relayProgram` fields). */
+export interface SharedRelay { session: string; program: string }
 
 export interface SharedGroup {
   id: string
@@ -63,6 +73,8 @@ export type CanvasOp =
   | { kind: 'delete'; panelId: string }
   | { kind: 'group-set'; group: SharedGroup }
   | { kind: 'group-delete'; groupId: string }
+  /** M343. A relay panel's session bound (or unbound, null) after the panel was created: the relay minted it later. */
+  | { kind: 'relay-bind'; panelId: string; relay: SharedRelay | null }
   /**
    * A shared file's text appearing in `canvas:files` (canvas-doc.ts), keyed by
    * its file panel's doc key. Written only by the machine that runs the panel
@@ -103,11 +115,11 @@ const OK: Verdict = { ok: true }
  *   viewer      -     -       -        -             -       -
  *   (no share)  -     -       -        -             -       yes
  *
- *              file-create   text-edit
- *   owner       own panel     yes
- *   editor      own panel     yes
- *   viewer      -             -
- *   (no share)  -             -
+ *              file-create   text-edit   relay-bind
+ *   owner       own panel     yes         own panel
+ *   editor      own panel     yes         own panel
+ *   viewer      -             -           -
+ *   (no share)  -             -           -
  *
  * Moving someone else's panel is allowed to an editor: arranging the shared
  * canvas IS the point of editing it. Deleting it is not — a tombstone is
@@ -154,6 +166,12 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
       if (ctx.panelOwner === null) return refuse(`panel ${op.fileKey} is not on the shared canvas`)
       if (ctx.fileExists !== true) return refuse(`file ${op.fileKey} is not shared`)
       return OK
+    // M343. The session is minted by the relay for the machine that runs the
+    // panel, so only that panel's owner names it — a second author could
+    // point everyone's Attach at a session of their choosing.
+    case 'relay-bind':
+      if (ctx.panelOwner === null) return refuse(`panel ${op.panelId} is not on the shared canvas`)
+      return ctx.panelOwner === ctx.userId ? OK : refuse('a relay session is bound by the person whose panel it is')
   }
 }
 

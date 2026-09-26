@@ -93,6 +93,14 @@ action node — with a program name from `programs.json` (default `shell`), or
 so a relay that is not set up is refused by name rather than left as a dead panel. In a
 shared workspace the session is bound to the share, so members attach by their role.
 
+**Attach from a teammate's placeholder (M343).** A shared workspace's relay panel
+carries its minted session id and program name into the shared doc
+(`relaySession`/`relayProgram`, flat fields written only by the panel's owner). On a
+teammate's canvas its placeholder reads "*name*'s terminal on the team relay · *program*"
+and offers **Attach**, which opens a relay panel beside the placeholder, recorded with
+that session so a relaunch attaches again. Before M343 the placeholder carried no id,
+and joining took `create-relay attach <id>` with an id learned some other way.
+
 - **Persistence.** The record is `{ kind: 'relay', relay: { program, sessionId?, shareId? } }`
   and nothing else — no cwd, no spec. The first session id the relay mints is written
   back, so a relaunch ATTACHES; it never starts a second process. A bad program drops

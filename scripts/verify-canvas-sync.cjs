@@ -327,6 +327,58 @@ async function until(pred, ms = 3000) {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   }
 
+  // ── M343: a relay panel's session crosses, so a teammate can Attach ─────
+  {
+    const a = M.ops.authorizeCanvasOp
+    const bind = { kind: 'relay-bind', panelId: 'hosta1_r1', relay: { session: 'S'.repeat(20), program: 'shell' } }
+    ok('cs.relay.1 a relay session is bound only by its panel\'s owner: not by an editor on someone else\'s panel, a viewer, an unshared room, or on no panel',
+      a('editor', bind, { userId: UA, panelOwner: UA }).ok && a('owner', { ...bind, relay: null }, { userId: UA, panelOwner: UA }).ok &&
+      !a('owner', bind, { userId: UB, panelOwner: UA }).ok && !a('editor', bind, { userId: UB, panelOwner: UA }).ok &&
+      !a('viewer', bind, { userId: UA, panelOwner: UA }).ok && !a(null, bind, { userId: UA, panelOwner: UA }).ok && !a('owner', bind, { userId: UA, panelOwner: null }).ok)
+
+    const doc = new Y.Doc()
+    const S1 = 'sess_' + 'a'.repeat(16), S2 = 'sess_' + 'b'.repeat(16)
+    const rp = (relay) => ({ id: 'r1', kind: 'relay', title: 'relay · shell', x: 0, y: 0, w: 720, h: 460, z: 1, ...(relay === undefined ? {} : { relay }) })
+    const created = M.doc.diffLocal(doc, { panels: [rp({ session: S1, program: 'shell' })], groups: [] }, { userId: UA, host: 'hosta1' }, () => false, (t) => t)
+    for (const op of created) M.doc.applyCanvasOp(doc, op, 'test')
+    const read1 = M.doc.readSharedPanels(doc).live.find((x) => x.id === 'hosta1_r1')
+    const rebind = M.doc.diffLocal(doc, { panels: [rp({ session: S2, program: 'shell' })], groups: [] }, { userId: UA, host: 'hosta1' }, () => false, (t) => t)
+    const unbind = M.doc.diffLocal(doc, { panels: [rp(undefined)], groups: [] }, { userId: UA, host: 'hosta1' }, () => false, (t) => t)
+    const same = M.doc.diffLocal(doc, { panels: [rp({ session: S1, program: 'shell' })], groups: [] }, { userId: UA, host: 'hosta1' }, () => false, (t) => t)
+    ok('cs.relay.2 a relay panel\'s session goes into the doc on create and is read back; a new session is ONE relay-bind, an ended one unbinds, an unchanged one writes nothing',
+      created.length === 1 && created[0].kind === 'create' && read1?.relay?.session === S1 && read1.relay.program === 'shell' &&
+      rebind.length === 1 && rebind[0].kind === 'relay-bind' && rebind[0].relay.session === S2 &&
+      unbind.length === 1 && unbind[0].kind === 'relay-bind' && unbind[0].relay === null && same.length === 0,
+      JSON.stringify({ created, read1, rebind, unbind, same }))
+
+    const probe = (mutate) => { const d = new Y.Doc(); Y.applyUpdate(d, Y.encodeStateAsUpdate(doc)); const sv0 = Y.encodeStateVector(d); mutate(d); return M.doc.inspectUpdate(doc, Y.encodeStateAsUpdate(d, sv0)) }
+    const good = probe((d) => d.transact(() => { const fm = d.getMap(M.doc.CANVAS_PANELS).get('hosta1_r1'); fm.set('relaySession', S2) }))
+    const half = probe((d) => d.transact(() => { d.getMap(M.doc.CANVAS_PANELS).get('hosta1_r1').delete('relayProgram') }))
+    const badId = probe((d) => d.transact(() => { d.getMap(M.doc.CANVAS_PANELS).get('hosta1_r1').set('relaySession', '../etc') }))
+    M.doc.applyCanvasOp(doc, { kind: 'create', panel: { id: 'hosta1_n9', kind: 'terminal', title: 't', owner: UA, host: 'hosta1', x: 0, y: 0, w: 1, h: 1, z: 1 } }, 'test')
+    const onTerminal = probe((d) => d.transact(() => { const fm = d.getMap(M.doc.CANVAS_PANELS).get('hosta1_n9'); fm.set('relaySession', S1); fm.set('relayProgram', 'shell') }))
+    ok('cs.relay.3 inspectUpdate reads a relay session change as relay-bind with the panel\'s owner; half a pair, a malformed id, or a session on a terminal is unknown',
+      good.length === 1 && good[0].op.kind === 'relay-bind' && good[0].op.relay.session === S2 && good[0].ctx.panelOwner === UA &&
+      half.some((x) => x.op.kind === 'unknown') && badId.some((x) => x.op.kind === 'unknown') && onTerminal.some((x) => x.op.kind === 'unknown'),
+      JSON.stringify({ good, half, badId, onTerminal }))
+
+    const RA = machine({ host: 'hosta1', userId: UA, role: 'owner', panels: [{ ...panel('r1', 0), kind: 'relay', relay: { session: S1, program: 'shell' } }] })
+    const RB = machine({ host: 'hostb1', userId: UB, role: 'editor' })
+    RA.bind(); RB.bind(); relay(RA.doc, RB.doc)
+    await tick()
+    RB.sync.activated(); await tick()
+    const seen = (RB.view()?.placeholders ?? []).find((x) => x.id === 'hosta1_r1')
+    ok('cs.relay.4 a teammate\'s view carries the relay placeholder with its session and program — and nothing else of the panel',
+      seen?.relay?.session === S1 && seen.relay.program === 'shell' && !('command' in seen) && !('cwd' in seen), JSON.stringify(seen))
+    RA.unbind(); RB.unbind()
+
+    const layer = readFileSync(join(root, 'src/renderer/shared-canvas/SharedPlaceholderLayer.tsx'), 'utf8')
+    const canvas = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    ok('cs.relay.5 a relay placeholder with a session offers Attach (the person\'s click), which opens a relay panel HERE attached to that session',
+      /data-shared-relay-attach/.test(layer) && /onClick=\{\(\) => props\.onAttachRelay\?\.\(p\)\}/.test(layer) &&
+      /onAttachRelay=\{\(p\) => \{ if \(p\.relay !== undefined\) openRelayPanel\(\{ program: p\.relay\.program, sessionId: p\.relay\.session/.test(canvas))
+  }
+
   // ── the renderer never holds the doc ────────────────────────────────────
   {
     const files = []
@@ -601,6 +653,20 @@ async function until(pred, ms = 3000) {
       await until(() => bad.st.closed > 0, 2000)
       ok('srv.unknown.1 even the owner cannot write outside the canvas maps: a new root type is refused and closes the connection',
         bad.st.closed > 0 && !owner.doc.share.has('evil'))
+
+      // M343. Through the real server: the owner binds their relay panel's
+      // session; an editor re-pointing it is refused and closed.
+      const RS = 'sess_' + 'c'.repeat(16)
+      M.doc.applyCanvasOp(owner.doc, { kind: 'create', panel: { id: 'hosta1_r2', kind: 'relay', title: 'relay · shell', owner: UA, host: 'hosta1', x: 0, y: 0, w: 720, h: 460, z: 1 } }, 'test')
+      M.doc.applyCanvasOp(owner.doc, { kind: 'relay-bind', panelId: 'hosta1_r2', relay: { session: RS, program: 'shell' } }, 'test')
+      const ed3 = join('teditor')
+      await until(() => ed3.st.synced && live(ed3.doc).find((x) => x.id === 'hosta1_r2')?.relay?.session === RS)
+      const ed3Closed = ed3.st.closed
+      ed3.doc.getMap(M.doc.CANVAS_PANELS).get('hosta1_r2').set('relaySession', 'sess_' + 'd'.repeat(16))
+      await until(() => ed3.st.closed > ed3Closed, 2000)
+      ok('srv.relay.1 the owner\'s relay session reaches an editor through beforeSync; the editor re-pointing it is refused, closed, and the room keeps the owner\'s',
+        ed3.st.closed > ed3Closed && field(owner.doc, 'hosta1_r2', 'relaySession') === RS && refusals.some((r) => r.userId === UB && /relay session/.test(r.reason)),
+        JSON.stringify(refusals.slice(-1)))
     } finally {
       for (const p of providers) p.destroy()
       await server.destroy()

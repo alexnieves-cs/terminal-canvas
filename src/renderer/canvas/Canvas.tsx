@@ -130,7 +130,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeRelayPanel, isRelayPanel, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE,
@@ -8462,7 +8462,9 @@ export function Canvas({
           {!merged && (
             <SharedPlaceholderLayer placeholders={shared.placeholders} workspaceId={activeWorkspaceId}
               mayArrange={shared.mayArrange} mayRemove={shared.mayRemove} files={shared.view?.files ?? []}
-              onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder} />
+              onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder}
+              // M343. Beside the placeholder, never over it: both stay visible.
+              onAttachRelay={(p) => { if (p.relay !== undefined) openRelayPanel({ program: p.relay.program, sessionId: p.relay.session, ...(creationShareRef.current === undefined ? {} : { shareId: creationShareRef.current }) }, { x: p.x + p.w + 40 + RELAY_W / 2, y: p.y + RELAY_H / 2 }) }} />
           )}
           {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
           <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft} merged={merged}

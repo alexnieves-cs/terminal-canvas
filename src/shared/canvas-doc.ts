@@ -39,8 +39,9 @@
 import * as Y from 'yjs'
 import { TEAM_DOC_MAP } from './team'
 import {
-  CANVAS_FILES, RECT_FIELDS, SHARED_TEXT_MAX, type CanvasOp, type OpContext, type SharedGroup, type SharedPanel
+  CANVAS_FILES, RECT_FIELDS, SHARED_TEXT_MAX, type CanvasOp, type OpContext, type SharedGroup, type SharedPanel, type SharedRelay
 } from './canvas-ops'
+import { RELAY_PROGRAM, RELAY_SESSION_ID } from './relay-protocol'
 
 export const CANVAS_PANELS = 'canvas:panels'
 export const CANVAS_GROUPS = 'canvas:groups'
@@ -67,6 +68,18 @@ export function sharedText(doc: Y.Doc, fileKey: string): Y.Text | undefined {
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 
+/**
+ * M343. A relay panel's two session fields as one value: both present and
+ * well-formed on a `relay` panel, or both absent (null). Anything else —
+ * half a pair, a bad id, a session on a terminal — is malformed (undefined).
+ */
+function relayOf(fm: Y.Map<unknown>, kind: string): SharedRelay | null | undefined {
+  const session = fm.get('relaySession'), program = fm.get('relayProgram')
+  if (session === undefined && program === undefined) return null
+  if (kind !== 'relay' || typeof session !== 'string' || typeof program !== 'string') return undefined
+  return RELAY_SESSION_ID.test(session) && RELAY_PROGRAM.test(program) ? { session, program } : undefined
+}
+
 /** A field map as a SharedPanel, or undefined when it is malformed. Tombstones are read by `isTombstone`. */
 function panelOf(key: string, fm: unknown): SharedPanel | undefined {
   if (!(fm instanceof Y.Map)) return undefined
@@ -74,7 +87,9 @@ function panelOf(key: string, fm: unknown): SharedPanel | undefined {
   const x = num(fm.get('x')), y = num(fm.get('y')), w = num(fm.get('w')), h = num(fm.get('h')), z = num(fm.get('z'))
   if (kind === undefined || title === undefined || owner === undefined || host === undefined ||
       x === undefined || y === undefined || w === undefined || h === undefined || z === undefined) return undefined
-  return { id: key, kind, title, owner, host, x, y, w, h, z }
+  const relay = relayOf(fm, kind)
+  if (relay === undefined) return undefined
+  return { id: key, kind, title, owner, host, x, y, w, h, z, ...(relay === null ? {} : { relay }) }
 }
 
 const isTombstone = (fm: unknown): boolean => fm instanceof Y.Map && fm.get('deleted') === true
@@ -139,9 +154,19 @@ export function applyCanvasOp(doc: Y.Doc, op: CanvasOp, origin: unknown): void {
       case 'create': {
         if (panels.has(op.panel.id)) return
         const fm = new Y.Map<unknown>()
-        const { id: _id, ...fields } = op.panel
+        const { id: _id, relay, ...fields } = op.panel
         for (const [k, v] of Object.entries(fields)) fm.set(k, v)
+        // M343. Flat fields, so each is its own last-writer-wins register.
+        if (relay !== undefined) { fm.set('relaySession', relay.session); fm.set('relayProgram', relay.program) }
         panels.set(op.panel.id, fm)
+        return
+      }
+      case 'relay-bind': {
+        const fm = panels.get(op.panelId)
+        if (fm === undefined || isTombstone(fm)) return
+        if (op.relay === null) { fm.delete('relaySession'); fm.delete('relayProgram'); return }
+        setIf(fm, 'relaySession', op.relay.session)
+        setIf(fm, 'relayProgram', op.relay.program)
         return
       }
       case 'retitle': {
@@ -176,7 +201,7 @@ export function applyCanvasOp(doc: Y.Doc, op: CanvasOp, origin: unknown): void {
   }, origin)
 }
 
-const PANEL_FIELDS = new Set(['kind', 'title', 'owner', 'host', 'x', 'y', 'w', 'h', 'z'])
+const PANEL_FIELDS = new Set(['kind', 'title', 'owner', 'host', 'x', 'y', 'w', 'h', 'z', 'relaySession', 'relayProgram'])
 const GROUP_FIELDS = new Set(['label', 'colour', 'panelIds', 'collapsed', 'deleted'])
 
 /**
@@ -231,8 +256,10 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
         const key = item.parentSub
         const fm = changed as unknown as Y.Map<unknown>
         const fields: Partial<Record<'x' | 'y' | 'w' | 'h' | 'z', number>> = {}
+        let relayTouched = false
         for (const k of keys) {
           if (k === null) { unknown(`panel ${key} changed as a list`); continue }
+          if (k === 'relaySession' || k === 'relayProgram') { relayTouched = true; continue }
           const v = fm.get(k)
           if ((RECT_FIELDS as readonly string[]).includes(k) || k === 'z') {
             const n = num(v)
@@ -248,6 +275,14 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
           } else unknown(`panel ${key}.${k} rewritten`)
         }
         if (Object.keys(fields).length > 0) out.push({ op: { kind: 'rect', panelId: key, fields }, ctx: ctxOf(key) })
+        // M343. The pair is judged as it stands AFTER the change: both fields
+        // well-formed on a relay panel, or both gone — never half, never on a
+        // panel of another kind.
+        if (relayTouched) {
+          const relay = relayOf(fm, str(fm.get('kind')) ?? '')
+          if (relay === undefined) unknown(`panel ${key} relay session malformed`)
+          else out.push({ op: { kind: 'relay-bind', panelId: key, relay }, ctx: ctxOf(key) })
+        }
       } else if (type === groups) {
         for (const key of keys) {
           if (key === null) { unknown('canvas:groups changed as a list'); continue }
@@ -303,7 +338,7 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
 }
 
 /** A local panel as main's layout store holds it — just what the doc needs. */
-export interface LocalPanelLike { id: string; kind?: string; title?: string; x: number; y: number; w: number; h: number; z: number }
+export interface LocalPanelLike { id: string; kind?: string; title?: string; x: number; y: number; w: number; h: number; z: number; relay?: SharedRelay }
 export interface LocalGroupLike { id: string; label: string; colour: string; panelIds: string[]; collapsed?: boolean }
 
 /**
@@ -337,7 +372,7 @@ export function diffLocal(
     const fm = panels.get(key)
     const title = scrub(p.title ?? '')
     if (fm === undefined) {
-      ops.push({ kind: 'create', panel: { id: key, kind: p.kind ?? 'terminal', title, owner: me.userId, host: me.host, x: p.x, y: p.y, w: p.w, h: p.h, z: p.z } })
+      ops.push({ kind: 'create', panel: { id: key, kind: p.kind ?? 'terminal', title, owner: me.userId, host: me.host, x: p.x, y: p.y, w: p.w, h: p.h, z: p.z, ...(p.relay === undefined ? {} : { relay: p.relay }) } })
       continue
     }
     // A tombstone stays one: a peer removed this panel from the SHARED
@@ -349,6 +384,10 @@ export function diffLocal(
     }
     if (Object.keys(fields).length > 0) ops.push({ kind: 'rect', panelId: key, fields })
     if (fm.get('title') !== title && !stale(`p:${key}:title`)) ops.push({ kind: 'retitle', panelId: key, title })
+    // M343. The relay minted the session after the panel was shared (or it ended).
+    if (p.kind === 'relay' && (fm.get('relaySession') !== p.relay?.session || fm.get('relayProgram') !== p.relay?.program)) {
+      ops.push({ kind: 'relay-bind', panelId: key, relay: p.relay ?? null })
+    }
   }
   // Ours in the doc, gone from the layout: closed here.
   panels.forEach((fm, key) => {

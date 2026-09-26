@@ -104,7 +104,11 @@ export function createCanvasSyncWiring(state: MainState, stores: Stores, account
       const ws = store.current().workspaces.find((w) => w.id === id)
       if (ws === undefined) return null
       return {
-        panels: ws.panels.map((p) => ({ id: p.id, kind: p.kind ?? 'terminal', title: typeof p.title === 'string' ? p.title : '', x: p.x, y: p.y, w: p.w, h: p.h, z: p.z })),
+        // M343. A relay panel's minted session crosses (its id and program name only), so a teammate's placeholder can Attach.
+        panels: ws.panels.map((p) => ({
+          id: p.id, kind: p.kind ?? 'terminal', title: typeof p.title === 'string' ? p.title : '', x: p.x, y: p.y, w: p.w, h: p.h, z: p.z,
+          ...(p.kind === 'relay' && p.relay.sessionId !== undefined ? { relay: { session: p.relay.sessionId, program: p.relay.program } } : {})
+        })),
         groups: (ws.groups ?? []).map((g) => ({ id: g.id, label: g.label, colour: g.colour, panelIds: [...g.panelIds], ...(g.collapsed === true ? { collapsed: true } : {}) }))
       }
     },
