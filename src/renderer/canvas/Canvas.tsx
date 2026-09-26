@@ -283,6 +283,8 @@ import type { SharedPanel } from '@shared/canvas-ops'
 import { notifyRefused } from '../shell/toast'
 import { RosterStrip } from '../presence/RosterStrip'
 import { usePresenceReport } from '../presence/usePresenceReport'
+import { useRosterNames } from '../presence/useRosterNames'
+import { relayNameOf } from '../relay/relay-gate'
 import { TeamView } from '../team/TeamView'
 import { useAccounts } from '../account/useAccounts'
 import { ShareDialog } from '../account/ShareDialog'
@@ -6847,6 +6849,10 @@ export function Canvas({
   // M338. The active workspace's share, for a relay session started in it.
   const creationShareRef = useRef<string | undefined>(undefined)
   creationShareRef.current = workspaceRows.find((w) => w.active)?.share?.id
+  // M344. The relay strip names people from this workspace's presence roster
+  // ("sam is in control"), not by the first eight characters of a uuid.
+  const rosterNames = useRosterNames(activeWorkspaceId)
+  const relayNameFor = useCallback((userId: string): string => relayNameOf(rosterNames, userId), [rosterNames])
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
     const entry = CREATABLE_OBJECTS.find((item) => item.id === kind)
     if (!entry) return { kind: 'refused', reason: `unknown object kind: ${kind}` }
@@ -8650,6 +8656,7 @@ export function Canvas({
                   key={panel.rect.id}
                   panel={panel}
                   onSession={setRelaySession}
+                  nameOf={relayNameFor}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}

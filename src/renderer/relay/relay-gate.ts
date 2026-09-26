@@ -46,6 +46,16 @@ export function relayActions(view: RelayView | null): RelayAction[] {
   return out
 }
 
+/**
+ * M344. A person's name for the strip: the presence roster's, else the first
+ * eight characters of the id — which is what every name was before M344, and
+ * is still what a person not in this workspace's roster reads as.
+ */
+export function relayNameOf(names: ReadonlyMap<string, string>, userId: string): string {
+  const name = names.get(userId)
+  return name !== undefined && name.trim() !== '' ? name : userId.slice(0, 8)
+}
+
 /** The one line the strip says about control. `nameOf` maps a user id to a person's name when presence knows it. */
 export function relayControlLine(view: RelayView | null, nameOf: (userId: string) => string): string {
   if (view === null) return 'Not connected'

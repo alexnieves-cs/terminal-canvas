@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties, type JSX, type MouseEvent } fr
 import { CodeEditor } from '../file/CodeEditor'
 import type { SharedPanel } from '@shared/canvas-ops'
 import { colorOf } from '@shared/presence'
-import { latestRoster, onRoster } from '../presence/presence-store'
+import { useRosterNames } from '../presence/useRosterNames'
 import { Close } from '../icons'
 
 /**
@@ -60,25 +60,8 @@ function SharedDraft({ p, workspaceId, who, onClose }: { p: SharedPanel; workspa
 
 const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture', relay: 'Relay terminal' }
 
-/** Display names from the roster, so a placeholder names a person rather than a uuid. */
-function useNames(workspaceId: string | undefined): ReadonlyMap<string, string> {
-  const read = (): Map<string, string> => new Map((latestRoster(workspaceId)?.peers ?? []).map((p) => [p.presence.userId, p.presence.displayName]))
-  const [names, setNames] = useState(read)
-  useEffect(() => {
-    let key = ''
-    const take = (): void => {
-      const next = read()
-      const k = [...next].join('|')
-      if (k !== key) { key = k; setNames(next) }
-    }
-    take()
-    return onRoster((r) => { if (r.workspaceId === workspaceId) take() })
-  }, [workspaceId])
-  return names
-}
-
 export function SharedPlaceholderLayer(props: SharedPlaceholderLayerProps): JSX.Element | null {
-  const names = useNames(props.workspaceId)
+  const names = useRosterNames(props.workspaceId)
   const [openId, setOpenId] = useState<string | null>(null)
   const workspaceId = props.workspaceId
   // A share that went away (unshared, tombstoned) closes the draft with it.

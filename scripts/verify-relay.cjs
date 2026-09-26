@@ -182,6 +182,20 @@ function connect(port, tok, opts = {}) {
       kinds(OWNER) === 'grant:V deny:V revoke kill' && kinds(GUEST) === 'grant:V deny:V release' && kinds(VIEWER) === 'requested' &&
       kinds(STRANGER) === 'request' && kinds(STRANGER, { canRequest: false }) === '' && kinds(OWNER, { exited: true }) === '' &&
       kinds(OWNER, { connection: 'reconnecting' }) === '')
+    // M344. The name the strip uses: the roster's, else the id's first eight
+    // characters (what every name was before) — never an empty string.
+    const names = new Map([[GUEST, 'sam'], [VIEWER, '   ']])
+    ok('relay.names.1 a person is named from the presence roster, and an unknown or blank name falls back to the id\'s first eight characters',
+      G.relayNameOf(names, GUEST) === 'sam' && G.relayNameOf(names, VIEWER) === VIEWER.slice(0, 8) && G.relayNameOf(names, STRANGER) === STRANGER.slice(0, 8) &&
+      G.relayControlLine(v(OWNER), (u) => G.relayNameOf(names, u)) === 'sam is in control')
+    {
+      const { readFileSync } = require('node:fs')
+      const canvas = readFileSync(join(__dirname, '..', 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+      const layer = readFileSync(join(__dirname, '..', 'src/renderer/shared-canvas/SharedPlaceholderLayer.tsx'), 'utf8')
+      ok('relay.names.2 every relay panel on the canvas is handed the roster\'s names, from the same hook the shared placeholders use',
+        /const rosterNames = useRosterNames\(activeWorkspaceId\)/.test(canvas) && /relayNameOf\(rosterNames, userId\)/.test(canvas) &&
+        /<RelayNode[\s\S]{0,200}nameOf=\{relayNameFor\}/.test(canvas) && /useRosterNames\(props\.workspaceId\)/.test(layer))
+    }
     ok('relay.gate.4 the control line names the controller, or says why there is none',
       G.relayControlLine(v(OWNER), (u) => u === GUEST ? 'sam' : '?') === 'sam is in control' &&
       G.relayControlLine(v(GUEST), () => '') === 'You are in control' &&
