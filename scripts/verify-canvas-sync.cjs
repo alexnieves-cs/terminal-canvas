@@ -35,6 +35,10 @@ buildSync({
       "  auth: require('./server/collab/auth.ts'),",
       "  server: require('./server/collab/server.ts'),",
       "  value: require('./src/renderer/shared-text/value.ts'),",
+      "  persistence: require('./server/collab/persistence.ts'),",
+      "  log: require('./server/collab/log.ts'),",
+      "  backup: require('./server/collab/backup.ts'),",
+      "  health: require('./server/collab/health.ts'),",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -671,6 +675,176 @@ async function until(pred, ms = 3000) {
       for (const p of providers) p.destroy()
       await server.destroy()
     }
+  }
+
+  // ── M346: the collab server keeps its rooms (persistence.ts, on PGlite) ──
+  // The migration and the store's own SQL run on real Postgres (PGlite, in
+  // process); two real Hocuspocus servers share one store across a restart.
+  {
+    const { PGlite } = require('@electric-sql/pglite')
+    const pg = new PGlite()
+    // The roles PostgREST serves exist on every Supabase project; the migration revokes from them by name.
+    await pg.exec('create role anon; create role authenticated;')
+    await pg.exec(readFileSync(join(root, 'supabase/migrations/20260926120000_collab_documents.sql'), 'utf8'))
+    const query = (text, params) => pg.query(text, params)
+    const priv = async (role, obj, what) => (await pg.query(`select has_table_privilege('${role}', '${obj}', '${what}') as ok`)).rows[0].ok
+    const schemaUse = async (role) => (await pg.query(`select has_schema_privilege('${role}', 'collab', 'usage') as ok`)).rows[0].ok
+    const leaks = []
+    for (const role of ['anon', 'authenticated']) {
+      if (await schemaUse(role)) leaks.push(`${role} usage`)
+      for (const t of ['collab.documents', 'collab.snapshots']) for (const w of ['select', 'insert', 'update', 'delete']) if (await priv(role, t, w)) leaks.push(`${role} ${w} ${t}`)
+    }
+    ok('persist.schema.1 the migration runs on real Postgres, and the roles PostgREST serves (anon — the key the app ships — and authenticated) get NOTHING in the collab schema', leaks.length === 0, JSON.stringify(leaks))
+
+    const store = M.persistence.createPgDocStore(query, { keep: 3 })
+    const ROOM = `tc:workspace:${SHARE}`
+    const before = await store.load(ROOM)
+    await store.store(ROOM, new Uint8Array([1, 2, 3]))
+    await store.store(ROOM, new Uint8Array([4, 5]))
+    const after = await store.load(ROOM)
+    const rooms = await store.rooms()
+    ok('persist.store.1 a room loads null until stored; a store replaces its one row; rooms() lists it with its size',
+      before === null && after !== null && Array.from(after).join() === '4,5' && rooms.length === 1 && rooms[0].name === ROOM && rooms[0].bytes === 2, JSON.stringify({ before, after: after && Array.from(after), rooms }))
+    for (let i = 0; i < 5; i++) await store.snapshot(ROOM, new Uint8Array([i]), i === 4 ? 'manual' : 'interval')
+    const snaps = await store.snapshots(ROOM)
+    const newest = snaps[0] === undefined ? null : await store.snapshotState(snaps[0].id)
+    ok('persist.snap.1 snapshots are kept newest first and PRUNED to the room\'s bound as they are taken; one reads back by id with its room',
+      snaps.length === 3 && snaps[0].reason === 'manual' && newest !== null && Array.from(newest.state).join() === '4' && newest.name === ROOM &&
+      (await store.lastSnapshotAt(ROOM)) !== null, JSON.stringify(snaps))
+    let refusedName = null
+    try { await store.store('tc:workspace:w1', new Uint8Array([1])) } catch (e) { refusedName = String(e.message || e) }
+    ok('persist.name.1 the table itself refuses a room that is not a share\'s (an unshared workspace\'s presence room is never kept)', refusedName !== null && /check/i.test(refusedName), refusedName)
+
+    // Two real servers over the one store: the first keeps the room, the
+    // second — the owner offline — serves it to a teammate who arrives later.
+    const people = { towner: { userId: UA, role: 'owner' }, teditor: { userId: UB, role: 'editor' } }
+    const logs = []
+    const mk = (port) => M.server.createCollabServer({
+      port, address: '127.0.0.1', quiet: true, store, snapshotEveryMs: 0, debounceMs: 40,
+      log: M.log.createLog((line) => logs.push(JSON.parse(line))),
+      authenticate: async (token, documentName) => { const p = people[token]; if (p === undefined) throw new M.auth.Refused('no'); return { ...p, shareId: SHARE, documentName } }
+    })
+    const connect = (port, token, name = ROOM) => {
+      const doc = new Y.Doc()
+      const st = { synced: false }
+      const p = new HocuspocusProvider({ url: `ws://127.0.0.1:${port}`, name, document: doc, token, onSynced: () => { st.synced = true } })
+      return { doc, st, p }
+    }
+    await pg.query('delete from collab.documents')
+    const port1 = await freePort()
+    const s1 = mk(port1)
+    await s1.listen()
+    const owner = connect(port1, 'towner')
+    await until(() => owner.st.synced)
+    M.doc.applyCanvasOp(owner.doc, { kind: 'create', panel: { id: 'hosta1_p1', kind: 'terminal', title: 'kept', owner: UA, host: 'hosta1', x: 10, y: 20, w: 400, h: 300, z: 1 } }, 'test')
+    owner.doc.getMap('team').set(`snapshot:${UA}`, { stale: true })
+    // Also a presence-only room, which must not be kept.
+    const local = connect(port1, 'towner', 'tc:workspace:w1')
+    await until(() => local.st.synced)
+    // An ASYNC predicate: `until` would read its promise as truthy and pass at once.
+    const untilAsync = async (pred, ms) => { const end = Date.now() + ms; while (Date.now() < end) { if (await pred()) return true; await new Promise((r) => setTimeout(r, 25)) } return pred() }
+    const stored = await untilAsync(async () => { const b = await store.load(ROOM); if (b === null) return false; const d = new Y.Doc(); Y.applyUpdate(d, b); return live(d).some((p) => p.id === 'hosta1_p1') }, 4000)
+    owner.p.destroy(); local.p.destroy()
+    await s1.destroy()
+    const port2 = await freePort()
+    const s2 = mk(port2)
+    await s2.listen()
+    const teammate = connect(port2, 'teditor')
+    const served = await until(() => teammate.st.synced && live(teammate.doc).some((p) => p.id === 'hosta1_p1' && p.title === 'kept'), 4000)
+    ok('persist.room.1 a shared room survives its server: stored as it changes, loaded before anyone syncs — a teammate joining the restarted server, with the owner offline, gets the canvas',
+      stored === true && served === true, JSON.stringify({ stored, served, keys: live(teammate.doc).map((p) => p.id) }))
+    const rooms2 = (await store.rooms()).map((r) => r.name)
+    ok('persist.room.2 only a share\'s room is written; the presence-only room is not', JSON.stringify(rooms2) === JSON.stringify([ROOM]), JSON.stringify(rooms2))
+    ok('persist.team.1 a Team view snapshot does not outlive the restart (it is published only while someone watches, and after a restart nobody does)',
+      teammate.doc.getMap('team').size === 0, JSON.stringify([...teammate.doc.getMap('team').keys()]))
+    const snaps2 = await store.snapshots(ROOM)
+    ok('persist.snap.2 the server snapshots a stored room on its interval (zero here: every store)', snaps2.length >= 1 && snaps2.every((x) => x.reason === 'interval'), JSON.stringify(snaps2.map((x) => x.reason)))
+    const health = await (await fetch(`http://127.0.0.1:${port2}/healthz`)).json()
+    ok('persist.health.1 GET /healthz answers the counts an uptime check needs — and no room name', health.ok === true && health.rooms >= 1 && health.connections >= 1 && health.persisted === true &&
+      typeof health.uptimeS === 'number' && !JSON.stringify(health).includes('workspace'), JSON.stringify(health))
+    const loaded = logs.find((l) => l.event === 'room.loaded')
+    ok('persist.log.1 the log is one JSON object per event — a room loaded is logged by name, size and time, never by content',
+      loaded !== undefined && loaded.room === ROOM && typeof loaded.bytes === 'number' && typeof loaded.ms === 'number' && typeof loaded.ts === 'string' && loaded.level === 'info' &&
+      !logs.some((l) => JSON.stringify(l).includes('kept')), JSON.stringify(logs.slice(0, 6)))
+    teammate.p.destroy()
+    await s2.destroy()
+
+    // ── M347: backups and restores over the same store ────────────────────
+    const lines = []
+    const dumped = await M.backup.dumpRooms(store, (l) => lines.push(l), { snapshots: true })
+    const header = JSON.parse(lines[0])
+    const hasContent = lines.slice(1).every((l) => { const o = JSON.parse(l); return typeof o.state === 'string' && o.state.length > 0 })
+    await pg.query('delete from collab.documents')
+    const r1 = await M.backup.restoreRooms(store, lines)
+    const back = await store.load(ROOM)
+    const d = new Y.Doc(); if (back !== null) Y.applyUpdate(d, back)
+    const r2 = await M.backup.restoreRooms(store, lines)
+    const r3 = await M.backup.restoreRooms(store, lines, { force: true, room: ROOM })
+    let bad = null
+    try { await M.backup.restoreRooms(store, ['{"kind":"room","name":"x","state":""}']) } catch (e) { bad = String(e.message || e) }
+    ok('ops.backup.1 a dump is a header then every room (and its snapshots); restoring it after the rows are gone brings the canvas back, a SECOND restore skips the room that exists (a restore is for a room the server lost), --force replaces it, and a file without the header is refused before anything is written',
+      header.kind === 'header' && header.rooms === 1 && dumped.rooms === 1 && dumped.snapshots >= 1 && hasContent &&
+      JSON.stringify(r1.restored) === JSON.stringify([ROOM]) && live(d).some((p) => p.id === 'hosta1_p1') &&
+      r2.restored.length === 0 && r2.skipped.length === 1 && /--force/.test(r2.skipped[0].why) &&
+      JSON.stringify(r3.restored) === JSON.stringify([ROOM]) && bad !== null && /header/.test(bad), JSON.stringify({ header, dumped, r1, r2, r3, bad }))
+    await pg.close()
+  }
+
+  // ── M347: the uptime watcher's rules, walked through an outage ──────────
+  {
+    const H = M.health
+    let st = H.HEALTH_START
+    const said = []
+    const step = (ok, errors = [], now = 0) => { const r = H.healthStep(st, now, { ok, detail: ok ? '1 rooms' : 'ECONNREFUSED' }, errors); st = r.state; said.push(r.alerts) }
+    step(false); step(false); step(false, [], 1); step(false, [], 2); step(true, [], 3); step(true, [], 4)
+    ok('ops.health.1 DOWN only after three failed probes in a row, said once per outage, RECOVERED said once — a restart\'s one or two missed probes page nobody',
+      said[0].length === 0 && said[1].length === 0 && said[2].length === 1 && /DOWN/.test(said[2][0]) && said[3].length === 0 &&
+      said[4].length === 1 && /recovered/.test(said[4][0]) && said[5].length === 0, JSON.stringify(said))
+    st = H.HEALTH_START; said.length = 0
+    step(true, ['room.store_failed', 'room.store_failed', 'db.pool_error'], 0)
+    step(true, ['room.store_failed'], 10 * 60 * 1000)
+    step(true, ['room.store_failed'], 31 * 60 * 1000)
+    const events = H.errorEventsIn(['{"level":"error","event":"room.store_failed"}', '{"level":"info","event":"room.loaded"}', 'Started tc-collab.service.', '{"level":"warn","event":"update.refused"}'])
+    const body = JSON.parse(H.alertBody('collab DOWN', 'vm1'))
+    ok('ops.health.2 error events alert with their count and kinds at most once per 30 minutes; only JSON `error` lines are events; an alert body carries both Slack\'s `text` and Discord\'s `content`',
+      said[0].length === 1 && /3 error events: db.pool_error, room.store_failed/.test(said[0][0]) && said[1].length === 0 && said[2].length === 1 &&
+      JSON.stringify(events) === JSON.stringify(['room.store_failed']) && body.text === body.content && /tc-collab vm1/.test(body.text), JSON.stringify({ said, events, body }))
+  }
+
+  // ── M347: the deploy files agree with the code they deploy ──────────────
+  {
+    const deploy = join(root, 'server/collab/deploy')
+    const read = (f) => readFileSync(join(deploy, f), 'utf8')
+    // Every TC_* variable the three entry points read is in the env example.
+    const used = new Set()
+    for (const f of ['main.ts', 'backup-main.ts', 'health-main.ts']) for (const m of readFileSync(join(root, 'server/collab', f), 'utf8').matchAll(/process\.env\['(TC_[A-Z_]+)'\]/g)) used.add(m[1])
+    used.delete('TC_HEALTH_STATE') // set by the health unit itself (Environment=), not the operator
+    const example = read('collab.env.example')
+    const missing = [...used].filter((v) => !new RegExp(`^${v}=`, 'm').test(example))
+    const units = readdirSync(deploy).filter((f) => /\.(service|timer)$/.test(f))
+    const setup = read('setup.sh')
+    const notInstalled = units.filter((u) => !setup.includes(u))
+    const caddy = readFileSync(join(root, 'server/relay/deploy/Caddyfile'), 'utf8')
+    const server = read('tc-collab.service'), health = read('tc-collab-health.service')
+    ok('ops.deploy.1 the deploy agrees with the code: every TC_* variable the collab entry points read is in collab.env.example, setup.sh installs every unit and timer in deploy/, the VM\'s one Caddyfile routes /collab to the server\'s loopback port, the server restarts ALWAYS as its own user, and the health step reads the journal by group, not as root',
+      missing.length === 0 && used.size >= 6 && units.length === 5 && notInstalled.length === 0 &&
+      /handle_path \/collab\* \{\s*reverse_proxy 127\.0\.0\.1:1234/.test(caddy) && /^TC_COLLAB_ADDRESS=127\.0\.0\.1$/m.test(example) &&
+      /^Restart=always$/m.test(server) && /^User=tc-collab$/m.test(server) && /^NoNewPrivileges=true$/m.test(server) &&
+      /^User=tc-collab$/m.test(health) && /^SupplementaryGroups=systemd-journal$/m.test(health) && /install -d -m 0700 -o tc-collab -g tc-collab \/var\/backups\/tc-collab/.test(setup),
+      JSON.stringify({ used: [...used], missing, units, notInstalled }))
+    // The bundles the deploy copies: built exactly as deploy.sh builds them,
+    // then LOADED. `npm run collab` threw at load from M333 to M346 and no
+    // check could see it, because nothing here ever bundled the server.
+    const { spawnSync } = require('node:child_process')
+    const built = spawnSync(process.execPath, [join(root, 'scripts/collab-server.cjs'), '--build-only'], { encoding: 'utf8', timeout: 60000 })
+    const env = { ...process.env }; delete env.TC_SUPABASE_URL; delete env.TC_SUPABASE_ANON_KEY; delete env.TC_COLLAB_DATABASE_URL
+    const run = (f, args = []) => spawnSync(process.execPath, [join(root, 'out/collab', f), ...args], { encoding: 'utf8', env, timeout: 20000 })
+    const m = run('main.cjs'), b = run('backup.cjs', ['dump', '/nonexistent'])
+    const lastJson = (out) => { try { return JSON.parse(out.trim().split('\n').pop()) } catch { return null } }
+    const mLine = lastJson(m.stdout), bLine = lastJson(b.stdout)
+    ok('ops.bundle.1 the three collab bundles build as the deploy builds them and LOAD: the server refuses a missing config by name (exit 2), the backup refuses a missing database by name (exit 1) — each as a JSON log line',
+      built.status === 0 && m.status === 2 && mLine?.event === 'config.failed' && b.status === 1 && bLine?.event === 'backup.failed' && /TC_COLLAB_DATABASE_URL/.test(bLine?.error ?? ''),
+      JSON.stringify({ built: built.status, builtErr: (built.stderr || '').slice(0, 200), m: [m.status, (m.stderr || '').slice(0, 300)], mLine, b: [b.status, (b.stderr || '').slice(0, 300)], bLine }))
   }
 
   const failures = results.filter((r) => !r.pass)

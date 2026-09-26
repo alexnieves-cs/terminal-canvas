@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Terminal Canvas collab backup
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+RandomizedDelaySec=10m
+# A VM that was off at 03:17 backs up when it comes back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

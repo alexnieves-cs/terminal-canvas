@@ -1,0 +1,34 @@
+# /etc/systemd/system/tc-collab.service — installed by deploy/setup.sh (M347).
+# The collab server: Hocuspocus rooms, kept in Postgres (TC_COLLAB_DATABASE_URL).
+# Its log is JSON lines on stdout (log.ts), which journald keeps and the health
+# timer reads: `journalctl -u tc-collab -o cat | jq`.
+[Unit]
+Description=Terminal Canvas collab server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tc-collab
+Group=tc-collab
+WorkingDirectory=/opt/tc-collab
+EnvironmentFile=/etc/tc-collab/collab.env
+ExecStart=/usr/bin/node /opt/tc-collab/main.cjs
+# ALWAYS, not on-failure: a clean exit is still an outage for a server people
+# are editing through. SIGTERM stores every loaded room before it lets go.
+Restart=always
+RestartSec=2
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -98,6 +98,8 @@
     "verify:canvas-sync": "node scripts/verify-canvas-sync.cjs",
     "relay": "node scripts/relay-server.cjs",
     "relay:deploy": "bash server/relay/deploy/deploy.sh",
+    "collab:deploy": "bash server/collab/deploy/deploy.sh",
+    "collab:backup": "node scripts/collab-server.cjs --build-only && node out/collab/backup.cjs",
     "verify:relay": "node scripts/verify-relay.cjs"
   },
   "dependencies": {
@@ -122,12 +124,14 @@
   },
   "devDependencies": {
     "@doyensec/electronegativity": "^1.10.3",
+    "@electric-sql/pglite": "^0.5.8",
     "@electron/rebuild": "^4.0.1",
     "@hocuspocus/server": "^4.7.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@radix-ui/react-popover": "^1.1.23",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.186.0",
@@ -141,6 +145,7 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "esbuild": "0.21.5",
+    "pg": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.10.1",

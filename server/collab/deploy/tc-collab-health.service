@@ -1,0 +1,20 @@
+# One step of the uptime watcher (health.ts): probe /healthz, read tc-collab's
+# error events since the last step, alert TC_ALERT_WEBHOOK on what changed.
+# Runs as tc-collab, in the systemd-journal group only to READ the server's
+# log; it writes nothing but its state file.
+[Unit]
+Description=Terminal Canvas collab health step
+
+[Service]
+Type=oneshot
+User=tc-collab
+Group=tc-collab
+SupplementaryGroups=systemd-journal
+EnvironmentFile=/etc/tc-collab/collab.env
+Environment=TC_HEALTH_STATE=/var/lib/tc-collab/health.json
+ExecStart=/usr/bin/node /opt/tc-collab/health.cjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tc-collab

@@ -1,8 +1,21 @@
-# /etc/caddy/Caddyfile — TLS for the relay. Caddy gets a Let's Encrypt
-# certificate for the name on its own; the relay itself listens on loopback
-# only. Replace relay.example.com with the DNS name pointing at the VM.
+# /etc/caddy/Caddyfile — TLS for the team's VM. Caddy gets a Let's Encrypt
+# certificate for the name on its own and renews it on its own; the relay and
+# the collab server listen on loopback only. Replace relay.example.com with the
+# DNS name pointing at the VM (setup.sh does it). ONE file for the VM: the
+# relay's deploy and the collab server's (M347) both install this one.
 relay.example.com {
+	# M335. The relay: its WebSocket and its health.
 	@relay path /relay /healthz
-	reverse_proxy @relay 127.0.0.1:7681
-	respond 404
+	handle @relay {
+		reverse_proxy 127.0.0.1:7681
+	}
+	# M347. The collab server (Hocuspocus): wss://<name>/collab, and
+	# /collab/healthz for an uptime check from outside. The prefix is
+	# stripped, so the server sees / and /healthz.
+	handle_path /collab* {
+		reverse_proxy 127.0.0.1:1234
+	}
+	handle {
+		respond 404
+	}
 }
