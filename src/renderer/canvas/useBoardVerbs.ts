@@ -83,6 +83,12 @@ export interface BoardVerbs {
    * shows up in the task's history.
    */
   taskOfPanel?: (panelId: string) => string | undefined
+  /**
+   * M361. Append a comment to the task `panelId` belongs to — its card, its
+   * review, or a panel exactly one task owns. `proposedBy` makes it an
+   * agent's proposal (M360). Installed by Canvas, which owns the items.
+   */
+  addReviewComment?: (panelId: string, draft: { path: string; side: 'new' | 'old'; line: number; body: string; proposedBy?: { label: string; panelId?: string } }) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
 }
 
 export interface BoardVerbsDeps {

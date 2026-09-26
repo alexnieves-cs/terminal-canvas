@@ -233,6 +233,7 @@ import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusalSync, teammateRefusal, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
 import { ACROSS_BASELINE, type ReviewSubject } from '@shared/review'
 import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
 import { useBoardVerbs, type BoardVerbs } from './useBoardVerbs'
@@ -3742,6 +3743,22 @@ export function Canvas({
     if (panel === undefined) return undefined
     const owners = isWorkPanel(panel) ? [panel.work.itemId] : taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === panelId)).map((m) => m.itemId)
     return owners.length === 1 ? owners[0] : undefined
+  }
+  // M361. The review-comment verb's write. The task is the review's own
+  // subject, else the ONE task the panel belongs to (taskOfPanel's rule).
+  // A full list refuses rather than evicting: `parseReviewComments` keeps the
+  // last REVIEW_COMMENTS_MAX, so an agent appending past it would silently
+  // push the person's oldest comments out.
+  boardVerbsRef.current.addReviewComment = (panelId, draft) => {
+    const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
+    const itemId = isReviewPanel(panel) && panel.subject.workItemId !== undefined ? panel.subject.workItemId : boardVerbsRef.current.taskOfPanel?.(panelId)
+    const item = itemId === undefined ? undefined : workItemsRef.current.find((w) => w.id === itemId)
+    if (item === undefined) return { kind: 'refused', reason: `${panelId} is not part of one task — name its card, its review, or a panel only that task holds` }
+    if ((item.comments ?? []).length >= REVIEW_COMMENTS_MAX) return { kind: 'refused', reason: `${item.title} already holds ${REVIEW_COMMENTS_MAX} comments — resolve or remove some first` }
+    const comment = newReviewComment({ ...draft, quote: '', at: Date.now() })
+    setWorkItems((current) => current.map((w) => (w.id === item.id ? carryWorkItem({ ...w, comments: [...(w.comments ?? []), comment], updatedAt: Date.now() }) : w)))
+    return { kind: 'ran', note: `${draft.proposedBy === undefined ? 'commented' : 'proposed a comment'} on ${commentPlace(comment)} in ${item.title}` }
   }
   // A focus view with no task to show (deleted, or a workspace switch took it
   // away) is an empty page — it returns to the canvas instead.

@@ -222,6 +222,11 @@ export const VERBS: readonly VerbDef[] = [
   // `tidy`, which arrange is a scoped copy of, is not either.
   { id: 'show-related', label: 'Task: show related', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showRelated'], target: 'panel', hint: 'ring a task\'s panels and dim the rest — nothing moves; the same verb on the same task turns it off' },
   { id: 'arrange-task', label: 'Task: arrange this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['arrangeTask'], target: 'panel', hint: 'compact a task\'s panels in reading order, clear of everything else — one undo; locked panels stay' },
+  // M361. CROSS-AGENT REVIEW. A comment pinned to a diff line, one verb for
+  // every door: a person's writes the person's comment; an agent's or a
+  // workflow's writes a PROPOSAL (M360) the person keeps or discards, so a
+  // second reviewer can object on the line without speaking for the person.
+  { id: 'review-comment', label: 'Review: comment on a line', args: [{ name: 'panel', kind: 'panel' }, { name: 'place', kind: 'value' }, { name: 'comment', kind: 'text', rest: true }], destructive: false, actions: ['reviewComment'], target: 'panel', hint: 'path:line (path:line:old for a removed line), then the comment — from an agent or a workflow it is a proposal the person keeps or discards' },
   { id: 'review-task', label: 'Task: review the lane', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['reviewTask'], target: 'panel', hint: 'open the review for a work card\'s lane, beside the task and its conversation' },
   { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
   { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
@@ -453,6 +458,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'share-workspace': { canvas: 'the account menu\'s Share this workspace…', palette: 'share.workspace', agent: 'tc plan share-workspace', workflow: 'an action node whose line is: share-workspace' },
   'open-share': { canvas: 'the account menu\'s Open a shared workspace…', palette: 'share.open', agent: 'tc plan open-share', workflow: 'an action node whose line is: open-share' },
   'share-role': { canvas: 'a member\'s role picker in the share dialog', palette: 'share.role', agent: 'tc plan share-role octocat viewer', workflow: 'an action node whose line is: share-role octocat viewer' },
+  'review-comment': { canvas: 'the + beside each numbered line of a review\'s diff, then Save', palette: 'review.comment', agent: 'tc plan review-comment wk1 src/server.ts:12 the 429 path has no test', workflow: 'an action node whose line is: review-comment wk1 src/server.ts:12 check the retry header' },
   'cap-agent': { canvas: 'the Caps fields in a chat\'s Cost section, on the Inspector\'s Work tab', palette: 'agent.cap', agent: 'tc plan cap-agent ch1 5usd', workflow: 'an action node whose line is: cap-agent ch1 200k' },
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: 'an action node whose line is: check-readiness' },
   'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: 'an action node whose line is: new-chat' },

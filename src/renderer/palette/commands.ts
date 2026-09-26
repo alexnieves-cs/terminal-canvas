@@ -431,6 +431,12 @@ export interface PaletteActions {
    * agent's plan, a workflow node) may only lower one — see planCapChange.
    */
   capAgent(panelId: string, value: string, origin?: 'person' | 'door'): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /**
+   * M361. A comment pinned to a line of the panel's task's diff. Through a
+   * door (`origin: 'door'`, an agent's plan or a workflow node) it is a
+   * PROPOSAL attributed to the caller, which the person keeps or discards.
+   */
+  reviewComment(panelId: string, place: string, comment: string, origin?: 'person' | 'door', caller?: import('@shared/plan').AgentPlanCaller): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M251. A Markdown file panel's deck as .pptx, through main's save dialog; the note is the export sentence. */
   exportDeck(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2132,6 +2138,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M352. The verb line, like note.tint: the value is typed, and a person's line may raise a cap.
   const chatPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'chat')?.id
   out.push(withReason({ id: 'agent.cap', title: 'Cap this agent…', subtitle: 'its own spend and context caps — type cap-agent <panel> 5usd,200k (none, or default for the Settings caps)', group: 'canvas', searchText: 'agent cap spend budget cost context tokens limit hold stop dollars', run: () => actions.beginRunVerb() }, chatPanelId === undefined ? 'select an agent conversation first' : undefined))
+  // M361. Opens the verb line, like cap-agent: the place and the comment are typed.
+  out.push(withReason({ id: 'review.comment', title: 'Comment on a review line…', subtitle: 'a comment pinned to a line of this task\'s diff — type review-comment <panel> path:line <comment>; from an agent it is a proposal', group: 'canvas', searchText: 'review comment line diff note objection reviewer proposal', run: () => actions.beginRunVerb() }, ctx.selectedIds.length === 0 ? 'select a task\'s card, its review or its conversation first' : undefined))
   out.push({ id: 'feedback.open', title: 'Prepare feedback…', subtitle: 'a scrubbed draft in your browser — you read it and send it, this app does not', group: 'canvas', searchText: 'feedback issue bug report problem help github', run: () => { void actions.prepareFeedback() } })
   // M189. The portable file's two rows. Export writes what is on this canvas
   // (pictures only when the person asks, through the verb line); Import makes

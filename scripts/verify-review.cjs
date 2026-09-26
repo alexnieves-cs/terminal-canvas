@@ -2599,6 +2599,23 @@ if (GIT) {
       parsed.map((c) => c.id).join() === 'p1,m1' && parsed[0].proposedBy.label === 'review seat' && parsed[0].proposedBy.panelId === 'ch9' &&
       follow.includes('rename this') && !follow.includes('missing a test for 429'),
     JSON.stringify({ withProp, kept, dropped: dropped.map((c) => c.id), parsed: parsed.map((c) => [c.id, c.proposedBy]), follow }))
+
+  // M361 — review-comment.door.1. The verb's place grammar and its ONE
+  //     builder: `path:line` is a new-file line, `path:line:old` a removed
+  //     one, the LAST `:<n>` is the line (a path may hold colons), and
+  //     anything else writes nothing. A door's comment carries who proposed
+  //     it and survives the parse as a proposal; a person's carries none.
+  const places = ['src/a.ts:12', 'src/a.ts:3:old', 'C:/w/x.ts:7', 'src/a.ts', 'src/a.ts:0', ':4', 'a.ts:x'].map((x) => R.parseCommentPlace(x))
+  const doorC = R.newReviewComment({ path: 'src/a.ts', side: 'new', line: 12, quote: '', body: '  no test for 429  ', at: 9, proposedBy: { label: 'r'.repeat(200), panelId: 'ch9' } })
+  const personC = R.newReviewComment({ path: 'src/a.ts', side: 'old', line: 3, quote: 'x', body: 'y'.repeat(5000), at: 9 })
+  const back = R.parseReviewComments([doorC, personC])
+  ok('review-comment.door.1 the place grammar reads path:line and path:line:old (the last :n is the line) and refuses the rest; the one builder trims and cuts the body, attributes a door\'s comment (label cut), and a door\'s comment parses back as a proposal while a person\'s carries no author',
+    JSON.stringify(places.slice(0, 3)) === JSON.stringify([{ path: 'src/a.ts', side: 'new', line: 12 }, { path: 'src/a.ts', side: 'old', line: 3 }, { path: 'C:/w/x.ts', side: 'new', line: 7 }]) &&
+      places.slice(3).every((x) => x === null) &&
+      doorC.body === 'no test for 429' && doorC.proposedBy.label.length === R.PROPOSED_BY_LABEL_MAX && doorC.proposedBy.panelId === 'ch9' && /^c-/.test(doorC.id) &&
+      personC.proposedBy === undefined && personC.body.length === R.REVIEW_COMMENT_BODY_MAX &&
+      back.length === 2 && back[0].proposedBy !== undefined && back[1].proposedBy === undefined,
+    JSON.stringify({ places, doorC: { ...doorC, proposedBy: { ...doorC.proposedBy, label: doorC.proposedBy.label.length } }, back: back.map((c) => c.proposedBy !== undefined) }))
 }
 
 // M309 — brief.1–.3. THE RETURN BRIEFING SAYS ONLY WHAT A RECORD SAYS, FROM

@@ -13,6 +13,7 @@ import { boardActions, type BoardActions } from './palette-actions/board'
 import { objectsActions, type ObjectsActions } from './palette-actions/objects'
 import { sharingActions, type SharingActions } from './palette-actions/sharing'
 import { capsActions, type CapsActions } from './palette-actions/caps'
+import { reviewCommentActions, type ReviewCommentActions } from './palette-actions/review-comment'
 
 export type { PaletteActionsDeps }
 
@@ -120,7 +121,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       boardActions(ctx),
       objectsActions(ctx),
       sharingActions(ctx),
-      capsActions(ctx)
+      capsActions(ctx),
+      reviewCommentActions(ctx)
     )
     return self
   }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
@@ -143,6 +145,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
  *
  * `AssertNever` fails to compile the moment `Exclude` yields a real key.
  */
-type Covered = keyof ExecutorActions | keyof PresetsActions | keyof PromptsActions | keyof ArrangementActions | keyof WorkspacesActions | keyof SettingsActions | keyof BoardActions | keyof ObjectsActions | keyof SharingActions | keyof CapsActions
+type Covered = keyof ExecutorActions | keyof PresetsActions | keyof PromptsActions | keyof ArrangementActions | keyof WorkspacesActions | keyof SettingsActions | keyof BoardActions | keyof ObjectsActions | keyof SharingActions | keyof CapsActions | keyof ReviewCommentActions
 type AssertNever<T extends never> = T
 export type EveryVerbIsCovered = AssertNever<Exclude<keyof PaletteActions, Covered>>

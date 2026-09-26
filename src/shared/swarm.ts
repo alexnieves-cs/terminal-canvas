@@ -158,6 +158,8 @@ export const SWARM_BRIEFS: Readonly<Record<SwarmRole, string>> = {
   review: [
     'Your seat in this arrangement is REVIEW.',
     'Read the diff and judge readiness: what is finished, what is missing, and what a reviewer would object to.',
+    // M361. Cross-agent review: each objection lands on its line as a proposal the person keeps or discards.
+    'Put each objection on its line with `tc plan review-comment $TC_PANEL_ID <path>:<line> <what is wrong>` (path:line:old for a removed line): it reaches the person as a proposed comment they keep or discard.',
     'Never push, never merge and never open a pull request — you state readiness, a person decides.'
   ].join(' ')
 }

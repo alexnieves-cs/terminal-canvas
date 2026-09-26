@@ -109,6 +109,40 @@ export function parseReviewComments(raw: unknown): ReviewComment[] | undefined {
   return out.length === 0 ? undefined : out.slice(-REVIEW_COMMENTS_MAX)
 }
 
+/**
+ * M361. `review-comment`'s place: `path:line` for a new-file line (an added
+ * or context line), `path:line:old` for a removed one — the same address
+ * `commentPlace` writes. A path may hold colons; the LAST `:<number>` is the
+ * line. Null, with nothing written, for anything else.
+ */
+export function parseCommentPlace(raw: string): { path: string; side: 'new' | 'old'; line: number } | null {
+  const m = /^(.+):(\d+)(:old)?$/.exec(raw.trim())
+  if (m === null) return null
+  const line = Number(m[2])
+  const path = m[1].trim()
+  if (!Number.isSafeInteger(line) || line < 1 || path === '') return null
+  return { path, side: m[3] === undefined ? 'new' : 'old', line }
+}
+
+/**
+ * M361. THE ONE BUILDER for a new comment, whichever door wrote it: an id,
+ * the body cut to its maximum, and — through an agent's or a workflow's
+ * door — the attribution that makes it a proposal (M360). `quote` is the
+ * line's text when the door had the diff in hand, and '' when it did not.
+ */
+export function newReviewComment(input: {
+  path: string; side: 'new' | 'old'; line: number; quote: string; body: string; at: number
+  identity?: ReviewIdentity; proposedBy?: { label: string; panelId?: string }
+}): ReviewComment {
+  return carryReviewComment({
+    id: `c-${input.at.toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    path: input.path, side: input.side, line: input.line, quote: input.quote,
+    body: input.body.trim().slice(0, REVIEW_COMMENT_BODY_MAX), at: input.at,
+    ...(input.identity === undefined ? {} : { identity: input.identity }),
+    ...(input.proposedBy === undefined ? {} : { proposedBy: { label: input.proposedBy.label.slice(0, PROPOSED_BY_LABEL_MAX), ...(input.proposedBy.panelId === undefined ? {} : { panelId: input.proposedBy.panelId }) } })
+  })
+}
+
 /** The line a comment is written against, from a numbered diff line. Null for a line with no number (hunk, meta). */
 export function commentAnchorOf(line: { kind: string; text: string; oldNo?: number; newNo?: number }): { side: 'new' | 'old'; line: number; quote: string } | null {
   const quote = line.text.length > 0 && (line.kind === 'add' || line.kind === 'del' || line.kind === 'context') ? line.text.slice(1) : line.text
