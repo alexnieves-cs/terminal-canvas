@@ -1,5 +1,5 @@
 import type { AgentOptions } from './cost'
-import type { AgentBackend } from './agent-session'
+import type { AgentBackend, AgentCaps } from './agent-session'
 import type { SwarmMark } from './swarm'
 
 /**
@@ -53,6 +53,13 @@ export interface ChatSource {
    * code; see `swarm.ts`. Absent for every other chat.
    */
   swarm?: SwarmMark
+  /**
+   * M351. This agent's OWN spend and context caps, over the Settings
+   * defaults (`shared/agent-session.ts` AgentCaps). Main reads them from its
+   * copy of the layout, so they bind wherever the chat runs, and survive a
+   * relaunch as the panel does. Absent for every chat that never set one.
+   */
+  caps?: AgentCaps
 }
 
 /**
@@ -60,7 +67,7 @@ export interface ChatSource {
  * carry: absent stays absent, and only `true` is ever written. Spread beside
  * `carryBackend` at every site that rebuilds a ChatSource field by field.
  */
-export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string; swarm?: SwarmMark }): { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string; swarm?: SwarmMark } {
+export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string; swarm?: SwarmMark; caps?: AgentCaps }): { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string; swarm?: SwarmMark; caps?: AgentCaps } {
   return {
     ...(chat.dispatch === true ? { dispatch: true as const } : {}),
     ...(chat.sandbox === true ? { sandbox: true as const } : {}),
@@ -68,6 +75,8 @@ export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?
     ...(typeof chat.orchestrator === 'string' ? { orchestrator: chat.orchestrator } : {}),
     // A FRESH object, never the caller's: a shared reference lets a later
     // mutation rewrite the seat of a panel already on the canvas.
-    ...(chat.swarm === undefined ? {} : { swarm: { preset: chat.swarm.preset, role: chat.swarm.role } })
+    ...(chat.swarm === undefined ? {} : { swarm: { preset: chat.swarm.preset, role: chat.swarm.role } }),
+    // M351. A fresh object too, for the same reason.
+    ...(chat.caps === undefined ? {} : { caps: { ...chat.caps } })
   }
 }

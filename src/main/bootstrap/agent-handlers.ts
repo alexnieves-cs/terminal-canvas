@@ -175,6 +175,7 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     interrupt: (id) => state.agents?.interrupt(id) ?? false,
     cancelQueued: (id) => state.agents?.cancelQueued(id) ?? 0,
     terminate: (id) => state.agents?.terminate(id) ?? false,
+    capsChanged: () => { state.agents?.capsChanged() },
     dispose: ({ id, drop }) => {
       state.agents?.dispose(id)
       // M120. The sandbox folder goes with the chat — on dispose, never on exit.

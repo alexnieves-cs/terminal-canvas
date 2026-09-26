@@ -142,6 +142,8 @@ export interface NodeMeter {
   spentUsd?: number
   context?: number
   held?: CapHold
+  /** M351. The caps main is enforcing on this node right now, and whose they are. Absent when neither is set anywhere. */
+  caps?: NodeCapsView
 }
 
 /** M350. The caps main enforces on every node. 0 is no cap, for both (every canvas that never set one). */
@@ -149,6 +151,44 @@ export interface NodeCaps {
   usd: number
   /** Tokens, not thousands: the setting is in thousands and converted where it is read. */
   context: number
+}
+
+/**
+ * M351. One agent's OWN caps, on its chat panel's record (`ChatSource.caps`).
+ * Each figure is optional and independent: absent means the Settings value
+ * applies, and 0 means no cap for this agent even when Settings has one. The
+ * context cap is in thousands, like its setting.
+ */
+export interface AgentCaps {
+  usd?: number
+  contextK?: number
+}
+
+/** M351. The caps in force, and whether each is the agent's own (else Settings'). */
+export interface NodeCapsView extends NodeCaps {
+  ownUsd: boolean
+  ownContext: boolean
+}
+
+/** M351. An agent's own caps over the Settings defaults: its own figure wherever it has one. */
+export function effectiveCaps(own: AgentCaps | undefined, defaults: NodeCaps): NodeCapsView {
+  return {
+    usd: own?.usd ?? defaults.usd,
+    context: own?.contextK !== undefined ? own.contextK * 1000 : defaults.context,
+    ownUsd: own?.usd !== undefined,
+    ownContext: own?.contextK !== undefined
+  }
+}
+
+/** M351. A cap's figure is a finite, non-negative number, bounded like its setting. */
+export function parseAgentCaps(raw: unknown): AgentCaps | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  const figure = (v: unknown, max: number): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined)
+  const usd = figure(r['usd'], 1000)
+  const contextK = figure(r['contextK'], 2000)
+  if (usd === undefined && contextK === undefined) return undefined
+  return { ...(usd === undefined ? {} : { usd }), ...(contextK === undefined ? {} : { contextK }) }
 }
 
 /** M350. The tokens a message's usage says are in the conversation: every input class plus what it wrote. */

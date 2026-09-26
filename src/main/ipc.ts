@@ -208,6 +208,8 @@ export interface AgentHandlers {
   /** M319. Optional so every harness that builds these handlers by hand still does; absent answers 0 / false. */
   cancelQueued?(id: string): number
   terminate?(id: string): boolean
+  /** M351. A cap may have changed (a chat's record saved, a setting set): main re-reads every agent's caps. Optional, like terminate. */
+  capsChanged?(): void
   /** M322. Optional for the same reason; absent answers false. */
   queueEdit?(req: QueueEditRequest): boolean
   sendCorrection?(id: string, text: string, attachments: ChatAttachment[]): CorrectionAnswer
@@ -1066,6 +1068,9 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.LAYOUT_SAVE, (_event, state: CanvasState, meta?: unknown) => {
     layoutStore.save(state)
+    // M351. An agent's own caps live on its chat's record, so a save is where
+    // one can change. After the store, which is what the caps are read from.
+    agents.capsChanged?.()
     // After the store, never before: the shared canvas diffs the STORE's copy
     // (restore settings applied), not the renderer's raw state.
     const ack = (meta as { sharedAck?: unknown } | undefined)?.sharedAck
@@ -1178,6 +1183,8 @@ export function registerIpcHandlers(
   )
   ipcMain.handle(IPC.SETTINGS_SET, (_event, id: string, value: SettingValue) => {
     layoutStore.setPreference(id, value)
+    // M351. The Settings caps are every agent's default: re-read them now, not at the next send.
+    if (id === 'agents.nodeCapUsd' || id === 'agents.nodeCapContextK') agents.capsChanged?.()
     // The Restore submenu renders checkbox state from the same schema, so a
     // toggle made in the palette has to redraw it or the two surfaces disagree
     // until the next unrelated rebuild.

@@ -4251,6 +4251,28 @@ try {
     JSON.stringify({ threw, stored, carried, bare }))
 }
 
+// M351 — chat.caps.1. An agent's OWN caps ride its chat's record: figures
+// round-trip (0 kept — it means "no cap for this agent", not "unset"), a
+// malformed or out-of-range record warns and is dropped with the chat kept (the
+// Settings caps apply), and carryChatMarks carries a FRESH copy.
+{
+  let stored, warnings, carried, source, threw = null
+  try {
+    const panel = (id, extra) => ({ id, kind: 'chat', x: 0, y: 0, w: 560, h: 360, z: 1, chat: { cwd: '/w', sessionId: 's-' + id, ...extra } })
+    const out = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [panel('c1', { caps: { usd: 5, contextK: 0 } }), panel('c2', {}), panel('c3', { caps: { usd: -1 } }), panel('c4', { caps: 'lots' }), panel('c5', { caps: { contextK: 150, extra: 1 } })], camera: { x: 0, y: 0, scale: 1 } }] }))
+    stored = out.snapshot.workspaces[0].panels.map((p) => p.chat)
+    warnings = out.warnings
+    source = { caps: { usd: 2 } }
+    carried = L.carryChatMarks(source)
+  } catch (e) { threw = String(e) }
+  ok('chat.caps.1 a chat record\'s own caps round-trip with a 0 kept, a negative or non-object caps warns and is dropped with the chat kept, unknown keys are not carried, and carryChatMarks carries a fresh copy',
+    threw === null && stored && stored.length === 5 && stored[0].caps && stored[0].caps.usd === 5 && stored[0].caps.contextK === 0 &&
+      !('caps' in stored[1]) && !('caps' in stored[2]) && !('caps' in stored[3]) && JSON.stringify(stored[4].caps) === '{"contextK":150}' &&
+      warnings.some((w) => /c3.*caps/.test(w)) && warnings.some((w) => /c4.*caps/.test(w)) &&
+      carried && carried.caps && carried.caps.usd === 2 && carried.caps !== source.caps,
+    JSON.stringify({ threw, stored, warnings, carried }))
+}
+
 // M138 — chat.orchestrator.1. An orchestrator block's chat keeps its PROMPT
 // across a relaunch on its record (`orchestrator: string`), the way a
 // supervisor keeps its flag: the CLI keeps no record of --append-system-prompt,

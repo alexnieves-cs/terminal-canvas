@@ -10,7 +10,7 @@ import { expandTilde } from '../pty-manager'
 import { requestFromRendererWith } from '../ipc'
 import { resolveTranscript } from '../transcript-reader'
 import { windowUtilization } from '../../shared/rate-limit'
-import type { AgentSessionEvent } from '../../shared/agent-session'
+import { effectiveCaps, type AgentCaps, type AgentSessionEvent } from '../../shared/agent-session'
 import { IPC_EVENTS, type PoolMintReply, type PoolMintRequest } from '../../shared/ipc-contract'
 import type { PanelTokens, MainState } from './context'
 import type { Stores } from './stores'
@@ -28,6 +28,13 @@ import type { Stores } from './stores'
  */
 export function startAgentRuntime(state: MainState, stores: Stores, tokens: PanelTokens): void {
   const { layoutStore, agentTranscripts, attention, controlSocketPath, launcherDir } = stores
+  // M351. A chat panel's own caps by its id (a session's id IS its panel's), in any workspace.
+  const chatCapsOf = (id: string): AgentCaps | undefined => {
+    for (const w of layoutStore.current().workspaces) {
+      for (const p of w.panels) if (p.id === id && p.kind === 'chat') return p.chat.caps
+    }
+    return undefined
+  }
   const env = state.loginEnv
 
   // The bare name is kept when the probe found nothing: the spawn then fails
@@ -58,7 +65,10 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     }),
     // M350. Each node's own caps, read LIVE the same way. The context cap is
     // set in thousands, and enforced in tokens.
-    caps: () => ({
+    // M351. An agent's OWN caps (its chat's record, in main's copy of the
+    // layout) stand over those defaults, figure by figure. Main's copy, not
+    // the renderer's word: a cap is enforced from what was saved.
+    caps: (id) => effectiveCaps(chatCapsOf(id), {
       usd: Number(layoutStore.getSetting('agents.nodeCapUsd')) || 0,
       context: (Number(layoutStore.getSetting('agents.nodeCapContextK')) || 0) * 1000
     }),

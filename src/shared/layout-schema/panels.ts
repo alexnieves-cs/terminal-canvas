@@ -26,6 +26,7 @@ import {
   type PreviewBinding
 } from '../preview'
 import { isAssetId } from '../assets'
+import { parseAgentCaps } from '../agent-session'
 import { parseArtifactReference } from '../artifact-reference'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteTint } from '../notes'
 import type { ReviewSubject } from '../review'
@@ -313,6 +314,14 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   if (agentOptions !== undefined) chat.agentOptions = agentOptions
   // M100. The identity rides the record; absent stays absent.
   if (isStr(raw.teammateId) && raw.teammateId.trim() !== '') chat.teammateId = raw.teammateId
+  // M351. The agent's own caps. A malformed record warns and is dropped, so
+  // the Settings caps apply: a guessed cap would bind an agent to a figure
+  // nobody set.
+  if (raw.caps !== undefined) {
+    const caps = parseAgentCaps(raw.caps)
+    if (caps !== undefined) chat.caps = caps
+    else warnings.push(`chat panel ${id}: caps ${JSON.stringify(raw.caps)} are not { usd?, contextK? } figures - the Settings caps apply`)
+  }
   return chat
 }
 

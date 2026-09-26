@@ -33,6 +33,7 @@ import type {
   SendResult,
   CapHold,
   NodeCaps,
+  NodeCapsView,
   NodeMeter
 } from '@shared/agent-session'
 /**
@@ -106,8 +107,10 @@ export interface AgentSessionDeps {
    * M350. Each node's own caps, read LIVE like `limits` (a cap raised in
    * Settings releases a held node at its next send). 0 is no cap; absent is
    * no caps at all, which is every caller that does not pass this.
+   * M351: asked per node, so an agent's own caps (its chat's record) can
+   * stand over the Settings defaults; the `own*` flags say whose each is.
    */
-  caps?: () => NodeCaps
+  caps?: (id: string) => NodeCaps & Partial<Pick<NodeCapsView, 'ownUsd' | 'ownContext'>>
   runner: AgentRunner
   /** The resolved path of the `claude` binary. */
   command: string
@@ -1308,16 +1311,22 @@ export class AgentSessionManager {
 
   private meterOf(session: Session): NodeMeter {
     const spentUsd = this.nodeUsd(session)
+    const caps = this.capsOf(session)
+    const anyCap = caps.usd > 0 || caps.context > 0 || caps.ownUsd || caps.ownContext
     return {
       ...(spentUsd === undefined ? {} : { spentUsd }),
       ...(session.context === undefined ? {} : { context: session.context }),
-      ...(session.held === undefined ? {} : { held: { ...session.held } })
+      ...(session.held === undefined ? {} : { held: { ...session.held } }),
+      // M351. The caps in force ride the meter, so every surface reads the
+      // figure main enforces rather than re-deriving it from Settings and the
+      // record, which could disagree with main for a save's width.
+      ...(anyCap ? { caps } : {})
     }
   }
 
   private meterKeyOf(session: Session): string {
     const m = this.meterOf(session)
-    return m.spentUsd === undefined && m.context === undefined && m.held === undefined ? '' : JSON.stringify(m)
+    return m.spentUsd === undefined && m.context === undefined && m.held === undefined && m.caps === undefined ? '' : JSON.stringify(m)
   }
 
   /** M350. Says the meter when it CHANGED — a stream of blocks repeating one message's usage says it once. */
@@ -1328,8 +1337,27 @@ export class AgentSessionManager {
     this.emit({ id: session.id, type: 'meter', meter: this.meterOf(session) })
   }
 
-  private caps(): NodeCaps {
-    return this.deps.caps?.() ?? { usd: 0, context: 0 }
+  private capsOf(session: Session): NodeCapsView {
+    const c = this.deps.caps?.(session.id)
+    return { usd: c?.usd ?? 0, context: c?.context ?? 0, ownUsd: c?.ownUsd === true, ownContext: c?.ownContext === true }
+  }
+
+  /**
+   * M351. A cap changed somewhere main reads one (a chat's record saved, a
+   * Settings value set): every node's meter is said again with the caps now
+   * in force, a cap LOWERED under the figure holds its node, and a cap RAISED
+   * above it releases the node at once and serves what it held, first, in
+   * order. The M350 path did that only at the next send. The agent is never
+   * the one who calls this: it runs on a person's save.
+   */
+  capsChanged(): void {
+    for (const session of this.sessions.values()) {
+      // A crossing goes through enforceCap, which also stops a turn in flight;
+      // holdAtSend is the release half (and holds an idle node, as at a send).
+      if (capCrossing(this.meterOf(session), this.capsOf(session)) !== null) this.enforceCap(session)
+      else this.holdAtSend(session)
+      this.meterChanged(session)
+    }
   }
 
   /**
@@ -1341,7 +1369,7 @@ export class AgentSessionManager {
    * releases it.
    */
   private enforceCap(session: Session): void {
-    const hold = capCrossing(this.meterOf(session), this.caps())
+    const hold = capCrossing(this.meterOf(session), this.capsOf(session))
     if (hold === null || session.held !== undefined) return
     session.held = hold
     if (session.inFlight) {
@@ -1360,7 +1388,7 @@ export class AgentSessionManager {
    * order, so the new send queues behind them rather than jumping ahead.
    */
   private holdAtSend(session: Session): CapHold | null {
-    const hold = capCrossing(this.meterOf(session), this.caps())
+    const hold = capCrossing(this.meterOf(session), this.capsOf(session))
     if (hold !== null) {
       if (session.held === undefined) { session.held = hold; this.meterChanged(session) }
       return hold

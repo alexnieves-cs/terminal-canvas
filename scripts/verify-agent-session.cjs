@@ -1267,6 +1267,61 @@ const isResult = (l) => l.includes('"type":"result"')
         d.spawns[0].proc.stdin.filter((l) => l.includes('interrupt')).length === 0 &&
         lastAuto && lastAuto.state === 'stuck' && lastAuto.reason === 'cap' && uRefused === 'refused-cap' && d.spawns.length === 1,
       JSON.stringify({ started, meter: uSnap.meter, lastAuto, uRefused, spawns: d.spawns.length }))
+    // M351 — cap.own.1 / cap.changed.1. An agent's OWN caps over Settings,
+    //      and a change re-read at once. cap.own.1: effectiveCaps takes the
+    //      agent's figure wherever it has one (0 = no cap for this agent even
+    //      over a Settings cap), in thousands for context, and says whose.
+    //      cap.changed.1: capsChanged (main calls it on a layout save and a cap
+    //      setting) releases a held node AT ONCE and serves what it held; a cap
+    //      lowered under an idle node's figure holds it without an interrupt;
+    //      one lowered under a turn in flight interrupts it; and the meter
+    //      carries the caps in force with their owner.
+    {
+      const SS = M.sharedSession
+      const both = SS.effectiveCaps({ usd: 0, contextK: 150 }, { usd: 5, context: 80000 })
+      const none = SS.effectiveCaps(undefined, { usd: 5, context: 80000 })
+      const half = SS.effectiveCaps({ usd: 2 }, { usd: 5, context: 80000 })
+      ok('cap.own.1 an agent\'s own caps stand over Settings figure by figure (0 is no cap for this agent), context in thousands, and whose each is',
+        both.usd === 0 && both.context === 150000 && both.ownUsd && both.ownContext &&
+          none.usd === 5 && none.context === 80000 && !none.ownUsd && !none.ownContext &&
+          half.usd === 2 && half.ownUsd && half.context === 80000 && !half.ownContext &&
+          SS.parseAgentCaps({ usd: 3, contextK: 2001 }).contextK === undefined && SS.parseAgentCaps('x') === undefined,
+        JSON.stringify({ both, none, half }))
+
+      const own = new Map()
+      const capsOf = (id) => SS.effectiveCaps(own.get(id), { usd: 0, context: 50000 })
+      const e = makeManager({ caps: capsOf })
+      e.manager.create({ id: 'k1', cwd: '/r' })
+      e.manager.create({ id: 'k2', cwd: '/r' })
+      e.manager.send('k1', 'first')
+      e.manager.send('k1', 'waiting behind it')
+      const p1 = e.spawns[0].proc
+      p1.emitLines([assistant('k1m', usage)])
+      await tick(5)
+      p1.emitLines([JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, total_cost_usd: 0.3, usage: { input_tokens: 1, output_tokens: 1 } })])
+      await tick(5)
+      const heldBefore = e.manager.get('k1').meter.held
+      const writes = p1.stdin.length
+      own.set('k1', { contextK: 100 })
+      e.manager.capsChanged()
+      const servedNow = p1.stdin.slice(writes).some((l) => l.includes('waiting behind it'))
+      const k1Meter = e.manager.get('k1').meter
+      // Lower k1's spend cap under its figure while it works on the served message: that turn is interrupted.
+      const writes2 = p1.stdin.length
+      own.set('k1', { contextK: 100, usd: 0.2 })
+      e.manager.capsChanged()
+      const interruptedMidTurn = p1.stdin.slice(writes2).some((l) => l.includes('interrupt'))
+      // k2 is idle and unpriced; a context of its own is lowered under nothing measured — no hold.
+      own.set('k2', { contextK: 1 })
+      e.manager.capsChanged()
+      const k2 = e.manager.get('k2').meter
+      ok('cap.changed.1 capsChanged releases a held node at once and serves what it held; a cap lowered under a turn in flight interrupts it; an unmeasured node is never held; the meter says the caps in force and whose they are',
+        heldBefore && heldBefore.unit === 'context' && servedNow && k1Meter.held === undefined &&
+          k1Meter.caps && k1Meter.caps.context === 100000 && k1Meter.caps.ownContext === true && k1Meter.caps.ownUsd === false &&
+          interruptedMidTurn && e.manager.get('k1').meter.held && e.manager.get('k1').meter.held.unit === 'usd' &&
+          k2 && k2.held === undefined && k2.caps.context === 1000 && k2.caps.ownContext === true,
+        JSON.stringify({ heldBefore, servedNow, k1Meter, interruptedMidTurn, k1Now: e.manager.get('k1').meter, k2 }))
+    }
     const S2 = M.sharedSession
     const words = [S2.capSentence({ unit: 'usd', spent: 1.25, limit: 1 }), S2.capSentence({ unit: 'context', spent: 53500, limit: 50000 })]
     ok('cap.words.1 a hold is refused in its own figures and names the setting that releases it, and the bare word has a sentence too',
