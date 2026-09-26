@@ -53,7 +53,19 @@ export interface ReviewComment {
   sentAt?: number
   /** The person closed it. Resolved comments stay listed, struck through, until removed. */
   resolved?: boolean
+  /**
+   * M360. CROSS-AGENT REVIEW. Present when an AGENT wrote this comment (a
+   * review seat's `tc plan`, a workflow node): it is a PROPOSAL, not the
+   * person's comment. Comments are the person's (the header), so a proposal
+   * is outside every person-side reading: `openComments`, the follow-up and
+   * "every comment resolved". It does hold `verified` back while it is
+   * unread, so a second reviewer's objection is never passed silently. The
+   * person keeps it (it becomes theirs, `proposedBy` gone) or discards it.
+   */
+  proposedBy?: { label: string; panelId?: string }
 }
+
+export const PROPOSED_BY_LABEL_MAX = 80
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
@@ -65,7 +77,8 @@ export function carryReviewComment(c: ReviewComment): ReviewComment {
     id: c.id, path: c.path, side: c.side, line: c.line, quote: c.quote, body: c.body, at: c.at,
     ...(c.identity === undefined ? {} : { identity: carryReviewIdentity(c.identity) }),
     ...(c.sentAt === undefined ? {} : { sentAt: c.sentAt }),
-    ...(c.resolved === true ? { resolved: true } : {})
+    ...(c.resolved === true ? { resolved: true } : {}),
+    ...(c.proposedBy === undefined ? {} : { proposedBy: { label: c.proposedBy.label, ...(c.proposedBy.panelId === undefined ? {} : { panelId: c.proposedBy.panelId }) } })
   }
 }
 
@@ -77,12 +90,20 @@ export function parseReviewComments(raw: unknown): ReviewComment[] | undefined {
     if (!isRecord(r) || !isStr(r.id) || !isStr(r.path) || (r.side !== 'new' && r.side !== 'old')) continue
     if (!isNum(r.line) || r.line < 1 || typeof r.quote !== 'string' || !isStr(r.body) || !isNum(r.at)) continue
     const identity = parseReviewIdentity(r.identity)
+    // M360. A malformed attribution costs the comment: dropping only the
+    // field would turn an agent's proposal into the person's own comment.
+    let proposedBy: ReviewComment['proposedBy']
+    if (r.proposedBy !== undefined) {
+      if (!isRecord(r.proposedBy) || !isStr(r.proposedBy.label) || (r.proposedBy.panelId !== undefined && !isStr(r.proposedBy.panelId))) continue
+      proposedBy = { label: r.proposedBy.label.slice(0, PROPOSED_BY_LABEL_MAX), ...(isStr(r.proposedBy.panelId) ? { panelId: r.proposedBy.panelId } : {}) }
+    }
     out.push(carryReviewComment({
       id: r.id, path: r.path, side: r.side, line: Math.floor(r.line), quote: r.quote,
       body: r.body.slice(0, REVIEW_COMMENT_BODY_MAX), at: r.at,
       ...(identity === undefined ? {} : { identity }),
       ...(isNum(r.sentAt) ? { sentAt: r.sentAt } : {}),
-      ...(r.resolved === true ? { resolved: true } : {})
+      ...(r.resolved === true ? { resolved: true } : {}),
+      ...(proposedBy === undefined ? {} : { proposedBy })
     }))
   }
   return out.length === 0 ? undefined : out.slice(-REVIEW_COMMENTS_MAX)
@@ -101,9 +122,27 @@ export function commentPlace(c: Pick<ReviewComment, 'path' | 'side' | 'line'>): 
   return c.side === 'new' ? `${c.path}:${c.line}` : `${c.path}:${c.line} (removed line)`
 }
 
-/** Open = not resolved. Sent-and-open is still open: sending is not fixing. */
+/** Open = the person's and not resolved. Sent-and-open is still open: sending is not fixing. A proposal (M360) is not the person's yet. */
 export const openComments = (comments: readonly ReviewComment[] | undefined): ReviewComment[] =>
-  (comments ?? []).filter((c) => c.resolved !== true)
+  (comments ?? []).filter((c) => c.resolved !== true && c.proposedBy === undefined)
+
+/** M360. An agent's proposals the person has not kept or discarded yet. */
+export const proposedComments = (comments: readonly ReviewComment[] | undefined): ReviewComment[] =>
+  (comments ?? []).filter((c) => c.proposedBy !== undefined)
+
+/**
+ * M360. The person's answer to a proposal. Keep makes it theirs, as written
+ * (its line, its quote, its time), so it joins the follow-up like any
+ * comment; discard removes it. An unknown id changes nothing.
+ */
+export function answerProposal(comments: readonly ReviewComment[], id: string, keep: boolean): ReviewComment[] {
+  if (!keep) return comments.filter((c) => !(c.id === id && c.proposedBy !== undefined)).map(carryReviewComment)
+  return comments.map((c) => {
+    if (c.id !== id || c.proposedBy === undefined) return carryReviewComment(c)
+    const { proposedBy: _by, ...mine } = c
+    return carryReviewComment(mine)
+  })
+}
 
 /** A failing check, as the follow-up quotes it: what ran, how it ended, and its last lines when the record was read. */
 export interface FollowUpCheck {
@@ -128,7 +167,8 @@ export interface FollowUpInput {
  * Empty input composes nothing: a follow-up with no points is not a message.
  */
 export function composeFollowUp(input: FollowUpInput): string {
-  const points = input.comments.filter((c) => c.resolved !== true)
+  // M360. openComments: a proposal is never sent until the person keeps it.
+  const points = openComments(input.comments)
   if (points.length === 0 && input.failing.length === 0) return ''
   const out: string[] = [`Review of "${input.title}" — please address these, then tell me what you changed for each numbered point.`]
   if (input.brief !== undefined && input.brief.trim() !== '') out.push('', `The intended outcome: ${input.brief.trim()}`)
@@ -216,6 +256,7 @@ export function verificationOf(v: VerificationInput): Verification {
   const unsentOpen = open.filter((c) => c.sentAt === undefined)
   const sentOpen = open.filter((c) => c.sentAt !== undefined)
   const unmet = unmetCriteria(v.criteria, v.criteriaMet)
+  const proposed = proposedComments(v.comments)
 
   if (v.standing === 'current') holds.push('reviewed at this revision')
   else if (v.standing === 'stale') missing.push('the changes moved since your review')
@@ -230,7 +271,9 @@ export function verificationOf(v: VerificationInput): Verification {
   if (failed.length > 0) missing.push(`${failed.length} check${failed.length === 1 ? '' : 's'} failed`)
   else if (passedNow.length === 0) missing.push(stale.length > 0 ? 'checks ran on an earlier revision — run them again' : 'no check has run on this revision')
 
-  if (open.length === 0 && (v.comments ?? []).length > 0) holds.push('every comment resolved')
+  if (open.length === 0 && (v.comments ?? []).some((c) => c.proposedBy === undefined)) holds.push('every comment resolved')
+  // M360. A second reviewer's point is read before this can be verified.
+  if (proposed.length > 0) missing.push(`${proposed.length} proposed comment${proposed.length === 1 ? '' : 's'} from an agent not read`)
   if (unsentOpen.length > 0) missing.push(`${unsentOpen.length} comment${unsentOpen.length === 1 ? '' : 's'} not sent`)
   if (sentOpen.length > 0) missing.push(`${sentOpen.length} comment${sentOpen.length === 1 ? '' : 's'} sent, not resolved`)
 

@@ -2576,6 +2576,29 @@ if (GIT) {
       unmet.stage === 'agent-finished' && unmet.missing.includes('1 of 1 criteria not confirmed') &&
       moved.stage === 'stale' && !/verified/.test(moved.word.replace('not verified', '')),
     JSON.stringify({ all, idleNothing, staleOnly, withFail, openComment, sentWorking, unmet, moved }))
+
+  // M360 — review-comment.proposed.1. CROSS-AGENT REVIEW. An agent's comment
+  //     is a PROPOSAL: never the person's open comment, never in the
+  //     follow-up, never "every comment resolved" — but unread, it holds
+  //     `verified` back, so a second reviewer's point cannot pass unseen.
+  //     Kept, it is the person's as written; discarded, it is gone. A
+  //     malformed attribution costs the comment: dropping only the field
+  //     would make an agent's words the person's.
+  const prop = { id: 'p1', path: 'src/a.ts', side: 'new', line: 4, quote: 'x()', body: 'missing a test for 429', at: 2, proposedBy: { label: 'review seat', panelId: 'ch9' } }
+  const mine = { id: 'm1', path: 'src/a.ts', side: 'new', line: 9, quote: 'y()', body: 'rename this', at: 1 }
+  const withProp = v({ comments: [...resolved, prop] })
+  const kept = R.answerProposal([mine, prop], 'p1', true)
+  const dropped = R.answerProposal([mine, prop], 'p1', false)
+  const parsed = R.parseReviewComments([prop, { ...prop, id: 'bad', proposedBy: { label: '' } }, { ...prop, id: 'bad2', proposedBy: 'agent' }, mine])
+  const follow = R.composeFollowUp({ title: 'T', comments: [mine, prop], failing: [], unmet: [] })
+  ok('review-comment.proposed.1 an agent\'s proposal is not an open comment and never rides the follow-up, holds verified back while unread ("1 proposed comment from an agent not read"), is the person\'s as written once kept and gone once discarded, and a malformed attribution costs the comment',
+    R.openComments([mine, prop]).map((c) => c.id).join() === 'm1' && R.proposedComments([mine, prop]).map((c) => c.id).join() === 'p1' &&
+      withProp.stage === 'agent-finished' && withProp.missing.includes('1 proposed comment from an agent not read') && withProp.holds.includes('every comment resolved') &&
+      kept.length === 2 && kept[1].proposedBy === undefined && kept[1].body === 'missing a test for 429' && kept[1].at === 2 &&
+      R.openComments(kept).length === 2 && dropped.map((c) => c.id).join() === 'm1' &&
+      parsed.map((c) => c.id).join() === 'p1,m1' && parsed[0].proposedBy.label === 'review seat' && parsed[0].proposedBy.panelId === 'ch9' &&
+      follow.includes('rename this') && !follow.includes('missing a test for 429'),
+    JSON.stringify({ withProp, kept, dropped: dropped.map((c) => c.id), parsed: parsed.map((c) => [c.id, c.proposedBy]), follow }))
 }
 
 // M309 — brief.1–.3. THE RETURN BRIEFING SAYS ONLY WHAT A RECORD SAYS, FROM

@@ -431,7 +431,8 @@ export function recipeOutcome(item: PersistedWorkItem, checks?: { passed: string
     finished: item.merged !== undefined || item.state === 'done', merged: item.merged !== undefined,
     ...(item.reviewed === undefined ? {} : { reviewedFiles: item.reviewed.files }),
     criteria: { met, total },
-    openComments: (item.comments ?? []).filter((c) => c.resolved !== true).length,
+    // M360. The person's open comments; an agent's unread proposal is not one.
+    openComments: (item.comments ?? []).filter((c) => c.resolved !== true && c.proposedBy === undefined).length,
     ...(end === undefined ? {} : { durationMs: Math.max(0, end - (item.recipeUsed?.at ?? item.createdAt)) }),
     ...(checks === undefined ? {} : { passed: [...checks.passed], failed: [...checks.failed] })
   }

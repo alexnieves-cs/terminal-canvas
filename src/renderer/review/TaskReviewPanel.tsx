@@ -4,8 +4,7 @@ import { checkWords, type CheckRecord } from '@shared/check-evidence'
 import { checkOutputDisplay } from '@shared/check-output'
 import {
   commentPlace, composeFollowUp, openComments, unmetCriteria, verificationOf,
-  type FollowUpCheck, type ReviewComment
-} from '@shared/review-comments'
+  type FollowUpCheck, type ReviewComment, proposedComments, answerProposal } from '@shared/review-comments'
 import type { ReviewStanding } from '@shared/review-readiness'
 import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
 import type { PrEvidence } from '@shared/task-flow'
@@ -118,6 +117,8 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
     ...(p.criteriaMet === undefined ? {} : { criteriaMet: p.criteriaMet })
   })
   const open = openComments(p.comments)
+  const proposed = proposedComments(p.comments)
+  const resolvedCount = (p.comments ?? []).filter((c) => c.resolved === true && c.proposedBy === undefined).length
   const unmet = unmetCriteria(p.criteria, p.criteriaMet)
   const followUpChecks: FollowUpCheck[] = failing.map((c) => ({
     command: c.command,
@@ -282,12 +283,30 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       )}
 
       <div className="task-review__block">
-        <span className="task-review__label">Comments · {open.length} open{(p.comments ?? []).length > open.length ? `, ${(p.comments ?? []).length - open.length} resolved` : ''}</span>
+        <span className="task-review__label">Comments · {open.length} open{proposed.length > 0 ? `, ${proposed.length} proposed` : ''}{resolvedCount > 0 ? `, ${resolvedCount} resolved` : ''}</span>
         {(p.comments ?? []).length === 0 ? (
           <p className="pf__note" data-task-comments="none">none — press + beside a line in the diff above to comment on it</p>
         ) : (
           <ul className="task-review__comments">
-            {(p.comments ?? []).map((c) => (
+            {(p.comments ?? []).map((c) => c.proposedBy !== undefined ? (
+              // M360. An agent's proposal: whose it is, and the person's two answers. It is not a comment of theirs until kept.
+              <li key={c.id} className="task-review__comment task-review__comment--proposed" data-task-comment="proposed">
+                <span className="task-review__comment-place">{commentPlace(c)}</span>
+                {c.quote.trim() !== '' && <code className="task-review__comment-quote">{outward(c.quote, 'review comment').text}</code>}
+                <p className="task-review__comment-body">{c.body}</p>
+                <span className="task-review__comment-state" data-task-comment-by>proposed by {c.proposedBy.label}</span>
+                {!p.readOnly && p.onComments !== undefined && (
+                  <span className="task-review__comment-verbs">
+                    <button type="button" className="pf__verb pf__verb--word" data-task-comment-verb="keep"
+                      title="Keep it as your comment: it joins the follow-up like any comment of yours"
+                      onMouseDown={p.press(() => p.onComments?.(p.itemId, answerProposal(p.comments ?? [], c.id, true)))}>Keep</button>
+                    <button type="button" className="pf__verb pf__verb--word" data-task-comment-verb="discard"
+                      title="Discard the agent's proposal"
+                      onMouseDown={p.press(() => p.onComments?.(p.itemId, answerProposal(p.comments ?? [], c.id, false)))}>Discard</button>
+                  </span>
+                )}
+              </li>
+            ) : (
               <li key={c.id} className="task-review__comment" data-task-comment={c.resolved === true ? 'resolved' : c.sentAt !== undefined ? 'sent' : 'open'}>
                 <span className="task-review__comment-place">{commentPlace(c)}</span>
                 {c.quote.trim() !== '' && <code className="task-review__comment-quote">{outward(c.quote, 'review comment').text}</code>}

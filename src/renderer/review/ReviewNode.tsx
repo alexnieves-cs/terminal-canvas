@@ -1538,7 +1538,9 @@ function Hunks({ diff, activeHunkIndex, commenting, onOpenLine }: { diff: Review
               {line.text}
             </div>
             {pinned.map((c) => (
-              <div key={c.id} className="review-node__comment" data-review-comment={c.resolved === true ? 'resolved' : 'open'}>
+              <div key={c.id} className={`review-node__comment${c.proposedBy !== undefined ? ' review-node__comment--proposed' : ''}`} data-review-comment={c.proposedBy !== undefined ? 'proposed' : c.resolved === true ? 'resolved' : 'open'}>
+                {/* M360. An agent's proposal says whose it is; the task's Comments list keeps or discards it. */}
+                {c.proposedBy !== undefined && <span className="review-node__comment-by">{c.proposedBy.label} proposes</span>}
                 {c.body}
               </div>
             ))}

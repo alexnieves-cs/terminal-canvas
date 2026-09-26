@@ -9025,6 +9025,9 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .task-review__comment-quote { grid-column: 1 / -1; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .task-review__comment-body { grid-column: 1 / -1; margin: 0; font-size: var(--t-sm); color: var(--fg); white-space: pre-wrap; }
 .task-review__comment-verbs { grid-column: 1 / -1; display: flex; gap: var(--sp-2); }
+/* M360. An agent's proposal is not the person's comment: a dashed rule where
+   theirs is solid, and the proposer named where a person's state word goes. */
+.task-review__comment--proposed { border-left-style: dashed; border-left-color: var(--fg-4); background: transparent; }
 .task-review__followup-text { margin: 0; padding: var(--sp-2) var(--sp-3); max-height: 14rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg-2); font-family: var(--font-mono); font-size: var(--t-xs); white-space: pre-wrap; }
 .task-review__followup-verbs { display: flex; gap: var(--sp-2); }
 .task-review__send:not(:disabled) { color: var(--iris); }
@@ -9037,6 +9040,8 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .review-node__comment-add { position: absolute; left: 2px; top: 0; width: 14px; height: 100%; padding: 0; border: 0; background: transparent; color: var(--iris); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; }
 .review-node__line:hover .review-node__comment-add, .review-node__comment-add:focus-visible { opacity: 1; }
 .review-node__comment { margin: var(--sp-1) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); padding: var(--sp-1) var(--sp-2); border-left: 2px solid var(--iris); background: var(--s-1); font-size: var(--t-xs); color: var(--fg); white-space: pre-wrap; font-family: var(--font-ui); }
+.review-node__comment--proposed { border-left-style: dashed; border-left-color: var(--fg-4); background: transparent; }
+.review-node__comment-by { display: block; font-size: var(--t-xs); color: var(--fg-3); }
 .review-node__comment[data-review-comment='resolved'] { border-left-color: var(--line); color: var(--fg-3); text-decoration: line-through; }
 .review-node__comment-draft { margin: var(--sp-1) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); display: flex; flex-direction: column; gap: var(--sp-1); }
 .review-node__comment-input { width: 100%; box-sizing: border-box; resize: vertical; font: var(--t-sm) var(--font-ui); color: var(--fg); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); white-space: pre-wrap; }
