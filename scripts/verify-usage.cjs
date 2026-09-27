@@ -418,6 +418,21 @@ const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + 
     out !== null && out.count === 0 && out.text === text, JSON.stringify(out))
 }
 
+// M380 — cache.return.1. What caching returned, at the pinned list prices:
+//     a read is fresh input not paid (input − read rate), a write is paid
+//     above input (write − input rate). The net can be negative — a session
+//     that wrote more than it reused — and an unpriced model has no figure.
+{
+  const t = (cacheRead, cacheWrite) => ({ input: 0, output: 0, cacheRead, cacheWrite })
+  const reuse = U.cacheReturnOf(t(1_000_000, 100_000), 'claude-sonnet-5')
+  const waste = U.cacheReturnOf(t(0, 1_000_000), 'claude-sonnet-5')
+  const dated = U.cacheReturnOf(t(1_000_000, 0), 'claude-haiku-4-5-20251001')
+  ok('cache.return.1 caching\'s return at list price: a million reads on sonnet 5 saved $1.80 less $0.05 for a hundred thousand writes; a million writes and no reads is a $0.50 net cost; a dated id prices as its alias; an unknown model has no figure',
+    Math.abs(reuse.saved - 1.8) < 1e-9 && Math.abs(reuse.premium - 0.05) < 1e-9 && Math.abs(reuse.net - 1.75) < 1e-9 &&
+      Math.abs(waste.net + 0.5) < 1e-9 && Math.abs(dated.saved - 0.9) < 1e-9 && U.cacheReturnOf(t(1, 1), 'gpt-9') === undefined,
+    JSON.stringify({ reuse, waste, dated }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

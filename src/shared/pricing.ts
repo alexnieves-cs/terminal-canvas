@@ -84,3 +84,20 @@ export function costOf(totals: TokenTotals, model: string): number | undefined {
     PER_MILLION
   )
 }
+
+/**
+ * M380. What CACHING returned on these totals, in list-price dollars: every
+ * token read from cache would otherwise have been fresh input (`saved`), and
+ * every token written to it cost more than fresh input (`premium`). `net` is
+ * the return — negative for a session that wrote more than it reused, which
+ * is a real answer, not an error. Undefined for a model the table does not
+ * price, for costOf's reason: a plausible figure for an unknown model is the
+ * wrong answer this table refuses.
+ */
+export function cacheReturnOf(totals: TokenTotals, model: string): { saved: number; premium: number; net: number } | undefined {
+  const rates = ratesFor(model)
+  if (!rates) return undefined
+  const saved = (totals.cacheRead * (rates.input - rates.cacheRead)) / PER_MILLION
+  const premium = (totals.cacheWrite * (rates.cacheWrite - rates.input)) / PER_MILLION
+  return { saved, premium, net: saved - premium }
+}

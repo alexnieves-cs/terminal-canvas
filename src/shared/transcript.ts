@@ -103,6 +103,12 @@ export type TranscriptEvent =
       text?: string
       sessionId?: string
       error?: string
+      /**
+       * M380. The conversation model's context window, as the CLI reports it
+       * (`modelUsage[model].contextWindow`) — the vendor's own figure, never a
+       * table of ours. Absent when not reported.
+       */
+      contextWindow?: number
     }
   | {
       type: 'permission-request'
@@ -149,6 +155,25 @@ function finite(raw: unknown): number | undefined {
 }
 
 /** Four classes, never two — see shared/cost.ts. Absent usage is absent. */
+/**
+ * M380. The window of the model that HELD the conversation: of the models a
+ * result reports, the one with the most input it read (fresh, written to
+ * cache and read from it) — a subagent's smaller model is not the one whose
+ * window the conversation fills. Undefined when none reports a window.
+ */
+export function conversationWindow(raw: unknown): number | undefined {
+  if (!isRecord(raw)) return undefined
+  let best: { read: number; window: number } | undefined
+  for (const v of Object.values(raw)) {
+    if (!isRecord(v)) continue
+    const window = finite(v.contextWindow)
+    if (window === undefined || window <= 0) continue
+    const read = (finite(v.inputTokens) ?? 0) + (finite(v.cacheReadInputTokens) ?? 0) + (finite(v.cacheCreationInputTokens) ?? 0)
+    if (best === undefined || read > best.read) best = { read, window }
+  }
+  return best?.window
+}
+
 function parseUsage(raw: unknown): TokenTotals | undefined {
   if (!isRecord(raw)) return undefined
   return {
@@ -356,7 +381,8 @@ export function parseStreamLine(line: string): TranscriptEvent {
         numTurns: finite(parsed.num_turns),
         text: str(parsed.result),
         sessionId: str(parsed.session_id),
-        error: isError ? (errors && errors.length > 0 ? errors : subtype) : undefined
+        error: isError ? (errors && errors.length > 0 ? errors : subtype) : undefined,
+        ...(() => { const w = conversationWindow(parsed.modelUsage); return w === undefined ? {} : { contextWindow: w } })()
       }
     }
     case 'control_request': {

@@ -12,7 +12,7 @@ import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotal
 import { capSentence, type AgentCaps, type NodeMeter } from '@shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolEntry, ToolInventoryResult, ToolKind } from '@shared/toolbox'
-import { costOf } from '@shared/pricing'
+import { cacheReturnOf, costOf } from '@shared/pricing'
 import type { UsageSeries } from './usage-series'
 import type { RateLimitState } from '@shared/rate-limit'
 import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
@@ -443,6 +443,12 @@ export interface UsageFieldModel {
   cost?: number
   /** Always set when `cost` is, and always says whose price it is. */
   costLabel?: string
+  /**
+   * M380. What caching returned, in one sentence, when this panel read from
+   * or wrote to the cache and every model it used is priced. Can be a cost:
+   * a session that wrote more than it reused says so.
+   */
+  cacheReturn?: string
 }
 
 /**
@@ -501,8 +507,29 @@ export function buildUsageFields(
     subagentTurns: usage.subagentTurns,
     ...(cost !== undefined
       ? { cost, costLabel: 'API list price — not what a subscription is charged' }
-      : {})
+      : {}),
+    ...(() => { const r = cacheReturnWords(usage); return r === undefined ? {} : { cacheReturn: r } })()
   }
+}
+
+/**
+ * M380. Caching's return across every model a panel used, summed per model
+ * like the cost, and undefined when any model is unpriced (a partial sum
+ * presented as a total is the plausible-wrong figure) or nothing touched the
+ * cache.
+ */
+export function cacheReturnWords(usage: PanelUsage): string | undefined {
+  if (usage.totals.cacheRead === 0 && usage.totals.cacheWrite === 0) return undefined
+  let saved = 0, premium = 0
+  for (const [model, totals] of Object.entries(usage.byModel)) {
+    const r = cacheReturnOf(totals, model)
+    if (r === undefined) return undefined
+    saved += r.saved; premium += r.premium
+  }
+  const net = saved - premium
+  return net >= 0
+    ? `caching saved $${net.toFixed(2)} — $${saved.toFixed(2)} not paid as fresh input, less $${premium.toFixed(2)} more for writing it`
+    : `caching cost $${(-net).toFixed(2)} more than it saved — $${saved.toFixed(2)} saved, $${premium.toFixed(2)} more for writing it`
 }
 
 /** A review node has no process, so it can have no spend, and the section
@@ -597,6 +624,12 @@ export interface ChatInspectorInput {
 export interface CapsField {
   spend: string
   context: string
+  /**
+   * M380. The context BURN-DOWN: what is left of the conversation model's
+   * window, as the CLI reported the window. Absent until both figures are
+   * measured — a guessed window would be the confident wrong answer.
+   */
+  window?: string
   /** The hold in one sentence (capSentence), present only while held. */
   held?: string
   own: AgentCaps | undefined
@@ -611,7 +644,14 @@ export function capsField(meter: NodeMeter | undefined, own: AgentCaps | undefin
   const spend = caps !== undefined && caps.usd > 0 ? `${spentWord} of $${caps.usd.toFixed(2)} — ${whose(caps.ownUsd)}` : `${spentWord} — no spend cap`
   const ctxWord = meter?.context === undefined ? 'not measured yet' : `${kTokens(meter.context)} tokens`
   const context = caps !== undefined && caps.context > 0 ? `${ctxWord} of ${kTokens(caps.context)} — ${whose(caps.ownContext)}` : `${ctxWord} — no context cap`
-  return { spend, context, ...(meter?.held === undefined ? {} : { held: capSentence(meter.held) }), own }
+  const window = meter?.context !== undefined && meter.window !== undefined && meter.window > 0 ? windowWords(meter.context, meter.window) : undefined
+  return { spend, context, ...(window === undefined ? {} : { window }), ...(meter?.held === undefined ? {} : { held: capSentence(meter.held) }), own }
+}
+
+/** M380. "76k of 200k left — 62% used", under its `Window` label (which is why the value does not repeat the word). */
+export function windowWords(context: number, window: number): string {
+  const used = Math.min(100, Math.round((context / window) * 100))
+  return `${kTokens(Math.max(0, window - context))} of ${kTokens(window)} left — ${used}% used`
 }
 
 /**

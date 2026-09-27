@@ -3293,6 +3293,28 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ bare: bare.caps, capped: capped.caps, held: held.caps }))
 }
 
+// M380 — burn.1. The context BURN-DOWN and the cache's RETURN on the Work tab:
+// the window is the CLI's own figure and absent until reported (never a
+// guessed 200k); the return is summed per model at list price, and absent
+// when a model is unpriced or nothing touched the cache.
+{
+  const chat = { kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/r', sessionId: 'u' } }
+  const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  const base = { state: { status: 'ready', pending: 0, hasHistory: true }, usage, turns: 2 }
+  const withWindow = R.buildInspectorModel(chat, undefined, undefined, [], undefined, undefined, undefined, false, { ...base, meter: { context: 124000, window: 200000 } })
+  const noWindow = R.buildInspectorModel(chat, undefined, undefined, [], undefined, undefined, undefined, false, { ...base, meter: { context: 124000 } })
+  const pu = (byModel) => { const totals = Object.values(byModel).reduce((a, t) => ({ input: a.input + t.input, output: a.output + t.output, cacheWrite: a.cacheWrite + t.cacheWrite, cacheRead: a.cacheRead + t.cacheRead }), { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }); return { totals, byModel, turns: 3, subagentTurns: 0 } }
+  const saved = R.cacheReturnWords(pu({ 'claude-sonnet-5': { input: 10, output: 10, cacheWrite: 100000, cacheRead: 1000000 } }))
+  const cost = R.cacheReturnWords(pu({ 'claude-sonnet-5': { input: 10, output: 10, cacheWrite: 1000000, cacheRead: 0 } }))
+  const unpriced = R.cacheReturnWords(pu({ 'claude-sonnet-5': { input: 1, output: 1, cacheWrite: 1, cacheRead: 1 }, 'gpt-9': { input: 1, output: 1, cacheWrite: 1, cacheRead: 1 } }))
+  const untouched = R.cacheReturnWords(pu({ 'claude-sonnet-5': { input: 10, output: 10, cacheWrite: 0, cacheRead: 0 } }))
+  ok('burn.1 the Work tab says what is left of the window the CLI reported ("76k of 200k left — 62% used" under Window) and nothing without one; caching\'s return is a saving or a cost at list price, and absent for an unpriced model or an untouched cache',
+    withWindow.caps.window === '76k of 200k left — 62% used' && noWindow.caps.window === undefined &&
+      saved === 'caching saved $1.75 — $1.80 not paid as fresh input, less $0.05 more for writing it' &&
+      cost === 'caching cost $0.50 more than it saved — $0.00 saved, $0.50 more for writing it' && unpriced === undefined && untouched === undefined,
+    JSON.stringify({ window: withWindow.caps.window, saved, cost, unpriced, untouched }))
+}
+
 // M105 — lastline.1. THE RAIL SAYS WHAT IS HAPPENING: a chat row carries the
 // agent's LAST LINE SAID (the transcript's last complete text block, one line,
 // cut from the right — prose, not a path) and an UNREAD mark when its turn

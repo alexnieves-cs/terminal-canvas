@@ -250,6 +250,8 @@ interface Session {
   priorUsd?: number
   /** M350. Tokens in the conversation as of the latest message that reported usage. */
   context?: number
+  /** M380. The window those tokens fill, from the latest result that reported one. */
+  window?: number
   /** M350. Set when the node crosses a cap, cleared only when a cap read live no longer holds it. */
   held?: CapHold
   /** M350. The last meter said, so an unchanged one is not said again. */
@@ -1108,6 +1110,7 @@ export class AgentSessionManager {
         if (lost === null) session.turnCount += 1
         if (event.usage) session.usage = addTotals(session.usage, event.usage)
         if (event.costUsd !== undefined) { session.costUsd = event.costUsd; session.procUsd = event.costUsd }
+        if (event.contextWindow !== undefined) session.window = event.contextWindow
         this.meterChanged(session)
         // M350. The node's own cap, after the canvas's (M82) and before the
         // queue: a held node keeps what is waiting and sends none of it.
@@ -1338,6 +1341,7 @@ export class AgentSessionManager {
     return {
       ...(spentUsd === undefined ? {} : { spentUsd }),
       ...(session.context === undefined ? {} : { context: session.context }),
+      ...(session.window === undefined ? {} : { window: session.window }),
       ...(session.held === undefined ? {} : { held: { ...session.held } }),
       // M351. The caps in force ride the meter, so every surface reads the
       // figure main enforces rather than re-deriving it from Settings and the

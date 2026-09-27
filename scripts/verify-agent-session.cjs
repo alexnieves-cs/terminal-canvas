@@ -1289,6 +1289,13 @@ const isResult = (l) => l.includes('"type":"result"')
     ok('cap.context.1 context is measured on each message as every input class plus what it wrote, set rather than summed, and a message\'s repeated blocks say the meter once',
       said.length === 1 && said[0].context === 53500 && b.manager.get('c1').meter.context === 53500,
       JSON.stringify(said))
+    // M380. The window rides the meter from the result that reports it.
+    b.spawns[0].proc.emitLines([JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, usage: { input_tokens: 1, output_tokens: 1 }, modelUsage: { 'claude-x': { inputTokens: 1000, cacheReadInputTokens: 50000, contextWindow: 200000 } } })])
+    await tick(5)
+    const windowed = meters(b.events, 'c1').pop()
+    ok('window.meter.1 a result reporting the context window puts it on the meter beside the context, so the Work tab can say what is left',
+      windowed !== undefined && windowed.window === 200000 && windowed.context === 53500 && b.manager.get('c1').meter.window === 200000,
+      JSON.stringify(windowed))
 
     const caps = { usd: 0, context: 50000 }
     const c = makeManager({ caps: () => caps })
@@ -3231,6 +3238,21 @@ const isResult = (l) => l.includes('"type":"result"')
         R.replayPath('/r/src/a.ts', '/r') === 'src/a.ts' && R.replayPath('/elsewhere/a.ts', '/r') === '/elsewhere/a.ts' && R.replayPath('/r/a.ts', undefined) === '/r/a.ts' &&
         R.sinceStartWords(1000, 1000) === '0s in' && R.sinceStartWords(46000, 1000) === '45s in' && R.sinceStartWords(751000, 1000) === '12m 30s in' && R.sinceStartWords(3721000, 1000) === '1h 02m in',
       'words')
+  }
+
+  // M380 — window.1. The conversation's window is the CLI's own figure, read
+  //     off a RECORDED result's modelUsage, and — with two models reported —
+  //     the window of the one that held the conversation (read the most).
+  {
+    const { readFileSync } = require('node:fs')
+    const { join } = require('node:path')
+    const line = readFileSync(join(__dirname, 'fixtures', 'agent-session', 'turn.jsonl'), 'utf8').split('\n').find((l) => /"type":"result"/.test(l))
+    const recorded = line === undefined ? null : M.transcript.parseStreamLine(line)
+    const two = M.transcript.conversationWindow({ 'claude-haiku-4-5': { inputTokens: 10, cacheReadInputTokens: 0, contextWindow: 200000 }, 'claude-opus-5': { inputTokens: 5, cacheReadInputTokens: 900000, contextWindow: 1000000 } })
+    ok('window.1 a recorded result carries the conversation model\'s context window (200000); of two models the one that read the most decides it; no window reported is none',
+      recorded !== null && recorded.type === 'result' && recorded.contextWindow === 200000 && two === 1000000 &&
+        M.transcript.conversationWindow({ m: { inputTokens: 1 } }) === undefined && M.transcript.conversationWindow(undefined) === undefined,
+      JSON.stringify({ recorded: recorded && recorded.contextWindow, two }))
   }
 
   const failed = results.filter((r) => !r.pass)

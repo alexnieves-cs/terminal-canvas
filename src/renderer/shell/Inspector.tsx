@@ -221,6 +221,8 @@ function CapsSection({ id, caps, onCap }: { id: string; caps: CapsField; onCap?:
       <dl className="inspector__caps">
         <dt>Spend</dt><dd data-caps-line="spend">{caps.spend}</dd>
         <dt>Context</dt><dd data-caps-line="context">{caps.context}</dd>
+        {/* M380. The burn-down: the window the CLI reported, and what is left of it. */}
+        {caps.window !== undefined && <><dt>Window</dt><dd data-caps-line="window">{caps.window}</dd></>}
       </dl>
       {caps.held !== undefined && <p className="inspector__caps-held" role="status" data-caps-held>{caps.held}</p>}
       {/* Each field NAMED on screen, not only by its unit (the M352 critic): a
@@ -1091,6 +1093,10 @@ function InspectorPanel({
                   ${model.usage.cost.toFixed(2)}{' '}
                   <span className="inspector__usage-cost-suffix">list price</span>
                 </p>
+              )}
+              {/* M380. The cache's return, at the same list price. */}
+              {model.usage.cacheReturn !== undefined && (
+                <p className="inspector__usage-turns" data-usage-cache-return>{model.usage.cacheReturn}</p>
               )}
             </>
           )}

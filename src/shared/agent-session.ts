@@ -143,6 +143,8 @@ export interface CapHold {
 export interface NodeMeter {
   spentUsd?: number
   context?: number
+  /** M380. The conversation model's context window, as the CLI last reported it. Absent until a result says it. */
+  window?: number
   held?: CapHold
   /** M351. The caps main is enforcing on this node right now, and whose they are. Absent when neither is set anywhere. */
   caps?: NodeCapsView

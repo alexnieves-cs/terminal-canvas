@@ -3,4 +3,4 @@
  * import path. The table lives in shared because the INSPECTOR prices its own
  * totals, and the renderer must never import from src/main.
  */
-export { costOf, MODEL_RATES, type ModelRates } from '../shared/pricing'
+export { cacheReturnOf, costOf, MODEL_RATES, type ModelRates } from '../shared/pricing'
