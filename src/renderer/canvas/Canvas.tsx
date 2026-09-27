@@ -1461,7 +1461,9 @@ export function Canvas({
         ...(req.brief === undefined ? {} : { brief: req.brief }),
         ...(req.criteria === undefined ? {} : { criteria: req.criteria }),
         ...(req.recipe === undefined ? {} : { recipeId: req.recipe }),
-        ...(req.cwd === undefined ? {} : { preferRoot: req.cwd })
+        ...(req.cwd === undefined ? {} : { preferRoot: req.cwd }),
+        // M370. The arrangement `tc task --swarm` named, chosen on the sheet.
+        ...(req.swarm === undefined ? {} : { swarm: req.swarm })
       })
       return { kind: 'ok', id: 'start-work' }
     }

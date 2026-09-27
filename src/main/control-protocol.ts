@@ -14,6 +14,7 @@
  * function for the same reason presets.ts takes `which`.
  */
 import type { Preset } from '../shared/layout-schema'
+import { SWARM_PRESET_IDS, type SwarmPresetId } from '../shared/swarm'
 
 export type ControlRequest =
   | { verb: 'open'; preset?: string; cwd?: string }
@@ -54,7 +55,7 @@ export type ControlRequest =
    * by the request itself, which is why this — unlike `board add` — may come
    * through the URL door: a web page can pre-fill a form, never act.
    */
-  | { verb: 'task'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string }
+  | { verb: 'task'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string; swarm?: SwarmPresetId }
   /**
    * The Terminal Canvas account. SOCKET ONLY — the URL door's host list is
    * `open` and `task`, so a web page can never sign someone in, out, or into
@@ -171,6 +172,9 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       const cwd = optionalString(fields['cwd'])
       const recipe = optionalString(fields['recipe'])
       if (brief === null || cwd === null || recipe === null) return { kind: 'bad', error: 'brief, cwd and recipe must be non-empty strings when given' }
+      // M370. An arrangement by its own name, or refused naming the four.
+      const swarm = optionalString(fields['swarm'])
+      if (swarm === null || (swarm !== undefined && !(SWARM_PRESET_IDS as readonly string[]).includes(swarm))) return { kind: 'bad', error: `swarm must be one of ${SWARM_PRESET_IDS.join(', ')}` }
       if (cwd !== undefined && !cwd.startsWith('/')) return { kind: 'bad', error: 'cwd must be an absolute path' }
       // A list from the socket; one-per-line text from a URL's single value.
       const raw = fields['criteria']
@@ -184,7 +188,8 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
           ...(brief === undefined ? {} : { brief: brief.slice(0, 4000) }),
           ...(clean === undefined || clean.length === 0 ? {} : { criteria: clean }),
           ...(cwd === undefined ? {} : { cwd }),
-          ...(recipe === undefined ? {} : { recipe: recipe.slice(0, 80) })
+          ...(recipe === undefined ? {} : { recipe: recipe.slice(0, 80) }),
+          ...(swarm === undefined ? {} : { swarm: swarm as SwarmPresetId })
         }
       }
     }

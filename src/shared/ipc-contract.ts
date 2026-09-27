@@ -1030,7 +1030,7 @@ export type BoardControlRequest =
   | { op: 'add'; title: string }
   | { op: 'done'; id: string }
   /** M313. `tc task` / `terminal-canvas://task`: open Start work filled in; the answer's id is the sheet's, nothing was added. */
-  | { op: 'propose'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string }
+  | { op: 'propose'; title: string; brief?: string; criteria?: string[]; cwd?: string; recipe?: string; swarm?: import('./swarm').SwarmPresetId }
 export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
 
 /** M316. See JOB_RECOVER. */

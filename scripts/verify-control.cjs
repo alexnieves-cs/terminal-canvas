@@ -700,6 +700,24 @@ const ok = (n, pass, detail = '') => {
         read.rows.map((r) => r.title).join('|') === `${kept}|${personCap}`,
       JSON.stringify(read.rows))
   }
+  // M370 — task.swarm.1. `tc task --swarm review` proposes the task WITH its
+  //     arrangement: the CLI carries the name, the protocol keeps one of the
+  //     four arrangements and refuses anything else naming them, and the
+  //     handler hands it to the canvas's proposal — still only a proposal.
+  {
+    const built = C.buildRequest(['task', 'fix', 'login', '--swarm', 'review'], { TC_PANEL_CWD: '/tmp' })
+    const noValue = C.buildRequest(['task', 'fix', '--swarm'], {})
+    const parsed = C.parseControlLine(JSON.stringify({ verb: 'task', title: 'fix login', swarm: 'review' }))
+    const bad = C.parseControlLine(JSON.stringify({ verb: 'task', title: 'fix login', swarm: 'everything' }))
+    let proposed = null
+    const base = { presets: () => [], defaultId: () => null, exists: () => true, spawn: () => {}, list: () => [], focus: () => true }
+    const answered = await C.createControlHandler({ ...base, board: async (r) => { proposed = r; return { kind: 'ok', id: 'start-work' } } })({ verb: 'task', title: 'fix login', swarm: 'review' })
+    ok('task.swarm.1 tc task --swarm carries an arrangement to the canvas\'s proposal; an unknown arrangement is refused naming the four, and a flag with no value is a usage error',
+      built.kind === 'ok' && JSON.parse(built.line).swarm === 'review' && noValue.kind === 'usage' &&
+        parsed.kind === 'ok' && parsed.req.swarm === 'review' && bad.kind === 'bad' && /explore, implement, test, review/.test(bad.error) &&
+        answered.ok === true && proposed.op === 'propose' && proposed.swarm === 'review',
+      JSON.stringify({ built, parsed, bad, proposed }))
+  }
   // M369 fix — cli.list.1. Every no-argument verb builds ITSELF. M369 first
   //     put `case 'audit'` between `case 'list':` and `case 'status':`, so
   //     `tc list` fell through and asked for the audit, and no check built

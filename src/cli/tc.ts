@@ -29,7 +29,7 @@ export interface CliIo {
 export const USAGE = [
   'usage: tc open [--preset <name|id>] [--cwd <dir>]',
   '       tc board add <title…> | tc board done <id>',
-  '       tc task <title…> [--brief <text>] [--criterion <text>]… [--recipe <id>] [--cwd <dir>]',
+  '       tc task <title…> [--brief <text>] [--criterion <text>]… [--recipe <id>] [--cwd <dir>] [--swarm explore|implement|test|review]',
   '       tc list',
   '       tc focus <panel-id>',
   '       tc ping',
@@ -108,8 +108,10 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       for (let i = 0; i < rest.length; i += 1) {
         const flag = rest[i]!
         const value = rest[i + 1]
-        if ((flag === '--brief' || flag === '--recipe' || flag === '--cwd' || flag === '--criterion') && value === undefined) return { kind: 'usage', error: `${flag} needs a value` }
-        if (flag === '--brief' || flag === '--recipe' || flag === '--cwd') { fields[flag.slice(2)] = value; i += 1 }
+        if ((flag === '--brief' || flag === '--recipe' || flag === '--cwd' || flag === '--criterion' || flag === '--swarm') && value === undefined) return { kind: 'usage', error: `${flag} needs a value` }
+        // M370. `--swarm review` proposes the task WITH an arrangement: Start
+        // work opens with it chosen, and a person still presses Start.
+        if (flag === '--brief' || flag === '--recipe' || flag === '--cwd' || flag === '--swarm') { fields[flag.slice(2)] = value; i += 1 }
         else if (flag === '--criterion') { criteria.push(value as string); i += 1 }
         else if (flag.startsWith('--')) return { kind: 'usage', error: `unexpected argument ${flag}` }
         else words.push(flag)
