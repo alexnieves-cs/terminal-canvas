@@ -653,7 +653,7 @@ const SCENES = [
       await press('.panel[data-panel-kind="workflow"] .pf__title')
       await press('[data-workflow-library-toggle]')
       await sleep(300)
-      await press('[data-workflow-block="scan"] rect')
+      await press('[data-workflow-block="scan"]')
       const tabBefore = await k.js(`document.querySelector('[data-context-tab][aria-selected="true"]')?.getAttribute('data-context-tab') ?? 'detail'`)
       await k.context(true)
       await k.tab('detail')
@@ -919,19 +919,52 @@ const SCENES = [
       // REAL clicks (a dispatched click never reaches shellControl's
       // mousedown; the product suite's own lesson): M205 moved the starter
       // off the primary and into the disclosure, so open it, then press the line.
+      // Every point pressed, for the failure message below.
+      const pressed = []
       const press = async (selector) => {
         const point = await k.js(`(() => { const b = document.querySelector(${JSON.stringify(selector)}); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); if (r.width === 0) return null; return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
-        if (point) { k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 }) }
+        if (point) { pressed.push([selector, point.x, point.y]); k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 }) }
         return point !== null
       }
-      await press('[data-launcher-more-toggle]')
-      for (let i = 0; i < 20 && !(await press('[data-launcher-starter]')); i++) await sleep(100)
+      // INTERMITTENT, and diagnosed as far as the evidence went (carried-reds,
+      // 2026-09-18): in the failing runs the line was enabled and on screen and
+      // the pointer's point hit it, yet applyStarter was never ENTERED — it
+      // logs `[starter] …` synchronously as its first act on every arm, and
+      // not one line came. Something transient at the instant of the press
+      // (the launcher still settling after the reload: its reason and rows
+      // load after emptyCanvas's fixed wait) took the click; by the time the
+      // failure was read, everything looked right. So the press is confirmed
+      // by that first line rather than by the panels appearing, and repeated
+      // ONLY when applyStarter never ran — a repeat after it ran could mint a
+      // second chat. The count is printed, so an absorbed miss stays visible.
+      const said = []
+      const onSay = (_e, _level, message) => { if (String(message).startsWith('[starter]')) said.push(String(message)) }
+      k.wc.on('console-message', onSay)
+      let attempts = 0
+      try {
+        for (; attempts < 3 && said.length === 0; attempts++) {
+          // The disclosure by its STATE, not a blind toggle: a second press on an open one closes it.
+          if (!(await k.js(`document.querySelector('[data-launcher-more]')?.open === true`))) await press('[data-launcher-more-toggle]')
+          for (let i = 0; i < 20 && !(await press('[data-launcher-starter]')); i++) await sleep(100)
+          for (let i = 0; i < 20 && said.length === 0; i++) await sleep(100)
+        }
+      } finally {
+        k.wc.removeListener('console-message', onSay)
+      }
+      if (attempts > 1) console.log(`[shot] starter: applyStarter was reached on press ${attempts} (${said.length > 0 ? 'reached' : 'never reached'}); points ${JSON.stringify(pressed)}`)
       for (let i = 0; i < 40 && (await k.js(`document.querySelectorAll('.panel[data-panel-kind]').length`)) < 5; i++) await sleep(100)
       for (let i = 0; i < 30 && !(await k.js(`document.querySelector('[data-image-node][data-image-arm="data"]') !== null`)); i++) await sleep(100)
       // LOUD when the arrangement is not there: a capture of the chat alone
       // would be written as the starter's golden by a blind update (the critic).
       const kinds = await k.js(`[...document.querySelectorAll('.panel[data-panel-kind]')].map((p) => p.getAttribute('data-panel-kind')).sort().join(',')`)
-      if (kinds !== 'chat,file,image,terminal,workflow') throw new Error(`starter scene: the arrangement is not on screen (${kinds})`)
+      // And say WHY: "not on screen" alone was undiagnosable for two
+      // milestones, because press() answers false alike for a missing line,
+      // a closed disclosure and a line DISABLED with a reason — the launcher's
+      // own sentence is the one fact that separates them.
+      if (kinds !== 'chat,file,image,terminal,workflow') {
+        const why = await k.js(`JSON.stringify({ launcher: !!document.querySelector('[data-launcher]'), more: document.querySelector('[data-launcher-more]')?.open ?? null, starter: (() => { const b = document.querySelector('[data-launcher-starter]'); if (!b) return null; const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { disabled: b.disabled, title: b.getAttribute('title'), box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], viewport: [innerWidth, innerHeight], hitIsLine: !!hit && b.contains(hit), hit: hit ? (hit.className || hit.tagName) : null } })() })`)
+        throw new Error(`starter scene: the arrangement is not on screen (${kinds}) ${why} pressed ${JSON.stringify(pressed)} said ${JSON.stringify(said)}`)
+      }
       await sleep(800)
       await k.shot('starter')
     } },
@@ -1899,7 +1932,11 @@ app.whenReady().then(async () => {
   // M148. A renderer error is PRINTED with its scene: a scene that fails
   // with `Script failed to execute` says nothing about why, and the only
   // place the why lives is the renderer's console.
-  win.webContents.on('console-message', (_e, level, message) => { if (level >= 2) console.log(`[renderer] ${String(message).slice(0, 300)}`) })
+  // Warnings and errors, and the starter's own decisions: applyStarter says on
+  // `info` what it decided precisely so a starter that did nothing can be told
+  // from a press that missed — which the starter scene needs, and which a
+  // warnings-only filter threw away.
+  win.webContents.on('console-message', (_e, level, message) => { if (level >= 2 || String(message).startsWith('[starter]')) console.log(`[renderer] ${String(message).slice(0, 300)}`) })
   await loadRenderer(win)
   await sleep(1500)
 
