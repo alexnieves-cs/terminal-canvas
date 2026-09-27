@@ -593,10 +593,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ], edges: [{ from: 'n1', to: 'n2', trigger: 'exit' }] })
       layoutStore.save({ panels: [{ id: 'wfe', kind: 'workflow', x: 40, y: 40, w: 640, h: 460, z: 1, title: 'edit me', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore(); await reload()
-      // Screen for the drag's start; SVG units (the rect's own x/y) for the
-      // comparison — the diagram rescales when its extent grows (M183's library
-      // sits beside it), so a screen delta is not the authored one.
-      const rectOf = (key) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="${key}"] rect'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, ax: Number(g.getAttribute('x')), ay: Number(g.getAttribute('y')) } })()`)
+      // The block is the React Flow island's node <div> (the SVG's <rect> went
+      // with M276's migration). Its SCREEN box is the comparison: the flow
+      // fits its camera once on mount and never refits on an edit, so a
+      // screen delta is the drag's own — which the SVG, rescaling as its
+      // extent grew, could not promise.
+      const rectOf = (key) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="${key}"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, ax: r.left, ay: r.top } })()`)
       const before = await waitUntil(() => rectOf('n2'), 4000)
       const drag = async (from, dx, dy) => {
         const x = Math.round(from.x + from.w / 2), y = Math.round(from.y + from.h / 2)
@@ -652,7 +654,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const cycle = await plan(`workflow-edge ${TPL} n2 n1 exit`)
       await settle()
       const blocks = await wc.executeJavaScript(`[...document.querySelectorAll('[data-workflow-block]')].map((g) => g.getAttribute('data-workflow-block')).sort().join(',')`)
-      const label = await wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"] .workflow-node__block-label')?.textContent`)
+      const label = await wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"] .workflow-flow__label')?.textContent`)
       const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfa"]')?.getAttribute('data-workflow-dirty')`)
       ok(id, set?.kind === 'ran' && add?.kind === 'ran' && removeMissing?.kind === 'refused' && /n9/.test(removeMissing.reason) &&
         cycle?.kind === 'refused' && /cycle/.test(cycle.reason) && blocks === 'n1,n2,n3' && label === 'renamed' && dirty === 'true',
@@ -746,14 +748,16 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-library-toggle]') !== null && document.querySelector('[data-workflow-block="n1"]') !== null`), 4000)
       await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-workflow-library-toggle]'); if (t && t.getAttribute('aria-pressed') !== 'true') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-library-kind="chat"]') !== null`), 3000)
+      // The drawer narrows the flow and the flow refits to it on the next frame (WorkflowFlow's FIT): measure after that, as a person would see it.
+      await settle()
       // lib.1: drag the chat entry onto the diagram, well right of the blocks.
       const entry = await centreOf('[data-workflow-library-kind="chat"]')
       // The drop point: to the right of n1's block, inside the SVG's drop room.
-      const n1Before = await centreOf('[data-workflow-block="n1"] rect')
+      const n1Before = await centreOf('[data-workflow-block="n1"]')
       const svgBox = n1Before ? { x: Math.round(n1Before.x + n1Before.w / 2 + 150), y: Math.round(n1Before.y) } : null
       if (entry && svgBox) await dragTo(entry, svgBox)
-      const afterDrop = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n3"]'); if (!g) return false; const r = g.querySelector('rect').getBoundingClientRect(); return { x: r.left, y: r.top, kind: g.getAttribute('data-workflow-block-kind') } })()`), 3000)
-      const n1Box = await centreOf('[data-workflow-block="n1"] rect')
+      const afterDrop = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n3"]'); if (!g) return false; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, kind: g.getAttribute('data-workflow-block-kind') } })()`), 3000)
+      const n1Box = await centreOf('[data-workflow-block="n1"]')
       // M259. The library COLLAPSES after a placement — so the Add below
       // reopens it the way a person would, through its own toggle.
       const collapsed = await wc.executeJavaScript(`document.querySelector('[data-workflow-library]') === null && document.querySelector('[data-workflow-library-toggle]')?.getAttribute('aria-pressed') === 'false'`)
@@ -762,7 +766,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // Add through the keyboard-reachable control on the terminal entry.
       await wc.executeJavaScript(`document.querySelector('[data-workflow-library-kind="terminal"] [data-workflow-library-add]').click(); true`)
       // The placement, not just the presence: a regression to dx 0 would stack the new block on an existing one, which is what placementFor exists to prevent.
-      const added = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n4"] rect'); if (!g) return false; const others = [...document.querySelectorAll('[data-workflow-block] rect')].filter((r) => r !== g).map((r) => Number(r.getAttribute('x')) + Number(r.getAttribute('width'))); return { ax: Number(g.getAttribute('x')), rightmost: Math.max(...others) } })()`), 3000)
+      const added = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n4"]'); if (!g) return false; const others = [...document.querySelectorAll('[data-workflow-block]')].filter((r) => r !== g).map((r) => r.getBoundingClientRect().right); return { ax: g.getBoundingClientRect().left, rightmost: Math.max(...others) } })()`), 3000)
       const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfl"]')?.getAttribute('data-workflow-dirty')`)
       flushLayoutStore()
       const onDisk = layoutStore.current().templates.find((t) => t.id === TPL)
@@ -771,12 +775,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ entry, svgBox, afterDrop, n1Box, added, dirty, diskNodes: onDisk && onDisk.nodes.length, collapsed, collapsedAgain }))
       // wire.1: port of n1 → block n2 wires n1 → n2; then n2's port → n1 would close a cycle.
       const port1 = await centreOf('[data-workflow-block="n1"] [data-workflow-port]')
-      const block2 = await centreOf('[data-workflow-block="n2"] rect')
+      const block2 = await centreOf('[data-workflow-block="n2"]')
       if (port1 && block2) await dragTo(port1, block2)
       const wired = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"]') !== null`), 3000)
-      const edgeWord = await wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"] .workflow-node__edge-word')?.textContent`)
+      const edgeWord = await wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"] .react-flow__edge-text')?.textContent`)
       const port2 = await centreOf('[data-workflow-block="n2"] [data-workflow-port]')
-      const block1 = await centreOf('[data-workflow-block="n1"] rect')
+      const block1 = await centreOf('[data-workflow-block="n1"]')
       // M259 — wfx.ui.1 (first half). The cycle is REFUSED AT THE POINTER
       // while the wire is still held, before any release: read mid-gesture.
       let heldReason = null
@@ -794,11 +798,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // M259 — wfx.ui.1 (second half). Selecting n1 lights its lineage — n2
       // and the edge between them — and quiets the unconnected blocks; then
       // Auto layout (top to bottom) is ONE draft step that puts n2 under n1.
-      const n1c = await centreOf('[data-workflow-block="n1"] rect')
+      const n1c = await centreOf('[data-workflow-block="n1"]')
       if (n1c) { wc.sendInputEvent({ type: 'mouseDown', x: n1c.x, y: n1c.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: n1c.x, y: n1c.y, button: 'left', clickCount: 1 }); await settle() }
       const lineage = await wc.executeJavaScript(`(() => ({ n2: document.querySelector('[data-workflow-block="n2"]')?.getAttribute('data-lit'), edge: document.querySelector('[data-workflow-edge="n1>n2"]')?.getAttribute('data-lit'), n3: document.querySelector('[data-workflow-block="n3"]')?.getAttribute('data-dim') }))()`)
       await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-workflow-layout="vertical"]'); if (b && !b.disabled) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
-      const arranged = await waitUntil(() => wc.executeJavaScript(`(() => { const r = (k) => { const g = document.querySelector('[data-workflow-block="' + k + '"] rect'); return g ? { x: Number(g.getAttribute('x')), y: Number(g.getAttribute('y')) } : null }; const a = r('n1'), b = r('n2'); return a && b && b.y > a.y && Math.abs(b.x - a.x) < 1 ? { a, b } : false })()`), 3000)
+      const arranged = await waitUntil(() => wc.executeJavaScript(`(() => { const r = (k) => { const g = document.querySelector('[data-workflow-block="' + k + '"]'); if (!g) return null; const q = g.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 } }; const a = r('n1'), b = r('n2'); return a && b && b.y > a.y && Math.abs(b.x - a.x) < 1 ? { a, b } : false })()`), 3000)
       ok('wfx.ui.1 a wire that would close a loop is refused at the pointer while held; a selected block lights its downstream block and edge and quiets the unconnected; Auto layout top-to-bottom puts the downstream block directly under its source',
         typeof heldReason === 'string' && /loop/.test(heldReason) && lineage.n2 === 'true' && lineage.edge === 'true' && lineage.n3 === 'true' && arranged !== false,
         JSON.stringify({ heldReason, lineage, arranged }))
@@ -807,7 +811,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`(() => { const t = document.querySelector('.shell__inspector-toggle'); if (t && t.getAttribute('aria-pressed') !== 'true') { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return true })()`); await settle()
       // The node editor lives in the Detail tab; the pane may be resting on another (M180's runs left it on Tools).
       await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="detail"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return true })()`); await settle()
-      const b1 = await centreOf('[data-workflow-block="n1"] rect')
+      const b1 = await centreOf('[data-workflow-block="n1"]')
       wc.sendInputEvent({ type: 'mouseDown', x: b1.x, y: b1.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: b1.x, y: b1.y, button: 'left', clickCount: 1 }); await settle()
       let journeyNote = null
       const fields = await waitUntil(() => wc.executeJavaScript(`(() => { const f = [...document.querySelectorAll('[data-inspector-node-field]')].map((n) => n.getAttribute('data-inspector-node-field')); return f.length > 0 ? f : false })()`), 3000)
@@ -820,9 +824,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         journeyNote = await wc.executeJavaScript(`(() => { const i = document.querySelector('input[data-inspector-node-field="title"]'); return { active: document.activeElement === i, value: i && i.value } })()`)
         wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' }); await settle()
       }
-      const label = await waitUntil(() => wc.executeJavaScript(`(() => { const t = document.querySelector('[data-workflow-block="n1"] .workflow-node__block-label')?.textContent; return t === 'renamed by inspector' ? t : false })()`), 3000)
+      const label = await waitUntil(() => wc.executeJavaScript(`(() => { const t = document.querySelector('[data-workflow-block="n1"] .workflow-flow__label')?.textContent; return t === 'renamed by inspector' ? t : false })()`), 3000)
       // The pool: a bad width keeps the typed value and shows the reason.
-      const b2 = await centreOf('[data-workflow-block="n2"] rect')
+      const b2 = await centreOf('[data-workflow-block="n2"]')
       wc.sendInputEvent({ type: 'mouseDown', x: b2.x, y: b2.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: b2.x, y: b2.y, button: 'left', clickCount: 1 }); await settle()
       const widthInput = await waitUntil(() => centreOf('input[data-inspector-node-field="width"]'), 3000)
       let widthReason = false, widthValue = null
@@ -890,7 +894,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const stillDirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfs"]')?.getAttribute('data-workflow-dirty')`)
       // Reload takes the record as it stands: the draft is clean and the block is back where the record has it.
       await click('[data-workflow-verb="reload"]')
-      const afterReload = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="wfs"]'); const g = document.querySelector('[data-workflow-block="n2"] rect'); return p && p.getAttribute('data-workflow-dirty') === 'false' && g ? { dirty: p.getAttribute('data-workflow-dirty') } : false })()`), 3000)
+      const afterReload = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="wfs"]'); const g = document.querySelector('[data-workflow-block="n2"]'); return p && p.getAttribute('data-workflow-dirty') === 'false' && g ? { dirty: p.getAttribute('data-workflow-dirty') } : false })()`), 3000)
       ok(id, atRest && atRest.disabled === true && atRest.dirty === 'false' &&
         /nothing to save — the diagram matches the template/.test(String(atRest.reason)) &&
         /nothing to save — the diagram matches the template/.test(String(atRest.lines)) &&

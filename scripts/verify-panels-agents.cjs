@@ -2553,13 +2553,20 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         t.field === false && t.sentry === 'undefined', JSON.stringify(t))
     }
 
-    // detail.1 (M57). Semantic zoom read off the DOM: every card is `tail`
-    //   at the default zoom, `summary` (naming its panel) once the camera is
-    //   pulled to ~0.2, `block` at ~0.08, and `tail` again after Cmd+0 — with
-    //   the idle text byte-identical throughout, since three checks above
-    //   read it. Zoom by the keyboard stepper rather than a wheel so the
-    //   path is the one a user has. Red by fault: thresholds pinned so the
-    //   tier never leaves `tail`.
+    // detail.1 (M57, M270). Semantic zoom read off the DOM: every card is
+    //   `tail` at the default zoom, `summary` (naming its panel) once the
+    //   camera is pulled to ~0.2, `block` inside (0.12, 0.16), `cluster`
+    //   below 0.12, and `tail` again after Cmd+0 — with the idle text
+    //   byte-identical throughout, since three checks above read it. Zoom by
+    //   the keyboard stepper rather than a wheel so the path is the one a
+    //   user has. Red by fault: thresholds pinned so the tier never leaves
+    //   `tail`.
+    //   M270 raised BLOCK_ENTER to 0.16 and put `cluster` under 0.12, so the
+    //   old "below 0.11 is block" read the clamped 0.1 as cluster and went
+    //   red for a milestone with the product right (card-detail.ts). The
+    //   stepper is x1.2 from exactly 1.0 after Cmd+0, so its stops are
+    //   …0.194, 0.162, 0.135, 0.112, 0.1: 0.135 is the one stop in block's
+    //   band and 0.112 the first in cluster's — both reached, never skipped.
     {
       const cmd = (key) => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, metaKey: true, bubbles: true }))`)
       const scale = () => wc.executeJavaScript(`window.__m4aViewport().scale`)
@@ -2585,9 +2592,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const s1 = await scale()
       const d1 = await details()
       const titled = await wc.executeJavaScript(`[...document.querySelectorAll('.panel__card [data-card-summary] .panel__card-summary-title')].every((t) => t.textContent.trim().length > 0)`)
-      const z2 = await zoomBelow(0.11); await settle()
+      const z2 = await zoomBelow(0.16); await settle()
       const s2 = await scale()
       const d2 = await details()
+      const z4 = await zoomBelow(0.12); await settle()
+      const s4 = await scale()
+      const d4 = await details()
       await cmd('0'); await settle()
       const d3 = await details()
       const idle3 = await idleText()
@@ -2596,10 +2606,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       // `tail` tier at that zoom is what the two hundred checks above already
       // exercise, and the idle text under the SUMMARY tier is what checks
       // 13-15 read (they fit-all first, which lands in the summary band).
-      ok('detail.1 every card is summary with a title near 0.2 and block near 0.08, and no card claims another tier at 1.0',
+      ok('detail.1 every card is summary with a title near 0.2, block inside (0.12, 0.16), cluster below 0.12, and no card claims another tier at 1.0',
         s0 === 1 && d0.every((x) => x === 'tail') && z1 === true && s1 < 0.26 && all(d1, 'summary') && titled === true &&
-          z2 === true && s2 < 0.11 && all(d2, 'block') && d3.every((x) => x === 'tail'),
-        JSON.stringify({ s0, d0, s1, d1, titled, s2, d2, d3, idle0, idle3 }))
+          z2 === true && s2 < 0.16 && s2 >= 0.12 && all(d2, 'block') &&
+          z4 === true && s4 < 0.12 && all(d4, 'cluster') && d3.every((x) => x === 'tail'),
+        JSON.stringify({ s0, d0, s1, d1, titled, s2, d2, s4, d4, d3, idle0, idle3 }))
     }
 
     // flight.1 / trail.1 / bookmark.1 (M56). The camera's discrete jumps

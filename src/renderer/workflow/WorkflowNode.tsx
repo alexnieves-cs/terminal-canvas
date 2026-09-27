@@ -17,7 +17,7 @@ import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H, BLOCK_W, DIAGRAM_PAD } from './workflow-diagram'
 import { autoLayout, completedWalk, diagramIssues, edgeGeometry, neighbourhood, runTimeline } from './workflow-graph'
 import { AutoLayout, Check, History, More, Plus, Trigger, Warn, WORKFLOW_NODE_GLYPH } from '@renderer/icons'
-import { WorkflowFlow } from './WorkflowFlow'
+import { WorkflowFlow, type WorkflowFlowApi } from './WorkflowFlow'
 
 /** M183. Extra SVG room beyond the diagram's extent, for a drop or a wire past the last block. */
 const DROP_ROOM = 220
@@ -189,9 +189,12 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   // M184. The run whose outcome the diagram wears; null is the definition at rest.
   const [runId, setRunId] = useState<string | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  // The React Flow island's camera mapping — the live diagram's answer to toSvg.
+  const flowApi = useRef<WorkflowFlowApi | null>(null)
   const say = (reason: string): void => { setRefusal(reason); window.setTimeout(() => setRefusal((r) => (r === reason ? null : r)), 4000) }
   /** A client point in the SVG's own units (the diagram's viewBox is 1:1 with its width). */
   const toSvg = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    if (flowApi.current !== null) return flowApi.current.toFlow(clientX, clientY)
     const svg = svgRef.current; if (svg === null) return null
     const ctm = svg.getScreenCTM(); if (ctm === null) return null
     const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse())
@@ -216,9 +219,14 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
       // drag that landed off the diagram earns the sentence below.
       if (!moved) return
       const p = toSvg(ev.clientX, ev.clientY)
-      const svg = svgRef.current
-      if (p === null || svg === null || diagram === null) return
-      if (p.x < 0 || p.y < 0 || p.x > diagram.width + DROP_ROOM || p.y > diagram.height + DROP_ROOM) { say('drop a node onto the diagram, or use its Add control'); return }
+      if (p === null || diagram === null) return
+      // Off the diagram is not a drop. The flow island answers by its own box
+      // (its camera pans, so the diagram's extent no longer bounds a drop);
+      // the legacy SVG by its viewBox plus the drop room.
+      const inside = flowApi.current !== null
+        ? flowApi.current.contains(ev.clientX, ev.clientY)
+        : svgRef.current !== null && p.x >= 0 && p.y >= 0 && p.x <= diagram.width + DROP_ROOM && p.y <= diagram.height + DROP_ROOM
+      if (!inside) { say('drop a node onto the diagram, or use its Add control'); return }
       // The diagram's own offset: its blocks sit at DIAGRAM_PAD + (dx - minX); invert it for the authored dx/dy.
       const minX = template.nodes.length === 0 ? 0 : Math.min(...template.nodes.map((n) => n.dx))
       const minY = template.nodes.length === 0 ? 0 : Math.min(...template.nodes.map((n) => n.dy))
@@ -396,8 +404,9 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const issueCount = Object.values(issues).reduce((n, list) => n + list.length, 0)
   // M259. A selected block lights its lineage and quiets everything else.
   const hood = useMemo(() => (selectedBlock === null || drawn === undefined ? null : neighbourhood(drawn.edges, selectedBlock)), [selectedBlock, drawn])
-  const litBlocks = hood === null ? null : new Set([...hood.up, ...hood.down, selectedBlock as string])
-  const litEdges = hood === null ? null : new Set(hood.edges)
+  // Memoised: the flow island derives its nodes from these, and a fresh Set every render would reset a block under a drag in flight.
+  const litBlocks = useMemo(() => (hood === null ? null : new Set([...hood.up, ...hood.down, selectedBlock as string])), [hood, selectedBlock])
+  const litEdges = useMemo(() => (hood === null ? null : new Set(hood.edges)), [hood])
   // M259. The traveling highlight: completed blocks, and the finished path
   // between them walked once in rank order. An edge animates the first time
   // it JOINS the walk for this run — a newly finished handoff during a live
@@ -699,6 +708,11 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   readOnly={readOnly}
                   selected={selectedRaw}
                   issues={issues}
+                  litBlocks={litBlocks}
+                  litEdges={litEdges}
+                  wireRefusal={(from, over) => (template === undefined ? null : wireRefusal(template, from, over))}
+                  ghost={ghost === null ? null : { x: ghost.x, y: ghost.y }}
+                  apiRef={flowApi}
                   onSelect={(key) => { select(panel.workflow.templateId, key); props.onFocus(panel.rect.id) }}
                   onMove={(key, dx, dy) => { const result = applyDraftOp(panel.workflow.templateId, saved, { type: 'move', key, dx, dy }); if (result.kind === 'refused') say(result.reason) }}
                   onConnect={(from, to) => { const result = applyDraftOp(panel.workflow.templateId, saved, { type: 'edge', from, to, trigger: 'exit' }); if (result.kind === 'refused') say(result.reason) }}

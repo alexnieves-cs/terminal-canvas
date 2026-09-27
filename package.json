@@ -81,6 +81,7 @@
     "verify:onboarding": "node scripts/verify-onboarding.cjs",
     "verify:orchestration": "node scripts/verify-orchestration.cjs",
     "verify:first-run": "node scripts/verify-first-run.cjs",
+    "verify:primitives": "node scripts/verify-primitives.cjs",
     "verify": "node scripts/verify-all.cjs",
     "verify:verbs": "node scripts/verify-verbs.cjs",
     "verify:teammates": "node scripts/verify-teammates.cjs",
