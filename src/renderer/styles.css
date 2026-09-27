@@ -9071,6 +9071,14 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .inbox__snooze-label { font-size: var(--t-xs); color: var(--fg-3); }
 .inbox__snoozed { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); }
 .inbox__snoozed .rail-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); }
+/* M378. A teammate's agent asking: the WHOLE line it would run, wrapped and
+   never cut — a teammate allows only what they can read in full (M376 sends
+   nothing longer), so an ellipsis here would hide the part that matters. */
+.team-ask__action { margin: 0; font: var(--t-xs) var(--font-mono); color: var(--fg-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.team-ask__verbs { margin-top: 0; padding: 0 var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); }
+/* Each part on its own line: the row wraps (M76), and a short line would
+   otherwise sit BESIDE the label and squeeze whose agent it is to "sa…". */
+.team-ask .rail-row__main, .team-ask .inbox__why, .team-ask .team-ask__verbs { flex: 1 1 100%; }
 
 /* M318. The task-centered queue: a header per task (why it waits, the next
    step, what happens after, who waits on it) above its decisions. Wider than

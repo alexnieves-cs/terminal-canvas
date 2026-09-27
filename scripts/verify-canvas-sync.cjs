@@ -750,6 +750,17 @@ async function until(pred, ms = 3000) {
       JSON.stringify({ first, after, inAnothersName }))
   }
 
+  // ── M378: a team ask's words in a teammate's Needs you ───────────────────
+  {
+    const base = { workspaceId: 'w1', askId: 'hosta1_q1', panelId: 'hosta1_c1', panelTitle: 'api agent', ownerName: 'Ada', tool: 'Bash', summary: 'npm test', scrubbed: 0, need: 1, allows: 0, at: 1 }
+    const one = M.asks.teamAskWords(base)
+    const two = M.asks.teamAskWords({ ...base, need: 2, allows: 1, scrubbed: 1, ownerName: null, panelTitle: '' })
+    ok('team.words.1 a team ask says whose agent (by presence\'s name, else "A teammate" — never an id), the whole line, the progress, and a scrub\'s count when one was hidden',
+      one.who === "Ada's agent · api agent" && one.action === 'Bash — npm test' && one.progress === "one person's allow decides it" && one.scrubbed === undefined &&
+        two.who === "A teammate's agent" && two.progress === "1 of 2 allowed — spend past the team's line needs two people" && two.scrubbed === '1 secret hidden before it left their machine',
+      JSON.stringify({ one, two }))
+  }
+
   // ── the real server: onAuthenticate + beforeSync over a socket ──────────
   {
     const port = await freePort()

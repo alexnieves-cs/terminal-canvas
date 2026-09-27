@@ -17,6 +17,8 @@ import { PLAN_TOOL } from '@shared/transcript'
 import { stepCursor, traversalOrder, type QueueDecision, type QueueEvidence, type TaskGroup, type TaskQueue } from './task-queue'
 import { dismissLost, setQueueCursor, useQueueCursor } from './useTaskQueue'
 import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
+import { teamAskWords } from '@shared/team-asks'
+import { answerTeamAsk, useTeamAsks } from './useTeamAsks'
 
 export interface DockProps {
   /** Which pane the navigator shows, when it shows. */
@@ -42,6 +44,8 @@ export interface DockProps {
   onAllowMore?: (id: string, value: string) => void
   /** M357. A held agent's "Stop": its process ends; the conversation and main's hold stay. */
   onStopAgent?: (id: string) => void
+  /** M378. A team ask's answer that main refused, by its reason (the canvas's toast). */
+  onTeamAskRefused?: (reason: string) => void
   /**
    * #16. The request a navigation shortcut (the inspector's "Review request")
    * opened the queue on — expanded in place of the default, which is the
@@ -103,7 +107,7 @@ function flatQueue(q: TaskQueue): boolean {
 
 function DockImpl({
   navigator, navVisible, onChoose, centerView, onSetCenterView,
-  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onAllowMore, onStopAgent, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onFocusTask, onSettings,
+  attention, elsewhere, onJumpElsewhere, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onAllowMore, onStopAgent, onTeamAskRefused, attentionFocus = null, taskTitleOf, inbox, queue, onEvidence, onFocusTask, onSettings,
   expanded, onToggleExpanded
 }: DockProps): JSX.Element {
   // M318. KEYBOARD TRAVERSAL — decision → evidence → back. The cursor is the
@@ -232,7 +236,10 @@ function DockImpl({
   const snoozed = inbox?.snoozed ?? []
   // Members, not items: a grouped decision is still that many panels waiting.
   const snoozedPanels = new Set(snoozed.flatMap((i) => i.members.map((m) => m.panelId)))
-  const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length
+  // M378. The team's asks wait on this person too — on anyone who may edit
+  // the canvas — so the badge counts them beside the panels waiting here.
+  const team = useTeamAsks()
+  const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length + team.length
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const orchPressed = centerView === 'orchestration'
@@ -552,6 +559,47 @@ function DockImpl({
                         {...shellControl(() => wakeDecision(item.key))}>Wake</button>
                     </li>
                   ))}
+                </ul>
+              </>
+            )}
+            {/* M378. A TEAMMATE's agent asking (M376): one line a person can read
+                whole, whose agent it is, how far the answers have got, and
+                the two answers — allow ONCE or deny. Never a standing grant:
+                that is the agent's owner's alone. The row jumps to the
+                agent's placeholder on this canvas. */}
+            {team.length > 0 && (
+              <>
+                <div className="shell__region-title" data-team-asks-title="">Your team is asking · {team.length}</div>
+                <ul className="rail-list rail-list--attention" aria-label="Your team is asking">
+                  {team.map((row) => {
+                    const w = teamAskWords(row)
+                    const answer = (a: 'allow' | 'deny'): void => { void answerTeamAsk(row, a).then((reason) => { if (reason !== null) onTeamAskRefused?.(reason) }) }
+                    return (
+                      <li key={`${row.workspaceId}/${row.askId}`} className="rail-row rail-attention team-ask" data-team-ask={row.askId}>
+                        <button type="button" className="rail-row__main" title={`Go to ${w.who}`} {...shellControl(() => onGoToPanel(row.panelId))}>
+                          <span className="rail-row__dot status-dot" data-agent-state="wants-you" data-tone="needs-you" aria-hidden="true" />
+                          <span className="rail-row__label">{w.who}</span>
+                          <span className="rail-row__go">jump</span>
+                        </button>
+                        <div className="inbox__why">
+                          <p className="team-ask__action" data-team-ask-action="">{w.action}</p>
+                          <p className="inbox__meta">
+                            <span data-team-ask-progress="">{w.progress}</span>
+                            {w.scrubbed !== undefined && <span data-team-ask-scrubbed="">{w.scrubbed}</span>}
+                            <span>waiting {waitedWords(row.at, now)}</span>
+                          </p>
+                        </div>
+                        <div className="inbox__group-verbs team-ask__verbs">
+                          <button type="button" className="approval__verb" data-team-ask-answer="allow"
+                            title={`Allow this one ${row.tool} call for ${w.who} — it asks again next time`}
+                            {...shellControl(() => answer('allow'))}>Allow once</button>
+                          <button type="button" className="approval__verb approval__verb--deny" data-team-ask-answer="deny"
+                            title="Deny it — one deny decides, whoever else allowed"
+                            {...shellControl(() => answer('deny'))}>Deny</button>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
               </>
             )}

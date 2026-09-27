@@ -116,3 +116,20 @@ export function teammateAskRows(
     .sort((a, b) => a.at - b.at)
 }
 
+/**
+ * M378. A team ask's words in a teammate's Needs you: whose agent, what it
+ * would run, and how far the answers have got. The owner is named only by
+ * the name presence knows them by — never their user id, never a guess.
+ */
+export function teamAskWords(row: TeamAskRow): { who: string; action: string; progress: string; scrubbed?: string } {
+  const owner = row.ownerName ?? 'A teammate'
+  const progress = row.need === 1
+    ? 'one person\'s allow decides it'
+    : `${Math.min(row.allows, 2)} of 2 allowed — spend past the team's line needs two people`
+  return {
+    who: `${owner}'s agent${row.panelTitle === '' ? '' : ` · ${row.panelTitle}`}`,
+    action: `${row.tool} — ${row.summary}`,
+    progress,
+    ...(row.scrubbed > 0 ? { scrubbed: `${row.scrubbed} secret${row.scrubbed === 1 ? '' : 's'} hidden before it left their machine` } : {})
+  }
+}

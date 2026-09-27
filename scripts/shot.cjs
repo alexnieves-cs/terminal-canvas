@@ -1152,6 +1152,27 @@ const SCENES = [
       k.wc.send('agent:state', { panelId: 'chat', state: 'idle' })
       await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
     } },
+  { name: 'team-ask', intent: 'M375–M378. A TEAMMATE\'S AGENT ASKING, in this person\'s Needs you: below whatever waits on this machine, a section `Your team is asking · 2`. Each row names WHOSE agent (`sam\'s agent · tests — api`, `sam\'s agent · relay · shell`) with a jump, the WHOLE line it would run in mono, wrapped and never cut (`Bash — npm test -- --watch=false`; the second a curl whose bearer token reads `[redacted bearer token]`), how far the answers have got (`one person\'s allow decides it`; `1 of 2 allowed — spend past the team\'s line needs two people`), `1 secret hidden before it left their machine` on the second, how long it has waited, and two answers — `Allow once` and `Deny`, never a standing grant. The dock\'s badge counts them. DISCLOSED: the two rows are main\'s `team:asks-changed` push as a shared workspace\'s doc would produce it; nobody answers, and the list is emptied after the shot.',
+    run: async (k) => {
+      const now = Date.now()
+      const row = (askId, panelId, panelTitle, summary, over = {}) => ({ workspaceId: 'w1', askId, panelId, panelTitle, ownerName: 'sam', tool: 'Bash', summary, scrubbed: 0, need: 1, allows: 0, at: now - 150000, ...over })
+      k.wc.send('team:asks-changed', [
+        row('hostsam1_q1', 'hostsam1_n1', 'tests — api', 'npm test -- --watch=false'),
+        row('hostsam1_q2', 'hostsam1_r1', 'relay · shell', 'curl -H "Authorization: Bearer [redacted bearer token]" https://api.github.com/repos/acme/canvas/releases', { need: 2, allows: 1, scrubbed: 1, at: now - 90000 })
+      ])
+      await sleep(300)
+      await k.dock('attention'); await sleep(500)
+      await k.js(`(() => { const t = document.querySelector('[data-team-asks-title]'); if (t) t.scrollIntoView({ block: 'start' }); return !!t })()`)
+      await sleep(300)
+      // What is PAINTED, not what is laid out: both answers of the second row reach the pointer.
+      const painted = await k.js(`(() => { const row = document.querySelector('[data-team-ask="hostsam1_q2"]'); if (!row) return 'no row'
+        const hit = (sel) => { const b = row.querySelector(sel); if (!b) return false; const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e === b || b.contains(e) }
+        return hit('[data-team-ask-answer="allow"]') && hit('[data-team-ask-answer="deny"]') })()`)
+      if (painted !== true) throw new Error(`team-ask scene: the answers are not painted (${painted})`)
+      await k.shot('team-ask')
+      k.wc.send('team:asks-changed', [])
+      await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'
