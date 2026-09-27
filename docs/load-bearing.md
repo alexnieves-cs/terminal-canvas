@@ -4237,8 +4237,8 @@ automated by that script and no longer owed to a person: **2** (`claude plugin l
 through the shipped parser against the real CLI, reporting the version and the arm it took),
 **5** (`shell.trashItem` from a node-mode Electron over a temp file), **7** (the real
 `createSkill` under a fresh temp HOME, the `mkdir` arm), and **8** (`renameInShelf` over an
-occupied destination). The SEVEN below are still a person's; the script prints these same
-steps, and a HAND line is not a pass:
+occupied destination). The SEVEN below were still a person's then, and M382 added an
+eighth (the last); the script prints these same steps, and a HAND line is not a pass:
 
 - **The trail against a real agent (M130).** Spawn a Claude-preset terminal in a repository
   with two skills; invoke both by name in two prompts; select the panel; the Skills pane's
@@ -4266,6 +4266,11 @@ steps, and a HAND line is not a pass:
 - **A workflow watcher ARMED for real (M133).** Triggers → every 1 minute; three minutes
   later three new runs in the Runs tab and a ledger row per fire naming `/usr/bin/true` with
   exit 0 beside it.
+- **A sealed transcript on a packaged, signed build (M382).** Added at M382, and a
+  person's: on a signed build that has never run on the Mac, send one message in a chat,
+  quit, relaunch and reopen it. No keychain prompt appears, the earlier turns render, and
+  the transcript file holds only `enc1:` lines. The credential store has used the same
+  Safe Storage item since M14, so a prompt is a signing change, not the seal.
 
 **`serialiseLayout` is the one place "an empty record is absent on disk" is decided
 (`shared/layout-schema.ts`, `main/layout-store.ts`).** It did not exist before M126: the

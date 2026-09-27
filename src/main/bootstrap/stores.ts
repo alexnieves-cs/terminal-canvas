@@ -211,7 +211,9 @@ export function createStores(state: MainState): Stores {
    */
   const checkOutputs = createCheckOutputStore({ dir: join(userData, 'check-output') })
   // M73. One append-only transcript per chat panel, beside the scrollback logs.
-  const agentTranscripts = createAgentTranscriptLog({ dir: join(userData, 'agent-transcripts') })
+  // M382. Sealed at rest under the keychain's key — the credential store's
+  // adapter, called lazily for the same reason.
+  const agentTranscripts = createAgentTranscriptLog({ dir: join(userData, 'agent-transcripts'), crypto: createSafeStorageCrypto() })
 
   // M54. Declared ABOVE the manager, which carries them into every spawn's env.
   const controlSocketPath = join(userData, 'control.sock')

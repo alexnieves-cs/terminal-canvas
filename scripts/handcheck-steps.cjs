@@ -147,6 +147,14 @@ const STEPS = [
       'Open a workflow panel; Triggers → every 1 minute; leave the app running for three minutes.',
       'Expected: the workflow instantiates once per minute (three new runs in the Runs tab), and the run ledger (`tc ledger` or the inspector\'s Ledger) shows a row per fire naming `/usr/bin/true` with exit 0 beside it — the recorded cost of a trigger being a watcher whose command is a no-op.'
     ]
+  },
+  {
+    n: 12, arm: 'hand',
+    title: 'A sealed transcript on a packaged, signed build (M382)',
+    steps: [
+      'On a packaged, signed build that has never run on this Mac, open a chat and send one message; then quit and relaunch, and open the same chat.',
+      'Expected: no keychain prompt at the first message or at the relaunch; the chat renders its earlier turns; and `userData/agent-transcripts/<id>.jsonl` holds only `enc1:` lines. A prompt that says the app wants its Safe Storage key means every chat now asks the keychain — the credential store has used the same item since M14, so a prompt here is a signing change, not this milestone.'
+    ]
   }
 ]
 

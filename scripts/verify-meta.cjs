@@ -964,8 +964,8 @@ console.log('\n' + '='.repeat(60))
   const auto = Array.isArray(steps) ? steps.filter((s) => s.arm === 'auto') : []
   const missing = hand.filter((s) => !manualBlock.includes(s.title)).map((s) => s.n)
   const chain = String(pkg.scripts.verify || '')
-  ok('handcheck.1 scripts/handcheck-steps.cjs holds the eleven owed checks, every HAND title is in the manual-only block, every step has an arm, and handcheck is a script outside the verify chain',
-    loadErr === null && Array.isArray(steps) && steps.length === 11 && hand.length + auto.length === 11 &&
+  ok('handcheck.1 scripts/handcheck-steps.cjs holds the twelve owed checks, every HAND title is in the manual-only block, every step has an arm, and handcheck is a script outside the verify chain',
+    loadErr === null && Array.isArray(steps) && steps.length === 12 && hand.length + auto.length === 12 &&
       hand.every((s) => Array.isArray(s.steps) && s.steps.length >= 2) && auto.every((s) => typeof s.run === 'function') &&
       missing.length === 0 && typeof pkg.scripts.handcheck === 'string' && !chain.includes('handcheck'),
     JSON.stringify({ loadErr, count: Array.isArray(steps) ? steps.length : null, hand: hand.length, auto: auto.length, missing, script: pkg.scripts.handcheck ?? null }))

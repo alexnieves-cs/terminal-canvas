@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { contextTokens } from '@shared/agent-session'
 import type { TokenTotals } from '@shared/cost'
@@ -46,7 +46,28 @@ export interface AgentTranscriptMeta {
 export interface AgentTranscriptRead {
   turns: TranscriptTurn[]
   meta?: AgentTranscriptMeta
+  /**
+   * M382. Sealed lines this machine could not open — written under a key its
+   * keychain no longer holds (another Mac's, a reset keychain). Absent when
+   * none: a transcript that lost lines says so, never reads as shorter.
+   */
+  unreadable?: number
 }
+
+/**
+ * M382. The line cipher: the credential store's shape (`CredentialCrypto`),
+ * and in production the same keychain-held key (`credential-crypto.ts`).
+ * Called LAZILY for that module's reason: safeStorage is not usable before
+ * the app is ready, and the log is built at module scope.
+ */
+export interface TranscriptCrypto {
+  available(): boolean
+  encrypt(plaintext: string): Buffer
+  decrypt(blob: Buffer): string
+}
+
+/** A sealed line's prefix; the version is in it so a second cipher can be told from the first. */
+export const SEALED_PREFIX = 'enc1:'
 
 export interface AgentTranscriptLog {
   appendTurn(panelId: string, turn: TranscriptTurn): void
@@ -91,7 +112,25 @@ function fileFor(dir: string, panelId: string): string {
   return join(dir, `${panelId.replace(/[^A-Za-z0-9_-]/g, '_')}.jsonl`)
 }
 
-export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscriptLog {
+/**
+ * M382. THE REPLAY RECORD, ENCRYPTED AT REST. A transcript holds every file
+ * an agent wrote and every command it ran — a node's whole replay (M381) — so
+ * with a cipher each line is sealed on its way to disk under the keychain's
+ * key (`enc1:` + base64). Per LINE, so the file stays an append stream (the
+ * header's first fact). A file with plaintext lines from before is SEALED
+ * WHOLE on this session's first write to it — rewritten through a temp file
+ * and a rename, once — so "encrypted at rest" is not "encrypted from now on".
+ * Reading takes both: a plaintext line is a line this app wrote earlier, and
+ * a sealed line this keychain cannot open is counted (`unreadable`), never
+ * silently dropped. With no cipher (a harness) or none available, lines are
+ * written plain exactly as before.
+ */
+export function createAgentTranscriptLog(deps: { dir: string; crypto?: TranscriptCrypto }): AgentTranscriptLog {
+  const sealedThisSession = new Set<string>()
+  const cipherOn = (): boolean => {
+    try { return deps.crypto?.available() === true } catch { return false }
+  }
+  const seal = (line: string): string => SEALED_PREFIX + (deps.crypto as TranscriptCrypto).encrypt(line).toString('base64')
   const ensureDir = (): void => {
     try {
       mkdirSync(deps.dir, { recursive: true })
@@ -99,13 +138,41 @@ export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscript
       // The append below reports the real failure.
     }
   }
+  /** Rewrite a file's plaintext lines sealed, once per file per session. */
+  const sealExisting = (file: string): void => {
+    if (sealedThisSession.has(file)) return
+    sealedThisSession.add(file)
+    let text: string
+    try { text = readFileSync(file, 'utf8') } catch { return }
+    const lines = text.split('\n').filter((l) => l.trim() !== '')
+    if (!lines.some((l) => !l.startsWith(SEALED_PREFIX))) return
+    const tmp = `${file}.tmp`
+    try {
+      writeFileSync(tmp, lines.map((l) => (l.startsWith(SEALED_PREFIX) ? l : seal(l))).join('\n') + '\n')
+      renameSync(tmp, file)
+    } catch (error) {
+      console.warn('[agent-transcript] could not seal an older transcript', error)
+    }
+  }
   const append = (panelId: string, line: string): void => {
     ensureDir()
+    const file = fileFor(deps.dir, panelId)
     try {
-      appendFileSync(fileFor(deps.dir, panelId), line + '\n')
+      if (cipherOn()) {
+        sealExisting(file)
+        appendFileSync(file, seal(line) + '\n')
+      } else {
+        appendFileSync(file, line + '\n')
+      }
     } catch (error) {
       console.warn(`[agent-transcript] could not append for ${panelId}`, error)
     }
+  }
+  /** A line as JSON text: a plaintext line as it is, a sealed one opened, or null when it cannot be. */
+  const open = (line: string): string | null => {
+    if (!line.startsWith(SEALED_PREFIX)) return line
+    if (deps.crypto === undefined) return null
+    try { return deps.crypto.decrypt(Buffer.from(line.slice(SEALED_PREFIX.length), 'base64')) } catch { return null }
   }
   return {
     appendTurn(panelId, turn) {
@@ -129,8 +196,11 @@ export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscript
       const order: string[] = []
       const byId = new Map<string, TranscriptTurn>()
       let meta: AgentTranscriptMeta | undefined
-      for (const line of text.split('\n')) {
-        if (line.trim() === '') continue
+      let unreadable = 0
+      for (const raw of text.split('\n')) {
+        if (raw.trim() === '') continue
+        const line = open(raw)
+        if (line === null) { unreadable++; continue }
         let parsed: unknown
         try {
           parsed = JSON.parse(line)
@@ -170,7 +240,7 @@ export function createAgentTranscriptLog(deps: { dir: string }): AgentTranscript
           }
         }
       }
-      return { turns: order.map((id) => byId.get(id) as TranscriptTurn), ...(meta === undefined ? {} : { meta }) }
+      return { turns: order.map((id) => byId.get(id) as TranscriptTurn), ...(meta === undefined ? {} : { meta }), ...(unreadable === 0 ? {} : { unreadable }) }
     },
     drop(panelId) {
       try {

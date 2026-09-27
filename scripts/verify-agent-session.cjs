@@ -3177,6 +3177,45 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify(cmp))
   }
 
+  // M382 — transcript.seal.1. The replay record encrypted at rest: every
+  //     line sealed under the cipher (the keychain's, in production), an
+  //     older plaintext file sealed WHOLE on this session's first write, a
+  //     line under a key this machine lacks counted rather than dropped, and
+  //     no cipher (or none available) writing plain exactly as before.
+  {
+    const { mkdtempSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
+    const { join } = require('node:path')
+    const { tmpdir } = require('node:os')
+    const dir = mkdtempSync(join(tmpdir(), 'tc transcript seal '))
+    const cipher = (key) => ({
+      available: () => true,
+      encrypt: (s) => Buffer.from(`${key}:` + [...s].reverse().join(''), 'utf8'),
+      decrypt: (b) => { const t = b.toString('utf8'); if (!t.startsWith(`${key}:`)) throw new Error('wrong key'); return [...t.slice(key.length + 1)].reverse().join('') }
+    })
+    const T = (id, text, at) => ({ id, role: 'assistant', blocks: [{ type: 'text', text }], at })
+    // An older, plaintext transcript, then this session's sealed writer.
+    M.log.createAgentTranscriptLog({ dir }).appendTurn('c1', T('a1', 'curl the old way', 1))
+    const sealed = M.log.createAgentTranscriptLog({ dir, crypto: cipher('K1') })
+    sealed.appendTurn('c1', T('a2', 'Write the secret file', 2))
+    const onDisk = readFileSync(join(dir, 'c1.jsonl'), 'utf8')
+    const back = sealed.read('c1')
+    // A line sealed by another machine's key sits beside ours.
+    const foreign = M.log.createAgentTranscriptLog({ dir, crypto: cipher('K2') })
+    foreign.appendTurn('c1', T('a3', 'from elsewhere', 3))
+    const mixed = sealed.read('c1')
+    const plain = M.log.createAgentTranscriptLog({ dir, crypto: { ...cipher('K1'), available: () => false } })
+    plain.appendTurn('c2', T('b1', 'not yet ready', 4))
+    const plainDisk = readFileSync(join(dir, 'c2.jsonl'), 'utf8')
+    rmSync(dir, { recursive: true, force: true })
+    const lines = onDisk.split('\n').filter((l) => l !== '')
+    ok('transcript.seal.1 the replay record is sealed at rest: every line enc1:, an older plaintext file sealed whole on the first write, both turns read back, a line under another key counted as unreadable (never dropped silently), and no available cipher writes plain as before',
+      lines.length === 2 && lines.every((l) => l.startsWith(M.log.SEALED_PREFIX)) && !/curl the old way|secret file/.test(onDisk) &&
+        back.turns.map((t) => t.id).join(',') === 'a1,a2' && back.unreadable === undefined &&
+        mixed.turns.map((t) => t.id).join(',') === 'a1,a2' && mixed.unreadable === 1 &&
+        !plainDisk.startsWith(M.log.SEALED_PREFIX) && /not yet ready/.test(plainDisk),
+      JSON.stringify({ lines: lines.map((l) => l.slice(0, 12)), back: back.turns.length, mixed: { turns: mixed.turns.length, unreadable: mixed.unreadable } }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
