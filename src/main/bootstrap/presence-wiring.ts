@@ -8,6 +8,7 @@ import { hocuspocusConnect } from '../presence/presence-provider'
 import { createTeamReporter, type TeamReporter } from '../presence/team-reporter'
 import type { AccountService } from '../account-session'
 import { recordDecision } from '../decision-audit'
+import { createTeamAskRouter, type TeamAskRouter } from '../team-ask-router'
 import { shareDecisionRow, type ShareDecision } from '../../shared/decision-audit'
 import { requestFromRenderer } from '../ipc'
 import { IPC_EVENTS, type ControlCanvasModel } from '../../shared/ipc-contract'
@@ -130,11 +131,35 @@ export function createCanvasSyncWiring(state: MainState, stores: Stores, account
     // Background news like a roster: never pops a closed window open.
     emit: (view) => { readyContents(state)?.send(IPC_EVENTS.CANVAS_SHARED, view) },
     emitText: (push) => { readyContents(state)?.send(IPC_EVENTS.TEXT_REMOTE, push) },
+    // M376. A peer answered a team ask: the owner's router decides (read at use).
+    onAsks: (id) => { state.teamAsks?.asksChanged(id) },
     refreshRole: (shareId) => account.workspaceRole(shareId),
     setRole: (id, role) => {
       const share = store.workspaceShare(id)
       if (share !== undefined) store.setWorkspaceShare(id, { ...share, role })
     }
+  })
+}
+
+/**
+ * M376. The team queue's owner side over canvas-sync and the agent manager,
+ * every collaborator read at USE (context.ts's rule): the agents runtime and
+ * the canvas binding both exist later than this, and may be absent.
+ */
+export function createTeamAskWiring(state: MainState, stores: Stores, account: AccountService, userData: string): TeamAskRouter {
+  const store = stores.layoutStore
+  const setting = (id: string): unknown => store.getSetting(id as never)
+  return createTeamAskRouter({
+    enabled: () => setting('agents.teamAsks') === true,
+    escalateAtUsd: () => { const v = setting('agents.teamEscalateUsd'); return typeof v === 'number' && v > 0 ? v : undefined },
+    host: installId(userData),
+    userId: () => account.currentUserId(),
+    workspaceOfPanel: (panelId) => state.canvasSync?.workspaceOfPanel(panelId) ?? null,
+    asks: (workspaceId) => state.canvasSync?.asks(workspaceId) ?? null,
+    writeAsk: (workspaceId, op) => state.canvasSync?.writeAsk(workspaceId, op) ?? { ok: false, reason: 'sharing is not wired in this build' },
+    spentOf: (panelId) => state.agents?.get(panelId)?.meter?.spentUsd,
+    answer: (panelId, requestId, answer) => state.agents?.answerPermission(panelId, requestId, answer) ?? false,
+    record: (row) => { void recordDecision(stores.runLedger, stores.decisionAudit, row) }
   })
 }
 

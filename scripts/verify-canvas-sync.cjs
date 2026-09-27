@@ -40,6 +40,7 @@ buildSync({
       "  backup: require('./server/collab/backup.ts'),",
       "  health: require('./server/collab/health.ts'),",
       "  asks: require('./src/shared/team-asks.ts'),",
+      "  router: require('./src/main/team-ask-router.ts'),",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -64,7 +65,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0))
 const panel = (id, x, extra = {}) => ({ id, kind: 'terminal', title: `t ${id}`, x, y: 0, w: 400, h: 300, z: 1, ...extra })
 
 /** One machine: a layout-store stand-in, a canvas-sync, a doc. */
-function machine({ host, userId, role, panels = [], crdt = null }) {
+function machine({ host, userId, role, panels = [], crdt = null, extra = {} }) {
   const ws = { panels: panels.map((p) => ({ ...p })), groups: [] }
   const share = { id: SHARE, orgId: ORG, role }
   const views = []
@@ -84,7 +85,8 @@ function machine({ host, userId, role, panels = [], crdt = null }) {
       if (change.groups !== undefined) ws.groups = change.groups.map((g) => ({ ...g, panelIds: [...g.panelIds] }))
     },
     emit: (v) => views.push(v),
-    emitText: (push) => { for (const sink of textSinks) sink(push) }
+    emitText: (push) => { for (const sink of textSinks) sink(push) },
+    ...extra
   })
   const doc = new Y.Doc()
   return { ws, share, views, textSinks, store, sync, doc, host, userId, view: () => views[views.length - 1] ?? null, bind() { this.unbind = sync.bind('w1', doc) } }
@@ -637,6 +639,90 @@ async function until(pred, ms = 3000) {
         stray[0]?.op.kind === 'unknown' && malformed[0]?.op.kind === 'unknown' && rewritten[0]?.op.kind === 'unknown' &&
         read.length === 1 && read[0].answers[UB] === 'allow' && read[0].closed === undefined,
       JSON.stringify({ opened, answered, closed, stray, malformed, rewritten, read }))
+  }
+
+  // ── M376: the owner's machine routes, reads and decides ──────────────────
+  //     A real owner canvas-sync (A) and a teammate's (B), relayed like a
+  //     room; a stand-in agent manager whose `answer` is the one door.
+  {
+    let router = null
+    const A = machine({ host: 'hosta1', userId: UA, role: 'owner', panels: [panel('c1', 0, { kind: 'chat' })], extra: { onAsks: (w) => router?.asksChanged(w) } })
+    const B = machine({ host: 'hostb1', userId: UB, role: 'editor' })
+    A.bind(); B.bind(); relay(A.doc, B.doc)
+    let enabled = true, spent = 1
+    const pending = new Set(), answered = [], records = []
+    let n = 0
+    const deps = {
+      enabled: () => enabled, escalateAtUsd: () => 5, host: () => 'hosta1', userId: () => UA,
+      workspaceOfPanel: (id) => A.sync.workspaceOfPanel(id), asks: (w) => A.sync.asks(w), writeAsk: (w, op) => A.sync.writeAsk(w, op),
+      spentOf: () => spent,
+      answer: (panelId, requestId, answer) => {
+        answered.push({ requestId, answer })
+        const had = pending.delete(requestId)
+        // The manager's own event for this very answer, as agent-runtime fans it out.
+        if (had) router.agentEvent({ id: panelId, type: 'permission-answered', requestId, allow: answer.allow })
+        return had
+      },
+      record: (row) => records.push(row), mintId: () => `q${++n}`
+    }
+    router = M.router.createTeamAskRouter(deps)
+    const ask = (requestId, input, toolName = 'Bash') => { pending.add(requestId); router.agentEvent({ id: 'c1', type: 'permission-request', requestId, toolName, input }) }
+    const onB = (id) => M.doc.readSharedAsks(B.doc).find((q) => q.ask.id === id)
+    const answerB = (id, answer) => B.sync.writeAsk('w1', { kind: 'ask-answer', askId: id, by: UB, answer })
+
+    // One allow decides a request under the line; the summary crossed scrubbed.
+    ask('r1', { command: 'curl -H "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789" https://api.github.com/user', description: 'who am I' })
+    const r1 = onB('hosta1_q1')
+    answerB('hosta1_q1', 'allow')
+    const r1After = onB('hosta1_q1')
+    ok('team.route.1 a request on a shared canvas reaches a teammate as an ask, its one line scrubbed with the count; the teammate\'s allow answers the process through the one door, closes the ask as allowed, and is on the record as the team\'s',
+      r1 !== undefined && r1.ask.panel === 'hosta1_c1' && r1.ask.need === 1 && r1.ask.scrubbed === 1 && !/ghp_/.test(r1.ask.summary) && /api\.github\.com/.test(r1.ask.summary) &&
+        answered.some((a) => a.requestId === 'r1' && a.answer.allow === true) && r1After?.closed === 'allowed' &&
+        records.length === 1 && /^Allowed Bash — curl .*, by a teammate on the team$/.test(records[0].title) && records[0].source === 'person' && records[0].panelId === 'c1',
+      JSON.stringify({ r1, r1After, answered, records }))
+
+    // Past the line: the owner's own allow is one of two, and the request waits.
+    spent = 6
+    ask('r2', { command: 'npm publish' })
+    const waiting = router.localAnswer('c1', 'r2', { allow: true })
+    const beforeSecond = answered.some((a) => a.requestId === 'r2')
+    const r2Mid = onB('hosta1_q2')
+    answerB('hosta1_q2', 'allow')
+    const r2After = onB('hosta1_q2')
+    // One deny decides, whatever the count.
+    ask('r3', { command: 'rm -rf build' })
+    answerB('hosta1_q3', 'deny')
+    const r3 = answered.find((a) => a.requestId === 'r3')
+    ok('team.route.2 past the spend line an ask needs two people: the owner\'s own allow is one (the request waits, unanswered), a teammate\'s is the second; a single deny decides at once, in the team\'s words',
+      waiting === 'waiting' && !beforeSecond && r2Mid?.ask.need === 2 && r2Mid?.answers[UA] === 'allow' && r2After?.closed === 'allowed' &&
+        answered.some((a) => a.requestId === 'r2' && a.answer.allow === true) && /by 2 people on the team/.test(records[1]?.title ?? '') &&
+        r3?.answer.allow === false && /A teammate denied/.test(r3.answer.message) && onB('hosta1_q3')?.closed === 'denied',
+      JSON.stringify({ waiting, r2Mid, r2After, r3, records: records.map((r) => r.title) }))
+
+    // What never leaves: a Write's content, a plan, main's own question, anything with routing off.
+    const before = router.open().length
+    ask('r4', { file_path: '/repo/a.ts', content: 'secret stuff' }, 'Write')
+    ask('r5', { plan: '# Plan' }, 'ExitPlanMode')
+    ask('tc-ext-1', { command: 'POST /repos' })
+    enabled = false
+    ask('r6', { command: 'ls' })
+    enabled = true
+    const notRouted = router.open().length === before && M.doc.readSharedAsks(B.doc).length === 3
+    // A request that ends another way withdraws its ask; so does a relaunch.
+    ask('r7', { command: 'make' })
+    router.agentEvent({ id: 'c1', type: 'permission-dropped', requestId: 'r7' })
+    ask('r8', { command: 'make test' })
+    const fresh = M.router.createTeamAskRouter(deps)
+    fresh.asksChanged('w1')
+    // The owner alone deciding keeps their own words.
+    spent = 1
+    ask('r9', { command: 'git push' })
+    const decided = router.localAnswer('c1', 'r9', { allow: false, message: 'not from this branch' })
+    ok('team.route.3 a Write\'s content, a plan, main\'s own credential question and a request with routing off stay here; a dropped request and a relaunch withdraw their asks; the owner deciding alone answers in their own words',
+      notRouted && onB('hosta1_q4')?.closed === 'withdrawn' && onB('hosta1_q5')?.closed === 'withdrawn' &&
+        decided === 'decided' && answered.find((a) => a.requestId === 'r9')?.answer.message === 'not from this branch' && onB('hosta1_q6')?.closed === 'denied' &&
+        records.length === 3 && /^Denied Bash — rm -rf build, by a teammate/.test(records[2].title),
+      JSON.stringify({ asks: M.doc.readSharedAsks(B.doc).map((q) => [q.ask.id, q.ask.summary, q.closed]), records: records.length }))
   }
 
   // ── the real server: onAuthenticate + beforeSync over a socket ──────────

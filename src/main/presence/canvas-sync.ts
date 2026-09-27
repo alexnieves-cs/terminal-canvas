@@ -47,11 +47,11 @@
 import * as Y from 'yjs'
 import { redactSecrets } from '../../shared/redact'
 import {
-  applyCanvasOp, diffLocal, docKey, groupToLocal, inspectUpdate, localIdOf, opContext, readSharedGroups, readSharedPanels,
+  applyCanvasOp, diffLocal, docKey, groupToLocal, inspectUpdate, localIdOf, opContext, readSharedAsks, readSharedGroups, readSharedPanels,
   CANVAS_FILES, CANVAS_GROUPS, CANVAS_PANELS, type LocalGroupLike, type LocalPanelLike
 } from '../../shared/canvas-doc'
 import {
-  authorizeCanvasOp, RECT_FIELDS,
+  authorizeCanvasOp, CANVAS_ASKS, RECT_FIELDS,
   type CanvasOp, type CanvasSharedView, type SharedGroup, type SharedTextOpen, type SharedTextPush, type Verdict, type WorkspaceRole
 } from '../../shared/canvas-ops'
 
@@ -77,6 +77,8 @@ export interface CanvasSyncDeps {
   setRole?: (workspaceId: string, role: WorkspaceRole) => void
   /** text:remote — to the renderer's replica of a workspace it has open (see the header). */
   emitText?: (push: SharedTextPush) => void
+  /** M376. A workspace's team asks changed by anything but this machine's own write (a peer's answer, the doc loaded). */
+  onAsks?: (workspaceId: string) => void
 }
 
 export interface CanvasSync {
@@ -96,6 +98,12 @@ export interface CanvasSync {
   textClose(workspaceId: string): void
   /** An update from the renderer's replica, gated like the server gates ours. A refusal means the replica has diverged and must re-open. */
   textUpdate(workspaceId: string, update: Uint8Array): Verdict
+  /** M376. The shared workspace whose bound doc holds this LOCAL panel, or null. */
+  workspaceOfPanel(panelId: string): string | null
+  /** M376. A bound workspace's team asks as its doc stands now, or null when it is not bound and shared. */
+  asks(workspaceId: string): ReturnType<typeof readSharedAsks> | null
+  /** M376. One team-ask op, as this person, through the same authorisation as every write. */
+  writeAsk(workspaceId: string, op: Extract<CanvasOp, { kind: 'ask-open' | 'ask-answer' | 'ask-close' }>): Verdict
 }
 
 /** Writes this machine made — everything else observed on the doc is a peer's. */
@@ -285,9 +293,19 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
         // A file newly shared: a placeholder's draft door appears (view.files).
         if (events.some((e) => e.target === files)) emitSoon(b)
       }
+      // M376. A peer's answer to a team ask touches no panel either: it
+      // persists here, and the router is told so it can decide. Our own
+      // writes are the router's own; it needs no echo of them.
+      const asks = doc.getMap(CANVAS_ASKS)
+      const onAsks = (_events: Array<Y.YEvent<Y.AbstractType<unknown>>>, tr: Y.Transaction): void => {
+        if (bindings.get(workspaceId) !== b || tr.origin === LOCAL_ORIGIN) return
+        if (tr.origin !== PERSIST_ORIGIN && tr.origin !== RENDERER_ORIGIN) persist(b)
+        deps.onAsks?.(workspaceId)
+      }
       doc.on('update', onUpdate)
       files.observeDeep(onFiles)
-      b.off = () => { panels.unobserveDeep(onPanels); groups.unobserveDeep(onPanels); files.unobserveDeep(onFiles); doc.off('update', onUpdate) }
+      asks.observeDeep(onAsks)
+      b.off = () => { panels.unobserveDeep(onPanels); groups.unobserveDeep(onPanels); files.unobserveDeep(onFiles); asks.unobserveDeep(onAsks); doc.off('update', onUpdate) }
       // A replica opened on the doc this one replaces holds the wrong history.
       if (textOpen.has(workspaceId)) deps.emitText?.({ workspaceId, kind: 'reset' })
 
@@ -319,6 +337,25 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
         if (deps.activeWorkspaceId() === workspaceId) deps.emit(null)
         if (textOpen.has(workspaceId)) deps.emitText?.({ workspaceId, kind: 'reset' })
       }
+    },
+
+    workspaceOfPanel(panelId) {
+      for (const b of bindings.values()) {
+        if (deps.share(b.workspaceId) === undefined) continue
+        if ((deps.local(b.workspaceId)?.panels ?? []).some((p) => p.id === panelId)) return b.workspaceId
+      }
+      return null
+    },
+
+    asks(workspaceId) {
+      const b = bindings.get(workspaceId)
+      return b === undefined || deps.share(workspaceId) === undefined ? null : readSharedAsks(b.doc)
+    },
+
+    writeAsk(workspaceId, op) {
+      const b = bindings.get(workspaceId)
+      if (b === undefined || deps.share(workspaceId) === undefined) return { ok: false, reason: 'this workspace is not shared' }
+      return write(b, op)
     },
 
     op(op) {

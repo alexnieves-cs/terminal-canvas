@@ -221,6 +221,28 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M376. Arc 2's team queue: off by default, because a teammate allowing a
+    // command runs it on THIS machine — sharing a canvas is not consent to it.
+    id: 'agents.teamAsks',
+    label: 'Ask the team to approve on a shared canvas',
+    description: 'on a shared canvas, send each of your agents\' permission requests to the team as well: anyone who may edit the canvas can allow it once or deny it, and you can still answer here — plans and credential writes stay yours alone',
+    keywords: ['team', 'approve', 'approval', 'permission', 'queue', 'shared', 'teammate', 'ask', 'allow', 'deny'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'agents.teamEscalateUsd',
+    label: 'Two approvers past this spend',
+    description: 'once an agent\'s own reported cost reaches this many dollars, a request sent to the team needs two different people to allow it — your answer here is one of them; 0 is always one',
+    keywords: ['team', 'approve', 'approval', 'escalate', 'two', 'second', 'spend', 'threshold', 'dollars', 'cost'],
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 1000,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.bell',
     planWritable: true,
     label: 'Detect the terminal bell',

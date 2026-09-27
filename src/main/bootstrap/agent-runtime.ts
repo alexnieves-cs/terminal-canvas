@@ -173,6 +173,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     // agentStatus/statusLine. Read at use: the hub may be off (not configured,
     // not signed in), and then this is a no-op.
     state.presence?.agentEvent(event)
+    // M376. A permission request may also go to the team (off by default).
+    state.teamAsks?.agentEvent(event)
     state.window?.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
   })
 }

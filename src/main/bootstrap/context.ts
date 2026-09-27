@@ -7,6 +7,7 @@ import type { PoolCaller } from '../pool-caller'
 import type { ControlServer } from '../control-server'
 import type { PresenceHub } from '../presence/presence-hub'
 import type { CanvasSync } from '../presence/canvas-sync'
+import type { TeamAskRouter } from '../team-ask-router'
 
 /**
  * EVERY FIELD HERE IS READ LATE, AND THAT IS THE WHOLE POINT OF THE OBJECT.
@@ -83,6 +84,8 @@ export interface MainState {
   presence: PresenceHub | null
   /** The shared canvas's binding (presence/canvas-sync.ts). Read by the hub's bindCanvas and by layout:save. */
   canvasSync: CanvasSync | null
+  /** M376. The team queue's owner side. Read at use by the agent:event fan-out, agent:answer and canvas-sync's onAsks. */
+  teamAsks: TeamAskRouter | null
   /** The signed-in person's user id, or null — what every agent event is stamped with. Replaced in index.ts once the account exists. */
   currentUserId: () => string | null
 }
@@ -105,6 +108,7 @@ export function createMainState(): MainState {
     watchRunner: null,
     presence: null,
     canvasSync: null,
+    teamAsks: null,
     currentUserId: () => null
   }
 }

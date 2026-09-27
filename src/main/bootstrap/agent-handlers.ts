@@ -192,7 +192,14 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
       // writes). `toolName` is defined only when the request is really PENDING
       // in main's own record, so a grant for a question the process never heard
       // cannot be minted here (the pending lookup above is the guard).
+      // M376. A request routed to the team: this answer is ONE person's.
+      // Past the spend line it may leave the request pending ('waiting' —
+      // accepted, and no grant yet); when it decides, the router has already
+      // answered the process, and a session grant is kept for next time.
+      const routed = state.teamAsks?.localAnswer(id, requestId, answer) ?? 'not-routed'
+      if (routed === 'waiting') return true
       if (toolName !== undefined) state.approvals?.grant(id, toolName)
+      if (routed === 'decided') return true
       return state.agents?.answerPermission(id, requestId, answer) ?? false
     },
     grants: (id) => state.approvals?.grantsOf(id) ?? [],

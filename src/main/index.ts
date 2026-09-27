@@ -18,7 +18,7 @@ import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
-import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring } from './bootstrap/presence-wiring'
+import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
 import { createShareControl } from './share-control'
 import { confirm } from './bootstrap/dialogs'
@@ -115,6 +115,8 @@ stores.ptyManager.ownerOf = () => account.currentUserId()
 state.presence = createPresenceWiring(state, stores, account)
 // The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
 state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'))
+// M376. The team queue's owner side (off until agents.teamAsks is on).
+state.teamAsks = createTeamAskWiring(state, stores, account, app.getPath('userData'))
 const shareDoors = createShareDoors(state, stores, account)
 // The Team view's server rows, written from the hub's summary on its own slow beat.
 const teamReporter = createTeamReporterWiring(state.presence, account)
