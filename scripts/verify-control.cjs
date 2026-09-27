@@ -700,6 +700,17 @@ const ok = (n, pass, detail = '') => {
         read.rows.map((r) => r.title).join('|') === `${kept}|${personCap}`,
       JSON.stringify(read.rows))
   }
+  // M369 fix — cli.list.1. Every no-argument verb builds ITSELF. M369 first
+  //     put `case 'audit'` between `case 'list':` and `case 'status':`, so
+  //     `tc list` fell through and asked for the audit, and no check built
+  //     `tc list` through the CLI to notice.
+  {
+    const built = ['list', 'status', 'ping', 'audit'].map((v) => C.buildRequest([v], {}))
+    const extra = C.buildRequest(['list', 'x'], {})
+    ok('cli.list.1 tc list, status, ping and audit each build their own verb, and a stray argument to list is a usage error',
+      built.every((b, i) => b.kind === 'ok' && JSON.parse(b.line).verb === ['list', 'status', 'ping', 'audit'][i]) && extra.kind === 'usage',
+      JSON.stringify({ built, extra }))
+  }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

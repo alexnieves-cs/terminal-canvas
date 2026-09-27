@@ -92,3 +92,13 @@ the baseline.
 
 Next: M371 (the missing decisions reach the audit), then M372 (the ledger's person rows
 are scrubbed).
+
+## Fix, after landing: `tc list` asked for the audit
+
+Found while building M366. The `audit` arm went into `cli/tc.ts` between `case 'list':`
+and `case 'status':`, so `tc list` fell through into it and sent `{"verb":"audit"}`.
+Nothing built `tc list` through the CLI: `verify:control` parsed `list` at the protocol,
+never through `buildRequest`. The arm now sits above the no-argument group.
+`verify:control cli.list.1` builds `list`, `status`, `ping` and `audit` through the CLI,
+each to its own verb. It is red on M369's `tc.ts` and green on the fix. The fix shares
+M372's gate, and its files do not overlap M372's.

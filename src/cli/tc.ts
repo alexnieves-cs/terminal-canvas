@@ -248,8 +248,10 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       return rest.length === 1 && rest[0] !== '' ? { kind: 'ok', line: JSON.stringify({ verb: 'open-share', shareId: rest[0] }) } : { kind: 'usage', error: 'open-share takes one shared workspace id — `tc shares` lists them' }
     case 'share-role':
       return rest.length === 3 ? { kind: 'ok', line: JSON.stringify({ verb: 'share-role', shareId: rest[0], who: rest[1], role: rest[2] }) } : { kind: 'usage', error: 'share-role takes a share id, a login or user id, and editor, viewer or none' }
-    case 'list':
     // M369. `tc audit [--limit N]`: what a person decided, newest first.
+    // Placed ABOVE the no-argument group, never inside it: M369 first landed
+    // it between `case 'list':` and `case 'status':`, so `tc list` fell
+    // through into this arm and asked for the audit (`verify:control cli.list.1`).
     case 'audit': {
       if (rest.length === 0) return { kind: 'ok', line: JSON.stringify({ verb: 'audit' }) }
       if (rest.length === 2 && rest[0] === '--limit') {
@@ -259,6 +261,7 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       }
       return { kind: 'usage', error: 'audit takes only --limit N' }
     }
+    case 'list':
     case 'status':
     case 'ping':
       return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }
