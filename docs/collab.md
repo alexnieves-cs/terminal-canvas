@@ -35,10 +35,12 @@ reason.
 
 ## The database
 
-Apply `supabase/migrations/20260926120000_collab_documents.sql` (the Supabase SQL editor,
-or `supabase db push` with the CLI linked). It creates schema `collab` with every
+Apply `supabase/migrations/20260926120000_collab_documents.sql`, then
+`supabase/migrations/20260927120000_collab_audit.sql` (the Supabase SQL editor, or
+`supabase db push` with the CLI linked). The first creates schema `collab` with every
 privilege revoked from `anon` and `authenticated`, so PostgREST cannot serve it and the
-anon key the app ships can never read a room.
+anon key the app ships can never read a room. The second adds `collab.audit`, the
+trail of every shared action (M387), in the same closed schema.
 
 Give the server a role of its own rather than the `postgres` password:
 
@@ -46,6 +48,8 @@ Give the server a role of its own rather than the `postgres` password:
 create role tc_collab login password '<generate one>';
 grant usage on schema collab to tc_collab;
 grant select, insert, update, delete on collab.documents, collab.snapshots to tc_collab;
+-- M387. The trail is append-only IN FACT, not only by use: its writer cannot edit or delete a row.
+grant select, insert on collab.audit to tc_collab;
 grant usage on all sequences in schema collab to tc_collab;
 ```
 

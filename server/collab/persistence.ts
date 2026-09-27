@@ -111,3 +111,43 @@ export function createPgDocStore(query: Query, opts: { keep?: number } = {}): Do
     }
   }
 }
+
+/**
+ * M387. The compliance trail of shared actions (migration
+ * 20260927120000_collab_audit.sql): one row per discrete action a member
+ * took, written after the server's per-operation check accepted it, with the
+ * user id the connection authenticated as. Who, what kind, which object —
+ * never a title, text or command. Append-only: nothing here deletes.
+ */
+export const AUDIT_ACTIONS = ['create', 'retitle', 'delete', 'group-set', 'group-delete', 'file-create', 'relay-bind', 'ask-open', 'ask-answer', 'ask-close', 'edited'] as const
+export type AuditAction = (typeof AUDIT_ACTIONS)[number]
+
+export interface AuditEntry { room: string; userId: string; action: AuditAction; target?: string; detail?: string }
+export interface AuditRow extends AuditEntry { id: number; at: string }
+
+export interface AuditStore {
+  record(entries: readonly AuditEntry[]): Promise<void>
+  /** A room's trail, newest first. */
+  list(room: string, limit: number): Promise<AuditRow[]>
+}
+
+export function createPgAuditStore(query: Query): AuditStore {
+  return {
+    async record(entries) {
+      for (const e of entries) {
+        if (!PERSISTED_ROOM.test(e.room)) continue
+        await query('insert into collab.audit (room, user_id, action, target, detail) values ($1, $2, $3, $4, $5)',
+          [e.room, e.userId, e.action, e.target ?? null, e.detail ?? null])
+      }
+    },
+    async list(room, limit) {
+      const { rows } = await query('select id, room, user_id, action, target, detail, at from collab.audit where room = $1 order by at desc, id desc limit $2', [room, Math.max(1, Math.min(1000, Math.floor(limit)))])
+      return rows.map((r) => ({
+        id: Number(r['id']), room: String(r['room']), userId: String(r['user_id']), action: r['action'] as AuditAction,
+        ...(r['target'] == null ? {} : { target: String(r['target']) }),
+        ...(r['detail'] == null ? {} : { detail: String(r['detail']) }),
+        at: r['at'] instanceof Date ? r['at'].toISOString() : String(r['at'])
+      }))
+    }
+  }
+}

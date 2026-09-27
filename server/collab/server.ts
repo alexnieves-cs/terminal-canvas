@@ -20,11 +20,11 @@
 import { Server } from '@hocuspocus/server'
 import * as Y from 'yjs'
 import { inspectUpdate } from '../../src/shared/canvas-doc'
-import { authorizeCanvasOp } from '../../src/shared/canvas-ops'
+import { authorizeCanvasOp, type CanvasOp } from '../../src/shared/canvas-ops'
 import { TEAM_DOC_MAP } from '../../src/shared/team'
 import type { CollabContext } from './auth'
 import { Refused } from './auth'
-import { PERSISTED_ROOM, type DocStore } from './persistence'
+import { PERSISTED_ROOM, type AuditEntry, type AuditStore, type DocStore } from './persistence'
 
 /** y-protocols/sync message types: 1 sync step 2, 2 update. Step 1 is a state vector and writes nothing. */
 const WRITES = new Set([1, 2])
@@ -47,6 +47,11 @@ export interface CollabServerOptions {
   log?: (event: string, fields: Record<string, unknown>) => void
   /** Overridable for the checks: Hocuspocus's store debounce, ms. */
   debounceMs?: number
+  /**
+   * M387. The compliance trail of shared actions (persistence.ts's audit
+   * store). Absent, nothing is recorded — the harness's default.
+   */
+  audit?: AuditStore
 }
 
 /** The first line of `GET /healthz`: what an uptime check needs, nothing about any room's content. */
@@ -60,6 +65,16 @@ export function createCollabServer(opts: CollabServerOptions): Server<CollabCont
   // When each room last took a snapshot, cached so a store does not have to
   // ask the database first; seeded from the store on a room's first save.
   const lastSnapshot = new Map<string, number>()
+  // M387. Moves and typing, counted per connection (its context object, one
+  // per connection) and summarised as ONE 'edited' row when it closes: a
+  // drag writes sixty times a second, and sixty rows would bury the trail.
+  const edits = new Map<CollabContext, { room: string; moves: number; typed: number }>()
+  const auditRecord = (entries: AuditEntry[]): void => {
+    if (opts.audit === undefined || entries.length === 0) return
+    // Beside the room's work, never in front of it: a failed write is logged,
+    // and the member's change has already been accepted.
+    opts.audit.record(entries).catch((error: unknown) => log('audit.store_failed', { room: entries[0]?.room, error: String(error instanceof Error ? error.message : error) }))
+  }
   return new Server<CollabContext>({
     port: opts.port ?? 1234,
     ...(opts.address === undefined ? {} : { address: opts.address }),
@@ -123,13 +138,60 @@ export function createCollabServer(opts: CollabServerOptions): Server<CollabCont
       // here for a write that was never going to apply.
       if (!WRITES.has(type) || context === undefined || connection.readOnly) return
       const ctx = context as CollabContext
+      const accepted: CanvasOp[] = []
       for (const { op, ctx: before } of inspectUpdate(document, payload)) {
         const verdict = authorizeCanvasOp(ctx.role, op, { userId: ctx.userId, ...before })
         if (!verdict.ok) {
           opts.onRefused?.({ documentName, userId: ctx.userId, reason: verdict.reason })
           throw Object.assign(new Refused(verdict.reason), { code: 4403 })
         }
+        accepted.push(op)
       }
+      // M387. Only once the WHOLE update passed: a refused update applies
+      // nothing, so nothing in it happened.
+      if (opts.audit === undefined || !PERSISTED_ROOM.test(documentName)) return
+      const entries: AuditEntry[] = []
+      for (const op of accepted) {
+        if (op.kind === 'rect' || op.kind === 'text-edit') {
+          const tally = edits.get(ctx) ?? { room: documentName, moves: 0, typed: 0 }
+          if (op.kind === 'rect') tally.moves++; else tally.typed++
+          edits.set(ctx, tally)
+          continue
+        }
+        const entry = auditEntryOf(documentName, ctx.userId, op)
+        if (entry !== null) entries.push(entry)
+      }
+      auditRecord(entries)
+    },
+    async onDisconnect({ context }) {
+      const tally = context === undefined ? undefined : edits.get(context as CollabContext)
+      if (tally === undefined) return
+      edits.delete(context as CollabContext)
+      auditRecord([{ room: tally.room, userId: (context as CollabContext).userId, action: 'edited', detail: `moves ${tally.moves} · text edits ${tally.typed}` }])
     }
   })
+}
+
+/**
+ * M387. One accepted op as a row of the trail: who, what kind, which object,
+ * and a word — never content. A move, a keystroke and the Team view's own
+ * snapshot are not rows (the first two are summarised per connection; the
+ * last is presence, not an action on the workspace).
+ */
+export function auditEntryOf(room: string, userId: string, op: CanvasOp): AuditEntry | null {
+  const row = (action: AuditEntry['action'], target: string, detail?: string): AuditEntry =>
+    ({ room, userId, action, target, ...(detail === undefined ? {} : { detail }) })
+  switch (op.kind) {
+    case 'create': return row('create', op.panel.id, op.panel.kind)
+    case 'retitle': return row('retitle', op.panelId)
+    case 'delete': return row('delete', op.panelId)
+    case 'group-set': return row('group-set', op.group.id)
+    case 'group-delete': return row('group-delete', op.groupId)
+    case 'file-create': return row('file-create', op.fileKey)
+    case 'relay-bind': return row('relay-bind', op.panelId, op.relay === null ? 'unbound' : 'bound')
+    case 'ask-open': return row('ask-open', op.ask.id, `need ${op.ask.need}`)
+    case 'ask-answer': return row('ask-answer', op.askId, op.answer)
+    case 'ask-close': return row('ask-close', op.askId, op.outcome)
+    default: return null
+  }
 }

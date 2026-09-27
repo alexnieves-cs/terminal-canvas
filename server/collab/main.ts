@@ -22,7 +22,7 @@
 import { Pool } from 'pg'
 import { createCollabAuth } from './auth'
 import { createLog } from './log'
-import { createPgDocStore } from './persistence'
+import { createPgAuditStore, createPgDocStore } from './persistence'
 import { createCollabServer } from './server'
 
 const log = createLog()
@@ -40,6 +40,8 @@ const snapshotMinutes = Number(process.env['TC_COLLAB_SNAPSHOT_MINUTES'] ?? '60'
 const pool = databaseUrl === '' ? null : new Pool({ connectionString: databaseUrl, max: 4 })
 pool?.on('error', (error) => log('db.pool_error', { error: error.message }))
 const store = pool === null ? undefined : createPgDocStore((sql, params) => pool.query(sql, params))
+// M387. The shared-action trail, in the same database and schema as the rooms.
+const audit = pool === null ? undefined : createPgAuditStore((sql, params) => pool.query(sql, params))
 
 const server = createCollabServer({
   authenticate: createCollabAuth({ supabaseUrl: url, anonKey, fetch: (u, init) => fetch(u, init) }),
@@ -47,6 +49,7 @@ const server = createCollabServer({
   address,
   quiet: true,
   ...(store === undefined ? {} : { store }),
+  ...(audit === undefined ? {} : { audit }),
   snapshotEveryMs: (Number.isFinite(snapshotMinutes) && snapshotMinutes > 0 ? snapshotMinutes : 60) * 60 * 1000,
   log,
   onRefused: ({ documentName, userId, reason }) => log('update.refused', { room: documentName, user: userId, reason })

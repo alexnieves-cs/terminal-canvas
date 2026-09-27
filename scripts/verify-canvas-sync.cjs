@@ -998,6 +998,68 @@ async function until(pred, ms = 3000) {
     await pg.close()
   }
 
+  // ── M387: every shared action on the record, at the server ──────────────
+  // The migration on real Postgres (PGlite), and a real server writing its
+  // trail as members act: discrete actions one row each with the user id the
+  // connection AUTHENTICATED as, moves and typing one summary per connection,
+  // a refused update nothing, and no row carrying a title or text.
+  {
+    const { PGlite } = require('@electric-sql/pglite')
+    const pg = new PGlite()
+    await pg.exec('create role anon; create role authenticated;')
+    await pg.exec(readFileSync(join(root, 'supabase/migrations/20260926120000_collab_documents.sql'), 'utf8'))
+    await pg.exec(readFileSync(join(root, 'supabase/migrations/20260927120000_collab_audit.sql'), 'utf8'))
+    const query = (t, p) => pg.query(t, p)
+    const priv = async (role, what) => (await pg.query(`select has_table_privilege('${role}', 'collab.audit', '${what}') as ok`)).rows[0].ok
+    const audit = M.persistence.createPgAuditStore(query)
+    let badAction = null
+    try { await pg.query("insert into collab.audit (room, user_id, action) values ($1, 'u', 'read-everything')", [`tc:workspace:${SHARE}`]) } catch (e) { badAction = String(e.message || e) }
+    ok('audit.schema.1 the trail\'s table runs on real Postgres, its schema\'s privileges revoked from the roles PostgREST serves, and it refuses an action outside the named set',
+      !(await priv('anon', 'select')) && !(await priv('authenticated', 'select')) && !(await priv('authenticated', 'insert')) && badAction !== null && /check/i.test(badAction),
+      badAction)
+
+    const people = { towner: { userId: UA, role: 'owner' }, teditor: { userId: UB, role: 'editor' } }
+    const port = await freePort()
+    const srv = M.server.createCollabServer({ port, address: '127.0.0.1', quiet: true, audit, debounceMs: 40,
+      authenticate: async (token, documentName) => { const x = people[token]; if (x === undefined) throw new M.auth.Refused('no'); return { ...x, shareId: SHARE, documentName } } })
+    await srv.listen()
+    const ROOM = `tc:workspace:${SHARE}`
+    const join2 = (token) => { const doc = new Y.Doc(); const st = { synced: false, closed: 0 }; const p = new HocuspocusProvider({ url: `ws://127.0.0.1:${port}`, name: ROOM, document: doc, token, onSynced: () => { st.synced = true }, onClose: () => { st.closed += 1 } }); return { doc, st, p } }
+    let rows = []
+    try {
+      const owner = join2('towner'), editor = join2('teditor')
+      await until(() => owner.st.synced && editor.st.synced)
+      M.doc.applyCanvasOp(owner.doc, { kind: 'create', panel: { id: 'hosta1_s1', kind: 'chat', title: 'secret project title', owner: UA, host: 'hosta1', x: 0, y: 0, w: 400, h: 300, z: 1 } }, 'test')
+      await until(() => live(editor.doc).length === 1)
+      M.doc.applyCanvasOp(owner.doc, { kind: 'ask-open', ask: { id: 'hosta1_qa', panel: 'hosta1_s1', owner: UA, tool: 'Bash', summary: 'npm test', scrubbed: 0, at: 1, need: 1 } }, 'test')
+      await until(() => M.doc.readSharedAsks(editor.doc).length === 1)
+      M.doc.applyCanvasOp(editor.doc, { kind: 'ask-answer', askId: 'hosta1_qa', by: UB, answer: 'allow' }, 'test')
+      M.doc.applyCanvasOp(editor.doc, { kind: 'rect', panelId: 'hosta1_s1', fields: { x: 10 } }, 'test')
+      M.doc.applyCanvasOp(editor.doc, { kind: 'rect', panelId: 'hosta1_s1', fields: { x: 20 } }, 'test')
+      await until(() => field(owner.doc, 'hosta1_s1', 'x') === 20)
+      // A refused update: the editor deleting the owner's panel — nothing of it is on the record.
+      const closedBefore = editor.st.closed
+      editor.doc.getMap(M.doc.CANVAS_PANELS).get('hosta1_s1').set('deleted', true)
+      await until(() => editor.st.closed > closedBefore, 2000)
+      M.doc.applyCanvasOp(owner.doc, { kind: 'ask-close', askId: 'hosta1_qa', outcome: 'allowed' }, 'test')
+      M.doc.applyCanvasOp(owner.doc, { kind: 'delete', panelId: 'hosta1_s1' }, 'test')
+      await new Promise((r) => setTimeout(r, 300))
+      owner.p.destroy(); editor.p.destroy()
+      // The summary is written as the connection closes: wait for it by awaiting the store itself.
+      for (let i = 0; i < 150 && !(await audit.list(ROOM, 50)).some((r) => r.action === 'edited'); i++) await new Promise((r) => setTimeout(r, 20))
+      rows = (await audit.list(ROOM, 50)).reverse()
+    } finally {
+      await srv.destroy()
+    }
+    const seq = rows.map((r) => `${r.action}:${r.userId === UA ? 'owner' : r.userId === UB ? 'editor' : r.userId}${r.detail ? `:${r.detail}` : ''}`)
+    const edited = rows.find((r) => r.action === 'edited' && r.userId === UB)
+    ok('audit.server.1 through a real server: a create, an ask opened, an ask answered, an ask closed and a delete are one row each in the AUTHENTICATED user\'s name, in order; the editor\'s two moves are one summary when it leaves; the refused delete is nowhere; no row carries a title',
+      seq.filter((x) => !x.startsWith('edited')).join(',') === 'create:owner:chat,ask-open:owner:need 1,ask-answer:editor:allow,ask-close:owner:allowed,delete:owner' &&
+        edited !== undefined && /moves 2/.test(edited.detail) &&
+        rows.filter((r) => r.action === 'delete').length === 1 && !JSON.stringify(rows).includes('secret project title'),
+      JSON.stringify(seq))
+  }
+
   // ── M348: local-first — an offline edit survives a crash and reaches the room ──
   // Real providers, a real (persisted) server, main's own canvas-sync on each
   // machine. The server goes away; the owner moves a panel offline (the
