@@ -42,7 +42,7 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
   const laneMerge = createLaneMerger({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
   // M317. Integrate lands lanes through the SAME merger Accept uses.
   const receipts = createReceiptStore({ file: join(userData, 'integration-receipts.json') })
-  const integrate = createIntegrator({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir, readOutput: (id) => checkOutputs.read(id), merge: laneMerge, receipts, record: (row) => runLedger.append(row) })
+  const integrate = createIntegrator({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir, readOutput: (id) => checkOutputs.read(id), merge: laneMerge, receipts, record: async (row) => { await runLedger.append(row) } })
   const editorOpen = createEditorOpener({
     pref: () => String(layoutStore.getSetting('files.editor') ?? 'auto'),
     which: (bin) => whichFromEnv(bin, state.loginEnv),

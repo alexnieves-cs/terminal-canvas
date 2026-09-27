@@ -1174,6 +1174,7 @@ price of not killing something.
 | M370 | `tc task --swarm <preset>`: a task proposed from any terminal opens Start work with M275's Explore, Implement, Test or Review arrangement already chosen — still a proposal a person starts, an unknown arrangement refused at the door naming the four. [Ledger](docs/build-log/m370-tc-task-swarm.md). |
 | M366 | `tc toolbox <name>`: the palette's "Which agents can…" from a shell — main's toolbox read lifted out of `toolbox:read`'s closure into one door both ask through (one cache, one directory rule), each panel's tools directory named by the renderer's inspector rule in `tc status`'s model, and the supervisor told to use it. [Ledger](docs/build-log/m366-tc-toolbox.md). |
 | M373 | A workspace share decision is a person's row on the record: sharing a canvas with an organization, opening a shared workspace here, and setting or removing someone's role each write a person's `permission` row at main's share doors (the dialog's and `tc`'s alike), mirrored to the decision audit through one ledger-then-audit function, `recordDecision`. [Ledger](docs/build-log/m373-share-decisions.md). |
+| M374 | The run ledger says whether a row landed: `append` resolves true once the line is on disk and false otherwise, never rejecting, so `recordDecision` mirrors only a decision the ledger recorded and `ledger:event` answers the truth; the queue survives a failed write. [Ledger](docs/build-log/m374-ledger-landed.md). |
 
 ### What's next — the v10 run (D01–D20)
 

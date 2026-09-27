@@ -757,6 +757,29 @@ const ok = (n, pass, detail = '') => {
         timeline.entries.length === 4 && refused === false && mirrored === 0,
       JSON.stringify({ results, refused, mirrored, read: read.rows.map((r) => r.title), timeline: timeline.entries.length }))
   }
+  // M374 — ledger.landed.1. The run ledger says whether a row reached its
+  //     file, and never rejects: a row for a directory that is not there
+  //     resolves false (and the queue keeps working for the next row), so
+  //     `recordDecision` refuses it and the audit never mirrors a decision
+  //     the ledger did not record.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc ledger landed '))
+    const good = C.createRunLedger({ file: join(dir, 'ledger.jsonl') })
+    const bad = C.createRunLedger({ file: join(dir, 'missing', 'ledger.jsonl') })
+    const audit = C.createDecisionAudit({ file: join(dir, 'd.jsonl') })
+    const row = C.shareDecisionRow({ kind: 'share', shareId: 's2', workspace: 'Canvas', org: 'Acme' }, 20)
+    let rejected = false
+    const badLanded = await bad.append(row).catch(() => { rejected = true; return null })
+    const badAgain = await bad.append(row).catch(() => { rejected = true; return null })
+    const goodLanded = await good.append(row)
+    const refused = await C.recordDecision(bad, audit, row)
+    const recorded = await C.recordDecision(good, audit, row)
+    const read = audit.list(10)
+    rmSync(dir, { recursive: true, force: true })
+    ok('ledger.landed.1 the run ledger resolves whether a row reached its file and never rejects, and recordDecision mirrors only a row that landed',
+      badLanded === false && badAgain === false && !rejected && goodLanded === true && refused === false && recorded === true && read.rows.length === 1,
+      JSON.stringify({ badLanded, badAgain, rejected, goodLanded, refused, recorded, audit: read.rows.length }))
+  }
   // M366 — toolbox.door.1. Main's toolbox read, lifted out of `toolbox:read`'s
   //     closure, answers the three refusals by their own sentences, reads a
   //     real project's skill, and asks plugins once for two readers of one

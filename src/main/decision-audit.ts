@@ -74,14 +74,17 @@ export function createDecisionAudit(o: { file: string; max?: number }): Decision
  * a row the ledger refused is not a decision this app recorded (M369's
  * rule). One function, so the renderer's `ledger:event` door and main's own
  * writers (the share doors) keep that order the same way. False when the
+ * row did not reach the ledger's file (M374: `append` says so) or the
  * ledger threw; the audit is then left alone.
  */
-export async function recordDecision(ledger: { append(row: LedgerRow): Promise<void> }, audit: Pick<DecisionAudit, 'record'>, row: EventRow): Promise<boolean> {
+export async function recordDecision(ledger: { append(row: LedgerRow): Promise<boolean> }, audit: Pick<DecisionAudit, 'record'>, row: EventRow): Promise<boolean> {
+  let landed: boolean
   try {
-    await ledger.append(row)
+    landed = await ledger.append(row)
   } catch {
     return false
   }
+  if (!landed) return false
   audit.record(row)
   return true
 }

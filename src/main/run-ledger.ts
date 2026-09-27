@@ -26,7 +26,13 @@ import { parseReviewIdentity } from '../shared/review-identity'
 import { isCheckRunId } from '../shared/check-output'
 
 export interface RunLedger {
-  append(row: LedgerRow): Promise<void>
+  /**
+   * M374. Resolves whether the row reached the file — never rejects, so a
+   * caller that ignores it (a command end, a usage row) cannot turn a full
+   * disk into an unhandled rejection in main, and a caller that must know
+   * (`recordDecision`, the renderer's `ledger:event`) is told the truth.
+   */
+  append(row: LedgerRow): Promise<boolean>
   /** A panel's COMMAND rows, newest first, at most `limit`. Usage rows are `usage()`'s. */
   list(panelId: string, limit: number): Promise<RunRow[]>
   /** M142. Every usage row at or after `since`, newest first. */
@@ -138,13 +144,17 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
 
   return {
     append(row) {
+      // Set only once the line is on disk: a trim that fails AFTER it does
+      // not unwrite the row, so it still counts as landed.
+      let landed = false
       queue = queue.then(async () => {
         if (count === null) count = (await readLines()).length
         await appendFile(o.file, JSON.stringify(scrubbedRow(row)) + '\n')
+        landed = true
         count += 1
         if (count > max) { await trim(); count = max }
       }).catch(() => {})
-      return queue
+      return queue.then(() => landed)
     },
     async usage(since) {
       await queue
