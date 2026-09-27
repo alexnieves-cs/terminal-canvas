@@ -3255,6 +3255,27 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ recorded: recorded && recorded.contextWindow, two }))
   }
 
+  // M384 — acp.transport.1. THE ACP TRANSPORT SEAM. An ACP agent is reached
+  //     only through `AgentProcess` (write one JSON line, data, exit, kill),
+  //     so ACP's remote transport, when it stabilizes, is one more
+  //     `AgentRunner` over a socket — nothing in the codec, the adapters or
+  //     the manager changes. This pins the half a refactor could quietly
+  //     break: none of the protocol path's modules may reach a transport
+  //     itself. The other half is acp.3 above, which drives a whole ACP
+  //     session through the manager over a runner that is not a process.
+  {
+    const { readFileSync } = require('node:fs')
+    const { join } = require('node:path')
+    const root = join(__dirname, '..')
+    const TRANSPORT = /^import\s+(?!type\b)[^\n]*from\s+'(node:child_process|child_process|node:net|net|node:tls|tls|node:http|node:https|electron|ws|node-pty)'/m
+    const path = ['src/shared/acp-transcript.ts', 'src/main/backend-adapters.ts', 'src/main/agent-session.ts', 'src/main/agent-session-args.ts']
+    const reaching = path.filter((f) => TRANSPORT.test(readFileSync(join(root, f), 'utf8')))
+    const runner = readFileSync(join(root, 'src/main/agent-runner.ts'), 'utf8')
+    ok('acp.transport.1 the ACP protocol path (codec, adapters, manager) reaches no transport itself — only agent-runner.ts spawns — so a remote ACP transport is one AgentRunner, and acp.3 drives a session over a runner that is not a process',
+      reaching.length === 0 && /export type AgentRunner = \(spawn: AgentSpawn\) => AgentProcess/.test(runner) && /child_process/.test(runner),
+      JSON.stringify({ reaching }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {

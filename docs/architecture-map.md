@@ -660,6 +660,16 @@ check does not, and should not, cover it.
   (copilot's agent never asked; backlog #81; `acp.4` pins the line). The row's capabilities
   are the promise; `initialize`'s answer is the fact (`negotiated` on the snapshot outranks
   the row, `acp.2`).
+  **The transport seam (M384).** The codec, the adapters and the manager reach an ACP agent
+  ONLY through `AgentProcess` — write one JSON line, `onData`, `onExit`, `kill` — and only
+  `main/agent-runner.ts` spawns. ACP's remote transport, when it stabilizes, is therefore
+  one more `AgentRunner` that returns an `AgentProcess` over a socket (lines out as
+  messages, messages in as data, a close as the exit), chosen per backend row where the
+  runner is built; nothing in `acp-transcript.ts`, `backend-adapters.ts` or
+  `agent-session.ts` changes. `acp.transport.1` pins the half a refactor could break
+  quietly (no transport import on the protocol path); `acp.3` drives a whole session over
+  a runner that is not a process. The canvas stays a CLIENT: `clientCapabilities` still
+  declines `fs/*` and `terminal/*` (backlog #81, declined by measurement).
 - `src/main/sandbox.ts` / `sandboxTeammateRefusal` — M120. A chat with NO place lives in
   `userData/sandbox/<id>` — never a place, never home; the Places gate is bypassed BY
   CONSTRUCTION (the folder is the app's) and a teammate beside `sandbox` is refused first.
