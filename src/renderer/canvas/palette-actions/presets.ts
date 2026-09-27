@@ -13,6 +13,7 @@
 import { answerTeamAsk as answerTeamAskInStore } from '@renderer/shell/useTeamAsks'
 import { notifyRefused } from '../../shell/toast'
 import { normalisePreviewPath } from '@shared/preview'
+import { openReplay as openReplaySheet } from '@renderer/replay/replay-store'
 import { inspectionDirectory } from '../inspection-directory'
 import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
 import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
@@ -66,6 +67,7 @@ export type PresetsActions = Pick<PaletteActions,
   | 'answerApproval'
   | 'answerTeamAsk'
   | 'openAsChat'
+  | 'openReplay'
   | 'openInTerminal'
   | 'newChat'
   | 'newSandboxChat'
@@ -653,6 +655,8 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
         })
     },
     openAsChat: (id) => openAsChat(id),
+    // M383. A view: the sheet reads the renderer's own transcripts.
+    openReplay: (id) => openReplaySheet(id),
     openInTerminal: (id) => openInTerminal(id),
     newChat: (backend) => { void beginNewChat(backend === undefined ? undefined : { backend }) },
     // M120. The sandbox flag rides the create; the backend by NAME from the row, absent is claude.

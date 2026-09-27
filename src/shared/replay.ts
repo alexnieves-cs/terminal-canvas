@@ -162,3 +162,42 @@ export function compareFrames(a: ReplayFrame, b: ReplayFrame): Array<{ path: str
     return { path, ...(fa === undefined ? {} : { a: fa }), ...(fb === undefined ? {} : { b: fb }), same }
   })
 }
+
+/** M383. A file's state in one line: whether the replay knows it whole, and how often the agent changed it. */
+export function fileStateWords(f: ReplayFile): string {
+  const n = `${f.changes} change${f.changes === 1 ? '' : 's'}`
+  return f.state === 'exact' ? `known whole · ${n}` : `not known whole · ${n}`
+}
+
+/** M383. One compared path in words — "cannot tell" is its own answer, never "different". */
+export function compareWords(row: { a?: ReplayFile; b?: ReplayFile; same: boolean | null }, first: string, second: string): string {
+  if (row.a === undefined) return `only ${second} changed it`
+  if (row.b === undefined) return `only ${first} changed it`
+  return row.same === true ? 'the same' : row.same === false ? 'different' : 'cannot tell — one side is not known whole'
+}
+
+/** M383. The frame's shell note, or null with none: what may have changed files the replay cannot see. */
+export function shellWords(n: number): string | null {
+  return n === 0 ? null : `${n} shell command${n === 1 ? '' : 's'} had run by then — they may have changed files this replay cannot see`
+}
+
+/** M383. A path under the conversation's folder, shown from it; anything else whole. */
+export function replayPath(path: string, cwd: string | undefined): string {
+  if (cwd === undefined || cwd === '') return path
+  const root = cwd.endsWith('/') ? cwd : `${cwd}/`
+  return path.startsWith(root) ? path.slice(root.length) : path
+}
+
+/**
+ * M383. How far into the conversation a moment is — "12m 30s in" — rather
+ * than a wall-clock time: a replay is read as a run's own course, and two
+ * runs side by side started at different hours.
+ */
+export function sinceStartWords(at: number, start: number): string {
+  const s = Math.max(0, Math.round((at - start) / 1000))
+  if (s < 60) return `${s}s in`
+  const m = Math.floor(s / 60), rs = s % 60
+  if (m < 60) return rs === 0 ? `${m}m in` : `${m}m ${rs}s in`
+  const h = Math.floor(m / 60), rm = m % 60
+  return `${h}h ${String(rm).padStart(2, '0')}m in`
+}

@@ -1173,6 +1173,53 @@ const SCENES = [
       k.wc.send('team:asks-changed', [])
       await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
     } },
+  { name: 'replay', intent: 'M381–M383. THE REPLAY SHEET over a dimmed canvas: two conversations side by side, each on the same point in its own run — `3m in`: the left scrubbed BACK from its latest (a rewind, `turn 8 of 12 · 3m in`, the fixture\'s own later turns not yet reached), the right at its latest because this run is all it holds (`turn 6 of 6 · 3m in · latest`). Left, `claude — api (chat)`: its last words, then FILES BY THEN — `src/health.ts` known whole · 1 change, `src/routes.ts` known whole · 1 change, `src/server.ts` NOT known whole · 1 change (the agent edited it without the transcript ever showing it whole) in amber, with that file open below as its edit in order (the old text struck, the new text inserted), and the amber note that one shell command had run by then and may have changed files the replay cannot see. Right, `codex — api thread`: its own files (two known whole, `src/server.ts` not), with `src/routes.ts` open showing its whole content. Beneath both, FILES, SIDE BY SIDE: `src/health.ts` the same (both ended at the same text by different routes — an edit on a read base, and a whole write), `src/routes.ts` different (amber), and `src/server.ts` cannot tell — one side is not known whole (both edited it without reading it). A `Compare with` picker and `Done` sit in the header. DISCLOSED: both runs are transcript turns sent to the renderer as the agent manager would (placed hours before the fixture\'s own turns, so they are each chat\'s first moments); nothing ran, and the sheet reads them without writing anything.',
+    run: async (k) => {
+      const f = (p) => join(REPO, 'src', p)
+      // Hours before any fixture turn, at fixed offsets: each chat's first
+      // moments are these, so "3m in" and the turn counts hold on every run.
+      const t0 = Date.now() - 5 * 3600000
+      const turn = (id, tid, role, blocks, sec) => k.wc.send('agent:event', { id, type: 'turn', turn: { id: tid, role, blocks, at: t0 + sec * 1000 } })
+      const use = (id, name, input) => ({ type: 'tool_use', id, name, input })
+      const res = (id, content = '') => ({ type: 'tool_result', toolUseId: id, content, isError: false })
+      const said = (text) => ({ type: 'text', text })
+      turn('chat', 'rp-c1', 'user', [said('Wire /health into the server.')], 0)
+      turn('chat', 'rp-c2', 'assistant', [said('Reading the check first.'), use('rp-cr1', 'Read', { file_path: f('health.ts') })], 20)
+      turn('chat', 'rp-c3', 'user', [res('rp-cr1', '1\texport const health = () => ok()\n2\texport const ready = false')], 30)
+      turn('chat', 'rp-c4', 'assistant', [use('rp-ce1', 'Edit', { file_path: f('health.ts'), old_string: 'export const ready = false', new_string: 'export const ready = true' }), use('rp-cw1', 'Write', { file_path: f('routes.ts'), content: "import { health } from './health'\n\nexport const routes = { '/health': health }\n" })], 70)
+      turn('chat', 'rp-c5', 'user', [res('rp-ce1'), res('rp-cw1')], 90)
+      turn('chat', 'rp-c6', 'assistant', [use('rp-cb1', 'Bash', { command: 'npm test -- health' }), use('rp-ce2', 'Edit', { file_path: f('server.ts'), old_string: 'listen(3000)', new_string: 'listen(3000, routes)' })], 150)
+      turn('chat', 'rp-c7', 'user', [res('rp-cb1'), res('rp-ce2')], 170)
+      turn('chat', 'rp-c8', 'assistant', [said('`/health` is routed and `ready` is true; the health tests pass.')], 180)
+      turn('codex', 'rp-x1', 'user', [said('Wire /health into the server.')], 0)
+      turn('codex', 'rp-x2', 'assistant', [use('rp-xw1', 'Write', { file_path: f('routes.ts'), content: "import { health } from './health'\n\nexport const routes = { '/health': health, '/ready': () => true }\n" }), use('rp-xw2', 'Write', { file_path: f('health.ts'), content: 'export const health = () => ok()\nexport const ready = true' })], 60)
+      turn('codex', 'rp-x3', 'user', [res('rp-xw1'), res('rp-xw2')], 80)
+      turn('codex', 'rp-x3b', 'assistant', [use('rp-xe1', 'Edit', { file_path: f('server.ts'), old_string: 'listen(3000)', new_string: 'listen(3000, { routes })' })], 120)
+      turn('codex', 'rp-x3c', 'user', [res('rp-xe1')], 130)
+      turn('codex', 'rp-x4', 'assistant', [said('Added `/health` and `/ready` routes; `ready` is on.')], 180)
+      await sleep(400)
+      // The gesture door: the chat's Activity tab, then its Replay button.
+      await k.goTo('api (chat)')
+      await k.tab('activity')
+      if (!(await k.click('[data-inspector-replay]'))) throw new Error('replay scene: the Activity tab offered no Replay button')
+      await sleep(500)
+      // Compare with the codex thread, through the picker's own change.
+      await k.js(`(() => { const s = document.querySelector('[data-replay-compare]'); if (!s) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'codex'); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await sleep(400)
+      // Rewind each side to this scene's last turn: its moments are the
+      // first ones, so the index is the count of this scene's moments less one.
+      const scrub = (side, index) => k.js(`(() => { const r = document.querySelector('[data-replay-scrub="${side}"]'); if (!r) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(r, '${index}'); r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await scrub('a', 7); await scrub('b', 5); await sleep(300)
+      await k.click('[data-replay-side="a"] [data-replay-file="partial"]')
+      await k.js(`(() => { const b = [...document.querySelectorAll('[data-replay-side="b"] [data-replay-file]')].find((x) => /routes\\.ts/.test(x.textContent)); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await sleep(400)
+      const seen = JSON.parse(await k.js(`JSON.stringify({ when: [...document.querySelectorAll('[data-replay-when]')].map((e) => e.textContent), partial: !!document.querySelector('[data-replay-partial]'), content: !!document.querySelector('[data-replay-content]'), diff: document.querySelectorAll('.replay__diff-row').length })`))
+      if (!seen.partial || !seen.content || seen.diff < 3 || !seen.when.every((w) => /3m in/.test(w))) throw new Error(`replay scene: the sheet is not in its intended state ${JSON.stringify(seen)}`)
+      await k.shot('replay')
+      await k.click('.replay__done'); await sleep(300)
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'

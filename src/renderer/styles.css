@@ -983,6 +983,53 @@ body {
 
 /* M337. The share dialog: a centred card over the shell's own dim. Modal on
    purpose — sharing is a decision that owns the window until it is made. */
+/* M383. The Replay sheet: a conversation at any turn, and one beside it.
+   The share dialog's scrim-and-card shape, wide enough for two columns. */
+.replay-sheet {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 6vh;
+  background: var(--scrim);
+}
+.replay {
+  width: min(1120px, 94vw); max-height: 86vh; overflow: auto;
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  background: var(--s-1); box-shadow: var(--e-3);
+  color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md);
+  display: flex; flex-direction: column; gap: var(--sp-4);
+}
+.replay__head { display: flex; align-items: center; gap: var(--sp-4); }
+.replay__title { margin: 0; font-size: var(--t-lg); font-weight: 600; flex: 1; }
+.replay__compare { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-3); }
+.replay__compare select { font: inherit; color: var(--fg); background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); }
+.replay__done { font: inherit; color: var(--fg); background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); cursor: pointer; }
+.replay__cols { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); }
+.replay__cols[data-replay-cols="2"] { grid-template-columns: 1fr 1fr; }
+.replay__col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.replay__who { margin: 0; font-size: var(--t-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replay__scrub { width: 100%; accent-color: var(--iris); }
+.replay__when { margin: 0; font-size: var(--t-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.replay__said { margin: 0; padding: var(--sp-2) var(--sp-3); border-left: 2px solid var(--line-strong); color: var(--fg-2); font-size: var(--t-sm); }
+.replay__section { margin: var(--sp-2) 0 0; font-size: var(--t-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-3); }
+.replay__files, .replay__diff-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.replay__file { width: 100%; display: flex; align-items: baseline; gap: var(--sp-3); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.replay__file:hover, .replay__file[aria-pressed="true"] { background: var(--s-2); }
+.replay__path { font: var(--t-sm) var(--font-mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replay__words { font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+.replay__file[data-replay-file="partial"] .replay__words { color: var(--amber); }
+.replay__shell { margin: 0; font-size: var(--t-xs); color: var(--amber); }
+.replay__content, .replay__edit { margin: 0; max-height: 280px; overflow: auto; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-0); font: var(--t-xs) var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.replay__partial { display: flex; flex-direction: column; gap: var(--sp-2); }
+.replay__why { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.replay__edits { margin: 0; padding-left: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-2); }
+.replay__edit del { color: var(--red); text-decoration: line-through; }
+.replay__edit ins { color: var(--green); text-decoration: none; }
+.replay__diff { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.replay__diff-row { display: flex; align-items: baseline; gap: var(--sp-3); padding: var(--sp-1) var(--sp-2); }
+.replay__diff-row[data-replay-same="false"] .replay__words { color: var(--amber); }
+.replay__empty { margin: 0; font-size: var(--t-sm); color: var(--fg-3); }
+.inspector__replay { padding: var(--sp-2) var(--sp-3) 0; }
 .share-dialog {
   position: fixed; inset: 0; z-index: 1000;
   display: flex; align-items: flex-start; justify-content: center;

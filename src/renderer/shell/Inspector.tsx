@@ -14,6 +14,7 @@ import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { pinRefusal } from '@renderer/canvas/lod'
 import { shellControl } from './shell-control'
+import { openReplay } from '@renderer/replay/replay-store'
 import { Popover, PopoverTrigger, PopoverContent, Tabs } from '@renderer/primitives'
 import { Close, More, Pencil, RotateCw } from '@renderer/icons'
 import type { PersistedTemplate } from '@shared/templates'
@@ -1099,6 +1100,14 @@ function InspectorPanel({
       </section>
       {/* M279. The object's feed — deep detail, so it is here and on no frame. */}
       <section className="context__panel" data-context-panel="activity" role="tabpanel" hidden={tab !== 'activity'}>
+        {/* M383. What a conversation DID, as it stood at any turn: the replay's
+            door beside the feed of what it did. A view — nothing runs. */}
+        {model.kind === 'chat' && (
+          <div className="inspector__replay">
+            <button type="button" className="inspector__action" data-inspector-replay title="Scrub this conversation back to any turn and see its files as they stood then — and compare it with another"
+              {...shellControl(() => openReplay(model.id))}>Replay this conversation…</button>
+          </div>
+        )}
         <InspectorActivity panelId={model.id} />
       </section>
       <section className="context__panel" data-context-panel="tools" role="tabpanel" hidden={tab !== 'tools'}>

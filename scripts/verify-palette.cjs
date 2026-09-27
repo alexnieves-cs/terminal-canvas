@@ -291,7 +291,9 @@ const spyActions = () => {
     setPanelFontSize: record('setPanelFontSize'),
     tidyPanels: record('tidyPanels'),
     // M379. The team asks' palette door.
-    answerTeamAsk: record('answerTeamAsk')
+    answerTeamAsk: record('answerTeamAsk'),
+    // M383. The Replay sheet's palette door.
+    openReplay: record('openReplay')
   }
 }
 
@@ -2873,6 +2875,23 @@ const WS = [
       c.actions.calls.some((x) => x[0] === 'answerTeamAsk' && x[1] === 'w1' && x[2] === 'hosta1_q1' && x[3] === true) &&
       c.actions.calls.some((x) => x[0] === 'answerTeamAsk' && x[3] === false) && none.length === 0,
     JSON.stringify({ allow: allow && allow.title, deny: deny && deny.title, calls: c.actions.calls }))
+}
+
+// M383 — replay.row.1. The Replay sheet's palette door: aimed at the captured
+//     panel, enabled on a conversation, refused BY NAME on anything else or
+//     with nothing captured, and its press opens the sheet on that chat.
+{
+  const chat = { id: 'c1', label: 'chat · api', kind: 'chat', restartable: false, agent: false, turns: 3 }
+  const term = { id: 't1', label: 'shell', kind: 'terminal', restartable: true, agent: false, claude: false }
+  const onChat = ctx({ panels: [chat], capturedId: 'c1' })
+  const row = byId(P.buildCommands(onChat), 'chat.replay')
+  if (row && row.disabledReason === undefined) row.run()
+  const onTerm = byId(P.buildCommands(ctx({ panels: [term], capturedId: 't1' })), 'chat.replay')
+  const none = byId(P.buildCommands(ctx({ panels: [chat] })), 'chat.replay')
+  ok('replay.row.1 Replay this conversation… is enabled on a captured chat and opens the sheet on it; on a terminal it is refused by name, and with nothing captured it says so',
+    row && row.disabledReason === undefined && onChat.actions.calls.some((c) => c[0] === 'openReplay' && c[1] === 'c1') &&
+      onTerm && /select a conversation first/.test(onTerm.disabledReason ?? '') && none && none.disabledReason === P.REASON_NO_FOCUS,
+    JSON.stringify({ row: row && row.disabledReason, onTerm: onTerm && onTerm.disabledReason, calls: onChat.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

@@ -518,7 +518,8 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M309. `.briefing` is the return briefing, which floats over the canvas in
   // the resume banner's own slot and takes its elevation for the same reason.
   // M337. `.share-dialog__card` is the share dialog: modal, over a scrim.
-  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.shell--inspector-float|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.briefing$|\.canvas-toast$|\.share-dialog__card$/
+  // M383. `.replay` is the Replay sheet's card: modal, over a scrim, the share dialog's shape.
+  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.shell--inspector-float|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.briefing$|\.canvas-toast$|\.share-dialog__card$|\.replay$/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere

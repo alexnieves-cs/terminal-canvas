@@ -325,6 +325,9 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // person's own gestures (the row, ⌘⇧E, a diff line) reach it.
   openInEditor: 'launches the person\'s own editor — outside the app, so a person\'s gesture only',
   openBoard: 'opens a navigator pane — a view, not an action on the canvas',
+  // M383. The Replay sheet reads a conversation's past; a plan reads the
+  // transcript through its own verbs and has no eyes for a sheet.
+  openReplay: 'opens the Replay sheet — a person reading a conversation\'s past, not an action on the canvas',
   // M127/M128. STAYS excluded now that it mints a real panel, and the
   // original reason is why: the verb takes a WORLD POINT, which is the
   // drop's own cursor position, and a plan has no cursor. Giving it a verb

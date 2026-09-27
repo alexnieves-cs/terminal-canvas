@@ -499,6 +499,8 @@ export interface PaletteActions {
   stopWorkflow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M74. A claude terminal's session, rendered and continued as a chat. */
   openAsChat(id: string): void
+  /** M383. Open the Replay sheet on a conversation — a view of its past; nothing runs. */
+  openReplay(id: string): void
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
   openInTerminal(id: string): void
   openJira(): void
@@ -680,6 +682,24 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ctx.capturedId === null ? REASON_NO_FOCUS
           : target === undefined || target.kind !== 'terminal' || target.claude !== true ? REASON_NOT_CLAUDE_SESSION
             : termLive ? REASON_TERMINAL_LIVE : undefined
+      )
+    )
+    // M383. A conversation scrubbed back to any turn, its files as they stood
+    // then, and another beside it — the Replay sheet, a view. Offered on the
+    // captured panel when it is a chat; any other panel names why not.
+    out.push(
+      withReason(
+        {
+          id: 'chat.replay',
+          title: 'Replay this conversation…',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          searchText: 'replay rewind history timeline turn files virtual filesystem compare runs side by side conversation chat',
+          group: 'panel',
+          run: () => actions.openReplay(ctx.capturedId!)
+        },
+        ctx.capturedId === null ? REASON_NO_FOCUS
+          : target === undefined || target.kind !== 'chat' ? 'select a conversation first — a replay is read from a chat\'s own transcript'
+            : undefined
       )
     )
     // M76. Two rows per pending request, named with the tool and the panel;

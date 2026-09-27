@@ -3216,6 +3216,23 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ lines: lines.map((l) => l.slice(0, 12)), back: back.turns.length, mixed: { turns: mixed.turns.length, unreadable: mixed.unreadable } }))
   }
 
+  // M383 — replay.words.1. The sheet's words: a file known whole or not with
+  //     its count, "cannot tell" as its own compare answer, the shell note only
+  //     when a shell ran, and a path shown from the conversation's folder.
+  {
+    const R = M.replay
+    const exact = { path: '/r/a.ts', state: 'exact', content: 'x', changes: 1, lastAt: 1 }
+    const partial = { path: '/r/a.ts', state: 'partial', edits: [], changes: 3, lastAt: 1, why: 'w' }
+    ok('replay.words.1 the Replay sheet\'s words: known whole or not with the count, the same / different / cannot tell / only one side, the shell note only after a shell ran, and a path from the conversation\'s folder',
+      R.fileStateWords(exact) === 'known whole · 1 change' && R.fileStateWords(partial) === 'not known whole · 3 changes' &&
+        R.compareWords({ a: exact, b: exact, same: true }, 'one', 'two') === 'the same' && R.compareWords({ a: exact, b: exact, same: false }, 'one', 'two') === 'different' &&
+        /cannot tell/.test(R.compareWords({ a: exact, b: partial, same: null }, 'one', 'two')) && R.compareWords({ b: exact, same: false }, 'one', 'two') === 'only two changed it' &&
+        R.shellWords(0) === null && /^2 shell commands had run by then/.test(R.shellWords(2)) &&
+        R.replayPath('/r/src/a.ts', '/r') === 'src/a.ts' && R.replayPath('/elsewhere/a.ts', '/r') === '/elsewhere/a.ts' && R.replayPath('/r/a.ts', undefined) === '/r/a.ts' &&
+        R.sinceStartWords(1000, 1000) === '0s in' && R.sinceStartWords(46000, 1000) === '45s in' && R.sinceStartWords(751000, 1000) === '12m 30s in' && R.sinceStartWords(3721000, 1000) === '1h 02m in',
+      'words')
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {

@@ -291,6 +291,7 @@ import { relayNameOf } from '../relay/relay-gate'
 import { TeamView } from '../team/TeamView'
 import { useAccounts } from '../account/useAccounts'
 import { ShareDialog } from '../account/ShareDialog'
+import { ReplaySheet } from '../replay/ReplaySheet'
 
 // M137. Moved below the import block, where a module-scope constant belongs.
 const EMPTY_SHELF: Shelf = { columns: [] }
@@ -8092,6 +8093,10 @@ export function Canvas({
       />
       <ShareDialog accounts={accounts} workspaces={workspaceRows}
         onOpened={(id) => { void switchWorkspace(id) }} onWorkspacesChanged={reloadWorkspaces} />
+      {/* M383. A conversation scrubbed back to any turn, and one beside it — a view over the renderer's own transcripts. */}
+      <ReplaySheet
+        chats={panels.flatMap((p) => (isChatPanel(p) ? [{ id: p.rect.id, label: panelName(p), cwd: p.chat.cwd }] : []))}
+        turnsOf={(id) => getChat(id).turns} />
       {resumeStrip}
       <Navigator
         onResizeHandleDown={onNavResizeDown}
