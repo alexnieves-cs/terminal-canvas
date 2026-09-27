@@ -15,6 +15,7 @@
  */
 import type { Preset } from '../shared/layout-schema'
 import { SWARM_PRESET_IDS, type SwarmPresetId } from '../shared/swarm'
+import { normalizeCapability } from '../shared/toolbox-query'
 
 export type ControlRequest =
   | { verb: 'open'; preset?: string; cwd?: string }
@@ -29,6 +30,11 @@ export type ControlRequest =
    * scrubbed on its way to disk. Socket only, like `status`.
    */
   | { verb: 'audit'; limit?: number }
+  /**
+   * M366. READ-ONLY: which panels' toolboxes hold a capability by this name —
+   * the palette's "Which agents can…" asked from a shell. Socket only.
+   */
+  | { verb: 'toolbox'; name: string }
   /**
    * M83. The project memory. `add` is the first control verb that WRITES,
    * and it writes only into that store — it cannot spawn, focus or run.
@@ -137,6 +143,14 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       if (limitRaw === undefined) return { kind: 'ok', req: { verb: 'audit' } }
       if (typeof limitRaw !== 'number' || !Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 1000) return { kind: 'bad', error: 'limit must be a whole number from 1 to 1000' }
       return { kind: 'ok', req: { verb: 'audit', limit: limitRaw } }
+    }
+    case 'toolbox': {
+      // The name a person would type: a skill, a command, an agent, an MCP
+      // server. Bounded and single-line, because it is echoed in the answer.
+      const name = optionalString(fields['name'])
+      if (name === null || name === undefined || normalizeCapability(name) === '') return { kind: 'bad', error: 'toolbox needs a capability name — a skill, command, agent or MCP server' }
+      if (name.length > 200 || /[\x00-\x1f\x7f]/.test(name)) return { kind: 'bad', error: 'a capability name is one line of at most 200 characters' }
+      return { kind: 'ok', req: { verb: 'toolbox', name } }
     }
     case 'memory': {
       const op = fields['op']

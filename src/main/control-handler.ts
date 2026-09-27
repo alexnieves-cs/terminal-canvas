@@ -11,6 +11,8 @@
  */
 import { existsSync } from 'node:fs'
 import type { DecisionRow } from '../shared/decision-audit'
+import type { ToolInventoryResult } from '../shared/toolbox'
+import { CAPABILITY_ORDER, capabilityAcross, capabilityWords, normalizeCapability } from '../shared/toolbox-query'
 import type { Preset } from '../shared/layout-schema'
 import type { BoardControlRequest, ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
@@ -49,6 +51,8 @@ export interface ControlHandlerDeps {
   canvas?: () => Promise<ControlCanvasModel | null>
   /** M369. The decision audit, newest first. Absent: this window keeps none. */
   audit?: (limit: number) => { rows: DecisionRow[]; skipped: number }
+  /** M366. Main's one toolbox read (`toolbox-door.ts`). Absent: this window cannot read toolboxes. */
+  toolbox?: (req: { panelId: string; cwd: string }) => Promise<ToolInventoryResult>
   /** M102. The teammate a panel speaks as, from main's own records — never the CLI's claim. */
   teammateOf?: (panelId: string) => string | undefined
   /** M102. The panel a session token was minted for; undefined for a token this window never minted. */
@@ -198,6 +202,25 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         // READ-ONLY by construction, like `status`: one read of main's own file.
         if (deps.audit === undefined) return { ok: false, error: 'this window keeps no decision audit' }
         return { ok: true, audit: deps.audit(req.limit ?? 50) }
+      }
+      case 'toolbox': {
+        // M366. READ-ONLY, like `status`: the renderer names each panel's
+        // tools directory (the inspector's rule, `toolsCwd`), and main reads
+        // each distinct one through the same door `toolbox:read` uses. The
+        // answer is names, scopes and states — never an entry's contents.
+        if (deps.toolbox === undefined) return { ok: false, error: 'this window cannot read toolboxes' }
+        const model = deps.canvas === undefined ? null : await deps.canvas().catch(() => null)
+        if (model === null) return { ok: false, error: 'the canvas did not answer — no toolboxes were read' }
+        const asked = model.panels.flatMap((p) => p.toolsCwd === undefined ? [] : [{ panelId: p.id, label: p.title ?? p.id, cwd: p.toolsCwd }])
+        const read = deps.toolbox
+        const rows = await capabilityAcross(req.name, asked, (panelId, cwd) => read({ panelId, cwd }))
+        rows.sort((a, b) => CAPABILITY_ORDER[a.answer.kind] - CAPABILITY_ORDER[b.answer.kind])
+        return {
+          ok: true,
+          name: normalizeCapability(req.name),
+          panels: rows.map((r) => ({ id: r.panelId, label: r.label, answer: r.answer.kind, words: capabilityWords(req.name, r.answer) })),
+          ...(rows.length === 0 ? { note: 'no panel on the canvas has a toolbox directory' } : {})
+        }
       }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or

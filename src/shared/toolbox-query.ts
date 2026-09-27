@@ -100,3 +100,33 @@ export function capabilityWords(query: string, answer: CapabilityAnswer): string
 
 /** Display order: who can, who nearly can, who cannot say, who cannot. */
 export const CAPABILITY_ORDER: Record<CapabilityAnswer['kind'], number> = { has: 0, inactive: 1, unknown: 2, lacks: 3 }
+
+/** One panel asked: its id, its name, and the directory the inspector's rule gave it. */
+export interface CapabilityAsk { panelId: string; label: string; cwd: string }
+export interface CapabilityRow { panelId: string; label: string; answer: CapabilityAnswer }
+
+/**
+ * M366. The question asked of every panel at once, by BOTH doors — the
+ * palette scope (M365) and `tc toolbox` — so neither groups directories its
+ * own way. Each DISTINCT directory is read once (panels in one repository
+ * share a toolbox), asked for the first panel naming it. A read that throws
+ * is `unknown`, never a missing row: a panel that did not answer is still a
+ * panel that was asked. Rows keep the asked order; a door sorts by
+ * `CAPABILITY_ORDER` if it wants to.
+ */
+export async function capabilityAcross(
+  query: string,
+  asked: readonly CapabilityAsk[],
+  read: (panelId: string, cwd: string) => Promise<ToolInventoryResult>
+): Promise<CapabilityRow[]> {
+  const byCwd = new Map<string, string>()
+  for (const a of asked) if (!byCwd.has(a.cwd)) byCwd.set(a.cwd, a.panelId)
+  const pairs = await Promise.all([...byCwd].map(async ([cwd, panelId]) => {
+    try { return [cwd, await read(panelId, cwd)] as const } catch { return [cwd, { kind: 'unavailable', reason: 'the toolbox read did not answer' } as const] as const }
+  }))
+  const got = new Map<string, ToolInventoryResult>(pairs)
+  return asked.flatMap((a) => {
+    const answer = capabilityOf(query, got.get(a.cwd))
+    return answer === null ? [] : [{ panelId: a.panelId, label: a.label, answer }]
+  })
+}

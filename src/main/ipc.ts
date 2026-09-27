@@ -14,7 +14,6 @@ import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
-import { statSync } from 'node:fs'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage, QueueEditRequest, CorrectionAnswer } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
@@ -71,6 +70,7 @@ import {
 import type { FileWatchers } from './file-watch'
 import { readDir } from './fs-tree'
 import type { ToolboxCache } from './toolbox-cache'
+import { createToolboxDoor } from './toolbox-door'
 import { readPermissionRules, resolveToolboxHome } from './toolbox-read'
 import { resolveCwd } from './pty-manager'
 import { writeFile } from './file-write'
@@ -1338,41 +1338,15 @@ export function registerIpcHandlers(
     fileWatchers.close(panelId)
   })
 
-  ipcMain.handle(IPC.TOOLBOX_READ, (_event, req: ToolboxReadRequest) => {
-    // M194. Inspection must never borrow the spawn resolver's home fallback:
-    // a deleted project would otherwise display HOME's tools as its own.
-    if (req.cwd === '') return { kind: 'no-cwd' }
-    const cwd = expandTilde(req.cwd)
-    // Three facts, three sentences. An earlier round of this had two, and the
-    // one that named non-existence was the arm that never saw it: `statSync`
-    // THROWS on a missing path, so a deleted project always lands in the
-    // catch. Each of these has a different fix, which is why they are not
-    // merged (the DirResult union's own rule, `shared/fs-tree.ts`).
-    if (!cwd.startsWith('/')) return { kind: 'unavailable', reason: `the working directory is not an absolute path (${req.cwd})` }
-    try {
-      if (!statSync(cwd).isDirectory()) return { kind: 'unavailable', reason: 'that path is a file, not a directory' }
-    } catch {
-      return { kind: 'unavailable', reason: 'the directory is no longer there — it may have been moved or deleted' }
-    }
-    return toolboxCache.read(
-      {
-        cwd,
-        home: resolveToolboxHome(),
-        spawnStamps: ptyManager.configStampsFor(req.panelId)
-      },
-      // Passed as a RESOLVER, never pre-awaited here: the cache asks this
-      // only on an actual miss, so N toolbox panels sharing one cwd spawn
-      // `claude plugin list --json` once, not once per panel. `unknown`
-      // reads as no plugins, never as an error surfaced here — the pane
-      // already has a place for "the CLI didn't answer" one level up (the
-      // ordinary env-report three-state rule), and TOOLBOX_READ has no slot
-      // to carry a second one through.
-      async () => {
-        const pluginsResult = await listPlugins()
-        return pluginsResult.kind === 'ok' ? pluginsResult.plugins : undefined
-      }
-    )
+  // M366. Main's one toolbox read is its own door now (`toolbox-door.ts`),
+  // so `tc toolbox` asks through the same directory rule over the same cache.
+  const toolboxDoor = createToolboxDoor({
+    cache: toolboxCache,
+    home: resolveToolboxHome,
+    stampsFor: (panelId) => ptyManager.configStampsFor(panelId),
+    listPlugins
   })
+  ipcMain.handle(IPC.TOOLBOX_READ, (_event, req: ToolboxReadRequest) => toolboxDoor(req))
 
   ipcMain.handle(IPC.TOOLBOX_PERMISSIONS, (_event, req: ToolboxPermissionsRequest) => {
     return readPermissionRules(req.path, req.bucket)

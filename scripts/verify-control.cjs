@@ -729,6 +729,71 @@ const ok = (n, pass, detail = '') => {
       built.every((b, i) => b.kind === 'ok' && JSON.parse(b.line).verb === ['list', 'status', 'ping', 'audit'][i]) && extra.kind === 'usage',
       JSON.stringify({ built, extra }))
   }
+  // M366 — toolbox.door.1. Main's toolbox read, lifted out of `toolbox:read`'s
+  //     closure, answers the three refusals by their own sentences, reads a
+  //     real project's skill, and asks plugins once for two readers of one
+  //     directory (the cache's rule survives the lift).
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc toolbox door '))
+    const home = join(dir, 'home'); const proj = join(dir, 'proj')
+    require('node:fs').mkdirSync(join(proj, '.claude', 'skills', 'review'), { recursive: true })
+    require('node:fs').mkdirSync(home, { recursive: true })
+    require('node:fs').writeFileSync(join(proj, '.claude', 'skills', 'review', 'SKILL.md'), '---\nname: review\ndescription: Reviews.\n---\n')
+    require('node:fs').writeFileSync(join(dir, 'a-file'), 'x')
+    let pluginAsks = 0
+    const door = C.createToolboxDoor({ cache: new C.ToolboxCache(), home: () => home, stampsFor: () => undefined, listPlugins: async () => { pluginAsks += 1; return { kind: 'ok', plugins: [] } } })
+    const none = await door({ panelId: 'p', cwd: '' })
+    const relative = await door({ panelId: 'p', cwd: 'proj' })
+    const file = await door({ panelId: 'p', cwd: join(dir, 'a-file') })
+    const gone = await door({ panelId: 'p', cwd: join(dir, 'nope') })
+    const first = await door({ panelId: 'p1', cwd: proj })
+    const second = await door({ panelId: 'p2', cwd: proj })
+    rmSync(dir, { recursive: true, force: true })
+    const has = C.capabilityOf('/review', first)
+    ok('toolbox.door.1 the lifted toolbox door refuses no directory, a relative path, a file and a missing folder by their own sentences, reads a real project skill, and asks plugins once for two readers of one directory',
+      none.kind === 'no-cwd' && relative.kind === 'unavailable' && /not an absolute path/.test(relative.reason) &&
+        file.kind === 'unavailable' && /a file, not a directory/.test(file.reason) && gone.kind === 'unavailable' && /no longer there/.test(gone.reason) &&
+        has !== null && has.kind === 'has' && has.matches[0].scope === 'project' && second.kind === 'inventory' && pluginAsks === 1,
+      JSON.stringify({ none, relative, file, gone, has, pluginAsks }))
+  }
+  // M366 — toolbox.1. `tc toolbox <name>` is the palette's "Which agents
+  //     can…" from a shell: the CLI builds it, the protocol refuses an empty
+  //     or multi-line name, and the handler reads each DISTINCT tools
+  //     directory the canvas named once, answers every panel that has one
+  //     in the palette's words, has-first, and refuses by name with no
+  //     window or no toolbox door.
+  {
+    const built = C.buildRequest(['toolbox', 'review'], {})
+    const two = C.buildRequest(['toolbox', 'git', 'review'], {})
+    const bare = C.buildRequest(['toolbox'], {})
+    const parsed = C.parseControlLine('{"verb":"toolbox","name":"/review"}')
+    const empty = C.parseControlLine('{"verb":"toolbox","name":"/"}')
+    const multi = C.parseControlLine(JSON.stringify({ verb: 'toolbox', name: 'a\nb' }))
+    const inv = (names) => ({ kind: 'inventory', inventory: { entries: names.map((n) => ({ kind: 'skill', name: n, scope: 'project', active: { kind: 'active' } })), overflow: { skills: 0, commands: 0, agents: 0, mcp: 0, hooks: 0, total: 0 }, pluginsEnabled: [], freshness: { kind: 'unknown' } } })
+    const reads = []
+    const base = { presets: () => [], defaultId: () => null, exists: () => true, spawn: () => {}, list: () => [], focus: () => true }
+    const canvas = async () => ({ panels: [
+      { id: 'a1', kind: 'chat', state: 'idle', title: 'lint seat', toolsCwd: '/a' },
+      { id: 'b1', kind: 'chat', state: 'idle', title: 'review seat', toolsCwd: '/b' },
+      { id: 'a2', kind: 'terminal', state: 'idle', toolsCwd: '/a' },
+      { id: 'n1', kind: 'note', state: 'not started' }
+    ], edges: [], runs: [] })
+    const toolbox = async (req) => { reads.push(req.cwd); return req.cwd === '/b' ? inv(['review']) : inv([]) }
+    const answered = await C.createControlHandler({ ...base, canvas, toolbox })({ verb: 'toolbox', name: 'Review' })
+    const noWindow = await C.createControlHandler({ ...base, canvas: async () => null, toolbox })({ verb: 'toolbox', name: 'review' })
+    const noDoor = await C.createControlHandler({ ...base, canvas })({ verb: 'toolbox', name: 'review' })
+    const empty2 = await C.createControlHandler({ ...base, canvas: async () => ({ panels: [], edges: [], runs: [] }), toolbox })({ verb: 'toolbox', name: 'review' })
+    const rows = answered.panels ?? []
+    ok('toolbox.1 tc toolbox <name> builds and parses (an empty or multi-line name refused), reads each distinct tools directory once, answers every panel with one in the palette\'s words has-first, and refuses by name with no window or no door',
+      built.kind === 'ok' && JSON.parse(built.line).name === 'review' && JSON.parse(two.line).name === 'git review' && bare.kind === 'usage' &&
+        parsed.kind === 'ok' && parsed.req.name === '/review' && empty.kind === 'bad' && multi.kind === 'bad' &&
+        answered.ok === true && answered.name === 'review' && reads.sort().join(',') === '/a,/b' &&
+        rows.map((r) => r.id).join(',') === 'b1,a1,a2' && rows[0].answer === 'has' && rows[0].words === 'has skill review · project' &&
+        rows[1].words === 'no review' && rows[2].label === 'a2' && !rows.some((r) => r.id === 'n1') &&
+        noWindow.ok === false && /did not answer/.test(noWindow.error) && noDoor.ok === false && /cannot read toolboxes/.test(noDoor.error) &&
+        empty2.ok === true && /no panel/.test(empty2.note),
+      JSON.stringify({ built, two, bare, parsed, empty, multi, answered, noWindow, noDoor, empty2, reads }))
+  }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

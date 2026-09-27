@@ -132,7 +132,10 @@ const shareControl = createShareControl({
   },
   confirm: (ask) => confirm(state.window, ask)
 })
-const control = createControlWiring(state, stores, places, tokens, account, shareControl)
+// M366. Built before the control wiring so `tc toolbox` and `toolbox:read`
+// ask plugins through the SAME runner; it reads `state` at use, not here.
+const toolbox = createToolboxHandlers(state, places)
+const control = createControlWiring(state, stores, places, tokens, account, shareControl, toolbox.listPlugins)
 // M311–M314. Built at module scope with the other collaborators; every
 // closure inside reads `state` at the point of use (context.ts's rule).
 const kit = createKitHandlers(state, stores, app.getPath('userData'))
@@ -244,8 +247,6 @@ app.whenReady().then(async () => {
   // M101. Arm every routine the layout holds; a tick that fell while the app
   // was closed is marked missed here (startup only), never fired.
   palette.armRoutines(true)
-
-  const toolbox = createToolboxHandlers(state, places)
 
   // POSITIONAL, AND THE ORDER IS THE CONTRACT. Every parameter of
   // `registerIpcHandlers` is documented "appended last so no existing

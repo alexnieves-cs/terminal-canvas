@@ -43,7 +43,7 @@ import { panelName } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { inspectionDirectory } from './inspection-directory'
-import { capabilityOf, normalizeCapability, type CapabilityAnswer } from '@shared/toolbox-query'
+import { capabilityAcross, normalizeCapability, type CapabilityAnswer } from '@shared/toolbox-query'
 import { useVault } from './useVault'
 import { buildIntegrationRows, INTEGRATION_AUDIT_ROWS } from '@renderer/shell/integration-model'
 import { SERVICES } from '@shared/credential-schema'
@@ -2016,10 +2016,15 @@ export function Canvas({
             return acc === undefined || c === undefined ? undefined : acc + c
           }, 0)
         const cost = priced
+        // M366. The directory the inspector's Tools rule reads for this
+        // panel, so `tc toolbox` asks main about the same directories the
+        // palette's capability scope does (a sandbox chat has none).
+        const tools = inspectionDirectory(p, 'tools')
         return {
           id: p.rect.id, kind: p.kind, state: word.word,
           ...(p.title === undefined ? {} : { title: p.title }),
           ...(isTerminalPanel(p) ? { cwd: getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd } : isChatPanel(p) ? { cwd: p.chat.cwd } : {}),
+          ...(tools.kind === 'known' ? { toolsCwd: tools.cwd } : {}),
           ...(cost === undefined ? {} : { cost })
         }
       }),
@@ -4755,17 +4760,9 @@ export function Canvas({
       const d = inspectionDirectory(p, 'tools')
       return d.kind === 'known' ? [{ panelId: p.rect.id, label: panelName(p), cwd: d.cwd }] : []
     })
-    const byCwd = new Map<string, string>()
-    for (const a of asked) if (!byCwd.has(a.cwd)) byCwd.set(a.cwd, a.panelId)
-    void Promise.all([...byCwd].map(async ([cwd, panelId]) => {
-      try { return [cwd, await window.canvas.toolbox.read({ panelId, cwd })] as const } catch { return [cwd, { kind: 'unavailable', reason: 'the toolbox read did not answer' } as const] as const }
-    })).then((pairs) => {
+    void capabilityAcross(query, asked, (panelId, cwd) => window.canvas.toolbox.read({ panelId, cwd })).then((rows) => {
       if (capabilityQueryRef.current !== query) return
-      const read = new Map<string, ToolInventoryResult>(pairs)
-      setCapability(asked.flatMap((a) => {
-        const answer = capabilityOf(query, read.get(a.cwd))
-        return answer === null ? [] : [{ panelId: a.panelId, label: a.label, answer }]
-      }))
+      setCapability(rows)
     })
   }, [])
   const workSearch = useMemo(() => {

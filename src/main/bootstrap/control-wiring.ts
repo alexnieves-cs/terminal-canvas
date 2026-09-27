@@ -11,6 +11,9 @@ import type { Stores } from './stores'
 import type { MainState, PanelTokens } from './context'
 import type { AccountService } from '../account-session'
 import type { ShareControl } from '../share-control'
+import { createToolboxDoor } from '../toolbox-door'
+import { resolveToolboxHome } from '../toolbox-read'
+import type { PluginListResult } from '../plugin-list'
 
 /**
  * M87. The broker over the credential store — the store's LAST reader — with
@@ -26,7 +29,7 @@ export interface ControlWiring {
   teammateOfPanel(panelId: string): string | undefined
 }
 
-export function createControlWiring(state: MainState, stores: Stores, places: Places, tokens: PanelTokens, account?: AccountService, sharing?: ShareControl): ControlWiring {
+export function createControlWiring(state: MainState, stores: Stores, places: Places, tokens: PanelTokens, account?: AccountService, sharing?: ShareControl, listPlugins?: () => Promise<PluginListResult>): ControlWiring {
   const { layoutStore, credentialStore, brokerAudit, ptyManager, memoryStore, teammateMemory } = stores
 
   // M102. A panel's teammate is MAIN's own record (the chat's `teammateId`),
@@ -103,6 +106,16 @@ export function createControlWiring(state: MainState, stores: Stores, places: Pl
     },
     // M369. The decision audit, read from main's own file.
     audit: (limit) => stores.decisionAudit.list(limit),
+    // M366. The toolbox door `toolbox:read` uses, over main's ONE cache, so a
+    // directory the palette read is a cache hit here and the reverse.
+    ...(listPlugins === undefined ? {} : {
+      toolbox: createToolboxDoor({
+        cache: stores.toolboxCache,
+        home: resolveToolboxHome,
+        stampsFor: (panelId) => ptyManager.configStampsFor(panelId),
+        listPlugins
+      })
+    }),
     canvas: async () => {
       const wc = state.window?.webContents
       if (!wc) return null

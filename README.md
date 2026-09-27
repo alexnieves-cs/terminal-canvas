@@ -1172,6 +1172,7 @@ price of not killing something.
 | M371 | A cap set and a proposal answered are decisions on the record: `cap-agent` records a ledger row once a change lands (a person's reaching the decision audit, an agent's or workflow's lowering recorded as theirs), and keeping or discarding an agent's proposed review comment records the person's answer, each in one set of words (`capDecisionTitle`, `proposalDecisionTitle`). [Ledger](docs/build-log/m371-decisions-on-record.md). |
 | M372 | The run ledger scrubs what it writes, and counts it: a command row's command line and an event row's title and detail pass `redactSecrets` at the ledger's one writer on their way to disk, the count riding the row as `scrubbed` — the ledger joins `redactSecrets`' named callers, deliberately. [Ledger](docs/build-log/m372-ledger-scrub.md). |
 | M370 | `tc task --swarm <preset>`: a task proposed from any terminal opens Start work with M275's Explore, Implement, Test or Review arrangement already chosen — still a proposal a person starts, an unknown arrangement refused at the door naming the four. [Ledger](docs/build-log/m370-tc-task-swarm.md). |
+| M366 | `tc toolbox <name>`: the palette's "Which agents can…" from a shell — main's toolbox read lifted out of `toolbox:read`'s closure into one door both ask through (one cache, one directory rule), each panel's tools directory named by the renderer's inspector rule in `tc status`'s model, and the supervisor told to use it. [Ledger](docs/build-log/m366-tc-toolbox.md). |
 
 ### What's next — the v10 run (D01–D20)
 

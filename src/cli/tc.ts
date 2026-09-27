@@ -5,6 +5,7 @@
  *
  *   tc open [--preset <name|id>] [--cwd <dir>]
  *   tc list | tc focus <id> | tc ping | tc status | tc audit [--limit <n>]
+ *   tc toolbox <skill|command|agent|mcp-server>
  *   tc memory list [--root <dir> | --teammate <id>] [--limit <n>]
  *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir> | --teammate <id>]
  *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
@@ -35,6 +36,7 @@ export const USAGE = [
   '       tc ping',
   '       tc status',
   '       tc audit [--limit <n>]',
+  '       tc toolbox <skill|command|agent|mcp-server>',
   '       tc plan "focus n3; read n3"',
   '       tc memory list [--root <dir> | --teammate <id>] [--limit <n>]',
   '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir> | --teammate <id>]',
@@ -250,6 +252,12 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       return rest.length === 1 && rest[0] !== '' ? { kind: 'ok', line: JSON.stringify({ verb: 'open-share', shareId: rest[0] }) } : { kind: 'usage', error: 'open-share takes one shared workspace id — `tc shares` lists them' }
     case 'share-role':
       return rest.length === 3 ? { kind: 'ok', line: JSON.stringify({ verb: 'share-role', shareId: rest[0], who: rest[1], role: rest[2] }) } : { kind: 'usage', error: 'share-role takes a share id, a login or user id, and editor, viewer or none' }
+    // M366. `tc toolbox <name>`: which panels' toolboxes hold a capability
+    // by that name — the palette's "Which agents can…" from a shell.
+    case 'toolbox': {
+      const name = rest.join(' ').trim()
+      return name === '' ? { kind: 'usage', error: 'toolbox takes a capability name — a skill, command, agent or MCP server' } : { kind: 'ok', line: JSON.stringify({ verb: 'toolbox', name }) }
+    }
     // M369. `tc audit [--limit N]`: what a person decided, newest first.
     // Placed ABOVE the no-argument group, never inside it: M369 first landed
     // it between `case 'list':` and `case 'status':`, so `tc list` fell

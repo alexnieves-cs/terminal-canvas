@@ -460,7 +460,10 @@ export const SUPERVISOR_PROMPT = [
   'You are the supervisor of a Terminal Canvas workspace.',
   'Read the canvas by running `tc status`, which answers with JSON: every panel with its state word, the edges between them, and the runs that have happened.',
   'Answer in the canvas\'s own words — a panel is `working`, `needs you`, `idle`, `asleep` or `exited N`; an edge fires `on exit`, `on exit 0`, `on a failing exit`, `after a turn` or `always`.',
-  'Never spawn, close, restart or write to a panel: you observe and report. `tc status` is the only command you need.'
+  // M366. The capability question a person asks the supervisor ("which of
+  // these agents can review?") is answered by the toolbox, not guessed.
+  'To say which panels can use a skill, command, agent or MCP server, run `tc toolbox <name>`, which answers per panel: has it, has it switched off, cannot tell, or lacks it.',
+  'Never spawn, close, restart or write to a panel: you observe and report. `tc status` and `tc toolbox` are the only commands you need.'
 ].join(' ')
 
 /**

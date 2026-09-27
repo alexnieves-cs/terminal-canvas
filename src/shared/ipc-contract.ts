@@ -117,7 +117,8 @@ export interface MemoryEntryRow {
 
 /** M81. The canvas model `tc status` answers with — the renderer's own words. */
 export interface ControlCanvasModel {
-  panels: Array<{ id: string; kind: string; title?: string; state: string; cwd?: string; cost?: number }>
+  /** M366. `toolsCwd`: the directory the inspector's Tools rule reads (`inspectionDirectory`), absent when it has none. */
+  panels: Array<{ id: string; kind: string; title?: string; state: string; cwd?: string; toolsCwd?: string; cost?: number }>
   edges: Array<{ from: string; to: string; trigger: string }>
   runs: Array<{ id: string; name: string; outcome: string; panels: number; cost?: number }>
 }
