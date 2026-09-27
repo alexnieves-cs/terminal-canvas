@@ -3126,6 +3126,57 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify(h))
   }
 
+  // M381 — replay.*. A node's replay from its durable transcript: the files
+  //     AS THEY STOOD at a moment, exact only where the transcript showed the
+  //     content, and a change counted from its RESULT (a denied edit changed
+  //     nothing, a pending one had not happened yet).
+  {
+    const R = M.replay
+    const use = (id, name, input) => ({ type: 'tool_use', id, name, input })
+    const res = (id, content = '', isError = false) => ({ type: 'tool_result', toolUseId: id, content, isError })
+    const turn = (at, role, blocks) => ({ id: `t${at}`, role, blocks, at })
+    const turns = [
+      turn(1, 'user', [{ type: 'text', text: 'fix it' }]),
+      turn(2, 'assistant', [use('r1', 'Read', { file_path: '/r/a.ts' })]),
+      turn(3, 'user', [res('r1', '1\tconst a = 1\n2\tconst b = 2\n<system-reminder>ignore</system-reminder>')]),
+      turn(4, 'assistant', [
+        use('e1', 'Edit', { file_path: '/r/a.ts', old_string: 'const b = 2', new_string: 'const b = 3' }),
+        use('w1', 'Write', { file_path: '/r/new.ts', content: 'export const x = 1' }),
+        use('e2', 'Edit', { file_path: '/r/c.ts', old_string: 'foo', new_string: 'bar' }),
+        use('d1', 'Edit', { file_path: '/r/a.ts', old_string: 'const a = 1', new_string: 'const a = 9' })
+      ]),
+      turn(5, 'user', [res('e1'), res('w1'), res('e2'), res('d1', 'The user denied this', true)]),
+      turn(6, 'assistant', [use('s1', 'Bash', { command: 'sed -i s/3/4/ /r/a.ts' }), use('e3', 'Edit', { file_path: '/r/a.ts', old_string: 'const b = 4', new_string: 'const b = 5' })]),
+      turn(7, 'user', [res('s1'), res('e3')]),
+      turn(8, 'assistant', [use('r2', 'Read', { file_path: '/r/c.ts' })]),
+      turn(9, 'user', [res('r2', '     1→bar baz')])
+    ]
+    const at4 = R.replayAt(turns, 4), at5 = R.replayAt(turns, 5), at7 = R.replayAt(turns, 7), at9 = R.replayAt(turns, 9)
+    const file = (f, p) => f.files.find((x) => x.path === p)
+    ok('replay.1 a frame is the node as it stood: a whole Read is a base, an edit applies to it, a Write is exact, an edit with no base is partial with its edits listed, a denied edit changed nothing and a requested one had not happened until its result',
+      at4.files.length === 0 && at4.turns.length === 4 && at4.toolRuns === 1 &&
+        file(at5, '/r/a.ts')?.state === 'exact' && file(at5, '/r/a.ts').content === 'const a = 1\nconst b = 3' &&
+        file(at5, '/r/new.ts')?.content === 'export const x = 1' &&
+        file(at5, '/r/c.ts')?.state === 'partial' && file(at5, '/r/c.ts').edits.length === 1 && /without the transcript ever showing it whole/.test(file(at5, '/r/c.ts').why),
+      JSON.stringify({ at4: at4.files, at5: at5.files }))
+    ok('replay.2 what the replay cannot see is said: a shell command is counted, an edit whose old text is not in what the replay held makes the file partial with the reason, and a later whole Read makes it exact again',
+      at7.shellRuns === 1 && file(at7, '/r/a.ts')?.state === 'partial' && /old text was not in what the replay held/.test(file(at7, '/r/a.ts').why) &&
+        file(at9, '/r/c.ts')?.state === 'exact' && file(at9, '/r/c.ts').content === 'bar baz' && file(at9, '/r/c.ts').changes === 1 &&
+        R.replayMoments(turns).join(',') === '1,2,3,4,5,6,7,8,9',
+      JSON.stringify({ at7: at7.files, at9: at9.files }))
+    const other = R.replayAt([
+      turn(1, 'assistant', [use('w2', 'Write', { file_path: '/r/new.ts', content: 'export const x = 2' }), use('w3', 'Write', { file_path: '/r/only.ts', content: '' })]),
+      turn(2, 'user', [res('w2'), res('w3')])
+    ], 2)
+    const cmp = R.compareFrames(at5, other)
+    ok('replay.3 two nodes compared file by file: exact and different is false, one side partial is null (cannot tell), a file only one side changed is false; a Read slice, a gap and a Read at the CLI\'s line limit are never a base',
+      cmp.find((c) => c.path === '/r/new.ts')?.same === false && cmp.find((c) => c.path === '/r/only.ts')?.same === false && cmp.find((c) => c.path === '/r/c.ts')?.same === false &&
+        R.compareFrames(at5, at5).find((c) => c.path === '/r/c.ts')?.same === null && R.compareFrames(at5, at5).find((c) => c.path === '/r/a.ts')?.same === true &&
+        R.readBase({ offset: 5 }, '5\tx') === undefined && R.readBase({}, '1\ta\n3\tc') === undefined &&
+        R.readBase({}, Array.from({ length: 2000 }, (_, i) => `${i + 1}\tl`).join('\n')) === undefined && R.readBase({}, '1\ta\n2\tb') === 'a\nb',
+      JSON.stringify(cmp))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {

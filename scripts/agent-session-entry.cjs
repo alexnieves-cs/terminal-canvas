@@ -9,6 +9,8 @@
    its own module, which is deliberately NOT bundled here. */
 module.exports = {
   transcript: require('../src/shared/transcript'),
+  /* M381. A node's replay, from the durable transcript. */
+  replay: require('../src/shared/replay'),
   /* M90. The codex adapter: codex's JSONL to the same TranscriptEvent union. */
   codex: require('../src/shared/codex-transcript'),
   /* M118. copilot's JSONL door. Absent until Task 2 lands — the check guards on it. */
