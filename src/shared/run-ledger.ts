@@ -29,6 +29,8 @@ export interface RunRow {
    * and when capture was not wired; a reader then says it has no record.
    */
   outputId?: string
+  /** M372. Secrets scrubbed from `command` on the way to disk. Absent is none. */
+  scrubbed?: number
 }
 
 /**
@@ -129,7 +131,13 @@ export interface EventRow {
    */
   producer?: { title: string; kind: string; backend?: AgentBackend }
   /** M320. The directory `paths` are relative to (the lane), when the writer knew it. */
-  root?: string
+root?: string
+  /**
+   * M372. Secrets scrubbed from this row's title and detail on the way to
+   * disk (main's append). Absent is none. A tool row's title can quote the
+   * command it ran, and the ledger is a disclosure surface.
+   */
+  scrubbed?: number
   /**
    * M320. Each path's content digest when the row was APPENDED — computed by
    * main from `root`, never trusted from the renderer. It is what makes a
@@ -226,7 +234,8 @@ export function parseEventRow(raw: unknown): EventRow | null {
     // M320. Field-level, like `tested`: a malformed producer or digest costs itself.
     ...(parseProducer(r.producer) === undefined ? {} : { producer: parseProducer(r.producer)! }),
     ...(typeof r.root === 'string' && r.root.startsWith('/') ? { root: r.root } : {}),
-    ...(parseDigests(r.digests) === undefined ? {} : { digests: parseDigests(r.digests)! })
+    ...(parseDigests(r.digests) === undefined ? {} : { digests: parseDigests(r.digests)! }),
+    ...(typeof r.scrubbed === 'number' && Number.isInteger(r.scrubbed) && r.scrubbed > 0 ? { scrubbed: r.scrubbed } : {})
   }
 }
 

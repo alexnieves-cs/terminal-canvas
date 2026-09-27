@@ -1,5 +1,6 @@
 import { appendFile, readFile, writeFile, rename } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { redactSecrets } from '../shared/redact'
 
 /**
  * M52. The run ledger: what each panel ran, and how it ended.
@@ -60,8 +61,33 @@ function runRowOf(raw: unknown): RunRow | null {
     endedAt: typeof r.endedAt === 'number' ? r.endedAt : 0,
     exitCode: typeof r.exitCode === 'number' ? r.exitCode : null,
     ...(tested === undefined ? {} : { tested }),
-    ...(typeof r.outputId === 'string' && isCheckRunId(r.outputId) ? { outputId: r.outputId } : {})
+    ...(typeof r.outputId === 'string' && isCheckRunId(r.outputId) ? { outputId: r.outputId } : {}),
+    ...(typeof r.scrubbed === 'number' && Number.isInteger(r.scrubbed) && r.scrubbed > 0 ? { scrubbed: r.scrubbed } : {})
   }
+}
+
+/**
+ * M372. A row's WORDS are scrubbed on their way to disk, and the count rides
+ * the row. The ledger is where a terminal's command line lands (a command
+ * row), where a tool row quotes the command it ran and a permission record
+ * the command it allowed: terminal bytes going to disk, so the rule applies
+ * — scrub, count, say the count. A scrub replaces only secret-shaped tokens,
+ * so a row still says what ran, and a repeated command scrubs the same way
+ * every time (a check keyed by its command still matches itself). Usage and
+ * gap rows carry no words.
+ */
+function scrubbedRow(row: LedgerRow): LedgerRow {
+  if (!('kind' in row) || row.kind === undefined) {
+    const run = row as RunRow
+    const command = redactSecrets(run.command)
+    return command.count === 0 ? row : { ...run, command: command.text, scrubbed: (run.scrubbed ?? 0) + command.count }
+  }
+  if (row.kind !== 'event') return row
+  const title = redactSecrets(row.title)
+  const detail = row.detail === undefined ? undefined : redactSecrets(row.detail)
+  const n = title.count + (detail?.count ?? 0)
+  if (n === 0) return row
+  return { ...row, title: title.text, ...(detail === undefined ? {} : { detail: detail.text }), scrubbed: (row.scrubbed ?? 0) + n }
 }
 
 export function createRunLedger(o: { file: string; maxLines?: number }): RunLedger {
@@ -114,7 +140,7 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
     append(row) {
       queue = queue.then(async () => {
         if (count === null) count = (await readLines()).length
-        await appendFile(o.file, JSON.stringify(row) + '\n')
+        await appendFile(o.file, JSON.stringify(scrubbedRow(row)) + '\n')
         count += 1
         if (count > max) { await trim(); count = max }
       }).catch(() => {})

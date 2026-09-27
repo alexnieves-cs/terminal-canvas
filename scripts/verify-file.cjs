@@ -1818,6 +1818,27 @@ await (async () => {
       Array.isArray(since8k) && since8k.map((r) => r.panelId).join(',') === 'n3,n2' && since8k[0].byModel['nobody-knows'].input === 1 &&
       Array.isArray(all) && all.length === 3 && all.every((r) => r.kind === 'usage' && typeof r.turns === 'number' && typeof r.endedAt === 'number'),
     JSON.stringify({ has, commands, since8k: since8k && since8k.map((r) => r.panelId), all: all && all.length }))
+
+  // M372 — ledger.scrub.1. The run ledger is a disclosure surface: a command
+  //     row's command line and an event row's title and detail are scrubbed
+  //     on their way to disk, the count rides each row, a clean row is
+  //     written as it was, and the command still says what ran.
+  {
+    const sfile = join(mkdtempSync(join(tmpdir(), 'tc file ledger-scrub ')), 'ledger.jsonl')
+    const sl = F.createRunLedger({ file: sfile })
+    const tok = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789'
+    await sl.append({ panelId: 'n1', command: `curl -H "Authorization: Bearer ${tok}" https://api.github.com/user`, cwd: '/w', startedAt: 1, endedAt: 2, exitCode: 0 })
+    await sl.append({ panelId: 'n1', command: 'npm test', cwd: '/w', startedAt: 3, endedAt: 4, exitCode: 0 })
+    await sl.append({ kind: 'event', runId: 'r', at: 5, event: 'permission', source: 'person', title: `Allowed Bash — export GH=${tok}`, detail: `req-1 ${tok}` })
+    const raw = require('node:fs').readFileSync(sfile, 'utf8')
+    const lines = raw.split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l))
+    const cmds = await sl.list('n1', 10)
+    ok('ledger.scrub.1 a command line and an event\'s title and detail are scrubbed on their way to the ledger with the count on each row; a clean row is written as it was; the command still says what ran',
+      !raw.includes(tok) && lines[0].scrubbed === 1 && /curl -H "Authorization: Bearer .+" https:\/\/api\.github\.com\/user/.test(lines[0].command) &&
+        lines[1].scrubbed === undefined && lines[1].command === 'npm test' && lines[2].scrubbed === 2 && /^Allowed Bash — export GH=/.test(lines[2].title) &&
+        cmds.some((c) => c.scrubbed === 1) && cmds.some((c) => c.command === 'npm test' && c.scrubbed === undefined),
+      JSON.stringify(lines))
+  }
 })()
 
 // M181 — image.1. THE IMAGE READ: the media type is decided by MAGIC NUMBER
