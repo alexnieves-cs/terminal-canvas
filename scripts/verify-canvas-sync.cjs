@@ -39,6 +39,7 @@ buildSync({
       "  log: require('./server/collab/log.ts'),",
       "  backup: require('./server/collab/backup.ts'),",
       "  health: require('./server/collab/health.ts'),",
+      "  asks: require('./src/shared/team-asks.ts'),",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -579,6 +580,65 @@ async function until(pred, ms = 3000) {
       /not a Terminal Canvas room/.test(await reason(auth('ta', 'other:doc'))))
   }
 
+  // ── M375: the team ask queue — the policy, the table, the reader ──────────
+  {
+    const P = M.asks
+    const need = [P.approvalsNeeded(undefined, 5), P.approvalsNeeded(4.99, 5), P.approvalsNeeded(5, 5), P.approvalsNeeded(9, undefined), P.approvalsNeeded(9, 0)]
+    const dec = [P.askDecision(1, {}), P.askDecision(1, { a: 'allow' }), P.askDecision(2, { a: 'allow' }), P.askDecision(2, { a: 'allow', b: 'allow' }), P.askDecision(2, { a: 'allow', b: 'deny' })]
+    ok('ask.policy.1 an ask needs one allow, or two distinct people\'s once the agent\'s spend reaches the team\'s line; one deny decides it; the count reads as words',
+      need.join(',') === '1,1,2,1,1' && dec.join(',') === 'open,allowed,open,allowed,denied' &&
+        P.askProgressWords(2, { a: 'allow' }) === '1 of 2 allowed — spend past the team\'s line needs two people' && P.askProgressWords(1, {}) === 'waiting for one person',
+      JSON.stringify({ need, dec }))
+
+    const a = M.ops.authorizeCanvasOp
+    const ask = { id: 'hosta1_q1', panel: 'hosta1_n1', owner: UA, tool: 'Bash', summary: 'npm test', scrubbed: 0, at: 1, need: 1 }
+    const open = (role, userId, panelOwner, over = {}) => a(role, { kind: 'ask-open', ask: { ...ask, ...over } }, { userId, panelOwner, askOwner: null })
+    const answer = (role, userId, by, ctx = {}) => a(role, { kind: 'ask-answer', askId: 'hosta1_q1', by, answer: 'allow' }, { userId, panelOwner: null, askOwner: UA, askClosed: false, ...ctx })
+    const close = (role, userId, ctx = {}) => a(role, { kind: 'ask-close', askId: 'hosta1_q1', outcome: 'allowed' }, { userId, panelOwner: null, askOwner: UA, askClosed: false, ...ctx })
+    const t = {
+      ownerOpens: open('owner', UA, UA).ok,
+      editorOpensOwn: open('editor', UB, UB, { owner: UB }).ok,
+      forAnothersAgent: open('editor', UB, UA, { owner: UB }),
+      inAnothersName: open('editor', UB, UB),
+      viewerOpens: open('viewer', UV, UV, { owner: UV }).ok,
+      editorAnswers: answer('editor', UB, UB).ok,
+      ownerAnswers: answer('owner', UA, UA).ok,
+      answersForAnother: answer('editor', UB, UA),
+      viewerAnswers: answer('viewer', UV, UV).ok,
+      afterClose: answer('editor', UB, UB, { askClosed: true }),
+      noSuchAsk: answer('editor', UB, UB, { askOwner: null }),
+      ownerCloses: close('owner', UA).ok,
+      editorCloses: close('editor', UB),
+      reclose: close('owner', UA, { askClosed: true })
+    }
+    ok('ask.auth.1 the table: an ask is opened for your own agent in your own name, answered in your own name while open, closed once by its owner; a viewer does none of it',
+      t.ownerOpens && t.editorOpensOwn && /your own agent/.test(t.forAnothersAgent.reason ?? '') && /asker's name/.test(t.inAnothersName.reason ?? '') && !t.viewerOpens &&
+        t.editorAnswers && t.ownerAnswers && /own name/.test(t.answersForAnother.reason ?? '') && !t.viewerAnswers &&
+        /already decided/.test(t.afterClose.reason ?? '') && /no ask/.test(t.noSuchAsk.reason ?? '') &&
+        t.ownerCloses && /only the person whose agent asked/.test(t.editorCloses.reason ?? '') && /already decided/.test(t.reclose.reason ?? ''),
+      JSON.stringify(t))
+
+    const base = new Y.Doc()
+    M.doc.applyCanvasOp(base, { kind: 'create', panel: { id: 'hosta1_n1', kind: 'chat', title: 'agent', owner: UA, host: 'hosta1', x: 0, y: 0, w: 400, h: 300, z: 1 } }, 'test')
+    const probe = (mutate) => { const d = new Y.Doc(); Y.applyUpdate(d, Y.encodeStateAsUpdate(base)); const sv0 = Y.encodeStateVector(d); mutate(d); return M.doc.inspectUpdate(base, Y.encodeStateAsUpdate(d, sv0)) }
+    const opened = probe((d) => M.doc.applyCanvasOp(d, { kind: 'ask-open', ask }, 'test'))
+    M.doc.applyCanvasOp(base, { kind: 'ask-open', ask }, 'test')
+    const answered = probe((d) => M.doc.applyCanvasOp(d, { kind: 'ask-answer', askId: 'hosta1_q1', by: UB, answer: 'deny' }, 'test'))
+    const closed = probe((d) => M.doc.applyCanvasOp(d, { kind: 'ask-close', askId: 'hosta1_q1', outcome: 'denied' }, 'test'))
+    const stray = probe((d) => d.getMap(M.ops.CANVAS_ASKS).get('hosta1_q1').set('tool', 'Write'))
+    const malformed = probe((d) => { const fm = new Y.Map(); for (const [k, v] of Object.entries({ panel: 'hosta1_n1', owner: UA, tool: 'Bash', summary: 's', scrubbed: 0, at: 1, need: 1, ['answer:' + UA]: 'allow' })) fm.set(k, v); d.getMap(M.ops.CANVAS_ASKS).set('hosta1_q2', fm) })
+    M.doc.applyCanvasOp(base, { kind: 'ask-answer', askId: 'hosta1_q1', by: UB, answer: 'allow' }, 'test')
+    const rewritten = probe((d) => d.getMap(M.ops.CANVAS_ASKS).get('hosta1_q1').set('answer:' + UB, 'deny'))
+    const read = M.doc.readSharedAsks(base)
+    ok('ask.inspect.1 inspectUpdate reads an ask opened (with its panel\'s owner), an answer by the field\'s person, and a close; a rewritten answer, a rewritten field and an ask created with an answer inside are unknown',
+      opened.length === 1 && opened[0].op.kind === 'ask-open' && opened[0].ctx.panelOwner === UA &&
+        answered.length === 1 && answered[0].op.kind === 'ask-answer' && answered[0].op.by === UB && answered[0].op.answer === 'deny' && answered[0].ctx.askOwner === UA &&
+        closed.length === 1 && closed[0].op.kind === 'ask-close' && closed[0].op.outcome === 'denied' &&
+        stray[0]?.op.kind === 'unknown' && malformed[0]?.op.kind === 'unknown' && rewritten[0]?.op.kind === 'unknown' &&
+        read.length === 1 && read[0].answers[UB] === 'allow' && read[0].closed === undefined,
+      JSON.stringify({ opened, answered, closed, stray, malformed, rewritten, read }))
+  }
+
   // ── the real server: onAuthenticate + beforeSync over a socket ──────────
   {
     const port = await freePort()
@@ -671,6 +731,32 @@ async function until(pred, ms = 3000) {
       ok('srv.relay.1 the owner\'s relay session reaches an editor through beforeSync; the editor re-pointing it is refused, closed, and the room keeps the owner\'s',
         ed3.st.closed > ed3Closed && field(owner.doc, 'hosta1_r2', 'relaySession') === RS && refusals.some((r) => r.userId === UB && /relay session/.test(r.reason)),
         JSON.stringify(refusals.slice(-1)))
+
+      // M375. The team queue through the real server: the owner opens an ask
+      // for their own agent; an editor's answer in their OWN name reaches
+      // the owner; the same editor answering in the owner's name is refused
+      // and closed; a viewer's answer is dropped; the owner closes it.
+      M.doc.applyCanvasOp(owner.doc, { kind: 'create', panel: { id: 'hosta1_c1', kind: 'chat', title: 'agent', owner: UA, host: 'hosta1', x: 0, y: 0, w: 400, h: 300, z: 1 } }, 'test')
+      M.doc.applyCanvasOp(owner.doc, { kind: 'ask-open', ask: { id: 'hosta1_q9', panel: 'hosta1_c1', owner: UA, tool: 'Bash', summary: 'npm test', scrubbed: 0, at: 5, need: 2, spentUsd: 6 } }, 'test')
+      const ed4 = join('teditor'), vw4 = join('tviewer')
+      const askOn = (doc) => M.doc.readSharedAsks(doc).find((q) => q.ask.id === 'hosta1_q9')
+      await until(() => ed4.st.synced && vw4.st.synced && askOn(ed4.doc) !== undefined && askOn(vw4.doc) !== undefined)
+      M.doc.applyCanvasOp(ed4.doc, { kind: 'ask-answer', askId: 'hosta1_q9', by: UB, answer: 'allow' }, 'test')
+      await until(() => askOn(owner.doc)?.answers[UB] === 'allow')
+      vw4.doc.getMap(M.ops.CANVAS_ASKS).get('hosta1_q9').set('answer:' + UV, 'allow')
+      const ed5 = join('teditor')
+      await until(() => ed5.st.synced && askOn(ed5.doc) !== undefined)
+      const ed5Closed = ed5.st.closed
+      ed5.doc.getMap(M.ops.CANVAS_ASKS).get('hosta1_q9').set('answer:' + UA, 'allow')
+      await until(() => ed5.st.closed > ed5Closed, 2000)
+      await new Promise((r) => setTimeout(r, 200))
+      M.doc.applyCanvasOp(owner.doc, { kind: 'ask-close', askId: 'hosta1_q9', outcome: 'withdrawn' }, 'test')
+      await until(() => askOn(ed4.doc)?.closed === 'withdrawn')
+      const seen = askOn(owner.doc)
+      ok('srv.ask.1 the team queue through the real server: an editor\'s answer in their own name reaches the owner; answering in the owner\'s name is refused and closed; a viewer\'s answer is dropped; the owner\'s close reaches the editor',
+        seen?.answers[UB] === 'allow' && seen?.answers[UA] === undefined && seen?.answers[UV] === undefined && ed5.st.closed > ed5Closed &&
+          refusals.some((r) => r.userId === UB && /own name/.test(r.reason)) && askOn(ed4.doc)?.closed === 'withdrawn' && M.asks.askDecision(seen.ask.need, seen.answers) === 'open',
+        JSON.stringify({ seen, refusals: refusals.slice(-2) }))
     } finally {
       for (const p of providers) p.destroy()
       await server.destroy()

@@ -5,6 +5,12 @@
  *   canvas:panels  Y.Map< docKey, Y.Map<field, value> >   one FIELD MAP per panel
  *   canvas:groups  Y.Map< docKey, Y.Map<field, value> >   one field map per group
  *   canvas:files   Y.Map< docKey, Y.Text >                 one TEXT per shared file panel
+ *   canvas:asks    Y.Map< docKey, Y.Map<field, value> >   one field map per team ask (M375)
+ *
+ * An ask's answers are one field PER PERSON (`answer:<user id>`), for the
+ * panels' reason: two people answering at once are two registers, and both
+ * survive. An answer and an ask's `closed` are each written once and never
+ * rewritten, so the owner decides over answers that cannot move under it.
  *
  * A shared file's key is its file panel's key, so the text lives and dies with
  * the panel (a tombstoned panel's text refuses every edit) and two panels on
@@ -39,7 +45,8 @@
 import * as Y from 'yjs'
 import { TEAM_DOC_MAP } from './team'
 import {
-  CANVAS_FILES, RECT_FIELDS, SHARED_TEXT_MAX, type CanvasOp, type OpContext, type SharedGroup, type SharedPanel, type SharedRelay
+  ASK_OUTCOMES, CANVAS_ASKS, CANVAS_FILES, RECT_FIELDS, SHARED_TEXT_MAX,
+  type AskAnswer, type AskOutcome, type CanvasOp, type OpContext, type SharedAsk, type SharedGroup, type SharedPanel, type SharedRelay
 } from './canvas-ops'
 import { RELAY_PROGRAM, RELAY_SESSION_ID } from './relay-protocol'
 
@@ -58,6 +65,39 @@ export const localIdOf = (host: string, key: string): string | null =>
 const panelsOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_PANELS)
 const groupsOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_GROUPS)
 const filesOf = (doc: Y.Doc): Y.Map<unknown> => doc.getMap(CANVAS_FILES)
+const asksOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_ASKS)
+
+/** M375. An answer's field in an ask's map: one per person, so concurrent answers both survive. */
+export const ANSWER_PREFIX = 'answer:'
+const ASK_FIELDS = new Set(['panel', 'owner', 'tool', 'summary', 'scrubbed', 'at', 'need', 'spentUsd'])
+
+/** A field map as a SharedAsk, or undefined when it is malformed. */
+function askOf(key: string, fm: unknown): SharedAsk | undefined {
+  if (!(fm instanceof Y.Map)) return undefined
+  const panel = str(fm.get('panel')), owner = str(fm.get('owner')), tool = str(fm.get('tool')), summary = str(fm.get('summary'))
+  const scrubbed = num(fm.get('scrubbed')), at = num(fm.get('at')), need = fm.get('need'), spent = fm.get('spentUsd')
+  if (panel === undefined || owner === undefined || tool === undefined || summary === undefined || scrubbed === undefined || at === undefined) return undefined
+  if (need !== 1 && need !== 2) return undefined
+  if (spent !== undefined && num(spent) === undefined) return undefined
+  return { id: key, panel, owner, tool, summary, scrubbed, at, need, ...(spent === undefined ? {} : { spentUsd: spent as number }) }
+}
+
+const isAnswer = (v: unknown): v is AskAnswer => v === 'allow' || v === 'deny'
+const isOutcome = (v: unknown): v is AskOutcome => typeof v === 'string' && (ASK_OUTCOMES as readonly string[]).includes(v)
+
+/** M375. Every well-formed ask with its answers (by user id) and, once decided, how it ended. */
+export function readSharedAsks(doc: Y.Doc): Array<{ ask: SharedAsk; answers: Record<string, AskAnswer>; closed?: AskOutcome }> {
+  const out: Array<{ ask: SharedAsk; answers: Record<string, AskAnswer>; closed?: AskOutcome }> = []
+  asksOf(doc).forEach((fm, key) => {
+    const ask = askOf(key, fm)
+    if (ask === undefined) return
+    const answers: Record<string, AskAnswer> = {}
+    for (const [k, v] of fm.entries()) if (k.startsWith(ANSWER_PREFIX) && isAnswer(v)) answers[k.slice(ANSWER_PREFIX.length)] = v
+    const closed = fm.get('closed')
+    out.push({ ask, answers, ...(isOutcome(closed) ? { closed } : {}) })
+  })
+  return out
+}
 
 /** One shared file's text, or undefined when that file is not shared (or the key holds something malformed). */
 export function sharedText(doc: Y.Doc, fileKey: string): Y.Text | undefined {
@@ -120,6 +160,15 @@ export function readSharedGroups(doc: Y.Doc): SharedGroup[] {
 
 /** The context authorizeCanvasOp needs, read from the doc as it stands now. */
 export function opContext(doc: Y.Doc, op: CanvasOp, userId: string): OpContext {
+  if (op.kind === 'ask-answer' || op.kind === 'ask-close') {
+    const fm = asksOf(doc).get(op.askId)
+    return { userId, panelOwner: null, askOwner: fm === undefined ? null : str(fm.get('owner')) ?? null, askClosed: fm?.has('closed') === true }
+  }
+  if (op.kind === 'ask-open') {
+    const fm = panelsOf(doc).get(op.ask.panel)
+    const owner = fm === undefined || isTombstone(fm) ? null : str(fm.get('owner')) ?? null
+    return { userId, panelOwner: owner, askOwner: asksOf(doc).has(op.ask.id) ? str(asksOf(doc).get(op.ask.id)?.get('owner')) ?? null : null }
+  }
   const key = op.kind === 'create' ? op.panel.id : 'panelId' in op ? op.panelId : 'fileKey' in op ? op.fileKey : null
   if (key === null) return { userId, panelOwner: null }
   const file = 'fileKey' in op ? { fileExists: filesOf(doc).has(key) } : {}
@@ -195,6 +244,29 @@ export function applyCanvasOp(doc: Y.Doc, op: CanvasOp, origin: unknown): void {
         if (fm !== undefined && !isTombstone(fm)) fm.set('deleted', true)
         return
       }
+      case 'ask-open': {
+        const asks = asksOf(doc)
+        if (asks.has(op.ask.id)) return
+        const fm = new Y.Map<unknown>()
+        const { id: _id, spentUsd, ...fields } = op.ask
+        for (const [k, v] of Object.entries(fields)) fm.set(k, v)
+        if (spentUsd !== undefined) fm.set('spentUsd', spentUsd)
+        asks.set(op.ask.id, fm)
+        return
+      }
+      // Written once: a second answer from the same person, or any answer
+      // after the ask closed, is the server's to refuse and never ours to make.
+      case 'ask-answer': {
+        const fm = asksOf(doc).get(op.askId)
+        if (fm === undefined || fm.has('closed') || fm.has(ANSWER_PREFIX + op.by)) return
+        fm.set(ANSWER_PREFIX + op.by, op.answer)
+        return
+      }
+      case 'ask-close': {
+        const fm = asksOf(doc).get(op.askId)
+        if (fm !== undefined && !fm.has('closed')) fm.set('closed', op.outcome)
+        return
+      }
       default:
         return
     }
@@ -220,14 +292,19 @@ const GROUP_FIELDS = new Set(['label', 'colour', 'panelIds', 'collapsed', 'delet
 export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: CanvasOp; ctx: Omit<OpContext, 'userId'> }> {
   const copy = new Y.Doc({ gc: false })
   Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc))
-  const panels = panelsOf(copy), groups = groupsOf(copy), files = filesOf(copy), team = copy.getMap(TEAM_DOC_MAP)
+  const panels = panelsOf(copy), groups = groupsOf(copy), files = filesOf(copy), asks = asksOf(copy), team = copy.getMap(TEAM_DOC_MAP)
   const before = (key: string): Omit<OpContext, 'userId'> => {
     const fm = panels.get(key)
     if (fm === undefined) return { panelOwner: null }
     if (isTombstone(fm)) return { panelOwner: null, panelDeleted: true }
     return { panelOwner: str(fm.get('owner')) ?? null }
   }
-  const existed = { panels: new Set(panels.keys()), groups: new Set(groups.keys()), files: new Set(files.keys()) }
+  const existed = { panels: new Set(panels.keys()), groups: new Set(groups.keys()), files: new Set(files.keys()), asks: new Set(asks.keys()) }
+  // M375. Each ask's owner and the fields it held BEFORE the update: an
+  // answer or a close is judged against the ask as it stood, and a field that
+  // already existed is being rewritten (refused), never written.
+  const askBefore = new Map<string, { owner: string | null; fields: Set<string> }>()
+  asks.forEach((fm, key) => { askBefore.set(key, { owner: str(fm.get('owner')) ?? null, fields: new Set(fm.keys()) }) })
   // Context is read BEFORE the update applies: "whose panel was it" must not
   // be answered by the update that is being judged.
   const ctxBefore = new Map<string, Omit<OpContext, 'userId'>>()
@@ -321,6 +398,30 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
         // that (as of before the update) did not exist.
         if (!existed.files.has(key)) continue
         out.push({ op: { kind: 'text-edit', fileKey: key }, ctx: { ...ctxOf(key), fileExists: true } })
+      } else if (type === asks) {
+        for (const key of keys) {
+          if (key === null) { unknown('canvas:asks changed as a list'); continue }
+          if (existed.asks.has(key)) { unknown(`ask ${key} replaced or removed`); continue }
+          const fm = asks.get(key)
+          const a = askOf(key, fm)
+          if (a === undefined || [...(fm?.keys() ?? [])].some((k) => !ASK_FIELDS.has(k))) { unknown(`ask ${key} created malformed`); continue }
+          out.push({ op: { kind: 'ask-open', ask: a }, ctx: { ...ctxOf(a.panel), askOwner: null } })
+        }
+      } else if (parent === asks && item !== null && typeof item.parentSub === 'string') {
+        const key = item.parentSub
+        // An ask created by this same update is judged as its ask-open.
+        const was = askBefore.get(key)
+        if (was === undefined) continue
+        const fm = changed as unknown as Y.Map<unknown>
+        const ctx = { panelOwner: null, askOwner: was.owner, askClosed: was.fields.has('closed') }
+        for (const k of keys) {
+          if (k === null) { unknown(`ask ${key} changed as a list`); continue }
+          if (was.fields.has(k)) { unknown(`ask ${key}.${k} rewritten`); continue }
+          const v = fm.get(k)
+          if (k.startsWith(ANSWER_PREFIX) && isAnswer(v)) out.push({ op: { kind: 'ask-answer', askId: key, by: k.slice(ANSWER_PREFIX.length), answer: v }, ctx })
+          else if (k === 'closed' && isOutcome(v)) out.push({ op: { kind: 'ask-close', askId: key, outcome: v }, ctx })
+          else unknown(`ask ${key}.${k} is not an answer or an outcome`)
+        }
       } else if (type === team) {
         for (const key of keys) {
           if (key === null) unknown('team changed as a list')

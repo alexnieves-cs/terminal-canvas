@@ -64,6 +64,47 @@ export interface SharedGroup {
   collapsed?: boolean
 }
 
+/**
+ * M375. A permission request an agent's OWNER routed to the team: the
+ * multi-human approval queue (Arc 2), shaped after ACP's
+ * `session/request_permission` — a tool, what it would do, and answers that
+ * are allow-ONCE or reject-once. Nobody but the asking agent's owner grants a
+ * standing allow for someone else's agent.
+ *
+ * It lives in the workspace doc (`canvas:asks`, canvas-doc.ts) so every
+ * member sees it, and the collab server judges every write to it by the
+ * AUTHENTICATED user (authorizeCanvasOp): an answer is written in its
+ * answerer's own name only, and a viewer cannot write one at all. The
+ * machine that runs the agent reads the answers and decides; nothing a
+ * teammate writes reaches the agent's process except through that owner's
+ * `answerPermission`, the one door.
+ *
+ * `summary` is SCRUBBED on the owner's machine before it is written (terminal
+ * bytes leaving the panel for a server) and `scrubbed` says how many secrets
+ * the scrub replaced.
+ */
+export interface SharedAsk {
+  /** `<host>_<local id>`, like every doc key. */
+  id: string
+  /** The asking agent's panel, as a doc key. */
+  panel: string
+  /** The Supabase user id whose agent asks — the panel's owner. */
+  owner: string
+  tool: string
+  summary: string
+  scrubbed: number
+  at: number
+  /** How many DISTINCT people must allow it (M375's spend threshold makes it 2). */
+  need: 1 | 2
+  /** The agent's spend when it asked, when known — the reason `need` is 2. */
+  spentUsd?: number
+}
+export type AskAnswer = 'allow' | 'deny'
+/** How an ask ended. Written once, by its owner, and never again. */
+export type AskOutcome = 'allowed' | 'denied' | 'withdrawn'
+export const ASK_OUTCOMES: readonly AskOutcome[] = ['allowed', 'denied', 'withdrawn']
+export const CANVAS_ASKS = 'canvas:asks'
+
 export type CanvasOp =
   /** A move or resize: only the fields that changed. */
   | { kind: 'rect'; panelId: string; fields: Partial<Record<RectField | 'z', number>> }
@@ -83,6 +124,12 @@ export type CanvasOp =
   | { kind: 'file-create'; fileKey: string }
   /** Any insert or delete in an existing shared file's Y.Text. */
   | { kind: 'text-edit'; fileKey: string }
+  /** M375. A team ask opened by the asking agent's owner. */
+  | { kind: 'ask-open'; ask: SharedAsk }
+  /** M375. One person's answer, in their own name: `by` must be the writer. */
+  | { kind: 'ask-answer'; askId: string; by: string; answer: AskAnswer }
+  /** M375. The ask decided or withdrawn, by its owner, once. */
+  | { kind: 'ask-close'; askId: string; outcome: AskOutcome }
   /** Server-side only: the Team view's snapshot key in the `team` map. */
   | { kind: 'team-snapshot'; key: string }
   /** Server-side only: anything an update does that none of the above names. Always refused. */
@@ -97,6 +144,10 @@ export interface OpContext {
   panelDeleted?: boolean
   /** For file-create / text-edit: the file's Y.Text already existed before this op. */
   fileExists?: boolean
+  /** M375. For ask-answer / ask-close: the ask's owner before this op, or null when there is no such ask. */
+  askOwner?: string | null
+  /** M375. The ask was already closed before this op. */
+  askClosed?: boolean
 }
 
 export type Verdict = { ok: true } | { ok: false; reason: string }
@@ -120,6 +171,12 @@ const OK: Verdict = { ok: true }
  *   editor      own panel     yes         own panel
  *   viewer      -             -           -
  *   (no share)  -             -           -
+ *
+ *              ask-open      ask-answer        ask-close (M375)
+ *   owner       own agent     own name, open    own ask, once
+ *   editor      own agent     own name, open    own ask, once
+ *   viewer      -             -                 -
+ *   (no share)  -             -                 -
  *
  * Moving someone else's panel is allowed to an editor: arranging the shared
  * canvas IS the point of editing it. Deleting it is not — a tombstone is
@@ -172,6 +229,22 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
     case 'relay-bind':
       if (ctx.panelOwner === null) return refuse(`panel ${op.panelId} is not on the shared canvas`)
       return ctx.panelOwner === ctx.userId ? OK : refuse('a relay session is bound by the person whose panel it is')
+    // M375. The team queue. Opened for your OWN agent only, answered in your
+    // OWN name only, closed by the person whose agent asked — the server's
+    // copy of these three is what a modified client cannot get around.
+    case 'ask-open':
+      if (op.ask.owner !== ctx.userId) return refuse('an ask is opened in its asker\'s name only')
+      if (ctx.panelOwner !== ctx.userId) return refuse('an ask is opened for your own agent only')
+      if (ctx.askOwner !== undefined && ctx.askOwner !== null) return refuse(`ask ${op.ask.id} already exists`)
+      return OK
+    case 'ask-answer':
+      if (ctx.askOwner === undefined || ctx.askOwner === null) return refuse(`no ask is called ${op.askId}`)
+      if (ctx.askClosed === true) return refuse('that ask is already decided')
+      return op.by === ctx.userId ? OK : refuse('an answer is given in its answerer\'s own name only')
+    case 'ask-close':
+      if (ctx.askOwner === undefined || ctx.askOwner === null) return refuse(`no ask is called ${op.askId}`)
+      if (ctx.askOwner !== ctx.userId) return refuse('only the person whose agent asked closes the ask')
+      return ctx.askClosed === true ? refuse('that ask is already decided') : OK
   }
 }
 
