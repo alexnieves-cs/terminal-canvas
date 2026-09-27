@@ -1850,6 +1850,25 @@ app.whenReady().then(async () => {
     // which is how a real ERR_FILE_NOT_FOUND flake in this very suite read as
     // 77/78 with an unexplained `infrastructure` line. scripts/load-renderer.cjs
     // carries the measurement and separates "no build" from "flaked".
+    // M385. A part starts with NO composer drafts. An unsuffixed (serial) run
+    // keeps ONE userData across parts AND across runs, so the renderer's
+    // localStorage outlives each part: panels:orchestrate leaves a composer
+    // draft on purpose (M322's drafts are kept by PANEL id), and when
+    // panels:product's onboarding.start.1 minted a chat under the same id its
+    // composer opened holding `ask: list it` — the typed prompt went out
+    // behind it and the recorded agent never answered `pong`. ONLY the drafts
+    // key is removed: wiping the whole store also wiped per-viewer state that
+    // panels:shell's 98b and 106 have been reading from earlier runs (a
+    // hermeticity gap of their own, recorded in the ledger), so the blunter
+    // fix moved the red rather than removing it. localStorage is per ORIGIN,
+    // and the renderer's is file://, so a blank file page reaches it before
+    // the renderer has read a draft.
+    {
+      const blank = join(mkdtempSync(join(tmpdir(), 'tc-panels-blank-')), 'blank.html')
+      writeFileSync(blank, '<!doctype html><title>blank</title>')
+      await win.loadFile(blank)
+      await win.webContents.executeJavaScript(`localStorage.removeItem('tc.chat-drafts')`)
+    }
     await loadRenderer(win)
     const wc = win.webContents
     settleProbe.wc = wc
