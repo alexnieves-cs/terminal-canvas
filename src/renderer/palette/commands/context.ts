@@ -8,6 +8,7 @@
  * below is therefore circular by design; it is erased before esbuild sees it,
  * so there is no runtime cycle.
  */
+import type { TeamAskRow } from '@shared/team-asks'
 import type { PaletteActions } from '../commands'
 import type { PresetRow, PromptRow, PanelRow } from './row-types'
 import type { ApprovalRow } from './approval-row'
@@ -101,6 +102,11 @@ export interface PaletteContext {
    * label. Optional so every older fixture builds; absent is none.
    */
   approvals?: readonly ApprovalRow[]
+  /**
+   * M379. The team's asks this person may answer (M377/M378's store). Optional
+   * so every older fixture builds; absent is none.
+   */
+  teamAsks?: readonly TeamAskRow[]
   /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and

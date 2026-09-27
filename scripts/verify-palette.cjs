@@ -289,7 +289,9 @@ const spyActions = () => {
     // first) — same reason as restartPanel and openReview above.
     openFile: record('openFile'),
     setPanelFontSize: record('setPanelFontSize'),
-    tidyPanels: record('tidyPanels')
+    tidyPanels: record('tidyPanels'),
+    // M379. The team asks' palette door.
+    answerTeamAsk: record('answerTeamAsk')
   }
 }
 
@@ -2853,6 +2855,24 @@ const WS = [
       rows.map((r) => r.backend).join() === 'claude,codex,copilot,acp' && rows[0].fit.verdict === 'fits' && rows.slice(1).every((r) => r.fit.verdict === 'refused') &&
       shot.rows.some((r) => r.id === 'images') && !dflt.rows.some((r) => r.id === 'images'),
     JSON.stringify({ solo, arr: arr.verdict, noCli: noCli.refusal, rows: rows.map((r) => [r.backend, r.fit.verdict]) }))
+}
+
+// M379 — team.rows.1. A teammate's agent asking has two palette rows — Allow
+//     once and Deny — naming whose agent and the whole line, each answering
+//     THAT ask; with no team asks there are no such rows at all.
+{
+  const ask = { workspaceId: 'w1', askId: 'hosta1_q1', panelId: 'hosta1_c1', panelTitle: 'api agent', ownerName: 'Ada', tool: 'Bash', summary: 'npm test', scrubbed: 0, need: 1, allows: 0, at: 1 }
+  const c = ctx({ teamAsks: [ask] })
+  const rows = P.buildCommands(c)
+  const allow = byId(rows, 'team.allow.w1.hosta1_q1'), deny = byId(rows, 'team.deny.w1.hosta1_q1')
+  if (allow) allow.run()
+  if (deny) deny.run()
+  const none = P.buildCommands(ctx({})).filter((r) => r.id.startsWith('team.'))
+  ok('team.rows.1 a team ask is two rows — "Allow once — Ada\'s agent · api agent" and "Deny — …" with its whole line — each answering that ask; none without team asks',
+    allow && allow.title === "Allow once — Ada's agent · api agent" && allow.subtitle === 'Bash — npm test' && deny && deny.title.startsWith('Deny — ') &&
+      c.actions.calls.some((x) => x[0] === 'answerTeamAsk' && x[1] === 'w1' && x[2] === 'hosta1_q1' && x[3] === true) &&
+      c.actions.calls.some((x) => x[0] === 'answerTeamAsk' && x[3] === false) && none.length === 0,
+    JSON.stringify({ allow: allow && allow.title, deny: deny && deny.title, calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

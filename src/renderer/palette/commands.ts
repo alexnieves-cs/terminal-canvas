@@ -1,3 +1,4 @@
+import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
 import type { CreationResult } from '@shared/verb-table'
 import type { PersistedWorkItem } from '@shared/work-items'
@@ -109,6 +110,8 @@ export interface PaletteActions {
   insertPrompt(id: string): void
   /** M76. Answer a chat's pending permission request from anywhere. M98: `scope: 'session'` also grants the tool. */
   answerApproval(id: string, requestId: string, allow: boolean, scope?: 'session'): void
+  /** M379. One person's answer to a teammate's agent's ask: allow ONCE, or deny. Never a grant. */
+  answerTeamAsk(workspaceId: string, askId: string, allow: boolean): void
   beginSavePrompt(): void
   deletePrompt(id: string): void
   beginRenamePanel(id: string, currentTitle: string): void
@@ -695,6 +698,22 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         id: `approval.deny.${a.id}.${a.requestId}`, title: `Deny ${where}`, subtitle: a.argument, mono: true,
         searchText: `deny refuse permission needs you ${a.toolName} ${a.label}`, group: 'panel',
         run: () => actions.answerApproval(a.id, a.requestId, false)
+      })
+    }
+    // M379. A teammate's agent asking (M376): two rows per ask, the Needs-you
+    // section's two answers, so an ask can be answered from wherever the
+    // person is. Allow is ONCE — a standing grant is the agent owner's alone.
+    for (const t of ctx.teamAsks ?? []) {
+      const w = teamAskWords(t)
+      out.push({
+        id: `team.allow.${t.workspaceId}.${t.askId}`, title: `Allow once — ${w.who}`, subtitle: w.action, mono: true,
+        searchText: `allow approve team teammate ask needs you ${t.tool} ${w.who}`, group: 'panel',
+        run: () => actions.answerTeamAsk(t.workspaceId, t.askId, true)
+      })
+      out.push({
+        id: `team.deny.${t.workspaceId}.${t.askId}`, title: `Deny — ${w.who}`, subtitle: w.action, mono: true,
+        searchText: `deny refuse team teammate ask needs you ${t.tool} ${w.who}`, group: 'panel',
+        run: () => actions.answerTeamAsk(t.workspaceId, t.askId, false)
       })
     }
     if (approvals.length === 0) {

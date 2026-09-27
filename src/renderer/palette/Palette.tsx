@@ -41,6 +41,7 @@ import { EmptyState } from '@renderer/shell/EmptyState'
 import type { EnvReport } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 import { needsYouCount } from '@shared/attention-words'
+import { useTeamAsks } from '@renderer/shell/useTeamAsks'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -227,6 +228,8 @@ export function Palette(props: PaletteProps): JSX.Element {
   // is the same feedback loop from the other direction.
   const pointerSelectRef = useRef(false)
 
+  // M379. The team's asks, from the one store the Dock reads too.
+  const teamAsks = useTeamAsks()
   const commands = useMemo(
     () =>
       buildCommands({
@@ -255,6 +258,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         templates: props.templates,
         ...(props.teammateCount === undefined ? {} : { teammateCount: props.teammateCount }),
         approvals: props.approvals,
+        teamAsks,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         selectedIds: props.selectedIds,
@@ -274,7 +278,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
-     props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, props.templates, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, teamAsks, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
   )

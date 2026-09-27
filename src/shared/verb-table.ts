@@ -340,6 +340,9 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   setDefaultPreset: 'preset administration is the user\'s, not a plan\'s',
   insertPrompt: 'a prompt is inserted into a composer by the user; a plan uses `send`',
   answerApproval: 'M98\'s door — a plan may never answer a permission question for the user',
+  // M379. The team queue exists so a PERSON signs off; an agent or a
+  // workflow node that could answer it would be the thing it guards against.
+  answerTeamAsk: 'a teammate\'s ask is a person\'s to answer — a plan or a workflow node answering it would undo the approval it asks for',
   openWorkflow: 'opens a VIEW of a template — a plan runs a shape with `spawn` or the sheet, it does not open a diagram of one',
   beginSavePrompt: 'opens the palette\'s text mode',
   deletePrompt: 'prompt administration is the user\'s',

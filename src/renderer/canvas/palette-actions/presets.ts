@@ -10,6 +10,8 @@
  * is the object under construction rather than a getter.
  */
 
+import { answerTeamAsk as answerTeamAskInStore } from '@renderer/shell/useTeamAsks'
+import { notifyRefused } from '../../shell/toast'
 import { normalisePreviewPath } from '@shared/preview'
 import { inspectionDirectory } from '../inspection-directory'
 import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
@@ -62,6 +64,7 @@ export type PresetsActions = Pick<PaletteActions,
   | 'startAuto'
   | 'stopAuto'
   | 'answerApproval'
+  | 'answerTeamAsk'
   | 'openAsChat'
   | 'openInTerminal'
   | 'newChat'
@@ -602,6 +605,12 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // (the queue, Orchestrate, the chat card, the palette row) drops it in
     // the same frame rather than on main's round trip — and a second click in
     // that gap sends nothing. A rejected call puts it back.
+    // M379. A teammate's ask answered from the palette: the Dock's own door
+    // (the store hides it at once and brings it back if main refuses), and a
+    // refusal says why.
+    answerTeamAsk: (workspaceId, askId, allow) => {
+      void answerTeamAskInStore({ workspaceId, askId }, allow ? 'allow' : 'deny').then((reason) => { if (reason !== null) notifyRefused(reason) })
+    },
     answerApproval: (id, requestId, allow, scope) => {
       if (isAnswered(id, requestId)) return
       // Read BEFORE the mark: the request is what the record describes, and
