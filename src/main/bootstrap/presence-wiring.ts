@@ -7,6 +7,8 @@ import { HOST_PATTERN } from '../../shared/canvas-doc'
 import { hocuspocusConnect } from '../presence/presence-provider'
 import { createTeamReporter, type TeamReporter } from '../presence/team-reporter'
 import type { AccountService } from '../account-session'
+import { recordDecision } from '../decision-audit'
+import { shareDecisionRow, type ShareDecision } from '../../shared/decision-audit'
 import { requestFromRenderer } from '../ipc'
 import { IPC_EVENTS, type ControlCanvasModel } from '../../shared/ipc-contract'
 import { readyContents, type MainState } from './context'
@@ -139,6 +141,14 @@ export function createCanvasSyncWiring(state: MainState, stores: Stores, account
 /** The share doors: the account's rows, the store's record, the hub's rooms. */
 export function createShareDoors(state: MainState, stores: Stores, account: AccountService) {
   const store = stores.layoutStore
+  // M373. Every change these doors make was a person's: the app's share
+  // dialog, or `tc`'s Cancel-default confirm (share-control.ts). So each one
+  // is a person's row on the record, written here where the change lands,
+  // for both doors at once. Beside the work, never in front of it: the words
+  // may need a lookup, and a slow lookup must not hold the answer back.
+  const onRecord = (d: () => Promise<ShareDecision>): void => {
+    void d().then((decision) => recordDecision(stores.runLedger, stores.decisionAudit, shareDecisionRow(decision, Date.now()))).catch(() => undefined)
+  }
   return {
     async share(req: { orgId?: string }) {
       const id = store.activeWorkspaceId()
@@ -150,6 +160,10 @@ export function createShareDoors(state: MainState, stores: Stores, account: Acco
       // The room reopens under the share's name, and the bind seeds the doc.
       state.presence?.reconcile()
       state.canvasSync?.activated()
+      onRecord(async () => {
+        const team = await account.team(r.share.orgId).catch(() => null)
+        return { kind: 'share', shareId: r.share.id, workspace: name, org: team?.kind === 'ok' ? team.org.name : 'its organization' }
+      })
       return r
     },
     shares: () => account.listShares(),
@@ -163,9 +177,23 @@ export function createShareDoors(state: MainState, stores: Stores, account: Acco
       const workspaceId = store.createWorkspace(row.name)
       store.setWorkspaceShare(workspaceId, { id: row.id, orgId: row.orgId, role: row.role })
       state.presence?.reconcile()
+      // Only an open that ADDED a workspace is a decision; the already-open
+      // answer above changed nothing and records nothing.
+      onRecord(async () => ({ kind: 'open', shareId: row.id, workspace: row.name, role: row.role }))
       return { kind: 'ok' as const, workspaceId }
     },
-    setShareMember: (req: { shareId: string; userId: string; role: 'owner' | 'editor' | 'viewer' | null }) => account.setShareMember(req),
+    async setShareMember(req: { shareId: string; userId: string; role: 'owner' | 'editor' | 'viewer' | null }) {
+      const r = await account.setShareMember(req)
+      // The door is handed an id; the record says who and which workspace,
+      // looked up after the change and falling back to the ids themselves.
+      if (r.kind === 'ok') onRecord(async () => {
+        const [members, shares] = await Promise.all([account.shareMembers(req.shareId).catch(() => null), account.listShares().catch(() => null)])
+        const login = members?.kind === 'ok' ? members.members.find((m) => m.userId === req.userId)?.login : undefined
+        const workspace = shares?.kind === 'ok' ? shares.shares.find((s) => s.id === req.shareId)?.name : undefined
+        return { kind: 'role', shareId: req.shareId, workspace: workspace ?? 'a shared workspace', who: login ?? `user ${req.userId}`, userId: req.userId, role: req.role }
+      })
+      return r
+    },
     shareMembers: (shareId: string) => account.shareMembers(shareId)
   }
 }

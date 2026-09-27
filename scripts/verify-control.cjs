@@ -729,6 +729,34 @@ const ok = (n, pass, detail = '') => {
       built.every((b, i) => b.kind === 'ok' && JSON.parse(b.line).verb === ['list', 'status', 'ping', 'audit'][i]) && extra.kind === 'usage',
       JSON.stringify({ built, extra }))
   }
+  // M373 — share.audit.1. A workspace share decision, made in main behind a
+  //     person's dialog, is a person's row in one set of words (the ids in
+  //     the detail, the share's run id so one workspace reads back
+  //     together), and `recordDecision` keeps M369's order: the ledger
+  //     first, the audit only for a row the ledger took.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc share audit '))
+    const ledger = C.createRunLedger({ file: join(dir, 'ledger.jsonl') })
+    const audit = C.createDecisionAudit({ file: join(dir, 'd.jsonl') })
+    const shared = C.shareDecisionRow({ kind: 'share', shareId: 's1', workspace: 'Canvas', org: 'Acme' }, 10)
+    const opened = C.shareDecisionRow({ kind: 'open', shareId: 's1', workspace: 'Canvas', role: 'editor' }, 11)
+    const made = C.shareDecisionRow({ kind: 'role', shareId: 's1', workspace: 'Canvas', who: 'octo', userId: 'u9', role: 'viewer' }, 12)
+    const removed = C.shareDecisionRow({ kind: 'role', shareId: 's1', workspace: 'Canvas', who: 'user u9', userId: 'u9', role: null }, 13)
+    const results = []
+    for (const r of [shared, opened, made, removed]) results.push(await C.recordDecision(ledger, audit, r))
+    let mirrored = 0
+    const refused = await C.recordDecision({ append: async () => { throw new Error('disk full') } }, { record: () => { mirrored += 1 } }, shared)
+    const read = audit.list(10)
+    const timeline = await ledger.timeline({ runId: 'share-s1' }, 10)
+    rmSync(dir, { recursive: true, force: true })
+    ok('share.audit.1 a share, an open, a role set and a removal are person rows in their own words with the ids in the detail, on the ledger under the share\'s run id and mirrored to the audit; a row the ledger refused never reaches the audit',
+      shared.title === 'Shared “Canvas” with Acme' && opened.title === 'Opened the shared workspace “Canvas” here, as editor' &&
+        made.title === 'Made octo viewer of “Canvas”' && removed.title === 'Removed user u9 from “Canvas”' && made.detail === 'share s1 · user u9' &&
+        [shared, opened, made, removed].every((r) => r.source === 'person' && r.event === 'permission' && r.runId === 'share-s1') &&
+        results.every((r) => r === true) && read.rows.length === 4 && read.rows[0].title === removed.title &&
+        timeline.entries.length === 4 && refused === false && mirrored === 0,
+      JSON.stringify({ results, refused, mirrored, read: read.rows.map((r) => r.title), timeline: timeline.entries.length }))
+  }
   // M366 — toolbox.door.1. Main's toolbox read, lifted out of `toolbox:read`'s
   //     closure, answers the three refusals by their own sentences, reads a
   //     real project's skill, and asks plugins once for two readers of one

@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } fr
 import { dirname } from 'node:path'
 import { redactSecrets } from '../shared/redact'
 import { DECISION_AUDIT_MAX, decisionOf, parseDecisionRow, type DecisionRow } from '../shared/decision-audit'
-import type { EventRow } from '../shared/run-ledger'
+import type { EventRow, LedgerRow } from '../shared/run-ledger'
 
 /**
  * M369. The decision audit's file: one append-only JSONL in userData, beside
@@ -67,4 +67,21 @@ export function createDecisionAudit(o: { file: string; max?: number }): Decision
       return { rows: rows.reverse().slice(0, Math.max(0, limit)), skipped }
     }
   }
+}
+
+/**
+ * M373. A row on the record: the run ledger FIRST, then the audit's mirror —
+ * a row the ledger refused is not a decision this app recorded (M369's
+ * rule). One function, so the renderer's `ledger:event` door and main's own
+ * writers (the share doors) keep that order the same way. False when the
+ * ledger threw; the audit is then left alone.
+ */
+export async function recordDecision(ledger: { append(row: LedgerRow): Promise<void> }, audit: Pick<DecisionAudit, 'record'>, row: EventRow): Promise<boolean> {
+  try {
+    await ledger.append(row)
+  } catch {
+    return false
+  }
+  audit.record(row)
+  return true
 }

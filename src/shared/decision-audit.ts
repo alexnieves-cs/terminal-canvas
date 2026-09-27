@@ -82,3 +82,30 @@ export function capDecisionTitle(agent: string, note: string, byPerson: boolean)
 export function proposalDecisionTitle(keep: boolean, proposer: string, place: string): string {
   return `${keep ? 'Kept' : 'Discarded'} ${proposer}'s proposed comment on ${place}`
 }
+
+/**
+ * M373. A workspace share decision: a canvas shared with an organization,
+ * a shared workspace opened here, or a person's role in one set or removed.
+ * These are made in MAIN (the share doors), behind a person's dialog or the
+ * `tc` door's Cancel-default confirm, so main writes the row itself. The
+ * ids ride the detail, because a title is prose and the ids are the facts.
+ * `permission`: of the ledger's kinds, a share is a decision about who may
+ * see or change something. The run id is the share's, so every decision
+ * about one shared workspace reads back together.
+ */
+export type ShareDecision =
+  | { kind: 'share'; shareId: string; workspace: string; org: string }
+  | { kind: 'open'; shareId: string; workspace: string; role: string }
+  | { kind: 'role'; shareId: string; workspace: string; who: string; userId: string; role: string | null }
+
+export function shareDecisionRow(d: ShareDecision, at: number): EventRow {
+  const title = d.kind === 'share'
+    ? `Shared “${d.workspace}” with ${d.org}`
+    : d.kind === 'open'
+      ? `Opened the shared workspace “${d.workspace}” here, as ${d.role}`
+      : d.role === null
+        ? `Removed ${d.who} from “${d.workspace}”`
+        : `Made ${d.who} ${d.role} of “${d.workspace}”`
+  const detail = d.kind === 'role' ? `share ${d.shareId} · user ${d.userId}` : `share ${d.shareId}`
+  return { kind: 'event', runId: `share-${d.shareId}`, at, event: 'permission', source: 'person', title, detail }
+}

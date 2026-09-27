@@ -26,6 +26,7 @@ import { createWindow, sendToRenderer } from './bootstrap/window'
 import { startAgentRuntime, createJobDoors } from './bootstrap/agent-runtime'
 import { createTaskDoors } from './bootstrap/task-handlers'
 import { withDigests } from './task-evidence'
+import { recordDecision } from './decision-audit'
 import { initTelemetry } from './bootstrap/telemetry-init'
 import { sweepOrphans } from './bootstrap/orphan-sweep'
 import { createWatchWiring } from './bootstrap/watch-handlers'
@@ -306,12 +307,12 @@ app.whenReady().then(async () => {
         // M320. An artifact row's per-path digests are MAIN's, taken from
         // the files as they are now, at the moment the row lands — the
         // reviewed version a later reader compares the live file with.
-        await stores.runLedger.append(await withDigests(row))
+        const landed = await withDigests(row)
         // M369. A person's decision is mirrored, scrubbed, into the audit
         // that outlives the ledger's trim. After the ledger: a row the
-        // ledger refused is not a decision this app recorded.
-        stores.decisionAudit.record(row)
-        return true
+        // ledger refused is not a decision this app recorded. M373: one
+        // function keeps that order for main's own writers too.
+        return await recordDecision(stores.runLedger, stores.decisionAudit, landed)
       } catch {
         // A row that did not land is reported as not landed. The caller says
         // so; it does not get a silent true and a record with a hole in it.

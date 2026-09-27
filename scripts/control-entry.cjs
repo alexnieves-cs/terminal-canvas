@@ -11,6 +11,9 @@ module.exports = {
   /* M369. The decision audit behind `tc audit`: node:fs only. */
   ...require('../src/shared/decision-audit'),
   ...require('../src/main/decision-audit'),
+  /* M373. The run ledger, so a share decision is checked through the real
+     ledger-then-audit order. */
+  ...require('../src/main/run-ledger'),
   /* M366. The toolbox door behind `tc toolbox`, with the cache it reads
      through and the query both doors answer with: node:fs only. */
   ...require('../src/main/toolbox-door'),
