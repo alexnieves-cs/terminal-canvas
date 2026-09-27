@@ -376,6 +376,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        auth:use / auth:status
                        presence:local / presence:rosters
                        team:list / team:observe
+                       team:asks / team:ask-answer
                        canvas:op / canvas:shared-view
                        workspace:share / workspace:shares
                        workspace:open-share / workspace:share-member
@@ -442,6 +443,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        settings:changed / spawn:open-sheet
                        agent:event (batched ~16ms) / watcher:state / vault:changed
                        presence:remote / team:observed / canvas:shared
+                       team:asks-changed
                        auth:changed
                        text:remote
                        relay:data / relay:state
@@ -1178,6 +1180,7 @@ price of not killing something.
 | M385 | Each panels part starts with no composer drafts: a serial run's one `userData` let `localStorage` carry panels:orchestrate's deliberate composer draft (kept by panel id, M322) into panels:product's `onboarding.start.1` whenever their chat ids collided — the flake that reran green was a leak between parts, and only the drafts key is removed before each part's first load (a whole-store wipe moved the red into panels:shell). [Ledger](docs/build-log/m385-panels-fresh-storage.md). |
 | M375 | The team ask: an agent's permission request as the shared workspace records it (`canvas:asks`) — opened for your own agent in your own name, answered allow-once or deny in the answerer's own name (one field per person), closed once by its owner — with the collab server judging every write against the authenticated user, and a pure policy: one allow, or two distinct people's past the team's spend line, and a single deny decides. [Ledger](docs/build-log/m375-team-ask-record.md). |
 | M376 | The owner's machine routes a permission request to the team: with `agents.teamAsks` on (off by default) and the canvas shared, each request a teammate could read whole (one line, within 300 characters; never a plan, a credential write, a diff or a file's content) is written as a team ask, scrubbed with its count; main reads the answers, decides, and answers through the one `answerPermission` — the owner's own answer is one person's, and past `agents.teamEscalateUsd` the request waits for a second. [Ledger](docs/build-log/m376-team-ask-owner.md). |
+| M377 | A teammate's side of the team queue: `team:asks` lists every open ask of someone else's, in shared workspaces this person may edit, not yet answered by them (with the placeholder's title, the owner's name from presence, the need and the progress); `team:ask-answer` writes allow-once or deny in the signed-in person's name (the request carries no name); `team:asks-changed` pushes the list on every change. [Ledger](docs/build-log/m377-team-ask-doors.md). |
 
 ### What's next — the v10 run (D01–D20)
 

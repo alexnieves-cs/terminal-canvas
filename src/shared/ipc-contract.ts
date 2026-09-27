@@ -130,6 +130,9 @@ import type { CanvasOp, CanvasSharedView, SharedSaveMeta, SharedTextOpen, Shared
 import type { LocalPresence, PresenceRoster } from './presence'
 import type { RelayControlState, RelayRole, RelaySessionMeta } from './relay-protocol'
 import type { TeamListResult, TeamObserved, TeamObserveRequest } from './team'
+import type { TeamAskRow } from './team-asks'
+/** M377. One person's answer to one team ask: allow once, or deny. */
+export interface TeamAskAnswerRequest { workspaceId: string; askId: string; answer: 'allow' | 'deny' }
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
@@ -486,6 +489,19 @@ export const IPC = {
    * sees who is watching), and pushes TEAM_OBSERVED. Null detaches.
    */
   TEAM_OBSERVE: 'team:observe',
+  /**
+   * M377. The team's asks this person may answer: every open permission
+   * request a teammate's agent routed to the team (M376) in a shared
+   * workspace they may edit, not yet answered by them. Read-only.
+   */
+  TEAM_ASKS: 'team:asks',
+  /**
+   * M377. This person's answer to one team ask — allow once, or deny —
+   * written to the workspace doc in THEIR name by main (the collab server
+   * refuses any other name). Never a standing grant: that is the agent
+   * owner's alone.
+   */
+  TEAM_ASK_ANSWER: 'team:ask-answer',
   /**
    * The shared canvas (presence/canvas-sync.ts). One write-through op from a
    * gesture on the ACTIVE workspace — a move/resize as it happens, or removing
@@ -1141,6 +1157,8 @@ export const IPC_EVENTS = {
   PRESENCE_REMOTE: 'presence:remote',
   /** Observer mode: the observed member's awareness and canvas snapshot, pushed on every change. */
   TEAM_OBSERVED: 'team:observed',
+  /** M377. TEAM_ASKS's rows again, after a teammate opened, answered or closed one. */
+  TEAM_ASKS_CHANGED: 'team:asks-changed',
   /** The shared canvas: the active workspace's view after a peer's change, a refusal, or a switch; null when not shared. */
   CANVAS_SHARED: 'canvas:shared',
   /**
@@ -2242,6 +2260,10 @@ export interface CanvasBridge {
     list(orgId?: string): Promise<TeamListResult>
     observe(req: TeamObserveRequest | null): Promise<void>
     onObserved(listener: (observed: TeamObserved) => void): () => void
+    /** M377. See TEAM_ASKS / TEAM_ASK_ANSWER / TEAM_ASKS_CHANGED. */
+    asks(): Promise<TeamAskRow[]>
+    answerAsk(req: TeamAskAnswerRequest): Promise<Verdict>
+    onAsks(listener: (rows: TeamAskRow[]) => void): () => void
   }
   /** M89. See BROKER_AUDIT. */
   broker: {

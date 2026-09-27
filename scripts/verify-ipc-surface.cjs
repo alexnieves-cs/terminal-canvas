@@ -317,7 +317,9 @@ app.whenReady().then(() => {
   // auth:use / auth:status / workspace:share-members (202) — M336–M337: the
   // account picker's active choice, whether accounts are configured, and the
   // share's people with their roles for the owner's picker.
-  const EXPECTED_CHANNELS = 202
+  // team:asks / team:ask-answer (204) — M377: the team's open permission
+  // requests this person may answer, and their answer, written in their name.
+  const EXPECTED_CHANNELS = 204
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

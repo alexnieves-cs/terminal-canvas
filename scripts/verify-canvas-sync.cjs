@@ -725,6 +725,31 @@ async function until(pred, ms = 3000) {
       JSON.stringify({ asks: M.doc.readSharedAsks(B.doc).map((q) => [q.ask.id, q.ask.summary, q.closed]), records: records.length }))
   }
 
+  // ── M377: a teammate's side — the rows their Needs you lists ─────────────
+  {
+    const A = machine({ host: 'hosta1', userId: UA, role: 'owner', panels: [panel('c1', 0, { kind: 'chat', title: 'api agent' })] })
+    const B = machine({ host: 'hostb1', userId: UB, role: 'editor' })
+    const V = machine({ host: 'hostv1', userId: UV, role: 'viewer' })
+    A.bind(); B.bind(); V.bind(); relay(A.doc, B.doc); relay(A.doc, V.doc)
+    const q = (id, over = {}) => ({ id, panel: 'hosta1_c1', owner: UA, tool: 'Bash', summary: 'npm test', scrubbed: 0, at: 10, need: 1, ...over })
+    A.sync.writeAsk('w1', { kind: 'ask-open', ask: q('hosta1_q1', { at: 20 }) })
+    A.sync.writeAsk('w1', { kind: 'ask-open', ask: q('hosta1_q2', { at: 10, need: 2, summary: 'npm publish' }) })
+    A.sync.writeAsk('w1', { kind: 'ask-open', ask: q('hosta1_q3') })
+    A.sync.writeAsk('w1', { kind: 'ask-close', askId: 'hosta1_q3', outcome: 'withdrawn' })
+    const names = (w, u) => (u === UA ? 'Ada' : null)
+    const first = B.sync.teammateAsks(names)
+    const answered = B.sync.writeAsk('w1', { kind: 'ask-answer', askId: 'hosta1_q2', by: UB, answer: 'allow' })
+    const inAnothersName = B.sync.writeAsk('w1', { kind: 'ask-answer', askId: 'hosta1_q1', by: UA, answer: 'allow' })
+    const after = B.sync.teammateAsks(names)
+    ok('team.rows.1 a teammate\'s list holds someone else\'s open, unanswered asks, oldest first, with the placeholder\'s title, the owner\'s name from presence and the progress; a closed one, the owner\'s own and a viewer\'s are absent; answering drops it, and an answer in another\'s name is refused',
+      first.map((r) => r.askId).join(',') === 'hosta1_q2,hosta1_q1' && first[0].panelId === 'hosta1_c1' && first[0].panelTitle === 'api agent' &&
+        first[0].ownerName === 'Ada' && first[0].need === 2 && first[0].allows === 0 &&
+        A.sync.teammateAsks(names).length === 0 && V.sync.teammateAsks(names).length === 0 &&
+        answered.ok === true && inAnothersName.ok === false && /own name/.test(inAnothersName.reason) &&
+        after.map((r) => r.askId).join(',') === 'hosta1_q1' && M.doc.readSharedAsks(A.doc).find((x) => x.ask.id === 'hosta1_q2')?.answers[UB] === 'allow',
+      JSON.stringify({ first, after, inAnothersName }))
+  }
+
   // ── the real server: onAuthenticate + beforeSync over a socket ──────────
   {
     const port = await freePort()

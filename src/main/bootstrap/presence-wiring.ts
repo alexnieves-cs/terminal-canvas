@@ -9,9 +9,11 @@ import { createTeamReporter, type TeamReporter } from '../presence/team-reporter
 import type { AccountService } from '../account-session'
 import { recordDecision } from '../decision-audit'
 import { createTeamAskRouter, type TeamAskRouter } from '../team-ask-router'
+import type { TeamAskRow } from '../../shared/team-asks'
+import type { Verdict } from '../../shared/canvas-ops'
 import { shareDecisionRow, type ShareDecision } from '../../shared/decision-audit'
 import { requestFromRenderer } from '../ipc'
-import { IPC_EVENTS, type ControlCanvasModel } from '../../shared/ipc-contract'
+import { IPC_EVENTS, type ControlCanvasModel, type TeamAskAnswerRequest } from '../../shared/ipc-contract'
 import { readyContents, type MainState } from './context'
 import type { Stores } from './stores'
 
@@ -103,7 +105,7 @@ function installId(userData: string): () => string {
 }
 
 /** The shared canvas over the layout store, the account and the window. */
-export function createCanvasSyncWiring(state: MainState, stores: Stores, account: AccountService, userData: string): CanvasSync {
+export function createCanvasSyncWiring(state: MainState, stores: Stores, account: AccountService, userData: string, onTeamAsks?: () => void): CanvasSync {
   const store = stores.layoutStore
   return createCanvasSync({
     host: installId(userData),
@@ -132,7 +134,8 @@ export function createCanvasSyncWiring(state: MainState, stores: Stores, account
     emit: (view) => { readyContents(state)?.send(IPC_EVENTS.CANVAS_SHARED, view) },
     emitText: (push) => { readyContents(state)?.send(IPC_EVENTS.TEXT_REMOTE, push) },
     // M376. A peer answered a team ask: the owner's router decides (read at use).
-    onAsks: (id) => { state.teamAsks?.asksChanged(id) },
+    // M377. And a teammate's list changes with it.
+    onAsks: (id) => { state.teamAsks?.asksChanged(id); onTeamAsks?.() },
     refreshRole: (shareId) => account.workspaceRole(shareId),
     setRole: (id, role) => {
       const share = store.workspaceShare(id)
@@ -161,6 +164,34 @@ export function createTeamAskWiring(state: MainState, stores: Stores, account: A
     answer: (panelId, requestId, answer) => state.agents?.answerPermission(panelId, requestId, answer) ?? false,
     record: (row) => { void recordDecision(stores.runLedger, stores.decisionAudit, row) }
   })
+}
+
+/**
+ * M377. A TEAMMATE's side of the team queue: the rows their Needs you lists
+ * (someone else's open asks, in workspaces they may edit, not yet answered
+ * by them) and their answer, written in THEIR name — main's signed-in
+ * person, never a name the renderer sent. The owner's name is presence's,
+ * when that person is in the room; a row never guesses one.
+ */
+export function createTeamAskDoors(state: MainState, account: AccountService): { teamAsks: () => TeamAskRow[]; answerTeamAsk: (req: TeamAskAnswerRequest) => Verdict; push: () => void } {
+  const nameOf = (workspaceId: string, userId: string): string | null =>
+    state.presence?.rosters().find((r) => r.workspaceId === workspaceId)?.peers.find((p) => p.presence.userId === userId)?.presence.displayName ?? null
+  const rows = (): TeamAskRow[] => state.canvasSync?.teammateAsks(nameOf) ?? []
+  // Background news like a roster: never pops a closed window open.
+  const push = (): void => { readyContents(state)?.send(IPC_EVENTS.TEAM_ASKS_CHANGED, rows()) }
+  return {
+    teamAsks: rows,
+    answerTeamAsk: (req) => {
+      const me = account.currentUserId()
+      if (me === null) return { ok: false, reason: 'sign in to answer for your team' }
+      const verdict = state.canvasSync?.writeAsk(req.workspaceId, { kind: 'ask-answer', askId: req.askId, by: me, answer: req.answer }) ?? { ok: false, reason: 'sharing is not wired in this build' }
+      // Our own write is not echoed by canvas-sync's observer, so the list
+      // (which drops what this person answered) is pushed from here.
+      push()
+      return verdict
+    },
+    push
+  }
 }
 
 /** The share doors: the account's rows, the store's record, the hub's rooms. */

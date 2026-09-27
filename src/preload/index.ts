@@ -4,6 +4,7 @@ import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contra
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
 import type { TeamObserved } from '../shared/team'
+import type { TeamAskRow } from '../shared/team-asks'
 import type { AccountSessionMeta } from '../shared/account'
 import type { CanvasSharedView, SharedSaveMeta, SharedTextPush } from '../shared/canvas-ops'
 import type { PersistedRoutine } from '../shared/routines'
@@ -437,7 +438,10 @@ const bridge: CanvasBridge = {
   team: {
     list: (orgId) => ipcRenderer.invoke(IPC.TEAM_LIST, orgId),
     observe: (req) => ipcRenderer.invoke(IPC.TEAM_OBSERVE, req),
-    onObserved: (listener) => subscribe<TeamObserved>(IPC_EVENTS.TEAM_OBSERVED, listener)
+    onObserved: (listener) => subscribe<TeamObserved>(IPC_EVENTS.TEAM_OBSERVED, listener),
+    asks: () => ipcRenderer.invoke(IPC.TEAM_ASKS),
+    answerAsk: (req) => ipcRenderer.invoke(IPC.TEAM_ASK_ANSWER, req),
+    onAsks: (listener) => subscribe<TeamAskRow[]>(IPC_EVENTS.TEAM_ASKS_CHANGED, listener)
   },
   broker: {
     audit: (limit, service) => ipcRenderer.invoke(IPC.BROKER_AUDIT, limit, service)

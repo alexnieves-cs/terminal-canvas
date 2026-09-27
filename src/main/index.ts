@@ -18,7 +18,7 @@ import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
-import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring } from './bootstrap/presence-wiring'
+import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
 import { createShareControl } from './share-control'
 import { confirm } from './bootstrap/dialogs'
@@ -114,7 +114,9 @@ stores.ptyManager.ownerOf = () => account.currentUserId()
 // Presence rides the account's identity; built here, started after the env probe.
 state.presence = createPresenceWiring(state, stores, account)
 // The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
-state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'))
+// M377. A teammate's side of the team queue; its list is pushed on every asks change.
+const teamAskDoors = createTeamAskDoors(state, account)
+state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'), teamAskDoors.push)
 // M376. The team queue's owner side (off until agents.teamAsks is on).
 state.teamAsks = createTeamAskWiring(state, stores, account, app.getPath('userData'))
 const shareDoors = createShareDoors(state, stores, account)
@@ -349,6 +351,8 @@ app.whenReady().then(async () => {
       textOpen: (id) => state.canvasSync?.textOpen(id) ?? null,
       textClose: (id) => state.canvasSync?.textClose(id),
       textUpdate: (id, update) => state.canvasSync?.textUpdate(id, update) ?? { ok: false, reason: 'sharing is not wired in this build' },
+      teamAsks: teamAskDoors.teamAsks,
+      answerTeamAsk: teamAskDoors.answerTeamAsk,
       ...shareDoors
     },
     // The pty relay: one socket per relay panel, held in main with the token.

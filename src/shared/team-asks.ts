@@ -64,3 +64,55 @@ export function teamAskAction(input: Readonly<Record<string, unknown>>): { actio
   if (action.length > TEAM_ASK_SUMMARY_MAX) return { local: `its ${key} is longer than a teammate is shown (${TEAM_ASK_SUMMARY_MAX} characters)` }
   return { action }
 }
+
+/**
+ * M377. One team ask as a TEAMMATE's Needs you lists it: someone else's
+ * agent, the ask still open, and not yet answered by this person. The
+ * asker's own asks never appear here — on their machine the request is the
+ * ordinary permission row, answered through the ordinary door (M376 writes
+ * that answer to the doc for them).
+ */
+export interface TeamAskRow {
+  workspaceId: string
+  askId: string
+  /** The asking agent's placeholder on this canvas (its doc key): where a jump lands. */
+  panelId: string
+  /** Its title as the doc holds it (scrubbed on the owner's machine), or '' when that panel is gone. */
+  panelTitle: string
+  /** Whose agent, by the name presence knows them by; null when they are not in the room. */
+  ownerName: string | null
+  tool: string
+  summary: string
+  scrubbed: number
+  need: 1 | 2
+  /** Allows so far, from anyone — the progress a second approver needs to see. */
+  allows: number
+  at: number
+}
+
+export function teammateAskRows(
+  workspaceId: string,
+  reads: ReadonlyArray<{ ask: import('./canvas-ops').SharedAsk; answers: Readonly<Record<string, AskAnswer>>; closed?: AskOutcome }>,
+  panels: ReadonlyArray<{ id: string; title: string }>,
+  me: string,
+  nameOf: (userId: string) => string | null
+): TeamAskRow[] {
+  const titles = new Map(panels.map((p) => [p.id, p.title]))
+  return reads
+    .filter((q) => q.closed === undefined && q.ask.owner !== me && q.answers[me] === undefined && askDecision(q.ask.need, q.answers) === 'open')
+    .map((q) => ({
+      workspaceId,
+      askId: q.ask.id,
+      panelId: q.ask.panel,
+      panelTitle: titles.get(q.ask.panel) ?? '',
+      ownerName: nameOf(q.ask.owner),
+      tool: q.ask.tool,
+      summary: q.ask.summary,
+      scrubbed: q.ask.scrubbed,
+      need: q.ask.need,
+      allows: Object.values(q.answers).filter((a) => a === 'allow').length,
+      at: q.ask.at
+    }))
+    .sort((a, b) => a.at - b.at)
+}
+

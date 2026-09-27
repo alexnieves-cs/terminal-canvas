@@ -55,6 +55,8 @@ import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { accountOfCredentialKey } from '../shared/credential-schema'
 import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, AccountStatus, AccountUseResult, ShareListResult, ShareMemberResult, ShareMembersResult, ShareResult } from '../shared/account'
+import type { TeamAskRow } from '../shared/team-asks'
+import type { TeamAskAnswerRequest } from '../shared/ipc-contract'
 import { parseRendererOp, parseWorkspaceRole, type CanvasOp, type CanvasSharedView, type SharedTextOpen, type Verdict, type WorkspaceRole } from '../shared/canvas-ops'
 import { parseTextCursor, type LocalPresence, type PresenceRoster } from '../shared/presence'
 import { OBSERVING_MODE, type TeamListResult, type TeamObserveRequest } from '../shared/team'
@@ -459,6 +461,9 @@ export interface PresenceHandlers {
   textOpen(workspaceId: string): SharedTextOpen | null
   textClose(workspaceId: string): void
   textUpdate(workspaceId: string, update: Uint8Array): Verdict
+  /** M377. The team's asks this person may answer, and their answer to one. Inert: none, and every answer refused. */
+  teamAsks(): TeamAskRow[]
+  answerTeamAsk(req: TeamAskAnswerRequest): Verdict
 }
 const SHARING_NOT_WIRED = 'sharing is not wired in this build'
 export const INERT_PRESENCE: PresenceHandlers = {
@@ -471,7 +476,9 @@ export const INERT_PRESENCE: PresenceHandlers = {
   setShareMember: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
   shareMembers: async () => ({ kind: 'refused', reason: SHARING_NOT_WIRED }),
   textOpen: () => null, textClose: () => {},
-  textUpdate: () => ({ ok: false, reason: SHARING_NOT_WIRED })
+  textUpdate: () => ({ ok: false, reason: SHARING_NOT_WIRED }),
+  teamAsks: () => [],
+  answerTeamAsk: () => ({ ok: false, reason: SHARING_NOT_WIRED })
 }
 
 /**
@@ -789,6 +796,17 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.CANVAS_SHARED_VIEW, () => presence.canvasView())
   ipcMain.handle(IPC.TEXT_OPEN, (_event, id: unknown) => (typeof id === 'string' && WORKSPACE_ID.test(id) ? presence.textOpen(id) : null))
   ipcMain.handle(IPC.TEXT_CLOSE, (_event, id: unknown) => { if (typeof id === 'string' && WORKSPACE_ID.test(id)) presence.textClose(id) })
+  // M377. The team's asks: read, and one answer — shape-checked here, the
+  // name it is written in decided by main (the signed-in person), never sent.
+  ipcMain.handle(IPC.TEAM_ASKS, () => presence.teamAsks())
+  ipcMain.handle(IPC.TEAM_ASK_ANSWER, (_event, raw: unknown): Verdict => {
+    const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+    const { workspaceId, askId, answer } = r
+    if (typeof workspaceId !== 'string' || !WORKSPACE_ID.test(workspaceId)) return { ok: false, reason: 'no such workspace' }
+    if (typeof askId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(askId)) return { ok: false, reason: 'no such ask' }
+    if (answer !== 'allow' && answer !== 'deny') return { ok: false, reason: 'an answer is allow or deny' }
+    return presence.answerTeamAsk({ workspaceId, askId, answer })
+  })
   ipcMain.handle(IPC.TEXT_UPDATE, (_event, id: unknown, update: unknown): Verdict => {
     if (typeof id !== 'string' || !WORKSPACE_ID.test(id) || !(update instanceof Uint8Array)) return { ok: false, reason: 'not a shared text update' }
     // Bounded before Yjs parses it: a replica's honest update is one burst of

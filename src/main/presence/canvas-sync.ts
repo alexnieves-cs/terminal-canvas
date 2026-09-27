@@ -54,6 +54,7 @@ import {
   authorizeCanvasOp, CANVAS_ASKS, RECT_FIELDS,
   type CanvasOp, type CanvasSharedView, type SharedGroup, type SharedTextOpen, type SharedTextPush, type Verdict, type WorkspaceRole
 } from '../../shared/canvas-ops'
+import { teammateAskRows, type TeamAskRow } from '../../shared/team-asks'
 
 export interface WorkspaceShareRecord { id: string; orgId: string; role: WorkspaceRole }
 
@@ -104,6 +105,12 @@ export interface CanvasSync {
   asks(workspaceId: string): ReturnType<typeof readSharedAsks> | null
   /** M376. One team-ask op, as this person, through the same authorisation as every write. */
   writeAsk(workspaceId: string, op: Extract<CanvasOp, { kind: 'ask-open' | 'ask-answer' | 'ask-close' }>): Verdict
+  /**
+   * M377. What this person's Needs you lists from the team: every bound shared
+   * workspace they may EDIT (a viewer cannot answer, so nothing is asked of
+   * them), each open ask of someone else's they have not answered.
+   */
+  teammateAsks(nameOf: (workspaceId: string, userId: string) => string | null): TeamAskRow[]
 }
 
 /** Writes this machine made — everything else observed on the doc is a peer's. */
@@ -350,6 +357,18 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
     asks(workspaceId) {
       const b = bindings.get(workspaceId)
       return b === undefined || deps.share(workspaceId) === undefined ? null : readSharedAsks(b.doc)
+    },
+
+    teammateAsks(nameOf) {
+      const me = deps.userId()
+      if (me === null) return []
+      const out: TeamAskRow[] = []
+      for (const b of bindings.values()) {
+        const role = deps.share(b.workspaceId)?.role
+        if (role !== 'owner' && role !== 'editor') continue
+        out.push(...teammateAskRows(b.workspaceId, readSharedAsks(b.doc), readSharedPanels(b.doc).live, me, (u) => nameOf(b.workspaceId, u)))
+      }
+      return out.sort((a, b) => a.at - b.at)
     },
 
     writeAsk(workspaceId, op) {
