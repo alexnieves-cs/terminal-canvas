@@ -48,8 +48,11 @@ export interface FlowchartIODeps {
 
 export interface FlowchartIO {
   importMermaid: (text: string, source: string, at?: Point) => VerbResult
-  /** A paste of plain text: Mermaid becomes a diagram; anything else is not ours (false). */
-  importPasted: (text: string) => boolean
+  /**
+   * A paste of plain text: Mermaid becomes a diagram and the import's result
+   * comes back for the caller to SAY; anything else is not ours (null).
+   */
+  importPasted: (text: string) => VerbResult | null
   importMermaidFile: (path?: string) => Promise<VerbResult>
   exportFlowchart: (format: string, ids?: readonly string[]) => Promise<VerbResult>
   layout: (direction: string, ids?: readonly string[]) => VerbResult
@@ -109,11 +112,15 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
     return { kind: 'ran', note: `${mermaidImportSentence(parsed)}${lost} · from ${source}` }
   }, [commitHistory, frameRects, mergedRef, nextGroupIdRef, nextIdRef, setGroups, setPanels, worldCentre])
 
-  const importPasted = useCallback((text: string): boolean => {
+  const importPasted = useCallback((text: string): VerbResult | null => {
     const body = stripFence(text)
-    if (!looksLikeMermaid(body)) return false
-    importMermaid(body, 'a paste')
-    return true
+    if (!looksLikeMermaid(body)) return null
+    // The RESULT goes back, never a bare `true`: its sentence ("3 shapes ·
+    // 2 connectors · 1 line left out (click)") is the only place a person
+    // learns the diagram they pasted is not the diagram they got. Returned as
+    // a boolean, the paste door dropped it (verify:panels:flowchart
+    // flowchart.app.6) while the file and agent doors said it.
+    return importMermaid(body, 'a paste')
   }, [importMermaid])
 
   const importMermaidFile = useCallback(async (path?: string): Promise<VerbResult> => {

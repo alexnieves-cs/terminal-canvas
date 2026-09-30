@@ -186,13 +186,18 @@ export const VERBS: readonly VerbDef[] = [
   // M187. The note's three. `note-add` takes the FORM first because it is the
   // thing a person chooses; the text is optional (an empty note is a real
   // thing to make and type into).
-  { id: 'note-add', label: 'Note: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true }], destructive: false, actions: ['addNote'], target: 'canvas', hint: 'a sticky note, free text, or a named region' },
-  { id: 'note-set', label: 'Note: set the text', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text' }], destructive: false, actions: ['setNoteText'], target: 'panel', hint: 'replace a note\'s words' },
+  { id: 'note-add', label: 'Note: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['addNote'], target: 'canvas', hint: 'a sticky note, free text, or a named region' },
+  { id: 'note-set', label: 'Note: set the text', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text', rest: true }], destructive: false, actions: ['setNoteText'], target: 'panel', hint: 'replace a note\'s words' },
   { id: 'note-tint', label: 'Note: set the tint', args: [{ name: 'panel', kind: 'panel' }, { name: 'tint', kind: 'value' }], destructive: false, actions: ['setNoteTint'], target: 'panel', hint: 'yellow, blue, green or pink — a sticky note only' },
   // M388. The flowchart shape's three. `shape-add` takes the FORM first, the
   // thing a person chooses; the label is optional (a junction usually has none).
-  { id: 'shape-add', label: 'Shape: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true }], destructive: false, actions: ['addShape'], target: 'canvas', hint: 'a flowchart shape — process, decision, terminator, io, document, subprocess, junction or text — with an optional label' },
-  { id: 'shape-set', label: 'Shape: set the label', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text' }], destructive: false, actions: ['setShapeText', 'editShapeLabel'], target: 'panel', hint: 'replace a shape\'s label; \\n is a new line' },
+  // A label and a path are the LAST argument and take the REST of the line
+  // (`rest: true`): without it bindArgs keeps one word, so the agent example
+  // below (`shape-add decision Is it valid`) labelled the diamond "Is", and a
+  // Mermaid file under a folder with a space was read as a path ending at the
+  // space (verify:panels:flowchart flowchart.app.7).
+  { id: 'shape-add', label: 'Shape: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['addShape'], target: 'canvas', hint: 'a flowchart shape — process, decision, terminator, io, document, subprocess, junction or text — with an optional label' },
+  { id: 'shape-set', label: 'Shape: set the label', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text', rest: true }], destructive: false, actions: ['setShapeText', 'editShapeLabel'], target: 'panel', hint: 'replace a shape\'s label; \\n is a new line' },
   { id: 'shape-style', label: 'Shape: restyle', args: [{ name: 'panel', kind: 'panel' }, { name: 'field', kind: 'value' }, { name: 'value', kind: 'value' }], destructive: false, actions: ['styleShape'], target: 'panel', hint: 'form, fill, line or text, then its value — e.g. shape-style sh1 fill yellow' },
   // M389–M391. Lines, arranging, and the diagram in and out. `objects` is a
   // space-separated id list; absent means the person's selection.
@@ -202,7 +207,7 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'align', label: 'Align', args: [{ name: 'edge', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['alignObjects'], target: 'canvas', hint: 'left, hcentre, right, top, vcentre or bottom — two or more objects' },
   { id: 'distribute', label: 'Space evenly', args: [{ name: 'axis', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['distributeObjects'], target: 'canvas', hint: 'across or down — three or more objects, the outer two stay' },
   { id: 'flowchart-layout', label: 'Flowchart: lay out', args: [{ name: 'direction', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['layoutFlowchart'], target: 'canvas', hint: 'down, right, up or left — one shape lays out its whole chart' },
-  { id: 'flowchart-import', label: 'Flowchart: import Mermaid', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importFlowchart'], target: 'canvas', hint: 'a .mmd or .md file (an absolute path) becomes editable shapes; nothing in it runs' },
+  { id: 'flowchart-import', label: 'Flowchart: import Mermaid', args: [{ name: 'path', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['importFlowchart'], target: 'canvas', hint: 'a .mmd or .md file (an absolute path) becomes editable shapes; nothing in it runs' },
   { id: 'flowchart-export', label: 'Flowchart: export', args: [{ name: 'format', kind: 'value' }], destructive: false, actions: ['exportFlowchart'], target: 'canvas', hint: 'mermaid or svg, through a save dialog — scrubbed, the count said' },
   // M394. Sketch → plan: opens the Start work sheet with the chart's steps as its plan — a person presses Start.
   { id: 'flowchart-plan', label: 'Flowchart: start work from this chart', args: [{ name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['planFromChart'], target: 'canvas', hint: 'each labelled step becomes a plan step in the Start work sheet; nothing runs until a person presses Start' },
