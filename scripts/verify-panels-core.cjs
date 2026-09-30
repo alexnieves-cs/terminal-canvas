@@ -4468,6 +4468,47 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           chromeHover !== null && chromeHover.opacity === '1' && chromeHover.onTop === true,
         JSON.stringify({ chromeRest, chromeHover }))
 
+      // M397 (A4) — chromeless.row0.1. ROW 0 IS NOT UNDER THE CHROME. The
+      // scrim was a full-width --well band three rows tall, and row 0 — where
+      // a fresh shell prints its prompt — sat under it, so every new terminal
+      // looked dead. elementFromPoint cannot see this: the chrome is
+      // pointer-events: none at rest, so the probe falls through to xterm
+      // whether the band is opaque or not. So it is measured as geometry off
+      // the computed style: the band itself paints nothing, and the parts
+      // that DO paint a backing (anything with a background or a
+      // box-shadow), inflated by the largest shadow reach the stylesheet
+      // gives them, cover under half of row 0's width. And the name is still
+      // there at rest (rest layer): opaque, with a real box.
+      const row0 = geom === null ? null : await wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id="${geom.id}"]')
+        const ch = p && p.querySelector('.pf__chrome'), scr = p && p.querySelector('.xterm-screen'), t = p && p.querySelector('.pf__title')
+        if (!ch || !scr || !t) return null
+        const s = scr.getBoundingClientRect(), cs = getComputedStyle(ch)
+        const rowH = parseFloat(getComputedStyle(p.querySelector('.xterm')).lineHeight) || 17
+        const y0 = s.top, y1 = s.top + Math.min(rowH, 20)
+        const REACH = 18   // the title's widest shadow reach (--sp-3 spread + --sp-5 shift)
+        const spans = []
+        for (const e of ch.querySelectorAll('*')) {
+          const es = getComputedStyle(e)
+          if (+es.opacity === 0 || es.visibility === 'hidden') continue
+          const paints = (es.backgroundColor !== 'rgba(0, 0, 0, 0)' && es.backgroundColor !== 'transparent') || es.boxShadow !== 'none'
+          if (!paints) continue
+          const r = e.getBoundingClientRect(); if (r.width === 0 || r.height === 0) continue
+          if (r.bottom + REACH < y0 || r.top - REACH > y1) continue
+          spans.push([Math.max(s.left, r.left - REACH), Math.min(s.right, r.right + REACH)])
+        }
+        spans.sort((a, b) => a[0] - b[0]); let covered = 0, end = -Infinity
+        for (const [a, b] of spans) { if (b <= end) continue; covered += b - Math.max(a, end); end = b }
+        const tr = t.getBoundingClientRect(), ts = getComputedStyle(t)
+        return { bandImage: cs.backgroundImage, bandColor: cs.backgroundColor, position: cs.position,
+                 coveredFrac: Number((covered / s.width).toFixed(3)), parts: spans.length,
+                 title: { w: Math.round(tr.width), h: Math.round(tr.height), opacity: ts.opacity, color: ts.color } } })()`)
+      ok('chromeless.row0.1 a fresh terminal\'s row 0 is not under an opaque chrome band at rest — the band paints nothing, the parts that wear a backing cover under half the row, the chrome stays position: absolute, and the name is visible at rest',
+        row0 !== null && row0.bandImage === 'none' && /rgba\(0, 0, 0, 0\)|transparent/.test(row0.bandColor) &&
+          row0.position === 'absolute' && row0.coveredFrac < 0.5 &&
+          row0.title.w > 0 && row0.title.h > 0 && row0.title.opacity === '1' && !/rgba\(.*, 0\)$/.test(row0.title.color),
+        JSON.stringify(row0))
+
       ok('chromeless.resize.1 a terminal\'s chrome is OUT OF THE FLOW (absolute over the body) and a real hover changes neither the xterm screen nor the body\'s measured block size — a chrome whose box collapses fires a SIGWINCH into the running agent on every mouse-over, with no error and no red suite anywhere else',
         geom !== null && chromeOut && same(before, during) && same(during, after),
         JSON.stringify({ id: geom && geom.id, chromePos: geom && geom.chromePos, chromeOut, before, during, after }))

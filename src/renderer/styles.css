@@ -948,7 +948,15 @@ body {
 .shell__search kbd { margin-left: auto; }
 .shell__view { position: relative; -webkit-app-region: no-drag; }
 .shell__top .shell__view-trigger { padding-inline: var(--sp-3); }
-.shell__top { overflow: visible; z-index: 920; }
+/* M397 (A8). Menus and popovers sit ABOVE every canvas HUD layer. The View
+   menu's own 950 only ranks inside this bar's stacking context, so the bar's
+   number is the one that competes with the canvas's siblings — at 920 the
+   minimap (940) painted over the menu's theme rows and took their clicks.
+   960 clears the minimap and toaster (940), the HUD (950) and the pill (930),
+   and stays under the palette's scrim (999) and the modal sheets (1000).
+   `.link-banner` moves above it to keep its M257 guarantee.
+   verify:panels:agents menu.layer.1 measures it with elementFromPoint. */
+.shell__top { overflow: visible; z-index: 960; }
 .shell__view-menu {
   position: absolute;
   top: calc(100% + var(--sp-3));
@@ -2728,8 +2736,9 @@ body {
   transform: translateX(-50%);
   /* M257. The top bar is a stacking context so its View menu can cross the
      shell grid. A persistent mode's on-strip exit must still win hit testing
-     below that row; otherwise the bar's overflow catches the real Stop click. */
-  z-index: 930;
+     below that row; otherwise the bar's overflow catches the real Stop click.
+     M397: the bar went to 960 (A8), so this goes above it. */
+  z-index: 970;
   padding: var(--sp-2) var(--sp-5);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-full);
@@ -3204,6 +3213,10 @@ body {
    A note is a fact — missing, too-large, binary, not a repository — and it
    reads as one in the muted ink, with the frame's edge carrying no state. */
 .pf__note { margin: 0 0 var(--sp-4); color: var(--fg-2); }
+/* M397 (A11). A note carries no size of its own: inside a panel it inherits
+   the reading body's --t-base, but in a rail pane (Teammates, Skills) its
+   nearest sized ancestor was the document, so it printed at 16px. */
+.shell__rail .pf__note { font-size: var(--t-sm); }
 .pf__more { margin: var(--sp-4) 0 0; color: var(--fg-3); }
 
 /* A panel enters once, at its spawn point. This wrapper is intentionally the
@@ -4581,6 +4594,21 @@ body {
 .file-node__editor .monaco-editor,
 .file-node__editor .monaco-editor .overflow-guard { background: var(--s-1); }
 
+/* M397 (A1). The `flex: 1` above is only a size inside a FLEX parent, and the
+   editor's parent is `.pf__body--text`, a BLOCK scroller — so from M276 until
+   here the host measured 0px, Monaco 2.8px, and every note (and every file in
+   edit mode) opened onto an empty band a click could not focus, with no error
+   and every typing check green (they write through helpers, never measure).
+   The body becomes a column only while Monaco is its child: the read view and
+   Rich mode keep the block flow they were built on. Everything above the
+   editor keeps its own height (`flex: none`), and the editor keeps a floor so
+   a conflict banner or an armed-discard line in a short panel scrolls the body
+   instead of squeezing the editor back to nothing. `verify:rail`
+   note.editor.height.1 measures it. */
+.pf__body--text[data-file-mode="edit"]:has(> .file-node__editor) { display: flex; flex-direction: column; }
+.pf__body--text[data-file-mode="edit"]:has(> .file-node__editor) > :not(.file-node__editor) { flex: none; }
+.pf__body--text[data-file-mode="edit"] > .file-node__editor { flex: 1 1 auto; min-height: calc(2 * var(--sp-8)); }
+
 /* Monaco's own element. Its own box because React owns the element ABOVE it
    and Monaco owns everything inside this one — see CodeEditor. */
 .file-node__editor-host { position: absolute; inset: 0; }
@@ -5902,7 +5930,11 @@ body {
    it. A place is a mono path with its remove beside it; the three
    permissions are three separate controls. */
 .teammates-pane__new { display: flex; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); align-items: center; }
-.teammates-pane__name { flex: 1; min-width: 0; font: inherit; }
+/* M397 (A11). The name field takes the panes' shared input look (the
+   inspector's field and the vault filter): `font: inherit` alone inherited
+   the document's 16px and the browser's own grey box. */
+.teammates-pane__name { flex: 1; min-width: 0; min-height: 24px; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
+.teammates-pane__name:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 3px var(--iris-dim); }
 .teammates-pane__detail { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); }
 .teammates-pane__field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .teammates-pane__label { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -5970,7 +6002,8 @@ body {
 .skill-card[data-skill-installed="no"] .skill-card__name { color: var(--fg-3); }
 /* The card's NAME wraps rather than ellipsising, for the trail card's own
    reason: a skill's name is its identity and half of one names nothing. */
-.skill-card__name { flex: 1 1 auto; min-width: 0; padding: 0 var(--sp-2); white-space: normal; text-overflow: clip; overflow-wrap: anywhere; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* M397 (A11). --t-sm, the size every other rail row's label gets from .rail-row__main — a skill card's label sits in the <li> itself, so it had none and read at the document's 16px. */
+.skill-card__name { font-size: var(--t-sm); flex: 1 1 auto; min-width: 0; padding: 0 var(--sp-2); white-space: normal; text-overflow: clip; overflow-wrap: anywhere; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .skill-card__menu-host { flex: 0 0 auto; margin-right: var(--sp-1); }
 /* Two lines, then an ellipsis. A description is a sentence, and a card that
    let it run set the column's width — which is the defect this round fixes. */
@@ -6881,10 +6914,16 @@ body {
      Starting from --well — the colour the terminal is already painting —
      means the band under the chrome reads as empty terminal rather than as a
      tinted overlay laid on top of one: no seam, no second material, and the
-     title simply sits in space. The text does not disappear, it scrolls out
-     from under the title the way a large-title header works everywhere else,
-     and what it obscures is the OLDEST visible row, never the newest. */
-  background: linear-gradient(to bottom, var(--well) 0%, var(--well) 62%, transparent 100%);
+     title simply sits in space.
+     M397 (A4). But as a full-width BAND that --well was three rows tall, and
+     the claim that it only ever hid the oldest row was false: on a fresh shell
+     or after `clear`, row 0 IS the newest row, the prompt lives there, and a
+     new terminal looked dead. So the band is gone and the --well is worn by
+     the title, the state word and each control ITSELF (the rule below this
+     one) — the same ground, the same legibility over output, and the rest of
+     row 0 shows. Paint only: the chrome's box, position and padding are
+     untouched, so nothing refits (chromeless.resize.1). */
+  background: none;
   /* CLEARANCE UNDER THE NAME. The chrome is absolute, so padding here grows
      the SCRIM without moving a single layout box — no refit, no SIGWINCH.
      Without it the name's descenders sat directly on the next row's
@@ -6901,6 +6940,27 @@ body {
      scrim. That check exists for precisely this milestone; its comment said
      so in M228 and it collected. */
   box-shadow: var(--rim-top);
+}
+/* M397 (A4). THE SCRIM IS PER PART, NOT A BAND. Each visible part of the
+   chrome wears the terminal's own ground behind its text, spread by a
+   box-shadow rather than padding where it needs one, so not one box in the
+   chrome moves. The title and the state word are rest-layer content and wear
+   it at rest; the controls are opacity 0 at rest, so theirs appears with them. `:not(:hover)`
+   leaves each control's own hover fill in charge while it is pointed at.
+   Measured by verify:panels:core chromeless.row0.1 (a fresh shell's row 0 is
+   uncovered outside the title and the word). */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__title, .pf__word, .pf__verb, .pf__close):not(:hover) { background: var(--well); }
+/* The title alone has no padding of its own, so its backing is spread — and
+   spread UP and LEFT as well — up only as far as the frame's lit top edge,
+   which it must not cover (rim.paint.1) — because the name sits
+   across the boundary of rows 0 and 1: a backing that stopped at the name's
+   own box cut the prompt's first glyphs in half, which read as a rendering
+   fault. Covering whole cells hides the prompt's first few characters
+   cleanly and leaves the rest of row 0, and the cursor, in view. The word
+   and the controls keep their own padding and radius. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__title {
+  border-radius: var(--r-sm);
+  box-shadow: 0 0 0 var(--sp-3) var(--well), 0 calc(-1 * var(--sp-2)) 0 var(--sp-3) var(--well), calc(-1 * var(--sp-5)) calc(-1 * var(--sp-2)) 0 var(--sp-3) var(--well);
 }
 /* NO SEPARATE WELL RECESS on a chromeless terminal. --rim-inner sinks a
    screen into a housing; here the frame IS the housing, the body starts at

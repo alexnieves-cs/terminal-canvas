@@ -525,6 +525,26 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const record = ws && ws.starter
       const again = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'starter' }, null, 3000)
       const panelsAfterAgain = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind]').length`)
+      // M397 (A1) — note.editor.height.1. THE NOTE'S EDITOR HAS A HEIGHT.
+      // From M276 the Monaco host inside every note measured 0px (its
+      // `flex: 1` sat in a BLOCK body), Monaco 2.8px, nothing painted and a
+      // click could not focus it — while every typing check stayed green,
+      // because they type through a helper and never measure. This measures:
+      // offsetHeight, the untransformed layout size, so the camera's scale
+      // cannot make a real editor look short or a dead one look tall. The
+      // starter's note opens INTO its editor (autoEditedRef); ⌘K New note and
+      // a .md panel in edit mode are the same component and the same rule.
+      // Measured AFTER the agent door's second application, not gated on the
+      // visible line's click: whichever of the two laid the starter out, a
+      // note is on the canvas by then, and this check is about the editor,
+      // not about which door reached it (starter.1 owns that).
+      const editorH = await waitUntil(() => wc.executeJavaScript(`(() => {
+        const f = document.querySelector('.panel[data-panel-kind="file"] [data-file-node-editor]:not([data-file-node-editor-loading])')
+        if (!f) return false
+        const host = f.querySelector('.file-node__editor-host'), mon = f.querySelector('.monaco-editor')
+        return { editor: f.offsetHeight, host: host ? host.offsetHeight : 0, monaco: mon ? mon.offsetHeight : 0 } })()`), 12000)
+      ok('note.editor.height.1 the starter note opens into an editor with a real height — the Monaco host and Monaco itself measure at least 48 layout px, not the 0px/2.8px a flex item in a block body collapsed to',
+        editorH && editorH.host >= 48 && editorH.monaco >= 48, JSON.stringify(editorH))
       ok(id, primary === true && started && kinds === 'chat,file,image,terminal,workflow' &&
         Array.isArray(captions) && JSON.stringify(captions) === JSON.stringify(expected) &&
         typeof group === 'string' && /Examples/.test(group) && image === 'data' && note === true && overlap === 0 &&

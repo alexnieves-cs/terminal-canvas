@@ -2249,6 +2249,15 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         const saveInChrome = await wc.executeJavaScript(`(() => { const n = document.querySelector('[data-panel-kind="file"] [data-file-node-editor]')?.closest('.panel'); if (!n) return 'no panel'
           const s = n.querySelector('[data-file-node-save]'); return s ? (s.closest('.pf__chrome') !== null ? true : 'in body') : 'absent' })()`)
         ok('frame.2a the file panel\'s Save sits in the chrome row while a draft is open', saveInChrome === true, JSON.stringify({ saveInChrome }))
+        // M397 (A1) — note.editor.height.2. The same measurement as the
+        // starter's note (verify:panels:product note.editor.height.1) on a
+        // plain text file: the fix makes the edit-mode body a column only
+        // while Monaco is its child, and this is the non-note half of that.
+        const editH = await wc.executeJavaScript(`(() => { const f = document.querySelector('[data-panel-kind="file"] [data-file-node-editor]'); if (!f) return null
+          const host = f.querySelector('.file-node__editor-host'), mon = f.querySelector('.monaco-editor'), body = f.parentElement
+          return { host: host ? host.offsetHeight : 0, monaco: mon ? mon.offsetHeight : 0, body: body.clientHeight } })()`)
+        ok('note.editor.height.2 a plain file in edit mode gives Monaco a real height — host and editor at least 48 layout px',
+          editH !== null && editH.host >= 48 && editH.monaco >= 48, JSON.stringify(editH))
         await wc.executeJavaScript(`
           (() => {
             // M276. The draft surface is Monaco, so typing goes through the

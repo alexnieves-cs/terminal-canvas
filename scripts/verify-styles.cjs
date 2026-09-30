@@ -1640,5 +1640,19 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     tintsOk && revealed && swatchTokens, JSON.stringify({ tints: tints && tints.body, revealed, swatchTokens }))
 }
 
+// M397 (A11) — pane.type.1. Rail-pane text sits on the type scale. Three
+// leaves printed at the browser's 16px because nothing sized them: a rail
+// note (`.pf__note` has no size of its own and the rail's nearest sized
+// ancestor is the document), a skill card's label (it sits in the <li>, not
+// in a .rail-row__main that would size it) and the Teammates name field
+// (`font: inherit`, the browser's grey box). Each must name a --t-* token.
+{
+  const sized = (re) => all.some((r) => re.test(r.sel) && /font-size:\s*var\(--t-(xs|sm|base|md)\)/.test(r.body))
+  const pane = { railNote: sized(/^\.shell__rail \.pf__note$/), skillName: sized(/^\.skill-card__name$/), nameInput: sized(/^\.teammates-pane__name$/) }
+  const inputLook = all.some((r) => /^\.teammates-pane__name$/.test(r.sel) && /border:\s*1px solid var\(--line\)/.test(r.body) && /background:\s*var\(--s-1\)/.test(r.body))
+  ok('pane.type.1', 'rail-pane text is on the type scale: a rail note, a skill card label and the Teammates name field each name a --t-* size, and the field wears the shared input look',
+    pane.railNote && pane.skillName && pane.nameInput && inputLook, JSON.stringify({ ...pane, inputLook }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

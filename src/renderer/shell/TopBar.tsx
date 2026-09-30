@@ -186,7 +186,7 @@ export function TopBar({
               <div className="shell__view-heading">Layout</div>
               <MenuCheckboxItem checked={contextOpen} onSelect={onToggleContext}
                 className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
-              ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>⇧⌘\\</kbd></MenuCheckboxItem>
+              ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>{'⇧⌘\\'}</kbd></MenuCheckboxItem>
               {/* (this redesign) Pin the inspector open THROUGH the Compact
                   breakpoint's own auto-collapse — a separate axis from
                   contextOpen above (open/closed at all), the way

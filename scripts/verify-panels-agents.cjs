@@ -3268,6 +3268,58 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reL
         await settle()
+        // M397 (A8) — menu.layer.1. THE VIEW MENU PAINTS OVER THE MINIMAP.
+        // The menu's own z-index ranks only inside the top bar's stacking
+        // context, and the bar (920) lost to the minimap (940): the theme rows
+        // were drawn under the map and a click on them hit the map. Opened by
+        // a REAL click on the trigger (Radix opens on pointerdown), then every
+        // row is probed with elementFromPoint at four points across its width.
+        // The map's overlap with the menu is required and reported (the menu
+        // is moved onto the map when the window leaves them apart), so the
+        // check cannot pass on a layout where the two never meet. Also the
+        // shortcut label: JSX text is not a string literal, and `⇧⌘\\` there
+        // printed two backslashes.
+        {
+          let layer = null
+          try {
+            const trig = await wc.executeJavaScript(`(() => { const t = document.querySelector('.shell__view-trigger'); if (!t) return null; const r = t.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+            const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
+            if (trig) {
+              press(trig)
+              await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'); return !!m && !m.hidden })()`), 3000)
+              layer = await wc.executeJavaScript(`(() => {
+                const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'), map = document.querySelector('.minimap')
+                if (!m || m.hidden) return { open: false }
+                const mapShown = !!map && getComputedStyle(map).visibility !== 'hidden' && +getComputedStyle(map).opacity > 0
+                // At the harness's window size the two may not meet. Paint
+                // order is decided by the stacking contexts, not by where the
+                // menu sits, so the menu is TRANSLATED onto the map's centre
+                // (inside its own context) and translated back after the probe.
+                let pr = map ? map.getBoundingClientRect() : null, mr = m.getBoundingClientRect(), moved = false
+                if (pr && (mr.right <= pr.left || mr.left >= pr.right || mr.bottom <= pr.top || mr.top >= pr.bottom)) {
+                  m.style.transform = 'translate(' + Math.round(pr.left + pr.width / 2 - mr.left - mr.width / 2) + 'px,' + Math.round(pr.top + pr.height / 2 - mr.top - 20) + 'px)'
+                  moved = true; mr = m.getBoundingClientRect()
+                }
+                const overlap = pr ? Math.max(0, Math.min(mr.right, pr.right) - Math.max(mr.left, pr.left)) * Math.max(0, Math.min(mr.bottom, pr.bottom) - Math.max(mr.top, pr.top)) : 0
+                // Only points over the map are probed: that is the claim, and a
+                // moved menu can hang past the window, where the probe is null.
+                const lost = []; let probed = 0
+                for (const b of m.querySelectorAll('button')) { const r = b.getBoundingClientRect(); if (r.width === 0) continue
+                  for (const f of [0.1, 0.5, 0.75, 0.95]) { const x = r.left + r.width * f, y = r.top + r.height / 2
+                    if (!pr || x <= pr.left || x >= pr.right || y <= pr.top || y >= pr.bottom) continue
+                    probed++; const e = document.elementFromPoint(x, y)
+                    if (!e || !m.contains(e)) lost.push(b.textContent.trim().slice(0, 20) + '@' + f + '→' + (e ? String(e.className).split(' ')[0] : null)) } }
+                m.style.transform = ''
+                return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
+              press(trig)
+              await settle()
+            }
+          } catch (error) { layer = { error: String(error && error.message || error) } }
+          ok('menu.layer.1 the open View menu paints over the minimap — every row point over the map wins elementFromPoint — and the context-pane shortcut reads ⇧⌘\\ with one backslash',
+            layer !== null && layer.open === true && layer.mapShown === true && layer.overlap > 0 && layer.probed > 0 && layer.lost.length === 0 &&
+              Array.isArray(layer.kbd) && layer.kbd.includes('⇧⌘\\'),
+            JSON.stringify(layer))
+        }
         // Merged view: the mounted View-menu button, then its pressed label and the headers.
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
