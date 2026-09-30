@@ -426,7 +426,12 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // change, never an agent's line or a workflow node's.
   focusTask: 'opens a task\'s focus view — a page, a view',
   beginBrowser: 'opens the palette\'s text mode',
-  toggleFlip: 'a view state — nothing a plan should turn over'
+  toggleFlip: 'a view state — nothing a plan should turn over',
+  // M409 (C5). The palette's Undo/Redo rows — ⌘Z's own step. A plan that
+  // could undo would rewind the person's edits (or its own previous step)
+  // behind their back; the canvas history is the person's.
+  undoCanvas: 'the person\'s ⌘Z, as a palette row — a plan never rewinds their history',
+  redoCanvas: 'the person\'s ⌘⇧Z, as a palette row — a plan never replays their history'
 }
 
 export function verbById(id: string): VerbDef | undefined {

@@ -684,7 +684,9 @@ export function Canvas({
   // would undo/redo against a stale stack the moment two edits landed in the
   // same tick. Destructuring only the setter also keeps `noUnusedLocals`
   // honest instead of manufacturing a read nothing else needs.
-  const [, setHistory] = useState<History<Panel[]>>(() => createHistory(panels))
+  // M409: `undoStack` is read for ONE thing — whether ⌘K's Undo/Redo rows
+  // can run (two booleans, below). Never undo against it, for the reason above.
+  const [undoStack, setHistory] = useState<History<Panel[]>>(() => createHistory(panels))
 
   // Declared before onSpawn (which uses it) rather than grouped with the
   // other undo plumbing below applyHistory needs: applyHistory itself needs
@@ -1983,6 +1985,16 @@ export function Canvas({
   // drive document.execCommand against whatever DOM element happens to be
   // focused (xterm's hidden textarea, most of the time) rather than this
   // history stack.
+  // M409 (C5). The one undo/redo STEP, lifted so ⌘K's Undo/Redo rows run
+  // exactly what edit:undo runs. The guards stay on the IPC path below: they
+  // are about a chord pressed behind an overlay, and a palette row runs as
+  // the palette closes.
+  const undoCanvas = useCallback(() => {
+    setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
+  }, [applyHistory])
+  const redoCanvas = useCallback(() => {
+    setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
+  }, [applyHistory])
   useEffect(() => {
     // Rule 3 again, and this is the sharpest edge of it: Cmd+Z is a menu
     // accelerator on exactly the same footing as Cmd+V, so with the palette
@@ -2000,18 +2012,18 @@ export function Canvas({
       if (shouldIgnoreKeys()) return
       // A draft's ⌘Z undoes its TYPING, never a panel spawn behind it.
       if (serveDraftEdit('undo')) return
-      setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
+      undoCanvas()
     })
     const offRedo = window.canvas.edit.onRedo(() => {
       if (shouldIgnoreKeys()) return
       if (serveDraftEdit('redo')) return
-      setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
+      redoCanvas()
     })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory, shouldIgnoreKeys])
+  }, [undoCanvas, redoCanvas, shouldIgnoreKeys])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same
@@ -7569,7 +7581,7 @@ export function Canvas({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
-    goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
+    goToViewport, cameraBack, cameraForward, undoCanvas, redoCanvas, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
@@ -9782,6 +9794,8 @@ export function Canvas({
             workflowTemplateOf={(panelId) => { const p = panelsRef.current.find((x) => x.rect.id === panelId); return p !== undefined && isWorkflowPanel(p) ? p.workflow.templateId : undefined }}
             bookmarks={bookmarkRows}
             cameraTrail={trail}
+            canUndo={undoStack.past.length > 0}
+            canRedo={undoStack.future.length > 0}
             globalFontSize={globalFontSize}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are

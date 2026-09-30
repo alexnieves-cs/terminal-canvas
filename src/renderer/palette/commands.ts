@@ -51,7 +51,7 @@ import {
   REASON_NO_REPO_MEMORY, REASON_NO_TEMPLATES, REASON_NO_APPROVALS, claudeAvailable,
   backendAvailable
 } from './commands/reasons'
-import { withReason } from './commands/with-reason'
+import { withReason, hiddenAtRestIf } from './commands/with-reason'
 import { creationCommands } from './commands/creation-rows'
 import { buildCredentialRows } from './commands/credential-rows'
 import { buildEnvironmentRows } from './commands/environment-rows'
@@ -123,6 +123,14 @@ export interface PaletteActions {
   zoomToFit(): void
   /** M146. Cmd+0's INITIAL camera — the row that was called `Reset zoom` all along. */
   resetZoom(): void
+  /**
+   * M409 (C5). ⌘Z and ⌘⇧Z as palette rows: "undo" typed into ⌘K found 123
+   * rows and no Undo. The same step the menu's edit:undo runs, without its
+   * shouldIgnoreKeys guard — the palette is closing when a row runs, and
+   * that guard exists for a chord pressed BEHIND an open overlay.
+   */
+  undoCanvas(): void
+  redoCanvas(): void
   /**
    * Task 7 implements the real wiring (main's settings:set, then a reload of
    * the row list from the answer it gives back — never an optimistic local
@@ -534,7 +542,8 @@ export interface PaletteActions {
    */
   /** M180. The agent door: the same executor as the verb line, no destructive step, the caller main resolved. */
   runAgentPlan(line: string, caller?: import("@shared/plan").AgentPlanCaller): Promise<import("@shared/plan").AgentPlanReply>
-  beginRunVerb(): void
+  /** M409. `verb` opens the line prefilled with it, its grammar on the label. */
+  beginRunVerb(verb?: string): void
   /** M97. Start a bounded auto run on a chat; refused by name when one is live. */
   startAuto(id: string, mode: AutoModeId, task?: string): void
   stopAuto(id: string): void
@@ -619,16 +628,24 @@ const INSERT_TERMS = 'insert prompt paste'
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
-  out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
-  out.push({ id: 'deck.edit', title: 'Deck: edit a slide…', subtitle: 'deck-edit <panel> <slide> <markdown> — \\n is a new line', group: 'canvas', searchText: 'deck slides slide edit markdown presentation', run: () => actions.beginRunVerb() })
-  out.push({ id: 'deck.write', title: 'Deck: replace the whole deck…', subtitle: 'deck-write <panel> <markdown>', group: 'canvas', searchText: 'deck slides write replace markdown presentation', run: () => actions.beginRunVerb() })
-  out.push({ id: 'deck.review', title: 'Deck: keep or discard proposed slides…', subtitle: 'deck-review <panel> keep|discard <slides|all>', group: 'canvas', searchText: 'deck slides review keep discard proposal draft', run: () => actions.beginRunVerb() })
-  out.push({ id: 'deck.present', title: 'Deck: present…', subtitle: 'deck-present <panel>', group: 'canvas', searchText: 'deck slides present presentation full screen', run: () => actions.beginRunVerb() })
-  out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'deck-export-pdf <panel>', group: 'canvas', searchText: 'deck slides export pdf print', run: () => actions.beginRunVerb() })
-  out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
+  // M409 (C5). The verb-line rows. Their subtitles WERE the grammar
+  // ("deck-edit <panel> <slide> <markdown>"), nine rows of CLI syntax in the
+  // resting list of a palette whose ⌘K was the first thing a person opened.
+  // They now say what they do in words, rest behind "Run a verb…" (hidden at
+  // rest, found by search), and open the verb line PREFILLED with their verb,
+  // its grammar on the line's own label where the syntax is being typed.
+  // Each keeps its literal `id: '…'`: `closure.v9.1` reads this file as text
+  // for the palette door of every verb (load-bearing, M275).
+  out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'add, tick, delete or move a line, undo or redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', hiddenAtRest: true, run: () => actions.beginRunVerb('checklist-edit') })
+  out.push({ id: 'deck.edit', title: 'Deck: edit a slide…', subtitle: 'replace one slide with Markdown', group: 'canvas', searchText: 'deck slides slide edit markdown presentation', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-edit') })
+  out.push({ id: 'deck.write', title: 'Deck: replace the whole deck…', subtitle: 'the whole file, as Markdown', group: 'canvas', searchText: 'deck slides write replace markdown presentation', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-write') })
+  out.push({ id: 'deck.review', title: 'Deck: keep or discard proposed slides…', subtitle: 'an agent\'s proposed slides, one by one or all', group: 'canvas', searchText: 'deck slides review keep discard proposal draft', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-review') })
+  out.push({ id: 'deck.present', title: 'Deck: present…', subtitle: 'full-window slides', group: 'canvas', searchText: 'deck slides present presentation full screen', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-present') })
+  out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'one page per slide, through a save dialog', group: 'canvas', searchText: 'deck slides export pdf print', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-export-pdf') })
+  out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'send one line to an idle conversation', group: 'canvas', searchText: 'checklist hand task agent teammate send', hiddenAtRest: true, run: () => actions.beginRunVerb('checklist-hand') })
   out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
-  out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'sheet-review <panel> keep|discard <cell, B2:C4 or all>', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', run: () => actions.beginRunVerb() })
-  out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'sheet-edit <panel> <cell> <value or =formula>', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', run: () => actions.beginRunVerb() })
+  out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'an agent\'s draft cells, a range or all', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', hiddenAtRest: true, run: () => actions.beginRunVerb('sheet-review') })
+  out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'a value or a formula', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', hiddenAtRest: true, run: () => actions.beginRunVerb('sheet-edit') })
 
   // --- Panels --------------------------------------------------------------
 
@@ -695,7 +712,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'panel.open-as-chat',
+          id: 'panel.open-as-chat', ...hiddenAtRestIf(ctx.capturedId === null),
           title: 'Open as chat',
           subtitle: target ? (target.title ?? target.label) : 'no panel',
           searchText: 'open as chat conversation front-end claude session transcript',
@@ -713,7 +730,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'chat.replay',
+          id: 'chat.replay', ...hiddenAtRestIf(ctx.capturedId === null),
           title: 'Replay this conversation…',
           subtitle: target ? (target.title ?? target.label) : 'no panel',
           searchText: 'replay rewind history timeline turn files virtual filesystem compare runs side by side conversation chat',
@@ -768,7 +785,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'panel.open-in-terminal',
+          id: 'panel.open-in-terminal', ...hiddenAtRestIf(ctx.capturedId === null),
           title: 'Open in terminal',
           subtitle: target ? (target.title ?? target.label) : 'no panel',
           searchText: 'open in terminal front-end resume claude session',
@@ -819,7 +836,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       const need = ctx.capturedId === null || target === undefined ? REASON_NO_FOCUS : undefined
       const pins = ctx.pinnedCount ?? 0
       const pair = (id: string, title: string, run: (pid: string) => void, reason: string | undefined): void => {
-        out.push(withReason({ id, title, subtitle: target ? (target.title ?? target.label) : 'no panel', group: 'panel', run: () => run(ctx.capturedId!) }, need ?? reason))
+        out.push(withReason({ id, title, subtitle: target ? (target.title ?? target.label) : 'no panel', group: 'panel', ...hiddenAtRestIf(need !== undefined), run: () => run(ctx.capturedId!) }, need ?? reason))
       }
       pair('panel.lock', 'Lock panel', actions.lockPanel, target?.locked === true ? 'already locked — Unlock panel is the row' : undefined)
       pair('panel.unlock', 'Unlock panel', actions.unlockPanel, target?.locked === true ? undefined : 'not locked')
@@ -880,7 +897,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'panel.link',
+          id: 'panel.link', ...hiddenAtRestIf(ctx.capturedId === null),
           title: 'Link this panel to\u2026',
           subtitle: target ? (target.title ?? target.label) : 'no panel',
           group: 'panel',
@@ -902,7 +919,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'panel.toolbox',
+          id: 'panel.toolbox', ...hiddenAtRestIf(ctx.capturedId === null),
           title: target === undefined ? 'Open toolbox' : `Open toolbox for ${displayLabel(target.label)}`,
           subtitle: 'its skills, tools and permissions — add a skill so it loads instructions only when they apply',
           searchText: 'toolbox skills mcp hooks commands subagents permissions what can this agent do',
@@ -925,7 +942,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
     withReason(
       {
-        id: 'panel.review.across',
+        id: 'panel.review.across', ...hiddenAtRestIf(ctx.capturedId === null || target === undefined),
         title: target === undefined ? 'Review every worktree' : `Review every worktree of ${displayLabel(target.label)}'s repository`,
         searchText: 'review worktree worktrees branches across all git',
         group: 'panel',
@@ -945,7 +962,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
       withReason(
         {
-          id: 'panel.review',
+          id: 'panel.review', ...hiddenAtRestIf(ctx.capturedId === null || target === undefined),
           title: target === undefined ? 'Open review' : `Open review of ${displayLabel(target.label)}`,
           searchText: 'review changes diff git what changed',
           group: 'panel',
@@ -1000,7 +1017,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // run; and the save verb, refused by name with nothing selected.
   // M83. The project memory, for the captured panel's repository.
   out.push(withReason({
-    id: 'panel.memory',
+    id: 'panel.memory', ...hiddenAtRestIf(ctx.memoryRoot === undefined || ctx.memoryRoot === ''),
     title: 'Open memory…',
     subtitle: 'what this repository has decided, tried and failed',
     searchText: 'memory project remember decided tried failed notes',
@@ -1012,7 +1029,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // selected panel's, like the note and the memory rows, so the row is
   // disabled by NAME rather than opening a form with nowhere to run.
   out.push(withReason({
-    id: 'panel.watcher',
+    id: 'panel.watcher', ...hiddenAtRestIf(ctx.noteRoot === null || ctx.noteRoot === undefined),
     title: 'Watch…',
     // Brief #19: said as what it gives, not what it is.
     subtitle: 'rerun a check whenever files change, so a review always has a fresh result',
@@ -1096,6 +1113,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       {
         id: 'panel.new-note',
         title: 'New note…',
+        // M409. What tells it from `New Note` (in search): it asks for the name.
+        subtitle: 'choose its filename',
         searchText: 'new note markdown scratch write jot memo notes',
         group: 'spawn',
         run: () => actions.newNote()
@@ -1132,6 +1151,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `chat.sandbox.${backend}`,
+          // M409. The subject is the CLI (or a read-only mode): absent, the row rests in search.
+          ...hiddenAtRestIf(row.sandboxArgs === undefined || !backendAvailable(ctx.presets, backend)),
           // M403 (B8). The launcher's own words lead: "Ask a question" existed
           // only on the launcher, which is gone once a panel exists, and the
           // palette called the same door "New chat (no folder)". Both names
@@ -1151,6 +1172,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `preset.spawn.${preset.id}`,
+          // M409. Not on the PATH: in search and in Manage presets…, not at rest. An UNREAD
+          // preset stays at rest — reading it is a fix the person can act on, beside it.
+          ...hiddenAtRestIf(preset.reviewed !== false && !preset.available),
           title: preset.name,
           subtitle: preset.subtitle,
           searchText: SPAWN_TERMS,
@@ -1186,6 +1210,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `prompt.insert.${prompt.id}`,
+          ...hiddenAtRestIf(ctx.capturedId === null),
           title: prompt.name,
           subtitle,
           searchText: INSERT_TERMS,
@@ -1201,7 +1226,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
     withReason(
       {
-        id: 'prompt.save',
+        id: 'prompt.save', ...hiddenAtRestIf(ctx.capturedId === null),
         title: 'Save selection as prompt',
         group: 'prompt',
         scope: 'prompts',
@@ -1227,6 +1252,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `workspace.switch.${w.id}`,
+          // M409. The one you are in is not a place to go.
+          ...hiddenAtRestIf(w.active),
           // The bare name. The count is transient state, not a name, and
           // `title` feeds `haystack()` unconditionally — so the count lives
           // on `waiting` instead, which the view composes into what it
@@ -1278,14 +1305,27 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   })
   out.push({
     id: 'canvas.zoom-fit',
-    title: 'Zoom to fit',
+    // M409 (C5). Named for what it will frame, in the HUD's own words: "Zoom
+    // to fit", "Fit task" and the HUD's "Fit all" read as three names for one
+    // thing. With a selection it is Fit selection; without one it IS Fit all.
+    // "zoom to fit" stays in searchText, so the old phrase still finds it.
+    title: ctx.selectedIds.length > 0 ? 'Fit selection' : 'Fit all',
     // No ⌘1 hint: that chord runs useViewport's fitAll (every panel), not
     // this selection-aware verb — a hint naming it lied when a selection
     // existed (the Act II critic). The row is the verb's one door.
     subtitle: 'the selected panels, or every panel',
+    searchText: 'fit all selection zoom to fit frame view',
     group: 'canvas',
     run: () => actions.zoomToFit()
   })
+  // M409 (C5). Undo and Redo, which ⌘K did not have ("undo" matched 123 rows
+  // and selected a usage-window setting). The shortcut chips are the menu's.
+  out.push(
+    withReason({ id: 'canvas.undo', title: 'Undo', subtitle: 'the last change to the canvas — a move, a close, a spawn', searchText: 'undo revert back history', group: 'canvas', shortcut: '⌘Z', ...hiddenAtRestIf(ctx.canUndo === false), run: () => actions.undoCanvas() },
+      ctx.canUndo === false ? 'nothing to undo' : undefined),
+    withReason({ id: 'canvas.redo', title: 'Redo', subtitle: 'the change Undo took back', searchText: 'redo again history', group: 'canvas', shortcut: '⌘⇧Z', ...hiddenAtRestIf(ctx.canRedo === false), run: () => actions.redoCanvas() },
+      ctx.canRedo === false ? 'nothing to redo' : undefined)
+  )
   out.push({
     // The row is deliberately NOT hiddenAtRest, unlike every administration
     // row: this is a whole VIEW MODE, and its only other gesture is one
@@ -1446,7 +1486,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     const useSelection = ctx.selectedIds.length >= 2
     const ids = useSelection ? [...ctx.selectedIds] : ctx.panels.map((p) => p.id)
     out.push(withReason({
-      id: 'panel.tidy',
+      id: 'panel.tidy', ...hiddenAtRestIf(ctx.panels.length < 2),
       title: useSelection ? `Tidy the selection (${ctx.selectedIds.length} panels)` : 'Tidy everything',
       subtitle: ctx.merged === true ? REASON_MERGED_READ_ONLY : 'compact without reordering — one undo',
       group: 'panel',
@@ -1489,7 +1529,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           ? REASON_NOT_TERMINAL_OUTPUT
           : (ctx.scrollbackEnabled === false && target.spawned !== true ? REASON_NOTHING_TO_EXPORT : undefined))
     out.push(withReason({
-      id: 'panel.export-text',
+      id: 'panel.export-text', ...hiddenAtRestIf(ctx.capturedId === null || target === undefined),
       title: 'Export panel output…',
       // M112. Honest about both sources now: the durable log (2 MB cap)
       // when scrollback is on and has bytes, else the live buffer (10 000
@@ -1681,11 +1721,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   const trail = ctx.cameraTrail ?? { back: false, forward: false }
   out.push(
     withReason(
-      { id: 'camera.back', title: 'Camera: back', subtitle: '⌘[ — where the camera was before the last jump', searchText: 'camera back previous view undo', group: 'bookmark', run: () => actions.cameraBack() },
+      { id: 'camera.back', ...hiddenAtRestIf(!trail.back), title: 'Camera: back', subtitle: '⌘[ — where the camera was before the last jump', searchText: 'camera back previous view undo', group: 'bookmark', run: () => actions.cameraBack() },
       trail.back ? undefined : 'nothing to go back to'
     ),
     withReason(
-      { id: 'camera.forward', title: 'Camera: forward', subtitle: '⌘] — the jump that was undone', searchText: 'camera forward redo view', group: 'bookmark', run: () => actions.cameraForward() },
+      { id: 'camera.forward', ...hiddenAtRestIf(!trail.forward), title: 'Camera: forward', subtitle: '⌘] — the jump that was undone', searchText: 'camera forward redo view', group: 'bookmark', run: () => actions.cameraForward() },
       trail.forward ? undefined : 'nothing to go forward to'
     )
   )
@@ -1978,7 +2018,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       : (ctx.capturedId === null ? REASON_NO_FOCUS : (held === undefined ? REASON_NOT_IN_GROUP : undefined))
     const name = held === undefined ? '' : ` “${held.label}”`
     out.push(withReason({
-      id: 'group.toggle',
+      id: 'group.toggle', ...hiddenAtRestIf(held === undefined),
       title: held?.collapsed ? `Expand group${name}` : `Card group${name}`,
       subtitle: held?.collapsed ? 'show its panels again' : 'fold its panels to cards — nothing is closed',
       searchText: 'group collapse expand card fold unfold',
@@ -1986,7 +2026,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => { if (held !== undefined) actions.toggleGroup(held.id) }
     }, reason))
     out.push(withReason({
-      id: 'group.remove',
+      id: 'group.remove', ...hiddenAtRestIf(held === undefined),
       title: `Remove group${name}`,
       subtitle: 'the frame goes; its panels stay',
       searchText: 'group remove delete ungroup dissolve',
@@ -1998,7 +2038,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
     withReason(
       {
-        id: 'canvas.group-selection',
+        id: 'canvas.group-selection', ...hiddenAtRestIf(ctx.selectedIds.length < 2),
         title: `Group ${count}…`,
         searchText: 'group selected panels region label',
         group: 'canvas',
@@ -2013,7 +2053,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
     withReason(
       {
-        id: 'canvas.broadcast-input',
+        id: 'canvas.broadcast-input', ...hiddenAtRestIf(!(ctx.broadcastActive || ctx.broadcastReady)),
         title: ctx.broadcastActive ? 'Stop broadcasting input' : `Broadcast input to ${count}`,
         searchText: 'broadcast input type selected terminals agents',
         group: 'canvas',
@@ -2217,22 +2257,22 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     const reason = templateId === undefined ? 'select a workflow panel first' : undefined
     // Six literal ids (closure.v9.1 reads this file as TEXT for each door's row).
     const edit = (verb: 'add' | 'move' | 'set' | 'remove' | 'edge' | 'unedge') => () => { if (templateId !== undefined) actions.beginWorkflowEdit(templateId, verb) }
-    out.push(withReason({ id: 'workflow.add', title: 'Workflow: add node…', subtitle: 'a terminal, chat, pool, orchestrator or collect node in the draft', group: 'canvas', searchText: 'workflow template edit add node diagram', run: edit('add') }, reason))
-    out.push(withReason({ id: 'workflow.move', title: 'Workflow: move node…', subtitle: '<key> <dx> <dy>', group: 'canvas', searchText: 'workflow template edit move node diagram', run: edit('move') }, reason))
-    out.push(withReason({ id: 'workflow.set', title: 'Workflow: set field…', subtitle: '<key> <field> <value>', group: 'canvas', searchText: 'workflow template edit set field node diagram', run: edit('set') }, reason))
-    out.push(withReason({ id: 'workflow.remove', title: 'Workflow: remove node…', subtitle: '<key> — its edges go with it', group: 'canvas', searchText: 'workflow template edit remove node diagram', run: edit('remove') }, reason))
-    out.push(withReason({ id: 'workflow.edge', title: 'Workflow: connect…', subtitle: '<from> <to> <trigger>', group: 'canvas', searchText: 'workflow template edit connect edge diagram', run: edit('edge') }, reason))
-    out.push(withReason({ id: 'workflow.save', title: 'Workflow: save', subtitle: 'write the draft back to the template', group: 'canvas', searchText: 'workflow template save draft revision', run: () => { if (templateId !== undefined) void actions.saveWorkflow(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.add', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: add node…', subtitle: 'a terminal, chat, pool, orchestrator or collect node in the draft', group: 'canvas', searchText: 'workflow template edit add node diagram', run: edit('add') }, reason))
+    out.push(withReason({ id: 'workflow.move', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: move node…', subtitle: 'shift a node by an offset', group: 'canvas', searchText: 'workflow template edit move node diagram', run: edit('move') }, reason))
+    out.push(withReason({ id: 'workflow.set', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: set field…', subtitle: 'change one field of a node', group: 'canvas', searchText: 'workflow template edit set field node diagram', run: edit('set') }, reason))
+    out.push(withReason({ id: 'workflow.remove', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: remove node…', subtitle: 'a node, and its edges with it', group: 'canvas', searchText: 'workflow template edit remove node diagram', run: edit('remove') }, reason))
+    out.push(withReason({ id: 'workflow.edge', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: connect…', subtitle: 'an edge from one node to another, on a trigger', group: 'canvas', searchText: 'workflow template edit connect edge diagram', run: edit('edge') }, reason))
+    out.push(withReason({ id: 'workflow.save', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: save', subtitle: 'write the draft back to the template', group: 'canvas', searchText: 'workflow template save draft revision', run: () => { if (templateId !== undefined) void actions.saveWorkflow(templateId) } }, reason))
     // M184 (the critic, 15f). A built-in's ONLY save is a copy, and it was
     // reachable from the panel alone: `workflow.save` dead-ended at "a
     // built-in workflow saves as a copy" with no door the sentence named.
-    out.push(withReason({ id: 'workflow.copy', title: 'Workflow: save a copy', subtitle: 'keep the diagram under a new name', group: 'canvas', searchText: 'workflow template save copy duplicate built-in', run: () => { if (templateId !== undefined) void actions.saveWorkflowCopy(templateId) } }, reason))
-    out.push(withReason({ id: 'workflow.run', title: 'Workflow: run', subtitle: 'run the shape on the diagram', group: 'canvas', searchText: 'workflow template run diagram start', run: () => { if (templateId !== undefined) actions.runWorkflowNow(templateId) } }, reason))
-    out.push(withReason({ id: 'workflow.stop', title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.copy', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: save a copy', subtitle: 'keep the diagram under a new name', group: 'canvas', searchText: 'workflow template save copy duplicate built-in', run: () => { if (templateId !== undefined) void actions.saveWorkflowCopy(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.run', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: run', subtitle: 'run the shape on the diagram', group: 'canvas', searchText: 'workflow template run diagram start', run: () => { if (templateId !== undefined) actions.runWorkflowNow(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.stop', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
     // M188. Test this node: the selected block, run on its own, with its
     // duration and a named failure — never its neighbours.
-    out.push(withReason({ id: 'node.test', title: 'Test this node', subtitle: 'run the selected block on its own and report what it answered', group: 'canvas', searchText: 'node test run block try execute action fetch', run: () => { if (templateId !== undefined) void actions.testNode(templateId) } }, reason))
-    out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
+    out.push(withReason({ id: 'node.test', ...hiddenAtRestIf(templateId === undefined), title: 'Test this node', subtitle: 'run the selected block on its own and report what it answered', group: 'canvas', searchText: 'node test run block try execute action fetch', run: () => { if (templateId !== undefined) void actions.testNode(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.unedge', ...hiddenAtRestIf(templateId === undefined), title: 'Workflow: disconnect…', subtitle: 'remove the edge between two nodes', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
   const imagePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'image')?.id
   // M202 (D07). The selected work card, for the task review row. Derived the
@@ -2251,9 +2291,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'share.role', title: 'Shared workspace: members and roles…', subtitle: 'who is in, and whether they edit or watch — the owner decides', group: 'canvas', searchText: 'share role member editor viewer remove permission access', run: () => { void actions.proposeShareRole() } })
   // M352. The verb line, like note.tint: the value is typed, and a person's line may raise a cap.
   const chatPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'chat')?.id
-  out.push(withReason({ id: 'agent.cap', title: 'Cap this agent…', subtitle: 'its own spend and context caps — type cap-agent <panel> 5usd,200k (none, or default for the Settings caps)', group: 'canvas', searchText: 'agent cap spend budget cost context tokens limit hold stop dollars', run: () => actions.beginRunVerb() }, chatPanelId === undefined ? 'select an agent conversation first' : undefined))
+  out.push(withReason({ id: 'agent.cap', ...hiddenAtRestIf(chatPanelId === undefined), title: 'Cap this agent…', subtitle: 'its own spend and context caps — or back to the Settings caps', group: 'canvas', searchText: 'agent cap spend budget cost context tokens limit hold stop dollars', run: () => actions.beginRunVerb('cap-agent') }, chatPanelId === undefined ? 'select an agent conversation first' : undefined))
   // M361. Opens the verb line, like cap-agent: the place and the comment are typed.
-  out.push(withReason({ id: 'review.comment', title: 'Comment on a review line…', subtitle: 'a comment pinned to a line of this task\'s diff — type review-comment <panel> path:line <comment>; from an agent it is a proposal', group: 'canvas', searchText: 'review comment line diff note objection reviewer proposal', run: () => actions.beginRunVerb() }, ctx.selectedIds.length === 0 ? 'select a task\'s card, its review or its conversation first' : undefined))
+  out.push(withReason({ id: 'review.comment', ...hiddenAtRestIf(ctx.selectedIds.length === 0), title: 'Comment on a review line…', subtitle: 'a comment pinned to a line of this task\'s diff; from an agent it is a proposal', group: 'canvas', searchText: 'review comment line diff note objection reviewer proposal', run: () => actions.beginRunVerb('review-comment') }, ctx.selectedIds.length === 0 ? 'select a task\'s card, its review or its conversation first' : undefined))
   out.push({ id: 'feedback.open', title: 'Prepare feedback…', subtitle: 'a scrubbed draft in your browser — you read it and send it, this app does not', group: 'canvas', searchText: 'feedback issue bug report problem help github', run: () => { void actions.prepareFeedback() } })
   // M189. The portable file's two rows. Export writes what is on this canvas
   // (pictures only when the person asks, through the verb line); Import makes
@@ -2262,7 +2302,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M251. Present at rest and disabled by name, the image.replace rule: the
   // verb itself refuses a file that is not Markdown, in its own sentence.
   const deckPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'file')?.id
-  out.push(withReason({ id: 'deck.export-pptx', title: 'Deck: export to PowerPoint…', subtitle: 'the selected Markdown file as slides — headings, bullets, pictures and notes; secrets scrubbed and anything left out named', group: 'canvas', searchText: 'deck slides pptx powerpoint keynote export presentation markdown', run: () => { if (deckPanelId !== undefined) void actions.exportDeck(deckPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))) } }, deckPanelId === undefined ? 'select a Markdown file panel first' : undefined))
+  out.push(withReason({ id: 'deck.export-pptx', ...hiddenAtRestIf(deckPanelId === undefined), title: 'Deck: export to PowerPoint…', subtitle: 'the selected Markdown file as slides — headings, bullets, pictures and notes; secrets scrubbed and anything left out named', group: 'canvas', searchText: 'deck slides pptx powerpoint keynote export presentation markdown', run: () => { if (deckPanelId !== undefined) void actions.exportDeck(deckPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))) } }, deckPanelId === undefined ? 'select a Markdown file panel first' : undefined))
   out.push({ id: 'portable.import', title: 'Import a canvas…', subtitle: 'into a new workspace, with nothing started', group: 'canvas', searchText: 'import canvas file open portable load', run: () => { void actions.importCanvas() } })
   // M250. A literal id, for closure.v9.1's text read. The refusal (a docx the
   // converter cannot read, a note already there) lands on the feedback line.
@@ -2275,9 +2315,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // one panel is selected; the action then checks it is a file and says so.
   // Main's own dialog shows the text and asks before anything is sent.
   const oneSelected = ctx.selectedIds.length === 1 ? undefined : 'select the one draft file to publish first'
-  out.push(withReason({ id: 'publish.release', title: 'Publish as a GitHub release…', subtitle: 'the selected draft file becomes a release under the tag you type — you see the text before it is sent', group: 'canvas', searchText: 'publish github release notes tag draft', run: () => actions.beginPublish('release') }, oneSelected))
-  out.push(withReason({ id: 'publish.comment', title: 'Comment on a pull request…', subtitle: 'the selected draft file becomes a comment on the PR you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github comment pull request pr draft', run: () => actions.beginPublish('comment') }, oneSelected))
-  out.push(withReason({ id: 'publish.discussion', title: 'Post a GitHub Discussion…', subtitle: 'the selected draft file becomes a Discussion in the category you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github discussion announcement post draft', run: () => actions.beginPublish('discussion') }, oneSelected))
+  out.push(withReason({ id: 'publish.release', ...hiddenAtRestIf(oneSelected !== undefined), title: 'Publish as a GitHub release…', subtitle: 'the selected draft file becomes a release under the tag you type — you see the text before it is sent', group: 'canvas', searchText: 'publish github release notes tag draft', run: () => actions.beginPublish('release') }, oneSelected))
+  out.push(withReason({ id: 'publish.comment', ...hiddenAtRestIf(oneSelected !== undefined), title: 'Comment on a pull request…', subtitle: 'the selected draft file becomes a comment on the PR you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github comment pull request pr draft', run: () => actions.beginPublish('comment') }, oneSelected))
+  out.push(withReason({ id: 'publish.discussion', ...hiddenAtRestIf(oneSelected !== undefined), title: 'Post a GitHub Discussion…', subtitle: 'the selected draft file becomes a Discussion in the category you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github discussion announcement post draft', run: () => actions.beginPublish('discussion') }, oneSelected))
   out.push({ id: 'pack.import', title: 'Import a pack…', subtitle: 'shows what it holds and needs; nothing is added until you choose Add', group: 'canvas', searchText: 'import pack bundle open discipline library add', run: () => { void actions.importPack() } })
   // M255 (merge). An imported workflow is marked read by the button ON its
   // workflow panel (M252's `onMarkRead`), never by a palette row: M253's
@@ -2305,51 +2345,51 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'shape.add.junction', title: 'Add a junction', subtitle: shapeFormSentence('junction'), group: 'canvas', searchText: 'flowchart shape junction connector point circle merge diagram add', run: () => { actions.addShape('junction') } })
   out.push({ id: 'shape.add.text', title: 'Add diagram text', subtitle: shapeFormSentence('text'), group: 'canvas', searchText: 'flowchart shape text label caption diagram add', run: () => { actions.addShape('text') } })
   const shapeSelected = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'shape')?.id
-  out.push(withReason({ id: 'shape.label', title: 'Edit this shape\'s label', subtitle: 'type on the shape itself — Escape or a click away keeps it', group: 'canvas', searchText: 'flowchart shape label text rename edit', run: () => { actions.editShapeLabel() } }, shapeSelected === undefined ? 'select a shape first' : undefined))
-  out.push(withReason({ id: 'shape.style', title: 'Restyle this shape…', subtitle: 'form, fill, line or text — type shape-style <shape> <field> <value>', group: 'canvas', searchText: 'flowchart shape style form fill line colour stroke', run: () => actions.beginRunVerb() }, shapeSelected === undefined ? 'select a shape first' : undefined))
+  out.push(withReason({ id: 'shape.label', ...hiddenAtRestIf(shapeSelected === undefined), title: 'Edit this shape\'s label', subtitle: 'type on the shape itself — Escape or a click away keeps it', group: 'canvas', searchText: 'flowchart shape label text rename edit', run: () => { actions.editShapeLabel() } }, shapeSelected === undefined ? 'select a shape first' : undefined))
+  out.push(withReason({ id: 'shape.style', ...hiddenAtRestIf(shapeSelected === undefined), title: 'Restyle this shape…', subtitle: 'form, fill, line or text', group: 'canvas', searchText: 'flowchart shape style form fill line colour stroke', run: () => actions.beginRunVerb('shape-style') }, shapeSelected === undefined ? 'select a shape first' : undefined))
   // M389–M391. The arranging and flowchart rows — LITERAL ids (closure.v9.1).
   const many = ctx.selectedIds.length
-  out.push(withReason({ id: 'flowchart.connect', title: 'Connect two objects…', subtitle: 'type connect <from> <to> [label] — or drag from a port', group: 'canvas', searchText: 'flowchart connector connect arrow line link shapes', run: () => actions.beginRunVerb() }, undefined))
-  out.push({ id: 'flowchart.connector.style', title: 'Restyle a connector…', subtitle: 'route, arrows, line, dashed or label — type connector-style <connector> <field> <value>', group: 'canvas', searchText: 'connector line arrow route curved straight elbow dashed label style', run: () => actions.beginRunVerb() })
-  out.push(withReason({ id: 'flowchart.duplicate', title: 'Duplicate', subtitle: 'shapes, notes and pictures — ⌘D', group: 'canvas', searchText: 'duplicate copy clone shape note picture', run: () => { actions.duplicateObjects() } }, many === 0 ? 'select a shape, a note or a picture first' : undefined))
-  out.push(withReason({ id: 'arrange.align.left', title: 'Align left edges', subtitle: 'line the selection up on its leftmost edge', group: 'canvas', searchText: 'align left arrange line up', run: () => { actions.alignObjects('left') } }, many < 2 ? 'select two or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.align.hcentre', title: 'Align centres (horizontally)', subtitle: 'one vertical line through every centre', group: 'canvas', searchText: 'align centre center horizontal arrange', run: () => { actions.alignObjects('hcentre') } }, many < 2 ? 'select two or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.align.right', title: 'Align right edges', subtitle: 'line the selection up on its rightmost edge', group: 'canvas', searchText: 'align right arrange', run: () => { actions.alignObjects('right') } }, many < 2 ? 'select two or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.align.top', title: 'Align top edges', subtitle: 'line the selection up on its topmost edge', group: 'canvas', searchText: 'align top arrange', run: () => { actions.alignObjects('top') } }, many < 2 ? 'select two or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.align.vcentre', title: 'Align middles (vertically)', subtitle: 'one horizontal line through every centre', group: 'canvas', searchText: 'align middle centre vertical arrange', run: () => { actions.alignObjects('vcentre') } }, many < 2 ? 'select two or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.align.bottom', title: 'Align bottom edges', subtitle: 'line the selection up on its lowest edge', group: 'canvas', searchText: 'align bottom arrange', run: () => { actions.alignObjects('bottom') } }, many < 2 ? 'select two or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.distribute.across', title: 'Space evenly across', subtitle: 'equal gaps, left to right; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly horizontal across arrange', run: () => { actions.distributeObjects('across') } }, many < 3 ? 'select three or more objects first' : undefined))
-  out.push(withReason({ id: 'arrange.distribute.down', title: 'Space evenly down', subtitle: 'equal gaps, top to bottom; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly vertical down arrange', run: () => { actions.distributeObjects('down') } }, many < 3 ? 'select three or more objects first' : undefined))
-  out.push(withReason({ id: 'flowchart.layout.down', title: 'Lay out this chart, top to bottom', subtitle: 'the selected chart in ranks, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram vertical down', run: () => { actions.layoutFlowchart('down') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
-  out.push(withReason({ id: 'flowchart.layout.right', title: 'Lay out this chart, left to right', subtitle: 'the selected chart in columns, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram horizontal right', run: () => { actions.layoutFlowchart('right') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
-  out.push(withReason({ id: 'flowchart.plan', title: 'New task from this chart…', subtitle: 'its steps become a task plan — nothing runs until you press Start', group: 'canvas', searchText: 'flowchart plan start work task steps sketch diagram', run: () => { actions.planFromChart() } }, shapeSelected === undefined ? 'select a shape in a chart first' : undefined))
+  out.push(withReason({ id: 'flowchart.connect', title: 'Connect two objects…', subtitle: 'an arrow between two objects — or drag from a port', group: 'canvas', searchText: 'flowchart connector connect arrow line link shapes', run: () => actions.beginRunVerb('connect') }, undefined))
+  out.push({ id: 'flowchart.connector.style', title: 'Restyle a connector…', subtitle: 'route, arrows, line, dashed or label', group: 'canvas', searchText: 'connector line arrow route curved straight elbow dashed label style', run: () => actions.beginRunVerb('connector-style') })
+  out.push(withReason({ id: 'flowchart.duplicate', ...hiddenAtRestIf(many === 0), title: 'Duplicate', subtitle: 'shapes, notes and pictures — ⌘D', group: 'canvas', searchText: 'duplicate copy clone shape note picture', run: () => { actions.duplicateObjects() } }, many === 0 ? 'select a shape, a note or a picture first' : undefined))
+  out.push(withReason({ id: 'arrange.align.left', ...hiddenAtRestIf(many < 2), title: 'Align left edges', subtitle: 'line the selection up on its leftmost edge', group: 'canvas', searchText: 'align left arrange line up', run: () => { actions.alignObjects('left') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.hcentre', ...hiddenAtRestIf(many < 2), title: 'Align centres (horizontally)', subtitle: 'one vertical line through every centre', group: 'canvas', searchText: 'align centre center horizontal arrange', run: () => { actions.alignObjects('hcentre') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.right', ...hiddenAtRestIf(many < 2), title: 'Align right edges', subtitle: 'line the selection up on its rightmost edge', group: 'canvas', searchText: 'align right arrange', run: () => { actions.alignObjects('right') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.top', ...hiddenAtRestIf(many < 2), title: 'Align top edges', subtitle: 'line the selection up on its topmost edge', group: 'canvas', searchText: 'align top arrange', run: () => { actions.alignObjects('top') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.vcentre', ...hiddenAtRestIf(many < 2), title: 'Align middles (vertically)', subtitle: 'one horizontal line through every centre', group: 'canvas', searchText: 'align middle centre vertical arrange', run: () => { actions.alignObjects('vcentre') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.bottom', ...hiddenAtRestIf(many < 2), title: 'Align bottom edges', subtitle: 'line the selection up on its lowest edge', group: 'canvas', searchText: 'align bottom arrange', run: () => { actions.alignObjects('bottom') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.distribute.across', ...hiddenAtRestIf(many < 3), title: 'Space evenly across', subtitle: 'equal gaps, left to right; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly horizontal across arrange', run: () => { actions.distributeObjects('across') } }, many < 3 ? 'select three or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.distribute.down', ...hiddenAtRestIf(many < 3), title: 'Space evenly down', subtitle: 'equal gaps, top to bottom; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly vertical down arrange', run: () => { actions.distributeObjects('down') } }, many < 3 ? 'select three or more objects first' : undefined))
+  out.push(withReason({ id: 'flowchart.layout.down', ...hiddenAtRestIf(shapeSelected === undefined && many < 2), title: 'Lay out this chart, top to bottom', subtitle: 'the selected chart in ranks, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram vertical down', run: () => { actions.layoutFlowchart('down') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
+  out.push(withReason({ id: 'flowchart.layout.right', ...hiddenAtRestIf(shapeSelected === undefined && many < 2), title: 'Lay out this chart, left to right', subtitle: 'the selected chart in columns, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram horizontal right', run: () => { actions.layoutFlowchart('right') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
+  out.push(withReason({ id: 'flowchart.plan', ...hiddenAtRestIf(shapeSelected === undefined), title: 'New task from this chart…', subtitle: 'its steps become a task plan — nothing runs until you press Start', group: 'canvas', searchText: 'flowchart plan start work task steps sketch diagram', run: () => { actions.planFromChart() } }, shapeSelected === undefined ? 'select a shape in a chart first' : undefined))
   out.push({ id: 'flowchart.import', title: 'Import a Mermaid flowchart…', subtitle: 'a .mmd or .md file becomes shapes you can edit — nothing in it runs', group: 'canvas', searchText: 'mermaid import flowchart diagram graph file', run: () => { void actions.importFlowchart() } })
   out.push({ id: 'flowchart.export.mermaid', title: 'Export the diagram as Mermaid…', subtitle: 'the selected chart, or every shape — secrets scrubbed, the count said', group: 'canvas', searchText: 'mermaid export flowchart diagram save text', run: () => { void actions.exportFlowchart('mermaid') } })
   out.push({ id: 'flowchart.export.svg', title: 'Export the diagram as SVG…', subtitle: 'a vector picture of the chart — text only, secrets scrubbed', group: 'canvas', searchText: 'svg export flowchart diagram image vector save', run: () => { void actions.exportFlowchart('svg') } })
   const notePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'note')?.id
-  out.push(withReason({ id: 'note.tint', title: 'Tint this note…', subtitle: 'yellow, blue, green or pink — type note-tint <panel> <tint>', group: 'canvas', searchText: 'note tint colour yellow blue green pink sticky', run: () => actions.beginRunVerb() }, notePanelId === undefined ? 'select a sticky note first' : undefined))
+  out.push(withReason({ id: 'note.tint', ...hiddenAtRestIf(notePanelId === undefined), title: 'Tint this note…', subtitle: 'yellow, blue, green or pink', group: 'canvas', searchText: 'note tint colour yellow blue green pink sticky', run: () => actions.beginRunVerb('note-tint') }, notePanelId === undefined ? 'select a sticky note first' : undefined))
   // M186. The picture rows. `image.add` opens the verb line (a path is what
   // it needs and this app has no second file browser); `image.replace` acts on
   // the SELECTED picture through the system's own chooser, and is disabled by
   // name when the selection is not a picture.
-  out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'type image-add <path> — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb() })
-  out.push(withReason({ id: 'work.review', title: 'Task: review the lane', subtitle: 'open the review for the selected work card\'s lane, beside the task and its conversation', group: 'canvas', searchText: 'task review lane work card changes diff ready handoff', run: () => { if (workPanelId !== undefined) { const r = actions.reviewTask(workPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, workPanelId === undefined ? 'select a work card first' : undefined))
+  out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'from a file — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb('image-add') })
+  out.push(withReason({ id: 'work.review', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: review the lane', subtitle: 'open the review for the selected work card\'s lane, beside the task and its conversation', group: 'canvas', searchText: 'task review lane work card changes diff ready handoff', run: () => { if (workPanelId !== undefined) { const r = actions.reviewTask(workPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, workPanelId === undefined ? 'select a work card first' : undefined))
   // M203 (D08). From a card, or from the one selected panel of a task; the
   // verb itself refuses by name for a panel in no task or in two.
   const taskPanelId = workPanelId ?? (ctx.selectedIds.length === 1 ? ctx.selectedIds[0] : undefined)
-  out.push(withReason({ id: 'task.show', title: 'Task: show this task', subtitle: 'frame the selected card\'s task — or the task the selected panel belongs to; nothing moves', group: 'canvas', searchText: 'task show frame related lane conversation work card find navigate where', run: () => { if (taskPanelId !== undefined) { const r = actions.showTask(taskPanelId); if (r.kind === 'refused' || r.partial === true) actions.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
-  out.push(withReason({ id: 'task.focus', title: 'Task: focus this task', subtitle: 'open the task beside its conversation — changes, checks, review and preview on one page; Esc comes back', group: 'canvas', searchText: 'task focus workspace conversation diff review checks preview open page', run: () => { if (taskPanelId !== undefined) { const r = actions.focusTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
-  out.push(withReason({ id: 'task.related', title: 'Task: show related', subtitle: 'ring the task\'s panels and dim the rest; nothing moves — again to turn it off', group: 'canvas', searchText: 'task related highlight lens dim focus members show', run: () => { if (taskPanelId !== undefined) { const r = actions.showRelated(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'task.show', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: show this task', subtitle: 'frame the selected card\'s task — or the task the selected panel belongs to; nothing moves', group: 'canvas', searchText: 'task show frame related lane conversation work card find navigate where', run: () => { if (taskPanelId !== undefined) { const r = actions.showTask(taskPanelId); if (r.kind === 'refused' || r.partial === true) actions.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'task.focus', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: focus this task', subtitle: 'open the task beside its conversation — changes, checks, review and preview on one page; Esc comes back', group: 'canvas', searchText: 'task focus workspace conversation diff review checks preview open page', run: () => { if (taskPanelId !== undefined) { const r = actions.focusTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'task.related', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: show related', subtitle: 'ring the task\'s panels and dim the rest; nothing moves — again to turn it off', group: 'canvas', searchText: 'task related highlight lens dim focus members show', run: () => { if (taskPanelId !== undefined) { const r = actions.showRelated(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   // M258. Fit task — present at rest; the verb itself refuses by name with no task context.
   out.push({ id: 'task.fit', title: 'Fit task', subtitle: 'frame the active task — the one Show related lit, else the selected panel\'s task', group: 'canvas', searchText: 'fit task frame zoom active lens focus camera', run: () => { const r = actions.fitTask(); if (r.kind === 'refused') actions.say(r.reason) } })
-  out.push(withReason({ id: 'task.arrange', title: 'Task: arrange this task', subtitle: 'compact the task\'s panels in reading order, clear of everything else — one undo', group: 'canvas', searchText: 'task arrange tidy compact layout members gather', run: () => { if (taskPanelId !== undefined) { const r = actions.arrangeTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
-  out.push(withReason({ id: 'image.replace', title: 'Image: replace this picture…', subtitle: 'choose different bytes for the selected picture', group: 'canvas', searchText: 'image replace picture missing repair choose', run: () => { if (imagePanelId !== undefined) void actions.replaceImage(imagePanelId) } }, imagePanelId === undefined ? 'select a picture panel first' : undefined))
+  out.push(withReason({ id: 'task.arrange', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: arrange this task', subtitle: 'compact the task\'s panels in reading order, clear of everything else — one undo', group: 'canvas', searchText: 'task arrange tidy compact layout members gather', run: () => { if (taskPanelId !== undefined) { const r = actions.arrangeTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'image.replace', ...hiddenAtRestIf(imagePanelId === undefined), title: 'Image: replace this picture…', subtitle: 'choose different bytes for the selected picture', group: 'canvas', searchText: 'image replace picture missing repair choose', run: () => { if (imagePanelId !== undefined) void actions.replaceImage(imagePanelId) } }, imagePanelId === undefined ? 'select a picture panel first' : undefined))
   // M185, and M195's fifth. The preview's rows. Every one is PRESENT at rest — the verbs
   // refuse by name against no subject (this repo's rule: a row that
   // disappears is indistinguishable from a feature that was never built) —
   // and the ids are literals `closure.v9.1` reads this file as text for.
   out.push({ id: 'preview.open', title: 'Preview: open the project', subtitle: 'the page a process of the selected panel is serving', group: 'canvas', searchText: 'preview open project port dev server localhost discover', run: () => { void actions.openPreview() } })
-  out.push({ id: 'preview.width', title: 'Preview: set the width…', subtitle: 'phone, tablet, laptop or full — type preview-width <name> on the verb line', group: 'canvas', searchText: 'preview width device phone tablet laptop responsive', run: () => actions.beginRunVerb() })
+  out.push({ id: 'preview.width', title: 'Preview: set the width…', subtitle: 'phone, tablet, laptop or full', group: 'canvas', searchText: 'preview width device phone tablet laptop responsive', run: () => actions.beginRunVerb('preview-width') })
   out.push({ id: 'preview.capture', title: 'Preview: capture the page', subtitle: 'a real picture of the pane, placed as an image on the canvas', group: 'canvas', searchText: 'preview capture screenshot picture image page', run: () => { void actions.capturePreview() } })
   out.push({ id: 'preview.bind', title: 'Preview: bind the source', subtitle: 'the selected panel\'s folder is the work this preview reloads for', group: 'canvas', searchText: 'preview bind source project folder reload own owner', run: () => { const r = actions.bindPreview(); if (r.kind === 'refused') actions.say(r.reason) } })
   out.push({ id: 'preview.dev', title: 'Preview: start the dev server', subtitle: "the project's own dev script, in a terminal you can see and stop", group: 'canvas', searchText: 'preview dev server npm run start serve project', run: () => { void actions.startDevServer() } })
@@ -2382,7 +2422,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     for (const modeId of AUTO_MODE_IDS) {
       const mode = AUTO_MODES[modeId]
       out.push(withReason({
-        id: `panel.auto.${modeId}`,
+        id: `panel.auto.${modeId}`, ...hiddenAtRestIf(need !== undefined),
         title: `Auto: ${mode.label}`,
         subtitle: `${mode.hint} · up to ${mode.turnLimit} turns`,
         // `canvas`, not `panel`: in the panel section `Auto: Harden` outranks a
@@ -2394,7 +2434,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}) — stop it first` : undefined)))
     }
     out.push(withReason({
-      id: 'panel.auto.stop',
+      id: 'panel.auto.stop', ...hiddenAtRestIf(need !== undefined),
       title: 'Stop auto',
       subtitle: live ? `stop the ${target!.auto!.mode} run after this turn` : 'no auto run is live here',
       group: 'canvas',

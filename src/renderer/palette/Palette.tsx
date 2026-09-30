@@ -115,6 +115,13 @@ export interface InputMode {
    * because it holds the CURRENT value, not a rejected one.
    */
   feedback?: true
+  /**
+   * M409 (C5). A standing line under the field: the grammar of the verb the
+   * line was opened on. Not the placeholder, for `feedback`'s reason — the
+   * field starts non-empty (prefilled with the verb), so a placeholder
+   * would never be seen.
+   */
+  hint?: string
   /** M65. Present when kind is 'sheet'. */
   sheet?: SpawnSheetModel
   /** M197. Present when kind is 'start'. */
@@ -148,6 +155,9 @@ export interface PaletteProps {
   /** M56. This workspace's bookmarks and the trail's two ends. */
   bookmarks: readonly { id: string; name: string }[]
   cameraTrail: { back: boolean; forward: boolean }
+  /** M409. Whether the canvas history has a step each way — the Undo/Redo rows' reasons. */
+  canUndo?: boolean
+  canRedo?: boolean
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   /** M92. How many panels are pinned — the pin row's refusal reads it. */
@@ -256,6 +266,8 @@ export function Palette(props: PaletteProps): JSX.Element {
         globalFontSize: props.globalFontSize,
         bookmarks: props.bookmarks,
         cameraTrail: props.cameraTrail,
+        ...(props.canUndo === undefined ? {} : { canUndo: props.canUndo }),
+        ...(props.canRedo === undefined ? {} : { canRedo: props.canRedo }),
         noteRoot: props.noteRoot,
         // M83. The memory row's subject is the captured panel's DIRECTORY;
         // main resolves it to the repository. Without this the row was
@@ -286,7 +298,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         scrollbackEnabled: props.scrollbackEnabled,
         actions: props.actions
       }),
-    [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
+    [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail, props.canUndo, props.canRedo,
      props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, teamAsks, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
@@ -332,6 +344,10 @@ export function Palette(props: PaletteProps): JSX.Element {
   // What the selection was pointing AT last render, so the effect below can
   // follow the command rather than the slot it happened to occupy.
   const prevQueryRef = useRef(query)
+  // M409. Set when the seat effect RE-SEATS (a query or scope change, or the
+  // first seat), read once by the scroll effect. Starts true: opening is the
+  // first seat.
+  const reseatedRef = useRef(true)
   const prevScopeRef = useRef(scope)
 
   // The list shrinks under the selection on every keystroke; re-seat it on a
@@ -389,7 +405,7 @@ export function Palette(props: PaletteProps): JSX.Element {
     prevScopeRef.current = scope
     // A new query or scope is a new list: the held order is spent, so the
     // same query typed again later is ranked afresh rather than frozen stale.
-    if (reseat) setHeld(null)
+    if (reseat) { setHeld(null); reseatedRef.current = true }
     setSelectedId((current) => seatSelection({ rows, query, scope, leaving, reseat, current }))
   }, [rows, query, scope])
 
@@ -414,7 +430,23 @@ export function Palette(props: PaletteProps): JSX.Element {
       pointerSelectRef.current = false
       return
     }
-    selectedRef.current?.scrollIntoView({ block: 'nearest' })
+    const list = listRef.current
+    const row = selectedRef.current
+    // M409 (C5). A SEAT, not a step: the palette opened (or the query or
+    // scope changed) and the selection landed on its best row. 'nearest'
+    // parked that row at the BOTTOM edge, so the list opened scrolled to a
+    // fractional offset with its top row cut in half under the sticky header
+    // (measured on a fresh profile: scrollTop 223.5, the selection 19th). A
+    // seated row inside the first screen leaves the list at its top; one
+    // further down is brought to the top, under its own section header.
+    if (reseatedRef.current && list !== null && row !== null) {
+      reseatedRef.current = false
+      const bottom = row.getBoundingClientRect().bottom - list.getBoundingClientRect().top + list.scrollTop
+      if (bottom <= list.clientHeight) list.scrollTop = 0
+      else row.scrollIntoView({ block: 'start' })
+      return
+    }
+    row?.scrollIntoView({ block: 'nearest' })
   }, [index, rows])
 
   // The bottom fade is a claim ("there is more below") that has to stay
@@ -715,6 +747,7 @@ export function Palette(props: PaletteProps): JSX.Element {
           InputMode for why the placeholder this mode also sets can never be
           the thing that shows this text. */}
       {inputMode?.feedback && <div className="palette__number-error">{inputMode.label}</div>}
+      {inputMode?.hint !== undefined && <div className="palette__line-hint">{inputMode.hint}</div>}
 
       {/* M44. A listbox for a screen reader: each runnable row is an option,
           and the input points at the selected one via aria-activedescendant. */}

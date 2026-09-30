@@ -8,7 +8,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 75000 // measured 2026-09-10 in the Electron tier after M234–M237 (the chromeless checks), two green-but-for-headroom runs: 58.4s chained, 59.6s alone; 1.25x the slower, to the next second. Was 63000, which headroom.1 flagged at 93–95% before any watchdog fired
+const WATCHDOG_MS = 85000 // measured 2026-09-30 (M409): 70.5 s (94%) after palette.scroll.1 added ~1 s under another builder's load, 70.0 s (82%) on the green re-run; 1.2x. Before that: measured 2026-09-10 in the Electron tier after M234–M237 (the chromeless checks), two green-but-for-headroom runs: 58.4s chained, 59.6s alone; 1.25x the slower, to the next second. Was 63000, which headroom.1 flagged at 93–95% before any watchdog fired
 
 const { occupiedWorld, overlapsRect, onScreen, cameraStill, zoomInto, measurePlacement, expectedSpot, storeRect } = require('./lib/place-probe.cjs')
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
@@ -2834,6 +2834,52 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         await closePalette()
       }
 
+      // palette.scroll.1 (M409, C5). The list opened scrolled to a fractional
+      // offset (223.5 px on a fresh profile) with its top row cut in half under
+      // the sticky section header: the seated row was nineteenth, and
+      // scrollIntoView('nearest') parked it at the BOTTOM edge. MEASURED: at
+      // rest a seat inside the first screen leaves scrollTop at 0; and for a
+      // query whose best row seats BELOW the first screen, no row straddles
+      // the sticky header's lower edge and the seated row sits directly under
+      // it — brought to the top, or as near as the list's end allows (a row
+      // in the last screen cannot rise past it). 'nearest' parked it at the BOTTOM, which is
+      // the discriminator: whether a straddle also shows depends on how the
+      // row heights divide the list's (it did on the 1200×800 app). The query is chosen at run time — the first whose
+      // seat is past the first screen — so the check holds on any fixture.
+      {
+        await openPalette()
+        const probe = await wc.executeJavaScript(`(async () => { try {
+          const list = document.querySelector('.palette__list')
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const measure = () => {
+            const lr = list.getBoundingClientRect()
+            const sel = document.querySelector('.palette__row--selected')
+            const head = [...list.querySelectorAll('.palette__section')].find((h) => getComputedStyle(h).position === 'sticky')
+            const hh = head ? head.getBoundingClientRect().height : 0
+            const edge = lr.top + hh
+            const cut = [...list.querySelectorAll('.palette__row')].filter((r) => { const b = r.getBoundingClientRect(); return b.top < edge - 1 && b.bottom > edge + 1 }).map((r) => r.getAttribute('data-command-id'))
+            const sr = sel ? sel.getBoundingClientRect() : null
+            return { scrollTop: list.scrollTop, cut, sel: sel ? sel.getAttribute('data-command-id') : null, selInside: sr !== null && sr.top >= edge - 1 && sr.bottom <= lr.bottom + 1, inFirst: sr !== null && sr.bottom - lr.top + list.scrollTop <= list.clientHeight, topGap: sr === null ? null : Math.round(sr.top - edge), atEnd: list.scrollTop >= list.scrollHeight - list.clientHeight - 1 }
+          }
+          const rest = measure()
+          let deep = null
+          for (const q of ['manage', 'settings', 'credential', 'workspace', 'export', 'teammates', 'check']) {
+            setter.call(input, q); input.dispatchEvent(new Event('input', { bubbles: true }))
+            await new Promise((r) => setTimeout(r, 150))
+            const m = measure()
+            if (m.scrollTop > 0) { deep = { q, ...m }; break }
+          }
+          return { rest, deep }
+        } catch (e) { return { error: String(e) } } })()`)
+        const r = probe.rest, d = probe.deep
+        ok('palette.scroll.1 the palette opens at the top (a seat in the first screen leaves scrollTop 0, the selected row fully visible), and a query seating below the first screen cuts no row under the sticky header',
+          probe.error === undefined && r.sel !== null && r.selInside === true && (!r.inFirst || r.scrollTop === 0) && r.cut.length === 0 &&
+            d !== null && d.selInside === true && d.cut.length === 0 && d.topGap !== null && (Math.abs(d.topGap) <= 2 || d.atEnd === true),
+          JSON.stringify(probe))
+        await closePalette()
+      }
+
       // 49. The drill-in, and its exit. Two halves, and the SECOND is the one
       //     worth writing: Escape inside a scope must pop back to the top
       //     level and leave the palette OPEN. If it closed instead, the
@@ -3986,7 +4032,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
         return found
       }
-      const ranFit = await runRow('Zoom to fit')
+      const ranFit = await runRow('Fit selection')
       const framed = await waitUntil(async () => {
         const vp = await wc.executeJavaScript(`window.__m4aViewport()`)
         const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left && r.top >= host.top && r.right <= host.right && r.bottom <= host.bottom }) })()`)
@@ -3996,7 +4042,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const reset = await waitUntil(async () => { const vp = await wc.executeJavaScript(`window.__m4aViewport()`); return vp.scale === 1 && vp.x === DEFAULT_CAMERA.x && vp.y === DEFAULT_CAMERA.y ? vp : false }, 4000)
       const rectsAfter = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
       const sessionsAfter = (await sessionMap(wc)).size
-      ok('fit.1 Zoom to fit frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
+      ok('fit.1 Fit selection (Zoom to fit before M409) frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
         ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
           rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
         JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))

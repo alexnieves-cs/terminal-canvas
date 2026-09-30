@@ -27,6 +27,8 @@ export type ArrangementActions = Pick<PaletteActions,
   | 'beginRenameBookmark'
   | 'cameraBack'
   | 'cameraForward'
+  | 'undoCanvas'
+  | 'redoCanvas'
   | 'tidyPanels'
   | 'resetCanvas'
   | 'toggleGroup'
@@ -47,7 +49,7 @@ export function arrangementActions(ctx: ActionCtx): ArrangementActions {
     resetViewport, fitAll, fitSelection, selectedIdsRef, goToViewport, cameraBack, worldCentre,
     cameraForward, bookmarksRef, setBookmarks, viewportRef, selectOnly, commitHistory,
     toggleMerged, setPanels, setGroups, setInputMode, setBroadcastInput, setCenterView,
-    toggleFlip
+    toggleFlip, undoCanvas, redoCanvas
   } = ctx
   return ({
     // M146. TWO verbs, two names (backlog #23): `Reset zoom` is Cmd+0's
@@ -56,6 +58,9 @@ export function arrangementActions(ctx: ActionCtx): ArrangementActions {
     // canvas has nothing to fit and resets instead — a verb that did nothing
     // would read as broken.
     resetZoom: () => resetViewport(),
+    // M409 (C5). Canvas's own step, the one edit:undo runs — never a copy.
+    undoCanvas: () => undoCanvas(),
+    redoCanvas: () => redoCanvas(),
     zoomToFit: () => {
       const target = zoomTarget(selectedIdsRef.current, panelsRef.current.map((p) => p.rect))
       if (target.kind === 'selection') fitSelection(target.rects)

@@ -1,5 +1,5 @@
 import type { StateInput } from '@renderer/panels/panel-state'
-import { fuzzyMatch } from './fuzzy'
+import { fuzzyMatch, initialsStart, wordStarts } from './fuzzy'
 
 /**
  * The palette's list model: what a row is, which section it lives in, how a
@@ -237,20 +237,39 @@ export function filterCommands(
       .sort((a, b) => ((a.command.statePriority ?? 99) - (b.command.statePriority ?? 99)) || (a.order - b.order))
       .map((s) => s.command)
   }
-  const scored: Array<{ command: Command; score: number; order: number }> = []
+  const scored: Array<{ command: Command; score: number; order: number; weak: boolean }> = []
   commands.forEach((command, order) => {
     if (scope !== null ? command.scope !== scope : resting && command.hiddenAtRest) return
     const match = matchCommand(query, command)
     // M400. A row the query LEADS to is shown in the first section, Tasks —
     // a copy, so the row keeps its own section everywhere else and the
     // headers stay one-per-section (check 30, `verify:panels:core` 48).
-    if (match !== null) scored.push({ command: scope === null && leadsQuery(query, command) ? { ...command, group: 'task' } : command, score: match, order })
+    if (match !== null) scored.push({ command: scope === null && leadsQuery(query, command) ? { ...command, group: 'task' } : command, score: match, order, weak: isWeakMatch(query, command) })
   })
-  scored.sort((a, b) =>
+  // M409 (C5). At most WEAK_CAP rows that only a scattered subsequence found,
+  // the best of them. Top level only: inside a scope (search, capability) the
+  // query is a TERM the rows were computed for, not a filter over them.
+  const kept = scope === null ? keepBestWeak(scored) : scored
+  kept.sort((a, b) =>
     (sectionIndex(a.command.group) - sectionIndex(b.command.group)) ||
     (b.score - a.score) ||
     (a.order - b.order))
-  return scored.map((s) => s.command)
+  return kept.map((s) => s.command)
+}
+
+/**
+ * M409 (C5). How many rows a subsequence-only match may add. "add a" matched
+ * 174 of 184 rows and "undo" 123, because any row holding those letters in
+ * order anywhere in a long searchText qualified. Five keeps a typo or an
+ * abbreviation findable without burying the rows the words actually name.
+ */
+export const WEAK_CAP = 5
+
+function keepBestWeak<T extends { score: number; order: number; weak: boolean }>(scored: T[]): T[] {
+  const weak = scored.filter((s) => s.weak)
+  if (weak.length <= WEAK_CAP) return scored
+  const best = new Set([...weak].sort((a, b) => (b.score - a.score) || (a.order - b.order)).slice(0, WEAK_CAP))
+  return scored.filter((s) => !s.weak || best.has(s))
 }
 
 /** `state:needs` → `needs`; `state:` → ``; anything else → null. */
@@ -274,8 +293,38 @@ const PATH_SCORE = 1
  * nothing lit in it looks like a mistake.
  */
 const VISIBLE_BONUS = 40
-/** M400. Above any fuzzy score a short query reaches (a word run is ~50, plus VISIBLE_BONUS). */
-const LEAD_BONUS = 200
+/**
+ * M400. Above any score a short query reaches without leading: a word run is
+ * ~50, plus VISIBLE_BONUS, plus M409's best tier (TITLE_WORDS). Raised from
+ * 200 when the tiers landed, so a rival whose title a lead's query starts
+ * ("Preview: start the dev server" for "start") cannot catch the lead.
+ */
+const LEAD_BONUS = 400
+
+/**
+ * M409 (C5). The match tiers, above the fuzzy score and below LEAD_BONUS. A
+ * query whose words START words of the title is what a person meant; one
+ * that starts the title's initials ("np") nearly so; one whose words start
+ * words of the hidden searchText or subtitle is a real answer but less sure.
+ * Anything else was found by a scattered subsequence — WEAK, and capped.
+ */
+const TITLE_WORDS = 150
+const INITIALS = 100
+const HAYSTACK_WORDS = 80
+
+function tierBonus(query: string, command: Command): number {
+  if (query.trim() === '') return 0
+  if (wordStarts(query, command.title)) return TITLE_WORDS
+  if (initialsStart(query, command.title)) return INITIALS
+  if (wordStarts(query, haystack(command))) return HAYSTACK_WORDS
+  return 0
+}
+
+/** M409. Found only by a scattered subsequence: no tier, no lead, not a path hit. */
+export function isWeakMatch(query: string, command: Command): boolean {
+  if (query.trim() === '' || tierBonus(query, command) > 0 || leadsQuery(query, command)) return false
+  return fuzzyMatch(query, haystack(command)) !== null
+}
 
 /**
  * M400. Is the query a prefix of one of the row's `leads`? Case- and outer-space-insensitive.
@@ -293,7 +342,7 @@ export function leadsQuery(query: string, command: Command): boolean {
 
 export function matchCommand(query: string, command: Command): number | null {
   const fuzzy = fuzzyMatch(query, haystack(command))
-  if (fuzzy !== null) return fuzzy.score + (query.trim() !== '' && fuzzyMatch(query, command.title) !== null ? VISIBLE_BONUS : 0) + (leadsQuery(query, command) ? LEAD_BONUS : 0)
+  if (fuzzy !== null) return fuzzy.score + (query.trim() !== '' && fuzzyMatch(query, command.title) !== null ? VISIBLE_BONUS : 0) + tierBonus(query, command) + (leadsQuery(query, command) ? LEAD_BONUS : 0)
   const q = query.trim().toLowerCase()
   if (command.pathText !== undefined && q !== '' && command.pathText.toLowerCase().includes(q)) return PATH_SCORE
   return null

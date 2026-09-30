@@ -53,6 +53,9 @@ export interface PaletteContext {
   /** M56. This workspace's bookmarks, and whether the camera trail can step each way. */
   bookmarks?: readonly { id: string; name: string }[]
   cameraTrail?: { back: boolean; forward: boolean }
+  /** M409. Whether the canvas history can step back / forward; absent reads as yes (the step is a no-op). */
+  canUndo?: boolean
+  canRedo?: boolean
   workspaces: WorkspaceRow[]
   /**
    * Metadata only, from window.canvas.credential.list() — never a token, and
