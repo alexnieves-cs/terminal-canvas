@@ -426,9 +426,9 @@ module.exports = async function (ok, F) {
   const fenceT0 = process.hrtime.bigint()
   const hostileOut = typeof SF === 'function' ? SF(fenceBomb) : null
   const hostileMs = Number(process.hrtime.bigint() - fenceT0) / 1e6
-  ok('flowchart.mermaid.29 stripFence unwraps a ```mermaid or bare ``` fence (blank lines around it allowed) and leaves unfenced or half-fenced text alone; an unclosed fence over 60,000 blank lines answers in under 50ms, unchanged',
+  ok('flowchart.mermaid.29 stripFence unwraps a ```mermaid or bare ``` fence (blank lines around it allowed) and leaves unfenced or half-fenced text alone; an unclosed fence over 60,000 blank lines answers in under 250ms even beside the whole tier (the regex took minutes; alone this is ~6ms), unchanged',
     typeof SF === 'function' && SF('```mermaid\nflowchart TD\nA --> B\n```') === 'flowchart TD\nA --> B' && SF('\n  ```\ngraph LR\n```  \n\n') === 'graph LR' &&
       SF('flowchart TD\nA --> B') === 'flowchart TD\nA --> B' && SF('```mermaid\nflowchart TD') === '```mermaid\nflowchart TD' && SF('```js\nx\n```') === '```js\nx\n```' &&
-      hostileOut === fenceBomb && hostileMs < 50,
+      hostileOut === fenceBomb && hostileMs < 250,
     show({ hostileMs }))
 }

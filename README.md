@@ -1198,6 +1198,7 @@ price of not killing something.
 | M393 | The living flowchart: a shape joined to a terminal, an agent or a work card wears that object's state — the same word the rail says. [Log](docs/build-log/m388-m394-flowcharts.md). |
 | M394 | Sketch → plan: Start work from a drawn chart — its steps become the task's plan in the Start work sheet, nothing runs until a person presses Start, and the chart then shows each step's state. [Log](docs/build-log/m388-m394-flowcharts.md). |
 | M395 | The canvas, remade from evidence: frames that no longer trap what they hold, annotate's strip that works, ink as curves, ⌘ chords from any text field, snapping you can bypass, a host that never scrolls, framing clear of the chrome, a minimap that yields, Create on the HUD, far-tier names you can read, new objects in free space, tidy to the view's shape, motion without overshoot, launcher copy that says what it does. [Log](docs/build-log/m395-canvas-revamp.md). |
+| M396 | Critique, one fix batch, the gate: two boundary critics (the SVG and the Mermaid are built in main after every word crosses the gate whole, main never routes, the file read is one bounded descriptor) and two visual critics (the pill clear of the HUD, far names that clip only at their end, square handles and outset ports, a quieter live chip, a regridded shape inspector, iris retired as a line colour). [Log](docs/build-log/m396-critique-and-gate.md). |
 
 ### What's next — the v10 run (D01–D20)
 

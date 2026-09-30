@@ -343,8 +343,8 @@ module.exports = async function (ok, F) {
     ].map((points) => exp({ format: 'svg', model: { ...MODEL(), connectors: [{ ...MODEL().connectors[0], points }] }, colours: COLOURS, suggestedName: 'bad' })))
     const curved3 = await exp({ format: 'svg', model: { ...MODEL(), connectors: [{ ...MODEL().connectors[0], connector: { id: 'cx1', to: 'b', route: 'curved' }, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }] }, colours: COLOURS, suggestedName: 'bad' })
     const lineCount = (r) => ((r.log.writes[0]?.[1] ?? '').match(/class="connector"|<path[^>]*marker|stroke-linecap/g) ?? []).length
-    ok('flowchart.files.17 main never routes: 2,000 shapes and 6,000 connectors, each sent with every shape as an "obstacle", export in under 2.5s (an A* per connector took minutes); a route is drawn exactly as the points it was sent; a malformed point list (one point, 65, a NaN, a string, a path string, a curve that is not four) costs only that line',
-      huge.result.kind === 'written' && ms < 2500 && (one.log.writes[0]?.[1] ?? '').includes(want) &&
+    ok('flowchart.files.17 main never routes: 2,000 shapes and 6,000 connectors, each sent with every shape as an "obstacle", export in under 10s even with the whole suite tier running beside it (an A* per connector took 69.5s; alone this runs in about 1s); a route is drawn exactly as the points it was sent; a malformed point list (one point, 65, a NaN, a string, a path string, a curve that is not four) costs only that line',
+      huge.result.kind === 'written' && ms < 10_000 && (one.log.writes[0]?.[1] ?? '').includes(want) &&
         [...badPoints, curved3].every((r) => r.result.kind === 'written' && !(r.log.writes[0]?.[1] ?? '').includes('M 0 0 L 9 9')) &&
         [...badPoints, curved3].every((r) => lineCount(r) === lineCount(badPoints[0])),
       JSON.stringify({ ms: Math.round(ms), huge: huge.result.kind, drawn: (one.log.writes[0]?.[1] ?? '').includes(want) }))

@@ -15,15 +15,15 @@ this file, not memory.
 
 | Milestone | What | Status |
 |---|---|---|
-| M388 | Shapes: the `shape` kind — record, reader, a lightweight layer, create verbs through the four doors, label edited in place, resize from every edge, tiers, the 200-shape fixture and the perf work it needs | built (checkpoint); 200-shape fixture owed |
-| M389 | Connectors: a record on the source object, ports, straight / orthogonal / curved, arrow ends, labels in place, drawn from a port (into empty space creates the next shape), mixed edges | built (checkpoint) |
-| M390 | Building fast: the keyboard scheme, object copy/paste, duplicate, align/distribute, spacing guides | built (checkpoint); grid NOT built — see D10 |
-| M391 | Auto-layout (animated) and Mermaid in/out, SVG export through the gate | built (checkpoint) |
+| M388 | Shapes: the `shape` kind — record, reader, a lightweight layer, create verbs through the four doors, label edited in place, resize from every edge, tiers, the 200-shape fixture and the perf work it needs | done; 200-shape fixture measured (below) |
+| M389 | Connectors: a record on the source object, ports, straight / orthogonal / curved, arrow ends, labels in place, drawn from a port (into empty space creates the next shape), mixed edges | done |
+| M390 | Building fast: the keyboard scheme, object copy/paste, duplicate, align/distribute, spacing guides | done; grid NOT built — see D10 |
+| M391 | Auto-layout (animated) and Mermaid in/out, SVG export through the gate | done; two boundary rounds (below) |
 | M392 | Shared flowcharts: shapes and connectors through the Yjs shared canvas | built and MERGED into this branch: `shape`/`connectors` JSON fields (2 KB / 16 KB caps), `panel-content` op = the retitle rule, peer shapes drawn read-only in the ShapeLayer; audit counts it under `edited` (the action set is pinned by the migration's CHECK); a local panel cannot connect TO a teammate's shape (the layout's load prunes a target that is not in the file) |
-| M393 | The living flowchart: a shape connected to a live object shows its state | built (checkpoint); Electron check owed |
+| M393 | The living flowchart: a shape connected to a live object shows its state | done (`verify:panels:flowchart`) |
 | M394 | Sketch → plan: "Start work from this" | built (7c8f9dcb) |
-| M395 | The canvas revamp: the ranked surface changes (below) | part A (objects & input) MERGED; part B (chrome & reading) in flight |
-| M396 | Critique → one fix batch → gate | planned |
+| M395 | The canvas revamp: the ranked surface changes (below) | done; parts A and B merged |
+| M396 | Critique → one fix batch → gate | fix batch done; confirm round, goldens and gate below |
 
 ## Phase 0 — ground truth (2026-09-29)
 
@@ -319,3 +319,9 @@ and layout is the obvious cut if the owner wants it (nothing pins the chunk size
 
 Next: integrate the builders' branches (read every diff), full `npm run shot`, the fresh
 critic on before/after, one fix batch, goldens with the critic's sentences, the full gate.
+
+## Impeccable detector (once, at the end)
+`impeccable detect --json` over the 21 renderer files this run changed: 16 warnings, all in
+`styles.css`, and every one on a line older than this run (`git blame`, each commit an ancestor
+of f7a3247e) — side-tab accents, spring easing, two layout transitions. None introduced here;
+none fixed here (out of scope, and each is a restyle of a shipped surface with its own golden).

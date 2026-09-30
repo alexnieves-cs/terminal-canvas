@@ -92,19 +92,25 @@ const pointsOf = (raw: unknown, route: unknown): { x: number; y: number }[] | nu
 }
 
 /**
- * Every string a model holds, measured BEFORE any is scrubbed: the scrub is a
- * set of regexes over whole strings, and a request past the export's own cap
- * must be refused before main spends that time — and never "fixed" by cutting
- * the strings first (a cut can split a secret the scrubber would have matched:
- * the boundary confirm's finding C).
+ * The words a request carries — ONLY the fields a builder reads (a shape's or
+ * node's text, an arrow's label, a group's name, a live object's title),
+ * measured BEFORE any is scrubbed: the scrub is a set of regexes over whole
+ * strings, so a request past the export's own cap is refused before main
+ * spends that time — and never "fixed" by cutting the strings first (a cut
+ * can split a secret the scrubber would have matched: the boundary confirm's
+ * finding C). Fields no builder reads are never walked, so a payload padded
+ * with them costs nothing to measure.
  */
-function wordsLength(value: unknown, depth = 0): number {
-  if (typeof value === 'string') return value.length
-  if (depth > 4 || value === null || typeof value !== 'object') return 0
+const strLen = (v: unknown): number => (typeof v === 'string' ? v.length : 0)
+const listOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+const field = (v: unknown, key: string): unknown => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>)[key] : undefined)
+function wordsLength(parts: ReadonlyArray<readonly [list: unknown, read: (item: unknown) => unknown]>): number {
   let n = 0
-  for (const v of Array.isArray(value) ? value : Object.values(value as Record<string, unknown>)) {
-    n += wordsLength(v, depth + 1)
-    if (n > FLOWCHART_EXPORT_MAX_CHARS) return n
+  for (const [list, read] of parts) {
+    for (const item of listOf(list)) {
+      n += strLen(read(item))
+      if (n > FLOWCHART_EXPORT_MAX_CHARS) return n
+    }
   }
   return n
 }
@@ -123,7 +129,7 @@ function buildScrubbedMermaid(rawGraph: unknown, gate: (text: string, source: st
   if (g.nodes.length > MAX_SHAPES || (Array.isArray(g.edges) && g.edges.length > MAX_CONNECTORS) || (Array.isArray(g.groups) && g.groups.length > MAX_GROUPS)) {
     return { kind: 'refused', reason: 'the diagram is too large to export — split it into smaller diagrams' }
   }
-  if (wordsLength(g) > FLOWCHART_EXPORT_MAX_CHARS) return tooBig()
+  if (wordsLength([[g.nodes, (n) => field(n, 'text')], [g.edges, (e) => field(e, 'label')], [g.groups, (x) => field(x, 'label')]]) > FLOWCHART_EXPORT_MAX_CHARS) return tooBig()
   let redacted = 0
   const clean = (text: string): string => { const out = gate(text, 'flowchart'); redacted += out.redacted; return out.text }
   const idOf = new Map<string, string>()
@@ -177,7 +183,7 @@ function buildScrubbedSvg(rawModel: unknown, rawColours: unknown, gate: (text: s
   if (m.shapes.length > MAX_SHAPES || (Array.isArray(m.connectors) && m.connectors.length > MAX_CONNECTORS) || (Array.isArray(m.panels) && m.panels.length > MAX_SHAPES)) {
     return { kind: 'refused', reason: 'the diagram is too large to export as a picture — export it as Mermaid' }
   }
-  if (wordsLength(m) > FLOWCHART_EXPORT_MAX_CHARS) return tooBig()
+  if (wordsLength([[m.shapes, (x) => field(field(x, 'shape'), 'text')], [m.connectors, (c) => field(field(c, 'connector'), 'label')], [m.panels, (x) => field(x, 'title')]]) > FLOWCHART_EXPORT_MAX_CHARS) return tooBig()
   let redacted = 0
   const clean = (text: string): string => { const out = gate(text, 'flowchart'); redacted += out.redacted; return out.text }
   const warnings: string[] = []
