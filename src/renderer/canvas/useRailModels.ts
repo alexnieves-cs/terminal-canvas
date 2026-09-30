@@ -48,6 +48,8 @@ export interface RailModelsDeps {
   templateNameOf?: (templateId: string) => string | undefined
   /** M266. Teammate display name by id — chat silhouette leads on the rail and Go-to. */
   teammateNameOf?: (teammateId: string) => string | undefined
+  /** M401 (B2). A panel's settled task outcome by panel id. See buildRailRows. */
+  outcomeOf?: (panelId: string) => string | undefined
   /** M252. The workflow's record by id, for the inspector's reach and read fields. */
   templateOf?: (templateId: string) => import('@shared/templates').PersistedTemplate | undefined
   /** M116. The record itself, for the inspector's five facts. */
@@ -257,7 +259,7 @@ export function useRailModels(deps: RailModelsDeps) {
   // M388. Shapes are not rail rows (ledger D8): a chart is many marks on the
   // canvas, like ink and labels, and 200 rows would bury every agent. They are
   // found on the canvas and through their chart, never one row each.
-  const railBuilt = buildRailRows(displayPanels.filter((p) => !isShapePanel(p)), (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf)
+  const railBuilt = buildRailRows(displayPanels.filter((p) => !isShapePanel(p)), (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf, deps.outcomeOf)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 

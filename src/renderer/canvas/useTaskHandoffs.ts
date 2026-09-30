@@ -92,8 +92,15 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
   const [records, setRecords] = useState<readonly WorktreeListRow[] | null>(null)
   const wanted = workItems.some((i) => i.worktreeId !== undefined)
   const unknown = records === null ? wanted : workItems.some((i) => i.worktreeId !== undefined && !records.some((w) => w.id === i.worktreeId))
+  // M401 (B2). A REFRESH re-reads the list too (token > 0), not only an
+  // unknown record: a lane removed from the review is a record this list
+  // still HOLDS, so "unknown" never fires for it and the task went on
+  // offering to remove a lane that was gone. One IPC per refresh.
+  const refreshedAt = useRef(0)
   useEffect(() => {
-    if (!wanted || !unknown) return
+    if (!wanted) return
+    if (!unknown && token === refreshedAt.current) return
+    refreshedAt.current = token
     let live = true
     void window.canvas.worktree.list()
       .then((rows) => { if (live) setRecords(rows) })

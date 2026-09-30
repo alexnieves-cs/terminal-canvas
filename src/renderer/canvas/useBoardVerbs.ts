@@ -146,7 +146,9 @@ export interface BoardVerbsDeps {
    * this hook, and a ref keeps `taskContextFor`'s identity stable so the
    * review node's memo still holds.
    */
-  startWorkRef: MutableRefObject<{ beginStartWork(opts: { itemId: string }): void } | null>
+  startWorkRef: MutableRefObject<{ beginStartWork(opts: { itemId: string }): void; beginRemoveWorktree(id: string, after?: () => void): void } | null>
+  /** M401 (B2). The canvas's one close path (`onClosePanel`), for an accepted task's Close task. */
+  closePanel: (id: string) => void
 
   /* ---- M204's lens ---- */
   relatedItemId: string | null
@@ -184,8 +186,11 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     viewportRef, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
-    startWorkRef, relatedItemId, setRelatedItemId
+    startWorkRef, relatedItemId, setRelatedItemId, closePanel
   } = deps
+  // M401 (B2). By ref, for startWorkRef's reason: `taskContextFor`'s identity stays stable.
+  const closePanelRef = useRef(closePanel)
+  closePanelRef.current = closePanel
   /**
    * M114. DISPATCH — the one verb. In order, each step refusing by name into
    * the record's `note` and minting nothing when it does: main's `board:lane`
@@ -649,8 +654,14 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined || item.worktreeId === undefined) return undefined
     // The SAME records the handoff was judged against, never a second list.
-    const record = taskLaneOf(itemId)
-    if (record === undefined) return undefined
+    // M401 (B2). An ACCEPTED task keeps its section after its lane is removed
+    // — the review's own Remove lane is what removed it, and the section
+    // vanishing under the press would read as a crash. It has no lane path,
+    // so nothing below is read against one (no watchers, no diff section).
+    const listed = taskLaneOf(itemId)
+    if (listed === undefined && item.merged === undefined) return undefined
+    const laneGone = listed === undefined
+    const record = listed ?? { path: '', root: '', panelId: '' }
     const handoff = taskHandoffOf(itemId)
     if (handoff === undefined) return undefined
     // A CHAT, not merely a panel that exists. `insertIntoComposer` is a
@@ -709,7 +720,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       ...(item.comments === undefined ? {} : { comments: item.comments }),
       // The lane's watchers, by the SAME rule `checksFromWatchers` filters by,
       // so a watcher in a neighbouring lane cannot vouch for this one.
-      watchers: panelsRef.current.filter(isWatcherPanel)
+      watchers: laneGone ? [] : panelsRef.current.filter(isWatcherPanel)
         .filter((p) => p.watch.cwd !== '' && insideDirectory(record.path, p.watch.cwd))
         .map((p) => ({ id: p.rect.id, cwd: p.watch.cwd, command: p.watch.command, args: p.watch.args })),
       onToggleCriterion: (id, criterion, met) => {
@@ -829,6 +840,26 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       // the note says where it went, so the board card carries the outcome.
       onAccepted: (id, merged) => {
         patchWorkItem(id, { state: 'done', merged: { into: merged.into, sha: merged.sha, at: Date.now() } })
+      },
+      // M401 (B2). An accepted task's next steps. Close task is the chat's own
+      // close (the same path its × takes — the session ends, the card keeps
+      // its `lane closed` note); Remove lane is the palette's remove-worktree
+      // confirm, so the refusal a dirty tree earns is said where it always is.
+      // `laneHeld` is the palette row's `attached` rule, read from the panels
+      // on screen now rather than main's last saved layout.
+      laneHeld: !laneGone && panelsRef.current.some((p) => p.rect.id === record.panelId),
+      ...(laneGone ? { laneGone: true } : {}),
+      onCloseTask: (id) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it?.panelId === undefined || !panelsRef.current.some((p) => p.rect.id === it.panelId && isChatPanel(p))) return
+        closePanelRef.current(it.panelId)
+      },
+      onRemoveLane: (id) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it?.worktreeId === undefined) return
+        // The second argument is presets.ts's optional `after`: the handoffs
+        // are re-read once the lane is really gone, so this section says so.
+        startWorkRef.current?.beginRemoveWorktree(it.worktreeId, refreshTaskHandoffs)
       },
       onDraftFollowUp: (id, text) => {
         const it = workItemsRef.current.find((i) => i.id === id)

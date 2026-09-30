@@ -270,6 +270,8 @@ import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
 import { ReopenNotice, useReopenNotice } from '../shell/ReopenNotice'
+import { mergedLine } from '@shared/review-readiness'
+import { reopenTaskDetail, reopenTaskOutcome, type ReopenTask } from '@shared/persistence'
 import { JobRecoveryNotice, useJobRecovery } from '../shell/JobRecoveryNotice'
 import { buildInspectorContext } from '../shell/inspector-context'
 import { useShellChrome, type CenterView } from '../shell/useShellChrome'
@@ -5692,7 +5694,7 @@ export function Canvas({
     viewportRef, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
-    startWorkRef: paletteActionsRef, relatedItemId, setRelatedItemId
+    startWorkRef: paletteActionsRef, relatedItemId, setRelatedItemId, closePanel: onClosePanel
   })
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
@@ -7565,6 +7567,8 @@ export function Canvas({
     workspaceRows, waitingIds, selectedId, globalFontSize,
     // M116. A work card's row speaks its item's state; absent when the board is empty.
     ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) }),
+    // M401 (B2). A merged task's conversation says where its work went.
+    ...(workItems.some((i) => i.merged !== undefined) ? { outcomeOf: (panelId: string) => { const m = workItems.find((i) => i.panelId === panelId && i.merged !== undefined)?.merged; return m === undefined ? undefined : mergedLine(m) } } : {}),
     // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name,
@@ -8153,12 +8157,35 @@ export function Canvas({
   // Brief #20. What came back running, what came back stopped, and what was
   // lost while the app was closed — kept until each is dealt with.
   const presentIds = useMemo(() => new Set(displayPanels.map((p) => p.rect.id)), [displayPanels])
+  // M401 (B7). The TASKS that came back — the same notice, one line per
+  // outcome. Only tasks that existed before this launch (Resume's M315 rule),
+  // and only with a panel to show: the conversation, or else the task's
+  // review. Read from the work items and the handoff the cards already
+  // project, so nothing new is persisted; it re-derives when the lanes are
+  // read, which is after boot.
+  const reopenTasks = useMemo<ReopenTask[]>(() => {
+    const out: ReopenTask[] = []
+    for (const item of workItems) {
+      if (item.createdAt >= APP_OPENED_AT || item.panelId === undefined) continue
+      const chat = displayPanels.find((p) => p.rect.id === item.panelId && isChatPanel(p))
+      const review = displayPanels.find((p) => isReviewPanel(p) && p.subject.workItemId === item.id)
+      const shown = chat ?? review
+      if (shown === undefined) continue
+      const h = taskHandoffOf(item.id)
+      const outcome = reopenTaskOutcome(h?.state, item.merged !== undefined, chat !== undefined)
+      if (outcome === null) continue
+      const detail = reopenTaskDetail(outcome, { ...(item.merged === undefined ? {} : { merged: item.merged }), ...(h === undefined ? {} : { state: h.state, word: h.word }) })
+      out.push({ id: shown.rect.id, label: item.title, outcome, ...(detail === undefined ? {} : { detail }) })
+    }
+    return out
+  }, [workItems, displayPanels, taskHandoffOf, handoffsVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   const reopen = useReopenNotice({
     restored: restoredTerminals,
     liveAtBoot: liveSessionIds,
     present: presentIds,
     dormant: dormantIds,
-    backend: backendInfo?.kind ?? null
+    backend: backendInfo?.kind ?? null,
+    tasks: reopenTasks
   })
 
   // M316. What an interrupted job left — the pool's journal from main, and

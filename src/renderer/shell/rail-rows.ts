@@ -36,6 +36,14 @@ export interface RailRow {
   dormant: boolean
   /** M63. What panelState needs, so the row can apply the agent state itself. */
   state: StateInput
+  /**
+   * M401 (B2). A task's settled OUTCOME, for the conversation that did it —
+   * "merged into main as abc1234". The row shows it in place of the agent's
+   * last line, which after a merge still says "it hasn't been merged". Absent
+   * for every other row, so their shape and signature are unchanged; last in
+   * the literal for railSignature's key-order reason.
+   */
+  outcome?: string
 }
 
 /**
@@ -200,7 +208,9 @@ export function buildRailRows(
   /** M133. Passed through to `railLabel` — see its own parameter. */
   templateNameOf?: (templateId: string) => string | undefined,
   /** M266. Passed through to `railLabel` for chat silhouette leads. */
-  teammateNameOf?: (teammateId: string) => string | undefined
+  teammateNameOf?: (teammateId: string) => string | undefined,
+  /** M401 (B2). A panel's task outcome by panel id — see `RailRow.outcome`. */
+  outcomeOf?: (panelId: string) => string | undefined
 ): RailRow[] {
   return panels.map((panel) => {
     const id = panel.rect.id
@@ -220,7 +230,8 @@ export function buildRailRows(
     const workState = isWorkPanel(panel) && workStateOf !== undefined ? workStateOf(panel.work.itemId) : undefined
     const state: StateInput = { kind: tailKind, status, dormant, ...(workState === undefined ? {} : { work: { state: workState } }) }
     // M92. The marks, absent unless set, so a plain row's shape is unchanged.
-    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
+    const outcome = outcomeOf?.(id)
+    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}), ...(outcome === undefined ? {} : { outcome }) }
   })
 }
 

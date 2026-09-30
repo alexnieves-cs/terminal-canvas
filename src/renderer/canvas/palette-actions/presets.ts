@@ -161,33 +161,48 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       // the toggle row's own title flip.
       void window.canvas.preset.setWorktree(id, on).then(reloadPresets)
     },
-    beginRemoveWorktree: (id) => {
+    // M401 (B2). `after` is optional and outside PaletteActions' declared
+    // shape on purpose: only the review's Remove lane passes it (through
+    // useBoardVerbs' own typing of this ref), to re-read its task once the
+    // lane is really gone. Every other door calls it with the id alone.
+    beginRemoveWorktree: (id: string, after?: () => void) => {
       // Gated, for deletePreset's reason. The question names the BRANCH,
       // because that is what the user would recognise; the path is in the
       // row's subtitle they just read. A dirty tree is refused by git itself
       // and the refusal comes back as a note in the palette's input mode
       // rather than as silence.
       const row = worktreeRows.find((w) => w.id === id)
-      const branch = row?.branch ?? id
-      setInputMode({
-        kind: 'confirm',
-        label: `Remove worktree “${branch}”? Its branch stays; git refuses if the tree is dirty.`,
-        initial: '',
-        submit: () => {
-          void window.canvas.worktree.remove(id).then((result) => {
-            reloadWorktrees()
-            if (result.kind === 'refused' || result.kind === 'failed') {
-              // Shown, never swallowed: a remove that did nothing and said
-              // nothing reads as the row being broken. Input mode is the one
-              // surface the palette already has for a sentence the user must
-              // read; `submit` closes it.
-              setInputMode({ kind: 'confirm', label: `Not removed — ${result.reason}`, initial: '', submit: () => {} })
-              palette.openPalette()
-            }
-          })
-        }
-      })
-      palette.openPalette()
+      // M401 (B2). The review's Remove lane reaches this before ⌘K ever
+      // opened, when `worktreeRows` (read only when the palette opens) is
+      // still empty — so an unknown id is looked up once rather than asked
+      // about by its opaque id.
+      if (row === undefined) {
+        void window.canvas.worktree.list().then((rows) => ask(rows.find((w) => w.id === id)?.branch ?? id), () => ask(id))
+        return
+      }
+      ask(row.branch)
+      function ask(branch: string): void {
+        setInputMode({
+          kind: 'confirm',
+          label: `Remove worktree “${branch}”? Its branch stays; git refuses if the tree is dirty.`,
+          initial: '',
+          submit: () => {
+            void window.canvas.worktree.remove(id).then((result) => {
+              reloadWorktrees()
+              if (result.kind === 'removed') after?.()
+              if (result.kind === 'refused' || result.kind === 'failed') {
+                // Shown, never swallowed: a remove that did nothing and said
+                // nothing reads as the row being broken. Input mode is the one
+                // surface the palette already has for a sentence the user must
+                // read; `submit` closes it.
+                setInputMode({ kind: 'confirm', label: `Not removed — ${result.reason}`, initial: '', submit: () => {} })
+                palette.openPalette()
+              }
+            })
+          }
+        })
+        palette.openPalette()
+      }
     },
     revealWorktree: (id) => {
       void window.canvas.worktree.reveal(id)

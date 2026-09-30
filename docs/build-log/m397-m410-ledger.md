@@ -323,3 +323,107 @@ any first-run launcher scene (the tip's button and sentence); `palette` scenes o
 watchdog — `starter.1` green, **a baseline red retired**. `verify:canvas` 7/7, `verify:palette` 167/167,
 `verify:file` 115/115, `verify:rail` 258/258, `verify:meta` green after the audit rows. `verify:panels:product` crashed its renderer (exit 5) with the first A10 cut in three runs out of three (see A10),
 and never without it.
+
+### M401 — a merged task looks done, one notion of reviewed, the return covers tasks (B2, B9, B7)
+
+Built by a builder in worktree `tc-m401-review` (branch `m401-review` off `f5e642c9`), app on slot 2 (CDP 9220).
+B3, listed beside B2/B9 in the plan table, was not in this builder's brief and is not touched here.
+**Reproduction fixture (no real agent):** a throwaway repo under `/tmp/m401-fixture` with a REAL linked worktree on
+branch `tc/m401-greeting` holding one commit; `merged` mode merges that branch into `main` with `--no-ff`, `ready`
+mode leaves it unmerged. `/tmp/tcc-2/layout.json` is seeded with a chat panel in the lane, a work card, the worktree
+record and the work item (`merged` + an old `reviewed` mark, or neither), and the chat's transcript file gets a
+plaintext assistant turn ending "It hasn't been pushed or merged." — main's transcript reader takes plaintext lines.
+The Review is then opened through the card's real Review verb. The state is exactly what M315's Accept leaves, and
+the fix was also driven through a LIVE Accept → Merge on the `ready` fixture (`B2-after-live-accept.png`: the row
+flips to Close task / Remove lane and the navigator line to "merged into main as aa091d6" the moment Merge lands).
+Screenshots: `/tmp/tc-daily-loop-shots/B2-*`, `B7-*`, `B9-*`.
+
+**B2 (P2), a merged task never looks done.** *Reproduced:* the accepted review showed `Mark reviewed again` and
+`Accept…` (both disabled, both titled with the accepted detail), `Continue the conversation`, and nothing about
+what comes next; the navigator's chat row read "It hasn't been pushed or merged." (`B2-before.png`). *Cause:* a
+projection gap, as the prompt says. `review-readiness` already returns `accepted`; the review's decision row only
+disabled its verbs, and the rail row's second line is the chat's last assistant line with no task context.
+*Fix:* (1) The accepted decision row swaps its verbs for the two next steps (FocusTask's accepted arm already
+dropped them): **Close task…** — a two-press arm with its own sentence ("Its agent stops and its panel closes; the
+branch, the lane and this review stay."), then the canvas's ordinary `onClosePanel` for the chat; **Remove lane…** —
+the palette's own remove-worktree confirm (`beginRemoveWorktree`, so a dirty tree is refused where it always is).
+Remove lane is PRESENT and disabled while a panel still owns the lane, titled with the palette row's own
+`REASON_WORKTREE_ATTACHED`; closing the task lights it. (2) `mergedLine()` in `review-readiness.ts` is the one
+spelling of "merged into main as <sha7>"; the navigator row (`RailRow.outcome`, built by `buildRailRows`' new
+optional `outcomeOf`, appended last in the literal for `railSignature`'s key-order reason) shows it in place of the
+last line for the merged task's conversation. The last-line store is untouched. (3) After the lane is removed the
+accepted detail stops promising it ("…; its lane has been removed"): an accepted task's section is undefined exactly
+when its record is gone. `taskContextFor` keeps an ACCEPTED task's section after its record goes (lane path `''`,
+no watchers, `laneGone`), because the section vanishing under the person's own press read as a crash; Remove lane
+then reads disabled "the lane was removed — its branch stays in the repository". (4) Two things found while driving
+it: `useTaskHandoffs` only re-read the worktree list for a record it did not hold, so a removed lane stayed "held"
+forever — a refresh (token) now re-reads it too, one IPC per refresh; and closing a merged task's conversation
+retains an outcome, after which **"Resume work … open blocker — lane closed"** appeared for work that had landed
+(`B2-resume-bug.png`, taken before this fix) — `pickResumeSubject` now skips a DONE item's retained
+outcome. (5) `beginRemoveWorktree` looks the branch up when `worktreeRows` (read only when ⌘K opens) doesn't hold
+it, so the confirm names `tc/m401-greeting`, not the opaque id; its optional `after` callback (outside
+`PaletteActions`' declared shape, typed only on useBoardVerbs' ref, commented at both ends — `commands.ts` is the
+B1 builder's file and was left alone) re-reads the handoffs once the lane is really gone.
+*Decision — ACCEPTED IS TERMINAL for "present at rest, disabled by name, never absent".* That rule (the comment over
+Mark reviewed/Accept) exists so a person can see what they must do before a verb lights. After the merge nothing will
+ever light Accept or Mark reviewed, so a disabled pair is noise that reads as "not done yet". The rule applies to a
+task not yet accepted; the accepted row's own doors (Close task, Remove lane) keep it: each is present and disabled
+by name when it cannot run. *Checks:* `verify:panels:product review.accepted.1` (real lane merged into main, real
+card Review press): exactly `close-task,remove-lane`, Remove lane disabled with the palette's reason, the chat's
+rail row reads `merged into main as <sha7>` with `data-rail-outcome`, and Close task confirmed removes the chat and
+enables Remove lane. `verify:review accepted.lane.1` (the detail with and without the lane; `mergedLine`),
+`verify:rail rail.outcome.1` (the outcome rides only its row, moves the signature, absent = byte-identical),
+`verify:rail resume.done.1`. `accepted.1` and `fr.flagship.1` stay green.
+
+**B9 (P2), two notions of "reviewed".** *Reproduced* on the `ready` fixture with a real Mark reviewed press:
+"you reviewed these change and the lane has not moved since" (the typo), "you reviewed 1 file here" beside
+"0 of 1 marked seen this session", and "agent finished — not verified / no check has run on this revision" with
+nothing saying why (`B9-before.png`). *Cause:* the footer tally counted only the session's ephemeral marks
+(`locallyReviewed`) while the decision row spoke the persisted whole-task mark, and the verdict never said that
+only a check THIS CANVAS watched exit counts (readiness.4 keeps the agent's own runs apart, correctly). *Fix:* ONE
+state per file. A file the task's CURRENT mark covers is `reviewed` (its check mark titled "recorded by Mark
+reviewed", and the session "mark seen" toggle is not offered for it); otherwise the session's `seen`. The tally
+counts that same state — "1 of 1 seen" — so it can never contradict the mark. A stale or unknown mark, or an
+accepted task, covers nothing. The typo is fixed ("this change" / "these changes"). Under a verdict that is not
+`verified`, one line says what verified asks for — "Verified means you reviewed this revision, a check this canvas
+ran passed on it, and nothing is left open. Tests the agent ran itself are its account, not a check this canvas
+saw." — with a **Run checks…** verb (when the canvas can run one and nothing passed) that opens the ONE Run checks
+form below and scrolls it into view (`B9-after.png`, `B9-after-run-checks.png`). `verificationOf`'s words are
+unchanged (pinned by `review-comment.4`, `prBody`, orchestration). *Check:* `verify:review reviewed.copy.1` (number
+agreement, never "these change"). The per-file state and the footer copy have no DOM check: no suite selected the
+footer or the seen toggle before this, and a P2 copy-and-state change was not worth a fourth Electron seed; say so.
+
+**B7 (P2), the return covers only terminals.** *Reproduced:* the `merged` fixture launched, stopped (main records
+last-exit on SIGTERM) and relaunched on the pre-fix build shows no notice at all (`B7-before.png`) — main's record
+lists pty ids only, so a chat + review task gets nothing. *Fix:* the EXISTING notice, extended: `reopenTaskLines`
+(`shared/persistence.ts`) adds one `task` line per outcome — needs you (ready / shared / blocked), finished (merged),
+asleep (working/empty with its conversation on the canvas) — after the terminal lines, `info` tone (Got it clears
+it), each with a **show** per task (up to three) that goes to its conversation, or else its review. Tasks are those
+created before this launch (Resume's M315 rule) with a panel to show; the list is live because a task's outcome
+needs its lane read, which lands after boot. The notice still appears only when main has a last-exit record, so a
+harness mount moves nothing. No persisted key was added. (`B7-after.png`: "“Add a greeting file” finished — merged
+into main as cb60bae · show".) The outcome and detail rules live in shared (`reopenTaskOutcome`,
+`reopenTaskDetail`), because `verify:rail state.2` forbids a state word as a display literal in Canvas. *Check:*
+`verify:layout reopen.task.1`. persist.1–5 unchanged and green.
+
+**Noticed, not fixed (outside the IDs):** in `B7-after.png` the command pill ("1 selected") overlaps the reopen
+notice's Got it at 1200×800. The accepted review still shows the follow-up/recipe blocks, which say nothing wrong.
+
+**Goldens expected to move:** any scene with a review node's footer — the tally now reads "N of M seen" (`kinds`,
+`kinds-dark`, `across`, `header`); any scene whose review verdict is not verified gains the "Verified means" line.
+No scene seeds an accepted task or a reopen record, so B2's row and B7's lines move no golden; `navigator-panels`
+only if its fixture has a merged item (it does not, as read).
+
+**Suites (M401), all with `TC_VERIFY_SUFFIX=m401` under the shared lock, app stopped.** Plain tier all green:
+`verify:review` (incl. `accepted.1`, `accepted.lane.1`, `reviewed.copy.1`, `review-comment.4`, `readiness.4`),
+`verify:rail` 260/260 (after moving the reopen outcome rules into shared — `state.2` caught a state word spelled in
+Canvas), `verify:layout` 284/284, `verify:first-run`, `verify:orchestration`. `npm run affected` (56 suites): 53
+passed. `verify:panels:product` green including `review.accepted.1`, 181.8 s of 230 s (79%). The three reds —
+`panels:shell` (`106`, plus one of `98`/`98b`/`126`/`127` per run, headroom 90–98%), `panels:agents` (`attention.1`,
+`template.1`, headroom 99–100%) and `panels:flowchart` (`flowchart.app.10`) — were each re-run alone and then run
+on the BASELINE build (this commit stashed, same worktree, same machine, load 4.6–7): the baseline is red on the same
+checks (`shell` 106/126/127 in two runs of two, `agents` attention.1 + template.1, `flowchart.app.10`). So none is
+M401's; `attention.1`, `shell 106/126/127` and `flowchart.app.10` are NOT in the M396 baseline list and look
+environmental on this machine today (the M399 run was green on them) — the lead's gate should re-measure them. Two
+earlier product runs (mine and the baseline's) went red on `work.action.1`/`review.task.2` with "no-panel" at load
+8–14 and green on the third; recorded, not diagnosed.

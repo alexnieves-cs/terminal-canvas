@@ -5279,6 +5279,34 @@ try {
       f(null, true).quit === '' && f(null, true).closeWindow === '' && f('tmux', true).closePanel === P.CLOSE_PANEL_FACT,
       JSON.stringify([f('tmux', true), f('direct', false)]))
   } catch (e) { ok('persist.4 (threw)', false, String(e)) }
+  // M401 (B7). reopen.task.1 — the return covers TASK-shaped work: a merged
+  // task is finished, a lane ready to review or blocked needs you, a stopped
+  // conversation is asleep, and a task with no lane says nothing. One line
+  // per outcome, needs-you first, each naming the panels "show" goes to, and
+  // every task line is news ("Got it" clears it), never a problem.
+  try {
+    const o = P.reopenTaskOutcome
+    const outcomes = [o('ready', false), o('blocked', false), o('shared', false), o('accepted', true), o(undefined, true), o('working', false), o('empty', false), o('no-lane', false), o('lane-missing', false), o(undefined, false)]
+    const one = P.reopenTaskLines([{ id: 'c1', label: 'Add a greeting', outcome: 'finished', detail: 'merged into main as ef90985' }])
+    const mixed = P.reopenTaskLines([
+      { id: 'c1', label: 'A', outcome: 'asleep' }, { id: 'c2', label: 'B', outcome: 'finished' },
+      { id: 'c3', label: 'C', outcome: 'needs-you', detail: 'ready to review' }, { id: 'c4', label: 'D', outcome: 'needs-you' }
+    ])
+    ok('reopen.task.1 a task comes back finished, needing you or asleep from its own handoff, one line per outcome with needs-you first, every line info with the panels to show',
+      outcomes.join() === 'needs-you,needs-you,needs-you,finished,finished,asleep,asleep,,,' &&
+        one.length === 1 && one[0].group === 'task' && one[0].tone === 'info' && one[0].outcome === 'finished' &&
+        one[0].text === '“Add a greeting” finished — merged into main as ef90985' && one[0].panels[0].id === 'c1' &&
+        mixed.map((l) => l.outcome).join() === 'needs-you,finished,asleep' &&
+        mixed[0].text === '“C” and “D” need you' && mixed[0].panels.map((p) => p.id).join() === 'c3,c4' &&
+        /“A” is asleep/.test(mixed[2].text) && mixed.every((l) => l.tone === 'info') &&
+        P.reopenTaskLines([]).length === 0 &&
+        // Asleep needs the conversation on the canvas; the detail is the shared merge sentence.
+        P.reopenTaskOutcome('working', false, false) === null && P.reopenTaskOutcome('ready', false, false) === 'needs-you' &&
+        P.reopenTaskDetail('finished', { merged: { into: 'main', sha: 'ef90985abc' } }) === 'merged into main as ef90985' &&
+        P.reopenTaskDetail('needs-you', { state: 'blocked', word: 'needs you' }) === 'it is waiting on an answer' &&
+        P.reopenTaskDetail('needs-you', { state: 'ready', word: 'ready to review' }) === 'ready to review',
+      JSON.stringify({ outcomes, one, mixed }))
+  } catch (e) { ok('reopen.task.1 (threw)', false, String(e)) }
   try {
     const { mkdtempSync, existsSync } = require('node:fs')
     const { tmpdir } = require('node:os')
