@@ -1439,7 +1439,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const noneArm = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const a = p ? p.querySelector('[data-file-backlinks-arm="none"]') : null; return a ? a.textContent : false })()`), 8000)
         const markedRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="meetings/2026-09-04.md"]'); return r && r.classList.contains('rail-row--selected') ? true : false })()`), 6000)
         ok(IDS[0],
-          unset && /no vault folder yet/.test(unset.text) && unset.verb === true &&
+          unset && /no notes folder yet/.test(unset.text) && unset.verb === true &&
             typeof noneArm === 'string' && /no note points here/.test(noneArm) && markedRow === true &&
             Array.isArray(listed) && listed.some((r) => r.path === 'design.md' && r.title === 'The design') && clickedNote.ok === true && clickedLink === true &&
             listed.some((r) => r.path === 'meetings/2026-09-04.md' && r.title === 'Standup') &&
@@ -6083,7 +6083,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       return { dock, seg: painted(document.querySelector('[data-seg="orchestration"]')), crumb: painted(document.querySelector('[data-crumb="workspace"]')),
         chevron: !!document.querySelector('[data-crumb="workspace"] svg'), dockClaims: claims } })()`)
     const found = {}
-    for (const [q, want] of [['Show Orchestrate', 'Show Orchestrate'], ['Manage workspaces', 'Manage workspaces…']]) {
+    for (const [q, want] of [['Open Orchestrate', 'Open Orchestrate'], ['Manage workspaces', 'Manage workspaces…']]) {
       await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
       await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(q)}); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
@@ -6093,7 +6093,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await settle()
     }
     ok('dock.dup.1 the dock has no Orchestrate or Workspaces button; the top bar\'s segment and switcher crumb are painted, their palette rows are found, and no dock button claims ⌘\\',
-      !dup.dock.includes('orchestration') && !dup.dock.includes('workspaces') && dup.seg && dup.crumb && dup.chevron && dup.dockClaims.length === 0 && found['Show Orchestrate'] && found['Manage workspaces'],
+      !dup.dock.includes('orchestration') && !dup.dock.includes('workspaces') && dup.seg && dup.crumb && dup.chevron && dup.dockClaims.length === 0 && found['Open Orchestrate'] && found['Manage workspaces'],
       JSON.stringify({ dup, found }))
 
     // team.segment.1 (signed-out half). No People segment at rest; the

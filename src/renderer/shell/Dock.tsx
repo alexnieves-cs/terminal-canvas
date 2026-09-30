@@ -85,7 +85,7 @@ export interface DockProps {
  *
  * M268. Orchestrate is a CENTER PAGE, not a navigator pane. M404 (C2) took
  * its dock button out: the top bar's center segment is its one chrome door
- * (and ⌘K's "Show Orchestrate"). `centerView` is still read here so Panels
+ * (and ⌘K's "Open Orchestrate"). `centerView` is still read here so Panels
  * is pressed only while the canvas shows.
  *
  * Attention is NOT a pane. It is a count badge on its icon, always visible —
@@ -216,7 +216,7 @@ function DockImpl({
       { id: 'panels', label: 'Panels', icon: <Grid /> },
       // M404 (C2). Workspaces and Orchestrate are gone from the dock: the top
       // bar's workspace crumb (a switcher) and its center segment are their
-      // doors, and "Manage workspaces…" / "Show Orchestrate" stay in ⌘K. A
+      // doors, and "Manage workspaces…" / "Open Orchestrate" stay in ⌘K. A
       // second button for the same place is a second thing to learn.
       // M404 (C1). "Board", the pane's own title: "Tasks" is the noun of
       // New task and of Orchestrate's list, and this pane is the GitHub/Jira board.

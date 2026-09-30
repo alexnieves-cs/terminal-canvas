@@ -52,7 +52,7 @@ export function readVault(root: string, options: { maxFiles?: number; maxBytes?:
   const maxBytes = options.maxBytes ?? VAULT_MAX_BYTES
   let isDir = false
   try { isDir = statSync(root).isDirectory() } catch { isDir = false }
-  if (!isDir) return { root, notes: [], skipped: 0, reason: `there is no vault at ${root} — choose a folder that exists` }
+  if (!isDir) return { root, notes: [], skipped: 0, reason: `there is no notes folder at ${root} — choose a folder that exists` }
 
   const notes: VaultNote[] = []
   let skipped = 0

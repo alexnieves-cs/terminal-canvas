@@ -77,8 +77,8 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
           <button
             type="button"
             className="shell__region-add icon-button"
-            title="Read the vault again"
-            aria-label="Refresh the vault"
+            title="Read the notes folder again"
+            aria-label="Refresh Notes"
             data-vault-refresh
             disabled={props.root === ''}
             {...shellControl(props.onRefresh)}
@@ -146,7 +146,7 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
             ))}
           </ul>
           {props.skipped > 0 && (
-            <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read — the vault is over the cap</p>
+            <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read — the notes folder is over the cap</p>
           )}
           {/* M150. TAGS, under the notes: one row per tag with its count. No
               section at all when the vault has none — absence, never a

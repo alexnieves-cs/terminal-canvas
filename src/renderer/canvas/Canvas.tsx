@@ -8413,6 +8413,8 @@ export function Canvas({
         onToggleMerged={toggleMerged}
         contextOpen={chrome.ctxVisible}
         onToggleContext={chrome.toggleContext}
+        navigatorOpen={chrome.navVisible}
+        onToggleNavigator={chrome.toggleNavigator}
         inspectorPinned={inspectorPinned}
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}

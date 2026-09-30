@@ -5339,6 +5339,27 @@ try {
     JSON.stringify(back.filter((p) => p.kind === 'relay')))
 }
 
+{
+  // M404 (critic). A FRESH layout's first workspace is "Workspace" — the
+  // switcher crumb then says what it switches. Everything that loads a file
+  // that already existed keeps its name exactly: a stored name as written, an
+  // absent name as the 'Canvas' it always loaded as, and the no-usable-
+  // workspace repair as 'Canvas'. No saved file changes meaning.
+  const fresh = L.defaultSnapshot().workspaces[0].name
+  // The store on a path with no file is the real first launch.
+  const storeName = (L.createLayoutStore({ filePath: tmp() }).workspaces()[0] || {}).name
+  const load = (ws) => L.parseLayout(JSON.stringify({ version: L.LAYOUT_VERSION, activeWorkspaceId: 'w1', workspaces: [ws] })).snapshot.workspaces[0].name
+  const base = { id: 'w1', panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  const stored = load({ ...base, name: 'Canvas' })
+  const absent = load(base)
+  const other = load({ ...base, name: 'auth refactor' })
+  const repaired = L.parseLayout(JSON.stringify({ version: L.LAYOUT_VERSION, workspaces: [] })).snapshot.workspaces[0].name
+  ok('workspace.default.1 a fresh layout names its workspace "Workspace"; a stored "Canvas", an absent name and the no-workspace repair all load as \'Canvas\', a stored name as written',
+    fresh === 'Workspace' && L.FRESH_WORKSPACE_NAME === 'Workspace' && storeName === 'Workspace' &&
+      stored === 'Canvas' && absent === 'Canvas' && other === 'auth refactor' && repaired === 'Canvas',
+    JSON.stringify({ fresh, storeName, stored, absent, other, repaired }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

@@ -121,7 +121,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
       const initial = typeof current?.value === 'string' ? current.value : ''
       setInputMode({
         kind: 'text',
-        label: 'Vault folder — a folder; `none` clears it',
+        label: 'Notes folder — a folder; `none` clears it',
         initial,
         submit: (value) => {
           // Blank is CANCEL, as on every other text line in this app; `none`

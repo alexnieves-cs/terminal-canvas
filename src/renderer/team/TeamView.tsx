@@ -103,7 +103,7 @@ export function TeamView({ accounts }: { accounts?: Accounts }): JSX.Element {
   const signedOut = accounts !== undefined && accounts.sessions.length === 0
   const unconfigured = accounts?.status?.configured === false ? accounts.status.reason : null
   return (
-    <section className="team" data-team-view aria-label="Team">
+    <section className="team" data-team-view aria-label="People">
       <header className="team__head">
         <h2 className="team__title">People</h2>
         {ok !== null && ok.orgs.length > 1 ? (
@@ -126,7 +126,7 @@ export function TeamView({ accounts }: { accounts?: Accounts }): JSX.Element {
         </div>
       ) : tiles.length === 0 ? (
         <p className="team__empty" data-team-empty>
-          {list === null ? 'Reading your team…' : ok !== null ? 'Nobody else is in this organization yet. `tc invite` makes a code to share.' : 'No teammates are on a shared workspace right now.'}
+          {list === null ? 'Reading your team…' : ok !== null ? 'Nobody else is in this organization yet. `tc invite` makes a code to share.' : 'Nobody else is on a shared workspace right now.'}
         </p>
       ) : (
         <ul className="team__grid" aria-label="Members">
@@ -302,7 +302,7 @@ function ObserverPane({ tile, onLeave }: { tile: TeamTile; onLeave: () => void }
   return (
     <section className="team team--observing" data-team-observer={tile.userId} aria-label={`Observing ${name}`} style={{ '--peer': color } as CSSProperties}>
       <header className="team__head">
-        <button type="button" className="team__back" onClick={onLeave} title="Back to the team (Esc)"><ChevronLeft /> Team</button>
+        <button type="button" className="team__back" onClick={onLeave} title="Back to People (Esc)"><ChevronLeft /> People</button>
         <span className="team-tile__avatar team-tile__avatar--sm" aria-hidden="true">{tile.initials}</span>
         <h2 className="team__title">Observing {name}</h2>
         <span className="team__chip" data-team-readonly>read-only</span>

@@ -224,7 +224,7 @@ const OK: Verdict = { ok: true }
 export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx: OpContext): Verdict {
   if (op.kind === 'unknown') return refuse(`unrecognised change: ${op.detail}`)
   if (op.kind === 'team-snapshot') {
-    return op.key === `snapshot:${ctx.userId}` ? OK : refuse('a Team view snapshot may only be written by the person it shows')
+    return op.key === `snapshot:${ctx.userId}` ? OK : refuse('a People view snapshot may only be written by the person it shows')
   }
   if (role === null) return refuse('this workspace is not shared — its canvas is not written to the room')
   if (role === 'viewer') return refuse('you are a viewer of this workspace')

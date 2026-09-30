@@ -47,7 +47,7 @@ export function useVault(setting: string): VaultModel {
       setState({ root: answer.root, notes: answer.notes, skipped: answer.skipped, pending: false, ...(answer.reason === undefined ? {} : { reason: answer.reason }) })
     }).catch((error: unknown) => {
       if (epoch !== epochRef.current) return
-      setState({ root: setting, notes: [], skipped: 0, pending: false, reason: `the vault could not be read: ${String(error)}` })
+      setState({ root: setting, notes: [], skipped: 0, pending: false, reason: `the notes folder could not be read: ${String(error)}` })
     })
   }, [setting])
 

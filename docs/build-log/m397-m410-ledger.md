@@ -526,3 +526,45 @@ stale, but it is not this builder's to remove. So `names.agree.1`, `dock.dup.1` 
 harness selector rewrites in `verify:panels:{product,shell,agents,orchestrate}` and `shot.cjs`, are UNRUN: they were
 exercised only by hand against the live app (the same DOM reads, on slot 2). The lead owes a run of those four
 suites before merging, with `TC_VERIFY_SUFFIX` set.
+
+**M404 follow-up (critic).** Built in the worktree without launching the app or running an Electron suite (the lead
+runs those at integration). `npm run lb -- layout-schema` read first.
+1. *Default workspace name: DECIDED "Workspace", fresh layout only.* `defaultWorkspace(name = 'Canvas')` takes the
+   name; `defaultSnapshot()` passes the new `FRESH_WORKSPACE_NAME` ("Workspace", exported from `@shared/layout-schema`).
+   That covers a first launch (the store on a path with no file) and a file that is not JSON or not an object ("starting
+   from defaults"). Every repair keeps 'Canvas': `parseLayout`'s no-usable-workspace branch, the store's
+   `activeWorkspace()` repair and never-zero guard, and `parseWorkspace`'s absent-name fallback. A stored name loads as
+   written, and no saved file changes. The renderer's delete-the-last-workspace replacement now reads
+   `FRESH_WORKSPACE_NAME` rather than a second literal, and its stale "'Canvas' matches main's default" comment is
+   corrected. *Check:* `verify:layout workspace.default.1` pins fresh = "Workspace" (both `defaultSnapshot()` and a
+   real store on a missing file), and stored "Canvas", absent name, the no-workspace repair = 'Canvas', and a stored
+   "auth refactor" = as written. No existing check pinned the fresh name (every `name: 'Canvas'` in the suites is a
+   stored fixture, which is the point).
+2. *"Vault" inside Notes, and the other retired words.* Copy only, keys kept: the empty states (`no notes folder yet — choose a
+   folder of markdown notes…`, `the notes folder could not be read…`), VaultPane's refresh ("Refresh Notes" / "Read the
+   notes folder again") and over-the-cap line, the palette text line and setting label "Notes folder", the setting's
+   description ("…the Notes pane lists…"), `shell.navigator`'s description (the panes by their names), useVault's
+   read error, main's `vault-read.ts` refusal ("there is no notes folder at …", which shows in the pane), and
+   verb-table's two plan refusals. The sweep also found `Navigator pane: vault` as the palette row's title. The enum's
+   stored values are keys, so `SettingDef.valueLabels` (display only) makes that row say "Notes" / "Connections" / "Board".
+   People: TeamView's back button ("Back to People", "People"), canvas-ops' refusal ("a People view snapshot…"), and
+   the account menu's sign-in tooltip. The one "Services" left is SetupSheet's (a setup record's dev servers, a
+   different thing), and it is allowlisted by name. Orchestrate's "Tasks" is the task list, not the board, so it stays.
+   `verify-panels-product`'s vault arm now matches `/no notes folder yet/`. *Check:* `verify:styles names.words.1` scans
+   every prose literal in `src/renderer` and `src/shared` as text (a spaced string that isn't a class list or template,
+   a lone Title-case word, or JSX text; `searchText`/`keywords` lines are aliases on purpose) for Vault, Services,
+   Team, Show Orchestration, Orchestration view, Open board and Hide the navigator. It has a planted-sentence
+   self-test. Against HEAD's `empty-states.ts` it goes red with both lines.
+3. *People page:* aria-label "People". The empty line is now "Nobody else is on a shared workspace right now." The
+   `account.sign-in` subtitle is "to share workspaces and see who in your organization is working".
+4. *⌘\ discoverability:* a View ▸ Layout row, **Navigator ⌘\** (checked while the navigator shows, `data-view-navigator`,
+   a new `PanelLeft` icon mirroring Context pane's), wired to `chrome.toggleNavigator`, the chord's own handler. I chose it over the
+   dock tooltip because `dock.dup.1` rules that no dock control claims ⌘\. A pressed-pane tooltip would re-open exactly
+   what C2 closed.
+Minor: ⌘K "Show Orchestrate" → **Open Orchestrate** (`dock.dup.1`'s search updated, Dock comments too), "Open board" →
+**Open Board**.
+*Suites (plain tier, all 43 `affected` maps):* green, including `layout` 284/284, `styles` 94/94, `palette` 169/169,
+`team` 30/30, `verbs` 30/30, `meta` 51/51. `npm run build` is clean. *Owed to the lead:* the Electron tier. `names.agree.1`,
+`dock.dup.1` and `team.segment.1` are still unrun, and `dock.dup.1` now searches "Open Orchestrate". *Goldens expected to
+move:* every scene whose crumb shows a fresh layout's name. The harness starts fresh, so "Canvas ▾" becomes "Workspace ▾" wherever the
+crumb is in frame. Also the vault/notes scenes' empty or refusal sentences, and `account-menu`'s sign-in tooltip if it's captured.

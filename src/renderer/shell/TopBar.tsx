@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
-import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
+import { Check, ChevronDown, Lanes, PanelLeft, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
 import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem, SegmentedControl } from '@renderer/primitives'
 import { LiveStatus } from './LiveStatus'
 import { AccountMenu } from '../account/AccountMenu'
@@ -29,6 +29,14 @@ export interface TopBarProps {
   /** M46. The context pane is on screen (a column, or a Compact drawer). */
   contextOpen: boolean
   onToggleContext: () => void
+  /**
+   * M404 (critic). The navigator is on screen. ⌘\ shows or hides whichever
+   * pane it holds, and the View menu is where a chord is learned — the dock
+   * no longer claims it, so without this row nothing on screen named it.
+   * Absent = no row (a caller with no navigator).
+   */
+  navigatorOpen?: boolean
+  onToggleNavigator?: () => void
   /** (this redesign) Keeps the inspector open through the Compact breakpoint's own auto-collapse (`shell.inspectorPinned`). */
   inspectorPinned: boolean
   onToggleInspectorPinned: () => void
@@ -64,7 +72,7 @@ export interface TopBarProps {
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
+  presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext, navigatorOpen, onToggleNavigator,
   workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
   centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false
 }: TopBarProps): JSX.Element {
@@ -201,6 +209,10 @@ export function TopBar({
                 ))}
               </MenuRadioGroup>
               <div className="shell__view-heading">Layout</div>
+              {onToggleNavigator !== undefined && (
+                <MenuCheckboxItem checked={navigatorOpen === true} onSelect={onToggleNavigator} data-view-navigator
+                ><span className="shell__view-check">{navigatorOpen === true && <Check />}</span><PanelLeft /> Navigator <kbd>{'⌘\\'}</kbd></MenuCheckboxItem>
+              )}
               <MenuCheckboxItem checked={contextOpen} onSelect={onToggleContext}
                 className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
               ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>{'⇧⌘\\'}</kbd></MenuCheckboxItem>

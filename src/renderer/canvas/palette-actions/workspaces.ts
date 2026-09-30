@@ -16,6 +16,7 @@ import { forgetAgentLinksFor } from '../agent-links-store'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { allTemplates } from '@shared/templates'
+import { FRESH_WORKSPACE_NAME } from '@shared/layout-schema'
 import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLastLine } from '@renderer/session/last-line-store'
 import { clearLastActive } from '@renderer/session/last-active-store'
@@ -221,10 +222,10 @@ export function workspacesActions(ctx: ActionCtx): WorkspacesActions {
                   // neighbour missing rather than merely stale: the
                   // outgoing write still landed on a real, currently-active
                   // record (the fresh default) with this doomed workspace's
-                  // disposed panels, resurrecting them there. 'Canvas'
-                  // matches the name main's own defaultWorkspace() would
-                  // have installed, so the user sees the same thing either
-                  // way — the only difference is which process decided.
+                  // disposed panels, resurrecting them there. The name is a
+                  // fresh layout's (FRESH_WORKSPACE_NAME), not main's repair
+                  // default, because this is a new workspace the person
+                  // will see, not a file being repaired.
                   // Captured BEFORE the switch below, and out of this
                   // canvas's own panel array, because that array is the only
                   // place a KIND is knowable here: main's workspace rows
@@ -256,8 +257,8 @@ export function workspacesActions(ctx: ActionCtx): WorkspacesActions {
                   if (doomed.active && !target) {
                     // M404 (C1). "Workspace", not "Canvas": Canvas is the center
                     // view's name, and a crumb reading it looked like the mode.
-                    const freshId = await window.canvas.workspace.create('Workspace')
-                    target = { id: freshId, name: 'Workspace', panelIds: [], active: false }
+                    const freshId = await window.canvas.workspace.create(FRESH_WORKSPACE_NAME)
+                    target = { id: freshId, name: FRESH_WORKSPACE_NAME, panelIds: [], active: false }
                   }
                   // AWAITED, and a refusal ABANDONS the delete. This is the
                   // one caller that cannot treat switchWorkspace as
