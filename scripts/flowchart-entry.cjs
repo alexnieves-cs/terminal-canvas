@@ -9,5 +9,8 @@ module.exports = {
   geometry: require('../src/shared/flowchart-geometry'),
   svg: require('../src/shared/flowchart-svg'),
   arrange: require('../src/renderer/canvas/arrange'),
-  files: require('../src/main/flowchart-files')
+  files: require('../src/main/flowchart-files'),
+  // M392. A teammate's flowchart as the canvas draws it, and the router it feeds.
+  shared: require('../src/renderer/flowchart/shared-shapes'),
+  connectors: require('../src/renderer/flowchart/connector-model')
 }

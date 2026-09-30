@@ -20,6 +20,12 @@ import { Close } from '../icons'
  * text rides the doc, so editing it here runs nothing and reads nothing from
  * the owner's disk. It has no save — the file is on the owner's machine, and
  * what is typed here reaches them as unsaved changes they choose to keep.
+ *
+ * M392. A teammate's flowchart SHAPE is not drawn here: Canvas hands this
+ * layer only the placeholders shared-shapes.ts left as cards, and the shape
+ * itself is drawn read-only in the ShapeLayer, a diamond as a diamond. A shape
+ * whose record did not survive the wire stays a card here, named by its title
+ * (the label's first line).
  */
 export interface SharedPlaceholderLayerProps {
   placeholders: readonly SharedPanel[]
@@ -58,7 +64,7 @@ function SharedDraft({ p, workspaceId, who, onClose }: { p: SharedPanel; workspa
   )
 }
 
-const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture', relay: 'Relay terminal' }
+const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture', relay: 'Relay terminal', shape: 'Shape' }
 
 export function SharedPlaceholderLayer(props: SharedPlaceholderLayerProps): JSX.Element | null {
   const names = useRosterNames(props.workspaceId)

@@ -19,7 +19,7 @@ this file, not memory.
 | M389 | Connectors: a record on the source object, ports, straight / orthogonal / curved, arrow ends, labels in place, drawn from a port (into empty space creates the next shape), mixed edges | built (checkpoint) |
 | M390 | Building fast: the keyboard scheme, object copy/paste, duplicate, align/distribute, spacing guides | built (checkpoint); grid NOT built — see D10 |
 | M391 | Auto-layout (animated) and Mermaid in/out, SVG export through the gate | built (checkpoint) |
-| M392 | Shared flowcharts: shapes and connectors through the Yjs shared canvas | planned |
+| M392 | Shared flowcharts: shapes and connectors through the Yjs shared canvas | built on `m392-flow-sync` (unmerged): `shape`/`connectors` JSON fields (2 KB / 16 KB caps), `panel-content` op = the retitle rule, peer shapes drawn read-only in the ShapeLayer; audit counts it under `edited` (the action set is pinned by the migration's CHECK); a local panel cannot connect TO a teammate's shape (the layout's load prunes a target that is not in the file) |
 | M393 | The living flowchart: a shape connected to a live object shows its state | built (checkpoint); Electron check owed |
 | M394 | Sketch → plan: "Start work from this" | planned |
 | M395 | The canvas revamp: the ranked surface changes (below) | planned |

@@ -5,7 +5,7 @@ import {
 } from '@shared/flowchart'
 import { nearestPort, routeConnector } from '@shared/flowchart-geometry'
 import { addConnector, findConnector, isShapePanel, makeShapePanel, nextZ, patchConnector, removeConnector, type Panel } from '@renderer/panels/panels'
-import { buildConnectorViews, type ConnectorView } from '@renderer/flowchart/connector-model'
+import { buildConnectorViews, type ConnectorView, type RoutablePanel } from '@renderer/flowchart/connector-model'
 import type { ConnectorGhost } from '@renderer/flowchart/ConnectorLayer'
 import { screenToWorld, type Point, type Viewport, type WorldRect } from './viewport'
 import { editNewShape, type VerbResult } from './useFlowchartVerbs'
@@ -36,6 +36,13 @@ export interface ConnectorsDeps {
   panelsRef: RefObject<Panel[]>
   /** The panels as displayed (merged lanes included) — what the layer draws. */
   displayPanels: readonly Panel[]
+  /**
+   * M392. A shared canvas's placeholders as arrow ends (shared-shapes.ts):
+   * a teammate's arrows draw read-only, and an arrow of theirs that points at
+   * one of OUR panels lands on it. Never a target of OUR verbs — connect and
+   * the draw gesture look only in `panelsRef`.
+   */
+  peers?: readonly RoutablePanel[]
   /** Z-sorted rects, the marquee's and the link draw's own target order. */
   hitOrderRef: RefObject<WorldRect[]>
   nextIdRef: MutableRefObject<number>
@@ -78,7 +85,7 @@ const NORMAL: Record<Port, Point> = { n: { x: 0, y: -1 }, s: { x: 0, y: 1 }, e: 
 const LAND_PX = 20
 
 export function useConnectors(deps: ConnectorsDeps): Connectors {
-  const { setPanels, commitHistory, panelsRef, displayPanels, hitOrderRef, nextIdRef, hostRef, viewportRef, mergedRef, selectedIds, selectOnly, selectedId, setSelectedId, shouldIgnoreKeys } = deps
+  const { setPanels, commitHistory, panelsRef, displayPanels, peers, hitOrderRef, nextIdRef, hostRef, viewportRef, mergedRef, selectedIds, selectOnly, selectedId, setSelectedId, shouldIgnoreKeys } = deps
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draw, setDraw] = useState<DrawState | null>(null)
   const drawRef = useRef<DrawState | null>(null)
@@ -88,10 +95,10 @@ export function useConnectors(deps: ConnectorsDeps): Connectors {
   // time, so a removed connector's route is never kept alive.
   const cacheRef = useRef<Map<string, ConnectorView>>(new Map())
   const views = useMemo(() => {
-    const next = buildConnectorViews(displayPanels, cacheRef.current)
+    const next = buildConnectorViews(peers === undefined || peers.length === 0 ? displayPanels : [...displayPanels, ...peers], cacheRef.current)
     cacheRef.current = next
     return [...next.values()]
-  }, [displayPanels])
+  }, [displayPanels, peers])
 
   // Exclusive with the panel selection, the M78 edge rule: selecting a panel
   // clears the connector, and the merged view has no connector verbs.

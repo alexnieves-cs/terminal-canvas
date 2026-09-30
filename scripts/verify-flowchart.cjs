@@ -3,9 +3,11 @@
    Plain node. The record (src/shared/flowchart.ts), Mermaid in and out
    (flowchart-mermaid.ts), the layered auto-layout (flowchart-layout.ts) and
    the geometry — outlines, ports, routing, arrowheads, hit tests
-   (flowchart-geometry.ts) — the SVG text (flowchart-svg.ts), and the
+   (flowchart-geometry.ts) — the SVG text (flowchart-svg.ts), the
    arranging math every canvas object shares with a chart: align,
-   distribute, equal-spacing guides, grid (renderer/canvas/arrange.ts). Every property here fails SILENTLY when
+   distribute, equal-spacing guides, grid (renderer/canvas/arrange.ts), and
+   (M392) a teammate's shapes and arrows as a shared canvas draws them
+   (renderer/flowchart/shared-shapes.ts). Every property here fails SILENTLY when
    broken: a connector that routes through the shape it avoids still draws,
    a layout that overlaps two nodes still returns positions, a Mermaid import
    that dropped a `click` directive without counting it reads as an import
@@ -37,6 +39,7 @@ rmSync(outfile, { force: true })
   await require('./flowchart-checks/geometry.cjs')(ok, F)
   await require('./flowchart-checks/arrange.cjs')(ok, F)
   await require('./flowchart-checks/files.cjs')(ok, F)
+  await require('./flowchart-checks/shared.cjs')(ok, F)
   const failures = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
   process.exitCode = failures.length ? 1 : 0
