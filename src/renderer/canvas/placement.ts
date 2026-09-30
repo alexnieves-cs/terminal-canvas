@@ -234,11 +234,9 @@ export const FREE_STEP = 24
  * view, and the caller falls back to its old point (overlapping is better
  * than appearing off-screen, where a new object reads as "nothing happened").
  *
- * Deliberately NOT used for a terminal's spawn: cascadeCentre's argument —
- * overlap is the normal state of a working canvas, and ⌘N promises the
- * centre — stands for panels a person spawns into a busy canvas to work in
- * (docs/load-bearing.md, "Cmd+N cascades"). Pure; called with the updater's
- * own `current` wherever it can be, like the cascade.
+ * M402 (B4): now under EVERY create door, a terminal's included, through
+ * `placeNew` below — see there for why cascadeCentre's argument no longer
+ * holds. Pure; called with the updater's own `current`, like the cascade.
  */
 export function freeSpot(
   centre: Point,
@@ -280,4 +278,59 @@ export function freeSpot(
     for (let j = -k + 1; j <= k - 1; j++) { consider(-k, j); consider(k, j) }
   }
   return best === null ? null : (best as { c: Point }).c
+}
+
+/**
+ * M402. Rings an anchored search walks before giving up (to the cascade). At
+ * the pitch freeSpot derives from a review's size that is several thousand
+ * world units — past any real canvas's crowd around one agent.
+ */
+export const ANCHOR_RINGS = 40
+
+type Box = { x: number; y: number; w: number; h: number }
+
+/**
+ * M402 (B4). ONE PLACEMENT RULE FOR EVERY CREATE DOOR. The live critique found
+ * the rule depended on the door: ⌘N, an opened file and ⌘K's New note
+ * cascaded onto whatever was there, "+ Create" free-spotted the same file ⌘K
+ * cascaded, and a new chat landed inside the starter's group frame. Now every
+ * door asks here, inside its `setPanels` updater over `current`:
+ *
+ * - `anchored` (a review beside its agent): the free spot nearest `centre`,
+ *   which the caller put beside the parent, WHEREVER the parent is — a parent
+ *   off screen is the normal case for a review opened from the rail, and the
+ *   caller flies there;
+ * - otherwise the free spot nearest `centre` wholly IN VIEW and clear of the
+ *   floating chrome (`within`, `chrome`), where the person is looking; and
+ *   when the view has no room, the nearest free spot anywhere — the caller
+ *   flies there too.
+ *
+ * `obstacles` are what the caller says the object must not land in: every
+ * panel's OCCUPIED rect (a terminal's rim name included) and the frame of
+ * every group the object does not belong to — a group's frame reaches 28 +
+ * 34 world units past its members, more than the 24 gap, which is how a chat
+ * came to land inside one. `null` only when nothing within reach is free; the
+ * caller falls back to cascadeCentre, which is still the rule of last resort.
+ *
+ * Why ⌘N no longer keeps the centre (docs/load-bearing.md, "Cmd+N"): the
+ * cascade tested only exact centres because an overlap rule "would step
+ * nearly every press away from where the user is looking". That held while an
+ * object off the view read as "nothing happened". Every create door now ends
+ * with a flight to what it made (Canvas.tsx's reveal), so stepping away from
+ * the centre is SEEN, and a new terminal no longer buries the one under it.
+ */
+export function placeNew(req: {
+  size: { w: number; h: number }
+  centre: Point
+  anchored?: boolean
+  obstacles: readonly Box[]
+  chrome?: readonly Box[]
+  within?: Box
+}): Point | null {
+  if (req.anchored === true) return freeSpot(req.centre, req.size, req.obstacles, { maxRings: ANCHOR_RINGS })
+  if (req.within !== undefined) {
+    const inView = freeSpot(req.centre, req.size, [...req.obstacles, ...(req.chrome ?? [])], { within: req.within })
+    if (inView !== null) return inView
+  }
+  return freeSpot(req.centre, req.size, req.obstacles)
 }

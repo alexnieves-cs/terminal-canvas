@@ -1,6 +1,6 @@
 import { useCallback, useEffect, type MouseEvent, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { isCorrectedEvent } from '@renderer/components/xterm-pointer'
-import { addLink, type Panel } from '@renderer/panels/panels'
+import { addLink, occupiedRect, type Panel } from '@renderer/panels/panels'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import { marqueeRect, marqueeSelection } from './marquee'
 import { EMPTY_SELECTION } from './canvas-constants'
@@ -145,7 +145,9 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
       // one normalisation, read twice.
       const topLeft = worldToScreen({ x: rect.x, y: rect.y }, vp)
       setMarquee({ x: topLeft.x, y: topLeft.y, w: rect.w * vp.scale, h: rect.h * vp.scale })
-      const ids = marqueeSelection(rect, panelsRef.current.map((p) => p.rect))
+      // M402. What each panel OCCUPIES: a band across a terminal's rim name
+      // selects that terminal, the way a click on the name does.
+      const ids = marqueeSelection(rect, panelsRef.current.map(occupiedRect))
       // The set-shaped setter directly: this is the one gesture in the app
       // that legitimately selects MANY, which is the whole reason selectedIds
       // is a set. EMPTY_SELECTION rather than a fresh empty Set, so a marquee

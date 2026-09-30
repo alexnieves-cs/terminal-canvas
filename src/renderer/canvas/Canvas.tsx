@@ -68,13 +68,14 @@ import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advanced-doors'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
-import { taskClusters } from './task-clusters'
+import { taskClusters, type TaskCluster } from './task-clusters'
 import { TaskClusterLayer } from './TaskClusterLayer'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
-import { chromeObstacles, placementRoom as readPlacementRoom, placeIn } from './safe-area'
+import { chromeObstacles, placementRoom as readPlacementRoom, sizeToView } from './safe-area'
+import { placePanel, type PlaceFn } from './place-new'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -142,10 +143,10 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, maximiseRect, nextZ, pickRects, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
+  makePanel, makeReviewPanel, maximiseRect, nextZ, occupiedRect, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_GAP, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
   addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel,
-  NOTE_W, NOTE_H, IMAGE_W, IMAGE_H, FILE_W, FILE_H, WORKFLOW_W, WORKFLOW_H, BROWSER_W, BROWSER_H } from '@renderer/panels/panels'
+  IMAGE_W, IMAGE_H } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
 import { shellQuote } from '@renderer/shell/file-tree-model'
@@ -724,16 +725,48 @@ export function Canvas({
   // typed command needs no "spawn at a stated grid" door. The id is queued
   // here and selected once the panel exists in state (the effect below).
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null)
+  // M402 (B4). ONE PLACEMENT RULE FOR EVERY CREATE DOOR: a free spot near the
+  // parent or where the person is looking, never inside a group the object
+  // does not belong to, then a flight to it at a readable zoom (place-new.ts's
+  // placePanel, placement.ts's placeNew, useViewport's reveal). `placer()` is
+  // called OUTSIDE the door's setPanels updater — it reads the DOM (the
+  // chrome, the view) and the groups once — and what it returns runs INSIDE
+  // the updater over `current`: the cascade's batching rule, kept. It queues
+  // the made object for the reveal effect (below jumpAnywhere), which flies
+  // once the object is rendered; `quiet` is for a mint no person asked for
+  // (a workflow's pool), where a camera that moved by itself would be taken
+  // from them. `lit` lands with the attention jump's arrival glow.
+  const pendingRevealRef = useRef<{ id: string; lit?: true } | null>(null)
+  const clusterHullsRef = useRef<readonly TaskCluster[]>([])
+  const placer = useCallback((opts: { quiet?: true; lit?: true; exact?: boolean } = {}): PlaceFn => {
+    // A point the person GAVE (a double-click, a drop, the starter's layout)
+    // is kept exactly, as M395 kept it.
+    if (opts.exact === true) return <T extends Panel>(_current: readonly Panel[], made: T): T => made
+    const room = readPlacementRoom(hostRef.current, viewportRef.current)
+    const groupsNow = groupsRef.current
+    // The task regions as they are drawn (clusterHulls, read once like the
+    // groups). An ANCHORED object goes beside its parent and joins the
+    // parent's task, so the regions are obstacles only for the others.
+    const regions = clusterHullsRef.current.filter((c) => c.kind === 'task').map((c) => c.rect)
+    return <T extends Panel>(current: readonly Panel[], made: T, how?: { anchored?: boolean; memberOf?: string }): T => {
+      if (opts.quiet !== true) pendingRevealRef.current = { id: made.rect.id, ...(opts.lit === true ? { lit: true as const } : {}) }
+      return placePanel(made, current, room, groupsNow, how?.anchored === true ? how : { ...how, regions })
+    }
+  }, [])
   const onSpawn = useCallback(
     (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true }) => {
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
       if (opening?.focus) setPendingFocusId(id)
       setEnteringPanelIds((current) => new Set(current).add(id))
+      // M402. The one placement rule (placer, above) unless the caller gave an EXACT point.
+      const place = opening?.exact ? null : placer()
       setPanels((current) => {
         // Where the panel ACTUALLY goes. Without this, N presses at an
         // unmoved camera produce N byte-identical rects and the canvas looks
         // like it holds one panel — see cascadeCentre for the whole argument.
+        // M402: the free spot nearest the view's centre (placePanel), with
+        // the cascade as its last resort.
         //
         // `current` — this updater's own argument — and never a panelsRef.
         // React applies queued updaters sequentially, so two spawns batched
@@ -742,16 +775,13 @@ export function Canvas({
         // pick the same slot, which is the stacking bug resurrected through a
         // door that only opens under batching.
         //
-        // cascadeCentre being PURE is also what keeps this line clear of the
+        // The placer being PURE is also what keeps this line clear of the
         // hazard the note above describes: called twice with the same
         // `current` it returns the same point, so a StrictMode double-invoke
         // could not place the panel somewhere else.
-        const placed = opening?.exact ? centre : cascadeCentre(centre, current)
-        const next = [
-          ...current,
-          { ...makePanel(
+        const made: Panel = { ...makePanel(
             id,
-            placed,
+            centre,
             nextZ(current),
             chosen
               ? {
@@ -779,12 +809,12 @@ export function Canvas({
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
           ), ...(opening?.title === undefined ? {} : { title: opening.title }) }
-        ]
+        const next = [...current, place === null ? made : place(current, made)]
         commitHistory(next)
         return next
       })
     },
-    [commitHistory]
+    [commitHistory, placer]
   )
   const [openingContexts, setOpeningContexts] = useState<Map<string, string>>(() => new Map())
   // A STABLE identity, and the reason is TerminalPanel's memo. This was an
@@ -823,8 +853,9 @@ export function Canvas({
   const spawnGithubItem = useCallback((item: WorkItem) => spawnWorkItem(item, item.state === 'review requested' || item.state === 'pull request' ? 'GitHub pull request' : 'GitHub issue'), [spawnWorkItem])
   const openGithubPanel = useCallback(() => {
     const id = `g${nextIdRef.current++}`
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeGithubPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
-  }, [commitHistory])
+    const place = placer()
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, place(current, makeGithubPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
+  }, [commitHistory, placer])
   // M116. A work card for an item, at the viewport's centre. The title is
   // the item's at mint (the rail's `work · <title>`); a card for an item the
   // board does not hold is refused by name — it would render "no longer on
@@ -833,12 +864,14 @@ export function Canvas({
     const item = workItems.find((i) => i.id === itemId)
     if (item === undefined) return
     const id = `k${nextIdRef.current++}`
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeWorkPanel(id, cascadeCentre(centre, current), nextZ(current), item.id, item.title)]; commitHistory(next); return next })
-  }, [commitHistory, workItems])
+    const place = placer()
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, place(current, makeWorkPanel(id, centre, nextZ(current), item.id, item.title))]; commitHistory(next); return next })
+  }, [commitHistory, workItems, placer])
   const openJiraPanel = useCallback(() => {
     const id = `j${nextIdRef.current++}`
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
-  }, [commitHistory])
+    const place = placer()
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, place(current, makeJiraPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
+  }, [commitHistory, placer])
   // The selection is a SET: M18's marquee and M26's additive click build a
   // multi-selection without renaming the older single-selection call sites.
   //
@@ -1450,7 +1483,7 @@ export function Canvas({
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects, frameReadable,
     beginPanDrag, panning,
-    goToViewport, cameraBack, cameraForward, trail, flying, landing
+    goToViewport, cameraBack, cameraForward, trail, flying, landing, reveal
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
@@ -1531,13 +1564,16 @@ export function Canvas({
     const result = await window.canvas.agentSession.create({ id, cwd: req.cwd, sessionId })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const targets = poolTargetsRef.current.get(req.templateId)
+    // M402. A pool's mint is the workflow's, not a person's press: placed by
+    // the one rule when its workflow is not on this canvas, and QUIET — the
+    // camera is not flown for a mint nobody asked for.
+    const place = placer({ quiet: true })
     setPanels((current) => {
       const host = current.find((p) => isWorkflowPanel(p) && p.workflow.templateId === req.templateId)
-      const centre = host === undefined
-        ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current)
-        : { x: host.rect.x + host.rect.w + 40 + 280, y: host.rect.y + 180 + req.index * 400 }
-      const panel = makeChatPanel(id, centre, nextZ(current), { cwd: req.cwd, sessionId })
-      let next: Panel[] = [...current, { ...panel, title: `${req.key} · ${req.item}` }]
+      const made = { ...makeChatPanel(id, host === undefined
+        ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+        : { x: host.rect.x + host.rect.w + 40 + 280, y: host.rect.y + 180 + req.index * 400 }, nextZ(current), { cwd: req.cwd, sessionId }), title: `${req.key} · ${req.item}` }
+      let next: Panel[] = [...current, host === undefined ? place(current, made) : made]
       for (const edge of targets?.edges ?? []) {
         if (edge.from !== req.key) continue
         const to = targets?.minted.get(edge.to)
@@ -1549,7 +1585,7 @@ export function Canvas({
       return next
     })
     return { kind: 'ok', id }
-  }), [commitHistory])
+  }), [commitHistory, placer])
   /** M138. Stop a live pool: main's, through the one invoke. */
   const stopPool = useCallback((templateId: string, key: string) => { void window.canvas.agentSession.poolStop({ templateId, key }) }, [])
   useEffect(() => {
@@ -2340,7 +2376,14 @@ export function Canvas({
   const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }, min?: { w: number; h: number }): WorldRect => {
     if (!snapEnabledRef.current) return rect
     const others = panelsRef.current.filter((p) => !exclude.has(p.rect.id)).map((p) => p.rect)
-    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null })
+    // M402. The rim a terminal's name paints above its frame (occupiedRect),
+    // so a stack snaps the lower name clear of the upper one's bottom row. A
+    // multi-move's bounds (`selection`) carry the rim of a terminal on its top edge.
+    const rimOf = (id: string): number => {
+      const ids = id === 'selection' ? [...exclude] : [id]
+      return Math.max(0, ...panelsRef.current.filter((p) => ids.includes(p.rect.id) && (id !== 'selection' || p.rect.y === rect.y)).map((p) => p.rect.y - occupiedRect(p).y))
+    }
+    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, rimOf })
     setSnapGuides(out.guides, out.spacing)
     return out.rect
   }, [setSnapGuides])
@@ -3157,6 +3200,21 @@ export function Canvas({
     pendingJumpRef.current = null
     jumpToAttention(id)
   }, [displayPanels, jumpToAttention])
+  // M402 (B4). The flight that ends every create door (`placer`, by onSpawn):
+  // once the made object is rendered, the camera goes to it at a readable
+  // zoom unless it is already in view at one (useViewport's reveal). Its
+  // OCCUPIED rect, so a terminal's rim name is shown with it. `lit` arms the
+  // attention jump's arrival glow, disarmed again when the camera stays put
+  // (no settle would ever consume it).
+  useEffect(() => {
+    const pending = pendingRevealRef.current
+    if (pending === null) return
+    const panel = displayPanels.find((p) => p.rect.id === pending.id)
+    if (panel === undefined) return
+    pendingRevealRef.current = null
+    if (pending.lit === true) landingTargetRef.current = pending.id
+    if (!reveal(occupiedRect(panel)) && pending.lit === true) landingTargetRef.current = null
+  }, [displayPanels, reveal])
 
   /**
    * Cmd+Shift+] and Cmd+Shift+[: the next or previous workspace, WRAPPING.
@@ -4084,26 +4142,28 @@ export function Canvas({
       // door — the second panel to go live attaches to the first one's
       // session and the user simply sees one agent through two panels.
       const id = `r${nextIdRef.current++}`
+      // M402. Sized to the canvas it opens into (B3), placed by the one rule
+      // beside its subject (B4) — never on another review of the same panel —
+      // and flown to.
+      const size = sizeToView(hostRef.current, viewportRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
+      const place = placer({ lit: true })
       setPanels((existing) => {
-        // cascadeCentre for the reason onSpawn uses it: opening two reviews
-        // of one panel must not stack them byte-identically, which is a
-        // canvas that looks like it holds one node while holding two.
-        const centre = cascadeCentre(reviewCentre(current.rect), existing)
+        const centre = reviewCentre(current.rect, size?.w, size?.h)
         const next = [
           ...existing,
-          makeReviewPanel(id, centre, nextZ(existing), {
+          place(existing, makeReviewPanel(id, centre, nextZ(existing), {
             subjectId,
             repoRoot: baseline.root,
             baselineSha: baseline.sha,
             label
-          })
+          }, size), { anchored: true })
         ]
         commitHistory(next)
         return next
       })
       selectOnly(id)
     })
-  }, [commitHistory])
+  }, [commitHistory, placer])
 
   /**
    * M202 (D07). THE TASK REVIEW — the one implementation all four doors reach
@@ -4147,21 +4207,25 @@ export function Canvas({
       const census = subject.across === true ? panelsRef.current.find((p) => isReviewPanel(p) && p.subject.workItemId === itemId) : undefined
       if (census !== undefined) { jumpToAttention(census.rect.id); return }
       const id = `r${nextIdRef.current++}`
+      // M402 (B3). The review opens at the size of the canvas it opens into,
+      // up to TASK_REVIEW_SIZE — a fixed 960 was wider than a 1200px window's
+      // canvas, so its controls sat off screen under the minimap.
+      const size = sizeToView(hostRef.current, viewportRef.current, TASK_REVIEW_SIZE, REVIEW_MIN) ?? TASK_REVIEW_SIZE
+      // The review opens where the person can SEE it: minted beside the
+      // conversation it was otherwise placed off-screen with no camera move,
+      // and the press looked like it did nothing. The placer's reveal waits
+      // for the panel to be rendered before flying to it at a readable zoom,
+      // and lands with the arrival glow the attention jump has (`lit`).
+      const place = placer({ lit: true })
       setPanels((current) => {
         const existing = subject.across === true ? current : current.filter((p) => !(isReviewPanel(p) && p.subject.workItemId === itemId))
         const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
-        const centre = cascadeCentre(anchorPanel === undefined ? { x: 0, y: 0 } : reviewCentre(anchorPanel.rect, TASK_REVIEW_SIZE.w, TASK_REVIEW_SIZE.h), existing)
-        const next = [...existing, makeReviewPanel(id, centre, nextZ(existing), subject, TASK_REVIEW_SIZE)]
+        const made = makeReviewPanel(id, anchorPanel === undefined ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current) : reviewCentre(anchorPanel.rect, size.w, size.h), nextZ(existing), subject, size)
+        const next = [...existing, place(existing, made, anchorPanel === undefined ? undefined : { anchored: true })]
         commitHistory(next)
         return next
       })
       selectOnly(id)
-      // The review opens where the person can SEE it: minted beside the
-      // conversation it was otherwise placed off-screen with no camera move,
-      // and the press looked like it did nothing. `pendingJumpRef` waits for
-      // the panel to be rendered before framing it, and lands with the
-      // arrival glow the attention jump already has.
-      pendingJumpRef.current = id
     }
     const across: ReviewSubject = {
       subjectId: item.panelId ?? itemId,
@@ -4188,7 +4252,7 @@ export function Canvas({
         : { subjectId: item.panelId ?? itemId, repoRoot: section.path, baselineSha: section.base, label: item.title, workItemId: itemId })
     }).catch(() => mint(across))
     return { kind: 'ran' }
-  }, [commitHistory, taskLaneOf, jumpToAttention])
+  }, [commitHistory, taskLaneOf, jumpToAttention, placer])
 
   /**
    * M86. A review of EVERY worktree of the subject's repository: the same mint
@@ -4204,18 +4268,19 @@ export function Canvas({
       const current = panelsRef.current.find((p) => p.rect.id === subjectId)
       if (current === undefined || !(isTerminalPanel(current) || isChatPanel(current))) return
       const id = `r${nextIdRef.current++}`
+      const size = sizeToView(hostRef.current, viewportRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
+      const place = placer({ lit: true })
       setPanels((existing) => {
-        const centre = cascadeCentre(reviewCentre(current.rect), existing)
         const next = [
           ...existing,
-          makeReviewPanel(id, centre, nextZ(existing), { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: `every worktree of ${baseline.root.split('/').pop() ?? baseline.root}`, across: true })
+          place(existing, makeReviewPanel(id, reviewCentre(current.rect, size?.w, size?.h), nextZ(existing), { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: `every worktree of ${baseline.root.split('/').pop() ?? baseline.root}`, across: true }, size), { anchored: true })
         ]
         commitHistory(next)
         return next
       })
       selectOnly(id)
     })
-  }, [commitHistory])
+  }, [commitHistory, placer])
 
   /**
    * Put a file on the canvas, at a world point.
@@ -4240,14 +4305,12 @@ export function Canvas({
     // state updater must be pure, and `nextIdRef.current++` inside one is a
     // side effect StrictMode would run twice, burning an id per spawn.
     const id = `f${nextIdRef.current++}`
+    // M402. The one placement rule, as onSpawn and openReview: opening the
+    // same file twice at an unmoved camera must not stack the two, and a note
+    // made from ⌘K lands where "+ Create" would put it, not on what is there.
+    const place = opts?.exact ? null : placer()
     setPanels((existing) => {
-      // cascadeCentre for the reason onSpawn and openReview both use it:
-      // opening the same file twice at an unmoved camera must not stack the
-      // two byte-identically, which is a canvas that looks like it holds one
-      // panel while holding two.
-      const next = [
-        ...existing,
-        makeFilePanel(id, opts?.exact ? centre : cascadeCentre(centre, existing), nextZ(existing), {
+      const made = makeFilePanel(id, centre, nextZ(existing), {
           path,
           // Conditional, never `...opts`. A spread writes `prose: undefined`,
           // which `'prose' in source` reads as PRESENT — the absent-stays-
@@ -4260,7 +4323,7 @@ export function Canvas({
           ...(opts?.imported === undefined ? {} : { imported: opts.imported }),
           ...(opts?.deck === undefined ? {} : { deck: opts.deck })
         })
-      ]
+      const next = [...existing, place === null ? made : place(existing, made)]
       commitHistory(next)
       return next
     })
@@ -4269,7 +4332,7 @@ export function Canvas({
     // selectedIds note — the marquee made selection a SET, so every
     // single-panel selector goes through here.
     selectOnly(id)
-  }, [commitHistory, selectOnly])
+  }, [commitHistory, selectOnly, placer])
   // M149 (the Act II critic). A STABLE door for the memo'd toolbox nodes: a
   // fresh arrow per render defeated ToolboxNode's memo for every node.
   const openFileAtCentre = useCallback((path: string) => openFilePanel(path, worldCentre()), [openFilePanel, worldCentre])
@@ -4291,10 +4354,11 @@ export function Canvas({
     // their regex to `[nrfjt]` for this prefix — and which were already blind
     // to M19's own `j`.
     const id = `t${nextIdRef.current++}`
+    const place = placer()
     setPanels((existing) => {
       const next = [
         ...existing,
-        makeToolboxPanel(id, cascadeCentre(centre, existing), nextZ(existing), { cwd, label })
+        place(existing, makeToolboxPanel(id, centre, nextZ(existing), { cwd, label }))
       ]
       commitHistory(next)
       return next
@@ -4539,8 +4603,9 @@ export function Canvas({
     w.__m287Watcher = (cwd: string, command: string, args: string[]): string => {
       const watcherId = `w${nextIdRef.current++}`
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      const place = placer()
       setPanels((current) => {
-        const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), { cwd, command, args, trigger: { kind: 'timer', everyMs: 3600000 } })]
+        const next = [...current, place(current, makeWatcherPanel(watcherId, centre, nextZ(current), { cwd, command, args, trigger: { kind: 'timer', everyMs: 3600000 } }))]
         commitHistory(next)
         return next
       })
@@ -5327,6 +5392,8 @@ export function Canvas({
       groups: groups.map((g) => ({ id: g.id, title: g.label, panelIds: g.panelIds }))
     })
   }, [cardDetail, displayPanels, workItems, groups, dormantIds, version, runs, taskLaneOf])
+  // M402. For the placer (onSpawn's `placer`), which is declared above this and reads it at press time.
+  clusterHullsRef.current = clusterHulls
   // M204 (D08). THE TASK LENS — a VIEW state, never persisted (M106's flip is
   // the precedent). Derived as the task's panels change, and cleared when the
   // task leaves the board — which includes switching to a workspace whose
@@ -5652,12 +5719,18 @@ export function Canvas({
       const screen = clearOfOverlays(worldToScreen(world, vp), { width: CHAT_W * vp.scale, height: CHAT_H * vp.scale }, obstacles)
       return screenToWorld(screen, vp)
     }
+    // M402. The one placement rule (placer) unless the caller gave a point.
+    const place = opts?.at === undefined ? placer() : null
     setPanels((current) => {
       // M181. An EXACT placement when the caller asked for one (the starter,
       // which lays four examples out relative to this rect and so must know it
-      // without waiting for a commit); the cascade otherwise, kept clear of the
-      // chrome floating over the canvas.
-      const centre = opts?.at ?? clearOfChrome(cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current))
+      // without waiting for a commit). M402: the one placement rule otherwise —
+      // a free spot, never inside a group the chat is not in (a chat landed in
+      // the starter's) — then kept clear of the chrome floating over the
+      // canvas, whose minimap may not have rendered yet (clearOfChrome).
+      const want = opts?.at ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      const placed = place === null ? null : place(current, makeChatPanel(id, want, 0, { cwd, sessionId })).rect
+      const centre = placed === null ? want : clearOfChrome({ x: placed.x + placed.w / 2, y: placed.y + placed.h / 2 })
       // M121. A routine's chat is MARKED, the way a lane is: the record is what
       // makes its next spawn carry ROUTINE_PROMPT again after a relaunch.
       const panel = makeChatPanel(id, centre, nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
@@ -5669,7 +5742,7 @@ export function Canvas({
     // M81/M80's rule: a first message is INSERTED, never sent.
     if (opts?.message !== undefined && opts.message !== '') void deliverToComposer(id, opts.message)
     return { kind: 'spawned', id }
-  }, [commitHistory, selectOnly])
+  }, [commitHistory, selectOnly, placer])
   beginNewChatRef.current = beginNewChat
   /**
    * M114/M115/M202/M204. The board's verbs — dispatch a work item into a lane,
@@ -5689,7 +5762,7 @@ export function Canvas({
     panels, setPanels, panelsRef, displayPanelsRef, groups, setWorkItems, workItemsRef,
     boardVerbsRef, mergedRef, nextIdRef, commitHistory,
     selectedIds, selectedIdsRef, selectOnly, focusedId, focusedIdRef, onFocusPanel,
-    viewportRef, frameRects, palette, setInputMode,
+    viewportRef, placer, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
     startWorkRef: paletteActionsRef, relatedItemId, setRelatedItemId
@@ -5881,10 +5954,11 @@ export function Canvas({
           const parts = command.trim().split(/\s+/)
           const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
           const watcherId = `w${nextIdRef.current++}`
+          const place = placer()
           setPanels((current) => {
-            const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), {
+            const next = [...current, place(current, makeWatcherPanel(watcherId, centre, nextZ(current), {
               cwd: root, command: parts[0] as string, args: parts.slice(1), trigger
-            })]
+            }))]
             commitHistory(next)
             return next
           })
@@ -5922,8 +5996,9 @@ export function Canvas({
     const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const id = `wf${nextIdRef.current++}`
+    const place = placer({ exact: at !== undefined })
     setPanels((current) => {
-      const next = [...current, makeWorkflowPanel(id, at ?? cascadeCentre(centre, current), nextZ(current), templateId, template?.name ?? templateId)]
+      const next = [...current, place(current, makeWorkflowPanel(id, at ?? centre, nextZ(current), templateId, template?.name ?? templateId))]
       commitHistory(next)
       return next
     })
@@ -5984,10 +6059,11 @@ export function Canvas({
           setInputMode(null)
           const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
           const watcherId = `w${nextIdRef.current++}`
+          const place = placer()
           setPanels((current) => {
-            const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), {
+            const next = [...current, place(current, makeWatcherPanel(watcherId, centre, nextZ(current), {
               ...workflowWatch(templateId, root, trigger)
-            })]
+            }))]
             commitHistory(next)
             return next
           })
@@ -6217,8 +6293,9 @@ export function Canvas({
     if (root === null) return
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const memoryId = `m${nextIdRef.current++}`
+    const place = placer()
     setPanels((current) => {
-      const next = [...current, makeMemoryPanel(memoryId, cascadeCentre(centre, current), nextZ(current), { root })]
+      const next = [...current, place(current, makeMemoryPanel(memoryId, centre, nextZ(current), { root }))]
       commitHistory(next)
       return next
     })
@@ -6234,8 +6311,9 @@ export function Canvas({
   const openBrowserPanel = useCallback((url: string, preview?: PreviewBinding, at?: Point): void => {
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const browserId = `b${nextIdRef.current++}`
+    const place = placer({ exact: at !== undefined })
     setPanels((current) => {
-      const next = [...current, makeBrowserPanel(browserId, at ?? cascadeCentre(centre, current), nextZ(current), url, preview)]
+      const next = [...current, place(current, makeBrowserPanel(browserId, at ?? centre, nextZ(current), url, preview))]
       commitHistory(next)
       return next
     })
@@ -6245,8 +6323,9 @@ export function Canvas({
   const openRelayPanel = useCallback((relay: { program: string; sessionId?: string; shareId?: string }, at?: Point): void => {
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const relayId = `r${nextIdRef.current++}`
+    const place = placer({ exact: at !== undefined })
     setPanels((current) => {
-      const made = makeRelayPanel(relayId, at ?? cascadeCentre(centre, current), nextZ(current), relay)
+      const made = place(current, makeRelayPanel(relayId, at ?? centre, nextZ(current), relay))
       const next = [...current, relay.sessionId === undefined ? made : { ...made, relay: { ...made.relay, sessionId: relay.sessionId } }]
       commitHistory(next)
       return next
@@ -6491,14 +6570,16 @@ export function Canvas({
     // nearest the view's centre (placement.ts's freeSpot), never on top of what
     // is there — the audit measured a new text over 53% of a sticky. A frame
     // keeps the centre: it goes BEHIND and is made to enclose what is there.
-    const room = world === undefined && form !== 'frame' ? readPlacementRoom(hostRef.current, viewportRef.current) : null
+    // M402: through the one placement rule (placer), clear of groups the note is not in.
+    const place = world === undefined && form !== 'frame' ? placer() : null
     setPanels((current) => {
       // A FRAME goes to the BACK: a region drawn over the objects it encloses
       // would cover them at the moment it is made, and the first thing a
       // person would have to do is send it backwards.
       const z = form === 'frame' ? Math.min(0, ...current.map((p) => p.z)) - 1 : nextZ(current)
-      const free = room === null ? null : placeIn(room, at, { w: NOTE_W, h: NOTE_H }, current.map((p) => p.rect))
-      const next = [...current, makeNotePanel(noteId, free ?? cascadeCentre(at, current), z, form, normaliseNoteText(text ?? ''))]
+      const next = [...current, place === null
+        ? makeNotePanel(noteId, cascadeCentre(at, current), z, form, normaliseNoteText(text ?? ''))
+        : place(current, makeNotePanel(noteId, at, z, form, normaliseNoteText(text ?? '')))]
       commitHistory(next)
       return next
     })
@@ -6549,8 +6630,7 @@ export function Canvas({
   }, [])
   const shapeStepRef = useRef<{ nextStep: (id: string) => void; previousStep: (id: string) => void } | null>(null)
   // M395. The chrome and the world in view, read when a new object needs a free spot (safe-area.ts).
-  const placementRoom = useCallback(() => readPlacementRoom(hostRef.current, viewportRef.current), [])
-  const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef, placementRoom })
+  const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef, placer })
   // M344. The relay strip names people from this workspace's presence roster
   // ("sam is in control"), not by the first eight characters of a uuid.
   // M392. So does a teammate's shape's owner mark (below).
@@ -6661,10 +6741,9 @@ export function Canvas({
     const imageId = `img${nextIdRef.current++}`
     // M395. With no place of its own (the palette row, the agent's verb) a
     // picture lands in the free spot nearest the centre; a drop keeps its point.
-    const room = world === undefined ? readPlacementRoom(hostRef.current, viewportRef.current) : null
+    const place = placer({ exact: world !== undefined })
     setPanels((current) => {
-      const free = room === null ? null : placeIn(room, at, { w: IMAGE_W, h: IMAGE_H }, current.map((p) => p.rect))
-      const next = [...current, makeImagePanel(imageId, free ?? at, nextZ(current), stored.path, displayPath(path).short, stored.id)]
+      const next = [...current, place(current, makeImagePanel(imageId, at, nextZ(current), stored.path, displayPath(path).short, stored.id))]
       commitHistory(next)
       return next
     })
@@ -6901,15 +6980,16 @@ export function Canvas({
     // A capture is an ORDINARY image object, not a new kind: it moves, groups,
     // exports and deletes like every other picture, and its title names the
     // page it is of so its provenance is on screen rather than in a log.
-    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const imageId = `img${nextIdRef.current++}`
     // D12. The task is the one whose lane the pane previews, found through the
     // binding's source panel — never guessed from the camera or the title.
     const boundTo = pane.preview?.sourcePanelId
     const task = boundTo === undefined ? undefined : workItemsRef.current.find((item) => item.panelId === boundTo)
     const artifact = { kind: 'capture' as const, id: shot.id, url: shot.url, capturedAt: shot.capturedAt, sourcePanelId: pane.rect.id, ...(task === undefined ? {} : { taskId: task.id }) }
+    // M402. Beside the pane it is a picture of — its parent — by the one rule.
+    const place = placer()
     setPanels((current) => {
-      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`, undefined, artifact)]
+      const next = [...current, place(current, makeImagePanel(imageId, { x: pane.rect.x + pane.rect.w + REVIEW_GAP + IMAGE_W / 2, y: pane.rect.y + IMAGE_H / 2 }, nextZ(current), shot.path, `capture · ${shot.host}`, undefined, artifact), { anchored: true })]
       commitHistory(next)
       return next
     })
@@ -7160,22 +7240,20 @@ export function Canvas({
     // A late answer must not mint into another workspace after a switch.
     const workspace = creationWorkspaceRef.current
     const at = worldCentre()
-    // M395. An AUTHORED object (a file, a picture, a workflow, a browser) goes
-    // to the free spot nearest the view's centre, measured when it is placed —
-    // after any chooser answered — so it never lands on what is already there.
-    // A terminal, an agent's conversation and a relay keep the centre and the
-    // cascade: panels a person spawns to work in (placement.ts's freeSpot).
-    const spotFor = (size: { w: number; h: number }): Point =>
-      placeIn(readPlacementRoom(hostRef.current, viewportRef.current), at, size, panelsRef.current.map((p) => p.rect)) ?? at
+    // M402 (B4). Every object Create makes goes through its door's own
+    // placement — the one rule (placer), measured when it is placed, after any
+    // chooser answered, inside the updater — so "+ Create" and ⌘K put the same
+    // object in the same place. M395's `spotFor` did the free-spot search here,
+    // over panelsRef OUTSIDE the updater, and only for authored objects.
     const current = (): boolean => creationWorkspaceRef.current === workspace && !mergedRef.current && !transitionRef.current
     const refused = (): CreationResult => ({ kind: 'refused', reason: 'the workspace changed — create the object again here' })
     const host: CreationHost = {
-      terminal: async () => { onSpawn(at, { cwd: noteRootRef.current ?? '~', args: [] }, { exact: true, focus: true }); return { kind: 'ran' } },
+      terminal: async () => { onSpawn(at, { cwd: noteRootRef.current ?? '~', args: [] }, { focus: true }); return { kind: 'ran' } },
       agent: async () => {
         const readiness = onboardingReadiness(await window.canvas.env.report())
         if (!current()) return refused()
         if (!readiness.preferred) return { kind: 'refused', reason: 'no conversation engine is available — check readiness' }
-        const result = await beginNewChat({ backend: readiness.preferred, at })
+        const result = await beginNewChat({ backend: readiness.preferred })
         return result.kind === 'refused' ? result : { kind: 'ran' }
       },
       document: async (view, name) => {
@@ -7189,7 +7267,7 @@ export function Canvas({
           const made = await window.canvas.file.create({ root, name: filename, seed: '' })
           if (made.kind !== 'created') return { kind: 'refused', reason: made.kind === 'exists' ? 'that file already exists — choose another filename' : made.detail }
           if (!current()) return { kind: 'refused', reason: `created ${made.path}; the workspace changed, so open the file there explicitly` }
-          openFilePanel(made.path, spotFor({ w: FILE_W, h: FILE_H }), { exact: true, sheet: {} })
+          openFilePanel(made.path, worldCentre(), { sheet: {} })
           return { kind: 'ran' }
         }
         const checklist = view === 'checklist'
@@ -7199,14 +7277,14 @@ export function Canvas({
         const result = await window.canvas.file.create({ root, name: filename, seed })
         if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists — choose another filename' : result.detail }
         if (!current()) return { kind: 'refused', reason: `created ${result.path}; the workspace changed, so open the file there explicitly` }
-        openFilePanel(result.path, spotFor({ w: FILE_W, h: FILE_H }), view === 'deck' ? { deck: {}, exact: true } : { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
+        openFilePanel(result.path, worldCentre(), view === 'deck' ? { deck: {} } : { prose: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
         return { kind: 'ran' }
       },
       image: async (path) => {
         const chosen = path ?? await window.canvas.asset.choose()
         if (!current()) return refused()
         if (!chosen) return { kind: 'refused', reason: 'no image chosen' }
-        return addImageFromPath(chosen, spotFor({ w: IMAGE_W, h: IMAGE_H }))
+        return addImageFromPath(chosen)
       },
       workflow: async () => {
         const result = await window.canvas.template.save({ name: 'New workflow', nodes: [], edges: [] })
@@ -7216,13 +7294,13 @@ export function Canvas({
         if (!current()) return refused()
         templateRowsRef.current = rows
         setTemplateRows(rows)
-        openWorkflowPanel(result.template.id, spotFor({ w: WORKFLOW_W, h: WORKFLOW_H }))
+        openWorkflowPanel(result.template.id)
         return { kind: 'ran' }
       },
       browser: async (url) => {
         const parsed = normaliseTypedUrl(url ?? 'http://localhost:3000')
         if (parsed.kind === 'refused') return { kind: 'refused', reason: 'use an http(s) URL' }
-        openBrowserPanel(parsed.url, undefined, spotFor({ w: BROWSER_W, h: BROWSER_H }))
+        openBrowserPanel(parsed.url)
         return { kind: 'ran' }
       },
       relay: async (value) => {
@@ -7238,7 +7316,7 @@ export function Canvas({
           if (!RELAY_SESSION_ID.test(sessionId)) return { kind: 'refused', reason: 'that is not a relay session id' }
           const meta = listed.sessions.find((s) => s.sessionId === sessionId)
           if (meta === undefined) return { kind: 'refused', reason: 'no session by that id that you may attach to — it may have ended' }
-          openRelayPanel({ program: meta.program, sessionId, ...(meta.shareId === null ? {} : { shareId: meta.shareId }) }, at)
+          openRelayPanel({ program: meta.program, sessionId, ...(meta.shareId === null ? {} : { shareId: meta.shareId }) })
           return { kind: 'ran' }
         }
         const program = typed === '' ? 'shell' : typed
@@ -7246,7 +7324,7 @@ export function Canvas({
         // A shared workspace's session is bound to its share, so its members
         // may attach by their role; an unshared one is the owner's alone.
         const shareId = creationShareRef.current
-        openRelayPanel({ program, ...(shareId === undefined ? {} : { shareId }) }, at)
+        openRelayPanel({ program, ...(shareId === undefined ? {} : { shareId }) })
         return { kind: 'ran' }
       },
       tool: async (description) => {
@@ -7367,7 +7445,8 @@ export function Canvas({
       if (failedItem !== undefined && !panelsRef.current.some((p) => workCardItemId(p) === itemId)) {
         const cardId = `k${nextIdRef.current++}`
         const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-        setPanels((current) => { const next = [...current, makeWorkPanel(cardId, cascadeCentre(centre, current), nextZ(current), failedItem.id, failedItem.title)]; commitHistory(next); return next })
+        const place = placer()
+        setPanels((current) => { const next = [...current, place(current, makeWorkPanel(cardId, centre, nextZ(current), failedItem.id, failedItem.title))]; commitHistory(next); return next })
       }
       return { kind: 'refused', reason: outcome.reason }
     }
@@ -9355,7 +9434,7 @@ export function Canvas({
         {/* An overview of nothing is noise beside the launcher: it appears
             with the first object. */}
         {minimapEnabled && !merged && panels.length > 0 && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} flying={flying} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view

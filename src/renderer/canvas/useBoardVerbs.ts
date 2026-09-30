@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import type { PlaceFn } from './place-new'
 import {
-  addLink, cascadeCentre, isChatPanel, isTerminalPanel, isWatcherPanel, isWorkPanel, makeChatPanel, makePanel, makeWatcherPanel, WATCHER_H,
+  addLink, isChatPanel, isTerminalPanel, isWatcherPanel, isWorkPanel, makeChatPanel, makePanel, makeWatcherPanel, WATCHER_H,
   nextZ, setLinkAutomation, setLinkLabel, workCardItemId, CHAT_W, type Panel
 } from '@renderer/panels/panels'
 import { seedAfter } from '@renderer/panels/recover'
@@ -128,6 +129,8 @@ export interface BoardVerbsDeps {
   focusedIdRef: MutableRefObject<string | null>
   onFocusPanel: (id: string) => void
   viewportRef: MutableRefObject<Viewport>
+  /** M402. The one placement rule (Canvas.tsx's `placer`). */
+  placer: () => PlaceFn
   /** Through the camera TRAIL, so Cmd+[ goes back from every frame these verbs make. */
   frameRects: (rects: WorldRect[]) => void
 
@@ -188,7 +191,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     panels, setPanels, panelsRef, displayPanelsRef, groups, setWorkItems, workItemsRef,
     boardVerbsRef, mergedRef, nextIdRef, commitHistory,
     selectedIds, selectedIdsRef, selectOnly, focusedId, focusedIdRef, onFocusPanel,
-    viewportRef, frameRects, palette, setInputMode,
+    viewportRef, placer, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
     startWorkRef, relatedItemId, setRelatedItemId
@@ -332,9 +335,12 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       const before = panelsRef.current
       const card = before.find((p) => workCardItemId(p) === itemId)
       const centre = card === undefined
-        ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
+        ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
         : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
-      const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...carryBackend(item), ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }
+      // M402. The one placement rule: beside its card when there is one (an
+      // anchored free spot), where the person is looking otherwise — here over
+      // the ref, not inside an updater, for the recovery record's reason above.
+      const chatPanel = placer()(before, { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...carryBackend(item), ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }, { anchored: card !== undefined })
       const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
       let next: Panel[] = [...before, chatPanel]
       if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
@@ -800,10 +806,12 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         void window.canvas.watcher.run(watcherId)
         const chat = it.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === it.panelId)
         const centre = chat === undefined
-          ? { x: 0, y: 0 }
+          ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
           : { x: chat.rect.x + chat.rect.w / 2, y: chat.rect.y + chat.rect.h + 40 + WATCHER_H / 2 }
+        // M402. Under its conversation by the one rule (an anchored free spot).
+        const place = placer()
         setPanels((current) => {
-          const made = makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), { cwd: lane.path, command: argv.command, args: argv.args, trigger })
+          const made = place(current, makeWatcherPanel(watcherId, centre, nextZ(current), { cwd: lane.path, command: argv.command, args: argv.args, trigger }), { anchored: chat !== undefined })
           const next = [...current, { ...made, title: `checks · ${it.title}`, watch: { ...made.watch, armed: false as const } }]
           panelsRef.current = next
           commitHistory(next)

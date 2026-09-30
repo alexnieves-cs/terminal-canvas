@@ -9,7 +9,7 @@ import { alignRects, alignSentence, distributeRects, distributeSentence, type Al
 import { setEditingShape } from '@renderer/flowchart/shape-edit-store'
 import type { DragState, ResizeEdge } from './panel-interaction'
 import type { Point } from './viewport'
-import { placeIn, type PlacementRoom } from './safe-area'
+import type { PlaceFn } from './place-new'
 
 /**
  * M388. THE FLOWCHART'S VERBS — the Canvas half.
@@ -62,7 +62,8 @@ export interface FlowchartVerbsDeps {
   /** M390. Tab and ⇧Tab from an open label: the keyboard hook's next/previous step, assigned below this hook (a ref). */
   stepRef: RefObject<{ nextStep: (id: string) => void; previousStep: (id: string) => void } | null>
   /** M395. The chrome and the world in view, for a shape with no place of its own (safe-area.ts). */
-  placementRoom: () => PlacementRoom
+  /** M402. The one placement rule (Canvas.tsx's `placer`), read outside the updater. */
+  placer: () => PlaceFn
 }
 
 export interface FlowchartVerbs {
@@ -94,7 +95,7 @@ export interface FlowchartVerbs {
 }
 
 export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
-  const { setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef, placementRoom } = deps
+  const { setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef, placer } = deps
   // The selection as a list of ids, or the ids a door named.
   const targetIds = (ids?: readonly string[]): string[] => (ids !== undefined && ids.length > 0 ? [...ids] : [...(selectedIdsRef.current ?? [])])
   const selectMany = (ids: readonly string[]): void => {
@@ -112,16 +113,18 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
     // M395. With no place of its own (a palette row, an agent's line) a shape
     // goes to the FREE spot nearest the view's centre, never on top of what
     // is there; a point the person gave (a double-click, a drop) is kept.
-    const room = world === undefined ? placementRoom() : null
+    // M402: the one placement rule (placer) — clear of groups the shape is not in, and shown.
+    const place = world === undefined ? placer() : null
     setPanels((current) => {
-      const free = room === null ? null : placeIn(room, at, SHAPE_SIZE[form], current.map((p) => p.rect))
-      const next = [...current, makeShapePanel(id, free ?? cascadeCentre(at, current), nextZ(current), form, label)]
+      const next = [...current, place === null
+        ? makeShapePanel(id, cascadeCentre(at, current), nextZ(current), form, label)
+        : place(current, makeShapePanel(id, at, nextZ(current), form, label))]
       commitHistory(next)
       return next
     })
     selectOnly(id)
     return { kind: 'ran', note: label === '' ? `a ${shapeFormWord(form)}` : `${shapeFormWord(form)}: ${shapeSummary(label, form)}`, id }
-  }, [commitHistory, mergedRef, nextIdRef, placementRoom, selectOnly, setPanels, worldCentre])
+  }, [commitHistory, mergedRef, nextIdRef, placer, selectOnly, setPanels, worldCentre])
 
   const setShapeText = useCallback((panelId: string, text: string): VerbResult => {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to edit a shape' }

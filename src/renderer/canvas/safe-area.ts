@@ -1,4 +1,4 @@
-import { screenToWorld, type Point, type ScreenRect, type Size, type Viewport, type WorldRect } from './viewport'
+import { CENTRE_MARGIN, freeFrames, READABLE_SCALE, screenToWorld, type Point, type ScreenRect, type Size, type Viewport, type WorldRect } from './viewport'
 import { freeSpot } from './placement'
 
 /**
@@ -98,4 +98,28 @@ export function placementRoom(host: HTMLElement | null, vp: Viewport): Placement
 }
 export function placeIn(room: PlacementRoom, centre: Point, size: { w: number; h: number }, rects: readonly { x: number; y: number; w: number; h: number }[]): Point | null {
   return freeSpot(centre, size, [...rects, ...room.chrome], room.within === undefined ? {} : { within: room.within })
+}
+
+/**
+ * M402 (B3). THE SIZE A LARGE OBJECT OPENS AT, measured against the canvas it
+ * opens into. A task's review was a fixed 960×760 world box: in a 1200×800
+ * window that is wider than the canvas at 100%, so its header controls sat
+ * off screen, the diff was cut on the right and the minimap covered its
+ * heading. Now it is `max` or the largest part of the canvas the chrome
+ * leaves (the minimap reserved even while hidden — a flight can bring it
+ * back), at the scale the reveal will show it at (the current one, or
+ * READABLE_SCALE from further out), whichever is smaller — never under `min`.
+ * Read once, outside the updater; `undefined` without a host.
+ */
+export function sizeToView(host: HTMLElement | null, vp: Viewport, max: { w: number; h: number }, min: { w: number; h: number }): { w: number; h: number } | undefined {
+  if (host === null) return undefined
+  const size = hostSize(host)
+  const scale = Math.max(vp.scale, READABLE_SCALE)
+  let best: { w: number; h: number } | undefined
+  for (const f of freeFrames(size, chromeObstacles(host, { minimap: 'always' }), CENTRE_MARGIN)) {
+    const w = Math.min(max.w, f.w / scale), h = Math.min(max.h, f.h / scale)
+    if (best === undefined || w * h > best.w * best.h) best = { w, h }
+  }
+  if (best === undefined) return undefined
+  return { w: Math.round(Math.max(min.w, best.w)), h: Math.round(Math.max(min.h, best.h)) }
 }

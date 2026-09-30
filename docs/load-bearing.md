@@ -688,6 +688,19 @@ constant at every zoom; it runs inside the `setPanels` updater on `current`, nev
 spawns batched into one tick each see the previous one's array; and it WRAPS at
 `CASCADE_MAX_STEPS` rather than marching a panel outside the cull region, where it would never
 promote and `Cmd+N` would appear to do nothing.
+**M402 (B4) — the cascade is now the LAST RESORT, not the rule.** Every create door, ⌘N
+included, asks `placement.ts`'s `placeNew` through `place-new.ts`'s `placePanel` (the entry
+below). The old reason was: "overlap is the NORMAL state of a working canvas, so an overlap
+rule would step nearly every press away from where the user is looking." That held only
+because an object placed away from the view's centre was an object nobody saw — "nothing
+happened". It no longer holds: every create door now ends with a flight to what it made
+(`useViewport`'s `reveal`, which moves no camera when the object is already in view at a
+readable scale), so a step away from the centre is SEEN, and the live critique measured
+the cost of the old rule instead — a new terminal buried the one under it, and the rule
+depended on the door. What survives of this entry: the batching rule (the placer runs
+inside the `setPanels` updater over `current`; its DOM reads happen once, outside), and
+`cascadeCentre` itself, with every detail above, as the fallback when no free spot is
+within reach.
 
 **A new AUTHORED object goes to free space; a terminal still cascades (`placement.ts`'s
 `freeSpot`, `safe-area.ts`'s `placementRoom`/`placeIn`, M395).** A sticky, a text, a shape, a
@@ -699,9 +712,19 @@ in view — and returns `null` rather than an off-screen spot, so the caller fal
 old point: an object that appears where nobody is looking reads as "nothing happened". It runs
 inside the `setPanels` updater over `current` (the cascade's batching rule); the DOM reads
 happen once, outside. A point the person GAVE (a double-click, a drop, a Tab-made next step)
-is kept exactly. A frame keeps the centre (it goes behind, to enclose). The cascade entry above
-still holds for terminals, conversations and relays: panels spawned to work in, where overlap
-is normal and ⌘N promises the centre. `verify:viewport revamp.place.1–.2`.
+is kept exactly. A frame keeps the centre (it goes behind, to enclose). ~~The cascade entry
+above still holds for terminals, conversations and relays~~ — **M402 (B4): superseded; one
+rule for every door.** `placeNew`: in view and clear of the chrome first; with no room in
+view, the nearest free spot anywhere, and the door's reveal flies there (the `null` → "fall
+back to the old point" answer above is gone, because an object off the view is now shown);
+`anchored` (a review beside its agent, a capture beside its pane, a dispatched lane's chat
+beside its card) searches from beside the parent WHEREVER the parent is. The obstacles are
+every panel's `occupiedRect` (a live terminal's rim name is 16 world units above its rect,
+M397's A4) and the frame of every group the object does not belong to — a group's frame
+reaches 28 + 34 past its members, more than the 24 gap, which is how a new chat landed inside
+the starter's "Examples". A pool mint is `quiet` (no flight for a mint nobody pressed for);
+the lineup/swarm arrangements keep their fixed offsets (not yet one bounding box).
+`verify:viewport revamp.place.1–.2`, `place.rule.1–.3`, `place.reveal.1`.
 
 **The header's honest chain, and the backfill that must never happen (`TerminalPanel.tsx`).**
 The label is `title ?? status.command ?? spec.command ?? 'login shell'`. The resolved command
@@ -2160,6 +2183,12 @@ moves by the same amount: snapping members individually would shear them apart m
 failure `applyGroupDrag`'s own entry names. Guides live in `.world`, like the link layer, so they
 ride the one transform; they are cleared on commit. `placement.snap` turns the whole thing off,
 because a user aligning by eye against a snap is fighting the app.
+**M402: a terminal's rim.** A live terminal paints its name 16 world units ABOVE its rect
+(`panels.ts`'s `TERMINAL_RIM`/`occupiedRect`), and a rim-blind snap pulled a lower terminal
+flush under an upper one — its name, which takes the pointer, over the upper one's bottom row
+(Claude Code's input line). `smartSnap`'s `rimOf` offsets only the STACKING pairs (my top on
+your bottom, my bottom on your top); top-to-top stays frame alignment, because the frames are
+what a person lines up by eye (`verify:viewport place.rim.2`).
 
 **Tidy compacts WITHOUT reordering and WITHOUT resizing, in ONE undoable step
 (`placement.ts`'s `tidyPanels`, `palette-actions/arrangement.ts`'s `tidyPanels`).** Rows are formed by

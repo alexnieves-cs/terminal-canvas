@@ -10,6 +10,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 
 const WATCHDOG_MS = 75000 // measured 2026-09-10 in the Electron tier after M234–M237 (the chromeless checks), two green-but-for-headroom runs: 58.4s chained, 59.6s alone; 1.25x the slower, to the next second. Was 63000, which headroom.1 flagged at 93–95% before any watchdog fired
 
+const { occupiedWorld, overlapsRect, onScreen, cameraStill } = require('./lib/place-probe.cjs')
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, zoomToScale, state } = ctx
   {
@@ -300,20 +301,26 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       },
       3000
     )
+    // M402 (B4). "Centred on the view" is now "where the view looks, UNLESS
+    // that is taken": the seed s01 overlaps a 720x460 rect at the view's
+    // centre, so the one placement rule puts the panel in the nearest FREE
+    // spot and the reveal shows it. What stays pinned: one panel added, in
+    // WORLD coordinates (its rect is the store's, read back through the
+    // world layer), overlapping nothing (rims included — occupiedWorld), and
+    // wholly on screen once the camera settles. The exact-centre arm is
+    // core's place.free.1 below, which starts in empty world space.
     const spawnedCentre = await lastPanelCentreInWorld(wc)
-    // 1px: both sides come from the same getBoundingClientRect and the same
-    // computed transform, so the only slack is float rounding in the matrix
-    // string and sub-pixel layout. Anything larger is the centring math being
-    // wrong, not measurement noise.
-    const CENTRE_TOLERANCE_PX = 1
-    const centred =
-      spawnedCentre &&
-      Math.abs(spawnedCentre.x - expectedCentre.x) <= CENTRE_TOLERANCE_PX &&
-      Math.abs(spawnedCentre.y - expectedCentre.y) <= CENTRE_TOLERANCE_PX
-    ok('7 Cmd+N adds a panel centred on the view in world coordinates',
-      panelsAfterSpawn === panelsBeforeSpawn + 1 && centred,
-      `panels ${panelsBeforeSpawn} -> ${panelsAfterSpawn}, ` +
-        `centre ${JSON.stringify(spawnedCentre)} expected ${JSON.stringify(expectedCentre)}`)
+    await settle()
+    const placed7 = await occupiedWorld(wc)
+    const newest7 = placed7.find((r) => r.newest)
+    const overlaps7 = newest7 === undefined ? ['missing'] : placed7.filter((r) => !r.newest && overlapsRect(r, newest7)).map((r) => r.id)
+    const shown7 = newest7 === undefined ? false : await onScreen(wc, newest7.id)
+    ok('7 Cmd+N adds a panel in world coordinates where the view looks — the free spot nearest its centre, overlapping nothing, and on screen',
+      panelsAfterSpawn === panelsBeforeSpawn + 1 && overlaps7.length === 0 && shown7,
+      `panels ${panelsBeforeSpawn} -> ${panelsAfterSpawn}, centre ${JSON.stringify(spawnedCentre)} view ${JSON.stringify(expectedCentre)} overlaps ${JSON.stringify(overlaps7)} shown ${shown7}`)
+    // The view here had no room for 720x460, so the reveal FLEW to the new
+    // panel: let the flight land before anything clicks.
+    await cameraStill(wc)
 
     // 7b. HOLDING Cmd+N spawns exactly one panel, not one per OS key-repeat.
     //     A held key is one gesture but many keydowns: the OS emits the real
@@ -356,9 +363,14 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     // terminal while every other check still passes.
     const MARKER = 'qzxv'
 
-    await zoomTo(wc, '0') // back inside the interaction band so the click reaches xterm
+    // M402. Typed into the panel check 7 just made, BY ID, with the camera
+    // where check 7's reveal left it (on that panel, at 100%). Until M402 the
+    // first slot in the DOM happened to be the seed s01 with ⌘N's panel lying
+    // over its centre, so the click reached the new panel by overlap; the one
+    // placement rule puts it clear of s01, whose seed command echoes nothing.
     await waitUntil(async () => (await liveCount(wc)) > 0, 3000)
-    const focused = await clickPanelBody('.panel__slot')
+    const typedInto = newest7 === undefined ? null : newest7.id
+    const focused = await clickPanelBody(typedInto === null ? '.panel__slot' : `.panel[data-panel-id="${typedInto}"] .panel__slot`)
     for (const ch of MARKER) {
       // A real key event through Chromium's input pipeline, not a synthetic
       // KeyboardEvent: xterm reads typed text off its hidden textarea's input
@@ -390,7 +402,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       echoed !== false,
       echoed !== false
         ? `card shows ${JSON.stringify(echoed.slice(-60))}`
-        : `no card contained ${MARKER} (focused activeElement was "${focused.active}")`)
+        : `no card contained ${MARKER} (typed into ${typedInto}, focused activeElement was "${focused.active}")`)
 
     // ---------------------------------------------------------------------
     // 9. Pointer correction. Proves the corrector (Task 3's
@@ -3164,17 +3176,32 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           )
         : false
 
-      const TOL = 1 // same 1px float-rounding slack check 7 allows
+      const TOL = 1 // 1px float-rounding slack
+      // M402. "Where the view looks" is the free spot nearest the centre that
+      // also clears the floating chrome (the HUD and pill along the bottom):
+      // centred across, and never further up than it must be to clear them.
       const firstCentred = first &&
         Math.abs(first.x - expectedCentre.x) <= TOL &&
-        Math.abs(first.y - expectedCentre.y) <= TOL
-      const stepped = first && second &&
-        Math.abs(second.x - first.x - CASCADE_STEP) <= TOL &&
-        Math.abs(second.y - first.y - CASCADE_STEP) <= TOL
-      ok('51 a second Cmd+N at one camera cascades one step instead of stacking, and still goes live',
-        Boolean(firstCentred && stepped && live),
-        `first=${JSON.stringify(first)} second=${JSON.stringify(second)} ` +
-          `viewCentre=${JSON.stringify(expectedCentre)} step=${CASCADE_STEP} live=${live}`)
+        first.y <= expectedCentre.y + TOL && expectedCentre.y - first.y <= 160
+      // M402 (B4). The second press no longer cascades one CASCADE_STEP onto
+      // the first (the step left all but a 48px band of the older terminal
+      // buried): it goes to the nearest free spot, and — the view at 100%
+      // having no room for a second 720x460 — outside the view, where the
+      // reveal flies. A third press, likewise. Measured: no two of the three
+      // overlap, rim names included, and each is on screen once it lands.
+      await settle()
+      const secondShown = secondId ? await onScreen(wc, secondId) : false
+      const thirdId = await spawnOne()
+      await settle()
+      const thirdShown = thirdId ? await onScreen(wc, thirdId) : false
+      const three = (await occupiedWorld(wc)).filter((r) => [firstId, secondId, thirdId].includes(r.id))
+      const clash = three.flatMap((a, i) => three.slice(i + 1).filter((b) => overlapsRect(a, b)).map((b) => `${a.id}/${b.id}`))
+      ok('51 a second Cmd+N at one camera lands centred first, then CLEAR of the first instead of stacking, and still goes live',
+        Boolean(firstCentred && second && live && clash.length === 0 && secondShown),
+        `first=${JSON.stringify(first)} second=${JSON.stringify(second)} viewCentre=${JSON.stringify(expectedCentre)} live=${live} shown=${secondShown}`)
+      ok('place.free.1 ⌘N ×3 at one camera: no two of the three overlap (occupied rects, the rim name included), and each is on screen after its press — the view flies to the one it had no room for',
+        three.length === 3 && clash.length === 0 && secondShown && thirdShown,
+        `rects=${JSON.stringify(three)} clash=${JSON.stringify(clash)} shown=${secondShown}/${thirdShown}`)
     }
 
     // 52-53 — M6b. The end-to-end proof that a palette toggle reaches main's store
@@ -3796,10 +3823,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           return now.find((id) => !before.includes(id)) ?? false
         }, 8000)
       }
+      // M402. Each ⌘N may FLY the camera to its panel (the one placement
+      // rule), so A is clicked while it is the one on screen — before B's
+      // press moves the view — and B is added by the dispatched shift press
+      // below, which does not depend on where the camera is.
       const fitA = await spawnFit()
-      await sleep(300)
+      await cameraStill(wc)
+      const aEarly = typeof fitA === 'string' ? await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fitA))} + '] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) } })()`) : null
+      if (aEarly) { wc.sendInputEvent({ type: 'mouseDown', x: aEarly.x, y: aEarly.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: aEarly.x, y: aEarly.y, button: 'left', clickCount: 1 }); await sleep(120) }
       const fitB = await spawnFit()
-      await sleep(300)
+      await cameraStill(wc)
       const ids = [fitA, fitB].filter((x) => typeof x === 'string')
       const chromeBox = async (id) => wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) } })()`)
       const click = async (box, modifiers) => {
@@ -3809,9 +3842,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       }
       const rectsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
       const sessionsBefore = (await sessionMap(wc)).size
-      const a = ids.length === 2 ? await chromeBox(ids[0]) : null
       const b = ids.length === 2 ? await chromeBox(ids[1]) : null
-      if (a) await click(a, [])
       // The additive select reads `event.shiftKey` on the frame's mousedown
       // (PanelFrame's beginMove): a dispatched event carries the flag where a
       // real one through sendInputEvent did not add to the selection.
@@ -4017,6 +4048,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     rest is never unreachable. Read AFTER the --dur-1 transition (settle),
     //     the reveal.1 lesson: a computed opacity mid-transition is still 0.
     {
+      // M402. At INITIAL, where the seed frames are: the camera is wherever
+      // the last create door's reveal flew it.
+      await zoomTo(wc, '0')
+      await cameraStill(wc)
       await clickEmptyCanvas(wc)
       await settle()
       const away = await backgroundPoint(wc)
@@ -4025,7 +4060,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const target = await wc.executeJavaScript(`(() => {
         // Any kind's frame, live or carded: the rest rule is the FRAME's. A live one
         // first when there is one; the end of this part may have carded them all.
-        const frames = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.querySelector('[data-panel-more]') && !p.classList.contains('panel--selected') && !p.matches(':hover'))
+        // M402: and ON SCREEN — a create door now flies the camera to what it
+        // made, so a frame early in the array may lie outside the window.
+        const host = document.querySelector('.canvas').getBoundingClientRect()
+        const frames = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.querySelector('[data-panel-more]') && !p.classList.contains('panel--selected') && !p.matches(':hover')).filter((p) => { const c = p.querySelector('.pf__chrome').getBoundingClientRect(); const x = c.left + Math.min(60, c.width / 4), y = c.top + c.height / 2; const hit = document.elementFromPoint(x, y); return x > host.left && x < host.right && y > host.top && y < host.bottom && hit !== null && p.contains(hit) })
         const p = frames.find((f) => f.querySelector('.xterm')) ?? frames[0]; if (!p) return null
         const c = p.querySelector('.pf__chrome').getBoundingClientRect()
         const more = p.querySelector('[data-panel-more]')

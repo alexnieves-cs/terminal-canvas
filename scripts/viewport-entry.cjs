@@ -21,6 +21,10 @@ module.exports = {
   ...require('../src/renderer/panels/layout-adapt'),
   // M50. Snapping and tidy: pure rect math over applyDrag's output.
   ...require('../src/renderer/canvas/placement'),
+  // M402. The one placement rule over panels and groups, and the snap it shares a rim with.
+  ...require('../src/renderer/canvas/place-new'),
+  ...require('../src/renderer/groups/groups'),
+  ...require('../src/renderer/canvas/arrange'),
   ...require('../src/renderer/panels/recover'),
   ...require('../src/renderer/canvas/flight'),
   ...require('../src/renderer/canvas/card-detail'),

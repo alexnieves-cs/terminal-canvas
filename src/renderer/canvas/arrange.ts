@@ -357,6 +357,14 @@ export interface SmartSnapOptions {
   spacing?: boolean
   /** The floor for a resize; the panel floor unless a shape passes a smaller one. */
   min?: { w: number; h: number }
+  /**
+   * M402. World units a rect paints ABOVE its top edge (a live terminal's rim
+   * name, panels.ts's `occupiedRect`), by id. Only the STACKING pairs read it
+   * — my top on your bottom, my bottom on your top — so a terminal stacked
+   * under another lands its name clear of the upper one's bottom row, while
+   * top-to-top alignment still lines up the FRAMES a person sees.
+   */
+  rimOf?: (id: string) => number
 }
 export interface SmartSnapResult { rect: WorldRect; guides: SnapGuide[]; spacing: SpacingGuide[] }
 
@@ -383,7 +391,8 @@ function alignCandidates(
   others: readonly WorldRect[],
   threshold: number,
   resize: { growsX: boolean; growsY: boolean } | undefined,
-  min: { w: number; h: number }
+  min: { w: number; h: number },
+  rimOf: (id: string) => number = () => 0
 ): { x: AlignCand | null; y: AlignCand | null } {
   let bx: AlignCand | null = null
   let by: AlignCand | null = null
@@ -404,9 +413,13 @@ function alignCandidates(
     }
     for (let i = 0; i < nMineY; i++) {
       const mine = resize ? rect.y + rect.h : edgeAt(rect.y, rect.h, i)
+      const mineIsBottom = resize !== undefined || i === 1
       for (let k = 0; k < 3; k++) {
         const at = edgeAt(o.y, o.h, k)
-        const delta = at - mine
+        // M402. A stacking pair keeps the upper edge's rim clear: my top
+        // stops my rim below your bottom, my bottom stops at your rim.
+        const rim = !mineIsBottom && i === 0 && k === 1 ? rimOf(rect.id) : mineIsBottom && k === 0 ? -rimOf(o.id) : 0
+        const delta = at + rim - mine
         const a = Math.abs(delta)
         if (a > threshold || (by !== null && a >= Math.abs(by.delta))) continue
         if (resize && rect.h + delta < min.h) continue
@@ -435,7 +448,7 @@ export function smartSnap(rect: WorldRect, others: readonly WorldRect[], thresho
   const resize = opts.resize
   const min = opts.min ?? PANEL_MIN
   const grid = opts.grid !== undefined && opts.grid !== null && opts.grid > 0 ? opts.grid : null
-  const align = alignCandidates(rect, others, threshold, resize, min)
+  const align = alignCandidates(rect, others, threshold, resize, min, opts.rimOf)
   const useSpacing = !resize && opts.spacing !== false
   const px = useSpacing ? spacingPlan(rect, others, threshold, AX_X) : null
   const py = useSpacing ? spacingPlan(rect, others, threshold, AX_Y) : null

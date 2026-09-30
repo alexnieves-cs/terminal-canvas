@@ -108,6 +108,26 @@ export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
 /** M315. Screen pixels kept between the canvas edge and a panel too large to centre. */
 export const CENTRE_MARGIN = 16
 
+/**
+ * M402 (B4). Where the camera goes to SHOW a new object: `null` when it is
+ * already wholly in view at a readable scale (it appeared where the person is
+ * looking, and a camera that moved anyway would take their place from them);
+ * otherwise the object centred at a READABLE scale — the current one when it
+ * already is, READABLE_SCALE when the camera is further out — and never so
+ * close that the object does not fit (then its fit, whatever that reads at).
+ * The caller passes the result through the safe area, keeping the scale.
+ */
+export function revealTarget(vp: Viewport, rect: WorldRect, size: Size): Viewport | null {
+  const room = { w: size.width - 2 * CENTRE_MARGIN, h: size.height - 2 * CENTRE_MARGIN }
+  if (!(room.w > 0) || !(room.h > 0) || !(rect.w > 0) || !(rect.h > 0)) return null
+  const fits = Math.min(room.w / rect.w, room.h / rect.h)
+  const scale = clampScale(Math.min(Math.max(vp.scale, READABLE_SCALE), fits))
+  const tl = worldToScreen({ x: rect.x, y: rect.y }, vp)
+  const inView = tl.x >= 0 && tl.y >= 0 && tl.x + rect.w * vp.scale <= size.width && tl.y + rect.h * vp.scale <= size.height
+  if (inView && vp.scale >= Math.min(READABLE_SCALE, fits) - 1e-9) return null
+  return centreOn({ ...vp, scale }, rect, size)
+}
+
 /** A canvas-local pixel rect — something painted OVER the canvas, not in the world. */
 export interface ScreenRect {
   x: number
@@ -221,7 +241,32 @@ export function clearFraming(
   if (!hits(mb) && inside) return moved
   if (opts.keepScale === true) return moved
   // 3. Refit into the largest free frame.
-  const margin = opts.margin ?? 64
+  const frames = freeFrames(size, real, opts.margin ?? 64, gap)
+  const bw = box.w / target.scale, bh = box.h / target.scale
+  if (frames.length === 0 || !(bw > 0) || !(bh > 0)) return moved
+  let best: { f: ScreenRect; s: number } | null = null
+  for (const f of frames) {
+    const s = Math.min(target.scale, clampScale(Math.min(f.w / bw, f.h / bh)))
+    if (best === null || s > best.s + 1e-9 || (Math.abs(s - best.s) <= 1e-9 && f.w * f.h > best.f.w * best.f.h)) best = { f, s }
+  }
+  const { f, s } = best!
+  const worldLeft = (box.x - target.x) / target.scale
+  const worldTop = (box.y - target.y) / target.scale
+  return {
+    scale: s,
+    x: f.x + f.w / 2 - (worldLeft + bw / 2) * s,
+    y: f.y + f.h / 2 - (worldTop + bh / 2) * s
+  }
+}
+
+/**
+ * M395, named in M402. The frames of the host, inset by `margin`, that clear
+ * every obstacle by `gap`: each obstacle that cuts a frame is cleared by
+ * moving one of the frame's four edges past it, every combination kept
+ * (three to five obstacles, so at most a thousand tiny rects).
+ */
+export function freeFrames(size: Size, obstacles: readonly ScreenRect[], margin: number, gap: number = FRAME_CLEAR_GAP): ScreenRect[] {
+  const blocks = obstacles.filter((o) => o.w > 0 && o.h > 0).map((o) => ({ x: o.x - gap, y: o.y - gap, w: o.w + 2 * gap, h: o.h + 2 * gap }))
   let frames: ScreenRect[] = [{ x: margin, y: margin, w: size.width - 2 * margin, h: size.height - 2 * margin }]
   for (const o of blocks) {
     const next: ScreenRect[] = []
@@ -238,21 +283,7 @@ export function clearFraming(
     frames = next
     if (frames.length > 1024) break
   }
-  const bw = box.w / target.scale, bh = box.h / target.scale
-  if (frames.length === 0 || !(bw > 0) || !(bh > 0)) return moved
-  let best: { f: ScreenRect; s: number } | null = null
-  for (const f of frames) {
-    const s = Math.min(target.scale, clampScale(Math.min(f.w / bw, f.h / bh)))
-    if (best === null || s > best.s + 1e-9 || (Math.abs(s - best.s) <= 1e-9 && f.w * f.h > best.f.w * best.f.h)) best = { f, s }
-  }
-  const { f, s } = best!
-  const worldLeft = (box.x - target.x) / target.scale
-  const worldTop = (box.y - target.y) / target.scale
-  return {
-    scale: s,
-    x: f.x + f.w / 2 - (worldLeft + bw / 2) * s,
-    y: f.y + f.h / 2 - (worldTop + bh / 2) * s
-  }
+  return frames
 }
 
 /**

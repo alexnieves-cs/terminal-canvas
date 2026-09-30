@@ -731,6 +731,32 @@ export function cascadeCentre(centre: Point, panels: Panel[]): Point {
   return centre
 }
 
+/**
+ * M402. The strip a live terminal's name sits on, ABOVE its rect, in world
+ * units: `--sp-6`, the chrome's height in styles.css's rim rule (M397's A4
+ * follow-up moved the name off rows 0–1 and onto the rim, `bottom: 100%`).
+ */
+export const TERMINAL_RIM = 16
+
+/**
+ * M402. WHAT A PANEL OCCUPIES, which for a terminal is more than its rect.
+ * The rim strip paints — and takes the pointer, the name and the state word
+ * are live at rest — 16px above the frame, and every layout routine read
+ * `rect` alone: a drag-snap put a lower terminal's name over the upper one's
+ * bottom row (Claude Code's input line), so a click there hit the wrong
+ * panel; the placer, the marquee and a group's frame did not see the strip.
+ * Every one of those reads THIS instead.
+ *
+ * Every terminal, not only a live one: which tier a terminal renders at is a
+ * zoom-time fact (a far card has its header inside the rect), while a
+ * placement or a group's frame must hold at every zoom — the room the name
+ * needs near must stay reserved when the camera is far.
+ */
+export function occupiedRect(panel: Panel): WorldRect {
+  const rim = isTerminalPanel(panel) ? TERMINAL_RIM : 0
+  return rim === 0 ? panel.rect : { ...panel.rect, y: panel.rect.y - rim, h: panel.rect.h + rim }
+}
+
 /** One above the highest current z, so a raised or new panel is on top. */
 export function nextZ(panels: Panel[]): number {
   return panels.reduce((max, p) => Math.max(max, p.z), 0) + 1
@@ -1039,6 +1065,12 @@ export const REVIEW_H = 520
  * scroll away under every other section.
  */
 export const TASK_REVIEW_SIZE = { w: 960, h: 760 } as const
+/**
+ * M402 (B3). The smallest a review opens at when it is sized to the canvas
+ * (safe-area.ts's sizeToView): RAIL_MIN_W's width, so a many-file review can
+ * still take its file column, and room for the summary above a few diff lines.
+ */
+export const REVIEW_MIN = { w: 520, h: 400 } as const
 
 /** World units between a subject's right edge and its review node's left. */
 export const REVIEW_GAP = 40

@@ -33,6 +33,15 @@ export interface MinimapProps {
   selected?: ReadonlySet<string>
   /** M388. The flowchart shapes among `rects` — drawn as ONE outline path, no per-shape subscription: a chart is a shape on the map, not two hundred status blocks. */
   shapeIds?: ReadonlySet<string>
+  /**
+   * M402 (B3). A camera flight is under way. The map's `needed` is judged on
+   * every in-between frame, so a flight from a view that framed everything
+   * brought the full map in on its first frame — over the object being flown
+   * to. While flying it stays as it was at take-off — hidden if it was
+   * hidden, tucked aside if it was showing — and the landing's framing
+   * reserved its box (useViewport's `safely`), so it returns clear of the target.
+   */
+  flying?: boolean
 }
 
 /** The one place a minimap row's state is derived — Block and its `.sr-only`
@@ -60,7 +69,7 @@ function MinimapAltRow({ row }: { row: MinimapRow }): JSX.Element {
   return <li>{row.label} — {shown.word}</li>
 }
 
-export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds }: MinimapProps): JSX.Element | null {
+export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds, flying }: MinimapProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
   // The CANVAS's size, not the thumb's: the camera's rectangle is the canvas
@@ -137,6 +146,10 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
   // area (safe-area.ts) reads its box to reserve it while hidden.
   const needed = minimapNeeded(rects, viewport, size)
   const [presence, setPresence] = useState<MinimapPresence>('rest')
+  // M402. `needed` as it was when the camera last stood still (the flying prop's note).
+  const settledNeededRef = useRef(needed)
+  if (flying !== true) settledNeededRef.current = needed
+  const shownPresence: MinimapPresence | 'hidden' = !needed || (flying === true && !settledNeededRef.current) ? 'hidden' : flying === true ? 'aside' : presence
   const presenceRef = useRef<MinimapPresence>('rest')
   const beforeRef = useRef<MinimapPointer | null>(null)
   // The latest camera and rects for the document listener, which is
@@ -188,8 +201,8 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
       className="minimap"
       data-minimap
       data-cover={cover > 0.9 ? 'full' : 'part'}
-      data-presence={!needed ? 'hidden' : presence}
-      aria-hidden={!needed ? true : undefined}
+      data-presence={shownPresence}
+      aria-hidden={shownPresence === 'hidden' ? true : undefined}
       data-grabbing={grabbing ? '' : undefined}
       role="img"
       aria-label={`Overview: ${rects.length} panel${rects.length === 1 ? '' : 's'}; click to move the camera, or drag the view rectangle to pan`}

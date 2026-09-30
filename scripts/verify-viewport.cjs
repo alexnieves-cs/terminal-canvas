@@ -2245,6 +2245,86 @@ console.log('\n' + '='.repeat(60))
   ok('revamp.place.2 the floating chrome, passed as world rects, is avoided like any object',
     nearMap !== null && clears(nearMap, [chrome]) && inside(nearMap), JSON.stringify(nearMap))
 }
+// M402 (B4). THE ONE PLACEMENT RULE, pure: placePanel over real panels and
+// groups. Each arm is the defect it answers, measured as an overlap.
+{
+  const have = typeof V.placePanel === 'function' && typeof V.occupiedRect === 'function'
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  const within = { x: -700, y: -420, w: 1400, h: 840 }
+  const room = { chrome: [], within }
+  // A group of two notes around the view's centre: its FRAME (28 + 34 past
+  // its members) is what a chat landed inside in the live critique.
+  const a = have ? V.makeNotePanel('na', { x: -140, y: 0 }, 1, 'sticky', '') : null
+  const b = have ? V.makeNotePanel('nb', { x: 140, y: 0 }, 2, 'sticky', '') : null
+  const group = { id: 'g1', label: 'Examples', colour: 'blue', panelIds: ['na', 'nb'] }
+  const frame = have ? V.groupRect(group, [a, b]) : null
+  const chat = have ? V.placePanel(V.makeChatPanel('c1', { x: 0, y: 0 }, 3, { cwd: '~', sessionId: 's' }), [a, b], room, [group]) : null
+  const member = have ? V.placePanel(V.makeNotePanel('nc', { x: 0, y: 0 }, 3, 'sticky', ''), [a, b], room, [group], { memberOf: 'g1' }) : null
+  ok('place.rule.1 a new object never lands inside a group it does not belong to — the group\'s frame is an obstacle, not only its members — and a member-to-be may',
+    have && chat !== null && !overlaps(chat.rect, frame) && member !== null && overlaps(member.rect, frame),
+    JSON.stringify({ chat: chat?.rect, frame }))
+  // ⌘N three times at one camera: none overlaps another, rim included, and
+  // the view that has no room left sends the next one to the nearest free
+  // spot OUTSIDE it (the reveal flies there) rather than onto what is there.
+  let panels = []
+  const small = { chrome: [], within: { x: -600, y: -400, w: 1200, h: 800 } }
+  for (let i = 0; i < 3 && have; i++) panels = [...panels, V.placePanel(V.makePanel(`n${i}`, { x: 0, y: 0 }, i + 1), panels, small, [])]
+  const occ = panels.map((p) => V.occupiedRect(p))
+  const anyOverlap = occ.some((r, i) => occ.some((q, j) => j > i && overlaps(r, q)))
+  const firstCentred = panels[0] !== undefined && Math.abs(panels[0].rect.x + panels[0].rect.w / 2) < 1e-6 && Math.abs(panels[0].rect.y + panels[0].rect.h / 2) < 1e-6
+  ok('place.rule.2 ⌘N ×3 at one camera: the first where the view looks, none overlapping another (the rim name included), the one the view has no room for placed outside it',
+    have && panels.length === 3 && !anyOverlap && firstCentred, JSON.stringify(occ))
+  // Anchored: a review goes beside its agent even with the agent far off
+  // screen, and steps clear of a review already there.
+  const agent = have ? V.makeChatPanel('c9', { x: 5000, y: 3000 }, 1, { cwd: '~', sessionId: 's' }) : null
+  const rv = (id, cur) => V.placePanel(V.makeReviewPanel(id, V.reviewCentre(agent.rect, 640, 520), 5, { subjectId: 'c9', repoRoot: '/r', baselineSha: 'x', label: 'l' }, { w: 640, h: 520 }), cur, room, [], { anchored: true })
+  const r1 = have ? rv('r1', [agent]) : null
+  const r2 = have && r1 !== null ? rv('r2', [agent, r1]) : null
+  ok('place.rule.3 an anchored object (a review) goes BESIDE its parent wherever the parent is — never pulled into the view — and clear of what is already there',
+    have && r1 !== null && r1.rect.x === agent.rect.x + agent.rect.w + V.REVIEW_GAP && r1.rect.y === agent.rect.y && r2 !== null && !overlaps(r2.rect, r1.rect) && !overlaps(r2.rect, agent.rect) &&
+      Math.hypot(r2.rect.x - r1.rect.x, r2.rect.y - r1.rect.y) < 2000,
+    JSON.stringify({ r1: r1?.rect, r2: r2?.rect }))
+}
+// M402. The rim a terminal's name paints above its frame: every layout
+// routine reads occupiedRect, and a stack snaps the lower name clear.
+{
+  const have = typeof V.occupiedRect === 'function' && typeof V.smartSnap === 'function'
+  const upper = have ? V.makePanel('up', { x: 0, y: 0 }, 1) : null
+  const lower = have ? V.makePanel('lo', { x: 0, y: 600 }, 2) : null
+  const occ = have ? V.occupiedRect(upper) : null
+  const noteOcc = have ? V.occupiedRect(V.makeNotePanel('nt', { x: 0, y: 0 }, 1, 'sticky', '')) : null
+  ok('place.rim.1 a terminal OCCUPIES its rim strip above its rect (TERMINAL_RIM), every other kind exactly its rect; a group\'s frame encloses the rim',
+    have && occ.y === upper.rect.y - V.TERMINAL_RIM && occ.h === upper.rect.h + V.TERMINAL_RIM && noteOcc.y === V.makeNotePanel('nt', { x: 0, y: 0 }, 1, 'sticky', '').rect.y &&
+      V.groupRect({ id: 'g', label: '', colour: 'blue', panelIds: ['up'] }, [upper]).y === occ.y - V.GROUP_PADDING - V.GROUP_HEADER_H,
+    JSON.stringify({ occ, rect: upper?.rect }))
+  // Dragged near the upper frame's bottom: the snap stops the lower top
+  // TERMINAL_RIM below it, and never pulls it flush (flush = the name on the
+  // upper one's bottom row, which is what the rim-blind snap did).
+  const rimOf = (id) => (id === 'up' || id === 'lo' ? V.TERMINAL_RIM : 0)
+  const bottom = have ? upper.rect.y + upper.rect.h : 0
+  const snapped = have ? V.smartSnap({ ...lower.rect, y: bottom + V.TERMINAL_RIM + 5 }, [upper.rect], 8, { rimOf, spacing: false }).rect : null
+  const nearFlush = have ? V.smartSnap({ ...lower.rect, y: bottom + 4 }, [upper.rect], 8, { rimOf, spacing: false }).rect : null
+  const plain = have ? V.smartSnap({ ...lower.rect, y: bottom + 4 }, [upper.rect], 8, { spacing: false }).rect : null
+  const sideBySide = have ? V.smartSnap({ ...lower.rect, x: upper.rect.x + upper.rect.w + 30, y: upper.rect.y + 3 }, [upper.rect], 8, { rimOf, spacing: false }).rect : null
+  ok('place.rim.2 a snapped stack of terminals leaves the rim between them (the lower name clears the upper bottom row); top-to-top alignment still lines up the frames',
+    have && snapped.y === bottom + V.TERMINAL_RIM && nearFlush.y !== bottom && plain.y === bottom && sideBySide.y === upper.rect.y,
+    JSON.stringify({ snapped: snapped?.y, nearFlush: nearFlush?.y, plain: plain?.y, side: sideBySide?.y, bottom }))
+}
+// M402. The flight every create door ends with (revealTarget).
+{
+  const have = typeof V.revealTarget === 'function'
+  const size = { width: 1000, height: 700 }
+  const rect = { id: 'x', x: 100, y: 100, w: 400, h: 300 }
+  const here = have ? V.revealTarget({ x: 0, y: 0, scale: 1 }, rect, size) : undefined
+  const far = have ? V.revealTarget({ x: 0, y: 0, scale: 0.3 }, rect, size) : undefined
+  const off = have ? V.revealTarget({ x: -3000, y: 0, scale: 1 }, rect, size) : undefined
+  const big = have ? V.revealTarget({ x: 0, y: 0, scale: 1 }, { id: 'b', x: 2000, y: 0, w: 1600, h: 1200 }, size) : undefined
+  const shows = (vp, r) => { const b = V.framedBox([r], vp); return b.x >= -1e-6 && b.y >= -1e-6 && b.x + b.w <= size.width + 1e-6 && b.y + b.h <= size.height + 1e-6 }
+  ok('place.reveal.1 a new object already in view at a readable scale moves no camera; one out of view, or seen from too far, is centred at a readable scale; one too large for that is fitted whole',
+    have && here === null && far !== null && Math.abs(far.scale - V.READABLE_SCALE) < 1e-9 && shows(far, rect) &&
+      off !== null && off.scale === 1 && shows(off, rect) && big !== null && big.scale < V.READABLE_SCALE && shows(big, { id: 'b', x: 2000, y: 0, w: 1600, h: 1200 }),
+    JSON.stringify({ here, far, off, big }))
+}
 {
   const have = typeof V.tidyPanels === 'function'
   const view = { width: 1312, height: 800 }

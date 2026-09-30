@@ -10,7 +10,11 @@ import {
   screenToWorld,
   zoomAt,
   clearFraming,
+  CENTRE_MARGIN,
+  framedBox,
+  freeFrames,
   READABLE_SCALE,
+  revealTarget,
   type Point,
   type Size,
   type Viewport,
@@ -130,6 +134,8 @@ export interface ViewportControls {
    * up behind them. STATE, like `flying`, so an effect can key on it.
    */
   landing: { seq: number; landed: boolean }
+  /** M402 (B4). Fly to a new object unless it is already in view at a readable scale; whether the camera moves. */
+  reveal: (rect: WorldRect) => boolean
   /**
    * Arms a camera drag-pan from a mousedown's screen coordinates — backlog
    * #68's middle-drag and space-drag. The seventh narrow verb, after
@@ -645,11 +651,49 @@ export function useViewport(
     const size = hostSize(host)
     const target = centreOnRect(viewportRef.current, rect, size)
     // M395. A panel that fits is moved clear of the chrome at the SAME scale
-    // (centreOn's contract); one larger than the canvas is leading-edge
-    // aligned by centreOnRect and left there — its far side is off screen
-    // whatever the chrome does.
+    // (centreOn's contract). M402 (B3): one larger than the canvas is
+    // leading-edge aligned by centreOnRect and ALSO cleared, judged on its
+    // leading corner — the part a person reads first. Left unguarded, the
+    // minimap sat over a task review's heading and its controls.
     const fits = rect.w * target.scale <= size.width && rect.h * target.scale <= size.height
-    jump(fits ? safely(host, target, [rect], size, true) : target)
+    const moved = safely(host, target, fits ? [rect] : [leadingPart(rect, target, size)], size, true)
+    // M402 (B3). `safely` moves a target only up or left (clearOfOverlays),
+    // so a panel centred under a TOP-right minimap was lifted further under
+    // it: a task review's second press (the "already open" jump) framed its
+    // header controls beneath the map. When the move leaves it covered, it
+    // is centred in the largest free part of the canvas that holds it.
+    const reserve = minimapNeeded(rectsRef.current, moved, size) ? 'always' : 'never'
+    const stillCovered = fits && chromeObstacles(host, { minimap: reserve }).some((o) => overlaps(framedBox([rect], moved), o))
+    jump((stillCovered ? inFreeFrame(host, rect, moved.scale, size, reserve) : undefined) ?? moved)
+  }, [hostRef, jump, safely])
+
+  /**
+   * M402 (B4). SHOW WHAT A CREATE DOOR MADE: nothing when it is already in
+   * view at a readable scale, a flight to it at one otherwise
+   * (`revealTarget`), cleared of the chrome at that scale. Every create door
+   * ends here, which is what lets the one placement rule step a new object
+   * away from the view's centre — or out of a full view — and still be seen.
+   * Returns whether the camera moves.
+   */
+  const reveal = useCallback((rect: WorldRect): boolean => {
+    const host = hostRef.current
+    if (!host) return false
+    const size = hostSize(host)
+    const vp = viewportRef.current
+    // In view at a readable scale is not enough when the floating chrome lies
+    // over it: an ANCHORED object (a review beside its agent) is placed
+    // without the chrome, and one that landed under the minimap is not shown.
+    const box = framedBox([rect], vp)
+    const covered = chromeObstacles(host, { minimap: 'shown' }).some((o) => overlaps(box, o))
+    const target = revealTarget(vp, rect, size) ?? (covered ? vp : null)
+    if (target === null) return false
+    // Centred in the largest part of the canvas the chrome leaves that holds
+    // it, not in the host: the minimap reserved even while hidden (a canvas
+    // with an object out of view brings it back). `safely` moves a target
+    // only up or left (clearOfOverlays), so a task review centred under a
+    // top-right minimap stayed under it, its header controls covered (B3).
+    jump(inFreeFrame(host, rect, target.scale, size, 'always', { shrink: true }) ?? safely(host, target, [rect], size, true))
+    return true
   }, [hostRef, jump, safely])
 
   /**
@@ -751,6 +795,36 @@ export function useViewport(
   return {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects, frameReadable,
     beginPanDrag, panning,
-    goToViewport, cameraBack, cameraForward, trail, flying, landing
+    goToViewport, cameraBack, cameraForward, trail, flying, landing, reveal
   }
+}
+
+function overlaps(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+/**
+ * M402 (B3). `rect` centred at `scale` in the LARGEST part of the canvas the
+ * chrome leaves that holds it whole (viewport.ts's `freeFrames`), or
+ * undefined when none does.
+ */
+function inFreeFrame(host: HTMLElement, rect: WorldRect, scale: number, size: Size, minimap: 'always' | 'never', opts: { shrink?: boolean } = {}): Viewport | undefined {
+  // `shrink` (the reveal, which chooses its own scale): the frame that allows
+  // the LARGEST scale up to `scale`, a free frame a few px short no longer
+  // sending the object back under the chrome. Without it (centreOn, whose
+  // contract is the person's zoom), only a frame that holds it at `scale`.
+  let best: { f: { x: number; y: number; w: number; h: number }; s: number } | undefined
+  for (const f of freeFrames(size, chromeObstacles(host, { minimap }), CENTRE_MARGIN)) {
+    const s = Math.min(scale, f.w / rect.w, f.h / rect.h)
+    if (!(opts.shrink === true ? s > 0 : s >= scale - 1e-9)) continue
+    if (best === undefined || s > best.s + 1e-9 || (Math.abs(s - best.s) <= 1e-9 && f.w * f.h > best.f.w * best.f.h)) best = { f, s }
+  }
+  if (best === undefined) return undefined
+  const { f, s } = best
+  return { scale: s, x: f.x + f.w / 2 - (rect.x + rect.w / 2) * s, y: f.y + f.h / 2 - (rect.y + rect.h / 2) * s }
+}
+
+/** M402. The part of an oversized rect the screen shows from its leading corner at `vp`. */
+function leadingPart(rect: WorldRect, vp: Viewport, size: Size): WorldRect {
+  return { ...rect, w: Math.min(rect.w, size.width / vp.scale), h: Math.min(rect.h, size.height / vp.scale) }
 }

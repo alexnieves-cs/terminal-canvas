@@ -10,6 +10,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 
 const WATCHDOG_MS = 230000 // measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
 
+const { cameraStill } = require('./lib/place-probe.cjs')
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
@@ -561,6 +562,32 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         return { editor: f.offsetHeight, host: host ? host.offsetHeight : 0, monaco: mon ? mon.offsetHeight : 0 } })()`), 12000)
       ok('note.editor.height.1 the starter note opens into an editor with a real height — the Monaco host and Monaco itself measure at least 48 layout px, not the 0px/2.8px a flex item in a block body collapsed to',
         editorH && editorH.host >= 48 && editorH.monaco >= 48, JSON.stringify(editorH))
+      // M402 (B4) — place.group.1. A NEW CHAT DOES NOT LAND IN A GROUP IT IS
+      // NOT IN. The live critique found one inside the starter's "Examples"
+      // frame: the group's frame reaches 28 + 34 world units past its members,
+      // more than the placer's 24 gap, and nothing treated the FRAME as taken.
+      // Opened through beginNewChat (the harness door every chat door shares),
+      // then measured against the group's own painted frame and every panel.
+      let groupChat = null
+      const groupPlace = await (async () => {
+        const frame0 = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-group-id]'); return g ? g.getBoundingClientRect().toJSON() : null })()`)
+        if (frame0 === null) return { frame: null }
+        const ids0 = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        const made = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(require('node:os').homedir())})`)
+        groupChat = await waitUntil(async () => (await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id'))`)).find((pid) => !ids0.includes(pid)) ?? false, 3000)
+        await settle()
+        const measured = typeof groupChat === 'string' ? await wc.executeJavaScript(`(() => {
+          const g = document.querySelector('[data-group-id]').getBoundingClientRect()
+          const c = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${groupChat}"]`)}).getBoundingClientRect()
+          const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+          const others = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.getAttribute('data-panel-id') !== ${JSON.stringify(String(groupChat))}).filter((p) => hit(p.getBoundingClientRect(), c)).map((p) => p.getAttribute('data-panel-id'))
+          return { inFrame: hit(g, c), others, chat: c.toJSON(), frame: g.toJSON() }
+        })()`) : null
+        return { made, groupChat, measured }
+      })()
+      ok('place.group.1 a new chat opened beside the starter lands OUTSIDE the "Examples" group frame (a group it is not in) and on no other panel',
+        groupPlace.measured != null && groupPlace.measured.inFrame === false && groupPlace.measured.others.length === 0, JSON.stringify(groupPlace))
+      if (typeof groupChat === 'string') { await clickPanelClose(wc, groupChat); await settle() }
       ok(id, primary === true && started && kinds === 'chat,file,image,terminal,workflow' &&
         Array.isArray(captions) && JSON.stringify(captions) === JSON.stringify(expected) &&
         typeof group === 'string' && /Examples/.test(group) && image === 'data' && note === true && overlap === 0 &&
@@ -3137,7 +3164,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const afterType = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === (stickyRecord && stickyRecord.id))
       // (c) The SEEDED frame lies over the terminal: what does a click in its
       // middle hit? A DOM read, not a picture — the paint could look right
-      // while the frame still swallowed every gesture.
+      // while the frame still swallowed every gesture. M402: the note-adds
+      // above flew the camera to each new note (the one placement rule's
+      // reveal), so bring the seeded pair back on screen first.
+      await zoomTo(wc, '0')
+      await cameraStill(wc)
       const hit = await wc.executeJavaScript(`(() => {
         const f = document.querySelector('.panel[data-panel-id="ntOver"]')
         const t = document.querySelector('.panel[data-panel-id="ntTerm"]')
@@ -4199,6 +4230,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const none = await waitUntil(async () => { const c = await cardState('d07B'); return c && c.readiness === 'no-lane' ? c : false }, 8000)
         if (ready === false || none === false) console.log(`[work.action.1] final d07A=${JSON.stringify(await cardState('d07A'))} d07B=${JSON.stringify(await cardState('d07B'))}`)
 
+        // M402 (B3): the review opens at the size the live critique measured it
+        // clipped at — a 1200×800 window — and review.fit.1 below measures it.
+        win.setContentSize(1200, 800)
+        await sleep(400)
         // ---- review.task.2: the card's Review, pressed as a person does ----
         // mousedown and click in SEPARATE tasks (M195's lesson: a handler
         // that focuses on mousedown and then refuses cannot be seen by a
@@ -4234,6 +4269,31 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           }
         })()`)
         const opened = await waitUntil(async () => { const t = await taskSection(); return t && t.state === 'ready' && t.evidence !== 'reading' && t.rows.length > 0 ? t : false }, 15000)
+        // review.fit.1 — M402 (B3). THE REVIEW OPENS WHOLE. At 1200×800 the
+        // task review was a fixed 960×760 world box wider than the canvas at
+        // 100%: its header controls off screen, the minimap over its heading.
+        // Measured once the reveal has landed: the whole frame inside the
+        // canvas host, and every header control's centre in the host AND
+        // answered by elementFromPoint inside the review — not the minimap,
+        // not the canvas.
+        await cameraStill(wc)
+        const fit = await wc.executeJavaScript(`(() => {
+          const p = document.querySelector('.panel[data-panel-kind="review"]'); if (!p) return null
+          const h = document.querySelector('.canvas').getBoundingClientRect(), r = p.getBoundingClientRect()
+          const controls = [...p.querySelectorAll('.pf__chrome button')].map((b) => {
+            const c = b.getBoundingClientRect(); const x = c.left + c.width / 2, y = c.top + c.height / 2
+            const el = document.elementFromPoint(x, y)
+            return { label: (b.getAttribute('aria-label') || b.textContent || '').slice(0, 16), inHost: x >= h.left && x <= h.right && y >= h.top && y <= h.bottom, hit: el !== null && p.contains(el), under: el && !p.contains(el) ? String(el.className).slice(0, 30) : null }
+          })
+          const m = document.querySelector('.minimap'); const mr = m && m.getBoundingClientRect()
+          return { inside: r.left >= h.left - 1 && r.top >= h.top - 1 && r.right <= h.right + 1 && r.bottom <= h.bottom + 1, rect: [r.left, r.top, r.width, r.height], host: [h.left, h.top, h.width, h.height], controls,
+            world: [p.style.left, p.style.top, p.style.width, p.style.height], vp: window.__m4aViewport(), map: mr && [mr.left, mr.top, mr.width, mr.height, m.dataset.presence], reviews: document.querySelectorAll('.panel[data-panel-kind="review"]').length }
+        })()`)
+        win.setContentSize(1400, 900)
+        await sleep(300)
+        ok('review.fit.1 at a 1200×800 window a task review opens WHOLE — the frame inside the canvas, every header control on screen and hit by elementFromPoint inside the review (never the minimap)',
+          fit !== null && fit.inside === true && fit.controls.length > 0 && fit.controls.every((c) => c.inHost && c.hit),
+          JSON.stringify(fit))
         const subjectSaved = await waitUntil(() => {
           layoutStore.flushSync()
           const p = (layoutStore.initial().panels || []).find((q) => q.kind === 'review')

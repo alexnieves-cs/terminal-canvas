@@ -1,5 +1,5 @@
 import type { PersistedGroup } from '@shared/groups'
-import { isFramePanel, type Panel } from '@renderer/panels/panels'
+import { isFramePanel, occupiedRect, type Panel } from '@renderer/panels/panels'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import { applyDrag, type DragState } from '@renderer/canvas/panel-interaction'
 
@@ -8,10 +8,14 @@ export type CanvasGroup = PersistedGroup
 export const GROUP_PADDING = 28
 export const GROUP_HEADER_H = 34
 
-/** The visible region is derived from the panels it owns, never persisted. */
+/**
+ * The visible region is derived from the panels it owns, never persisted.
+ * M402: from what each member OCCUPIES (`occupiedRect`), so a terminal's rim
+ * name is inside its group's frame rather than under the group's header.
+ */
 export function groupRect(group: CanvasGroup, panels: readonly Panel[]): WorldRect | null {
   const members = group.panelIds
-    .map((id) => panels.find((panel) => panel.rect.id === id)?.rect)
+    .map((id) => { const panel = panels.find((candidate) => candidate.rect.id === id); return panel === undefined ? undefined : occupiedRect(panel) })
     .filter((rect): rect is WorldRect => rect !== undefined)
   if (members.length === 0) return null
   const left = Math.min(...members.map((r) => r.x)) - GROUP_PADDING

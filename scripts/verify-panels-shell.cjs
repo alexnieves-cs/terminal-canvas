@@ -3130,7 +3130,12 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           // after the reload through a real sendInputEvent, which needs real
           // screen coordinates — not a panel 60,000 world units from
           // wherever the camera happens to sit.
-          layoutStore.save({ panels: seededPanels, camera: { x: 0, y: 0, scale: 1 },
+          // M402: centred on the SUBJECT, wherever the one placement rule put
+          // it (no longer necessarily near the origin).
+          const subjectRect = seededPanels.find((p) => p.id === subjectPanel)
+          const camera107 = subjectRect === undefined ? { x: 0, y: 0, scale: 1 }
+            : { x: Math.round(600 - (subjectRect.x + subjectRect.w / 2)), y: Math.round(400 - (subjectRect.y + subjectRect.h / 2)), scale: 1 }
+          layoutStore.save({ panels: seededPanels, camera: camera107,
             selectedId: null, focusedId: null })
           layoutStore.flushSync()
           const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -3792,8 +3797,24 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       //      needs new work to have something to cancel, since 113 left the
       //      node clean.
       {
-        if (subject) ptyManager.write(subject, "printf 'more\\n' > second.txt\n")
-        await settle()
+        // M402. The subject is wherever the one placement rule put it — no
+        // longer beside the view's centre — so after 113's reload it was off
+        // screen, never promoted, and its (direct-backend) shell never came
+        // back: the write below went nowhere. Frame it first (the rail row's
+        // goToPanel), wait for its session, then come back to the node.
+        if (subject) {
+          await clickRailRow(subject); await settle()
+          await waitUntil(async () => (await sessionMap(wc)).has(subject), 8000)
+          ptyManager.write(subject, "printf 'more\\n' > second.txt\n")
+          await settle()
+          await clickRailRow('rcommit'); await settle()
+        }
+        // The node re-reads on its own when its subject goes idle; the
+        // refresh control makes this deterministic, as 115's comment says.
+        await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.review-node[data-panel-id="rcommit"] .review-node__refresh')
+          if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
         const armed = await waitUntil(async () => wc.executeJavaScript(
           `(() => { const b = document.querySelector('.review-node[data-panel-id="rcommit"] [data-review-node-commit]')
                     return b !== null && !b.disabled })()`), 15000)
@@ -3825,6 +3846,9 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
             return kind !== 'never-started' ? kind : false
           }, 10000)
         }
+        // M402. The peer's spawn flew the camera to the peer (the one
+        // placement rule's reveal); frame the node again before reading it.
+        await clickRailRow('rcommit'); await settle()
         // The node re-reads on its own only when its subject goes idle, which
         // may already have happened — so the refresh control is what makes
         // this deterministic rather than a race against an agent's timing.

@@ -8,8 +8,9 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 60000 // measured 2026-09-07 alone in the Electron tier after the M149 checks, two green runs: 47.1s, 47.4s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 68000 // measured 2026-09-30 (M402) after place.snap.rim.1 and the create doors' reveal flights, two green runs: 53.1s, 53.8s (the second in `npm run affected`); 1.25x the slower, to the next second. Was 60000 (M149: 47.1s, 47.4s), which headroom.1 read at 89.7%
 
+const { occupiedWorld, overlapsRect, cameraStill } = require('./lib/place-probe.cjs')
 runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
@@ -582,6 +583,79 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         selectionReady144b && movedTogether144b && undone144b === true,
         `fresh=${JSON.stringify(fresh144b)} first=${JSON.stringify(firstProbe)} second=${JSON.stringify(secondProbe)} ` +
           `selected=${JSON.stringify(selected144b)} under=${JSON.stringify(under144b)} moved=${movedTogether144b} undone=${undone144b}`)
+    }
+
+    // place.snap.rim.1 — M402. A live terminal's name sits on the rim ABOVE
+    // its frame (M397's A4) and takes the pointer. The drag-snap read the
+    // rect alone, so stacking one terminal under another snapped it FLUSH and
+    // its name landed on the upper one's bottom row — Claude Code's input
+    // line — where a click then hit the wrong panel. Two fresh live
+    // terminals; the lower one dragged by its NAME (the real handle) to 3px
+    // past the rim-clear line; measured: the snap stops it TERMINAL_RIM under
+    // the upper frame, elementFromPoint on the upper one's bottom row under
+    // the lower name answers the UPPER panel, and the two occupied rects do
+    // not overlap.
+    {
+      await zoomTo(wc, '0')
+      // Snapping is OFF in this harness (so older checks pin raw arithmetic);
+      // on for this fixture only, through the same settings:changed a real
+      // toggle sends, and back off in the finally.
+      layoutStore.setPreference('placement.snap', true)
+      wc.send(IPC_EVENTS.SETTINGS_CHANGED, 'placement.snap')
+      await sleep(200)
+      try {
+      const idsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      for (let i = 0; i < 2; i++) {
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), command: '/bin/sh', args: [], w: 320, h: 200 })
+        await sleep(400)
+      }
+      await settle()
+      const fresh = (await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)).filter((id) => !idsBefore.includes(id))
+      const [upperId, lowerId] = fresh
+      const box = (id) => wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']')
+        const t = p && p.querySelector('.pf__title')
+        if (!p || !t) return null
+        return { p: p.getBoundingClientRect().toJSON(), t: t.getBoundingClientRect().toJSON(), live: !!p.querySelector('.panel__slot'), y: parseFloat(p.style.top), h: parseFloat(p.style.height) }
+      })()`)
+      let detail = { fresh }
+      let pass = false
+      if (upperId !== undefined && lowerId !== undefined) {
+        const up = await box(upperId), lo = await box(lowerId)
+        detail = { ...detail, up, lo }
+        if (up && lo && up.live && lo.live) {
+          const grab = { x: Math.round(lo.t.left + Math.min(20, lo.t.width / 2)), y: Math.round(lo.t.top + lo.t.height / 2) }
+          const dx = Math.round(up.p.left + 2 - lo.p.left)
+          const dy = Math.round(up.p.bottom + 16 + 3 - lo.p.top)
+          wc.sendInputEvent({ type: 'mouseMove', x: grab.x, y: grab.y })
+          await sleep(150)
+          wc.sendInputEvent({ type: 'mouseDown', x: grab.x, y: grab.y, button: 'left', clickCount: 1 })
+          for (let i = 1; i <= 6; i++) {
+            wc.sendInputEvent({ type: 'mouseMove', x: Math.round(grab.x + dx * i / 6), y: Math.round(grab.y + dy * i / 6), button: 'left', modifiers: ['leftButtonDown'] })
+            await sleep(30)
+          }
+          wc.sendInputEvent({ type: 'mouseUp', x: grab.x + dx, y: grab.y + dy, button: 'left', clickCount: 1 })
+          await sleep(300)
+          const up2 = await box(upperId), lo2 = await box(lowerId)
+          const hit = await wc.executeJavaScript(`(() => {
+            const t = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(lowerId))} + '] .pf__title').getBoundingClientRect()
+            const u = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(upperId))} + ']').getBoundingClientRect()
+            const el = document.elementFromPoint(t.left + Math.min(10, t.width / 2), u.bottom - 4)
+            return el ? (el.closest('.panel')?.getAttribute('data-panel-id') ?? '-') : null
+          })()`)
+          const occ = (await occupiedWorld(wc)).filter((r) => r.id === upperId || r.id === lowerId)
+          const gap = lo2.y - (up2.y + up2.h)
+          detail = { gap, hit, occ }
+          pass = Math.abs(gap - 16) < 0.5 && hit === upperId && occ.length === 2 && !overlapsRect(occ[0], occ[1])
+        }
+      }
+      ok('place.snap.rim.1 a snapped stack of live terminals leaves the lower one\'s rim name clear of the upper one\'s bottom row — elementFromPoint there answers the upper panel',
+        pass, JSON.stringify(detail))
+      } finally {
+        layoutStore.setPreference('placement.snap', false)
+        wc.send(IPC_EVENTS.SETTINGS_CHANGED, 'placement.snap')
+        await sleep(200)
+      }
     }
 
     // ---------------------------------------------------------------------
@@ -2633,11 +2707,17 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // wins over panel chrome, since no panel handler in this codebase
       // checks event.button and would otherwise start a PANEL drag.
       {
+        // M402. The first panel whose top edge is ON SCREEN and hit-testable,
+        // not the first in the DOM: create doors now fly the camera to what
+        // they made, so the array's first panel may lie off screen here.
         const rect = await wc.executeJavaScript(`(() => {
-          const el = document.querySelector('.panel')
-          if (!el) return null
-          const r = el.getBoundingClientRect()
-          return { id: el.getAttribute('data-panel-id'), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 10) }
+          for (const el of document.querySelectorAll('.panel')) {
+            const r = el.getBoundingClientRect()
+            const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + 10)
+            const hit = document.elementFromPoint(x, y)
+            if (hit && el.contains(hit)) return { id: el.getAttribute('data-panel-id'), x, y }
+          }
+          return null
         })()`)
         const before = rect ? await wc.executeJavaScript(`(() => {
           const el = document.querySelector('.panel[data-panel-id="${rect.id}"]')
@@ -3589,6 +3669,33 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         return diff.length === 2 ? diff : false
       }, 8000)
       const [A, B] = pair || [null, null]
+      // M402. The one placement rule puts each shell in a FREE spot and flies
+      // the camera to it; this crowded canvas has room for A in view but not
+      // B, so B's reveal leaves A off screen. Frame the pair first — select
+      // both (a dispatched press does not need them on screen) and run the
+      // palette's Zoom to fit, the way a person gathers two panels into view.
+      if (A && B) {
+        await cameraStill(wc)
+        await wc.executeJavaScript(`(() => {
+          for (const [id, shiftKey] of [[${JSON.stringify(A)}, false], [${JSON.stringify(B)}, true]]) {
+            const c = document.querySelector('.panel[data-panel-id="' + id + '"] .panel__chrome'); if (!c) continue
+            const r = c.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 20, clientY: r.top + r.height / 2, shiftKey }
+            c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o))
+          }
+          return true })()`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        await wc.executeJavaScript(`(async () => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const input = document.querySelector('.palette__input')
+          setter.call(input, 'Zoom to fit'); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const row = [...document.querySelectorAll('.palette__row')].find((r) => r.textContent.includes('Zoom to fit'))
+          if (row) row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+        await cameraStill(wc)
+      }
       const running = A && B ? await waitUntil(async () => { const m = await sessionMap(wc); return m.has(A) && m.has(B) }, 8000) : false
       // Chrome points by id (144b's shape), and a body point for focus.
       //
@@ -3645,7 +3752,9 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       }
       // B is topmost (spawned last) and may cover A's chrome; move B down out
       // of the way first, exactly as 144b does.
-      if (running) {
+      // M402: only when B does cover it — the one placement rule no longer
+      // lands B on A, and a drag of 240px then pushed A's body off the window.
+      if (running && (await pointIn(A, '.panel__chrome')) === null) {
         const bChrome = await pointIn(B, '.panel__chrome')
         if (bChrome) {
           wc.sendInputEvent({ type: 'mouseDown', x: bChrome.x, y: bChrome.y, button: 'left', clickCount: 1 })

@@ -423,3 +423,138 @@ task, the flowchart scenes with the pill or inspector open ("New task from this 
 `start.door.1/.2`, `start.answer.1`, `onboarding.intent.e2e.*`, `start.recovery.*`; `verify:panels:core` green with 48's
 new ORDER; `verify:panels:orchestrate` green with `orch-tasks.app.2`. Plain: `verify:palette` 169/169, `first-run` 29/29,
 `onboarding` 21/21, `swarm` 39/39, `rail` 258/258, `meta` 51/51 (the lb entries added in `docs/load-bearing.md`).
+
+### M402 — one placement rule for every create door (B4), the review opens whole (B3), the rim's geometry
+
+Reproduced both in the real built app (slot 1, CDP 9210, window 1200×800, navigator open — canvas host 852×744),
+against the task the M400 builder left in `/tmp/tc-b1-repo` (its lane `tc/c2-…`, one committed README change).
+The userData was snapshotted before the first drive (`/tmp/tcc-1.bak-m402-before`) and restored for the after-drive,
+so before and after start from the same canvas. Screenshots: `B3-before.png`, `B3-before-flight.png`, `B3-after.png`,
+`B3-after-flight.png`, `B4-before.png`, `B4-before-workcard.png`, `B4-after.png`, `B4-after-workcard.png`,
+`B4-after-cmdn-{1,2,3}.png`.
+
+**B4 (P1), new objects land on top, and the rule depends on the door.** *Reproduced:* Show on canvas put the task's
+work card over the terminal and the chat (`B4-before-workcard`); two ⌘N presses cascaded two login shells into the
+task's dashed region, over its review (`B4-before`). *Cause:* as the finding says — ⌘N, the sheet, preset spawns, files,
+⌘K New note, work/GitHub/Jira cards, watchers, workflows, memory, browser, relay, capture, skill and new chats went
+through `cascadeCentre` (exact-centre test only); stickies, shapes, pictures and "+ Create" went through M395's
+`freeSpot`, which saw neither a group's FRAME (28 + 34 past its members, more than its 24 gap — how a chat landed in the
+starter's "Examples") nor a task's dashed region; "+ Create"'s `spotFor` read `panelsRef` outside the updater.
+*Fix — the rule:* `placement.ts`'s `placeNew` (pure), applied by `place-new.ts`'s `placePanel` to a panel the door
+minted at the point it asks for, inside the door's `setPanels` updater over `current`:
+1. obstacles = every panel's `occupiedRect` + the frame of every group the object is not in + (Canvas passes) every
+   dashed TASK region, except for an anchored object, which joins its parent's task;
+2. `anchored` (a review beside its agent, a capture beside its pane, a dispatched lane's chat beside its card, a checks
+   watcher under its chat): the free spot nearest the point beside the parent, wherever the parent is;
+3. otherwise the free spot nearest the view's centre wholly in view and clear of the floating chrome; if the view has
+   no room, the nearest free spot anywhere;
+4. `cascadeCentre` only when nothing within reach is free (the full-view fallback, 80 rings);
+5. then `useViewport`'s `reveal`: no camera move when the object is already wholly in view at a readable scale;
+   otherwise a flight that centres it at `max(scale, READABLE_SCALE)` (its fit if it is too big for that), landed in the
+   largest part of the canvas the chrome leaves (the minimap reserved). A pool's mint is `quiet` (no flight for a mint
+   nobody pressed for); a review lands `lit` (the attention jump's arrival glow).
+`Canvas.tsx`'s `placer()` reads the DOM (chrome, view) and the groups/regions once, outside the updater, and returns
+the function the updater calls — the batching rule kept. Every `cascadeCentre` door in Canvas, `useBoardVerbs`
+(dispatch, checks watcher) and `useFlowchartVerbs` (shapes) now goes through it; "+ Create" hands every kind to its
+door's own placement (no `spotFor`, no `exact`), so ⌘K and Create put the same object in the same place. A point a
+person GAVE (double-click, drop, the starter's layout, `at` from a caller) stays exact.
+*The ⌘N cascade decision:* changed, and its load-bearing entry updated (`docs/load-bearing.md`, "`Cmd+N` cascades" and
+"A new AUTHORED object goes to free space"). The old reason was "overlap is the NORMAL state of a working canvas, so an
+overlap rule would step nearly every press away from where the user is looking." That held while an object placed off
+the centre was an object nobody saw. It no longer holds: every create door ends with the reveal, so the step away is
+seen, and the measured cost of the old rule was a new terminal burying the one under it.
+*Measured after:* the work card lands in free space above the chat (`B4-after-workcard`); three ⌘N presses land three
+terminals clear of each other and of the task region, each flown to at 80% (`B4-after-cmdn-*`, `B4-after`: the only
+overlap on that canvas, n1/c2, is the pre-existing one from before the drive).
+*Not done, with reasons:* the lineup/swarm/template ARRANGEMENTS keep their fixed offsets (the planner's "place the
+arrangement as one bounding box" is a larger change to `useBoardVerbs`' seat loop; its members are minted outside the
+placer). `recover.ts` keeps the cascade (it restores, it does not create). A skill panel's point is the drop's (exact
+by M395's rule) and keeps its cascade.
+
+**The rim (the M399 + A4-redo critic, item 1).** *Cause:* the 16px name strip of a live chromeless terminal sits above
+its rect, and snap, the placer, the marquee and group bounds read the rect. *Fix:* `panels.ts`'s `TERMINAL_RIM` and
+`occupiedRect(panel)` (every terminal, not only a live one — the tier is a zoom-time fact, placement must hold at every
+zoom), read by the placer (obstacles AND the new object's own box), the marquee (`useCanvasPointer`), group bounds
+(`groups.ts`'s `groupRect`, so a group frame encloses its top terminal's name), and the drag snap: `arrange.ts`'s
+`smartSnap` takes `rimOf`, applied to the STACKING pairs only (my top on your bottom, my bottom on your top) — top-to-top
+alignment still lines up the frames a person sees. The cascade itself is centre-based and needs no rect. The title is
+capped at `calc(50% - var(--sp-6))`, clear of the north port at the frame's middle. *Decision:* a snap no longer pulls a
+lower terminal flush under an upper one; dropped there by hand without snapping, it still may overlap (the person's
+choice).
+
+**B3 (P1), the review opens clipped.** *Reproduced* (`B3-before`): the task review was 960×760 world in an 852×744
+canvas at 100% — its ⋯/refresh/fill/close off the right edge, the diff cut, the minimap over its heading; with one file
+the row wrapped the diff BESIDE the stretched file name (measured: the diff 260px of 916). *Cause:* the fixed
+`TASK_REVIEW_SIZE`; the flight went through `centreOn`, whose oversized branch skipped `safely`; `safely`'s move
+(`clearOfOverlays`) only goes up or left, so a target under a top-right minimap stayed there; the map's `needed` is
+judged per in-between frame, so a flight brought it in over the target; `.review-node__file` wraps, so the stack
+layout's hunks sat beside the row. *Fix:* `safe-area.ts`'s `sizeToView` sizes a review at mint to the largest part of the
+canvas the chrome leaves (minimap reserved) at the reveal's scale, clamped to `REVIEW_MIN` (520×400) … `TASK_REVIEW_SIZE`
+/ `REVIEW_W×H`; it is placed by the rule beside its agent and flown to by the reveal, which lands it in that free frame
+(`viewport.ts`'s `freeFrames`, extracted from `clearFraming` unchanged); `centreOn`'s oversized branch now goes through
+`safely` on its leading part; the minimap keeps its take-off state during a flight (hidden stays hidden, shown tucks
+aside — `MinimapOverlay`'s `flying`); the stack layout's diff takes a full line under its row, and the rail's file column
+is `clamp(160px, 24%, 220px)`. *Measured after* (`B3-after`): the review 820×566 at (364,176)–(1184,742) inside the
+852×744 host, below the minimap (1028,68)–(1188,168); every header control's centre in the host and hit by
+`elementFromPoint` inside the review; the diff the full width of the row; mid-flight the map is a tucked tile
+(`B3-after-flight`).
+
+**Checks added (scoped ids):** `verify:viewport place.rule.1` (a group's frame is an obstacle, a member-to-be may
+enter it), `place.rule.2` (⌘N ×3 pure: none overlap, rims included, the first centred), `place.rule.3` (anchored beside
+a far-off parent, clear of a review already there), `place.rim.1` (occupiedRect + group frame enclose the rim),
+`place.rim.2` (a snapped stack leaves the rim; a near-flush drop is not pulled flush; top-to-top still aligns frames),
+`place.reveal.1` (no move in view; readable scale from far; fit when too big). `verify:panels:core place.free.1` (⌘N ×3
+in empty world space: no two overlap, measured from the DOM, each on screen after its press). `verify:panels:kinds
+place.snap.rim.1` (two live terminals, the lower dragged by its NAME to 3px past the rim line with snapping on: the gap
+is TERMINAL_RIM and `elementFromPoint` on the upper one's bottom row under the lower name answers the UPPER panel).
+`verify:panels:product place.group.1` (after the starter, a chat opened through `beginNewChat` does not overlap the
+"Examples" group's painted frame or any panel). `verify:panels:product review.fit.1` (B3: the harness window set to 1200×800, the card's Review pressed, the reveal
+landed: the review's frame inside the canvas host and every header control's centre in the host and answered by
+`elementFromPoint` inside the review, never the minimap). Its first run was RED on the fixed build and found a second
+defect: with the harness's narrower canvas (592px, rail and inspector open) no free frame held the sized review at
+100% by a few px, and the fallback `safely` lifted it under a top-right minimap. So the reveal now takes the free frame
+that allows the largest scale up to its own (`useViewport`'s `inFreeFrame`, `shrink`; it landed at 0.999), and
+`centreOn` — whose `safely` move only goes up or left — lands a fitting panel in the largest free frame at the SAME
+scale when the move leaves it covered (its keep-the-zoom contract unchanged).
+
+**Checks changed deliberately (each for the reason named):**
+- `panels:core 7` — "centred on the view" became "the free spot nearest the centre, overlapping nothing (occupied
+  rects), on screen": the seed s01 overlaps a 720×460 rect at the view's centre.
+- `panels:core 8` — types into check 7's panel BY ID with the camera where 7's reveal left it; it used to reach that
+  panel only because the cascade laid it over s01's centre (s01's seed command echoes nothing).
+- `panels:core 51` — the second press lands CLEAR of the first (no CASCADE_STEP); the first is centred across and
+  lifted only as far as the HUD/pill require (≤160 world px).
+- `panels:core fit.1` — A is clicked while it is on screen (before B's press flies the camera); B added by the
+  dispatched shift press.
+- `panels:core rest.1` — resets to INITIAL and picks an on-screen, hit-testable frame.
+- `panels:kinds 175` — the first ON-SCREEN, hit-testable panel, not the first in the DOM.
+- `panels:kinds broadcast.1` — frames the pair (select both, palette Zoom to fit) before its real clicks; B is dragged
+  out of A's way only when it covers A's chrome.
+- `panels:shell 107` — the reload's camera is centred on the subject (no longer near the origin).
+- `panels:shell 114` — frames the subject (rail row) so its shell is live before writing, back to the node, refresh.
+- `panels:shell 115` — frames the node again after the peer's spawn flew the camera to the peer.
+- `panels:product note.1` — resets to INITIAL before its elementFromPoint (the note-adds' reveals moved the camera).
+- Not changed, checked: `panels:kinds 142/144b` (green), `panels:shell 90/100b` (green), `verify:viewport 51–55/78` and
+  `revamp.place.1–.2` (green: cascadeCentre and freeSpot are unchanged), `verify:groups` (green),
+  `verify:flowchart arrange.*` (green — `rimOf` defaults to 0).
+
+**Suites (this milestone's final tree).** Plain: `verify:viewport` 193/193, `groups` 18/18, `flowchart` 169/169, `styles`
+93/93, `meta` 51/51 (after the kinds watchdog comment kept its "// measured" form, `panels-split.1`). Electron, each
+alone: `panels:core` 87/87 (63.8 s), `panels:kinds` 53/53 (53.1 s; its watchdog RE-PINNED 60000 → 68000 — two green runs
+53.1 s / 53.8 s put `headroom.1` at 89.7%; the added check and the reveal flights are the growth), `panels:shell`
+105/105 (83.2 s), `panels:product` 135/135 twice in a row (180.8 s, 180.9 s — note `starter.1` is GREEN now, M399's A5),
+`panels:agents` 85/86 (only `template.1`, baseline), `panels:flowchart` 16/16 (38.4 s). `npm run affected` (earlier in
+the milestone, before review.fit.1): 55/56, the one red `panels:agents template.1` (baseline).
+*Hangs, measured, not called flakes by assumption:* `panels:product` hit its watchdog twice in nine runs (once hung
+awaiting a reload in the D07 block, once in a `TC_ONLY` run); the next three full runs were green. `panels:orchestrate`
+was 37/37 twice (140 s, in and out of `affected`) and then hung at different checks in three runs at load 5–16 — and
+hung the same way on the BASELINE build (my changes stashed, rebuilt: watchdog at 29 checks, load 16). So the
+orchestrate hang is not this milestone's; the product hangs are unattributed.
+*Goldens expected to move:* every scene with a live terminal whose title is long (the rim title's `max-width`);
+`group*` (a group whose top member is a terminal grows 16px at its top, `occupiedRect`); any scene that creates an
+object at shot time (the object is placed by the rule and the camera may fly: `starter`, `palette*` if a row mints,
+`chat` if its chat is minted, `spawn-sheet`/`start-work` if they spawn); review scenes where a review is opened at
+shot time (sized to the canvas, the one-file diff full width, the rail's file column 160–220px): `review*`, `merged`,
+`focus*`; `minimap`-bearing scenes only if shot mid-flight.
+*Not done:* the lineup/swarm/template arrangements (above); a flight-time golden for the minimap. The A4 rim for an
+agent terminal (`claude` in a PTY) was not driven with a real agent (M397's note stands).

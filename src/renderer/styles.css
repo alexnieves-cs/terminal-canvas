@@ -4292,8 +4292,11 @@ body {
    the detail pane is under the cursor. */
 .review-node__layout { flex: 1 1 auto; min-height: 0; }
 .review-node__layout[data-review-layout="rail"] { display: flex; gap: var(--sp-3); min-height: 0; }
+/* M402 (B3). The DIFF gets the width: the file column is narrow — it lists
+   names, and a long path ellipsises — so a review sized to a 1200px window
+   still gives the diff most of its box. */
 .review-node__layout[data-review-layout="rail"] > .review-node__rail {
-  flex: 0 0 220px;
+  flex: 0 0 clamp(160px, 24%, 220px);
   overflow-y: auto;
   min-height: 0;
 }
@@ -4433,6 +4436,12 @@ body {
 .review-node__new { color: var(--blue); background: var(--blue-dim); }
 .review-node__file:hover .review-node__discard, .review-node__file:focus-within .review-node__discard, .review-node__discard--armed { opacity: 1; }
 .review-node__file > .review-node__file-button { flex: 1 1 auto; width: auto; }
+/* M402 (B3). ONE FILE COLLAPSES THE COLUMN: in the stack layout (one file,
+   or a narrow node) the row's diff and its touches take a full line of their
+   own under the row. The row wraps, so without this a wide review put the
+   one file's name, stretched, over ~60% of the width and squeezed the diff
+   into what was left beside it (the live critique, measured 260px of 916). */
+.review-node__file > :is(.review-node__hunks, .review-node__touch-list) { flex: 1 0 100%; min-width: 0; }
 .review-node__discard { opacity: 0; transition: opacity var(--dur-1) var(--ease);
   flex: none;
   min-height: 24px;
@@ -7057,7 +7066,11 @@ body {
    measured the consequence: a click two rows down, well to the right of the
    text, still landed on the title instead of the cell. The base rule and
    header.1 are untouched; this is the chromeless case overriding it. */
-.pf--kind-terminal:has(.panel__slot) .pf__title { flex: 0 1 auto; color: var(--fg-2); transition: color var(--dur-1) var(--ease); }
+/* M402. And it stops short of the frame's MIDDLE, where the north link port
+   sits: a long name (a command line, a ticket title) ran uncapped along the
+   rim and covered the port at rest. Half the strip, less the port's reach;
+   the ellipsis above takes the rest. */
+.pf--kind-terminal:has(.panel__slot) .pf__title { flex: 0 1 auto; max-width: calc(50% - var(--sp-6)); color: var(--fg-2); transition: color var(--dur-1) var(--ease); }
 .pf--kind-terminal:has(.panel__slot):hover .pf__title,
 .pf--kind-terminal:has(.panel__slot):focus-within .pf__title,
 .panel--selected.pf--kind-terminal:has(.panel__slot) .pf__title { color: var(--fg); }
