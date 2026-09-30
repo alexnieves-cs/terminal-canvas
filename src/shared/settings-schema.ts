@@ -78,6 +78,13 @@ export interface SettingDef {
   default: SettingValue
   /** The legal values of an `enum` setting, in the order the palette cycles them. */
   values?: readonly string[]
+  /**
+   * M404. What the palette row SAYS for a value, where the stored value is a
+   * code word the product no longer uses (`shell.navigator`'s `vault` is the
+   * Notes pane). Display only: the value written, parsed and persisted stays
+   * the key, so no saved file changes. Absent = the value is its own label.
+   */
+  valueLabels?: Readonly<Record<string, string>>
   /** Groups rows in the palette and names the menu submenu they came from. */
   category: string
   /**
@@ -396,10 +403,11 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.navigator',
     label: 'Navigator pane',
-    description: 'show your panels, your workspaces, your vault, your integrations, your teammates, the board or your skills in the navigator; the Files pane is its own toggle (⌘B)',
+    description: 'show Panels, Workspaces, Notes, Connections, Teammates, Board or Skills in the navigator; the Files pane is its own toggle (⌘B)',
     keywords: ['navigator', 'rail', 'sidebar', 'panels', 'workspaces', 'dock', 'pane', 'shell', 'board', 'skills'],
     type: 'enum',
     values: ['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board', 'skills'],
+    valueLabels: { panels: 'Panels', workspaces: 'Workspaces', vault: 'Notes', integrations: 'Connections', teammates: 'Teammates', board: 'Board', skills: 'Skills' },
     default: 'panels',
     category: SHELL_CATEGORY
   },
@@ -550,8 +558,8 @@ export const SETTINGS: readonly SettingDef[] = [
     // Empty by DEFAULT and empty is a real value — the pane says so and
     // offers the verb that fixes it, rather than hiding itself.
     id: 'vault.root',
-    label: 'Vault folder',
-    description: 'the folder of markdown notes the Vault pane lists and links between',
+    label: 'Notes folder',
+    description: 'the folder of markdown notes the Notes pane lists and links between',
     keywords: ['vault', 'notes', 'markdown', 'wiki', 'zettel', 'backlinks', 'obsidian'],
     type: 'text',
     default: '',

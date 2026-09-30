@@ -67,9 +67,9 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
   const tagList = useMemo(() => tagRows(props.tags), [props.tags])
 
   return (
-    <div className="shell__tree vault-pane" aria-label="Vault" data-vault-pane>
+    <div className="shell__tree vault-pane" aria-label="Notes" data-vault-pane>
       <div className="shell__region-title shell__region-title--action navigator__header">
-        <span className="shell__tree-root" title={props.root === '' ? undefined : props.root}>Vault</span>
+        <span className="shell__tree-root" title={props.root === '' ? undefined : props.root}>Notes</span>
         {props.root !== '' && (
           <span className="shell__tree-panel" data-vault-root title={props.root}>· {props.root.replace(/\/+$/, '').split('/').pop()}</span>
         )}
@@ -77,8 +77,8 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
           <button
             type="button"
             className="shell__region-add icon-button"
-            title="Read the vault again"
-            aria-label="Refresh the vault"
+            title="Read the notes folder again"
+            aria-label="Refresh Notes"
             data-vault-refresh
             disabled={props.root === ''}
             {...shellControl(props.onRefresh)}
@@ -88,8 +88,8 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
           <button
             type="button"
             className="shell__rail-toggle icon-button"
-            title="Hide the navigator (⌘\)"
-            aria-label="Hide the navigator"
+            title="Hide Notes (⌘\)"
+            aria-label="Hide Notes"
             {...shellControl(props.onToggle)}
           >
             <ChevronLeft />
@@ -146,7 +146,7 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
             ))}
           </ul>
           {props.skipped > 0 && (
-            <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read — the vault is over the cap</p>
+            <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read — the notes folder is over the cap</p>
           )}
           {/* M150. TAGS, under the notes: one row per tag with its count. No
               section at all when the vault has none — absence, never a

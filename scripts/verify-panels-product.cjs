@@ -1498,7 +1498,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const noneArm = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const a = p ? p.querySelector('[data-file-backlinks-arm="none"]') : null; return a ? a.textContent : false })()`), 8000)
         const markedRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="meetings/2026-09-04.md"]'); return r && r.classList.contains('rail-row--selected') ? true : false })()`), 6000)
         ok(IDS[0],
-          unset && /no vault folder yet/.test(unset.text) && unset.verb === true &&
+          unset && /no notes folder yet/.test(unset.text) && unset.verb === true &&
             typeof noneArm === 'string' && /no note points here/.test(noneArm) && markedRow === true &&
             Array.isArray(listed) && listed.some((r) => r.path === 'design.md' && r.title === 'The design') && clickedNote.ok === true && clickedLink === true &&
             listed.some((r) => r.path === 'meetings/2026-09-04.md' && r.title === 'Standup') &&
@@ -2502,7 +2502,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const deleted = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-kind="world"]') === null`), 3000)
         const remaining = await wc.executeJavaScript(`document.querySelectorAll('[data-annotation]').length`)
         // Merged: the row is disabled by name.
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle()
         const mergedRow = await (async () => {
           const on = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-merged] button'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
@@ -2537,7 +2537,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reS
         await settle()
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const rows = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('[data-rail-snapshot]')]; return rows.length >= 2 ? rows.map((r) => ({ at: r.getAttribute('data-rail-snapshot'), label: r.querySelector('.rail-row__label')?.textContent ?? '', restore: r.querySelector('[data-rail-snapshot-restore]') !== null })) : false })()`), 6000)
         const workspacesBefore = layoutStore.initial() ? (await wc.executeJavaScript(`document.querySelectorAll('[data-rail-workspace]').length`)) : 0
         const activeBefore = layoutStore.current().activeWorkspaceId
@@ -6398,6 +6398,93 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     }
   }
 
+  // M404 (C1/C2/C3) — names.agree.1, dock.dup.1, team.segment.1. Measured
+  // from the DOM of the running shell, signed OUT (before M345's block below
+  // turns the harness account on). One name per place: each dock pane's
+  // button, its tooltip, the pane's own Hide control and — where a palette
+  // row opens it — that row all say the same word. The pane heading is
+  // compared too, except Files, whose heading is the folder it shows (a fact,
+  // not a name). A copy edit that renamed one of the four and not the rest is
+  // what C1 found (Tasks → BOARD, Notes → VAULT, Services → CONNECTIONS).
+  let m404PeopleSignedOut = null
+  {
+    const PALETTE_ROW = { board: 'board', integrations: 'connections', teammates: 'teammates' }
+    const pressDock = (id) => wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__dock [data-dock="${id}"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+    const panes = await wc.executeJavaScript(`[...document.querySelectorAll('.shell__dock .dock__group:not(.dock__group--system) [data-dock]')].map((b) => b.dataset.dock)`)
+    const rows = []
+    for (const id of panes) {
+      const pressed = await wc.executeJavaScript(`document.querySelector('.shell__dock [data-dock="${id}"]')?.getAttribute('aria-pressed') === 'true'`)
+      if (!pressed) { await pressDock(id); await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__dock [data-dock="${id}"]')?.getAttribute('aria-pressed') === 'true'`), 2000) }
+      await settle()
+      rows.push(await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__dock [data-dock="${id}"]'); const rail = document.querySelector('.shell__rail')
+        const head = rail ? rail.querySelector('.navigator__header') : null
+        const heading = head ? ((head.querySelector('.shell__tree-root') || head.querySelector('span') || {}).textContent || '').trim() : null
+        const hide = head ? (head.querySelector('.shell__rail-toggle') || {}).getAttribute?.('aria-label') ?? null : null
+        return { id: ${JSON.stringify(id)}, name: b.getAttribute('aria-label'), label: (b.querySelector('.dock__label')?.firstChild?.textContent || '').trim(), tip: b.title, heading, hide } })()`))
+    }
+    // Palette rows, read from the rendered list for the name typed.
+    const palette = {}
+    for (const r of rows) {
+      const word = PALETTE_ROW[r.id]
+      if (word === undefined) continue
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(r.name)}); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+      await settle()
+      palette[r.id] = await wc.executeJavaScript(`[...document.querySelectorAll('.palette__row .palette__title')].map((t) => t.textContent.trim()).slice(0, 12)`)
+      await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })()`)
+      await settle()
+    }
+    const word = (name) => new RegExp(`\\b${name}\\b`, 'i')
+    const disagree = rows.filter((r) => !(
+      typeof r.name === 'string' && r.label === r.name && (r.tip === `Hide ${r.name}` || r.tip.startsWith(`Hide ${r.name} (`)) && r.hide === `Hide ${r.name}` &&
+      (r.id === 'files' || r.heading === r.name) &&
+      (palette[r.id] === undefined || palette[r.id].some((t) => word(r.name).test(t)))))
+    ok('names.agree.1 every dock pane has one name: its button, tooltip, pane heading, Hide control and palette row agree, measured in the running shell',
+      rows.length >= 6 && disagree.length === 0, JSON.stringify({ disagree, palette }))
+
+    // dock.dup.1. The dock holds no door the top bar already holds: no
+    // Orchestrate (the center segment's), no Workspaces (the crumb's). Both
+    // stay reachable — the segment and crumb are PAINTED, and their ⌘K rows
+    // are found by search — and ⌘\ is claimed by the pane's Hide alone.
+    const dup = await wc.executeJavaScript(`(() => {
+      const painted = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit !== null && el.contains(hit) }
+      const dock = [...document.querySelectorAll('.shell__dock [data-dock]')].map((b) => b.dataset.dock)
+      const claims = [...document.querySelectorAll('.shell__dock [aria-keyshortcuts], .shell__dock [title]')].filter((e) => { const t = (e.getAttribute('aria-keyshortcuts') || '') + ' ' + (e.getAttribute('title') || ''); return t.includes(String.fromCharCode(8984, 92)) || t.includes('Meta+' + String.fromCharCode(92)) }).map((e) => e.getAttribute('aria-label'))
+      return { dock, seg: painted(document.querySelector('[data-seg="orchestration"]')), crumb: painted(document.querySelector('[data-crumb="workspace"]')),
+        chevron: !!document.querySelector('[data-crumb="workspace"] svg'), dockClaims: claims } })()`)
+    const found = {}
+    for (const [q, want] of [['Open Orchestrate', 'Open Orchestrate'], ['Manage workspaces', 'Manage workspaces…']]) {
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(q)}); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+      await settle()
+      found[q] = await wc.executeJavaScript(`[...document.querySelectorAll('.palette__row .palette__title')].some((t) => t.textContent.trim() === ${JSON.stringify(want)})`)
+      await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })()`)
+      await settle()
+    }
+    ok('dock.dup.1 the dock has no Orchestrate or Workspaces button; the top bar\'s segment and switcher crumb are painted, their palette rows are found, and no dock button claims ⌘\\',
+      !dup.dock.includes('orchestration') && !dup.dock.includes('workspaces') && dup.seg && dup.crumb && dup.chevron && dup.dockClaims.length === 0 && found['Open Orchestrate'] && found['Manage workspaces'],
+      JSON.stringify({ dup, found }))
+
+    // team.segment.1 (signed-out half). No People segment at rest; the
+    // palette row still opens the page, whose empty state is the sign-in
+    // button — disabled here WITH the harness's reason, never hidden.
+    const segBefore = await wc.executeJavaScript(`document.querySelector('[data-seg="team"]') !== null`)
+    await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+    await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+    await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, 'Show People'); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+    await settle()
+    const rowFound = await wc.executeJavaScript(`[...document.querySelectorAll('.palette__row .palette__title')].some((t) => t.textContent.trim() === 'Show People')`)
+    await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })()`)
+    const signIn = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-team-sign-in]'); if (!b) return false; const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      return { painted: hit !== null && b.contains(hit), disabled: b.disabled, why: b.title, text: b.textContent.trim(), segWhileShown: document.querySelector('[data-seg="team"][aria-pressed="true"]') !== null } })()`), 3000)
+    await wc.executeJavaScript(`document.querySelector('[data-seg="canvas"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+    await settle()
+    const segAfterLeave = await wc.executeJavaScript(`document.querySelector('[data-seg="team"]') !== null`)
+    m404PeopleSignedOut = { segBefore, rowFound, signIn, segAfterLeave }
+  }
+
   // M345 — account.click.1 / share.click.1. The account menu and the share
   // dialog, driven the way a person drives them: REAL input events (Radix's
   // trigger and items listen for pointer events a dispatched click never
@@ -6422,6 +6509,15 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     }
     harnessAccount.turnOn(wc)
     const avatar = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__account-avatar')?.textContent ?? false`), 5000)
+    // team.segment.1 (signed-in half): signing in is what grows the segment.
+    const segSignedIn = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-seg="team"]') !== null`), 3000)
+    {
+      const o = m404PeopleSignedOut
+      ok('team.segment.1 People is a top-bar segment only when signed in (or shared): absent signed out, its palette row still opens the page, whose sign-in button is painted and says why it is disabled; present once signed in',
+        o !== null && o.segBefore === false && o.rowFound === true && o.signIn !== false && o.signIn.painted === true && o.signIn.text === 'Sign in with GitHub' &&
+          o.signIn.disabled === true && /accounts are off in the harness/.test(o.signIn.why) && o.signIn.segWhileShown === true && o.segAfterLeave === false && segSignedIn === true,
+        JSON.stringify({ o, segSignedIn }))
+    }
     const opened = avatar !== false && await click('.shell__account-trigger') &&
       await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('.shell__account-menu:not([hidden])')`), 3000)
     const menu = opened ? await wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__account-menu')

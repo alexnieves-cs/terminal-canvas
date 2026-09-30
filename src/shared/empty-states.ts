@@ -33,8 +33,8 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'workspaces', sentence: 'no workspaces — one holds a canvas of panels', verb: 'New workspace…' },
   { id: 'runs', sentence: 'no runs yet — a handoff that fires records one' },
   { id: 'snapshots', sentence: 'no snapshots yet — one is kept a minute after each save' },
-  { id: 'vault-unset', sentence: 'no vault folder yet — a vault is a folder of markdown notes that link to each other', verb: 'Choose a folder…' },
-  { id: 'vault-missing', sentence: 'the vault\'s folder could not be read — it may have moved' },
+  { id: 'vault-unset', sentence: 'no notes folder yet — choose a folder of markdown notes that link to each other', verb: 'Choose a folder…' },
+  { id: 'vault-missing', sentence: 'the notes folder could not be read — it may have moved' },
   { id: 'skills-column', sentence: 'drop a card here' },
   { id: 'palette', sentence: 'No matching command' },
   /** M399 (A9). ⌘F opens the search scope before anything is typed; `No matching command` there answered a question nobody asked. */

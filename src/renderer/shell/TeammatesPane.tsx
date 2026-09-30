@@ -60,7 +60,7 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
       <div className="shell__region-title shell__region-title--action navigator__header">
         <span className="shell__tree-root">Teammates</span>
         <span className="navigator__header-actions">
-          <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
+          <button type="button" className="shell__rail-toggle icon-button" title="Hide Teammates (⌘\)" aria-label="Hide Teammates" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
       <div className="teammates-pane__new">

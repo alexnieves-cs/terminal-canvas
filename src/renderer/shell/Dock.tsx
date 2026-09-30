@@ -3,7 +3,7 @@ import type { ElsewhereRow, RailAttention } from './rail-sections'
 import type { CenterView, NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
-import { Bell, ChevronLeft, ChevronRight, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Layers, Link, Orbit, People, ProductMark } from '@renderer/icons'
+import { Bell, ChevronLeft, ChevronRight, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Link, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 import { needsYouCount } from '@shared/attention-words'
 import { useAttentionOsSettings } from './useAttentionOsSettings'
@@ -26,7 +26,7 @@ export interface DockProps {
   /** The navigator is on screen; a dock icon is pressed only then. */
   navVisible: boolean
   onChoose: (pane: NavigatorPane) => void
-  /** M268. Which center page is showing; Orchestrate is pressed from this, not the navigator. */
+  /** M268. Which center page is showing; Panels is pressed only on the canvas. */
   centerView: CenterView
   /** M268. Swap canvas ↔ orchestration. Choosing Canvas also lands on the panels navigator. */
   onSetCenterView: (view: CenterView) => void
@@ -83,9 +83,10 @@ export interface DockProps {
  * active one collapses the pane. This is what makes a fifth navigator cheap
  * — a row in this array, not a negotiation over a column's height.
  *
- * M268. Orchestrate is a CENTER PAGE, not a navigator pane — it sits in the
- * Work group beside Canvas, and pressing it swaps the center column while
- * the canvas host stays mounted underneath.
+ * M268. Orchestrate is a CENTER PAGE, not a navigator pane. M404 (C2) took
+ * its dock button out: the top bar's center segment is its one chrome door
+ * (and ⌘K's "Open Orchestrate"). `centerView` is still read here so Panels
+ * is pressed only while the canvas shows.
  *
  * Attention is NOT a pane. It is a count badge on its icon, always visible —
  * the half that keeps a waiting agent from becoming invisible now that the
@@ -209,17 +210,27 @@ function DockImpl({
     { label: 'Work', entries: [
       // M315. Named for what it opens — the Panels pane — not "Canvas", which is
       // also the view switch beside it and the default workspace's name.
-      { id: 'panels', label: 'Panels', shortcut: '⌘\\', icon: <Grid /> },
-      { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
-      { id: 'board', label: 'Tasks', icon: <KindWork /> }
+      // M404 (C1). No ⌘\ here any more: that chord shows or hides WHICHEVER
+      // pane the navigator holds, so claiming it for Panels was false whenever
+      // Files or Notes was the pane. The chord lives on each pane's own Hide.
+      { id: 'panels', label: 'Panels', icon: <Grid /> },
+      // M404 (C2). Workspaces and Orchestrate are gone from the dock: the top
+      // bar's workspace crumb (a switcher) and its center segment are their
+      // doors, and "Manage workspaces…" / "Open Orchestrate" stay in ⌘K. A
+      // second button for the same place is a second thing to learn.
+      // M404 (C1). "Board", the pane's own title: "Tasks" is the noun of
+      // New task and of Orchestrate's list, and this pane is the GitHub/Jira board.
+      { id: 'board', label: 'Board', icon: <KindWork /> }
     ] },
     { label: 'Content', entries: [
       { id: 'files', label: 'Files', shortcut: '⌘B', icon: <Folder /> },
       { id: 'vault', label: 'Notes', icon: <KindNote /> },
       { id: 'skills', label: 'Skills', icon: <KindToolbox /> }
     ] },
-    { label: 'Connections', entries: [
-      { id: 'integrations', label: 'Services', icon: <Link /> },
+    // M404 (C1). The group is "Setup" — what these are for, set up once — so
+    // "Connections" names one place, the pane, not also the group around it.
+    { label: 'Setup', entries: [
+      { id: 'integrations', label: 'Connections', icon: <Link /> },
       { id: 'teammates', label: 'Teammates', icon: <People /> }
     ] }
   ]
@@ -242,7 +253,6 @@ function DockImpl({
   const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length + team.length
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
-  const orchPressed = centerView === 'orchestration'
   const [historyOpen, setHistoryOpen] = useState<string | null>(null)
   const renderInboxRow = (item: InboxItem, queueKey?: string, affects?: string): JSX.Element => {
                   const row = { id: item.panelId, label: item.label }
@@ -481,20 +491,6 @@ function DockImpl({
           </button>
         )
       })}
-        {group.label === 'Work' && (
-          <button
-            type="button"
-            className={`dock__button icon-button${orchPressed ? ' dock__button--on' : ''}`}
-            data-dock="orchestration"
-            aria-pressed={orchPressed}
-            aria-label="Orchestrate"
-            title={orchPressed ? 'Show Canvas — arrange and work' : 'Show Orchestrate — monitor and review'}
-            {...shellControl(() => onSetCenterView(orchPressed ? 'canvas' : 'orchestration'))}
-          >
-            <Orbit />
-            <span className="dock__label" aria-hidden="true">Orchestrate</span>
-          </button>
-        )}
       </div>)}
       <div className="dock__group dock__group--system" data-dock-group="system">
         <div className="dock__group-label">System</div>

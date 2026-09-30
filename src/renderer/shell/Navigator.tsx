@@ -135,7 +135,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
     setCollapsed(next)
     void window.canvas.settings.set('shell.collapsedRailGroups', [...next])
   }
-  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Connections' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'skills' ? 'Skills' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
+  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Notes' : navigator === 'integrations' ? 'Connections' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'skills' ? 'Skills' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
       {/* M279. Resize from the edge that borders the canvas — the inspector's handle, mirrored. */}
@@ -186,8 +186,8 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
               <button
                 type="button"
                 className="shell__rail-toggle icon-button"
-                title="Hide the navigator (⌘\)"
-                aria-label="Hide the navigator"
+                title={`Hide ${title} (⌘\\)`}
+                aria-label={`Hide ${title}`}
                 {...shellControl(onToggle)}
               >
                 <ChevronLeft />

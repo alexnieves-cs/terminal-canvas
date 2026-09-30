@@ -4911,7 +4911,8 @@ for a window a check could hit (`verify:panels tool.2`, found by its own diagnos
 
 **The dock has ONE destination model at two densities (`shell/Dock.tsx`, `styles.css`, M257).**
 Compact and standard render its accessible names as hover/focus tags; wide turns those same
-buttons into a real 156px labelled rail grouped as Work, Content, Connections and System. Do not
+buttons into a real 156px labelled rail grouped as Work, Content, Setup and System (M404 renamed
+Connections → Setup so the group and its Connections pane stop sharing a name). Do not
 fork the destination list or make the wide rail an overlay: the shell grid column is the source of
 truth, so canvas measurements and transient popover placement stay honest at every breakpoint.
 

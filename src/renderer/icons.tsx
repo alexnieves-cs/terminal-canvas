@@ -115,6 +115,10 @@ export const Bell = (p: IconProps): JSX.Element => (
 export const PanelRight = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M10 3v10" /></Svg>
 )
+/** M404. PanelRight's mirror, for the View menu's Navigator row beside Context pane. */
+export const PanelLeft = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M6 3v10" /></Svg>
+)
 export const More = (p: IconProps): JSX.Element => (
   <Svg {...p}><circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" /><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" /></Svg>
 )

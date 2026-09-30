@@ -32,7 +32,7 @@ export function AccountMenu({ accounts }: { accounts: Accounts }): JSX.Element |
           className="shell__account-trigger"
           title={trigger.kind === 'account'
             ? `Signed in as ${trigger.login}${trigger.others > 0 ? ` · ${trigger.others} more account${trigger.others === 1 ? '' : 's'} on this Mac` : ''}`
-            : 'Sign in with GitHub to share workspaces and see your team'}
+            : 'Sign in with GitHub to share workspaces and see who in your organization is working'}
         >
           {trigger.kind === 'account'
             ? <span className="shell__account-avatar" aria-label={trigger.login}>{trigger.initials}</span>

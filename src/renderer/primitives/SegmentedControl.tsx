@@ -39,6 +39,9 @@ export function SegmentedControl<T extends string>({ value, options, onChange, l
             type="button"
             className={`seg__btn${on ? ' seg__btn--on' : ''}${o.className ? ` ${o.className}${on ? ` ${o.className}--on` : ''}` : ''}`}
             aria-pressed={on}
+            // M404. The option's id as a hook: a suite (and shot.cjs) presses a
+            // PLACE by name, never by position — an option can come and go (C3).
+            data-seg={o.id}
             title={o.title}
             {...shellControl(() => onChange(o.id))}
           >{o.label}</button>

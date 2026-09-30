@@ -36,7 +36,8 @@ export {
   LAYOUT_VERSION,
   defaultSettings,
   defaultSnapshot,
-  defaultWorkspace
+  defaultWorkspace,
+  FRESH_WORKSPACE_NAME
 } from './layout-schema/types'
 export type {
   CanvasState,

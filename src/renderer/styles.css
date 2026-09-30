@@ -941,6 +941,19 @@ body {
   cursor: pointer;
 }
 .shell__crumb:hover { color: var(--fg); background: var(--s-3); }
+/* M404 (C1). The workspace crumb is a SWITCHER: a chevron says it opens a
+   choice, and a hairline at rest says it is a control — a bare name read as a
+   title. The name clips inside, never the chevron. */
+.shell__crumb--switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-inline: 0;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.shell__crumb--switcher > .shell__crumb-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell__crumb--switcher > svg { flex: 0 0 auto; width: 12px; height: 12px; color: var(--fg-3); }
+.shell__crumb--switcher:hover > svg { color: var(--fg); }
 .shell__breadcrumb-separator { color: var(--fg-4); }
 .shell__task { color: var(--fg); }
 .shell__search { flex: 1 1 auto; min-width: 200px; max-width: 560px; margin-inline: auto; justify-content: flex-start; }
@@ -10122,6 +10135,10 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .team__org { background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); color: var(--fg-2); }
 .team__note, .team__status { font-size: var(--t-sm); color: var(--fg-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team__empty { margin: var(--sp-8) auto; max-width: 42ch; text-align: center; color: var(--fg-3); font-size: var(--t-md); }
+/* M404 (C3). Signed out, the empty state is the sign-in: the sentence, then the door. */
+.team__signin { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); }
+.team__signin > p { margin: 0; }
+.team__signin > .share-dialog__btn { align-self: center; }
 .team__grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-5);
   margin: 0; padding: 0; list-style: none;

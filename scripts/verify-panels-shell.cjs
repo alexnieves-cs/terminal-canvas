@@ -5619,13 +5619,13 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
   // running; what M283 adds is that it is also DEAF there — `inert`, focus taken
   // off the terminal, and the four edit:* chords (menu IPC, which no renderer
   // keydown sees) gated in shouldIgnoreKeys — and that a return finds it exactly
-  // as left. Every toggle below is the Dock's own button, clicked the way shot.cjs
-  // clicks it; every keystroke is a TRUSTED sendInputEvent, because an untrusted
+  // as left. Every toggle below is the top bar's center segment (M404 took the
+  // dock's duplicate), clicked the way shot.cjs clicks it; every keystroke is a TRUSTED sendInputEvent, because an untrusted
   // dispatched key is not what a typing user produces.
   // ---------------------------------------------------------------------
   {
     const toggleOrch = (on) => wc.executeJavaScript(`(() => {
-      const b = document.querySelector(${JSON.stringify(on ? '[data-dock="orchestration"]:not([aria-pressed="true"])' : '[data-dock="orchestration"][aria-pressed="true"]')})
+      const b = document.querySelector(${JSON.stringify(on ? '[data-seg="orchestration"]:not([aria-pressed="true"])' : '.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')})
       if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
       return !!b
     })()`)
@@ -5697,7 +5697,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const host = document.querySelector('.canvas')
         return { inert: host?.inert === true, focusInside: host?.contains(document.activeElement) === true, active: document.activeElement?.className ?? null }
       })()`)
-      ok('orch-page.1 the Dock opens Orchestrate over a canvas host that stays MOUNTED and is inert, and the terminal that had the keyboard no longer has it',
+      ok('orch-page.1 the top bar opens Orchestrate over a canvas host that stays MOUNTED and is inert, and the terminal that had the keyboard no longer has it',
         pressed === true && shown === true && covered.inert === true && covered.focusInside === false,
         JSON.stringify({ pressed, shown, covered }))
 

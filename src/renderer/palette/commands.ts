@@ -17,7 +17,7 @@ import type { Command } from './palette-model'
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
-import type { SettingValue } from '@shared/settings-schema'
+import { settingDef, type SettingValue } from '@shared/settings-schema'
 import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId } from '@shared/auto'
 import { updateSentence } from '@renderer/session/update-store'
 import { statePriority } from '@renderer/panels/panel-state'
@@ -334,7 +334,7 @@ export interface PaletteActions {
    * M268. Show the canvas or the Orchestration center page. The canvas host
    * stays mounted either way — this only chooses which sibling is visible.
    */
-  setCenterView(view: 'canvas' | 'orchestration'): void
+  setCenterView(view: 'canvas' | 'orchestration' | 'team'): void
   /**
    * Arm the one-shot link mode with this panel as the source. The NEXT click
    * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's
@@ -1300,7 +1300,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M268. Center-page doors — same verbs as the TopBar / dock toggles.
   out.push({
     id: 'canvas.orchestration',
-    title: 'Show Orchestration',
+    // M404 (C1). The place's one name — the segment's "Orchestrate".
+    title: 'Open Orchestrate',
     searchText: 'orchestration orchestrate dashboard overview ops agents activity',
     group: 'canvas',
     run: () => actions.setCenterView('orchestration')
@@ -1311,6 +1312,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'canvas center view panels world',
     group: 'canvas',
     run: () => actions.setCenterView('canvas')
+  })
+  // M404 (C3). People's palette door. The top-bar segment shows only when
+  // signed in or on a shared workspace; this row is always here, and the
+  // page it opens carries the sign-in button when that is what is missing.
+  out.push({
+    id: 'canvas.people',
+    title: 'Show People',
+    subtitle: 'who in your organization is working, and on what',
+    searchText: 'people team members organization presence who is working observe',
+    group: 'canvas',
+    run: () => actions.setCenterView('team')
   })
   out.push({
     id: 'canvas.reset',
@@ -1323,7 +1335,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // item needs no service, no place and no CLI — it is a title on a board.
   out.push({
     id: 'board.open',
-    title: 'Open board',
+    title: 'Open Board',
     searchText: 'board kanban columns todo working review done dispatch',
     group: 'canvas',
     run: () => actions.openBoard()
@@ -1611,7 +1623,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       const next = values.length === 0 ? current : values[(at + 1) % values.length]
       out.push({
         id: `setting.${setting.id}`,
-        title: `${setting.label}: ${current}`,
+        // M404. The row names a value in the product's words (Notes, not
+        // `vault`); the cycle still writes the stored key.
+        title: `${setting.label}: ${settingDef(setting.id)?.valueLabels?.[current] ?? current}`,
         subtitle: setting.description,
         searchText: setting.keywords.join(' '),
         group: 'setting',
@@ -2229,7 +2243,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // never makes.
   // M336–M337. The account and sharing rows. The three sharing rows open the
   // share dialog; the dialog is where anything is shared, opened or changed.
-  out.push({ id: 'account.sign-in', title: 'Account: sign in with GitHub…', subtitle: 'to share workspaces and see your team; add another account the same way', group: 'canvas', searchText: 'account sign in login github supabase add another switch', run: () => { void actions.signIn() } })
+  out.push({ id: 'account.sign-in', title: 'Account: sign in with GitHub…', subtitle: 'to share workspaces and see who in your organization is working', group: 'canvas', searchText: 'account sign in login github supabase add another switch', run: () => { void actions.signIn() } })
   out.push({ id: 'share.workspace', title: 'Share this workspace…', subtitle: 'put it in one of your organizations — teammates see cards, never commands or transcripts', group: 'canvas', searchText: 'share workspace team organization collaborate invite members', run: () => { void actions.shareWorkspace() } })
   out.push({ id: 'share.open', title: 'Open a shared workspace…', subtitle: 'the workspaces your teammates shared with you', group: 'canvas', searchText: 'open shared workspace team join room', run: () => { void actions.openSharedWorkspace() } })
   out.push({ id: 'share.role', title: 'Shared workspace: members and roles…', subtitle: 'who is in, and whether they edit or watch — the owner decides', group: 'canvas', searchText: 'share role member editor viewer remove permission access', run: () => { void actions.proposeShareRole() } })

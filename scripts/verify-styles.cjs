@@ -1135,7 +1135,11 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M315: the header's creation button is `+ New task` — it opens the Task
   // sheet, the primary journey's front door (a raw panel is the sheet's switch).
   const topOk = /\+ New task/.test(top) && /Search panels, files, tasks, commands/.test(top) && /shell__workspace/.test(top) && /shell__view-menu/.test(top) && /onSetTheme/.test(top)
-  const dockOk = ['Work', 'Content', 'Connections', 'System', 'Canvas', 'Tasks', 'Notes', 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
+  // M404 (C1/C2): the groups are Work, Content, Setup and System, and the
+  // places carry their panes' names (Board, Notes, Connections). 'Canvas' and
+  // 'Tasks' left this list on purpose: they had matched only comments since
+  // the dock stopped naming them, which is a word check passing vacuously.
+  const dockOk = ["label: 'Work'", "label: 'Content'", "label: 'Setup'", "label: 'Board'", "label: 'Notes'", "label: 'Connections'", 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
   const state = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'panels', 'panel-state.ts'), 'utf8')
   const filters = ['All', 'Running', 'Needs you', 'Changed', 'Asleep'].every((word) => state.includes(word)) && /PANEL_FILTERS/.test(nav) && /data-rail-filter/.test(nav)
   const collapse = /shell\.collapsedRailGroups/.test(nav) && /aria-expanded/.test(nav) && /group\.label}\s*{group\.rows\.length}/.test(nav)
@@ -1145,6 +1149,51 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   ok('shell.recommendations.1', 'top bar, grouped dock and filtered collapsible navigator land as one contract',
     topOk && dockOk && filters && collapse && rowOk && stylesOk && settingOk,
     JSON.stringify({ topOk, dockOk, filters, collapse, rowOk, stylesOk, settingOk }))
+}
+
+// M404 (critic) — names.words.1. The words the product retired stay out of
+// what a person reads. names.agree.1 (verify:panels:product) compares the
+// dock's panes with themselves, so a sentence deeper in a pane ("no vault
+// folder yet", "Refresh the vault") passed it: the critic found "Vault"
+// leaking inside the Notes pane after C1 renamed the pane. This reads every
+// renderer and shared source as text and checks each PROSE literal — a
+// quoted string with a space (a class list or a template is not prose), a
+// lone Title-case word (a label), or JSX text — for Vault, Services, Team
+// (the place is People), "Show Orchestration", "Orchestration view", "Open
+// board" and "Hide the navigator". Code words stay: identifiers, settings
+// keys, DOM hooks and IPC channels are single lower-case tokens, and a
+// searchText/keywords line is a hidden search alias on purpose.
+{
+  const root = path.join(__dirname, '..')
+  const walk = (d) => fs.readdirSync(d).flatMap((n) => { const p = path.join(d, n); return fs.statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(n) ? [p] : [] })
+  const files = [...walk(path.join(root, 'src', 'renderer')), ...walk(path.join(root, 'src', 'shared'))]
+  const OLD = [/\b[Vv]ault\b/, /\bServices\b/, /\bTeam\b/, /\bShow Orchestration\b/, /\bOrchestration view\b/, /\bOpen board\b/, /\bHide the navigator\b/]
+  // SetupSheet's Services are a setup record's dev servers, not the retired
+  // dock pane — a different thing that happens to share the word.
+  const ALLOWED = new Set(['src/renderer/palette/SetupSheet.tsx|Services'])
+  const prose = (t) => (/\s/.test(t.trim()) && !/__|\$\{/.test(t)) || /^[A-Z][a-z]+$/.test(t.trim())
+  const hits = []
+  for (const f of files) {
+    const rel = path.relative(root, f).split(path.sep).join('/')
+    const text = fs.readFileSync(f, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+      .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, (m, a) => a + ' '.repeat(m.length - a.length))
+    text.split('\n').forEach((line, i) => {
+      if (/\b(searchText|keywords)\s*:/.test(line)) return
+      for (const m of line.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`|>([^<>{}]+)</g)) {
+        const lit = m[1] ?? m[2] ?? m[3] ?? m[4]
+        if (lit === undefined || !prose(lit) || !OLD.some((re) => re.test(lit))) continue
+        if (ALLOWED.has(`${rel}|${lit.trim()}`)) continue
+        hits.push(`${rel}:${i + 1} ${lit.trim().slice(0, 80)}`)
+      }
+    })
+  }
+  // Non-vacuous: the scan must reach the files the critic named, and must
+  // flag a planted old sentence the same way it would flag a real one.
+  const planted = ["'no vault folder yet'", '>Team<', "'Services'"].every((t) => { const m = /'((?:[^'\\]|\\.)*)'|>([^<>{}]+)</.exec(t); const lit = m[1] ?? m[2]; return prose(lit) && OLD.some((re) => re.test(lit)) })
+  const reached = ['src/shared/empty-states.ts', 'src/renderer/shell/VaultPane.tsx', 'src/renderer/team/TeamView.tsx'].every((r) => files.some((f) => path.relative(root, f).split(path.sep).join('/') === r))
+  ok('names.words.1', 'no user-visible string in the renderer or shared says Vault, Services, Team, Show Orchestration, Orchestration view, Open board or Hide the navigator',
+    hits.length === 0 && planted && reached, JSON.stringify({ hits: hits.slice(0, 20), planted, reached }))
 }
 
 // M173 — hud.2. THE STATUS BAR AT REST SAYS NOTHING: `.canvas-hud` is a

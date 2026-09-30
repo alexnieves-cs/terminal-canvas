@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
-import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
+import { Check, ChevronDown, Lanes, PanelLeft, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
 import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem, SegmentedControl } from '@renderer/primitives'
 import { LiveStatus } from './LiveStatus'
 import { AccountMenu } from '../account/AccountMenu'
@@ -29,6 +29,14 @@ export interface TopBarProps {
   /** M46. The context pane is on screen (a column, or a Compact drawer). */
   contextOpen: boolean
   onToggleContext: () => void
+  /**
+   * M404 (critic). The navigator is on screen. ⌘\ shows or hides whichever
+   * pane it holds, and the View menu is where a chord is learned — the dock
+   * no longer claims it, so without this row nothing on screen named it.
+   * Absent = no row (a caller with no navigator).
+   */
+  navigatorOpen?: boolean
+  onToggleNavigator?: () => void
   /** (this redesign) Keeps the inspector open through the Compact breakpoint's own auto-collapse (`shell.inspectorPinned`). */
   inspectorPinned: boolean
   onToggleInspectorPinned: () => void
@@ -41,6 +49,8 @@ export interface TopBarProps {
   onJumpWaiting: () => void
   /** M336. The signed-in accounts; the menu is absent when accounts are unconfigured and nobody is signed in. */
   accounts?: Accounts
+  /** M404 (C3). The active workspace is a shared one — the People segment shows then even signed out. */
+  sharedWorkspace?: boolean
 }
 
 
@@ -62,9 +72,9 @@ export interface TopBarProps {
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
+  presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext, navigatorOpen, onToggleNavigator,
   workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
-  centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts
+  centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -77,6 +87,12 @@ export function TopBar({
   // (DismissableLayer), along with Escape, the arrow keys, Home/End, typeahead
   // and focus returned to the trigger — none of which this menu had.
   const [viewOpen, setViewOpen] = useState(false)
+  // M404 (C3). People is a place only for someone with people to see: signed
+  // in, or on a shared workspace. Otherwise it was a top-level page saying
+  // "run tc login" with no button. The palette's "Show People" row stays, and
+  // the segment stays while the view is showing, so the pressed place never
+  // vanishes from under the person looking at it.
+  const showPeople = (accounts?.sessions.length ?? 0) > 0 || sharedWorkspace || centerView === 'team'
 
   return (
     <header className="shell__top" aria-label="Toolbar">
@@ -108,7 +124,10 @@ export function TopBar({
         options={[
           { id: 'canvas', label: <><span className="shell__center-name">Canvas</span><span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
           { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Orchestrate — monitor and review: what the agents are doing, and what is ready for you', className: 'shell__center-btn' },
-          { id: 'team', label: <><span className="shell__center-name">Team</span><span className="shell__center-purpose">See who is working</span></>, title: 'Team — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }
+          // M404 (C1). "People", not "Team": Teammates (the dock) are AGENT
+          // identities, and two places one letter-string apart read as one.
+          // The code id stays `team`.
+          ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span><span className="shell__center-purpose">See who is working</span></>, title: 'People — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
         ]}
       />
 
@@ -137,7 +156,13 @@ export function TopBar({
       <nav className="shell__workspace" aria-label="Location" title={taskName === undefined ? workspaceName : `${workspaceName} / ${taskName}`}>
         {onShowWorkspaces === undefined
           ? <span>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span>
-          : <button type="button" className="shell__crumb" title="Workspaces" {...shellControl(onShowWorkspaces)}>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</button>}
+          // M404 (C1). Styled as what it is — a workspace SWITCHER, with a
+          // chevron — because nobody guessed a bare name was clickable. It is
+          // the Workspaces door now that the dock's duplicate is gone (C2).
+          : <button type="button" className="shell__crumb shell__crumb--switcher" data-crumb="workspace"
+              title="Switch workspace — or add, rename and see history in the Workspaces list" {...shellControl(onShowWorkspaces)}>
+              <span className="shell__crumb-name">{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span><ChevronDown />
+            </button>}
         {taskName !== undefined && <><span className="shell__breadcrumb-separator" aria-hidden="true">/</span>
           {onShowTask === undefined
             ? <span className="shell__task" aria-current="location">{taskName}</span>
@@ -184,6 +209,10 @@ export function TopBar({
                 ))}
               </MenuRadioGroup>
               <div className="shell__view-heading">Layout</div>
+              {onToggleNavigator !== undefined && (
+                <MenuCheckboxItem checked={navigatorOpen === true} onSelect={onToggleNavigator} data-view-navigator
+                ><span className="shell__view-check">{navigatorOpen === true && <Check />}</span><PanelLeft /> Navigator <kbd>{'⌘\\'}</kbd></MenuCheckboxItem>
+              )}
               <MenuCheckboxItem checked={contextOpen} onSelect={onToggleContext}
                 className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
               ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>{'⇧⌘\\'}</kbd></MenuCheckboxItem>
@@ -209,7 +238,7 @@ export function TopBar({
                 onSelect={() => onSetCenterView(centerView === 'orchestration' ? 'canvas' : 'orchestration')}
               >
                 <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
-                Orchestration view
+                Orchestrate
               </MenuCheckboxItem>
             </div>
           </MenuContent>

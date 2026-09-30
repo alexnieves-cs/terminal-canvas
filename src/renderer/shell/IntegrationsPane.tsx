@@ -71,7 +71,7 @@ function IntegrationsPaneImpl(props: IntegrationsPaneProps): JSX.Element {
         <span className="shell__tree-root">Connections</span>
         <span className="navigator__header-actions">
           <button type="button" className="shell__region-add icon-button" title="Read again" aria-label="Refresh connections" data-integrations-refresh {...shellControl(props.onRefresh)}><Refresh /></button>
-          <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator (⌘\\)" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
+          <button type="button" className="shell__rail-toggle icon-button" title="Hide Connections (⌘\)" aria-label="Hide Connections" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
       {props.audit === 'pending' ? (

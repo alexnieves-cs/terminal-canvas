@@ -627,7 +627,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           '.shell__settings', '[data-hud-zoom-in]', '[data-hud-zoom-out]',
           '[data-dock]', '.shell__rail-toggle', '.shell__inspector-toggle', '.shell__merge'])
         await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
-        await dockClickT('workspaces'); await settle()
+        // M404 (C2): the Workspaces pane's door is the top bar's crumb now, not a dock button.
+        await wc.executeJavaScript(`document.querySelector('[data-crumb="workspace"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
         const targetsB = await measure(['.rail-row__rename', '.shell__region-add'])
         await dockClickT('panels'); await settle()
         const targets = [...targetsA, ...targetsB]
@@ -765,7 +766,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           return true
         }
         const pressed = async () => wc.executeJavaScript(`[...document.querySelectorAll('[data-dock]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.dock)`)
-        await realDock('workspaces'); const p1 = await pressed()
+        // M404 (C2): Notes, not Workspaces — Workspaces left the dock for the crumb.
+        await realDock('vault'); const p1 = await pressed()
         await realDock('files'); const p2 = await pressed()
         await realDock('panels'); const p3 = await pressed()
         const focusAfter = await focusProbe()
@@ -777,7 +779,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         }, 6000)
         ok(IDS[1],
           focusBefore === true && focusAfter === true &&
-            JSON.stringify(p1) === '["workspaces"]' && JSON.stringify(p2) === '["files"]' && JSON.stringify(p3) === '["panels"]' &&
+            JSON.stringify(p1) === '["vault"]' && JSON.stringify(p2) === '["files"]' && JSON.stringify(p3) === '["panels"]' &&
             sessionsBefore.has('sA') && sessionsAfter.has('sA') && !sessionsBefore.has('sB') && !sessionsAfter.has('sB') &&
             badge === '1',
           JSON.stringify({ focusBefore, focusAfter, p1, p2, p3, sA: sessionsAfter.has('sA'), sB: sessionsAfter.has('sB'), badge }))
@@ -1316,7 +1318,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const delivered = await waitUntil(async () => logHas('rB', 'RUN-TOKEN-1'), 12000)
         // The Workspaces pane lists the run.
         await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-run]'); if (!r) return false; const o = r.getAttribute('data-run-outcome'); return o === 'run ended' ? { id: r.getAttribute('data-rail-run'), outcome: o, text: r.textContent, again: !document.querySelector('[data-rail-run-again]')?.disabled } : false })()`), 10000)
         // The ACTIVE workspace's state as the store would hand a fresh renderer (check 17's door).
         const stored = await waitUntil(async () => { layoutStore.flushSync(); const runs = (layoutStore.initial().runs) || []; const run = runs.find((r) => r.panelIds.includes('rA')); return run && run.endedAt !== undefined && run.entries.length === 2 ? run : false }, 6000)
@@ -1334,7 +1336,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) } return !!t })()`)
         const workLine = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('[data-work-run]'); return p && /^run \\d/.test(p.textContent) && p.querySelector('[data-work-run-again]') ? p.textContent : false })()`), 5000)
         // Run again: the root restarts (a new pid), exits, and a second run is listed.
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
         const clickedAgain = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-run-again]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
         const note = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-run-note]')?.textContent ?? false`), 5000)
@@ -3500,7 +3502,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="files"]') || document.querySelector('.dock__button[data-navigator="files"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
         const files = await wc.executeJavaScript(`(() => ({ root: document.querySelector('.shell__tree-root')?.textContent ?? null, panel: document.querySelector('[data-tree-panel]')?.textContent ?? null }))()`)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]') || document.querySelector('.dock__button[data-navigator="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
         const doorBefore = await wc.executeJavaScript(`document.querySelector('[data-rail-merged] .rail-row__main')?.getAttribute('aria-pressed') ?? null`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-merged] .rail-row__main'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)

@@ -637,10 +637,21 @@ export function defaultSettings(): RestoreSettings {
   return { layout: true, camera: true, focus: true }
 }
 
-export function defaultWorkspace(): Workspace {
+/**
+ * M404. The name a FRESH layout's first workspace takes — "Workspace", so the
+ * top bar's switcher crumb says what it switches ("Canvas" is the centre
+ * place's name, beside it). Only defaultSnapshot() uses it. Every repair path
+ * (parseLayout's no-usable-workspace branch, the store's never-zero guards)
+ * and parseWorkspace's absent-name fallback keep 'Canvas': those rebuild a
+ * file that already existed, and a name must load exactly as written or as it
+ * always has. `verify:layout workspace.default.1` pins both halves.
+ */
+export const FRESH_WORKSPACE_NAME = 'Workspace'
+
+export function defaultWorkspace(name = 'Canvas'): Workspace {
   return {
     id: DEFAULT_WORKSPACE_ID,
-    name: 'Canvas',
+    name,
     panels: [],
     groups: [],
     camera: { ...DEFAULT_CAMERA },
@@ -661,7 +672,7 @@ export function defaultSnapshot(): LayoutSnapshot {
   return {
     version: LAYOUT_VERSION,
     activeWorkspaceId: DEFAULT_WORKSPACE_ID,
-    workspaces: [defaultWorkspace()],
+    workspaces: [defaultWorkspace(FRESH_WORKSPACE_NAME)],
     settings: defaultSettings(),
     presets: [],
     defaultPresetId: DEFAULT_PRESET_ID,
