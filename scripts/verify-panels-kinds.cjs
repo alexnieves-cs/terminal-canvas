@@ -2027,13 +2027,19 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         n.style.left = node.style.left
         n.style.top = (parseFloat(node.style.top) + 10) + 'px'
         node.style.pointerEvents = 'auto'
-        const h = head.getBoundingClientRect()
+        // M397 follow-up (A4): a live terminal's header is now a strip on
+        // the rim ABOVE its frame, transparent — and pointer-transparent —
+        // everywhere but its name and its state word. So the probes go where
+        // the header PAINTS at rest: the centre of each of those two parts'
+        // overlap with the node. A probe in the strip's empty span would
+        // land on the node through nothing, which is correct, not a cover.
         const r = node.getBoundingClientRect()
-        const x0 = Math.max(h.left, r.left), x1 = Math.min(h.right, r.right)
-        const y0 = Math.max(h.top, r.top), y1 = Math.min(h.bottom, r.bottom)
-        const probes = x1 > x0 && y1 > y0
-          ? [0.25, 0.5, 0.75].map((fx) => document.elementFromPoint(x0 + (x1 - x0) * fx, (y0 + y1) / 2))
-          : []
+        const probes = [...head.querySelectorAll(':scope > .pf__title, :scope > .pf__word')].flatMap((part) => {
+          const h = part.getBoundingClientRect()
+          const x0 = Math.max(h.left, r.left), x1 = Math.min(h.right, r.right)
+          const y0 = Math.max(h.top, r.top), y1 = Math.min(h.bottom, r.bottom)
+          return x1 > x0 && y1 > y0 ? [document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2)] : []
+        })
         const result = {
           overlap: probes.length > 0,
           neighbourWins: probes.length > 0 && probes.every((hit) => hit !== null && n.contains(hit)),
@@ -3464,13 +3470,16 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         }, 8000)
         const spawned = fresh ? await waitUntil(async () => (await sessionMap(wc)).has(fresh), 8000) : false
         // Select it with a real click on its chrome, so the inspector follows.
+        // M397 follow-up (A4): on its NAME — a live terminal's chrome is a
+        // strip on the rim above the frame, and only the name and the state
+        // word take the pointer at rest; 30% across the strip is canvas.
         let branch = null, path = null, rawField = null
         if (spawned) {
           const box = await wc.executeJavaScript(`(() => {
-            const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .panel__chrome')
+            const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .panel__chrome .panel__title')
             if (!p) return null
             const r = p.getBoundingClientRect()
-            return { x: Math.round(r.left + r.width * 0.3), y: Math.round(r.top + r.height / 2) }
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
           })()`)
           if (box) {
             wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })

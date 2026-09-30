@@ -103,6 +103,60 @@ frame (A8).
 runs hit the watchdog and three workflow drag checks went red while macOS's `mediaanalysisd` held the load average at
 20–85. At load 5 the same code ran green but for the baseline in 182 s, so those reds were load, measured by the re-run. `npm run affected` (39 suites): 37 passed. The two reds are `panels:agents` (`template.1`, baseline) and `panels:product` (`starter.1`, baseline, plus a watchdog at 230.7 s while the load average was 7–16). Re-run alone at load 4–5, product finished in 181.7 s (79% of its watchdog) with only `starter.1` red.
 
+**A4 follow-up (after the M397 critic).** The critic rejected the first A4 fix: the title's box-shadow backing
+spread up and left over whole cells, and the name straddles rows 0–1, so the first ~11 columns of BOTH rows were hidden
+at rest; with the chrome shown, `⋯` landed mid-prompt (`MacBook-Pr ⋯ · % echo hello`) and the state word sat on the
+typed line (`space-between` spread the controls across the screen). And `chromeless.row0.1` could not see any of it:
+it passed at `coveredFrac < 0.5`, never looked with the chrome shown, and inflated boxes by a hardcoded 18px.
+*Reproduced* on a fresh slot-1 instance (1200×800): row 0 read `/bin/zsh   Alexs-MacBook-Pro ~ %`, the user name hidden.
+*Fix: the name sits on the rim, like a fieldset legend, but wholly above the frame.* A legend centred on the edge
+(tried first, `translateY(-50%)`) still covered the top half of row 0, because xterm's row 0 starts at the frame's
+top edge. So the live terminal's chrome is `bottom: 100%`, one `--sp-6` (16px) tall, still `position: absolute` with
+the body's box untouched (`chromeless.resize.1` green). The name and the state word sit at its left, bottom-aligned on
+the rim, each on its own `--well` tab (no box-shadow spread); the controls (⋯, fill, close) sit together at the right
+end, shown on hover/focus/selection as before. Looked at in the real app, and each collision measured:
+- *100% zoom:* rows 0 and 1 fully clear at rest and selected; the prompt and `echo hello` read whole
+  (`A4-after2-100-rest.png`, `A4-after2-100-selected.png`).
+- *Zoomed out (58%), a tidied neighbour directly above:* M144's counter-scale grew the strip DOWN from its top at
+  first, which sliced row 0's prompt in half at 58% (looked at). The terminal's strip now grows UP from the rim
+  (`transform-origin: bottom left`), so row 0 is clear at every zoom. The cost, recorded: below 67% the strip's 16
+  screen px exceed a tidied gap (24 world px) and touch the bottom edge of the panel above by a few px
+  (`A4-after2-58-rest.png`, `-58-hover.png`). Below the near tier (≤ ~50%) a terminal is a headed card and none of
+  this applies (looked at, 40% and 48%).
+- *Maximised:* 16px fits `MAXIMISE_MARGIN` (16), so the name stays on screen. End-aligned 24–28px controls lost their
+  top 8–12px to the canvas edge (looked at), so the controls are CENTRED on the strip instead: they overhang 4–6px
+  each way, 22px above the frame in all (inside the tidy gap), and 4–6px into the far right end of row 0, never the
+  prompt's columns.
+- *Groups:* a group's header ends 30px into its frame and its first member starts 62px in (`GROUP_PADDING` +
+  `GROUP_HEADER_H`), so the strip never meets it (`A4-after2-group.png`, `SHELLS 2` above two rim names).
+- *Selection ring:* selection is the frame's border colour, which the strip does not cover.
+Two consequences, each fixed: (1) the name no longer covers any cell, so the name and the state word take the pointer
+at rest (a click selects, a press drags through the header's `beginMove`); `fit.1`'s real click on the chrome had
+started deselecting instead, because a pointer-transparent strip above the frame passed it to the canvas. The
+controls stay inert until shown. (2) The ⋯ menu hangs from the chrome's foot, now the frame's top edge, where the
+north link port (z 4) painted over its title (`menu.paint.1` red); the live terminal's chrome goes from z 2 to 5.
+The frame lets its overflow out for this kind only (`overflow: visible`), and the state edge's glow keeps spilling
+only inward through a `clip-path` (M109's clip). *Not done:* an agent terminal (`claude` in a PTY) also puts its
+header line and mode chips on the rim; not driven with a real agent. The hover-time north link port still sits on
+row 0's middle; that's D1 (ports on the resize band), not A4.
+*Checks:* `chromeless.row0.1` is rewritten to measure. Every chrome part that PAINTS (a fill, a shadow, a visible
+border, its own text, an svg; effective opacity through its ancestors above 0), inflated by its own computed
+box-shadow (parsed, no token px), against the cursor cell (xterm's helper textarea, parked on the cursor cell once the
+cursor moves, so a space and a backspace are sent first) and one cell's height: at rest nothing touches rows 0–1
+across the whole width; with the chrome shown by a real hover (⋯ at opacity 1) nothing touches the prompt's columns
+(the cursor's row, screen left to the cursor's right). Red against 864d9a03's stylesheet (the title and the chrome's
+band over rows 0–1 and the prompt), green now. `chromeless.paint.1`'s rest arm now asserts the point under the unseen
+⋯ does not land in the chrome (it is the canvas above the frame now, not a cell). `verify:panels:kinds
+subagent.cover.1` probes the neighbour's name and word, the parts its rim strip paints, instead of the strip's empty
+span. `verify:panels:kinds worktree.1` selects the terminal with a real click on its NAME: 30% across the strip is
+canvas now. *Suites (this commit alone, built without M399):* `verify:styles` 93/93, `verify:panels:core` 86/86,
+`verify:panels:kinds` 52/52, `verify:panels:shell` 105/105 (a first run had `discard.1` red, a review node's
+delete-new-file confirm, at load average 15–21; alone at load 8 it passed), `verify:panels:product` 130/131 (only
+`starter.1`, baseline), `verify:panels:agents` 83/84 on the first cut of this change (only `template.1`, baseline).
+*Goldens expected to move:* every scene with a live terminal (the name moves from the first row onto the rim):
+`kinds`, `kinds-dark`, `header`, `trail`, `attention`, `palette*`, `flip`, `overview`, `group*`, `merged`,
+`zoomed-out*`, `compact`, `wide`, `navigator-files`, `starter` (if its terminal is live).
+
 ### M398 — the harness fence covers the project arm, and the subagent card leaves plain shells
 
 Screenshots in `/tmp/tc-daily-loop-shots/`: `A3-before.png`, `A3-after.png` (and `A3-fresh.png`, the fresh canvas

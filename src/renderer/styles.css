@@ -6879,9 +6879,10 @@ body {
    state, and the rest rule says it survives. A card keeps its header.
 
    At rest a live terminal panel is a rounded glass rim, a
-   small state-toned dot, its name at low emphasis over the first row, and
-   content running to the edge. The controls come back on hover, focus or
-   selection, over a scrim that keeps the text under them legible.
+   small state-toned dot, its name at low emphasis on the rim above the
+   frame (M397 follow-up; it used to lie over the first row), and content
+   running to the edge. The controls come back on hover, focus or selection,
+   together at the rim's right end.
 
    THE CHROME IS ABSOLUTE, AND THAT IS THE WHOLE MILESTONE.
 
@@ -6903,64 +6904,100 @@ body {
    aria-label survive, because nothing here is display: none. */
 .pf--kind-terminal:has(.panel__slot) .pf__chrome {
   position: absolute;
-  top: 0;
+  /* M397 follow-up (A4). THE NAME SITS ON THE RIM, like a fieldset's legend,
+     not over the screen. Every cut that kept the chrome INSIDE the frame hid
+     something a person needed: M234's full-width --well band hid three rows
+     (a fresh shell's prompt looked dead), and M397's per-part backing still
+     hid the first ~11 columns of rows 0 AND 1, because the name straddles
+     that boundary — and with the controls shown, `⋯` landed mid-prompt and
+     the state word sat on the typed line. The body begins at the frame's top
+     edge and xterm owns every cell of it, so the only place the chrome can go
+     without covering a cell is OUTSIDE the frame.
+     So the chrome's box ends where the frame begins: `bottom: 100%`, one
+     --sp-6 tall. Still absolute, still out of the flow, the body's block size
+     untouched — nothing refits (chromeless.resize.1). Why this height and
+     this side, both measured against the neighbours it could collide with:
+       * --sp-6 (16px) fits inside MAXIMISE_MARGIN (16), so a maximised
+         terminal keeps its name on screen, and inside TIDY_GAP (24), so a
+         tidied neighbour above is never touched;
+       * the rest parts (the name, the state word) are END-aligned on the
+         rim and the word's pill is trimmed to the strip's height below, so
+         at rest nothing reaches into row 0 or stands taller than the strip;
+       * the controls are 24–28px (targets.1) and only shown on hover, focus
+         or selection. They are CENTRED on the strip, so they overhang it by
+         (h − 16) / 2 each way: at most 6px above, so 22 in all, inside the
+         tidy gap, and the same into the far right end of row 0, away from
+         the prompt and the cursor. End-aligned, a maximised frame's controls
+         lost their top 8–12px to the canvas edge (looked at); centred, the
+         canvas edge takes at most 6px of a box whose glyph sits mid-box;
+       * M144's counter-scale grows the strip UP from the rim here
+         (`transform-origin: bottom left`), not down from its top as every
+         other header does. Grown down, it sliced the prompt on row 0 in half
+         at 58% — looked at, not reasoned. Grown up, row 0 is clear at every
+         zoom; the cost is that between the near tier's floor and 67% the
+         strip's 16 screen px exceed a tidied gap (24 world px) and touch the
+         bottom edge of a panel directly above by a few px. Below the near
+         tier a terminal is a headed card and none of this applies.
+     The frame's overflow is let out for this kind only, below. */
+  transform-origin: bottom left;
+  /* Above the link ports (z 4). The ⋯ menu hangs from the chrome's foot,
+     which is now the frame's top edge — exactly where the north port sits —
+     and at the chrome's old 2 the port painted over the menu's title
+     (menu.paint.1). The strip is transparent between its parts, so the port
+     still shows beside them. */
+  z-index: 5;
+  top: auto;
+  bottom: 100%;
   left: 0;
   right: 0;
-  /* THE SCRIM IS THE TERMINAL'S OWN GROUND, and that is the whole trick.
-     A --chrome-bg gradient was the first cut and it did not work: --chrome-bg
-     is translucent glass, so the agent's first line showed THROUGH the title
-     and the two occupied the same band. `claude — api` printed straight over
-     `Reading src/server.ts` and neither could be read.
-     Starting from --well — the colour the terminal is already painting —
-     means the band under the chrome reads as empty terminal rather than as a
-     tinted overlay laid on top of one: no seam, no second material, and the
-     title simply sits in space.
-     M397 (A4). But as a full-width BAND that --well was three rows tall, and
-     the claim that it only ever hid the oldest row was false: on a fresh shell
-     or after `clear`, row 0 IS the newest row, the prompt lives there, and a
-     new terminal looked dead. So the band is gone and the --well is worn by
-     the title, the state word and each control ITSELF (the rule below this
-     one) — the same ground, the same legibility over output, and the rest of
-     row 0 shows. Paint only: the chrome's box, position and padding are
-     untouched, so nothing refits (chromeless.resize.1). */
+  height: var(--sp-6);
+  min-height: 0;
+  align-items: flex-end;
+  /* The name and its state on the left, the controls together at the right
+     end (the `order` rule below): space-between spread them across the
+     screen, which is how ⋯ came to sit in the middle of a typed command. */
+  justify-content: flex-start;
+  padding: 0 0 0 var(--sp-4);
+  /* THE SCRIM WAS THE TERMINAL'S OWN GROUND. A --chrome-bg gradient was the
+     first cut and `claude — api` printed straight over `Reading
+     src/server.ts`; M234 answered with a --well band, M397 with a --well
+     backing per part. Off the screen there is nothing to be legible OVER
+     except a neighbour a cascade dropped on top, so the parts keep their
+     --well backing (the rule below) and the strip itself paints nothing. */
   background: none;
-  /* CLEARANCE UNDER THE NAME. The chrome is absolute, so padding here grows
-     the SCRIM without moving a single layout box — no refit, no SIGWINCH.
-     Without it the name's descenders sat directly on the next row's
-     ascenders and the two read as colliding rather than layered (the Act III
-     gate critic measured zero gap). This buys about half a row of space and
-     lengthens the fade over it. */
-  padding-bottom: var(--sp-5);
   border-bottom: 0;
-  /* The BEZEL goes — it drew the seam where a housing met a screen, and there
-     is no seam now — but the LIT TOP EDGE stays. Dropping the whole
-     box-shadow was the first cut, and rim.paint.1 caught it immediately: the
-     frame's specular edge measured 0.79 where it had been 15.72, because the
-     chrome is what draws it and .panel's own rim sits UNDER the chrome's
-     scrim. That check exists for precisely this milestone; its comment said
-     so in M228 and it collected. */
-  box-shadow: var(--rim-top);
+  /* No bezel and no lit edge here: the strip no longer lies on the frame, so
+     the frame's OWN rim (`.panel`'s --rim-top, no longer under a scrim)
+     draws the specular edge (rim.paint.1). */
+  box-shadow: none;
 }
-/* M397 (A4). THE SCRIM IS PER PART, NOT A BAND. Each visible part of the
-   chrome wears the terminal's own ground behind its text, spread by a
-   box-shadow rather than padding where it needs one, so not one box in the
-   chrome moves. The title and the state word are rest-layer content and wear
-   it at rest; the controls are opacity 0 at rest, so theirs appears with them. `:not(:hover)`
-   leaves each control's own hover fill in charge while it is pointed at.
-   Measured by verify:panels:core chromeless.row0.1 (a fresh shell's row 0 is
-   uncovered outside the title and the word). */
+/* The frame clips its overflow for every other kind (a menu cut at the left
+   edge is why the ⋯ menu hangs inside the chrome). A live terminal lets it
+   out so the rim strip can sit above the frame; its screen keeps its own
+   rounded clip (`.panel__slot`'s radius). The state edge's glow was clipped
+   by that overflow to spill only INWARD (M109) — the clip-path keeps it so. */
+.pf--kind-terminal:has(.panel__slot) { overflow: visible; }
+.pf--kind-terminal:has(.panel__slot)::before { clip-path: inset(0 calc(-1 * var(--sp-8)) 0 1px); }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__menu-host, .pf__mark, .pf__trail, [data-open-as-chat], .pf__maximise, .pf__close) { order: 1; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__menu-host { margin-left: auto; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__menu-host, .pf__trail, [data-open-as-chat], .pf__maximise, .pf__close) { align-self: center; }
+/* M397 (A4). Each visible part wears the terminal's own ground behind its
+   text, so a name that lands over a neighbour's output (a cascade offsets a
+   new panel by less than a strip) still reads. The title and the state word
+   are rest-layer content and wear it at rest; the controls are opacity 0 at
+   rest, so theirs appears with them. `:not(:hover)` leaves each control's
+   own hover fill in charge while it is pointed at. */
 .pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__title, .pf__word, .pf__verb, .pf__close):not(:hover) { background: var(--well); }
-/* The title alone has no padding of its own, so its backing is spread — and
-   spread UP and LEFT as well — up only as far as the frame's lit top edge,
-   which it must not cover (rim.paint.1) — because the name sits
-   across the boundary of rows 0 and 1: a backing that stopped at the name's
-   own box cut the prompt's first glyphs in half, which read as a rendering
-   fault. Covering whole cells hides the prompt's first few characters
-   cleanly and leaves the rest of row 0, and the cursor, in view. The word
-   and the controls keep their own padding and radius. */
+/* The title's backing is a TAB: its own padding, the strip's full height,
+   rounded only where it stands free of the frame. No box-shadow spread —
+   that spread is what covered whole cells of rows 0 and 1 in M397. */
+/* The state pill, trimmed to the strip (the rim comment above): at rest
+   nothing on the rim stands taller than --sp-6. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { padding-block: 0; line-height: calc(var(--sp-6) - 2px); }
 .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__title {
-  border-radius: var(--r-sm);
-  box-shadow: 0 0 0 var(--sp-3) var(--well), 0 calc(-1 * var(--sp-2)) 0 var(--sp-3) var(--well), calc(-1 * var(--sp-5)) calc(-1 * var(--sp-2)) 0 var(--sp-3) var(--well);
+  padding: 0 var(--sp-2);
+  line-height: var(--sp-6);
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
 }
 /* NO SEPARATE WELL RECESS on a chromeless terminal. --rim-inner sinks a
    screen into a housing; here the frame IS the housing, the body starts at
@@ -6993,6 +7030,14 @@ body {
 .pf--kind-terminal:has(.panel__slot):hover .pf__chrome > *,
 .pf--kind-terminal:has(.panel__slot):focus-within .pf__chrome > *,
 .panel--selected.pf--kind-terminal:has(.panel__slot) .pf__chrome > * { pointer-events: auto; }
+/* M397 follow-up (A4). EXCEPT THE NAME AND ITS WORD, which now sit on the rim
+   ABOVE the frame and cover no cell — the reason above was cells, and there
+   are none under them. They are visible at rest, so they take the pointer at
+   rest: a click on the name selects the panel and a press drags it (the
+   header's beginMove), where a click that fell through to the canvas would
+   have DESELECTED it — fit.1's real click on the chrome measured exactly
+   that. The controls stay inert until they are shown. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome > :is(.pf__title, .pf__word) { pointer-events: auto; }
 /* The name at REST: quieter than a header's, but it must still LEAD. A gate
    critic measured the first cut at --fg-3 and found the ghosted terminal row
    beneath it reading BRIGHTER (176) than the title (160) in the dark theme —

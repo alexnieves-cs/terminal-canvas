@@ -4440,6 +4440,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       //     box and an accessible name at rest, so a scripted click lands and
       //     a keyboard reaches it without hovering (M44's reach rule, which
       //     chromeless must not spend).
+      // M397 follow-up (A4): the ⋯ now sits on the RIM strip above the
+      // frame, so at rest the point under it is the canvas, not a cell. The
+      // rest arm's contract is unchanged — an unseen control eats nothing —
+      // so it asserts that the point does not land in the chrome, and the
+      // hitsBody reading stays in the evidence rather than the verdict.
       // ONE probe, read twice, so the two states are compared like for like:
       // the same button, the same point, the same query.
       const probeMore = () => wc.executeJavaScript(`(() => {
@@ -4461,53 +4466,117 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
         await settle(); await sleep(150)
       }
-      ok('chromeless.paint.1 the lifted chrome PAINTS above the body ON HOVER (elementFromPoint at the ⋯ lands inside it) and is not there for the pointer AT REST (the same point reaches the terminal body, so an unseen control never eats a cell), while the button keeps a real box and an accessible name at rest so a script and a keyboard reach it without hovering',
+      ok('chromeless.paint.1 the lifted chrome PAINTS above the body ON HOVER (elementFromPoint at the ⋯ lands inside it) and is not there for the pointer AT REST (the same point does not land in the chrome, so an unseen control never eats a click), while the button keeps a real box and an accessible name at rest so a script and a keyboard reach it without hovering',
         chromeRest !== null && chromeRest.opacity === '0' &&
-          chromeRest.onTop === false && chromeRest.hitsBody === true &&
+          chromeRest.onTop === false &&
           chromeRest.w >= 20 && chromeRest.h >= 20 && chromeRest.named === true &&
           chromeHover !== null && chromeHover.opacity === '1' && chromeHover.onTop === true,
         JSON.stringify({ chromeRest, chromeHover }))
 
-      // M397 (A4) — chromeless.row0.1. ROW 0 IS NOT UNDER THE CHROME. The
-      // scrim was a full-width --well band three rows tall, and row 0 — where
-      // a fresh shell prints its prompt — sat under it, so every new terminal
-      // looked dead. elementFromPoint cannot see this: the chrome is
-      // pointer-events: none at rest, so the probe falls through to xterm
-      // whether the band is opaque or not. So it is measured as geometry off
-      // the computed style: the band itself paints nothing, and the parts
-      // that DO paint a backing (anything with a background or a
-      // box-shadow), inflated by the largest shadow reach the stylesheet
-      // gives them, cover under half of row 0's width. And the name is still
-      // there at rest (rest layer): opaque, with a real box.
-      const row0 = geom === null ? null : await wc.executeJavaScript(`(() => {
+      // M397 (A4) — chromeless.row0.1, REWRITTEN by the A4 follow-up. ROW 0
+      // IS NOT UNDER THE CHROME. The first version passed while the name's
+      // backing hid the first ~11 columns of rows 0 AND 1: it asked whether
+      // the painted parts covered UNDER HALF of row 0, never looked with the
+      // chrome shown, and inflated boxes by a hardcoded 18px copied from the
+      // tokens. elementFromPoint still cannot see this (the chrome is
+      // pointer-events: none at rest, so a probe falls through to xterm
+      // whether a part paints over the cell or not), so it is GEOMETRY, all
+      // of it read off the live page:
+      //   * every chrome part that paints — any element in the chrome whose
+      //     effective opacity (its own times every ancestor's up to the
+      //     chrome) is above 0, visible, with a box — inflated by ITS OWN
+      //     computed box-shadow, parsed, never a constant;
+      //   * the cursor cell, read off xterm's helper textarea, which xterm
+      //     parks on the cursor cell (its box is one cell: that is also the
+      //     row height used below, so no metric is assumed);
+      //   * AT REST, no part may touch rows 0 and 1 across the whole screen
+      //     width (the name is rest content and must still be there, opaque,
+      //     with a box); WITH THE CHROME SHOWN by a real hover, no part may
+      //     touch the prompt's columns — the cursor's row from the screen's
+      //     left edge to the cursor cell's right edge — which is where `⋯`
+      //     used to land mid-command.
+      const row0Probe = () => wc.executeJavaScript(`(() => {
         const p = document.querySelector('.panel[data-panel-id="${geom.id}"]')
-        const ch = p && p.querySelector('.pf__chrome'), scr = p && p.querySelector('.xterm-screen'), t = p && p.querySelector('.pf__title')
-        if (!ch || !scr || !t) return null
-        const s = scr.getBoundingClientRect(), cs = getComputedStyle(ch)
-        const rowH = parseFloat(getComputedStyle(p.querySelector('.xterm')).lineHeight) || 17
-        const y0 = s.top, y1 = s.top + Math.min(rowH, 20)
-        const REACH = 18   // the title's widest shadow reach (--sp-3 spread + --sp-5 shift)
-        const spans = []
-        for (const e of ch.querySelectorAll('*')) {
-          const es = getComputedStyle(e)
-          if (+es.opacity === 0 || es.visibility === 'hidden') continue
-          const paints = (es.backgroundColor !== 'rgba(0, 0, 0, 0)' && es.backgroundColor !== 'transparent') || es.boxShadow !== 'none'
-          if (!paints) continue
-          const r = e.getBoundingClientRect(); if (r.width === 0 || r.height === 0) continue
-          if (r.bottom + REACH < y0 || r.top - REACH > y1) continue
-          spans.push([Math.max(s.left, r.left - REACH), Math.min(s.right, r.right + REACH)])
+        const ch = p && p.querySelector('.pf__chrome'), scr = p && p.querySelector('.xterm-screen')
+        const ta = p && p.querySelector('.xterm-helper-textarea'), t = p && p.querySelector('.pf__title')
+        if (!ch || !scr || !ta || !t) return null
+        const s = scr.getBoundingClientRect(), c = ta.getBoundingClientRect()
+        const R = (r) => ({ l: r.left, t: r.top, r: r.right, b: r.bottom })
+        // One shadow list, parsed: Chromium serialises each as
+        // '<colour> <x> <y> <blur> <spread> [inset]'. An inset shadow paints
+        // inside the box, so it inflates nothing.
+        const reach = (bs) => {
+          const out = { l: 0, t: 0, r: 0, b: 0 }
+          if (!bs || bs === 'none') return out
+          for (const one of bs.split(/,(?![^(]*\\))/)) {
+            if (/\\binset\\b/.test(one)) continue
+            const n = (one.replace(/rgba?\\([^)]*\\)|#[0-9a-f]+|[a-z]+\\([^)]*\\)/gi, '').match(/-?[\\d.]+px/g) || []).map(parseFloat)
+            const [x = 0, y = 0, blur = 0, spread = 0] = n, e = blur + spread
+            out.l = Math.max(out.l, e - x); out.r = Math.max(out.r, e + x)
+            out.t = Math.max(out.t, e - y); out.b = Math.max(out.b, e + y)
+          }
+          return out
         }
-        spans.sort((a, b) => a[0] - b[0]); let covered = 0, end = -Infinity
-        for (const [a, b] of spans) { if (b <= end) continue; covered += b - Math.max(a, end); end = b }
+        const parts = []
+        for (const e of [ch, ...ch.querySelectorAll('*')]) {
+          let op = 1
+          for (let a = e; a && a !== p; a = a.parentElement) op *= +getComputedStyle(a).opacity
+          const es = getComputedStyle(e)
+          if (op === 0 || es.visibility === 'hidden' || es.display === 'none') continue
+          const r = e.getBoundingClientRect(); if (r.width === 0 || r.height === 0) continue
+          // A part counts only if it PAINTS: a fill, a shadow, a visible
+          // border, its own text, or a drawn glyph. A wrapper's box (the ⋯
+          // button's host span, the strip itself) is layout, not a surface.
+          const clear = (col) => /rgba\\(0, 0, 0, 0\\)|transparent/.test(col)
+          const border = ['Top', 'Right', 'Bottom', 'Left'].some((k) => parseFloat(es['border' + k + 'Width']) > 0 && !clear(es['border' + k + 'Color']) && es['border' + k + 'Style'] !== 'none')
+          const text = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== '')
+          const paints = !clear(es.backgroundColor) || es.backgroundImage !== 'none' || es.boxShadow !== 'none' || border || text || e instanceof SVGSVGElement
+          if (!paints) continue
+          const g = reach(es.boxShadow)
+          parts.push({ cls: (e.getAttribute('class') || e.tagName.toLowerCase()).split(' ')[0], l: r.left - g.l, t: r.top - g.t, r: r.right + g.r, b: r.bottom + g.b })
+        }
+        const hits = (a, box) => parts.filter((q) => q.l < box.r && q.r > box.l && q.t < box.b && q.b > box.t)
+          .map((q) => q.cls + '@' + Math.round(q.l) + ',' + Math.round(q.t) + '–' + Math.round(q.r) + ',' + Math.round(q.b))
+        const cell = R(c), rowH = c.height
+        const rows01 = { l: s.left, t: s.top, r: s.right, b: s.top + 2 * rowH }
+        const prompt = { l: s.left, t: cell.t, r: cell.r, b: cell.b }
+        const more = p.querySelector('[data-panel-more]')
         const tr = t.getBoundingClientRect(), ts = getComputedStyle(t)
-        return { bandImage: cs.backgroundImage, bandColor: cs.backgroundColor, position: cs.position,
-                 coveredFrac: Number((covered / s.width).toFixed(3)), parts: spans.length,
+        return { cursorInScreen: cell.l >= s.left && cell.r <= s.right + 1 && cell.t >= s.top && cell.b <= s.bottom + 1 && rowH > 0,
+                 cursor: { x: Math.round(cell.l), y: Math.round(cell.t), h: Math.round(rowH) },
+                 onRows01: hits(null, rows01), onPrompt: hits(null, prompt), parts: parts.length,
+                 moreOpacity: more ? getComputedStyle(more).opacity : null, position: getComputedStyle(ch).position,
                  title: { w: Math.round(tr.width), h: Math.round(tr.height), opacity: ts.opacity, color: ts.color } } })()`)
-      ok('chromeless.row0.1 a fresh terminal\'s row 0 is not under an opaque chrome band at rest — the band paints nothing, the parts that wear a backing cover under half the row, the chrome stays position: absolute, and the name is visible at rest',
-        row0 !== null && row0.bandImage === 'none' && /rgba\(0, 0, 0, 0\)|transparent/.test(row0.bandColor) &&
-          row0.position === 'absolute' && row0.coveredFrac < 0.5 &&
-          row0.title.w > 0 && row0.title.h > 0 && row0.title.opacity === '1' && !/rgba\(.*, 0\)$/.test(row0.title.color),
-        JSON.stringify(row0))
+      let row0Rest = null, row0Shown = null
+      if (geom !== null) {
+        // xterm parks its helper textarea on the cursor cell only when the
+        // cursor MOVES (onCursorMove → _syncTextArea); until then it sits at
+        // -9999em, which the first run measured. A space and a backspace move
+        // the cursor there and back and leave the line as it was; the blur
+        // hands the panel back to rest before the rest reading.
+        await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${geom.id}"] .xterm-helper-textarea')?.focus()`)
+        await sleep(100)
+        wc.sendInputEvent({ type: 'char', keyCode: ' ' }); await sleep(150)
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' })
+        await settle(); await sleep(250)
+        await wc.executeJavaScript(`document.activeElement && document.activeElement.blur()`)
+        await clickEmptyCanvas(wc); await settle()
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
+        await settle(); await sleep(250)
+        row0Rest = await row0Probe()
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.hoverX, y: geom.hoverY })
+        await settle(); await sleep(350)
+        row0Shown = await row0Probe()
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
+        await settle(); await sleep(150)
+      }
+      ok('chromeless.row0.1 no painted chrome part (its box inflated by its own computed box-shadow) touches a live terminal\'s rows 0–1 at rest or the prompt\'s columns up to the cursor cell with the chrome shown by a real hover — the name still visible at rest, the chrome still position: absolute',
+        row0Rest !== null && row0Shown !== null && row0Rest.cursorInScreen && row0Shown.cursorInScreen &&
+          row0Rest.parts > 0 && row0Rest.onRows01.length === 0 && row0Rest.onPrompt.length === 0 &&
+          row0Shown.moreOpacity === '1' && row0Shown.onPrompt.length === 0 &&
+          row0Rest.position === 'absolute' && row0Rest.moreOpacity === '0' &&
+          row0Rest.title.w > 0 && row0Rest.title.h > 0 && row0Rest.title.opacity === '1' && !/rgba\(.*, 0\)$/.test(row0Rest.title.color),
+        JSON.stringify({ row0Rest, row0Shown }))
 
       ok('chromeless.resize.1 a terminal\'s chrome is OUT OF THE FLOW (absolute over the body) and a real hover changes neither the xterm screen nor the body\'s measured block size — a chrome whose box collapses fires a SIGWINCH into the running agent on every mouse-over, with no error and no red suite anywhere else',
         geom !== null && chromeOut && same(before, during) && same(during, after),
