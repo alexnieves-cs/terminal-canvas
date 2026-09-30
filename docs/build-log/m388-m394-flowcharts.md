@@ -84,7 +84,23 @@ chart can become the plan for real work, and then shows that work's state.
 
 ## M392 — Shared flowcharts
 
-(written when the sync branch lands — see the ledger.)
+- **The wire.** `SharedPanel.shape` and `SharedPanel.connectors`, two more keys in a panel's
+  field map, JSON strings capped at 2 KB / 16 KB (`SHARED_SHAPE_MAX`, `SHARED_CONNECTORS_MAX`);
+  parsed on read by the same readers as the layout (a bad field costs the field; an arrow to a
+  panel not live in the doc is dropped). A shape's shared `title` is its label's first line, so
+  a client that does not draw shapes still names it. Written by main only for panels it HOSTS,
+  the words scrubbed through canvas-sync's existing `redactSecrets` door (no new caller).
+- **The gate.** `panel-content` (field `shape` | `connectors`), the retitle rule: the panel's
+  owner only; `inspectUpdate` recognises exactly those two fields and still refuses every other
+  unknown one; the collab server judges it through `authorizeCanvasOp` and counts it in the
+  `edited` summary (`diagram edits N`) — the audit's action set is pinned by its migration.
+- **What a peer sees.** A teammate's shape drawn in the ShapeLayer as the real shape, READ-ONLY
+  (no handles, ports or editor), an owner-colour dot on its outline; an editor may move it (the
+  placeholder write-through); the workspace owner may remove it. Their arrows draw read-only.
+- **Limits.** A peer cannot edit a teammate's words or arrows; a local panel cannot connect TO a
+  teammate's shape (a connector's target must be in the holder's own layout); a peer's shape
+  does not wear M393's live state.
+- Checks: `cs.flow.1–9`, `srv.flow.1`, `audit.flow.1`, `flowchart.shared.1–6`.
 
 ## M393 — The living flowchart
 
