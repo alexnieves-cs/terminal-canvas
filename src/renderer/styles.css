@@ -5898,7 +5898,17 @@ body {
 .world:is([data-detail="summary"], [data-detail="block"], [data-detail="cluster"]) .annotation-layer--starter { opacity: 0; visibility: hidden; transition: opacity var(--dur-2) var(--ease), visibility 0s linear var(--dur-2); }
 @media (prefers-reduced-motion: reduce) { .annotation-layer--starter { transition: none; } }
 .annotation__leader { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
-.annotation__host { pointer-events: none; }
+/* M407. THE HOST HAS A REAL BOX. It was 1×1 with its label overflowing it,
+   and Chromium paints a foreignObject's overflow but never HIT-TESTS it: no
+   label (caption or note) was a target for a real pointer, so M93's click to
+   select and double-click to edit were unreachable — every label answered
+   `canvas` to elementFromPoint. Sized per tier to hold the widest label
+   (max-width + its outline) at the tier's font; the host itself stays
+   pointer-events: none, so the empty part of the box takes nothing.
+   `verify:panels:product annotation.click.1`. */
+.annotation__host { pointer-events: none; width: 340px; height: 40px; }
+.world[data-detail="summary"] .annotation__host { width: 1120px; height: 80px; }
+.world[data-detail="block"] .annotation__host { width: 2420px; height: 140px; }
 .annotation__label, .annotation__editor {
   pointer-events: auto; display: inline-block; max-width: 320px; padding: var(--sp-1) var(--sp-2);
   font: var(--t-xs) var(--font-ui); color: var(--fg-2); background: var(--well); border: 1px solid var(--line-strong); border-radius: var(--r-sm);

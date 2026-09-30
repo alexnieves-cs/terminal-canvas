@@ -8,7 +8,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 230000 // measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
+const WATCHDOG_MS = 285000 // measured 2026-09-30 (M407): 208.7 s green with annotation.click.1 and starter.caption.retire.2 added (a reload and real input), 91% of 230000 at load avg ~300 — re-pinned at ~1.35x. Before that: measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
 
 const { cameraStill } = require('./lib/place-probe.cjs')
 
@@ -783,6 +783,102 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       JSON.stringify({ covered, own, open, retired, far }))
     } catch (error) {
       ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M407 — annotation.click.1 and starter.caption.retire.2.
+    //
+    // annotation.click.1: A LABEL IS A TARGET. M93's label is a <button> in a
+    // foreignObject that was 1×1 with the label overflowing it — Chromium
+    // paints that overflow and never hit-tests it, so no label, a caption or a
+    // person's note, could be clicked: elementFromPoint over one answered the
+    // canvas. Driven by REAL input (sendInputEvent): a click at the label's
+    // centre must select it, and a double-click must open its editor.
+    //
+    // starter.caption.retire.2: a caption retires only on a DIRECT, single
+    // selection of its object. A marquee that sweeps both examples up retires
+    // nothing (M405 retired both); a real press on one retires that one; ⌘Z
+    // (edit:undo) brings it back and ⌘⇧Z retires it again.
+    const idClick = 'annotation.click.1 a real click at an annotation label\'s centre hits the label and selects it (a caption and a person\'s note alike), and a real double-click opens its editor'
+    const idRetire = 'starter.caption.retire.2 a marquee over two captioned examples retires nothing; a real press on one retires its caption only; edit:undo brings it back and edit:redo retires it again'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const ids = () => wc.executeJavaScript(`[...document.querySelectorAll('[data-annotation]')].map((g) => g.getAttribute('data-annotation')).sort()`)
+    const click = async (x, y, count = 1) => {
+      wc.sendInputEvent({ type: 'mouseMove', x, y })
+      for (let c = 1; c <= count; c++) {
+        wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: c })
+        wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: c })
+      }
+      await settle()
+    }
+    try {
+      const files = prepareStarter(harnessStarterDir)
+      const [capA, capB] = [STARTER_OBJECTS.find((o) => o.key === 'image').caption, STARTER_OBJECTS.find((o) => o.key === 'note').caption]
+      layoutStore.save({ panels: [
+        { id: 'cr1', kind: 'image', x: 300, y: 120, w: 360, h: 160, z: 1, image: { path: files.imagePath } },
+        { id: 'cr2', kind: 'image', x: 760, y: 120, w: 360, h: 160, z: 2, image: { path: files.imagePath } }
+      ], annotations: [
+        { id: 'crA', text: capA, anchor: { kind: 'panel', panelId: 'cr1', dx: 0, dy: 182 } },
+        { id: 'crB', text: capB, anchor: { kind: 'panel', panelId: 'cr2', dx: 0, dy: 182 } },
+        { id: 'crN', text: 'my own note', anchor: { kind: 'world', x: 300, y: 420 } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+      const centre = (aid) => wc.executeJavaScript(`(() => { const l = document.querySelector('[data-annotation="${aid}"] [data-annotation-label]'); if (!l) return null; const r = l.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const e = document.elementFromPoint(x, y); return { x, y, hit: e ? (e.hasAttribute('data-annotation-label') ? 'label' : (e.className.baseVal ?? e.className)) : null } })()`)
+      await waitUntil(() => centre('crN'), 4000)
+      await sleep(300)
+      // annotation.click.1
+      const note = await centre('crN')
+      const cap = await centre('crB')
+      const selectedAfter = async (at) => { await click(at.x, at.y); return wc.executeJavaScript(`[...document.querySelectorAll('.annotation--selected')].map((g) => g.getAttribute('data-annotation'))`) }
+      const noteSel = note ? await selectedAfter(note) : null
+      const capSel = cap ? await selectedAfter(cap) : null
+      if (note) await click(note.x, note.y, 2)
+      const editor = await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-annotation="crN"] [data-annotation-editor]')`), 2000)
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle()
+      // Escape again: the canvas's own, which drops the annotation selection.
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle()
+      ok(idClick, note !== null && note.hit === 'label' && cap !== null && cap.hit === 'label' &&
+        JSON.stringify(noteSel) === '["crN"]' && JSON.stringify(capSel) === '["crB"]' && editor === true,
+      JSON.stringify({ note, cap, noteSel, capSel, editor }))
+
+      // starter.caption.retire.2 — a marquee from empty ground around both examples.
+      const box = await wc.executeJavaScript(`(() => { const r = [...document.querySelectorAll('.panel[data-panel-id="cr1"], .panel[data-panel-id="cr2"]')].map((p) => p.getBoundingClientRect()); return r.length === 2 ? { l: Math.min(r[0].left, r[1].left), t: Math.min(r[0].top, r[1].top), r: Math.max(r[0].right, r[1].right), b: Math.max(r[0].bottom, r[1].bottom) } : null })()`)
+      let swept = null
+      let marqueeIds = null
+      if (box) {
+        const from = { x: Math.round(box.l - 30), y: Math.round(box.t - 30) }, to = { x: Math.round(box.r + 30), y: Math.round(box.b + 12) }
+        wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 4; i++) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(from.x + (to.x - from.x) * i / 4), y: Math.round(from.y + (to.y - from.y) * i / 4), button: 'left', modifiers: ['leftButtonDown'] })
+        wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 }); await settle()
+        swept = await wc.executeJavaScript(`[...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')).sort()`)
+        marqueeIds = await ids()
+      }
+      // A press on the ground clears the marquee's selection first: a press on
+      // a MEMBER of a multi-selection is how a group drag begins, and selects
+      // nothing new (selectAndRaise), so it is rightly not a direct selection.
+      if (box) await click(Math.round(box.l + 400), Math.round(box.b + 150))
+      const cleared = await wc.executeJavaScript(`document.querySelectorAll('.panel--selected').length`)
+      // A real press on cr1's header retires crA only.
+      const head = await wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="cr1"] .panel__chrome'); if (!h) return null; const r = h.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
+      if (head) await click(head.x, head.y)
+      const pressed = await ids()
+      wc.send('edit:undo'); await settle()
+      const undone = await ids()
+      wc.send('edit:redo'); await settle()
+      const redone = await ids()
+      ok(idRetire, JSON.stringify(swept) === '["cr1","cr2"]' && JSON.stringify(marqueeIds) === '["crA","crB","crN"]' && cleared === 0 &&
+        JSON.stringify(pressed) === '["crB","crN"]' && JSON.stringify(undone) === '["crA","crB","crN"]' && JSON.stringify(redone) === '["crB","crN"]',
+      JSON.stringify({ box, swept, marqueeIds, cleared, head, pressed, undone, redone }))
+    } catch (error) {
+      ok(idClick, false, String(error && error.message || error))
+      ok(idRetire, false, String(error && error.message || error))
     } finally {
       layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
     }
@@ -4214,7 +4310,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           const inside = controls.map((c) => { const r = c.getBoundingClientRect(); return r.width > 0 && r.right <= frame.right + 1 && r.left >= frame.left - 1 })
           return { title: t ? t.getAttribute('title') : null, clipped: t ? t.scrollWidth > t.clientWidth : null, controls: controls.length, inside: inside.every(Boolean), text: t ? t.textContent : null }
         })()`)
-        ok(IDS[0], header !== null && typeof header.title === 'string' && /Revie in a narrow frame$/.test(header.title) && header.clipped === true && header.controls >= 2 && header.inside === true,
+        // M407: a titled terminal's tooltip is its full title and then what runs where (`— /bin/sh in ~`) — the title still LEADS it, whole.
+        ok(IDS[0], header !== null && typeof header.title === 'string' && header.title.startsWith(header.text) && /Revie in a narrow frame( — .+)?$/.test(header.title) && header.clipped === true && header.controls >= 2 && header.inside === true,
           JSON.stringify(header))
         // M121 — menu.1. THE OUTSIDE CLICK. The menu closed only on its own
         // `close menu` verb or Escape; a mousedown anywhere else left it open

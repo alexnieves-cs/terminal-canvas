@@ -23,7 +23,7 @@ import { capabilityLines, toolCapabilities } from '@shared/tool-spec'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
-import { terminalNames } from '@renderer/palette/panel-name'
+import { publishedTerminalName, terminalNames } from '@renderer/palette/panel-name'
 import type { PendingApproval } from './rail-sections'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { noteSummary } from '@shared/notes'
@@ -1181,7 +1181,8 @@ export function buildInspectorModelBare(
     id: panel.rect.id,
     ...(panel.title !== undefined ? { title: panel.title } : {}),
     // M405 (D2). The rim's and the rail's name, ordinal included, when the list is known.
-    heading: railLabel(panel, status, undefined, undefined, panels === undefined ? undefined : terminalNames(panels).get(panel.rect.id)),
+    // M407: the rim's published name first (the one list Canvas numbers), then this list's.
+    heading: railLabel(panel, status, undefined, undefined, publishedTerminalName(panel.rect.id) ?? (panels === undefined ? undefined : terminalNames(panels).get(panel.rect.id))),
     links,
     usage: buildUsageFields(usage, pinned),
     fields,

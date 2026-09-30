@@ -235,8 +235,10 @@ function TerminalPanelImpl({
     session.spec.command ??
     'login shell'
   const panelLabel = title ?? defaultTitle ?? terminalBaseName(session.spec) ?? resolvedCommand
-  const titleHint = title !== undefined ? undefined
-    : `${resolvedCommand} in ${session.status.kind === 'running' && session.status.cwd !== '' ? session.status.cwd : session.spec.cwd}`
+  // M407: a TITLED terminal keeps the fact too — its full title (M106: the
+  // tooltip is where a clipped title is read whole) and then what runs where.
+  const whereHint = `${resolvedCommand} in ${session.status.kind === 'running' && session.status.cwd !== '' ? session.status.cwd : session.spec.cwd}`
+  const titleHint = title !== undefined ? `${title} — ${whereHint}` : whereHint
   // M170. The chat's header line for an agent terminal; null for a plain shell.
   const agentLine = agentHeader(session.spec)
 

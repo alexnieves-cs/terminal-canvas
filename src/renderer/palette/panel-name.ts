@@ -80,27 +80,105 @@ export function terminalBaseName(spec: { command?: string; cwd: string }): strin
 }
 
 /**
- * M405 (D2). Every untitled terminal's DEFAULT name, with an ordinal where two
- * would read alike — `api`, `api 2`, `api 3`, `autoName`'s de-duplication.
- * Numbered in ARRAY order, which is stable (panels.ts: stacking is z, never
- * the array), so a raise never renames anything; closing the first renumbers
- * the rest, the same way Finder's `untitled 2` does. A titled terminal keeps
- * its own words and takes no number. One pass over one list, so the rim, the
- * navigator and the palette's Go-to rows read the same name for one panel.
+ * M407. One ordinal as a panel holds it: the NAME it numbers (`api`, or
+ * `a/api` once the parent is added) and its number. Keyed by the name AND the
+ * id, so a panel read in two lists (a workspace's, the merged view's) keeps
+ * each list's number instead of the two flipping each other's.
  */
-export function terminalNames(panels: readonly Panel[]): ReadonlyMap<string, string> {
-  const out = new Map<string, string>()
-  const seen = new Map<string, number>()
+export type TerminalOrdinals = Map<string, number>
+
+/**
+ * M407. THE SESSION'S ORDINALS. M405 numbered twins in array order, so
+ * closing `home` renamed `home 2` to `home` under the person's eyes — and a
+ * name that changes is a name nobody can use to find anything. A number, once
+ * given, is kept for the life of the renderer; nothing is persisted (the
+ * layout format does not move, and a relaunch numbers afresh, in array order).
+ */
+const SESSION_ORDINALS: TerminalOrdinals = new Map()
+
+/** `/a/b/api/` → `['a', 'b', 'api']`; `~/x` keeps its `~` (it reads as home, not a typo, INSIDE a path). */
+function segments(cwd: string): string[] {
+  return cwd.trim().split('/').filter((s) => s !== '')
+}
+
+/**
+ * M405 (D2), M407. Every untitled terminal's DEFAULT name, with an ordinal
+ * where two would read alike — `api`, `api 2`, `autoName`'s de-duplication.
+ *
+ * M407: two shells whose folders merely SHARE A BASENAME are two places, not
+ * twins — `~/a/api` and `~/b/api` read `a/api` and `b/api` (the parent added,
+ * and more of the path only while that still collides); an ordinal is only
+ * for two shells in the SAME folder. And the ordinal is STABLE: a panel keeps
+ * the number it was given (`ordinals`, the session's by default), a new
+ * panel takes the lowest free one, so closing `api` leaves `api 2` as it is
+ * and the next shell there is `api` again — the gap a Finder window leaves.
+ * A titled terminal keeps its own words and takes no number. The caller
+ * computes this ONCE per list (Canvas does, over the list the rim shows) so
+ * the rim, the navigator and the palette's Go-to rows read one name.
+ */
+export function terminalNames(panels: readonly Panel[], ordinals: TerminalOrdinals = SESSION_ORDINALS): ReadonlyMap<string, string> {
+  type Row = { id: string; cwd: string; base: string; name: string }
+  const rows: Row[] = []
   for (const p of panels) {
     if (!isTerminalPanel(p) || p.title !== undefined) continue
     const base = terminalBaseName(p.spec)
     if (base === undefined) continue
-    const n = (seen.get(base) ?? 0) + 1
-    seen.set(base, n)
-    out.set(p.rect.id, n === 1 ? base : `${base} ${n}`)
+    rows.push({ id: p.rect.id, cwd: p.spec.cwd.trim().replace(/\/+$/, ''), base, name: base })
+  }
+  // Same base, different folders: lengthen the PLACE (never the command in
+  // front of it) by parent segments until the folders read apart.
+  const byBase = new Map<string, Row[]>()
+  for (const r of rows) byBase.set(r.base, [...(byBase.get(r.base) ?? []), r])
+  for (const group of byBase.values()) {
+    const cwds = [...new Set(group.map((r) => r.cwd))]
+    if (cwds.length < 2) continue
+    const depth = Math.max(...cwds.map((c) => segments(c).length))
+    let k = 2
+    // A bare `~` is still `home` here (terminalBaseName's reason: `~` alone reads as a typo).
+    const tail = (cwd: string, n: number): string => { const t = segments(cwd).slice(-n).join('/') || cwd; return t === '~' ? 'home' : t }
+    while (k < depth && new Set(cwds.map((c) => tail(c, k))).size < cwds.length) k++
+    for (const r of group) {
+      const place = tail(r.cwd, k)
+      const cut = r.base.lastIndexOf(' — ')
+      r.name = cut === -1 ? place : `${r.base.slice(0, cut)} — ${place}`
+    }
+  }
+  // Ordinals: kept numbers first, then the lowest free number, in array order.
+  const out = new Map<string, string>()
+  const byName = new Map<string, Row[]>()
+  for (const r of rows) byName.set(r.name, [...(byName.get(r.name) ?? []), r])
+  for (const [name, group] of byName) {
+    const taken = new Set<number>()
+    const fresh: Row[] = []
+    for (const r of group) {
+      const kept = ordinals.get(`${name}\u0000${r.id}`)
+      if (kept !== undefined && !taken.has(kept)) { taken.add(kept); out.set(r.id, kept === 1 ? name : `${name} ${kept}`) }
+      else fresh.push(r)
+    }
+    for (const r of fresh) {
+      let n = 1
+      while (taken.has(n)) n++
+      taken.add(n)
+      ordinals.set(`${name}\u0000${r.id}`, n)
+      out.set(r.id, n === 1 ? name : `${name} ${n}`)
+    }
   }
   return out
 }
+
+/**
+ * M407. THE NAMES THE RIM SHOWS, for every label that cannot see the list.
+ * About twenty `railLabel(panel, undefined)` callers (the hand-off header,
+ * the activity feed, Orchestrate, the link banner, the runs' skip notes…)
+ * hold one panel and nothing else, so they said `home` where the rim said
+ * `home 2`. Canvas publishes the one `terminalNames` it computes each render
+ * and `panelName`/`railLabel` read it when no name was handed in. A renderer
+ * holds one canvas, so there is one book; in plain node nothing publishes and
+ * the book is empty, which is the place without an ordinal — M405's answer.
+ */
+let publishedNames: ReadonlyMap<string, string> = new Map()
+export function publishTerminalNames(names: ReadonlyMap<string, string>): void { publishedNames = names }
+export function publishedTerminalName(id: string): string | undefined { return publishedNames.get(id) }
 
 export interface PanelNameOpts {
   /** Resolved teammate display name for a chat with `chat.teammateId`. */
@@ -152,7 +230,8 @@ export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNa
   // M388. A shape names itself by its label's first line, like a note.
   if (isShapePanel(panel)) return shapeSummary(panel.shape.text, panel.shape.form)
   // M405 (D2). The place first; the program only when there is no place.
-  const named = opts?.defaultName ?? terminalBaseName(panel.spec)
+  // M407: the rim's published name when the caller did not hand one in.
+  const named = opts?.defaultName ?? publishedTerminalName(panel.rect.id) ?? terminalBaseName(panel.spec)
   if (named !== undefined) return named
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'

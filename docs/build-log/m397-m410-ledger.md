@@ -1253,3 +1253,106 @@ in a far tier); any `zoomed-out*` scene that shows starter captions.
 *Owed / for the lead:* a real-Mac pass of rename in place with a trackpad double-click; the annotation hit-test
 defect above (a new finding, not D3); the ledger's line 713 holds a stray merge marker (`||||||| f5e642c9`) from an
 earlier merge, left untouched.
+
+### M407 — labels take a click, one name per terminal on every surface, captions retire only when followed (M405 critic)
+
+Main checkout on `m397-daily-loop` off `72ab3ebc`, slot 1 (CDP 9210). The fix batch from a fresh critic of M405 (items 1,
+2, 3, 5 and the minors). **Item 4 (rename double-click vs drag) is not here**: it moved to D1's milestone, which
+follows this one. Screenshots in `/tmp/tc-daily-loop-shots/`: `M93-before`, `M93-after`, `D2b-after`, `D3b-before`,
+`D3b-after`.
+
+**1. No annotation label is a click target (M93, older than M405).** *Reproduced* on the real app, starter laid out:
+all four caption labels hit-tested `canvas` at their centres, and a real CDP click on one selected nothing
+(`M93-before`). *Cause:* `.annotation__host` is a `foreignObject` of 1×1 with its label overflowing it. Chromium
+paints a foreignObject's overflow but never hit-tests it, so M93's click-to-select and double-click-to-edit were
+unreachable by a real pointer on every label, a person's own notes included. *Fix (styles.css):* the host gets a
+real box per tier (340×40 near, 1120×80 summary, 2420×140 block: the widest label plus its outline, at the tier's
+font). The host stays `pointer-events: none`, so the empty part of the box takes nothing. *Measured after:* all
+visible labels hit-test as the label, a real click selects (`M93-after`), and a real double-click opens the editor.
+The covered-caption arm of `starter.caption.under.1` still answers `cu2`, because the starter layer is under the
+panels, so the box does not reach through a panel. *Check:* `verify:panels:product annotation.click.1`: real
+`sendInputEvent` clicks at a caption's and a note's centre hit the label and select it, and a real double-click
+opens the note's editor.
+
+**2. The ordinal reached only some surfaces.** *Cause:* the name with its ordinal needs the whole list, and about
+twenty labels hold one panel and call `railLabel(p, undefined)` (hand-off header, activity feed, Orchestrate's
+titles, the link banner, runs' skip notes, the Watch tile, the prompt `{{panel}}` built-in). They said `home` where
+the rim said `home 2`. The palette's Go-to rows also computed their own `terminalNames` over `panelsRef`, and the
+inspector computed its own over `panels`. *Fix:* Canvas computes `terminalNames` ONCE (over `displayPanels`, the list
+the rim shows) and hands the map to `buildRailRows` (a new optional `names` parameter that defaults to naming its own
+list) and to `useRailModels`'s Go-to rows (`deps.terminalNameOf`). It also PUBLISHES the map (`publishTerminalNames`).
+`railLabel` and `panelName` read the published name when no name is handed in, and a handed-in name still wins. The
+inspector heading prefers the published name. *Decision:* one module-level book, not a `nameOf` threaded through ~10
+hooks' signatures. A renderer holds one canvas, every present and future single-panel caller is covered without
+anyone remembering to pass it, and in plain node nothing publishes, so the answer is M405's (the place alone). The
+cost, recorded: a caller rendered before Canvas's first render reads the unnumbered place for that one render.
+*Check:* `verify:rail names.everywhere.1` (railLabel/panelName with no list read the published `home 2`; a
+handed-in name wins; unpublished it is `home`).
+*Minor, same cause:* in the merged view the rim numbered `displayPanels` while the palette numbered `panelsRef`. Now
+both read the one map.
+
+**3. Same basename, different folders, read as twins, and closing one renumbered the rest.** *Fix
+(`terminalNames`):* when two untitled terminals share a base name but not a folder, the PLACE is lengthened by parent
+segments until the folders read apart (`a/api`, `b/api`; `x/one/api` against `y/one/api`). A named command stays in
+front (`claude — a/api`), and a bare `~` tail is still `home`. An ordinal is only for the SAME folder, and it is
+session-stable: `SESSION_ORDINALS` maps name+panel id → number. A panel keeps its number and a new panel takes the
+lowest free one, so closing `home` leaves `home 2` as it is, and the next shell there is `home` again. The key
+includes the name, so a panel read in two lists (a workspace and the merged view) keeps each list's number instead
+of the two flipping each other's. No layout-format change: nothing is persisted, and a relaunch numbers afresh in
+array order. *Measured after (`D2b-after`):* shells in `/tmp/m407/a/api`, `/tmp/m407/b/api` and three in `~` read
+`a/api`, `b/api`, `home`, `home 2`, `home 3` on the rim and in the navigator. No D2b-before was taken. M405's own
+ledger records the `api`, `api 2` reading, and the stable-ordinal arm was not driven live: the canvas close control
+was not reachable by the driver at the card tier. It is pinned in plain node. *Check:* `verify:rail
+names.parent.1` (parents, deeper collision, the kicker kept, `home`/`home 2`/`home 3` → close `home` → `home 2`,
+`home 3` → a new one → `home`).
+
+**5. Captions retired on any selection, and not undoably.** *Cause:* M405's retirement was an effect on
+`selectedIds`. A marquee that swept an example up retired its caption, and so did a selection restored by a
+workspace switch. The panel history holds panels only, so ⌘Z could not bring a caption back. *Fix (Canvas.tsx):* the
+effect is gone. `retireCaptionsOf(id)` runs from `selectAndRaise`'s single, non-additive path: a press on the object,
+or Go to it. It does not run on the group-drag press on a member of a multi-selection, and it does not run for a
+marquee, an additive shift-press or a restored selection. The retirement is its own undo entry (`captionUndoRef`),
+pinned to the history's `present` as it stood right after the press (the same press may raise, which is one push).
+⌘Z restores the captions while that is still the present, meaning while the retirement is the newest thing. Once a
+later edit moves the panels, ⌘Z walks them back first and the caption returns on the press after. ⌘⇧Z re-retires,
+and a new `commitHistory` drops the caption redo as it drops the panels' future. *Measured after:* a real press on
+the note example retired its caption and no other (`D3b-before` → `D3b-after`). Undo could not be driven live: the
+driver's keys do not reach the menu accelerator, and the window could not be made frontmost for System Events. It is
+covered by the check. *Check:* `verify:panels:product starter.caption.retire.2`: a real marquee over two captioned
+examples selects both and retires nothing, a ground press clears the selection, a real press on one header retires
+its caption only, `edit:undo` brings it back, and `edit:redo` retires it again. `starter.caption.under.1`'s
+dispatched chrome press still retires (it reaches `selectAndRaise`).
+
+**Minor: a titled terminal lost its full-path tooltip.** The rim's tooltip is now `<title> — <command> in <path>` for
+a titled terminal. The title still leads it whole (M106's rule), and an untitled one keeps `<command> in <path>`.
+*Check changed deliberately:* `verify:panels:product header.1` accepted only a title attribute that ENDED at the
+title. It now asserts that the attribute starts with the full title text, followed by an optional `— …`.
+*Ledger note (the critic's):* the canvas PNG export now shows folder basenames in terminal titles, which is
+within the PNG's no-gate decision (pixels, not text).
+
+**Found, not fixed (out of scope):** in the real app, a click on the HUD's `Zoom in` sometimes SELECTS a panel
+(traced: `""` → `im5` after the second press, and `wf4` on another run). A selection that arrives this way goes
+through the canvas's hit-test → `onSelectPanel`, which is a direct selection by this milestone's rule, so it
+retires that object's caption. That is how two captions vanished during driving. It is pre-existing: M405's effect
+retired on it too. It is not diagnosed here. Candidates are a press/release pair split by the HUD re-laying out
+between them, or a background hit-test on the release.
+
+**Suites.** Plain: `rail` 264/264, `meta` 51/51 (after the watchdog comment kept its `// measured` form), `styles`
+94/94, `palette` 172/172, `layout` 286/286, `viewport` 197/197, `verbs` 30/30, `ipc` 1/1. Electron, each alone under
+the lock, at load avg 20–340:
+- `panels:product` 147/149. `names.agree.1` is red: the dock-pane palette read, M406's unattributed red with its harness fix in
+  the triage patch. `headroom.1` went red at 208.7 s of 230 s (91%), so **`WATCHDOG_MS` was re-pinned to 285000**
+  (~1.35×). The first run's `header.1` red was this milestone's (the tooltip) and was fixed as recorded above.
+- `panels:core` 86/90. `7`, `51`, `place.still.1` and `headroom.1` are the M406 placement-probe reds (window centre
+  against host centre, fixed in the triage patch). None of them is on this milestone's path. `title.default.2` and
+  `title.rename.1` are green.
+- `panels:kinds` 54/54, green (M405 recorded 46/53 on both builds).
+- `panels:shell` 101/105. `95`, `95b`, `95c` and `96` are red: the Workspaces pane's rail rows, `clickRail` matched
+  nothing. **They are red identically on `72ab3ebc`'s build in a scratch worktree**, so they are baseline and not
+  M407's. `106`, `117`, `126` and `127` were green in both runs.
+- The two new checks were not run against the baseline build. The M405 ledger measured labels answering `canvas`,
+  so `annotation.click.1` would read `hit: canvas`, and M405's effect retires on the marquee.
+*Goldens expected to move:* any scene with a titled terminal changes only its tooltip, which a PNG does not show. A
+scene with two untitled shells whose folders share a basename would now read by parent. None of the fixture scenes
+is known to have one, so no scene is expected to move. The label host change is invisible (the host box paints
+nothing).

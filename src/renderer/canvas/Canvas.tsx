@@ -46,7 +46,7 @@ import { useCanvasTestHooks } from './useCanvasTestHooks'
 import { usePaletteActions } from './usePaletteActions'
 import { useWorkspaceVerbs } from './useWorkspaceVerbs'
 import { useCanvasPointer } from './useCanvasPointer'
-import { panelName, terminalNames } from '@renderer/palette/panel-name'
+import { panelName, publishTerminalNames, terminalNames } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { inspectionDirectory } from './inspection-directory'
@@ -562,7 +562,11 @@ export function Canvas({
   }, [panels, workItems])
   const displayPanels = merged && mergedView ? mergedView.panels : anchoredPanels
   // M405 (D2). Untitled terminals' names, ordinals included, over the same list the rail names.
+  // M407: computed ONCE here and handed to the rail and the Go-to rows, and
+  // published for every label that holds one panel and no list (railLabel's
+  // ~20 single-panel callers), so the rim's `home 2` is `home 2` everywhere.
   const terminalNameOf = useMemo(() => terminalNames(displayPanels), [displayPanels])
+  publishTerminalNames(terminalNameOf)
   // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
   // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
   // after a pan would turn ordinary navigation into motion. The id is removed
@@ -684,7 +688,23 @@ export function Canvas({
   // would undo/redo against a stale stack the moment two edits landed in the
   // same tick. Destructuring only the setter also keeps `noUnusedLocals`
   // honest instead of manufacturing a read nothing else needs.
-  const [, setHistory] = useState<History<Panel[]>>(() => createHistory(panels))
+  const [history, setHistory] = useState<History<Panel[]>>(() => createHistory(panels))
+  // M407. Read by the caption retirement's undo (below), which needs to know
+  // whether anything moved on the canvas since the retirement.
+  const historyRef = useRef(history)
+  historyRef.current = history
+  /**
+   * M407. A RETIRED CAPTION COMES BACK ON ⌘Z. The panel history holds panels,
+   * not annotations, so a retirement is its own entry here, pinned to the
+   * history's `present` as it stood right after the press that retired it
+   * (the press may also have raised the panel — one history push). ⌘Z takes
+   * the retirement back while that is still the present, i.e. while it is the
+   * newest thing that happened; once a later edit moved the panels, ⌘Z walks
+   * the panel history back to that present first, and the caption returns on
+   * the press after. `present: null` until the press's render commits.
+   */
+  const captionUndoRef = useRef<Array<{ present: Panel[] | null; captions: Annotation[] }>>([])
+  const captionRedoRef = useRef<Array<{ present: Panel[]; captions: Annotation[] }>>([])
 
   // Declared before onSpawn (which uses it) rather than grouped with the
   // other undo plumbing below applyHistory needs: applyHistory itself needs
@@ -708,6 +728,8 @@ export function Canvas({
   // code has been proven against. If StrictMode is ever turned back on, this
   // whole call chain needs re-auditing before trusting it again.
   const commitHistory = useCallback((next: Panel[]) => {
+    // M407. A new edit drops a caption's redo, as it drops the panels' future.
+    captionRedoRef.current = []
     setHistory((h) => pushHistory(h, next))
   }, [])
 
@@ -906,11 +928,43 @@ export function Canvas({
   // the example is following the caption ("Click it to start a shell here"),
   // the same rule the launcher's starter tip follows when its door is used. A
   // person's own notes never retire; the merged view changes nothing.
+  // M407: only a DIRECT, single selection of that object retires it — a press
+  // on it, or Go to it — never a marquee that happens to sweep it up or a
+  // selection a workspace switch restores (an effect on `selectedIds` took all
+  // three); `selectAndRaise` calls this. And it is undoable (captionUndoRef).
+  const retireCaptionsOf = useCallback((id: string): void => {
+    if (mergedRef.current) return
+    const retired = annotationsRef.current.filter((a) => isStarterCaption(a) && a.anchor.kind === 'panel' && a.anchor.panelId === id)
+    if (retired.length === 0) return
+    captionUndoRef.current = [...captionUndoRef.current, { present: null, captions: retired }]
+    captionRedoRef.current = []
+    const gone = new Set(retired.map((a) => a.id))
+    setAnnotations((current) => current.filter((a) => !gone.has(a.id)))
+  }, [])
+  // The press's raise (if any) pushed its history entry in the same event, so
+  // by this commit `history.present` is what "right after the retirement" is.
   useEffect(() => {
-    if (selectedIds.size === 0 || merged) return
-    if (!annotationsRef.current.some((a) => isStarterCaption(a) && a.anchor.kind === 'panel' && selectedIds.has(a.anchor.panelId))) return
-    setAnnotations((current) => current.filter((a) => !(isStarterCaption(a) && a.anchor.kind === 'panel' && selectedIds.has(a.anchor.panelId))))
-  }, [selectedIds, merged])
+    for (const entry of captionUndoRef.current) if (entry.present === null) entry.present = history.present
+  }, [annotations, history])
+  /** M407. ⌘Z / ⌘⇧Z for a retirement; true when the press was spent on one. */
+  const stepCaptionHistory = useCallback((direction: 'undo' | 'redo'): boolean => {
+    const present = historyRef.current.present
+    if (direction === 'undo') {
+      const top = captionUndoRef.current[captionUndoRef.current.length - 1]
+      if (top === undefined || top.present !== present) return false
+      captionUndoRef.current = captionUndoRef.current.slice(0, -1)
+      captionRedoRef.current = [...captionRedoRef.current, { present, captions: top.captions }]
+      setAnnotations((current) => { const have = new Set(current.map((a) => a.id)); return [...current, ...top.captions.filter((a) => !have.has(a.id))].slice(-ANNOTATIONS_MAX) })
+      return true
+    }
+    const top = captionRedoRef.current[captionRedoRef.current.length - 1]
+    if (top === undefined || top.present !== present) return false
+    captionRedoRef.current = captionRedoRef.current.slice(0, -1)
+    captionUndoRef.current = [...captionUndoRef.current, { present, captions: top.captions }]
+    const gone = new Set(top.captions.map((a) => a.id))
+    setAnnotations((current) => current.filter((a) => !gone.has(a.id)))
+    return true
+  }, [])
   /**
    * The one selected panel, or null when zero OR MANY are selected. Every
    * existing reader of the selection — the inspector, the review query, the
@@ -2000,18 +2054,20 @@ export function Canvas({
       if (shouldIgnoreKeys()) return
       // A draft's ⌘Z undoes its TYPING, never a panel spawn behind it.
       if (serveDraftEdit('undo')) return
+      if (stepCaptionHistory('undo')) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
       if (shouldIgnoreKeys()) return
       if (serveDraftEdit('redo')) return
+      if (stepCaptionHistory('redo')) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory, shouldIgnoreKeys])
+  }, [applyHistory, shouldIgnoreKeys, stepCaptionHistory])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same
@@ -2720,6 +2776,7 @@ export function Canvas({
     // clicking an unselected panel, or the background, still replaces it.
     if (selectedIdsRef.current.size > 1 && selectedIdsRef.current.has(id)) return
     selectOnly(id)
+    retireCaptionsOf(id)
     setPanels((current) => {
       // Skip the raise (and the history push it would trigger) when `id` is
       // already topmost. onFocusPanel calls this on every click into a panel
@@ -2742,7 +2799,7 @@ export function Canvas({
       commitHistory(next)
       return next
     })
-  }, [addToSelection, commitHistory, selectOnly])
+  }, [addToSelection, commitHistory, selectOnly, retireCaptionsOf])
 
   /**
    * M256. DOCUMENT FOCUS — one file at a time, centred, widened and the only
@@ -7694,7 +7751,7 @@ export function Canvas({
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   } = useRailModels({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
-    workspaceRows, waitingIds, selectedId, globalFontSize,
+    workspaceRows, waitingIds, selectedId, globalFontSize, terminalNameOf,
     // M116. A work card's row speaks its item's state; absent when the board is empty.
     ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) }),
     // M401 (B2). A merged task's conversation says where its work went.

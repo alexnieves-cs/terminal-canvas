@@ -6,7 +6,7 @@ import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { WorkItemState } from '@shared/work-items'
 import { noteSummary } from '@shared/notes'
 import { shapeFormWord, shapeSummary } from '@shared/flowchart'
-import { chatDisplayLead, terminalBaseName, terminalNames } from '@renderer/palette/panel-name'
+import { chatDisplayLead, publishedTerminalName, terminalBaseName, terminalNames } from '@renderer/palette/panel-name'
 
 /**
  * What the rail's Panels section renders, as plain data.
@@ -152,7 +152,9 @@ export function railLabel(
       : teammateNameOf(panel.chat.teammateId)
     return chatDisplayLead(place, mate)
   }
+  // M407: a caller holding one panel reads the rim's published name (ordinal and all).
   return defaultName
+    ?? publishedTerminalName(panel.rect.id)
     ?? terminalBaseName(panel.spec)
     ?? (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
@@ -220,10 +222,13 @@ export function buildRailRows(
   /** M266. Passed through to `railLabel` for chat silhouette leads. */
   teammateNameOf?: (teammateId: string) => string | undefined,
   /** M401 (B2). A panel's task outcome by panel id — see `RailRow.outcome`. */
-  outcomeOf?: (panelId: string) => string | undefined
+  outcomeOf?: (panelId: string) => string | undefined,
+  /**
+   * M407. The terminal names Canvas computed for the rim. Absent (plain node),
+   * this list names itself; present, the rail and the rim cannot disagree.
+   */
+  names: ReadonlyMap<string, string> = terminalNames(panels)
 ): RailRow[] {
-  // M405 (D2). Named once over the whole list, so `home 2` here is `home 2` on the rim.
-  const names = terminalNames(panels)
   return panels.map((panel) => {
     const id = panel.rect.id
     const status = statusOf(id)

@@ -13,7 +13,7 @@ import { isFilePanel, isShapePanel, isTerminalPanel, type Panel, isChatPanel, is
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { watchStateInput } from '@renderer/watcher/watcher-store'
-import { panelName, panelPath, terminalNames } from '@renderer/palette/panel-name'
+import { panelName, panelPath } from '@renderer/palette/panel-name'
 import { REASON_CHAT_NO_BASELINE, type PanelRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { WorkspaceRow } from '@shared/ipc-contract'
@@ -50,6 +50,8 @@ export interface RailModelsDeps {
   teammateNameOf?: (teammateId: string) => string | undefined
   /** M401 (B2). A panel's settled task outcome by panel id. See buildRailRows. */
   outcomeOf?: (panelId: string) => string | undefined
+  /** M407. Untitled terminals' names as the rim shows them — ONE computation, so the rail and the Go-to rows cannot number differently. */
+  terminalNameOf: ReadonlyMap<string, string>
   /** M252. The workflow's record by id, for the inspector's reach and read fields. */
   templateOf?: (templateId: string) => import('@shared/templates').PersistedTemplate | undefined
   /** M116. The record itself, for the inspector's five facts. */
@@ -152,8 +154,8 @@ export function useRailModels(deps: RailModelsDeps) {
   // is only ever looked at while the overlay is up, and the commands that add
   // or remove a panel close it first, so recomputing at open is enough.
   const panelRows = useMemo<PanelRow[]>(
-    // M405 (D2). Terminal names over the ARRAY order (the rail's and the rim's ordinals), before the spatial reorder.
-    () => { const names = palette.open ? terminalNames(panelsRef.current) : undefined; return (palette.open
+    // M405 (D2), M407. The rim's own terminal names (Canvas computes them once), before the spatial reorder.
+    () => { const names = palette.open ? deps.terminalNameOf : undefined; return (palette.open
       // M44. Spatial order: on-screen panels first (nearest the camera centre),
       // then the rest by focus recency. Computed once on open, reading refs.
       ? orderPanelsFor(panelsRef.current.filter((p) => !isShapePanel(p)), viewportRef.current, registry.lastFocusedAt()).map((p) =>
@@ -260,7 +262,7 @@ export function useRailModels(deps: RailModelsDeps) {
   // M388. Shapes are not rail rows (ledger D8): a chart is many marks on the
   // canvas, like ink and labels, and 200 rows would bury every agent. They are
   // found on the canvas and through their chart, never one row each.
-  const railBuilt = buildRailRows(displayPanels.filter((p) => !isShapePanel(p)), (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf, deps.outcomeOf)
+  const railBuilt = buildRailRows(displayPanels.filter((p) => !isShapePanel(p)), (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf, deps.outcomeOf, deps.terminalNameOf)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 

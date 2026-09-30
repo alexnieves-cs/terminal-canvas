@@ -118,6 +118,54 @@ ok('4 nothing at all: "login shell"',
     JSON.stringify({ rowsApart, rowsSame, goApart: goTo(apart, namesApart), goSame: goTo(same, namesSame) }))
 }
 
+// M407. A SHARED BASENAME IS TWO PLACES, AND A NUMBER IS KEPT. Two shells in
+// `a/api` and `b/api` read `a/api`, `b/api` — M405 called them `api`, `api 2`,
+// an ordinal claiming two copies of one place. More of the path joins only
+// while the tails still collide (`x/one/api` vs `y/one/api`); a command's
+// kicker stays in front. An ordinal is for the SAME folder, and it is kept by
+// panel id: closing `home` leaves `home 2` as it is, and the next shell there
+// takes the lowest free number (`home`). Each arm hands in its own ordinal
+// map, the session's stand-in.
+{
+  const at = (id, cwd, over = {}) => panel(id, { kind: 'terminal', spec: { cwd, args: [] }, ...over })
+  const names = (list, book) => { const m = R.terminalNames(list, book); return list.map((p) => m.get(p.rect.id)) }
+  const parents = names([at('p1', '/w/a/api'), at('p2', '/w/b/api'), at('p3', '/w/a/api')], new Map())
+  const deeper = names([at('d1', '/x/one/api'), at('d2', '/y/one/api')], new Map())
+  const kicker = names([at('k1', '/w/a/api', { spec: { cwd: '/w/a/api', command: '/usr/bin/claude', args: [] } }), at('k2', '/w/b/api', { spec: { cwd: '/w/b/api', command: 'claude', args: [] } })], new Map())
+  const book = new Map()
+  const first = names([at('h1', '~'), at('h2', '~'), at('h3', '~')], book)
+  const closed = names([at('h2', '~'), at('h3', '~')], book)
+  const reopened = names([at('h2', '~'), at('h3', '~'), at('h4', '~')], book)
+  ok('names.parent.1 two shells whose folders share a basename read by their parents (a/api, b/api — more of the path only while that still collides, the command kept in front); only the SAME folder takes an ordinal, and an ordinal is kept when an earlier twin closes, the lowest free number going to the next',
+    JSON.stringify(parents) === JSON.stringify(['a/api', 'b/api', 'a/api 2']) &&
+      JSON.stringify(deeper) === JSON.stringify(['x/one/api', 'y/one/api']) &&
+      JSON.stringify(kicker) === JSON.stringify(['claude — a/api', 'claude — b/api']) &&
+      JSON.stringify(first) === JSON.stringify(['home', 'home 2', 'home 3']) &&
+      JSON.stringify(closed) === JSON.stringify(['home 2', 'home 3']) &&
+      JSON.stringify(reopened) === JSON.stringify(['home 2', 'home 3', 'home']),
+    JSON.stringify({ parents, deeper, kicker, first, closed, reopened }))
+}
+
+// M407. ONE NAME ON EVERY SURFACE. About twenty labels hold one panel and no
+// list — `railLabel(p, undefined)` in the hand-off header, the activity feed,
+// Orchestrate, the link banner, the runs' skip notes — and said `home` where
+// the rim said `home 2`. Canvas publishes the names it computes for the rim;
+// `railLabel` and `panelName` read them when no name is handed in, and a name
+// handed in still wins. Nothing published: M405's answer, the place alone.
+{
+  const twin = panel('pt2', { kind: 'terminal', spec: { cwd: '~', args: [] } })
+  const before = R.railLabel(twin, undefined)
+  R.publishTerminalNames(new Map([['pt2', 'home 2']]))
+  const rail = R.railLabel(twin, undefined)
+  const goTo = R.panelName(twin)
+  const handed = R.railLabel(twin, undefined, undefined, undefined, 'home 5')
+  R.publishTerminalNames(new Map())
+  const after = R.railLabel(twin, undefined)
+  ok('names.everywhere.1 a single-panel label (railLabel/panelName with no list) reads the rim\'s published name, ordinal included; a handed-in name still wins; with nothing published it is the place alone',
+    before === 'home' && rail === 'home 2' && goTo === 'home 2' && handed === 'home 5' && after === 'home',
+    JSON.stringify({ before, rail, goTo, handed, after }))
+}
+
 /* ---- The status tail ---- */
 
 // M63. The rail no longer says the pid — the word is the vocabulary's,
