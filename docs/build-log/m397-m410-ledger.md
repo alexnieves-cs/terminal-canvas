@@ -469,3 +469,9 @@ once in the verdict. The note is no longer rendered when the task is accepted, a
 
 **Goldens expected to move:** any scene with a verdict that is not verified (the shorter line, no Run checks verb).
 The accepted row and the reopen lines appear in no scene.
+
+**Suites (follow-up):** `npm run build` green. All 43 plain suites `npm run affected` selects are green, among them
+`verify:layout` 285/285 (`reopen.task.2`), `verify:review`, `verify:rail` and `verify:meta`. **`verify:panels:product`
+(the extended `review.accepted.1`) was NOT run.** `/tmp/tc-electron-lock` was held from 06:27 until past 07:37 by the
+main checkout's Electron tier (`verify-panels-shell`, still running), and the one-hour wait for it expired. That
+check is owed.
