@@ -6504,7 +6504,15 @@ export function Canvas({
   }), [])
   objectClipboardRef.current = {
     copy: () => flowchart.copyObjects().kind === 'ran',
-    paste: (text) => flowchart.pasteObjects(text) || flowchartIO.importPasted(text)
+    paste: (text) => {
+      if (flowchart.pasteObjects(text)) return true
+      // M391. A pasted diagram SAYS what it made and what it left out — the
+      // same sentence the file and agent doors return (useFlowchartIO).
+      const imported = flowchartIO.importPasted(text)
+      if (imported === null) return false
+      paletteActionsRef.current?.say(imported.kind === 'ran' ? (imported.note ?? 'diagram imported') : imported.reason)
+      return true
+    }
   }
   const onConnectorSelect = useCallback((id: string) => { connectors.select(id) }, [connectors.select])
   const selectedConnectorDetail = useMemo(() => {

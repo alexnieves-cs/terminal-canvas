@@ -113,7 +113,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers, unreviewedPresetReason, publish, parsePublishRequest,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers, unreviewedPresetReason, publish, parsePublishRequest, createFlowchartFiles,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1749,7 +1749,19 @@ app.whenReady().then(async () => {
   // M345's account and presence doors below.
   undefined, undefined, undefined,
   harnessAccountDoors,
-  harnessPresence)
+  harnessPresence,
+  // Position 45 (the pty relay) takes its default. 46 is M388's flowchart
+  // file doors: the PRODUCTION reader and exporter (the outward gate and every
+  // refusal arm are theirs), with the two system sheets answered by what a
+  // check planted — `state.flowchartOpenPath` / `state.flowchartSavePath`,
+  // cancelled when absent. Left to its inert default, `flowchart-import`
+  // through the agent door answered "not available here" for EVERY caller,
+  // so a teammate refusal could not be told from the door being unwired.
+  undefined,
+  createFlowchartFiles({
+    askOpen: async () => state.flowchartOpenPath ?? null,
+    askSave: async () => state.flowchartSavePath ?? null
+  }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

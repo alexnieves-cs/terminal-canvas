@@ -176,6 +176,9 @@ module.exports = {
   // M255. The PRODUCTION publisher, driven with a harness confirm and broker.
   publish: require('../src/main/github-publish').publish,
   parsePublishRequest: require('../src/main/github-publish').parsePublishRequest,
+  // M388. The PRODUCTION flowchart file doors (Mermaid in, diagram out through
+  // the outward gate) — only the two sheets are the harness's.
+  createFlowchartFiles: require('../src/main/flowchart-files').createFlowchartFiles,
   // M253. The one unread-preset refusal, so the harness's palette spawn asks
   // production's function rather than restating its sentence.
   unreviewedPresetReason: require('../src/main/presets').unreviewedPresetReason,
