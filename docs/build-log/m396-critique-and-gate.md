@@ -79,4 +79,20 @@ was ragged. The one fix batch (commit c9d7a0fc):
 - **A live terminal's header text at the block tier.** The live-terminal rule keeps its title.
 
 ## The gate
-See the ledger (reds split into this run's and the known baseline).
+
+`npm run verify` twice under the lock (the Electron tier serial), then `verify:visual` by hand.
+
+- **Run 2 (4437b426), the result:** 62/64 suites. The two red suites carry only baseline reds:
+  - `verify:panels:agents template.1`;
+  - `verify:panels:product starter.1`.
+
+  Of the older baseline list, `panels:agents detail.1` and the product part's
+  `workflow.edit.1/.2`, `lib.1`, `wire.1`, `inspect.1`, `save.1` and `panel.1e` are green here
+  (the carried-reds merge on main, dcfb5246). Every part's `headroom.1` is green (68–86%).
+- **Run 1 (af04423a):** the same two reds, plus `verify:panels:product` killed by its 230 s
+  watchdog right after `board.1`. **Not called a flake — measured.** The part alone took 184 s
+  (80%), and in run 2 184.6 s (80%), both with only `starter.1` red. One kill in three runs,
+  each surviving run at 80%. Watch for it rather than re-pin: headroom.1 says 80%.
+- **`verify:visual`:** 79/80. `starter` is the known baseline (the harness cannot paint it).
+  Its watchdog was re-pinned at 79 scenes: 307 s and 313.4 s measured, now 395 s.
+- **Reds of this run's own:** none.

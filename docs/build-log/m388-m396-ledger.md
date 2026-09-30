@@ -23,7 +23,7 @@ this file, not memory.
 | M393 | The living flowchart: a shape connected to a live object shows its state | done (`verify:panels:flowchart`) |
 | M394 | Sketch → plan: "Start work from this" | built (7c8f9dcb) |
 | M395 | The canvas revamp: the ranked surface changes (below) | done; parts A and B merged |
-| M396 | Critique → one fix batch → gate | fix batch done; confirm round, goldens and gate below |
+| M396 | Critique → one fix batch → gate | done — gate green apart from the baseline (below); merged to local main |
 
 ## Phase 0 — ground truth (2026-09-29)
 
@@ -380,3 +380,22 @@ not. In every one of them, the only tile past the budget is the bottom-right HUD
 - watcher — BETTER (net) — the corner Create no longer covers "project". The HUD now overlaps the blank top-right corner of the `worker b` tile, and its chip keeps 33px of clearance. Watch item.
 These 19 goldens were written in a second update after the gate.
 `starter` is the known baseline red (the harness cannot paint it).
+
+## The gate (M396)
+
+`npm run verify` twice under the lock (the Electron tier serial), then `verify:visual` by hand.
+
+- **Run 2 (4437b426), the result:** 62/64 suites. The two red suites carry only baseline reds:
+  - `verify:panels:agents template.1`;
+  - `verify:panels:product starter.1`.
+
+  Of the older baseline list, `panels:agents detail.1` and the product part's
+  `workflow.edit.1/.2`, `lib.1`, `wire.1`, `inspect.1`, `save.1` and `panel.1e` are green here
+  (the carried-reds merge on main, dcfb5246). Every part's `headroom.1` is green (68–86%).
+- **Run 1 (af04423a):** the same two reds, plus `verify:panels:product` killed by its 230 s
+  watchdog right after `board.1`. **Not called a flake — measured.** The part alone took 184 s
+  (80%), and in run 2 184.6 s (80%), both with only `starter.1` red. One kill in three runs,
+  each surviving run at 80%. Watch for it rather than re-pin: headroom.1 says 80%.
+- **`verify:visual`:** 79/80. `starter` is the known baseline (the harness cannot paint it).
+  Its watchdog was re-pinned at 79 scenes: 307 s and 313.4 s measured, now 395 s.
+- **Reds of this run's own:** none.
