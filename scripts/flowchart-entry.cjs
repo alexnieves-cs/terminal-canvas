@@ -10,6 +10,8 @@ module.exports = {
   svg: require('../src/shared/flowchart-svg'),
   arrange: require('../src/renderer/canvas/arrange'),
   files: require('../src/main/flowchart-files'),
+  // The shared half of the file doors: the SVG tripwire, the name rules, the caps.
+  filesShared: require('../src/shared/flowchart-files'),
   /* The canvas-side pure modules the flowchart rides on: conversion, the
      in-app clipboard, the connector view cache, the keyboard helpers, the
      panel verbs and the persistence path. Each check file refuses by name

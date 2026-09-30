@@ -291,7 +291,10 @@ function scanHeader(lines: string[]): Header {
   while (idEnd < line.length && (isAlnum(line.charCodeAt(idEnd)) || line[idEnd] === '-')) idEnd++
   const first = line.slice(0, idEnd)
   if (first !== '' && OTHER_DIAGRAMS.has(first.toLowerCase().replace(/-(beta|v2)$/, ''))) return { ok: false, reason: `this is a ${first}, not a flowchart` }
-  return { ok: false, reason: `this is not a flowchart — it starts with "${line.slice(0, 40)}${line.length > 40 ? '…' : ''}" instead of flowchart or graph` }
+  // Never the file's own words: a refusal travels back to whoever asked (an
+  // agent's line), and a linked or mistaken file's first line is not theirs to
+  // read (the boundary critic's finding 5).
+  return { ok: false, reason: 'this is not a flowchart — its first line is not `flowchart` or `graph`' }
 }
 
 /** Cheap sniff for a paste handler: does the first meaningful line open a flowchart? */
@@ -1149,4 +1152,24 @@ export function serializeMermaid(graph: FlowGraph, opts?: { title?: string }): s
     lines.push(`  ${from} ${operator(ends, e.dashed === true)}${label} ${to}`)
   }
   return lines.join('\n')
+}
+
+/**
+ * A ```mermaid fence (as an agent's answer or a README carries it) is the
+ * wrapper, not the diagram. LINEAR, over lines, and capped first — the
+ * boundary critic measured the regex this replaced backtracking for minutes on
+ * an unclosed fence followed by blank lines, before any size cap could apply.
+ */
+export function stripFence(text: string): string {
+  if (text.length > 400_000) return text
+  const lines = text.split('\n')
+  let first = 0
+  while (first < lines.length && lines[first].trim() === '') first++
+  let last = lines.length - 1
+  while (last > first && lines[last].trim() === '') last--
+  if (first >= last) return text
+  const open = lines[first].trim().toLowerCase()
+  if (open !== '```' && open !== '```mermaid') return text
+  if (lines[last].trim() !== '```') return text
+  return lines.slice(first + 1, last).join('\n')
 }

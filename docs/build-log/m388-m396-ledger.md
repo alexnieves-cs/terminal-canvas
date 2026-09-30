@@ -126,6 +126,25 @@ PNG is the canvas PNG (frame the chart, then Export canvas as PNG) — no second
 SVG is built from the model (vector text, no raster data URLs) and Mermaid is text: both cross
 `outward()` in main and report their scrub count; no new `redactSecrets` caller (`gate.2`).
 
+**Revised by the boundary critic (2026-09-29, fresh context, told to break the gates).** Three
+confirmed defects and two defence-in-depth gaps; all five fixed, each with a check:
+1. HIGH — the renderer built the SVG and main gated its TEXT, but the builder wraps a long word
+   across `<tspan>`s, so a token left in pieces and the count under-reported. Main now builds
+   the SVG from the model after scrubbing each label WHOLE (load-bearing entry;
+   `flowchart.files.13–15`).
+2. MEDIUM — the ```mermaid fence regex backtracked for minutes on an unclosed fence over blank
+   lines, freezing the renderer on a paste. Now a capped, linear line check in shared
+   (`flowchart.mermaid.29`: 60,000 blank lines under 50ms).
+3. MEDIUM — a group's label (an imported subgraph names one) reached the shared doc unscrubbed.
+   Scrubbed in `diffLocal` like a title, no churn (`cs.flow.10`).
+4. LOW — the SVG tripwire missed `<style`, `url(`, `<set`, `<animate`, `@import`. Added
+   (`flowchart.files.6–7`).
+5. LOW — `flowchart:read` followed links and a refusal quoted the file's first line. Real path
+   first, extension re-checked, cap re-checked after the read, no quoting
+   (`flowchart.files.16`, `flowchart.mermaid.28`).
+Not changed, recorded: `redact.ts`'s GitHub pattern needs a word boundary, so two tokens pasted
+back to back with no separator match neither — the scrubber's own limit, older than this run.
+
 ## The live-app audit (2026-09-29, 112 screenshots, old build)
 
 A fenced real-renderer driver used the canvas as a first-timer (empty canvas) and as a daily

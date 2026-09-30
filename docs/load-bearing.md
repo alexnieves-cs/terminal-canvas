@@ -5288,6 +5288,25 @@ reading "Fetch data: rows" refused the whole export. Labels are escaped characte
 an SVG lives in tags and attributes, so text between `>` and `<` is removed before the scan.
 `flowchart.files.*`.
 
+**The SVG is built in MAIN, from the model, after every label has crossed the gate whole
+(`main/flowchart-files.ts` `buildScrubbedSvg`, the boundary critic's finding 1).** The first
+version built the SVG in the renderer and sent main its TEXT. `flowchart-svg.ts` wraps a long
+label across several `<tspan>`s, splitting a word longer than a line into pieces — so a
+`ghp_…` token left in three lines the scrubber's pattern no longer matched, and the count said
+fewer secrets than had left. Scrubbing is a property of whole strings; a builder that wraps or
+escapes must run AFTER the gate, never before it. The renderer now sends the model (boxes,
+records, connector records, live objects' titles) and the theme's colours; main re-reads each
+record through the layout's own readers, takes only literal colours (the renderer normalises
+through a 2D context so a token in `oklch()` still exports), builds, and runs the tripwire on
+its own output. Mermaid stays text: its labels sit whole on one line. `flowchart.files.13–15`.
+
+**`flowchart:read` resolves the link before it judges the name (`readFlowchart`, finding 5).**
+An agent's line names the path, and `flow.mmd` linked to `~/.ssh/config` passed the extension
+check and read the key file into a refusal sentence that quoted its first line. The real path
+is taken first and its extension checked again; the read is held to the byte cap AFTER it too
+(a file can grow between the stat and the read); and a parse refusal never quotes the file.
+`flowchart.files.16`, `flowchart.mermaid.28`.
+
 **A resize floor is the OBJECT's (`panel-interaction.ts` `DragState.min`, `arrange.ts` `smartSnap`,
 M388/M390).** `MIN_PANEL_W/H` (200x160) is a terminal's floor; applied to a shape it made a 28px
 junction unresizable and made `snapRect` refuse every snap under 200 wide. A gesture carries its

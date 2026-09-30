@@ -408,4 +408,27 @@ module.exports = async function (ok, F) {
     show(ids(poison.graph)) === show(['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf']) && poison.graph.edges.length === 2 && node(poison.graph, 'hasOwnProperty').text === '__proto__' && poison.graph.groups[0].nodes.join() === 'valueOf' &&
       Object.getPrototypeOf(poison.graph) === Object.prototype && ({}).polluted === undefined && P(poisonOut).graph.nodes.length === 5,
     show({ ids: ids(poison.graph), out: poisonOut }))
+
+  // The boundary critic's finding 5: a refusal travels back to whoever asked
+  // (an agent's line names the file), so it never quotes the file's words.
+  const KEYLINE = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ secret@host'
+  const keyRefusal = M.parseMermaid(KEYLINE + '\nmore')
+  ok('flowchart.mermaid.28 a file that is not a flowchart is refused WITHOUT quoting its first line — a linked key file answers the same sentence as prose, and a known diagram type is still named by its keyword',
+    keyRefusal.kind === 'refused' && !keyRefusal.reason.includes('AAAAB3') && !keyRefusal.reason.includes('ssh-rsa') &&
+      keyRefusal.reason === M.parseMermaid('Hello there, this is prose.').reason && /sequenceDiagram/.test(M.parseMermaid('sequenceDiagram\n A->>B: x').reason),
+    show(keyRefusal))
+
+  // The boundary critic's finding 2: the fence regex this replaced backtracked
+  // for minutes on an unclosed fence followed by blank lines (measured). Now
+  // one pass over lines, capped before it starts.
+  const SF = M.stripFence
+  const fenceBomb = '```mermaid\n' + '\n'.repeat(60_000) + 'x'
+  const fenceT0 = process.hrtime.bigint()
+  const hostileOut = typeof SF === 'function' ? SF(fenceBomb) : null
+  const hostileMs = Number(process.hrtime.bigint() - fenceT0) / 1e6
+  ok('flowchart.mermaid.29 stripFence unwraps a ```mermaid or bare ``` fence (blank lines around it allowed) and leaves unfenced or half-fenced text alone; an unclosed fence over 60,000 blank lines answers in under 50ms, unchanged',
+    typeof SF === 'function' && SF('```mermaid\nflowchart TD\nA --> B\n```') === 'flowchart TD\nA --> B' && SF('\n  ```\ngraph LR\n```  \n\n') === 'graph LR' &&
+      SF('flowchart TD\nA --> B') === 'flowchart TD\nA --> B' && SF('```mermaid\nflowchart TD') === '```mermaid\nflowchart TD' && SF('```js\nx\n```') === '```js\nx\n```' &&
+      hostileOut === fenceBomb && hostileMs < 50,
+    show({ hostileMs }))
 }

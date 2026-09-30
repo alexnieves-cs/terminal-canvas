@@ -77,9 +77,15 @@ chart can become the plan for real work, and then shows that work's state.
   Inert by construction: a shape is a form and words. Doors: ⌘V of Mermaid text on the canvas,
   the palette's Import (a file), `tc plan flowchart-import /abs/path.mmd` (refused to a teammate's
   plan), a workflow node. An agent's diagram lands as a group named for its source.
-- **Mermaid and SVG out**: text, through `outward` in main (`export:flowchart`), the scrub count
-  in the verb's note; the SVG is built from the model (no raster, no script, no href — main
-  refuses one that has any), so the canvas PNG stays the ONE binary door (D6).
+- **Mermaid and SVG out** (`export:flowchart`), the scrub count in the verb's note. Mermaid is
+  text, gated whole in main. The SVG is BUILT IN MAIN from the model after every label crossed
+  `outward` whole — the boundary critic found that a renderer-built SVG wraps a long token
+  across `<tspan>`s and leaks it in pieces. No raster, no script, no href, no style, no url() —
+  main's tripwire refuses its own output if it ever had one — so the canvas PNG stays the ONE
+  binary door (D6).
+- **Boundary round** (fresh critic, five findings, all fixed): SVG built in main; a linear
+  fence check (the regex hung on a hostile paste); group labels scrubbed on the shared canvas;
+  the tripwire hardened; `flowchart:read` resolves links and never quotes the file.
 - **IPC.** `export:flowchart`, `flowchart:read` (`main/flowchart-files.ts`, injected deps).
 
 ## M392 — Shared flowcharts

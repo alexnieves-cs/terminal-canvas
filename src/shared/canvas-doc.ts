@@ -708,7 +708,11 @@ export function diffLocal(
     if (stale(`g:${key}`)) continue
     const fm = groups.get(key)
     if (fm !== undefined && isTombstone(fm)) continue
-    const want: SharedGroup = { id: key, label: g.label, colour: g.colour, panelIds: g.panelIds.map(panelToDoc), ...(g.collapsed === true ? { collapsed: true } : {}) }
+    // The label is scrubbed like a title (the boundary critic's finding 3): a
+    // group's name is words a teammate's machine receives, and since M391 an
+    // imported Mermaid subgraph names one — text a person did not type here.
+    // The doc holds the scrubbed form, so comparing against it does not churn.
+    const want: SharedGroup = { id: key, label: scrub(g.label), colour: g.colour, panelIds: g.panelIds.map(panelToDoc), ...(g.collapsed === true ? { collapsed: true } : {}) }
     const have = groupOf(key, fm)
     if (have === undefined || JSON.stringify(have) !== JSON.stringify(want)) ops.push({ kind: 'group-set', group: want })
   }

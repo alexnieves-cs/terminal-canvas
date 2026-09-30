@@ -522,6 +522,20 @@ async function until(pred, ms = 3000) {
         movedShape.ok && FA.ws.panels.find((x) => x.id === 'sh1').x === 44,
       JSON.stringify({ seenShape, seenTerm, movedShape }))
     FA.unbind(); FB.unbind()
+
+    // The boundary critic's finding 3: a group's label reached the doc as typed
+    // — since M391 an imported Mermaid subgraph names one. Scrubbed like a title,
+    // and a second diff of the same layout writes nothing (the doc holds the
+    // scrubbed form, so the comparison does not churn).
+    const gdoc = new Y.Doc()
+    const grp = { id: 'g1', label: 'deploy SECRET lane', colour: 'blue', panelIds: ['sh1'] }
+    const gdiff = () => M.doc.diffLocal(gdoc, { panels: [shapeP('Deploy?')], groups: [grp] }, me, () => false, (t) => t.replace(/SECRET/g, '[hidden]'))
+    const gFirst = applyAll(gdoc, gdiff())
+    const gSet = gFirst.find((op) => op.kind === 'group-set')
+    const gAgain = gdiff()
+    ok('cs.flow.10 a group\'s label crosses the scrub before it reaches the doc (the words a teammate receives), and diffing the same layout again writes nothing',
+      gSet?.group.label === 'deploy [hidden] lane' && !JSON.stringify(gFirst).includes('SECRET') && gAgain.length === 0,
+      JSON.stringify({ gSet, gAgain }))
   }
 
   // ── the renderer never holds the doc ────────────────────────────────────

@@ -13,12 +13,17 @@
 /** What the renderer serialised: Mermaid text, or SVG built as TEXT by the app. */
 export type FlowchartExportFormat = 'mermaid' | 'svg'
 
-export interface FlowchartExportRequest {
-  format: FlowchartExportFormat
-  text: string
-  /** A name to open the save sheet on. Main sanitises it and fixes the extension. */
-  suggestedName: string
-}
+/**
+ * Mermaid is sent as TEXT (its labels stay whole on one line, so the gate sees
+ * them whole). An SVG is sent as its MODEL and BUILT IN MAIN, after every label
+ * has crossed the gate: an SVG wraps a long label across several `<tspan>`s,
+ * and a token split across lines no longer matches the scrubber — the boundary
+ * critic measured a `ghp_` token leaving in three pieces while the count said
+ * one secret was scrubbed (docs/load-bearing.md, "the SVG is built in main").
+ */
+export type FlowchartExportRequest =
+  | { format: 'mermaid'; text: string; suggestedName: string }
+  | { format: 'svg'; model: unknown; colours: unknown; suggestedName: string }
 
 /**
  * Three arms, never a boolean. `refused` carries a sentence naming the fix — it
@@ -86,7 +91,15 @@ const SVG_ACTIVE: ReadonlyArray<{ marker: string; pattern: RegExp }> = [
   { marker: '<embed', pattern: /<embed/i },
   { marker: '<object', pattern: /<object/i },
   { marker: '<image', pattern: /<image/i },
-  { marker: 'an on…= event handler', pattern: /[\s"'/]on[a-z]+\s*=/i }
+  { marker: 'an on…= event handler', pattern: /[\s"'/]on[a-z]+\s*=/i },
+  // The boundary critic's holes: a stylesheet can fetch (`@import`, `url(`),
+  // and SMIL's <set>/<animate> can rewrite an attribute (an href, an on*) after
+  // load. None is anything this app's builder writes.
+  { marker: '<style', pattern: /<style/i },
+  { marker: 'url(', pattern: /url\s*\(/i },
+  { marker: '<set', pattern: /<set[\s/>]/i },
+  { marker: '<animate', pattern: /<animate/i },
+  { marker: '@import', pattern: /@import/i }
 ]
 
 /** The first active-content marker an SVG's text contains, or null when it is clean. */
@@ -96,6 +109,7 @@ export function svgActiveContent(text: string): string | null {
   // it cannot open a tag — and a label that reads "Fetch data: rows" must
   // not refuse the export. What can ACT in an SVG lives in tags and their
   // attributes, so the scan reads only those.
+  // (<style>'s own CONTENT is character data too — the `<style` tag itself refuses it.)
   const markup = text.replace(/>[^<]*</g, '><')
   for (const { marker, pattern } of SVG_ACTIVE) if (pattern.test(markup)) return marker
   return null

@@ -16,6 +16,23 @@ const { join } = require('node:path')
 // Built by concatenation so no scanner reads this file as holding a token.
 const TOKEN = 'ghp_' + 'abcdefghijklmnopqrstuvwxyz0123456789'
 const MERMAID = 'flowchart TD\n  A["Start"] --> B["Done"]\n'
+/** A theme's colours as the renderer reads them (`themeColours`). */
+const COLOURS = {
+  fill: { plain: '#f6f7fa', none: 'none', yellow: '#fbf3d5', blue: '#e2ecf9', green: '#e0f0e4', pink: 'rgba(249, 228, 236, .9)' },
+  stroke: { line: '#b5bcc7', ink: '#3f4552', iris: '#0b7f97', violet: 'rgb(106, 79, 196)', none: 'none' },
+  ink: { fg: '#1b1e26', muted: '#5b6271' },
+  background: '#fafafa',
+  line: '#444444'
+}
+/** A two-shape chart with a labelled arrow and a live object — every place words sit in an SVG. */
+const MODEL = (words = {}) => ({
+  shapes: [
+    { id: 'a', box: { x: 0, y: 0, w: 160, h: 72 }, shape: { form: 'process', text: words.a ?? 'Start' } },
+    { id: 'b', box: { x: 0, y: 200, w: 160, h: 90 }, shape: { form: 'decision', text: words.b ?? 'Done?' } }
+  ],
+  connectors: [{ fromBox: { x: 0, y: 0, w: 160, h: 72 }, fromForm: 'process', toBox: { x: 0, y: 200, w: 160, h: 90 }, toForm: 'decision', connector: { id: 'cx1', to: 'b', ...(words.label === undefined ? {} : { label: words.label }) }, obstacles: [] }],
+  panels: words.panel === undefined ? [] : [{ box: { x: 400, y: 0, w: 300, h: 200 }, title: words.panel }]
+})
 
 /** Fake dialogs, write and fs. `over.savePath: null` is a cancelled sheet; absent is "/out/<suggested name>". */
 function build(over = {}) {
@@ -43,6 +60,8 @@ function build(over = {}) {
       if (files.has(path)) return { isFile: () => true, isDirectory: () => false, size: sizes[path] ?? Buffer.byteLength(files.get(path)) }
       throw Object.assign(new Error(`ENOENT: no such file or directory, stat '${path}'`), { code: 'ENOENT' })
     },
+    // A link is modelled by `over.links`; everything else is its own real path.
+    realpath: (path) => (over.links ?? {})[path] ?? path,
     readText: (path) => {
       log.reads.push(path)
       if (over.readThrows) throw new Error('EIO: i/o error')
@@ -80,9 +99,9 @@ module.exports = async function (ok, F) {
 
     const seen = []
     const b = build()
-    const gated = await M.exportFlowchart({ format: 'svg', text: '<svg><text>hello</text></svg>', suggestedName: 'x' }, { ...b.deps, outward: (t, source) => { seen.push([t, source]); return { text: 'FROM THE GATE', redacted: 7 } } })
+    const gated = await M.exportFlowchart({ format: 'mermaid', text: MERMAID, suggestedName: 'x' }, { ...b.deps, outward: (t, source) => { seen.push([t, source]); return { text: 'FROM THE GATE', redacted: 7 } } })
     ok('flowchart.files.3 what is written is what the OUTWARD gate returned, not the request text, and the gate is named with a source — a write of the raw text would still say "written"',
-      seen.length === 1 && seen[0][0] === '<svg><text>hello</text></svg>' && typeof seen[0][1] === 'string' && /flowchart/.test(seen[0][1]) &&
+      seen.length === 1 && seen[0][0] === MERMAID && typeof seen[0][1] === 'string' && /flowchart/.test(seen[0][1]) &&
         b.log.writes.length === 1 && b.log.writes[0][1] === 'FROM THE GATE' && gated.kind === 'written' && gated.redacted === 7,
       JSON.stringify({ seen, writes: b.log.writes, gated }))
   }
@@ -112,7 +131,11 @@ module.exports = async function (ok, F) {
   }
 
   // ---- export: an SVG never carries active content ----
+  // Since the boundary fix the SVG is BUILT in main, so these markers are a
+  // tripwire on main's own output: checked on the shared scanner directly.
   {
+    const R = F.svg ?? {}
+    const scan = (F.filesShared ?? {}).svgActiveContent
     const svg = (inner) => `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${inner}</svg>`
     const cases = {
       '<script': svg('<script>alert(1)</script>'),
@@ -120,31 +143,29 @@ module.exports = async function (ok, F) {
       'javascript:': svg('<a style="x" id="javascript:void(0)"><rect/></a>'),
       'href=': svg('<a href="https://example.com"><rect/></a>'),
       'xlink:href': svg('<use xlink:href="#a"/>'),
-      'data:': svg('<rect style="fill:url(data:image/png;base64,AAAA)"/>'),
+      'data:': svg('<rect style="fill:red" id="data:x"/>'),
       'an on…= event handler': svg('<rect onload="alert(1)"/>'),
-      '<image': svg('<image width="1" height="1"/>')
+      '<image': svg('<image width="1" height="1"/>'),
+      '<style': svg('<style>rect{fill:red}</style>'),
+      'url(': svg('<rect fill="url(https://example.com/x)"/>'),
+      '<set': svg('<set attributeName="href" to="x"/>'),
+      '<animate': svg('<animate attributeName="x" to="1"/>'),
+      '@import': svg('<rect id="@import"/>')
     }
-    const outcomes = {}
-    for (const [marker, text] of Object.entries(cases)) {
-      const { result, log } = await exp({ format: 'svg', text, suggestedName: 'flow' })
-      outcomes[marker] = { kind: result.kind, names: result.kind === 'refused' && result.reason.includes(marker), saves: log.saves.length, writes: log.writes.length }
-    }
-    ok('flowchart.files.6 an SVG containing <script, <foreignObject, javascript:, href=, xlink:href, data:, an event handler or <image is refused NAMING the marker, before the sheet opens, and nothing is written',
-      Object.values(outcomes).every((o) => o.kind === 'refused' && o.names && o.saves === 0 && o.writes === 0), JSON.stringify(outcomes))
+    const named = typeof scan === 'function' ? Object.fromEntries(Object.entries(cases).map(([marker, text]) => [marker, scan(text)])) : null
+    ok('flowchart.files.6 the SVG tripwire names each active marker — <script, <foreignObject, javascript:, href=, xlink:href, data:, an event handler, <image, and (the boundary critic\'s holes) <style, url(, <set, <animate, @import',
+      named !== null && Object.entries(named).every(([marker, got]) => got === marker), JSON.stringify(named))
 
-    const shouted = await Promise.all([svg('<SCRIPT>1</SCRIPT>'), svg('<ForeignObject/>'), svg('<a HREF = "x"/>'), svg('<use XLINK:HREF="#a"/>'), svg('<rect style="fill:URL(DATA:image/png,x)"/>'), svg('<a id="JavaScript:1"/>')]
-      .map((text) => exp({ format: 'svg', text, suggestedName: 'flow' })))
-    const clean = await exp({ format: 'svg', text: svg('<rect x="1" y="1" width="8" height="8" fill="#fff" stroke="#333"/><text x="2" y="5">Start</text><path d="M1 1L9 9" marker-end="url(#arrow)"/>'), suggestedName: 'flow' })
-    const mermaidKeeps = await exp({ format: 'mermaid', text: 'flowchart TD\n  A["data: users"] --> B["<script> is only a word here"]\n', suggestedName: 'flow' })
-    ok('flowchart.files.7 the refusal is case-insensitive; a clean SVG (rects, text, paths, a url(#…) marker) is written as .svg; the refusal is SVG\'s alone — Mermaid text is inert and is not refused for a word',
-      shouted.every((r) => r.result.kind === 'refused' && r.log.writes.length === 0) &&
-        clean.result.kind === 'written' && clean.result.path === '/out/flow.svg' && clean.log.saves[0].format === 'svg' &&
-        mermaidKeeps.result.kind === 'written', JSON.stringify({ shouted: shouted.map((r) => r.result.kind), clean: clean.result, mermaid: mermaidKeeps.result.kind }))
+    const shouted = typeof scan === 'function' ? [svg('<SCRIPT>1</SCRIPT>'), svg('<ForeignObject/>'), svg('<a HREF = "x"/>'), svg('<STYLE>x</STYLE>'), svg('<rect fill="URL (x)"/>'), svg('<a id="JavaScript:1"/>')].map(scan) : []
+    const words = typeof scan === 'function' ? scan(svg('<text x="2" y="5">see url(x), &lt;script&gt;, href= and onload= and @import</text>')) : 'missing'
+    ok('flowchart.files.7 the tripwire is case-insensitive, and it reads MARKUP only — a label that says url(, <script>, href=, onload= or @import in its words is text and passes',
+      shouted.length === 6 && shouted.every((m) => m !== null) && words === null, JSON.stringify({ shouted, words }))
+    void R
   }
 
   // ---- export: the file name ----
   {
-    const name = async (suggestedName, format = 'mermaid') => (await exp({ format, text: format === 'svg' ? '<svg/>' : MERMAID, suggestedName })).log.saves[0]?.suggestedName
+    const name = async (suggestedName, format = 'mermaid') => (await exp(format === 'svg' ? { format, model: MODEL(), colours: COLOURS, suggestedName } : { format, text: MERMAID, suggestedName })).log.saves[0]?.suggestedName
     const got = {
       plain: await name('Order flow'),
       svg: await name('Order flow', 'svg'),
@@ -246,5 +267,56 @@ module.exports = async function (ok, F) {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  }
+
+  // ---- the boundary fix: the SVG is built in MAIN, every label scrubbed WHOLE ----
+  {
+    const long = `deploy with key ${TOKEN} then check the build`
+    const svgOut = await exp({ format: 'svg', model: MODEL({ a: long, label: `via ${TOKEN}`, panel: `term ${TOKEN}` }), colours: COLOURS, suggestedName: 'flow' })
+    const written = svgOut.log.writes[0]?.[1] ?? ''
+    const pieces = []
+    for (let i = 0; i + 12 <= TOKEN.length; i++) if (written.includes(TOKEN.slice(i, i + 12))) pieces.push(TOKEN.slice(i, i + 12))
+    ok('flowchart.files.13 an SVG is BUILT IN MAIN from the model: a token in a shape\'s words (long enough to wrap), in an arrow\'s label and in a live object\'s title leaves in NO piece — no 12 characters of it — and the count is every label that held one',
+      svgOut.result.kind === 'written' && svgOut.result.path === '/out/flow.svg' && /^<svg/.test(written.trim()) && pieces.length === 0 &&
+        svgOut.result.redacted >= 3 && written.includes('[redacted') && written.includes('Done?'),
+      JSON.stringify({ result: svgOut.result, pieces: pieces.slice(0, 3) }))
+
+    const seen = []
+    const b = build()
+    await M.exportFlowchart({ format: 'svg', model: MODEL({ label: 'yes' }), colours: COLOURS, suggestedName: 'x' }, { ...b.deps, outward: (t, source) => { seen.push([t, source]); return { text: t, redacted: 0 } } })
+    const text = b.log.writes[0]?.[1] ?? ''
+    ok('flowchart.files.14 the gate reads each label WHOLE, one call per label (Start, Done?, yes), never the built markup — and what is written is the builder\'s own SVG, which trips none of its own markers',
+      JSON.stringify(seen.map((x) => x[0]).sort()) === JSON.stringify(['Done?', 'Start', 'yes']) && seen.every((x) => /flowchart/.test(x[1])) &&
+        (F.filesShared ?? {}).svgActiveContent?.(text) === null,
+      JSON.stringify({ seen }))
+
+    const hostileColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, background: '#fff" onload="alert(1)' }, suggestedName: 'x' })
+    const fetchColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, stroke: { ...COLOURS.stroke, iris: 'url(https://example.com/x)' } }, suggestedName: 'x' })
+    const missingColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, ink: { fg: '#000' } }, suggestedName: 'x' })
+    const empty = await exp({ format: 'svg', model: { shapes: [], connectors: [] }, colours: COLOURS, suggestedName: 'x' })
+    const noModel = await exp({ format: 'svg', text: '<svg/>', suggestedName: 'x' })
+    const junk = await exp({ format: 'svg', model: { shapes: [{ id: 'z', box: { x: 'no' }, shape: { form: 'process', text: 'x' } }, { id: 'q', box: { x: 0, y: 0, w: 10, h: 10 }, shape: { form: 'weird', text: 'x' } }, ...MODEL().shapes], connectors: [{ connector: { id: 'cx', to: 'b' } }] }, colours: COLOURS, suggestedName: 'x' })
+    ok('flowchart.files.15 a colour that is not a literal colour (an attribute break, a url(), a missing key) refuses the export; an empty or absent model refuses; SVG TEXT from the renderer is no longer accepted; a malformed shape or connector costs only itself — each refusal before the sheet opens',
+      [hostileColour, fetchColour, missingColour].every((r) => r.result.kind === 'refused' && /colours/.test(r.result.reason) && r.log.saves.length === 0) &&
+        empty.result.kind === 'refused' && /empty/.test(empty.result.reason) && noModel.result.kind === 'refused' && noModel.log.saves.length === 0 &&
+        junk.result.kind === 'written' && !(junk.log.writes[0]?.[1] ?? '').includes('weird'),
+      JSON.stringify([hostileColour.result, fetchColour.result, missingColour.result, empty.result, noModel.result, junk.result]))
+  }
+
+  // ---- the boundary fix: a named path is followed to its REAL file first ----
+  {
+    const over = {
+      files: { '/home/.ssh/config': 'Host secret\n  IdentityFile ~/.ssh/id', '/w/real.mmd': MERMAID, '/w/grow.mmd': 'x'.repeat(200_001) },
+      links: { '/w/flow.mmd': '/home/.ssh/config', '/w/alias.mmd': '/w/real.mmd' },
+      sizes: { '/w/grow.mmd': 10 }
+    }
+    const linked = await read({ path: '/w/flow.mmd' }, over)
+    const alias = await read({ path: '/w/alias.mmd' }, over)
+    const grew = await read({ path: '/w/grow.mmd' }, over)
+    ok('flowchart.files.16 a .mmd name LINKED to a file that is not Mermaid is refused by its own sentence and reads nothing; a link to a real .mmd reads the real file; a file that grew past the cap between the stat and the read is refused',
+      linked.result.kind === 'refused' && /links to/.test(linked.result.reason) && linked.log.reads.length === 0 && !linked.result.reason.includes('secret') &&
+        alias.result.kind === 'ok' && alias.result.text === MERMAID && alias.log.reads[0] === '/w/real.mmd' &&
+        grew.result.kind === 'refused' && /KB/.test(grew.result.reason),
+      JSON.stringify([linked.result, alias.result.kind, grew.result]))
   }
 }

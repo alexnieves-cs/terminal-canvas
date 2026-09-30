@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react'
 import type { FlowDirection, ShapeFill, ShapeInk, ShapeStroke } from '@shared/flowchart'
-import { looksLikeMermaid, mermaidImportSentence, parseMermaid, serializeMermaid } from '@shared/flowchart-mermaid'
+import { looksLikeMermaid, mermaidImportSentence, parseMermaid, serializeMermaid, stripFence } from '@shared/flowchart-mermaid'
 import { layoutFlow } from '@shared/flowchart-layout'
-import { flowchartSvg, type FlowchartSvgColours } from '@shared/flowchart-svg'
+import type { FlowchartSvgColours } from '@shared/flowchart-svg'
 import { GROUP_COLOURS, type PersistedGroup } from '@shared/groups'
 import { isShapePanel, nextZ, type Panel } from '@renderer/panels/panels'
 import { graphToPanels, panelsToGraph, svgModelOf } from '@renderer/flowchart/flow-convert'
@@ -62,11 +62,6 @@ export interface FlowchartIO {
 
 const DIRECTION_WORDS: Record<string, FlowDirection> = { down: 'TB', tb: 'TB', td: 'TB', up: 'BT', bt: 'BT', right: 'LR', lr: 'LR', left: 'RL', rl: 'RL' }
 
-/** A ```mermaid fence (as an agent's answer or a README carries it) is the wrapper, not the diagram. */
-export function stripFence(text: string): string {
-  const m = /^\s*```\s*(?:mermaid)?\s*\n([\s\S]*?)\n\s*```\s*$/i.exec(text)
-  return m === null ? text : m[1]
-}
 
 export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
   const { setPanels, commitHistory, panelsRef, nextIdRef, setGroups, nextGroupIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, worldCentre, frameRects, reducedMotion, nameOf } = deps
@@ -140,16 +135,18 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
     // One shape selected means ITS CHART, as for a layout.
     if (scope.size === 1) scope = reachable(panels, [...scope][0])
     if (!panels.some((p) => isShapePanel(p) && (scope.size === 0 || scope.has(p.rect.id)))) return { kind: 'refused', reason: 'there is no diagram on this canvas to export' }
-    let text: string
+    let text = ''
     let note = ''
     if (format === 'mermaid') {
       const { graph, leftOut } = panelsToGraph(panels, scope)
       text = serializeMermaid(graph)
       if (leftOut > 0) note = ` · ${leftOut} line${leftOut === 1 ? '' : 's'} to a live object left out (Mermaid has no word for one)`
-    } else {
-      text = flowchartSvg(svgModelOf(panels, scope, nameOf), themeColours())
     }
-    const out = await window.canvas.export.flowchart({ format, text, suggestedName: format === 'mermaid' ? 'diagram.mmd' : 'diagram.svg' })
+    // An SVG goes as its MODEL: main scrubs every label WHOLE, then builds it
+    // (FlowchartExportRequest's header — a wrapped label splits a token).
+    const out = format === 'mermaid'
+      ? await window.canvas.export.flowchart({ format, text, suggestedName: 'diagram.mmd' })
+      : await window.canvas.export.flowchart({ format, model: svgModelOf(panels, scope, nameOf), colours: themeColours(), suggestedName: 'diagram.svg' })
     if (out.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
     if (out.kind === 'refused') return { kind: 'refused', reason: out.reason }
     const scrubbed = out.redacted === 0 ? 'nothing looked like a secret' : `${out.redacted} secret${out.redacted === 1 ? '' : 's'} scrubbed`
@@ -239,7 +236,18 @@ function reachable(panels: readonly Panel[], id: string): Set<string> {
  */
 function themeColours(): FlowchartSvgColours {
   const css = getComputedStyle(document.documentElement)
-  const v = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback
+  // Normalised through a 2D context, which answers any CSS colour as #rrggbb or
+  // rgba(): main takes ONLY literal colours (it builds the SVG — a value there
+  // must not be able to close an attribute), and a token moving to oklch() or
+  // color-mix() must not quietly make every SVG export a refusal.
+  const probe = document.createElement('canvas').getContext('2d')
+  const v = (name: string, fallback: string): string => {
+    const raw = css.getPropertyValue(name).trim() || fallback
+    if (probe === null) return fallback
+    probe.fillStyle = fallback
+    probe.fillStyle = raw
+    return probe.fillStyle
+  }
   const fill: Record<ShapeFill, string> = { plain: v('--s-1', '#f6f7fa'), none: 'none', yellow: v('--tint-yellow', '#fbf3d5'), blue: v('--tint-blue', '#e2ecf9'), green: v('--tint-green', '#e0f0e4'), pink: v('--tint-pink', '#f9e4ec') }
   const stroke: Record<ShapeStroke, string> = { line: v('--line-strong', '#b5bcc7'), ink: v('--fg-2', '#3f4552'), iris: v('--iris', '#0b7f97'), violet: v('--violet', '#6a4fc4'), none: 'none' }
   const ink: Record<ShapeInk, string> = { fg: v('--fg', '#1b1e26'), muted: v('--fg-3', '#5b6271') }
