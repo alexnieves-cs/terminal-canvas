@@ -73,7 +73,12 @@ const GOLDEN_SCALE = 0.5
 // one thing this timer must never do. The M160 figures (166.5 s, 166.2 s over 55
 // scenes) are the earlier baseline. Re-measure when a milestone adds scenes —
 // and this comment is the record that it was not done for six of them.
-const WATCHDOG_MS = 285000
+// Re-measured (2026-09-30, M396): 79 scenes — the M388 flowchart three type a
+// chart key by key and spawn a real shell, and scenes had landed since M299 —
+// and the 285 s ceiling killed the first golden run mid-way. Two runs alone,
+// the lock taken: the harness 307 s wall, this suite 313.4 s; times 1.25 of
+// the slower is 392 s.
+const WATCHDOG_MS = 395000
 
 const results = []
 const ok = (n, pass, detail) => {

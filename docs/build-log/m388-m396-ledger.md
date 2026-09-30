@@ -325,3 +325,50 @@ critic on before/after, one fix batch, goldens with the critic's sentences, the 
 `styles.css`, and every one on a line older than this run (`git blame`, each commit an ancestor
 of f7a3247e) — side-tab accents, spring easing, two layout transitions. None introduced here;
 none fixed here (out of scope, and each is a restyle of a shipped surface with its own golden).
+
+## Goldens (M396) — one sentence per changed scene, before `UPDATE_GOLDENS=1`
+
+Written after the second (confirm) visual critic; its verdicts are quoted, shortened. Where the
+confirm round still found a defect, the fix after it was checked by the LEAD looking at the
+fresh golden, and that is said on the line — no third critic was run (the prompt's limit).
+**Why so many:** the before shots were taken with the canvas host scrolled by earlier scenes'
+typing (the M395 host-scroll bug); fixed, every scene whose canvas sits under that scroll now
+paints at the true camera. The critic was told that alone is not a verdict.
+
+- account-menu — BETTER — the launcher behind the menu labels step 3 and says why Start is disabled.
+- approval — BETTER — the needs-you pill is opaque and clear of the HUD.
+- attention — BETTER — the needs-you pill is opaque and no longer bleeds over the review card's corner.
+- auto — BETTER — the chat's header row is whole instead of cut at the top.
+- compact — critic WORSE ("1 panel need" under the HUD: a drawer moves both by class and nothing resized) → FIXED after: the pill re-places on the shell's class change; the lead looked — the pill sits whole left of the HUD, Create keeps its word.
+- edge-firing — SAME — the firing edge is unchanged; "1 selected" clears the HUD.
+- flip — SAME — the pill now stops short of the HUD.
+- flowchart — GOOD — six shapes, centred labels, elbow connectors, yes/no on ground chips; the Panels list says shapes stay on the canvas.
+- flowchart-dark — critic NOT READY (the Shape section hidden behind a saved Activity tab; ports over "no"/"yes") → FIXED after: a shape's pane is its Detail with no tab strip, and while a shape is selected the connector labels lift above the ports; the lead looked — one 8-column swatch grid (eight forms on one row), Arrange / Export / Work rows, "no" and "yes" whole.
+- flowchart-far — GOOD — silhouettes in the connectors' ink, Build ringed green, the terminal a green block.
+- graph — SAME — the edge inspector and lines unchanged; the pill clears the HUD.
+- group — BETTER — the "WORKERS 2" label is in view instead of cut above.
+- group-collapsed — SAME — the label shows; the members look as before.
+- header — BETTER — with the ⋯ menu open the HUD and pill step away and the menu reads whole.
+- ink — SAME — the strip, strokes and selection unchanged.
+- inspector-activity / inspector-detail / inspector-tools / inspector-work — SAME — each tab's content unchanged.
+- kinds / kinds-dark — BETTER — the corner "+ Create" no longer overlaps the terminal's header.
+- launcher — BETTER — step 3 labelled, Start says its reason, no Fit verbs over nothing.
+- lineup — SAME.
+- merged — BETTER — both lanes framed at 21% with the HUD and needs-you pill whole.
+- navigator-files / navigator-panels / navigator-workspaces — SAME.
+- overview — BETTER — the needs-you pill is opaque.
+- palette — BETTER — "1 session running" clears the HUD. palette-dark — SAME. palette-query — SAME (the chart rows disabled with their reason).
+- reduced-motion — SAME — worker b framed and selected instantly.
+- search / search-empty / share-dialog / spawn-sheet / start-work / subagents / tool-objects / verbs — SAME.
+- wide — BETTER — the workflow's header, Run and ports whole instead of cut at the navigator.
+- workflow — BETTER — "nightly sweep" whole with Run (was "htly sweep").
+- workflow-edit — BETTER — the node library whole instead of cut at the left.
+- zoomed-out / zoomed-out-dark — critic BETTER with half-sliced last lines on small cards → partly FIXED after: the far body is the size container (the first cut named a class no element carries and did nothing), and a short card's name takes one line with an ellipsis while its kicker and state give way; the lead looked — "toolbox ·…", "Jira…", "Watchdog fire…" whole. OWED: two medium cards with three-line names ("codex api thread", "plan the milestone") still lose their last line at the card's edge.
+
+**Not written, on purpose:** 19 scenes differed from their goldens in the update run but render
+identically on main and on this branch (across, browser, chat, composer, edge-waiting, github,
+inspector-caps, integrations, plan-approval, queue-hold, relay, routine, runs, shared-canvas,
+shared-offline, team-ask, teammate, trail, watcher). That is golden debt from earlier runs, not
+this one's change; re-baselining it here would be the blind re-baseline the rule forbids. Those
+goldens were restored, and those scenes stay red in `verify:visual` as they are on main.
+`starter` is the known baseline red (the harness cannot paint it).

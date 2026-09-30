@@ -1414,7 +1414,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M396: capped by the CARD's height (cqh on a size container) and centred
   // SAFELY, so a short card clips the name's end, never its top.
   const title = has('.world[data-detail="summary"] .panel__card-summary-title', /font-size:\s*min\(calc\(var\(--t-md\) \* var\(--far-scale[^;]*\d+cqh\)/) &&
-    has('.world[data-detail="summary"] .panel__card--summary', /justify-content:\s*safe center/) && has('.world[data-detail="summary"] .panel__card--summary', /container-type:\s*size/)
+    has('.world[data-detail="summary"] .panel__card--summary', /justify-content:\s*safe center/) &&
+    // The container is the far BODY of every kind — a selector matching no rendered class is how the first cut of this rule did nothing.
+    all.some((r) => /\.world\[data-detail="summary"\] \.pf__far\b/.test(r.sel) && /container-type:\s*size/.test(r.body)) &&
+    all.some((r) => /\.world\[data-detail="summary"\] \.panel__card--summary\b/.test(r.sel) && /container-type:\s*size/.test(r.body))
   const clamp = has('.world[data-detail="summary"] .far-name__name', /-webkit-line-clamp:\s*2/)
   const kicker = has('.world[data-detail="summary"] .far-name__kicker', /white-space:\s*nowrap/) && has('.world[data-detail="summary"] .far-name__kicker', /text-overflow:\s*ellipsis/)
   const sep = has('.world[data-detail="summary"] .far-name__sep', /display:\s*none/)

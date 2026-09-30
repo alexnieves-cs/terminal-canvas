@@ -627,7 +627,7 @@ const SCENES = [
     // against the host-scroll displacement M395 removed, and landed with the
     // left third empty and `nightly sweep` cut at the right edge (the critic).
     run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
-  { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name clipped to the frame and its state on a tone wash; the minimap agrees.',
+  { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name (large enough to read, clipped only at its end) and its state on a tone wash; with everything in view the minimap stays hidden (M395).',
     // M396. Framed, then pulled back (merged's reason, above).
     run: async (k) => { await k.goTo('the kinds'); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.22); await k.shot('zoomed-out') } },
   { name: 'zoomed-out-dark', intent: 'The zoomed-out canvas on the dark theme.',
@@ -1354,7 +1354,8 @@ const SCENES = [
       // The inspector pane holds the Shape section; open it, THEN frame — Fit
       // lands clear of an open drawer (safe-area.ts), so the chart is not under it.
       await k.context(true); await sleep(400)
-      if (!(await k.js(`document.querySelector('.shape-inspector') !== null`))) throw new Error('flowchart-dark scene: the inspector shows no Shape section for the selected decision')
+      // VISIBLE, not merely mounted: a hidden Detail tab still holds the node.
+      if (!(await k.js(`(() => { const e = document.querySelector('.shape-inspector'); return e !== null && e.offsetParent !== null && e.getBoundingClientRect().height > 0 })()`))) throw new Error('flowchart-dark scene: the inspector shows no visible Shape section for the selected decision')
       await k.press('1', { metaKey: true }); await sleep(700)
       await k.shot('flowchart-dark')
       await k.context(false); await sleep(300)

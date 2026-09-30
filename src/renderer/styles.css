@@ -3606,15 +3606,22 @@ body {
    name mid-glyph — top AND bottom, because a centred column that overflows
    spills both ways. `safe center` keeps the top edge and clips the end, and
    the name is capped at a share of the CARD's height (size containment, so
-   cqh is the card's own), so it never outgrows the card it names. */
-.world[data-detail="summary"] .panel__card--summary { justify-content: safe center; container-type: size; }
+   cqh is the card's own), so it never outgrows the card it names. The
+   container is the far BODY — a terminal's `.panel__card--summary`, every
+   other kind's `.pf__far` — both a `.pf__body` sized by the frame (flex: 1),
+   never by their content, which is what size containment needs. A `.pf__far`
+   column already stacks from the top, so only the terminal's centred one
+   needs `safe`. */
+.world[data-detail="summary"] .panel__card--summary,
+.world[data-detail="summary"] .pf__far { container-type: size; }
+.world[data-detail="summary"] .panel__card--summary { justify-content: safe center; }
 .world[data-detail="summary"] .panel__card-summary-title {
   display: flex; flex-direction: column; min-width: 0;
   white-space: normal; line-height: 1.2;
-  font-size: min(calc(var(--t-md) * var(--far-scale, 1)), 24cqh);
+  font-size: min(calc(var(--t-md) * var(--far-scale, 1)), 36cqh);
 }
 .world[data-detail="summary"] .far-name__kicker {
-  font-size: min(calc(var(--t-xs) * var(--far-scale, 1)), 17cqh); font-weight: 500; color: var(--fg-2);
+  font-size: min(calc(var(--t-xs) * var(--far-scale, 1)), 24cqh); font-weight: 500; color: var(--fg-2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .world[data-detail="summary"] .far-name__sep,
@@ -3623,6 +3630,22 @@ body {
 .world[data-detail="summary"] .far-name__name {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden; overflow-wrap: anywhere;
+}
+/* A SHORT card (its content under ~150 world px — a small panel, or one the
+   header eats into) has no room for two lines, a kicker and its state: the
+   name takes ONE line and ends in an ellipsis rather than a second line the
+   card's edge slices through (the confirm critic's "Jira t…", "codex / api /
+   thr…"). The far body is the size container (above), so this reads its box. */
+@container (max-height: 150px) {
+  .world[data-detail="summary"] .far-name__name { -webkit-line-clamp: 1; }
+  /* And the kicker and the state word give way — both repeat on the header,
+     and the name is the one fact that tells cards apart; a cap tight enough
+     to fit everything made every name unreadable (measured in the golden
+     round, and reverted). The glyph STAYS: it sits under the far header's
+     counter-scaled band, and without it the name rose under that band and
+     lost its top instead (measured the same round). */
+  .world[data-detail="summary"] .far-name__kicker,
+  .world[data-detail="summary"] .panel__card-summary-state { display: none; }
 }
 /* The body carries the name, large; the header's copy of it — counter-scaled
    only to 2.5×, so clipped to `claude — …` at these zooms — is a second, worse
@@ -10331,7 +10354,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    column from Shape down to Text. */
 .shape-inspector__row { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-3); }
 .shape-inspector__label { font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
-.shape-inspector__swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(26px, 1fr)); gap: var(--sp-2); }
+.shape-inspector__swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--sp-2); }
 .shape-inspector__acts { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .shape-inspector__act {
   display: inline-flex; align-items: center; height: 26px; padding: 0 var(--sp-4);
@@ -10397,6 +10420,13 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world[data-detail="summary"] .connector__line { stroke-width: 5; }
 .world[data-detail="block"] .connector__line, .world[data-detail="cluster"] .connector__line { stroke-width: 10; }
 .connector-labels { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 0; pointer-events: none; }
+/* M396 (the confirm critic: a selected decision's outset port covered the
+   "n" of "no"). While a shape is selected its ports are out, and a short
+   line's label sits right where they are — so the words lift above every
+   object until the selection ends. Keyed on the selection class alone, so a
+   terminal's DOM churn never re-matches it. Panel z is a count that only
+   grows (nextZ); this is above any a session reaches. */
+.world:has(.shape--selected) .connector-labels { z-index: 1000000; }
 .connector-label {
   position: absolute;
   transform: translate(-50%, -50%);

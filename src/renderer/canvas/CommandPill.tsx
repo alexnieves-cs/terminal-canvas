@@ -301,7 +301,10 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
       const r = rest.getBoundingClientRect(), h = hud.getBoundingClientRect(), hb = host.getBoundingClientRect()
       const over = r.right - (h.left - GAP)
       if (over <= 0 || r.bottom < h.top) return
-      const room = Math.max(0, r.left - hb.left - GAP)
+      // Never under a left drawer either (the navigator at compact): its width
+      // is the shell's --drawer-l, which the pill inherits.
+      const drawerL = parseFloat(getComputedStyle(pill).getPropertyValue('--drawer-l')) || 0
+      const room = Math.max(0, r.left - hb.left - drawerL - GAP)
       pill.style.setProperty('--pill-shift', `${-Math.min(over, room)}px`)
     }
     place()
@@ -310,7 +313,17 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     ro.observe(host)
     const hud = host.querySelector<HTMLElement>(':scope > .canvas-hud')
     if (hud !== null) ro.observe(hud)
-    return () => { ro.disconnect() }
+    // A compact DRAWER moves the pill and the HUD by a class on the shell
+    // (`.shell--ctx-drawer`), and nothing changes size — the confirm critic's
+    // compact scene, "1 panel need" under the HUD. So a class change on the
+    // shell re-places too, and so does the end of any transition that slides
+    // either one.
+    const shell = host.closest('.shell')
+    const mo = new MutationObserver(() => { requestAnimationFrame(place) })
+    if (shell !== null) mo.observe(shell, { attributes: true, attributeFilter: ['class', 'data-bp'] })
+    const onEnd = (event: TransitionEvent): void => { if (event.target === hud || event.target === pill) place() }
+    host.addEventListener('transitionend', onEnd)
+    return () => { ro.disconnect(); mo.disconnect(); host.removeEventListener('transitionend', onEnd) }
   }, [])
 
   return (

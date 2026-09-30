@@ -576,7 +576,7 @@ function InspectorEmpty({ summary, onGoToPanel }: { summary: InspectorSummary; o
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  tab, onSelectTab, automations, templateOf, onTestNode,
+  tab: savedTab, onSelectTab, automations, templateOf, onTestNode,
   model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onChainStep, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onStyleShape, onShapeChart, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
@@ -628,6 +628,12 @@ function InspectorPanel({
   onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
   automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
+  // M396 (the confirm critic: an Activity tab saved from an earlier panel hid
+  // a selected shape's Shape section behind Detail). A SHAPE's pane is its
+  // Detail alone and shows no tab strip: Work, Tools and Activity could only
+  // say `nothing` about a box. The person's saved tab is untouched — the next
+  // terminal selected opens on it again.
+  const tab: ContextTab = model.kind === 'shape' ? 'detail' : savedTab
   // M191. Is a BLOCK of this workflow selected? The Machine section is absent
   // then: the object the pane is about is the node, and the panel's process
   // metrics are not the node's.
@@ -793,14 +799,16 @@ function InspectorPanel({
           obvious optimisation and it freezes hidden tabs stale (§4.3). */}
       {/* M279: the Tabs primitive; `.context__tabs` / `.context__tab` and
           `data-context-tab` stay on the elements for the suites that read them. */}
-      <Tabs<ContextTab>
-        className="context__tabs"
-        label="Context"
-        value={tab}
-        onSelect={onSelectTab}
-        dataAttr="data-context-tab"
-        tabs={TABS.map((t) => ({ id: t.id, label: t.label, className: 'context__tab' }))}
-      />
+      {model.kind !== 'shape' && (
+        <Tabs<ContextTab>
+          className="context__tabs"
+          label="Context"
+          value={tab}
+          onSelect={onSelectTab}
+          dataAttr="data-context-tab"
+          tabs={TABS.map((t) => ({ id: t.id, label: t.label, className: 'context__tab' }))}
+        />
+      )}
       <div className="inspector__body context__body">
       <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
       {/* M183. THE NODE EDITOR: the selected block's fields from its kind's schema, committed through the draft store's one door. */}
