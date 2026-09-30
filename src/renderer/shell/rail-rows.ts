@@ -6,7 +6,7 @@ import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { WorkItemState } from '@shared/work-items'
 import { noteSummary } from '@shared/notes'
 import { shapeFormWord, shapeSummary } from '@shared/flowchart'
-import { chatDisplayLead } from '@renderer/palette/panel-name'
+import { chatDisplayLead, terminalBaseName, terminalNames } from '@renderer/palette/panel-name'
 
 /**
  * What the rail's Panels section renders, as plain data.
@@ -47,7 +47,10 @@ export interface RailRow {
 }
 
 /**
- * The same four links TerminalPanel's header walks, most specific first.
+ * The same links TerminalPanel's header walks, most specific first. M405 (D2)
+ * put the terminal's PLACE second — `terminalBaseName`, or the ordinal-bearing
+ * name `buildRailRows` hands in — so the resolved command below now answers
+ * only for a spec with no cwd to name.
  *
  * The second link is the one that matters and the one that is easy to drop:
  * `status.command` is what main ACTUALLY spawned, and for a login-shell panel
@@ -73,7 +76,12 @@ export function railLabel(
    */
   templateNameOf?: (templateId: string) => string | undefined,
   /** M266. Teammate display name by teammate id — for chat silhouette leads. */
-  teammateNameOf?: (teammateId: string) => string | undefined
+  teammateNameOf?: (teammateId: string) => string | undefined,
+  /**
+   * M405 (D2). This terminal's name from `terminalNames`, ordinal included —
+   * the one link that needs the whole list. Absent: the place without one.
+   */
+  defaultName?: string
 ): string {
   // M116. A work card reads `work · <title>` with the KIND first, before the
   // title rule below: its title is the item's, and the chat dispatched on
@@ -144,7 +152,9 @@ export function railLabel(
       : teammateNameOf(panel.chat.teammateId)
     return chatDisplayLead(place, mate)
   }
-  return (status?.kind === 'running' ? status.command : undefined)
+  return defaultName
+    ?? terminalBaseName(panel.spec)
+    ?? (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
     ?? 'login shell'
 }
@@ -212,6 +222,8 @@ export function buildRailRows(
   /** M401 (B2). A panel's task outcome by panel id — see `RailRow.outcome`. */
   outcomeOf?: (panelId: string) => string | undefined
 ): RailRow[] {
+  // M405 (D2). Named once over the whole list, so `home 2` here is `home 2` on the rim.
+  const names = terminalNames(panels)
   return panels.map((panel) => {
     const id = panel.rect.id
     const status = statusOf(id)
@@ -231,7 +243,7 @@ export function buildRailRows(
     const state: StateInput = { kind: tailKind, status, dormant, ...(workState === undefined ? {} : { work: { state: workState } }) }
     // M92. The marks, absent unless set, so a plain row's shape is unchanged.
     const outcome = outcomeOf?.(id)
-    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}), ...(outcome === undefined ? {} : { outcome }) }
+    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf, names.get(id)), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}), ...(outcome === undefined ? {} : { outcome }) }
   })
 }
 

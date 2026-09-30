@@ -34,7 +34,7 @@ function reloadWithin(wc, ms = 20000) {
   })
 }
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
-  const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, zoomToScale, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -714,6 +714,73 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ok(id, painted && painted.w === 240 && painted.h === 150 && painted.arm === 'data' &&
         gone && gone.arm === 'missing' && /not there any more/.test(gone.note || '') && rail >= 2,
       JSON.stringify({ painted, gone, rail }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M405 (D3) — starter.caption.under.1. TEACHING TEXT SITS UNDER THE WORK.
+    // The starter's captions lived in the margin-note layer (z 5000), so a
+    // panel a person put over one wore the caption on top of it. Measured by
+    // PIXELS, not by elementFromPoint alone: a label's box overflows its 1px
+    // SVG, so no label is ever the hit target, and a hit test answers "the
+    // panel" before the fix and after it alike. So each arm captures the
+    // label's rect twice — as painted, and with that label's layer hidden —
+    // and asks whether the layer put any pixel there. Over the covering panel
+    // the starter caption must paint nothing (the panel covers it); a
+    // person's own note in the same place must still paint (z 5000 stays);
+    // and a caption with nothing over it must paint (the measure can see a
+    // caption at all). Then: a far tier hides the captions and keeps the note,
+    // and selecting a caption's object retires that caption and no other.
+    const id = 'starter.caption.under.1 a starter caption under a panel paints nothing through it (pixels, with elementFromPoint answering the panel), a person\'s own note there still paints above, an uncovered caption paints; the far tier hides captions but not notes; selecting an example retires its caption only'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    try {
+      const files = prepareStarter(harnessStarterDir)
+      const [capA, capB] = [STARTER_OBJECTS.find((o) => o.key === 'image').caption, STARTER_OBJECTS.find((o) => o.key === 'note').caption]
+      layoutStore.save({ panels: [
+        { id: 'cu1', kind: 'image', x: 100, y: 100, w: 480, h: 160, z: 1, image: { path: files.imagePath } },
+        // cu2's BODY covers both labels (world y 260–280), not its header: a header's glass lets what is under it through, blurred, by design.
+        { id: 'cu2', kind: 'image', x: 60, y: 180, w: 600, h: 260, z: 2, image: { path: files.imagePath } },
+        { id: 'cu3', kind: 'image', x: 760, y: 100, w: 440, h: 160, z: 3, image: { path: files.imagePath } }
+      ], annotations: [
+        { id: 'cuA', text: capA, anchor: { kind: 'panel', panelId: 'cu1', dx: 0, dy: 182 } },
+        { id: 'cuN', text: 'my own note', anchor: { kind: 'panel', panelId: 'cu1', dx: 300, dy: 182 } },
+        { id: 'cuB', text: capB, anchor: { kind: 'panel', panelId: 'cu3', dx: 0, dy: 182 } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+      const labelRect = (aid) => wc.executeJavaScript(`(() => { const l = document.querySelector('[data-annotation=' + ${JSON.stringify(JSON.stringify(aid))} + '] [data-annotation-label]'); if (!l) return null; const r = l.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) } })()`)
+      await waitUntil(() => labelRect('cuB'), 4000)
+      await sleep(300)
+      const paints = async (aid) => {
+        const rect = await labelRect(aid)
+        if (rect === null) return { rect, paints: null }
+        const layer = `document.querySelector('[data-annotation=' + ${JSON.stringify(JSON.stringify(aid))} + ']').closest('svg')`
+        const shown = (await win.webContents.capturePage(rect)).toBitmap()
+        await wc.executeJavaScript(`${layer}.style.visibility = 'hidden'; true`); await sleep(150)
+        const hidden = (await win.webContents.capturePage(rect)).toBitmap()
+        await wc.executeJavaScript(`${layer}.style.visibility = ''; true`); await sleep(150)
+        const hit = await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${rect.x + rect.width / 2}, ${rect.y + rect.height / 2}); const p = e && e.closest('.panel'); return p ? p.getAttribute('data-panel-id') : (e ? e.className.baseVal ?? e.className : null) })()`)
+        return { rect, paints: !shown.equals(hidden), hit }
+      }
+      const covered = await paints('cuA')
+      const own = await paints('cuN')
+      const open = await paints('cuB')
+      // Retire: a press on cu1's chrome selects it (the header's beginMove).
+      await wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="cu1"] .panel__chrome'); const r = h.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, buttons: 1, clientX: r.left + 30, clientY: r.top + r.height / 2 }; h.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', { ...o, buttons: 0 })); return true })()`)
+      const retired = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('[data-annotation]')].map((g) => g.getAttribute('data-annotation')).sort(); return ids.includes('cuA') ? false : ids })()`), 3000)
+      await zoomToScale(wc, 0.2)
+      const far = await wc.executeJavaScript(`(() => { const s = document.querySelector('.annotation-layer--starter'); const own = [...document.querySelectorAll('svg.annotation-layer')].find((x) => !x.classList.contains('annotation-layer--starter')); return { detail: document.querySelector('.world').getAttribute('data-detail'), starter: s ? getComputedStyle(s).visibility : null, own: own ? getComputedStyle(own).visibility : null } })()`)
+      ok(id, covered.paints === false && covered.hit === 'cu2' && own.paints === true && open.paints === true &&
+        Array.isArray(retired) && JSON.stringify(retired) === JSON.stringify(['cuB', 'cuN']) &&
+        far.detail !== 'tail' && far.starter === 'hidden' && far.own === 'visible',
+      JSON.stringify({ covered, own, open, retired, far }))
     } catch (error) {
       ok(id, false, String(error && error.message || error))
     } finally {

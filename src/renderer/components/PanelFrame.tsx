@@ -12,6 +12,7 @@ import { colorOf } from '@shared/presence'
 import { PanelPorts } from './PanelPorts'
 import { Close, KIND_GLYPH, Lock, Maximize, Pin, Restore } from '@renderer/icons'
 import { shellControl } from '@renderer/shell/shell-control'
+import { fieldKeepsKey } from '@renderer/canvas/draft-focus'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 import { useEdgeArriving } from '@renderer/canvas/useEdgeActivity'
 import { useLastLine } from '@renderer/session/last-line-store'
@@ -101,6 +102,16 @@ export interface PanelFrameProps {
   rootAttrs?: Record<string, string | undefined>
   /** The honest chain, computed by the kind. */
   title: ReactNode
+  /** M405 (D2). The title's tooltip when it is not the title itself — the path rule's FULL path beside a name that shows its basename. */
+  titleHint?: string
+  /**
+   * M405 (D2). RENAME IN PLACE: a double-click on the title swaps it for a
+   * field holding the same words; Enter or leaving the field commits, Escape
+   * keeps the old name, an empty field is a cancel (the palette's rule).
+   * Absent: the title is only text (every kind but the terminal, and the
+   * merged view's read-only geometry).
+   */
+  onRename?: (name: string) => void
   /** The kind's own chrome controls, between the title and close. */
   chrome?: ReactNode
   /** M170. A terminal started as an agent wears the chat's glyph beside its state dot, so a conversation and an agent terminal share one frame. */
@@ -164,8 +175,20 @@ const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState, owner,
-  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore, menuDetail
+  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore, menuDetail, titleHint, onRename
 }: PanelFrameProps): JSX.Element {
+  // M405 (D2). The rim's rename field; null while the title is plain text.
+  const [renaming, setRenaming] = useState<string | null>(null)
+  // Ends the edit ONCE: Enter unmounts the field, and a blur arriving from that
+  // unmount must not commit (or cancel) a second time.
+  const renameOpenRef = useRef(false)
+  renameOpenRef.current = renaming !== null
+  const endRename = (value: string | null): void => {
+    if (!renameOpenRef.current) return
+    renameOpenRef.current = false
+    setRenaming(null)
+    if (value !== null && onRename !== undefined && value.trim() !== '' && value.trim() !== title) onRename(value)
+  }
   // M233. Subscribed per panel id, so a frame re-renders for its OWN
   // arrivals and nobody else's — the same per-id discipline agent-state-store
   // uses, and the reason edge activity does not ride registry.version().
@@ -352,7 +375,26 @@ export function PanelFrame({
         {/* M106. The title is what gives (see styles.css's header rule); the FULL
             title lives here and at the top of the ⋯ menu, never truncated to
             `Revie…` with nowhere to read the rest. */}
-        <span className="pf__title panel__title" title={typeof title === 'string' ? title : undefined}>{title}</span>
+        {renaming !== null && onRename !== undefined ? (
+          /* M405 (D2). The field sits where the title was, in the title's own
+             box and font, so the rim does not jump. Its mousedown stays here:
+             the header's would start a move and steal the caret. */
+          <input className="pf__title pf__title-input" data-panel-title-input aria-label="Panel name" autoFocus value={renaming}
+            onChange={(e) => setRenaming(e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              // Bare keys stay with the field (a canvas shortcut must not fire
+              // mid-name); a ⌘ chord that is not a text edit reaches the canvas.
+              if (fieldKeepsKey(e)) e.stopPropagation()
+              if (e.key === 'Enter') { e.preventDefault(); endRename(renaming) }
+              else if (e.key === 'Escape') { e.preventDefault(); endRename(null) }
+            }}
+            onBlur={() => endRename(renaming)} />
+        ) : (
+          <span className="pf__title panel__title" title={titleHint ?? (typeof title === 'string' ? title : undefined)}
+            onDoubleClick={onRename === undefined || typeof title !== 'string' ? undefined : (e) => { e.stopPropagation(); setRenaming(title) }}>{title}</span>
+        )}
         {/* M106. The one menu the frame grows: the full title, the kind, and the
             door to every verb the palette holds for this panel. */}
         <span className="pf__menu-host" ref={menuHostRef}>

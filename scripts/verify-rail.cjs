@@ -69,20 +69,54 @@ ok('1 an explicit title wins over a resolved command',
 //    RESOLVED command since M4, and for a login-shell panel — spec.command
 //    absent, because only main can name the user's shell — it is the only
 //    honest label that exists anywhere in the renderer.
-ok('2 no title, running: the RESOLVED command, not the spec\'s',
-  R.railLabel(panel('n1'), running(48213, '/bin/zsh')) === '/bin/zsh')
+//    M405 (D2) moved it one link down: an untitled terminal with a cwd reads
+//    by its PLACE (`home` for `~`), and the resolved command now answers only
+//    for a spec with no cwd to name — changed deliberately, the finding was
+//    eight shells reading `/bin/zsh`.
+ok('2 no title, running: the place, never the resolved command; with no cwd, the RESOLVED command, not the spec\'s',
+  R.railLabel(panel('n1'), running(48213, '/bin/zsh')) === 'home' &&
+    R.railLabel(panel('n1', { spec: { cwd: '', args: [] } }), running(48213, '/bin/zsh')) === '/bin/zsh')
 
 // 3. Pre-spawn fallback: a dormant or never-started panel has no resolved
 //    command, and the spec's is the best thing left.
-ok('3 not running: the spec command',
+//    M405 (D2): a NAMED command rides in front of the place as the far card's
+//    kicker (`claude — home`); the bare spec command answers with no cwd.
+ok('3 not running: the spec command\'s name before the place; with no cwd, the spec command',
   R.railLabel(panel('n1', { spec: { cwd: '~', command: '/usr/bin/claude', args: [] } }),
-    { kind: 'idle' }) === '/usr/bin/claude')
+    { kind: 'idle' }) === 'claude — home' &&
+    R.railLabel(panel('n1', { spec: { cwd: '', command: '/usr/bin/claude', args: [] } }), { kind: 'idle' }) === '/usr/bin/claude')
 
 // 4. The end of the chain. An absent spec.command MEANS "the user's login
 //    shell" (M5a's absent-command rule); rendering an empty string here would
 //    read as a broken row rather than as a shell.
 ok('4 nothing at all: "login shell"',
-  R.railLabel(panel('n1'), { kind: 'idle' }) === 'login shell')
+  R.railLabel(panel('n1', { spec: { cwd: '', args: [] } }), { kind: 'idle' }) === 'login shell')
+
+// M405 (D2). THREE SHELLS, THREE NAMES — and the rim, the navigator and the
+// palette's Go-to rows say the same one. Three login shells in three
+// directories name themselves by their directories (the path rule's basename,
+// never the full path); three in ONE directory take `autoName`'s ordinal in
+// array order; a titled one keeps its words and takes no number; and every
+// row `buildRailRows` builds equals `panelName` handed the same list's name,
+// which is what TerminalPanel's rim reads (Canvas passes `terminalNames`).
+{
+  const at = (id, cwd, over = {}) => panel(id, { kind: 'terminal', spec: { cwd, args: [] }, ...over })
+  const apart = [at('a1', '/Users/ada/code/api'), at('a2', '/Users/ada/code/web'), at('a3', '/tmp')]
+  const same = [at('s1', '~'), at('s2', '~'), at('s3', '~', { title: 'server' }), at('s4', '~')]
+  const statusOf = () => running(1, '/bin/zsh')
+  const rowsApart = R.buildRailRows(apart, statusOf, NONE).map((r) => r.label)
+  const rowsSame = R.buildRailRows(same, statusOf, NONE).map((r) => r.label)
+  const namesApart = typeof R.terminalNames === 'function' ? R.terminalNames(apart) : new Map()
+  const namesSame = typeof R.terminalNames === 'function' ? R.terminalNames(same) : new Map()
+  const goTo = (list, names) => list.map((p) => R.panelName(p, '/bin/zsh', { defaultName: names.get(p.rect.id) }))
+  ok('title.default.1 three shells in three cwds get three distinct names (their directories, no full path), three in one cwd take an ordinal, a titled one keeps its words — and the navigator rows equal the rim/palette names',
+    JSON.stringify(rowsApart) === JSON.stringify(['api', 'web', 'tmp']) &&
+      new Set(rowsApart).size === 3 && rowsApart.every((l) => !l.includes('/')) &&
+      JSON.stringify(rowsSame) === JSON.stringify(['home', 'home 2', 'server', 'home 3']) &&
+      JSON.stringify(goTo(apart, namesApart)) === JSON.stringify(rowsApart) &&
+      JSON.stringify(goTo(same, namesSame)) === JSON.stringify(rowsSame),
+    JSON.stringify({ rowsApart, rowsSame, goApart: goTo(apart, namesApart), goSame: goTo(same, namesSame) }))
+}
 
 /* ---- The status tail ---- */
 
@@ -334,8 +368,11 @@ ok('17 isRunning counts starting as running, and nothing else as running',
 //     railLabel's own comment describes; the inspector must not reopen it.
 {
   const m = R.buildInspectorModel(panel('n1'), running(48213, '/bin/zsh'))
-  ok('20 the heading resolves the honest chain, not the spec',
-    m.heading === '/bin/zsh' && m.id === 'n1', JSON.stringify(m.heading))
+  // M405 (D2): the chain now leads with the place (`home` for `~`), and with
+  // the canvas's list it carries the rim's ordinal — changed deliberately.
+  const second = R.buildInspectorModel(panel('n2'), running(48213, '/bin/zsh'), undefined, [panel('n1'), panel('n2')])
+  ok('20 the heading resolves the honest chain, not the spec — the place, with the rim\'s ordinal when the list is known',
+    m.heading === 'home' && m.id === 'n1' && second.heading === 'home 2', JSON.stringify([m.heading, second.heading]))
 }
 
 // 21. THE CHECK THIS PANE EXISTS FOR. The links are shown SEPARATELY, not

@@ -1,7 +1,8 @@
 import { shapeSummary } from '@shared/flowchart'
-import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isTerminalPanel, isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import { noteSummary } from '@shared/notes'
+import { displayPath } from '@shared/display-path'
 
 /**
  * M64. IDENTITY LEADS, PROVENANCE FOLLOWS (brief, principle 3).
@@ -52,9 +53,60 @@ export function chatNameFromMessage(text: string): string | null {
   return `${(space >= CHAT_NAME_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
 }
 
+/**
+ * M405 (D2). AN UNTITLED TERMINAL IS NAMED BY WHERE IT STARTED. Eight shells
+ * used to be eight rows reading `/bin/zsh` — the resolved login shell, the
+ * one fact every default terminal shares. The name is now the place: the
+ * spawn cwd's basename through the path rule's helper (`displayPath(cwd,
+ * cwd)`, the root-is-its-basename arm), `home` for `~` (main's `autoName`
+ * spelling, for its reason: a bare `~` reads as a typo), and a command a
+ * person or preset NAMED rides in front as the far card's kicker
+ * (`claude — api`, `FAR_TITLE_SEPARATOR`). A login shell has no command in
+ * its spec, and its program is not what tells it apart, so it is the place
+ * alone. The full path goes on the title's tooltip, never in the name.
+ *
+ * The SPAWN cwd, not the live one (M12's `getLiveSession`): a name that
+ * followed every `cd` would change under the person's eyes and reorder a
+ * search, and `panelLabel`'s note already declines a present-tense claim in
+ * a label. Undefined when there is no cwd to name — the old chain answers.
+ */
+export function terminalBaseName(spec: { command?: string; cwd: string }): string | undefined {
+  const cwd = spec.cwd.trim()
+  if (cwd === '') return undefined
+  // `/` strips to nothing and has no basename: the root names itself.
+  const place = cwd === '~' ? 'home' : displayPath(cwd, cwd).short || cwd
+  const command = spec.command === undefined || spec.command === '' ? undefined : spec.command.split('/').pop()
+  return command === undefined || command === '' ? place : `${command} — ${place}`
+}
+
+/**
+ * M405 (D2). Every untitled terminal's DEFAULT name, with an ordinal where two
+ * would read alike — `api`, `api 2`, `api 3`, `autoName`'s de-duplication.
+ * Numbered in ARRAY order, which is stable (panels.ts: stacking is z, never
+ * the array), so a raise never renames anything; closing the first renumbers
+ * the rest, the same way Finder's `untitled 2` does. A titled terminal keeps
+ * its own words and takes no number. One pass over one list, so the rim, the
+ * navigator and the palette's Go-to rows read the same name for one panel.
+ */
+export function terminalNames(panels: readonly Panel[]): ReadonlyMap<string, string> {
+  const out = new Map<string, string>()
+  const seen = new Map<string, number>()
+  for (const p of panels) {
+    if (!isTerminalPanel(p) || p.title !== undefined) continue
+    const base = terminalBaseName(p.spec)
+    if (base === undefined) continue
+    const n = (seen.get(base) ?? 0) + 1
+    seen.set(base, n)
+    out.set(p.rect.id, n === 1 ? base : `${base} ${n}`)
+  }
+  return out
+}
+
 export interface PanelNameOpts {
   /** Resolved teammate display name for a chat with `chat.teammateId`. */
   teammateName?: string
+  /** M405 (D2). This terminal's name from `terminalNames` (the ordinal needs the whole list). */
+  defaultName?: string
 }
 
 /** What a row leads with: the user's title, else the honest name without path or id. */
@@ -99,6 +151,9 @@ export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNa
   if (isRelayPanel(panel)) return panel.title ?? `relay · ${panel.relay.program}`
   // M388. A shape names itself by its label's first line, like a note.
   if (isShapePanel(panel)) return shapeSummary(panel.shape.text, panel.shape.form)
+  // M405 (D2). The place first; the program only when there is no place.
+  const named = opts?.defaultName ?? terminalBaseName(panel.spec)
+  if (named !== undefined) return named
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }

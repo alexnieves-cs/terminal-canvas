@@ -13,7 +13,7 @@ import { isFilePanel, isShapePanel, isTerminalPanel, type Panel, isChatPanel, is
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { watchStateInput } from '@renderer/watcher/watcher-store'
-import { panelName, panelPath } from '@renderer/palette/panel-name'
+import { panelName, panelPath, terminalNames } from '@renderer/palette/panel-name'
 import { REASON_CHAT_NO_BASELINE, type PanelRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { WorkspaceRow } from '@shared/ipc-contract'
@@ -88,7 +88,7 @@ export interface RailModelsDeps {
  * so a panel that flips to needs-you while the overlay is up still reads
  * needs-you. Only the `state:` query's ORDER uses the build-time word.
  */
-function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>, teammateNameOf?: (id: string) => string | undefined): { name: string; path?: string; state: StateInput; stateWord: string } {
+function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>, teammateNameOf?: (id: string) => string | undefined, defaultName?: string): { name: string; path?: string; state: StateInput; stateWord: string } {
   const status = registry.get(p.rect.id)?.status
   const resolved = status?.kind === 'running' ? status.command : undefined
   const tailKind = isFilePanel(p) && p.source.prose === true ? 'note' : p.kind
@@ -98,7 +98,7 @@ function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<str
   const teammateName = isChatPanel(p) && p.chat.teammateId !== undefined && teammateNameOf !== undefined
     ? teammateNameOf(p.chat.teammateId)
     : undefined
-  return { name: panelName(p, resolved, teammateName === undefined ? undefined : { teammateName }), ...(path === undefined ? {} : { path }), state, stateWord: word }
+  return { name: panelName(p, resolved, { ...(teammateName === undefined ? {} : { teammateName }), ...(defaultName === undefined ? {} : { defaultName }) }), ...(path === undefined ? {} : { path }), state, stateWord: word }
 }
 
 function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedAt: Record<string, number>): Panel[] {
@@ -152,7 +152,8 @@ export function useRailModels(deps: RailModelsDeps) {
   // is only ever looked at while the overlay is up, and the commands that add
   // or remove a panel close it first, so recomputing at open is enough.
   const panelRows = useMemo<PanelRow[]>(
-    () => (palette.open
+    // M405 (D2). Terminal names over the ARRAY order (the rail's and the rim's ordinals), before the spatial reorder.
+    () => { const names = palette.open ? terminalNames(panelsRef.current) : undefined; return (palette.open
       // M44. Spatial order: on-screen panels first (nearest the camera centre),
       // then the rest by focus recency. Computed once on open, reading refs.
       ? orderPanelsFor(panelsRef.current.filter((p) => !isShapePanel(p)), viewportRef.current, registry.lastFocusedAt()).map((p) =>
@@ -199,7 +200,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 // one line up: read off the session, passed in as plain data.
                 spawned: registry.get(p.rect.id)?.spawned === true,
                 ...frontEndFields(p),
-                ...findingFields(p, registry, dormantIds, deps.teammateNameOf)
+                ...findingFields(p, registry, dormantIds, deps.teammateNameOf, names?.get(p.rect.id))
               }
             : {
                 id: p.rect.id,
@@ -215,10 +216,10 @@ export function useRailModels(deps: RailModelsDeps) {
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
                 spawned: registry.get(p.rect.id)?.spawned === true,
                 ...frontEndFields(p),
-                ...findingFields(p, registry, dormantIds, deps.teammateNameOf)
+                ...findingFields(p, registry, dormantIds, deps.teammateNameOf, names?.get(p.rect.id))
               }
         )
-      : EMPTY_PANELS),
+      : EMPTY_PANELS) },
     [palette.open]
   )
 

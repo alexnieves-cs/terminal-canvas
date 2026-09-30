@@ -1151,3 +1151,105 @@ Minor: ⌘K "Show Orchestrate" → **Open Orchestrate** (`dock.dup.1`'s search u
 `dock.dup.1` and `team.segment.1` are still unrun, and `dock.dup.1` now searches "Open Orchestrate". *Goldens expected to
 move:* every scene whose crumb shows a fresh layout's name. The harness starts fresh, so "Canvas ▾" becomes "Workspace ▾" wherever the
 crumb is in frame. Also the vault/notes scenes' empty or refusal sentences, and `account-menu`'s sign-in tooltip if it's captured.
+
+### M405 — every shell has a name, and teaching text sits under the work (D2, D3)
+
+Worktree `tc-m405-titles`, branch `m405-titles` off `3f9c01be`. Slot 2 (CDP 9220). Screenshots in
+`/tmp/tc-daily-loop-shots/`: `D2-before`, `D2-before-navigator`, `D2-before-palette`, `D2-after`, `D2-after-home`,
+`D2-after-rename-field`, `D3-before`, `D3-before-overlap`, `D3-after-overlap`, `D3-after-far`.
+
+**D2 (P1), every shell is titled `/bin/zsh`.** *Reproduced:* ⌘N ×3 on an empty canvas: the rim read `/bin/zsh` three
+times, the navigator three `/bin/zsh` rows, the palette three `zsh` rows (`D2-before*`). *Cause:* four places walked
+the same chain, `title ?? resolved command ?? spec.command ?? 'login shell'` (TerminalPanel's header, `railLabel`,
+`panelName`, the inspector heading through `railLabel`), and a login shell's resolved command is the one fact every
+default terminal shares. *Fix:* `palette/panel-name.ts`'s `terminalBaseName(spec)` names an untitled terminal by its
+SPAWN directory through `displayPath(cwd, cwd)` (the path rule's root-is-its-basename arm), `home` for `~` (main's
+`autoName` spelling, for its reason), and a command someone NAMED rides in front as the far card's kicker
+(`claude — api`, `FAR_TITLE_SEPARATOR`). `terminalNames(panels)` adds `autoName`'s ordinal where two read alike (`home`,
+`home 2`, `home 3`), numbered in ARRAY order. The rim (Canvas passes `defaultTitle` from one `terminalNames` over
+`displayPanels`), the navigator (`buildRailRows` computes it over the same list), the palette's Go-to rows
+(`useRailModels`, over `panelsRef` in array order before the spatial reorder), the edge indicators and the inspector
+heading (given the list) all read the same name. The resolved command and the FULL path moved to the name's tooltip
+(`/bin/zsh in /Users/…/api`), never the rim at rest. A persisted, user-given `title` is untouched and wins everywhere;
+nothing is written back into `title`, and the layout format does not move.
+*Rename in place:* a double-click on the rim name (M397/M402's 16px strip) swaps it for a field in the title's own box
+(`.pf__title-input`, carries `.pf__title` so the rim's tab and cap apply), focused with the name selected; Enter or blur
+commits, Escape keeps the name, empty is a cancel. Bare keys stay in the field (`fieldKeepsKey`, the draft rule); a ⌘
+chord that is not a text edit reaches the canvas. The commit is `renamePanel(id, name)`, extracted from the palette's
+`beginRenamePanel` so both doors share one history entry path (verify:verbs: excluded with `beginRenamePanel`, same
+reason). Merged view: no rename. *Measured after (`D2-after`):* shells in `~`, `~`, `~`, `/Users/alexnieves`, `/tmp`
+and the worktree read `home`, `home 2`, `home 3`, `home 4`, `tmp`, `tc-m405-titles` on the rim and in the navigator;
+rename in place → `api server` on both; keys typed into the field did not reach the canvas.
+*Decisions:* (1) **cwd + ordinal, not last command** — a last command needs shell integration that a plain shell
+may lack and changes on every Enter; a directory is identity. (2) **The spawn cwd, not the live one** — a name that
+followed every `cd` would change under the person and reorder a search, and `panelLabel`'s note already declines a
+present-tense claim in a label; the live cwd stays the inspector's "now in". (3) **A login shell drops its program**
+(`home`, not `zsh — home`): the program is exactly what does not tell shells apart; a named command keeps it. (4) The
+ordinal renumbers when an earlier twin closes (Finder's `untitled 2` behaviour); a stable per-panel number would need
+a persisted field, which D2 did not justify. `panelLabel` (canvas-constants, the long `command — cwd (id)` form the
+inspector and older checks read) is unchanged on purpose.
+*Checks:* `verify:rail title.default.1` (three shells in three cwds → three names, no `/`; three in one cwd → `home`,
+`home 2`, `home 3` with a titled one keeping its words; `buildRailRows` labels equal `panelName` with the same list's
+name). `verify:panels:core title.default.2` (three real command-less shells spawned in three temp directories: three
+distinct rim names, each its directory's basename, the full path on the tooltip, the navigator row equal) and
+`title.rename.1` (a dblclick on the rim name opens a focused field holding the name; Enter renames; the navigator row
+follows). *Checks changed deliberately:* `verify:rail 2/3/4` (the place leads; the resolved/spec command now answer
+only for a spec with no cwd; `claude — home` for a named command), `verify:rail 20` (the inspector heading is the place,
+`home 2` with the list), `verify:panels:core 31/44/45` (the resolved-command settle is read on the title's TOOLTIP, where
+that fact now lives — same assertion, new home).
+
+**D3 (P1), teaching overlays outrank the work.** *Reproduced (`D3-before-overlap`):* the starter laid out, the chat
+dragged over the terminal and note examples: both captions painted ON TOP of the chat's body. *Cause:* the starter's
+captions are ordinary panel-anchored annotations, painted in `.annotation-layer` (z 5000, above every panel on
+purpose — a margin note must be read). *Fix:* `shared/starter.ts`'s `isStarterCaption` recognises a caption by what it
+is — a panel-anchored label whose text is a manifest caption — so every canvas laid out since M181 is recognised with
+no new persisted mark (cost, recorded: a person who types a caption's exact sentence gets caption behaviour).
+`AnnotationLayer` paints two SVGs from one painter: captions in `.annotation-layer--starter` at z 1 (above a group
+frame's 0, under every panel), everything else unchanged at 5000. The caption layer fades to `opacity: 0; visibility:
+hidden` in the summary/block/cluster tiers (the critique's 16%-larger-than-57% caption), reduced-motion honoured. And
+a caption RETIRES (its record removed) when its object is first selected — following the caption is dismissing it, the
+launcher tip's rule; there is no other "dismiss the starter" gesture, so this is the closest the product allows
+without adding a door. A person's notes never retire. *Measured after:* `D3-after-overlap` (the chat covers both
+captions), selecting the image example removed its caption only, at 16% (`D3-after-far`) the caption layer is hidden.
+*Found, not fixed (out of scope):* NO annotation label is a hit target anywhere — its box overflows a 1px SVG, so
+`elementFromPoint` over any label (caption or note, covered or not) answers the canvas or the panel under it. Measured on
+the real app: all four starter captions, alone on the canvas, hit-tested as `canvas`. So a label's click-to-select /
+double-click-to-edit (M93) is unreachable by a real pointer. That is why the D3 check measures PIXELS.
+*Check:* `verify:panels:product starter.caption.under.1` — seeded: a caption and a person's note on `cu1`, both under
+`cu2`'s BODY, and a caption on `cu3` with nothing over it. Each label's rect is captured twice (`capturePage`), as
+painted and with its own layer hidden: the covered caption paints NOTHING (and `elementFromPoint` answers `cu2`), the
+covered note still paints (z 5000 kept), the open caption paints (the measure sees captions at all); a press on `cu1`'s
+chrome retires its caption and keeps the note; at 0.2 the caption layer is `hidden` and the note layer `visible`. The
+first cut put the labels under `cu2`'s HEADER and read `paints: true` — the header's glass lets what is under it
+through, blurred, by design — so the covering is measured over the body.
+
+**Suites.** Plain (all 44 on the branch's list): green, incl. `verify:rail` 261/261, `styles` 93/93, `meta` 51/51,
+`palette` 169/169, `layout` 285/285, `viewport` 193/193, `verbs` 30/30 (after `renamePanel` joined the excluded list).
+Electron, each under the lock: `panels:core` 89/89 (66.4 s, 89% of its watchdog at load 21–32 — the two added checks
+cost ~3 s; re-pin if it crosses 90% at normal load). The other three were each run on the M405 build AND on
+`3f9c01be`'s src (same scripts, rebuilt), alone under the lock, at load 4–8. Every Electron part ran at 90–100% of its
+watchdog on BOTH builds today, so the baseline was measured, not assumed:
+- `panels:product` 132/137 (229.8 s). The reds were `codex.1`, `tool.3`, `editor.1d`, `workflow.run.1` and headroom.
+  **All red on the baseline run too** (which also had `workflow.wire.1`, `wfx.ui.1` and a watchdog). On the baseline,
+  `starter.caption.under.1` is RED: the covered caption paints, nothing retires, and there's no caption layer at the
+  far tier. So the check discriminates. `starter.1` is green.
+- `panels:kinds` 46/53: `link-draw.1–.6` and headroom. **The same 46/53 on the baseline** (the seeded m24 terminals are
+  not in the DOM after the reload; unattributed, not M405's).
+- `panels:shell`: `106` (the inspector's Open review mints nothing; **red on the baseline**), `126`/`127` (link
+  gesture; **red on the baseline**), and a watchdog at 96 s (baseline 95.9 s, 100%). `117` (project prompts from the
+  live cwd) was red in 2 of 7 M405 runs and 0 of 3 baseline runs. It's unattributed: nothing M405 changed is on its
+  path (a slot click, the live-cwd field, the palette's prompt rows), and I haven't called it a flake.
+  **`107` was M405's to fix, in the fixture.** It was red in 4 of 4 runs on the M405 build. The seeded review `r92`
+  never reached main's store: it was absent from `workspace.list` for 30 s after the reload. A renderer layout save
+  that was still in flight landed after `layoutStore.save(seed)` and overwrote the seed, so the check minted the `r92`
+  it forbids. Instrumenting the sequence (a few store reads) made it pass. *Check changed deliberately:* `107` now
+  `settle()`s and flushes before writing the seed, and it is green since.
+- `npm run affected`: not run as a whole. Its list is the branch against main (every suite), and every suite on it
+  was run as above.
+*Goldens expected to move:* every scene with an untitled live or carded terminal (`/bin/zsh` → its directory):
+`kinds`, `kinds-dark`, `header`, `trail`, `attention`, `palette*`, `flip`, `overview`, `group*`, `merged`,
+`zoomed-out*`, `compact`, `wide`, `navigator-files`, `focus*`; `starter` (captions under panels, and hidden if shot
+in a far tier); any `zoomed-out*` scene that shows starter captions.
+*Owed / for the lead:* a real-Mac pass of rename in place with a trackpad double-click; the annotation hit-test
+defect above (a new finding, not D3); the ledger's line 713 holds a stray merge marker (`||||||| f5e642c9`) from an
+earlier merge, left untouched.
