@@ -46,7 +46,7 @@ import { useCanvasTestHooks } from './useCanvasTestHooks'
 import { usePaletteActions } from './usePaletteActions'
 import { useWorkspaceVerbs } from './useWorkspaceVerbs'
 import { useCanvasPointer } from './useCanvasPointer'
-import { panelName } from '@renderer/palette/panel-name'
+import { panelName, terminalNames } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { inspectionDirectory } from './inspection-directory'
@@ -210,7 +210,7 @@ import type { AgentPlanCaller } from '@shared/plan'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
 import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
-import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
+import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, isStarterCaption, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
@@ -560,6 +560,8 @@ export function Canvas({
     })
   }, [panels, workItems])
   const displayPanels = merged && mergedView ? mergedView.panels : anchoredPanels
+  // M405 (D2). Untitled terminals' names, ordinals included, over the same list the rail names.
+  const terminalNameOf = useMemo(() => terminalNames(displayPanels), [displayPanels])
   // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
   // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
   // after a pan would turn ordinary navigation into motion. The id is removed
@@ -893,6 +895,15 @@ export function Canvas({
   // mirror rather than a selection closure from the previous render.
   const selectedIdsRef = useRef<ReadonlySet<string>>(selectedIds)
   selectedIdsRef.current = selectedIds
+  // M405 (D3). A starter caption RETIRES once its object is taken up: selecting
+  // the example is following the caption ("Click it to start a shell here"),
+  // the same rule the launcher's starter tip follows when its door is used. A
+  // person's own notes never retire; the merged view changes nothing.
+  useEffect(() => {
+    if (selectedIds.size === 0 || merged) return
+    if (!annotationsRef.current.some((a) => isStarterCaption(a) && a.anchor.kind === 'panel' && selectedIds.has(a.anchor.panelId))) return
+    setAnnotations((current) => current.filter((a) => !(isStarterCaption(a) && a.anchor.kind === 'panel' && selectedIds.has(a.anchor.panelId))))
+  }, [selectedIds, merged])
   /**
    * The one selected panel, or null when zero OR MANY are selected. Every
    * existing reader of the selection — the inspector, the review query, the
@@ -9369,6 +9380,8 @@ export function Canvas({
                 rect={panel.rect}
                 z={panel.z}
                 title={panel.title}
+                defaultTitle={terminalNameOf.get(panel.rect.id)}
+                onRename={merged ? undefined : paletteActions.renamePanel}
                 cardDetail={cardDetail}
                 // M106. Flip hands the far view's summary to every terminal deliberately — a
                 // prop, because a LIVE panel never reads the card's detail.
@@ -9457,7 +9470,7 @@ export function Canvas({
         </PanelMarksContext.Provider>
         </CardDetailContext.Provider>
         {pipsEnabled && (
-          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p) }} />
+          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p, undefined, { defaultName: terminalNameOf.get(id) }) }} />
         )}
         {/* M69. The overview: outside .world like the pips, in the top-right
             corner, hidden while merged (the merged view's geometry is not this

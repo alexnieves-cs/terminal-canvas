@@ -61,6 +61,7 @@ export type PresetsActions = Pick<PaletteActions,
   | 'restartPanel'
   | 'restartPanelWithMode'
   | 'beginRenamePanel'
+  | 'renamePanel'
   | 'setPanelFontSize'
   | 'markPresetRead'
   | 'startAuto'
@@ -467,110 +468,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
         label: 'Name this panel…',
         initial: currentTitle,
         submit: (value) => {
-          const name = value.trim()
-          setPanels((prev) => {
-            // A captured id can outlive its panel — the row is aimed at
-            // whatever was focused when the palette opened, and that panel
-            // may have since been closed. Mapping over a missing id would
-            // still rewrite the array (a fresh reference for every element)
-            // and push a no-op history entry, so bail out instead: nothing
-            // changed, so nothing should look like it did.
-            if (!prev.some((p) => p.rect.id === id)) return prev
-            // Palette.tsx only calls submit() with a non-empty trimmed value
-            // (an empty Enter is a cancel, not a rename to "") — so `name`
-            // is never '' here, and clearing a title is not offered by this
-            // surface at all. Rebuilt field by field rather than spread, the
-            // same absent-stays-absent rule fromPanels obeys, so a future
-            // caller that DOES want to clear a title can't get there by
-            // accidentally spreading `title: undefined` through.
-            // ALL THREE kinds are rebuilt, and `kind` is carried explicitly
-            // by each arm rather than spread: a rename that dropped it would
-            // turn a review node or a file panel back into a terminal panel on
-            // the next parse, which reads its absent spec and empties the
-            // canvas. A fourth kind adds a fourth arm here, and the union's
-            // exhaustiveness is what makes forgetting one a compile error
-            // rather than a silent loss of a panel's own field.
-            const next: Panel[] = prev.map((p) => {
-              if (p.rect.id !== id) return p
-              if (isReviewPanel(p)) {
-                return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M187. The sixteenth kind: a rename carries the note's own
-              // record field by field, absent staying absent — the same rule
-              // the file panel's fontSize learned in M49.
-              // M388. A shape's name IS its label: a rename writes shape.text,
-              // never a title the shape would not show.
-              if (isShapePanel(p)) {
-                return { kind: p.kind, rect: p.rect, shape: { ...p.shape, text: normaliseShapeText(name) }, z: p.z, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              if (isNotePanel(p)) {
-                return { kind: p.kind, rect: p.rect, note: p.note, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              if (isFilePanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M133. The workflow panel's own arm — its `workflow` record is
-              // its only identity, and a rename that dropped it would leave a
-              // panel naming no template at all on the next parse.
-              if (isWorkflowPanel(p)) {
-                return { kind: p.kind, rect: p.rect, workflow: p.workflow, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              if (isToolboxPanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M83. The seventh arm — a memory node carries its root.
-              if (isMemoryPanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M88. The ninth arm — a github panel carries nothing but its title.
-              if (isGithubPanel(p)) {
-                return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M84. The eighth arm — a watcher carries its whole record.
-              if (isWatcherPanel(p)) {
-                return { kind: p.kind, rect: p.rect, watch: p.watch, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M73. The sixth arm; `verify:layout chat.1` is the parse side of
-              // the same field-by-field rule this rename obeys.
-              if (isChatPanel(p)) {
-                return { kind: p.kind, rect: p.rect, chat: p.chat, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M103. The browser pane's one field, by name.
-              if (isBrowserPanel(p)) {
-                return { kind: p.kind, rect: p.rect, url: p.url, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M116. The work card's one field, by name — the twelfth arm.
-              if (isWorkPanel(p)) {
-                return { kind: p.kind, rect: p.rect, work: { itemId: p.work.itemId }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M128. The skill panel's two fields, by name — the thirteenth arm.
-              if (isSkillPanel(p)) {
-                return { kind: p.kind, rect: p.rect, skill: { scope: p.skill.scope, name: p.skill.name }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M181. The image panel's one field, by name — the fifteenth arm.
-              if (isImagePanel(p)) {
-                return { kind: p.kind, rect: p.rect, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }), ...(p.image.artifact === undefined ? {} : { artifact: p.image.artifact }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M338. The relay panel's record, field by field — a rename that
-              // lost `sessionId` would start a second session on relaunch.
-              if (isRelayPanel(p)) {
-                return { kind: p.kind, rect: p.rect, relay: { program: p.relay.program, ...(p.relay.sessionId === undefined ? {} : { sessionId: p.relay.sessionId }), ...(p.relay.shareId === undefined ? {} : { shareId: p.relay.shareId }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-              }
-              // M49. `fontSize` and `links` ride along field by field, absent
-              // staying absent: a rename that rebuilt the panel without them
-              // silently dropped a font override and every link the panel
-              // held — found while adding the override, fixed for both.
-              return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name, ...carryMarks(p),
-                ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }),
-                ...(p.fontSize === undefined ? {} : { fontSize: p.fontSize }) }
-            })
-            // One entry for the whole gesture, on commit — the rule a drag
-            // already follows. Pushing per keystroke would make one rename
-            // take a dozen Cmd+Z presses to unwind.
-            commitHistory(next)
-            return next
-          })
+          self.renamePanel(id, value)
           setInputMode(null)
         }
       })
@@ -578,6 +476,116 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       // overlay BEFORE running a row's command, so without reopening, the mode
       // would be set on a palette that is already gone.
       palette.openPalette()
+    },
+    // M405 (D2). The rename itself, shared by the palette's row and the rim's
+    // rename in place — one commit path, so the two doors cannot drift. An
+    // empty name is a cancel here too (both surfaces already treat it so).
+    renamePanel: (id, value) => {
+      const name = value.trim()
+      if (name === '') return
+      setPanels((prev) => {
+        // A captured id can outlive its panel — the row is aimed at
+        // whatever was focused when the palette opened, and that panel
+        // may have since been closed. Mapping over a missing id would
+        // still rewrite the array (a fresh reference for every element)
+        // and push a no-op history entry, so bail out instead: nothing
+        // changed, so nothing should look like it did.
+        if (!prev.some((p) => p.rect.id === id)) return prev
+        // Palette.tsx only calls submit() with a non-empty trimmed value
+        // (an empty Enter is a cancel, not a rename to "") and the guard
+        // above holds the rim to the same rule — so `name` is never '' here,
+        // and clearing a title is not offered by this surface at all. Rebuilt field by field rather than spread, the
+        // same absent-stays-absent rule fromPanels obeys, so a future
+        // caller that DOES want to clear a title can't get there by
+        // accidentally spreading `title: undefined` through.
+        // ALL THREE kinds are rebuilt, and `kind` is carried explicitly
+        // by each arm rather than spread: a rename that dropped it would
+        // turn a review node or a file panel back into a terminal panel on
+        // the next parse, which reads its absent spec and empties the
+        // canvas. A fourth kind adds a fourth arm here, and the union's
+        // exhaustiveness is what makes forgetting one a compile error
+        // rather than a silent loss of a panel's own field.
+        const next: Panel[] = prev.map((p) => {
+          if (p.rect.id !== id) return p
+          if (isReviewPanel(p)) {
+            return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M187. The sixteenth kind: a rename carries the note's own
+          // record field by field, absent staying absent — the same rule
+          // the file panel's fontSize learned in M49.
+          // M388. A shape's name IS its label: a rename writes shape.text,
+          // never a title the shape would not show.
+          if (isShapePanel(p)) {
+            return { kind: p.kind, rect: p.rect, shape: { ...p.shape, text: normaliseShapeText(name) }, z: p.z, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          if (isNotePanel(p)) {
+            return { kind: p.kind, rect: p.rect, note: p.note, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          if (isFilePanel(p)) {
+            return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M133. The workflow panel's own arm — its `workflow` record is
+          // its only identity, and a rename that dropped it would leave a
+          // panel naming no template at all on the next parse.
+          if (isWorkflowPanel(p)) {
+            return { kind: p.kind, rect: p.rect, workflow: p.workflow, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          if (isToolboxPanel(p)) {
+            return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M83. The seventh arm — a memory node carries its root.
+          if (isMemoryPanel(p)) {
+            return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M88. The ninth arm — a github panel carries nothing but its title.
+          if (isGithubPanel(p)) {
+            return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M84. The eighth arm — a watcher carries its whole record.
+          if (isWatcherPanel(p)) {
+            return { kind: p.kind, rect: p.rect, watch: p.watch, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M73. The sixth arm; `verify:layout chat.1` is the parse side of
+          // the same field-by-field rule this rename obeys.
+          if (isChatPanel(p)) {
+            return { kind: p.kind, rect: p.rect, chat: p.chat, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M103. The browser pane's one field, by name.
+          if (isBrowserPanel(p)) {
+            return { kind: p.kind, rect: p.rect, url: p.url, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M116. The work card's one field, by name — the twelfth arm.
+          if (isWorkPanel(p)) {
+            return { kind: p.kind, rect: p.rect, work: { itemId: p.work.itemId }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M128. The skill panel's two fields, by name — the thirteenth arm.
+          if (isSkillPanel(p)) {
+            return { kind: p.kind, rect: p.rect, skill: { scope: p.skill.scope, name: p.skill.name }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M181. The image panel's one field, by name — the fifteenth arm.
+          if (isImagePanel(p)) {
+            return { kind: p.kind, rect: p.rect, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }), ...(p.image.artifact === undefined ? {} : { artifact: p.image.artifact }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M338. The relay panel's record, field by field — a rename that
+          // lost `sessionId` would start a second session on relaunch.
+          if (isRelayPanel(p)) {
+            return { kind: p.kind, rect: p.rect, relay: { program: p.relay.program, ...(p.relay.sessionId === undefined ? {} : { sessionId: p.relay.sessionId }), ...(p.relay.shareId === undefined ? {} : { shareId: p.relay.shareId }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
+          }
+          // M49. `fontSize` and `links` ride along field by field, absent
+          // staying absent: a rename that rebuilt the panel without them
+          // silently dropped a font override and every link the panel
+          // held — found while adding the override, fixed for both.
+          return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name, ...carryMarks(p),
+            ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }),
+            ...(p.fontSize === undefined ? {} : { fontSize: p.fontSize }) }
+        })
+        // One entry for the whole gesture, on commit — the rule a drag
+        // already follows. Pushing per keystroke would make one rename
+        // take a dozen Cmd+Z presses to unwind.
+        commitHistory(next)
+        return next
+      })
     },
     setPanelFontSize: (id, size) => {
       // A COMMIT, one history entry, the rule a drag and a rename follow. The

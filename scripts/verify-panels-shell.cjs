@@ -3117,6 +3117,15 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         let reattached107 = null
         let action107 = null
         if (seedBaseline) {
+          // M405. Let the renderer's own debounced layout save land BEFORE the
+          // seed is written: one in flight arrived after layoutStore.save and
+          // overwrote the seed, so r92 never reached main's store (measured:
+          // absent from workspace.list for 30 s after the reload, 4 runs of 4
+          // on the M405 build) and the id the check then minted was the very
+          // r92 it forbids. Slowing the sequence by a few store reads made it
+          // pass — a race in the fixture, not in the reseed.
+          await settle()
+          flushLayoutStore()
           const saved = layoutStore.initial()
           const seededPanels = saved.panels.concat([{
             id: collideId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',

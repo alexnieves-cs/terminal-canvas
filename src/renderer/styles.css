@@ -5873,6 +5873,17 @@ body {
 /* 1px, not 100%: the world has no size of its own (see .link-layer's note — a zero-sized SVG in the compositing layer painted NOTHING of its overflow, and 100% of nothing is nothing). */
 /* Above every panel (a panel's z is a small integer) and under the annotate sheet and the chrome: a margin note hidden under a frame is a note nobody reads. */
 .annotation-layer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 5000; }
+/* M405 (D3). THE STARTER'S CAPTIONS ARE NOT MARGIN NOTES. Teaching text sits
+   UNDER the panels (z 1: above a group's frame at 0, and a panel at the same
+   z paints over it because panels come later in the world), so an object a
+   person makes over a caption covers the caption, never the reverse. And it
+   leaves in the far tiers: a world-scaled label printed LARGER at 16% than at
+   57% (the critique measured it), and a far view is for finding your work,
+   not for reading a tour of it. Visibility follows the fade so a hidden label
+   is not a click target. */
+.annotation-layer.annotation-layer--starter { z-index: 1; transition: opacity var(--dur-2) var(--ease), visibility 0s linear 0s; }
+.world:is([data-detail="summary"], [data-detail="block"], [data-detail="cluster"]) .annotation-layer--starter { opacity: 0; visibility: hidden; transition: opacity var(--dur-2) var(--ease), visibility 0s linear var(--dur-2); }
+@media (prefers-reduced-motion: reduce) { .annotation-layer--starter { transition: none; } }
 .annotation__leader { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
 .annotation__host { pointer-events: none; }
 .annotation__label, .annotation__editor {
@@ -7075,6 +7086,11 @@ body {
 .pf--kind-terminal:has(.panel__slot):focus-within .pf__title,
 .panel--selected.pf--kind-terminal:has(.panel__slot) .pf__title { color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { .pf--kind-terminal .pf__title { transition: none; } }
+/* M405 (D2). RENAME IN PLACE: the field is the title's own box (it carries
+   .pf__title, so the rim's tab, height and cap apply), with the input's
+   native border and font reset to the title's and the focus ring the chrome
+   uses everywhere. A min width so a one-letter name leaves room to type. */
+.pf__title-input { min-width: 12ch; border: 0; margin: 0; font: inherit; color: var(--fg); background: var(--well); outline: 2px solid var(--iris); outline-offset: -2px; }
 
 /* M204 (D08). THE TASK LENS — paint only. `opacity` and `outline` are not
    layout: no box moves, so no chromeless terminal refits and no agent gets a

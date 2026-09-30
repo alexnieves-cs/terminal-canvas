@@ -372,6 +372,8 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   beginSavePrompt: 'opens the palette\'s text mode',
   deletePrompt: 'prompt administration is the user\'s',
   beginRenamePanel: 'opens the palette\'s text mode',
+  // M405 (D2). The commit behind that text mode and the rim's rename in place: a person naming a panel, excluded with its opener.
+  renamePanel: 'a person naming a panel — the commit behind the palette\'s rename and the rim\'s rename in place, excluded with `beginRenamePanel`',
   beginEditSetting: 'opens the palette\'s number mode; `set-setting` is the plan\'s door',
   beginEditTextSetting: 'opens the palette\'s text mode; the vault root is not plan-writable',
   beginChooseVault: 'the vault root is not plan-writable',

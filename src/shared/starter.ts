@@ -66,6 +66,22 @@ export const STARTER_OBJECTS: readonly StarterObject[] = [
   { key: 'image', kind: 'image', caption: 'An image. A picture kept beside the work.', rect: { dx: 640, dy: 800, w: 440, h: 160 } }
 ]
 
+/**
+ * M405 (D3). A STARTER CAPTION is teaching text, not a person's margin note:
+ * it paints UNDER the panels (a person's own note stays above them, z 5000),
+ * fades out in the far tiers, and retires once its object is taken up. It is
+ * recognised by what it IS — a panel-anchored label whose text is one of the
+ * manifest's captions — rather than by a new persisted mark, so every canvas
+ * the starter already laid out (captions written since M181, no mark) is
+ * recognised too, and the annotation record's format does not move. The cost,
+ * recorded: a person who types a caption's exact sentence onto a panel gets
+ * starter behaviour for that note.
+ */
+const STARTER_CAPTIONS: ReadonlySet<string> = new Set(STARTER_OBJECTS.map((o) => o.caption))
+export function isStarterCaption(a: { text: string; anchor: { kind: string }; ink?: unknown }): boolean {
+  return a.ink === undefined && a.anchor.kind === 'panel' && STARTER_CAPTIONS.has(a.text)
+}
+
 export interface PersistedStarter {
   version: number
   keys: string[]

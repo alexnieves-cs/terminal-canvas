@@ -1624,10 +1624,13 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const spawnedOnBackend = newId
         ? await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
         : false
+      // M405 (D2): the header now NAMES the panel by its place, and the
+      // resolved command moved to the title's tooltip (`<command> in <cwd>`),
+      // so the settle is read there — the same fact, its new home.
       const title = newId
         ? await waitUntil(async () => {
             const text = await wc.executeJavaScript(
-              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.title ?? ''`)
             return text.startsWith('/') ? text : false
           }, 3000)
         : false
@@ -2445,16 +2448,18 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // status transition to 'running' — a beat after the backend spawn
       // above, not the same tick. Poll the label itself rather than reading
       // it once right after the backend confirms.
+      // M405 (D2): the resolved command is the title's TOOLTIP now (the name
+      // is the place); read where it lives, the same assertion.
       const label = newId
         ? await waitUntil(async () => {
             const text = await wc.executeJavaScript(
-              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.title ?? ''`)
             return text.startsWith('/') ? text : false
           }, 3000)
         : false
       const rawLabel = newId
         ? await wc.executeJavaScript(
-            `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+            `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.title ?? ''`)
         : null
       ok('44 the header names what main resolved, not the stand-in',
         newId !== undefined && spawnedOnBackend && label !== false && label !== 'login shell' &&
@@ -2545,9 +2550,12 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // '' or the stand-in, and the real command could still settle in
       // behind the rename before the undo assertion runs, making a correct
       // implementation look like it reverted to the wrong value.
+      // M405 (D2): the settle is read on the title's tooltip (the resolved
+      // command lives there now); the name captured is the header's text.
       const preRenameTitle = await waitUntil(async () => {
-        const text = await titleOf()
-        return text.startsWith('/') ? text : false
+        const hint = panelId ? await wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=${JSON.stringify(panelId)}] .panel__title')?.title ?? ''`) : ''
+        return hint.startsWith('/') ? await titleOf() : false
       }, 3000) || await titleOf()
 
       await wc.executeJavaScript(
@@ -2595,6 +2603,59 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const undone = stillExists && revertedTitle !== false
       ok('46 one Cmd+Z undoes the whole rename', landed && undone,
         `preRenameTitle=${preRenameTitle} stillExists=${stillExists} revertedTitle=${revertedTitle}`)
+    }
+
+    // M405 (D2). THREE SHELLS, THREE NAMES, ONE NAME PER PANEL. Every login
+    // shell used to title itself `/bin/zsh`, on the rim and in the navigator
+    // alike. Three command-less shells in three directories must read three
+    // distinct names on the rim, none of them a path or a program, the full
+    // path on the name's tooltip, and the navigator row for each must say the
+    // same words. Then the rim's rename in place: a double-click on the name
+    // opens a field, Enter commits, and the navigator follows.
+    {
+      const dirs = ['alpha', 'beta', 'gamma'].map((w) => mkdtempSync(join(tmpdir(), `tc title ${w} `)))
+      const before = new Set(await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      const ids = []
+      for (const cwd of dirs) {
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd, args: ['-l'], w: 360, h: 220 })
+        const id = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.find((x) => !before.has(x) && !ids.includes(x)) ?? false
+        }, 4000)
+        if (typeof id === 'string') ids.push(id)
+      }
+      const read = () => wc.executeJavaScript(`(${JSON.stringify(ids)}).map((id) => {
+        const t = document.querySelector('.panel[data-panel-id=' + JSON.stringify(id) + '] .panel__title')
+        const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row=' + JSON.stringify(id) + '] .rail-row__label')
+        return { id, rim: t ? t.textContent : null, hint: t ? t.title : null, row: r ? r.textContent : null }
+      })`)
+      const facts = await waitUntil(async () => { const f = await read(); return f.length === 3 && f.every((x) => x.rim && x.row) ? f : false }, 4000) || await read()
+      const base = (d) => d.replace(/\/+$/, '').split('/').pop()
+      ok('title.default.2 three login shells in three directories read three distinct names on the rim (each its directory, never a path or /bin/…), the full path on the tooltip, and each navigator row says the same name',
+        ids.length === 3 && facts.length === 3 && new Set(facts.map((f) => f.rim)).size === 3 &&
+          facts.every((f, i) => f.rim === base(dirs[i]) && f.row === f.rim && !f.rim.includes('/') && typeof f.hint === 'string' && f.hint.endsWith(dirs[i].replace(/\/+$/, ''))),
+        JSON.stringify({ dirs, facts }))
+      const target = ids[1]
+      const renamed = typeof target === 'string' ? await wc.executeJavaScript(`(async () => {
+        const t = document.querySelector('.panel[data-panel-id=${JSON.stringify(target ?? '')}] .panel__title')
+        if (!t) return 'no title'
+        t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2 }))
+        await new Promise((r) => setTimeout(r, 100))
+        const field = document.querySelector('.panel[data-panel-id=${JSON.stringify(target ?? '')}] [data-panel-title-input]')
+        if (!field) return 'no field'
+        if (document.activeElement !== field) return 'field not focused'
+        const was = field.value
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(field, 'api server')
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        return 'ok:' + was
+      })()`) : 'no panel'
+      const after = await waitUntil(async () => { const f = await read(); const x = f.find((y) => y.id === target); return x && x.rim === 'api server' && x.row === 'api server' ? f : false }, 3000)
+      ok('title.rename.1 a double-click on a terminal\'s rim name opens a focused field holding the name; Enter renames the panel, and the navigator row follows',
+        typeof renamed === 'string' && renamed === `ok:${facts[1] ? facts[1].rim : ''}` && after !== false,
+        JSON.stringify({ renamed, after: after || await read() }))
+      for (const id of ids) await clickPanelClose(wc, id)
     }
 
     // ---------------------------------------------------------------------

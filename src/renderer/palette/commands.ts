@@ -117,6 +117,8 @@ export interface PaletteActions {
   beginSavePrompt(): void
   deletePrompt(id: string): void
   beginRenamePanel(id: string, currentTitle: string): void
+  /** M405 (D2). Set a panel's title; the palette's rename and the rim's rename in place both commit here. */
+  renamePanel(id: string, name: string): void
   resetCanvas(): void
   zoomToFit(): void
   /** M146. Cmd+0's INITIAL camera — the row that was called `Reset zoom` all along. */

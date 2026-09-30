@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { Annotation } from '@shared/annotations'
 import { annotationPoint } from '@shared/annotations'
+import { isStarterCaption } from '@shared/starter'
 import type { Panel } from '@renderer/panels/panels'
 import { smoothStrokePath } from './viewport'
 import { fieldKeepsKey } from './draft-focus'
@@ -39,63 +40,72 @@ const LEADER = 12
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null {
   const { annotations, panels, selectedId, editingId, onSelect, onBeginEdit, onCommitEdit, onCancelEdit, draft, merged } = props
   if (annotations.length === 0 && !draft) return null
+  // M405 (D3). Two layers, one painter. A person's notes stay ABOVE every
+  // panel (a margin note hidden under a frame is a note nobody reads); the
+  // starter's captions go UNDER them — teaching text that covered the
+  // person's own new objects was outranking the work. Same records, same
+  // attributes (`starter.1` reads the captions by them), a different z.
+  const starter = annotations.filter(isStarterCaption)
+  const own = starter.length === 0 ? annotations : annotations.filter((a) => !isStarterCaption(a))
+  const paint = (a: Annotation): JSX.Element | null => {
+    const p = annotationPoint(a, panels)
+    if (p === null) return null
+    const anchor = a.anchor
+    // M155. INK: the stroke's points are relative to the anchor point;
+    // an SVG path with round caps and joins in the label's own colour, a
+    // wider transparent HIT path beneath for selection (a 3px line is
+    // not a target), the label's leader and editor never. M395: the
+    // path is the smooth curve THROUGH the stored points (viewport.ts's
+    // `smoothStrokePath`) — one `d` for the ink and its hit path, so a
+    // click lands on what is painted; the points are not touched.
+    if (a.ink !== undefined) {
+      const d = smoothStrokePath(a.ink.points.map(([x, y]) => [p.x + x, p.y + y] as [number, number]))
+      return (
+        <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind} data-annotation-ink="true">
+          <path className={`annotation__hit${merged ? ' annotation__hit--inert' : ''}`} data-annotation-hit d={d}
+            onMouseDown={(e) => { e.stopPropagation() }}
+            onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }} />
+          <path className="annotation__ink" d={d} style={{ strokeWidth: a.ink.width }} />
+        </g>
+      )
+    }
+    const panel = anchor.kind === 'panel' ? panels.find((x) => x.rect.id === anchor.panelId) : undefined
+    // The leader runs from the label's own near edge (its vertical middle,
+    // at the anchor's x) to the nearest point on the panel's edge, so a
+    // note above a panel points down at it and one below points up — and
+    // it never crosses the label it belongs to (the critic saw none).
+    const mid = { x: p.x, y: p.y - LEADER }
+    const leader = panel === undefined ? null : {
+      x2: Math.max(panel.rect.x, Math.min(mid.x, panel.rect.x + panel.rect.w)),
+      y2: Math.max(panel.rect.y, Math.min(mid.y, panel.rect.y + panel.rect.h))
+    }
+    return (
+      <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind}>
+        {leader !== null && <line className="annotation__leader" x1={mid.x} y1={mid.y} x2={leader.x2} y2={leader.y2} />}
+        <foreignObject x={p.x} y={p.y - 22} width="1" height="1" className="annotation__host" style={{ overflow: 'visible' }}>
+          {editingId === a.id
+            ? <NoteEditor initial={a.text} onCommit={(text) => onCommitEdit(a.id, text)} onCancel={() => onCancelEdit(a.id)} />
+            : (
+              <button
+                type="button"
+                className="annotation__label"
+                data-annotation-label
+                title={a.anchor.kind === 'panel' ? 'a note on this panel — click to select, double-click to edit' : 'a note on the canvas — click to select, double-click to edit'}
+                onMouseDown={(e) => { e.stopPropagation() }}
+                onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }}
+                onDoubleClick={(e) => { e.stopPropagation(); onBeginEdit?.(a.id) }}
+              >{a.text === '' ? '…' : a.text}</button>
+            )}
+        </foreignObject>
+      </g>
+    )
+  }
   return (
     <>
+      {starter.length > 0 && <svg className="annotation-layer annotation-layer--starter" aria-hidden="true" data-annotation-layer="starter">{starter.map(paint)}</svg>}
       <svg className="annotation-layer" aria-hidden="true">
         {draft && draft.length > 1 && <path className="annotation__ink annotation__ink--draft" d={smoothStrokePath(draft)} />}
-        {annotations.map((a) => {
-          const p = annotationPoint(a, panels)
-          if (p === null) return null
-          const anchor = a.anchor
-          // M155. INK: the stroke's points are relative to the anchor point;
-          // an SVG path with round caps and joins in the label's own colour, a
-          // wider transparent HIT path beneath for selection (a 3px line is
-          // not a target), the label's leader and editor never. M395: the
-          // path is the smooth curve THROUGH the stored points (viewport.ts's
-          // `smoothStrokePath`) — one `d` for the ink and its hit path, so a
-          // click lands on what is painted; the points are not touched.
-          if (a.ink !== undefined) {
-            const d = smoothStrokePath(a.ink.points.map(([x, y]) => [p.x + x, p.y + y] as [number, number]))
-            return (
-              <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind} data-annotation-ink="true">
-                <path className={`annotation__hit${merged ? ' annotation__hit--inert' : ''}`} data-annotation-hit d={d}
-                  onMouseDown={(e) => { e.stopPropagation() }}
-                  onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }} />
-                <path className="annotation__ink" d={d} style={{ strokeWidth: a.ink.width }} />
-              </g>
-            )
-          }
-          const panel = anchor.kind === 'panel' ? panels.find((x) => x.rect.id === anchor.panelId) : undefined
-          // The leader runs from the label's own near edge (its vertical middle,
-          // at the anchor's x) to the nearest point on the panel's edge, so a
-          // note above a panel points down at it and one below points up — and
-          // it never crosses the label it belongs to (the critic saw none).
-          const mid = { x: p.x, y: p.y - LEADER }
-          const leader = panel === undefined ? null : {
-            x2: Math.max(panel.rect.x, Math.min(mid.x, panel.rect.x + panel.rect.w)),
-            y2: Math.max(panel.rect.y, Math.min(mid.y, panel.rect.y + panel.rect.h))
-          }
-          return (
-            <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind}>
-              {leader !== null && <line className="annotation__leader" x1={mid.x} y1={mid.y} x2={leader.x2} y2={leader.y2} />}
-              <foreignObject x={p.x} y={p.y - 22} width="1" height="1" className="annotation__host" style={{ overflow: 'visible' }}>
-                {editingId === a.id
-                  ? <NoteEditor initial={a.text} onCommit={(text) => onCommitEdit(a.id, text)} onCancel={() => onCancelEdit(a.id)} />
-                  : (
-                    <button
-                      type="button"
-                      className="annotation__label"
-                      data-annotation-label
-                      title={a.anchor.kind === 'panel' ? 'a note on this panel — click to select, double-click to edit' : 'a note on the canvas — click to select, double-click to edit'}
-                      onMouseDown={(e) => { e.stopPropagation() }}
-                      onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }}
-                      onDoubleClick={(e) => { e.stopPropagation(); onBeginEdit?.(a.id) }}
-                    >{a.text === '' ? '…' : a.text}</button>
-                  )}
-              </foreignObject>
-            </g>
-          )
-        })}
+        {own.map(paint)}
       </svg>
     </>
   )

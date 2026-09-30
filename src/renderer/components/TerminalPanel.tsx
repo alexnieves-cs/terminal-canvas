@@ -14,6 +14,7 @@ import { CLOSE_PANEL_FACT } from '@shared/persistence'
 import { FarTitle, PanelFrame } from './PanelFrame'
 import { KindTerminal } from '@renderer/icons'
 import { agentHeader } from '@renderer/shell/rail-rows'
+import { terminalBaseName } from '@renderer/palette/panel-name'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -42,6 +43,16 @@ export interface TerminalPanelProps {
    * mutated in place and would not.
    */
   title?: string
+  /**
+   * M405 (D2). The name an UNTITLED terminal reads by — its place, with an
+   * ordinal where two read alike (`terminalNames`, computed over the whole
+   * canvas by the caller, the one thing this panel cannot see). Absent: the
+   * place without an ordinal. Never written back into `title`: a default is
+   * not a name the person gave.
+   */
+  defaultTitle?: string
+  /** M405 (D2). Rename in place from the rim; absent in the merged view. */
+  onRename?: (id: string, name: string) => void
   /** M57. How the card draws at this zoom; `tail` is the only tier with terminal text. */
   cardDetail?: CardDetail
   /**
@@ -135,7 +146,7 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, z, title, cardDetail, flipped = false, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
+  session, rect, z, title, defaultTitle, onRename, cardDetail, flipped = false, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, demoting, waking, onEntryEnd, readOnly = false, openingContext, onContextPasted,
   onBeginLink, linkTarget, onOpenAsChat
 }: TerminalPanelProps): JSX.Element {
@@ -216,11 +227,16 @@ function TerminalPanelImpl({
 
   // M44. The honest label, computed once and used for BOTH the title span
   // below and the panel's screen-reader name — same chain, one source.
-  const panelLabel =
-    title ??
+  // M405 (D2): an untitled terminal leads with its PLACE (`terminalBaseName`),
+  // so eight shells stop reading as eight `/bin/zsh`; the command and the
+  // full path move to the tooltip, the path rule's `title`.
+  const resolvedCommand =
     (session.status.kind === 'running' ? session.status.command : undefined) ??
     session.spec.command ??
     'login shell'
+  const panelLabel = title ?? defaultTitle ?? terminalBaseName(session.spec) ?? resolvedCommand
+  const titleHint = title !== undefined ? undefined
+    : `${resolvedCommand} in ${session.status.kind === 'running' && session.status.cwd !== '' ? session.status.cwd : session.spec.cwd}`
   // M170. The chat's header line for an agent terminal; null for a plain shell.
   const agentLine = agentHeader(session.spec)
 
@@ -239,6 +255,8 @@ function TerminalPanelImpl({
       // "claude — terminal" reads as one thing rather than an anonymous div.
       rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
       title={panelLabel}
+      titleHint={titleHint}
+      onRename={readOnly || onRename === undefined ? undefined : (name) => onRename(session.id, name)}
       agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
       motion={{ entering, demoting, waking, onEntryEnd }}
