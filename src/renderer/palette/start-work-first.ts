@@ -30,6 +30,7 @@ import { BACKEND_IDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-b
 import type { SwarmPresetId } from '@shared/swarm'
 import { SWARM_PRESETS } from '@shared/swarm'
 import type { BackendFit } from '@shared/backend-fit'
+import { FIRST_LAUNCH_BACKENDS } from '@shared/onboarding'
 
 /** What the last successful start used — the "existing configuration" a preselection reads. */
 export interface StartWorkLast {
@@ -77,6 +78,18 @@ export function preselectBackend(rows: readonly { backend: AgentBackend; fit: Ba
   const verdict = (b: AgentBackend): BackendFit['verdict'] | undefined => rows.find((r) => r.backend === b)?.fit.verdict
   for (const p of preferred) if (p !== undefined && verdict(p) !== undefined && verdict(p) !== 'refused') return p
   return rows.find((r) => r.fit.verdict === 'fits')?.backend ?? rows.find((r) => r.fit.verdict !== 'refused')?.backend ?? DEFAULT_BACKEND
+}
+
+/**
+ * M403 (the M400 critic). The engine a NEW person would get: `onboardingReadiness`'s
+ * rule — the first first-launch engine that is installed — read from the discovery
+ * answer the sheet already holds (`available`, the preset probes of the same CLIs).
+ * It comes before the default in the preference list, so a Codex-only machine's
+ * Automatic says and mints Codex, as the launcher would. Undefined when nothing
+ * answered (the default then stands, and its fit says why it cannot run).
+ */
+export function installedFirstBackend(available: Partial<Record<AgentBackend, boolean>> | undefined): AgentBackend | undefined {
+  return available === undefined ? undefined : FIRST_LAUNCH_BACKENDS.find((b) => available[b] === true)
 }
 
 /** Whether Options must rest OPEN: it holds a choice that is not the default. */

@@ -7958,7 +7958,14 @@ body {
 .sheet__actions .sheet__keys { flex: 1 1 auto; color: var(--fg-4); }
 .sheet__button { min-height: 32px; padding: 0 var(--sp-6); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 500; cursor: pointer; }
 .sheet__button:hover:not(:disabled) { background: var(--s-3); }
-.sheet__button.is-primary { font-weight: 600; }
+/* M403 (the M400 critic). `.sheet__button` comes after the shared
+   `.is-primary` fill at the same specificity, so the ENABLED Start task
+   painted as a dark outline while the disabled one kept the half fill: the
+   button looked more primary when it could not run. Enabled is the full fill
+   (hover adds the ring, never a surface step); disabled is the launcher's
+   half fill, visibly weaker (start.primary.1 measures the three). */
+.sheet__button.is-primary { background: var(--iris); color: var(--on-iris); border-color: transparent; font-weight: 600; }
+.sheet__button.is-primary:hover:not(:disabled) { background: var(--iris); box-shadow: 0 0 0 3px var(--iris-dim); }
 .sheet__button.is-primary:disabled { background: color-mix(in srgb, var(--iris) 50%, var(--s-2)); color: var(--on-iris); border-color: transparent; box-shadow: none; cursor: not-allowed; }
 
 /* Material and interaction polish. Paint changes leave the canvas coordinate

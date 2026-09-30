@@ -2842,13 +2842,37 @@ const WS = [
   const none = typeof P.startWorkWho === 'function' ? who({ title: 'x' }, [ada]) : null
   const swarmMint = typeof P.startWorkSwarmRefusal === 'function' ? P.startWorkSwarmRefusal({ title: 'x', root: '/tmp/r', swarm: 'implement' }, { teammates: [], repos: [], wanted: null, agentAvailable: true }, { name: 'Claude · r', places: ['/tmp/r'] }) : 'absent'
   ok('start.who.1 with nobody picked the folder answers who — a fresh roster plans a NEW teammate for exactly the folder (trailing / trimmed), a containing place is reused (the preferred one first), a sibling folder is not "inside" by string prefix, a pick stays a pick, no folder is none; a planned mint does not trip the swarm\'s no-places refusal',
-    fresh !== null && fresh.kind === 'mint' && fresh.name === 'Claude · tc-b1-repo' && JSON.stringify(fresh.places) === '["/tmp/tc-b1-repo"]' &&
+    // M403 CHANGED ON PURPOSE: the mint is named after the agent with the sheet's own word, "Claude Code" (was "Claude").
+    fresh !== null && fresh.kind === 'mint' && fresh.name === 'Claude Code · tc-b1-repo' && JSON.stringify(fresh.places) === '["/tmp/tc-b1-repo"]' &&
       reuse !== null && reuse.kind === 'reuse' && reuse.mate.id === 't3' &&
       preferred !== null && preferred.kind === 'reuse' && preferred.mate.id === 't1' &&
       sibling !== null && sibling.kind === 'mint' &&
       picked !== null && picked.kind === 'picked' && picked.mate.id === 't1' &&
       none !== null && none.kind === 'none' && swarmMint === null,
     JSON.stringify({ fresh, reuse: reuse && reuse.mate && reuse.mate.id, preferred: preferred && preferred.mate && preferred.mate.id, sibling: sibling && sibling.kind, picked: picked && picked.kind, none, swarmMint }))
+}
+
+// M403 (the M400 critic) — start.who.2. ONE NAME, AND THE INSTALLED ONE.
+// On a Codex-only machine the sheet said "Claude Code" and minted "Claude ·
+// <folder>" where the launcher would use Codex. The preference list now puts
+// the installed engine (onboardingReadiness's rule, over the sheet's own
+// discovery answer) before the default, and the mint is named with the same
+// word the who line uses.
+{
+  const avail = { claude: false, codex: true, copilot: false, acp: false }
+  const first = typeof P.installedFirstBackend === 'function' ? P.installedFirstBackend(avail) : 'absent'
+  const both = typeof P.installedFirstBackend === 'function' ? P.installedFirstBackend({ claude: true, codex: true }) : 'absent'
+  const unknown = typeof P.installedFirstBackend === 'function' ? P.installedFirstBackend(undefined) : 'absent'
+  const choice = { title: 'x', root: '/code/app' }
+  const ctx = { teammates: [], repos: [], wanted: null, available: avail }
+  const rows = P.startWorkBackendRows(choice, ctx)
+  const picked = P.preselectBackend(rows, [undefined, undefined, first, 'claude'])
+  const who = P.startWorkWho({ ...choice, backend: picked }, ctx)
+  const name = typeof P.startAgentName === 'function' ? P.startAgentName(picked) : 'absent'
+  ok('start.who.2 Codex-only: the installed engine is preselected before the default, and the who line\'s name and the minted teammate\'s name are the same word ("Codex"); with both installed Claude Code leads; with no answer nothing is claimed',
+    first === 'codex' && both === 'claude' && unknown === undefined && picked === 'codex' && name === 'Codex' &&
+      who.kind === 'mint' && who.name === 'Codex · app' && P.startAgentName('claude') === 'Claude Code' && P.startAgentName() === 'Claude Code',
+    JSON.stringify({ first, both, unknown, picked, name, who }))
 }
 
 // M400 (B1) — task.rank.1. "New task" is the answer to "new", "task" and
@@ -2862,16 +2886,18 @@ const WS = [
   let res = {}, threw = null
   try {
     const rows = P.buildCommands(ctx({ panels: [{ id: 'p1', label: 'zsh — ~ (p1)', title: 'auth refactor' }] }))
-    for (const q of ['new', 'new task', 'task', 'start', 'Start work', 'restart', 'auth', '']) {
+    for (const q of ['new', 'new task', 'task', 'start', 'Start work', 'restart', 'auth', '', 'n', 't', 's', 'st', 'ne']) {
       const list = P.filterCommands(rows, q)
       const best = P.bestMatchIndex(list, q)
       res[q] = { first: list[0] && list[0].id, firstGroup: list[0] && list[0].group, selected: list[best] && list[best].id, title: list[0] && list[0].title }
     }
   } catch (e) { threw = String(e) }
   const leads = ['new', 'new task', 'task', 'start', 'Start work']
-  ok('task.rank.1 New task… is first and selected for "new", "new task", "task", "start" (and the old "Start work"), shown under Tasks; "restart" and "auth" are not led by it, and at rest it keeps its Canvas place',
+  ok('task.rank.1 New task… is first and selected for "new", "new task", "task", "start" (and the old "Start work"), shown under Tasks; "restart", "auth" and the short prefixes n/t/s/st/ne are not led by it, and at rest it keeps its Canvas place',
     threw === null && leads.every((q) => res[q].first === 'start.work' && res[q].selected === 'start.work' && res[q].firstGroup === 'task' && res[q].title === 'New task…') &&
-      res.restart.first !== 'start.work' && res.restart.selected !== 'start.work' && res.auth.first !== 'start.work' && res[''].first !== 'start.work',
+      res.restart.first !== 'start.work' && res.restart.selected !== 'start.work' && res.auth.first !== 'start.work' && res[''].first !== 'start.work' &&
+      // M403 (the M400 critic): a one- or two-letter prefix is the first keystroke of Split, Terminal, Settings — never promoted.
+      ['n', 't', 's', 'st', 'ne'].every((q) => res[q].firstGroup !== 'task' && res[q].selected !== 'start.work'),
     threw ?? JSON.stringify(res))
 }
 
@@ -2991,6 +3017,18 @@ const WS = [
   ok('palette.pin.1 the selection is a ROW: through a re-rank it stays on the same id wherever that row moved; it falls back to the best runnable match only when its row is gone or unrunnable, and a query change re-seats',
     follow === 'a' && gone === 'b' && dead === 'b' && fresh === 'b',
     JSON.stringify({ follow, gone, dead, fresh }))
+
+  // M403 (the M399 critic, minor). When the held row goes unrunnable IN PLACE,
+  // the selection steps to its nearest runnable neighbour, not to the best
+  // match at the top of a long list: the best match here is r0, five rows up.
+  const long = ['r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'].map((id) => row(id, 'panels'))
+  const off = (list, ids) => list.map((r) => (ids.includes(r.id) ? { ...r, disabledReason: 'no' } : r))
+  const below = P.seatSelection({ rows: off(long, ['r5']), query: '', scope: null, leaving: null, reseat: false, current: 'r5' })
+  const above = P.seatSelection({ rows: off(long, ['r5', 'r6', 'r7']), query: '', scope: null, leaving: null, reseat: false, current: 'r5' })
+  const none = P.seatSelection({ rows: off(long, long.map((r) => r.id)), query: '', scope: null, leaving: null, reseat: false, current: 'r5' })
+  ok('palette.pin.2 a held row that turns unrunnable in place hands the selection to its nearest runnable neighbour (below first), never back to the top; nothing runnable seats nothing',
+    below === 'r6' && above === 'r4' && none === null,
+    JSON.stringify({ below, above, none }))
 }
 
 // M399 (A10) — palette.reason.1. THE REFUSAL SAYS WHAT IS TRUE. The prompt-mark

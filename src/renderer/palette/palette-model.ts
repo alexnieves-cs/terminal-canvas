@@ -277,10 +277,18 @@ const VISIBLE_BONUS = 40
 /** M400. Above any fuzzy score a short query reaches (a word run is ~50, plus VISIBLE_BONUS). */
 const LEAD_BONUS = 200
 
-/** M400. Is the query a prefix of one of the row's `leads`? Case- and outer-space-insensitive. */
+/**
+ * M400. Is the query a prefix of one of the row's `leads`? Case- and outer-space-insensitive.
+ * M403. At least three characters, unless the query IS a whole lead: "n", "t", "s", "st" and
+ * "ne" are the first keystrokes of Split, Terminal and Settings too, and a one-letter prefix
+ * promoted New task… over every one of them (the M400 critic).
+ */
+export const LEAD_MIN = 3
 export function leadsQuery(query: string, command: Command): boolean {
   const q = query.trim().toLowerCase().replace(/\s+/g, ' ')
-  return q !== '' && (command.leads ?? []).some((lead) => lead.toLowerCase().startsWith(q))
+  if (q === '') return false
+  const leads = (command.leads ?? []).map((lead) => lead.toLowerCase())
+  return leads.includes(q) || (q.length >= LEAD_MIN && leads.some((lead) => lead.startsWith(q)))
 }
 
 export function matchCommand(query: string, command: Command): number | null {
@@ -409,7 +417,19 @@ export function seatSelection(p: {
     return idAt(bestMatchIndex(p.rows, p.query))
   }
   const at = p.current === null ? -1 : p.rows.findIndex((r) => r.id === p.current)
-  return at >= 0 && p.rows[at].disabledReason === undefined ? p.current : idAt(bestMatchIndex(p.rows, p.query))
+  if (at >= 0 && p.rows[at].disabledReason === undefined) return p.current
+  // M403 (the M399 critic). The held row is still there but can no longer
+  // run: the selection moves to its NEAREST runnable neighbour (below first on
+  // a tie), not to the best match, which could be a screen away from where
+  // the person was looking.
+  if (at >= 0) {
+    for (let d = 1; d < p.rows.length; d += 1) {
+      if (runnable(p.rows[at + d])) return idAt(at + d)
+      if (runnable(p.rows[at - d])) return idAt(at - d)
+    }
+    return null
+  }
+  return idAt(bestMatchIndex(p.rows, p.query))
 }
 
 export function holdOrder(rows: Command[], order: readonly string[]): Command[] {

@@ -227,13 +227,17 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
  * happens in Canvas's `teammateForFolder`, after the repository answer, and
  * nothing is minted on a refusal.
  */
-export function folderTeammatePlan(folder: string, teammates: FirstWorkContext['teammates'], prefer?: string): { reuse: string; mint?: undefined } | { reuse?: undefined; mint: { name: string; places: string[] } } {
+export function folderTeammatePlan(folder: string, teammates: FirstWorkContext['teammates'], prefer?: string, agent: string = FIRST_LAUNCH_ENGINES[LANE_ENGINE].name): { reuse: string; mint?: undefined } | { reuse?: undefined; mint: { name: string; places: string[] } } {
   const at = trimSeparators(folder)
   const contains = (t: FirstWorkContext['teammates'][number]): boolean => t.places.some((place) => placeContains(place, at))
   const preferred = prefer === undefined ? undefined : teammates.find((t) => t.id === prefer && contains(t))
   const standing = preferred ?? teammates.find(contains)
   if (standing !== undefined) return { reuse: standing.id }
-  return { mint: { name: `Claude · ${folderBase(at)}`, places: [at] } }
+  // M403 (the M400 critic). The new teammate is named after the agent that
+  // will do the work — the SAME name the sheet's who line and the launcher's
+  // step 3 say ("Claude Code", "Codex"), so one agent never has two names
+  // on one sheet, and a Codex start never mints a teammate called Claude.
+  return { mint: { name: `${agent} · ${folderBase(at)}`, places: [at] } }
 }
 
 function folderBase(folder: string): string {
@@ -246,12 +250,32 @@ function folderBase(folder: string): string {
  * talk about this folder in a conversation instead, which needs no branch.
  */
 export type FirstWorkRepoAnswer =
-  | { kind: 'repository' }
+  /** `canonical`: the folder git works in, when the typed one is another spelling of it (a symlink) — the place to grant and the root to start in. */
+  | { kind: 'repository'; canonical?: string }
   | { kind: 'refused'; reason: string }
   | { kind: 'not-a-repository'; reason: string }
 
-export function firstWorkRepoAnswer(status: RepoStatus, folder: string): FirstWorkRepoAnswer {
+export function firstWorkRepoAnswer(status: RepoStatus, folder: string, top?: string | null): FirstWorkRepoAnswer {
   if (status.kind === 'status') {
+    // M403 (the M400 critic). Home and the filesystem root are never a new
+    // teammate's place: a grant there is everything the person owns, and a
+    // dotfiles repository in $HOME is the ordinary way to reach this arm.
+    const real = status.real === undefined ? undefined : comparable(status.real)
+    if (status.home === true) return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is your home folder — a task's agent would be granted everything in it; choose the repository's own folder` }
+    if (comparable(folder) === '/' || real === '/') return { kind: 'refused', reason: 'the filesystem root is not a repository folder a task can be granted — choose the repository\'s own folder' }
+    // A SYMLINK: the typed folder and git's top level are the same directory
+    // under two spellings. main's gate judges the realpath, and placeContains
+    // compares strings, so a place stored as the link either mints a twin or
+    // is refused AFTER the card exists. The realpath is what is granted and
+    // started in (never wider: it IS the chosen folder). A link to a
+    // SUBFOLDER is the subfolder refusal below, judged on the realpath.
+    if (real !== undefined && top !== undefined && top !== null) {
+      const t = comparable(top)
+      if (real !== t && real.startsWith(t === '/' ? '/' : `${t}/`)) {
+        return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is inside the repository ${shortPath(top)} — choose the repository's own folder` }
+      }
+      if (real === t && comparable(folder) !== t) return { kind: 'repository', canonical: trimSeparators(top) }
+    }
     // A SUBFOLDER answers git too, but the lane is made from git's top level
     // and main's gate then judges that root against a grant of the subfolder
     // — a refusal AFTER a teammate, a card and a worktree exist, naming a fix

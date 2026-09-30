@@ -201,9 +201,27 @@ export interface ReopenTask extends ReopenPanel {
  * changed while the app was closed (a tmux agent committing) is not seen as
  * news until something patches its item.
  */
+/*
+ * M403 (the lead's B7 decision, after 166a3c15). The rule above filtered too
+ * hard: nothing patches a work item while its renderer is gone, so after a
+ * normal quit the task lines were almost always empty — the return B7 asked
+ * for never came back. Now each outcome is judged by what it IS:
+ *  - `needs-you` is a CURRENT FACT, not news: shown on every launch while the
+ *    handoff is still ready or blocked (the outcome is recomputed live), as
+ *    long as the need predates this launch (a need that arose during it is
+ *    the pill's and the bell's, not a return);
+ *  - `finished` is news, told once: only when the merge landed after the last
+ *    exit (`merged.at > LastExit.at`) and before this launch;
+ *  - `asleep` is dropped: every chat's process ends with the app, so it was
+ *    true of every conversation and told the person nothing.
+ */
 export function reopenTaskNews(tasks: readonly ReopenTask[], exitAt: number | undefined, openedAt = Infinity): ReopenTask[] {
   const known = exitAt !== undefined && Number.isFinite(exitAt)
-  return tasks.filter((t) => (known && t.changedAt !== undefined ? t.changedAt > exitAt && t.changedAt < openedAt : t.outcome === 'needs-you'))
+  return tasks.filter((t) => {
+    if (t.outcome === 'needs-you') return t.changedAt === undefined || t.changedAt < openedAt
+    if (t.outcome === 'finished') return known && t.changedAt !== undefined && t.changedAt > exitAt && t.changedAt < openedAt
+    return false
+  })
 }
 
 /**

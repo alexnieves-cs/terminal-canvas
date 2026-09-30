@@ -7387,19 +7387,23 @@ export function Canvas({
    * The reuse is `folderTeammatePlan`'s path-segment containment; the mint's
    * only place is EXACTLY the folder. Main's Places gate stays the authority.
    */
-  const teammateForFolder = useCallback(async (folder: string, prefer?: string): Promise<{ kind: 'teammate'; id: string } | { kind: 'refused' | 'not-a-repository'; reason: string }> => {
+  const teammateForFolder = useCallback(async (typed: string, prefer?: string, agent?: string): Promise<{ kind: 'teammate'; id: string; root: string } | { kind: 'refused' | 'not-a-repository'; reason: string }> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
-    const repo = firstWorkRepoAnswer(await window.canvas.git.status(folder), folder)
+    // M403. git's top level beside the status, so a symlinked folder is
+    // granted and started as the directory git (and main's gate) works in.
+    const [status, top] = await Promise.all([window.canvas.git.status(typed), typeof window.canvas.git.root === 'function' ? window.canvas.git.root(typed).catch(() => null) : Promise.resolve(null)])
+    const repo = firstWorkRepoAnswer(status, typed, top)
     if (repo.kind !== 'repository') return repo
-    const plan = folderTeammatePlan(folder, teammatesRef.current, prefer)
-    if (plan.reuse !== undefined) return { kind: 'teammate', id: plan.reuse }
+    const folder = repo.canonical ?? typed
+    const plan = folderTeammatePlan(folder, teammatesRef.current, prefer, agent)
+    if (plan.reuse !== undefined) return { kind: 'teammate', id: plan.reuse, root: folder }
     const id = `tm-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
     const saved = await window.canvas.teammate.save({ ...emptyTeammate(id, plan.mint.name), places: plan.mint.places })
     // The mirror is made current HERE: `dispatchWorkItem` → main reads the
     // roster by id, and the reload below lands a render later.
     teammatesRef.current = [...teammatesRef.current.filter((t) => t.id !== id), saved.teammate]
     reloadTeammates()
-    return { kind: 'teammate', id }
+    return { kind: 'teammate', id, root: folder }
   }, [reloadTeammates])
   boardVerbsRef.current.teammateFor = teammateForFolder
   const startFirstWork = useCallback(async (req: FirstWorkRequest): Promise<FirstWorkOutcome> => {
@@ -7431,7 +7435,8 @@ export function Canvas({
     const itemId = standing ?? actions.addWorkItem({ source: 'typed', title: plan.title, ...(plan.description === undefined ? {} : { description: plan.description }), state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
     firstWorkItemRef.current = { key, itemId }
     if (teammateId === undefined) return { kind: 'refused', reason: 'no teammate was chosen for this folder' }
-    const outcome = await actions.startWork(itemId, teammateId, plan.folder)
+    // M403. The folder git works in (a symlink's realpath), which is what the mint granted.
+    const outcome = await actions.startWork(itemId, teammateId, who.root)
     if (outcome.kind !== 'started') {
       // The critic's finding (M205 2.5): a failure at THIS stage has already
       // minted a teammate and a work item — `dispatchWorkItemAttempt` already

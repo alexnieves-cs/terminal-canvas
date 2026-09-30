@@ -10,11 +10,11 @@ import { SWARM_LIST, SWARM_PRESETS, swarmPlan, type SwarmPresetId } from '@share
 import { applyRecipe, type Recipe } from '@shared/recipes'
 import { setupLine } from '@shared/repo-setup'
 import type { SetupReadResult } from '@shared/ipc-contract'
-import { startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, startWorkWho, type StartWorkRepo } from './start-work'
-import { BACKENDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
+import { startAgentName, startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, startWorkWho, type StartWorkRepo } from './start-work'
+import { DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
 import { fitSummary } from '@shared/backend-fit'
 import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@shared/recipe-portability'
-import { optionsOpenAtRest, preselectBackend, preselectRoot, preselectTeammate, startDraftStore } from './start-work-first'
+import { installedFirstBackend, optionsOpenAtRest, preselectBackend, preselectRoot, preselectTeammate, startDraftStore } from './start-work-first'
 
 /**
  * M197 (D05). THE START WORK SHEET — the one place a task, an agent and a
@@ -296,7 +296,8 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const taskText = [brief, criteriaText, checksText, deliverText, recipe?.brief ?? '', recipe?.criteria.join('\n') ?? ''].join('\n')
   const baseChoice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }) }
   const backendRows = startWorkBackendRows(baseChoice, ctx, taskText)
-  const backend = backendPick ?? preselectBackend(backendRows, [model.backend, last?.backend, DEFAULT_BACKEND])
+  // M403. The installed engine (the launcher's answer) before the default.
+  const backend = backendPick ?? preselectBackend(backendRows, [model.backend, last?.backend, installedFirstBackend(model.available), DEFAULT_BACKEND])
   const choice = { ...baseChoice, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }
   const needs = startWorkNeeds(choice, ctx)
   const blocking = startWorkRefusal(choice, ctx)
@@ -392,7 +393,8 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     queued: model.ceiling?.queued ?? 0,
     ...(chosenRoot === null ? {} : { rootWords: shortPath(chosenRoot, 2) })
   })
-  const backendLabel = backend === DEFAULT_BACKEND ? 'Claude Code' : BACKENDS[backend].label
+  // M403. One name for the agent: the who line, the Runtime line and the mint's name (the foot) all read it.
+  const backendLabel = startAgentName(backend)
   // What Options holds, said on its closed row so nothing set there is invisible.
   const optionsHeld = [recipe === undefined ? '' : recipe.name, swarm === '' ? '' : SWARM_PRESETS[swarm].label, brief.trim() === '' ? '' : 'outcome', criteriaText.trim() === '' ? '' : 'done when', checkLines.length === 0 ? '' : 'checks', deliverText.trim() === '' ? '' : 'hand back'].filter((x) => x !== '')
   const query = issueQuery.trim().toLowerCase()

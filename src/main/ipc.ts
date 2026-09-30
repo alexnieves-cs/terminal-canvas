@@ -1,4 +1,7 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
+import { realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { isHomeDir } from './home-dir'
 import type { CheckOutputRead } from '../shared/check-output'
 import type { LastExit } from '../shared/persistence'
 import { INERT_JOBS, type JobHandlers } from './job-recovery'
@@ -968,7 +971,17 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))
   ipcMain.handle(IPC.AGENT_POOL_START, (_event, req: PoolStartRequest) => agents.poolStart(req))
   ipcMain.handle(IPC.AGENT_POOL_STOP, (_event, req: { templateId: string; key: string }) => agents.poolStop(req))
-  ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
+  // M403. The facts a task's mint needs and the renderer cannot know: the
+  // folder's realpath (a symlink is granted as what git works in) and whether
+  // it is home (never a place a new teammate is granted). Added here, not in
+  // the engine, so every other status reader is unchanged.
+  ipcMain.handle(IPC.GIT_STATUS, async (_event, root: string) => {
+    const status = await reviewEngine.status(root)
+    if (status.kind !== 'status' || typeof root !== 'string' || !root.startsWith('/')) return status
+    let real: string | undefined
+    try { real = realpathSync(root) } catch { real = undefined }
+    return { ...status, ...(real === undefined ? {} : { real }), ...(isHomeDir(root, homedir()) ? { home: true as const } : {}) }
+  })
   // Backlog #86. null for not-a-repo AND unreadable: the caller's fallback is the same short path either way.
   ipcMain.handle(IPC.GIT_ROOT, async (_event, dir: string) => {
     if (typeof dir !== 'string' || dir === '') return null

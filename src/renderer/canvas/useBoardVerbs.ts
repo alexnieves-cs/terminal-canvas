@@ -83,7 +83,8 @@ export interface BoardVerbs {
    * whose place contains the folder (`prefer` first) or a new one whose only
    * place is exactly it. Nothing is minted on a refusal. Installed by Canvas.
    */
-  teammateFor?: (folder: string, prefer?: string) => Promise<{ kind: 'teammate'; id: string } | { kind: 'refused' | 'not-a-repository'; reason: string }>
+  /** M403: `agent` names a mint after the engine; `root` is the folder to start in (the realpath when the typed one is a symlink). */
+  teammateFor?: (folder: string, prefer?: string, agent?: string) => Promise<{ kind: 'teammate'; id: string; root: string } | { kind: 'refused' | 'not-a-repository'; reason: string }>
   /**
    * Decision queue. The ONE task a panel belongs to, or undefined for none or
    * several — so an answered request is filed under its task. A task

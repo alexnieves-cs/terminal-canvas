@@ -103,9 +103,9 @@ export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
       lastExit: summary.lastExit
     })
     // M401 (B7). Task lines follow the terminal ones, and only for a task
-    // whose panel is still here — "Show" must land on something — and only
-    // for what moved since the last exit (`reopenTaskNews`), or every launch
-    // re-announces every old task and "Got it" never sticks.
+    // whose panel is still here — "Show" must land on something — filtered
+    // by `reopenTaskNews`: a need that still holds on every launch, a merge
+    // once (after the last exit), asleep never (M403, the lead's decision).
     all.push(...reopenTaskLines(reopenTaskNews((tasks ?? []).filter((t) => present.has(t.id)), summary.lastExit?.at, openedAt)))
     const lines = acknowledged ? all.filter((l) => l.group === 'ended') : all
     if (lines.length === 0) return null

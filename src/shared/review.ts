@@ -99,7 +99,15 @@ export interface ReviewFile {
  * (a branch with no upstream), never `0/0`.
  */
 export type RepoStatus =
-  | { kind: 'status'; root: string; /** The repository every worktree shares — what the identity line names. */ repository: string; branch: string; upstream: { name: string; ahead: number; behind: number } | null }
+  | {
+    kind: 'status'; root: string; /** The repository every worktree shares — what the identity line names. */ repository: string; branch: string; upstream: { name: string; ahead: number; behind: number } | null
+    /**
+     * M403. What the IPC handler adds (never the engine): `root`'s realpath, absent when it cannot be
+     * resolved, and whether `root` IS the home directory however it is spelled (main's `isHomeDir`).
+     * The renderer cannot realpath or read HOME, and a task's mint needs both before it grants a place.
+     */
+    real?: string; home?: true
+  }
   | { kind: 'git-missing' }
   | { kind: 'unreadable'; detail: string }
 

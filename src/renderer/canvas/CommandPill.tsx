@@ -70,6 +70,25 @@ const MAX_VISIBLE_ACTIONS = 5
 const MAX_VISIBLE_RUNNING = 4
 /** 4.3. A per-viewer convenience, like the dock's labels: localStorage, wrapped. */
 const JUMP_TAUGHT_KEY = 'tc.pill.jumpTaught'
+/** M403. How far a press may travel and still be a click (a marquee is a drag). */
+const PILL_CLICK_SLOP = 4
+/**
+ * M403. Whether an Escape is another layer's to handle, not the expanded
+ * pill's: an open dialog or menu anywhere (a force-mounted menu stays in the
+ * DOM `hidden` while closed, so `:not([hidden])` is what "open" means), or a
+ * key typed into an editable that is neither the pill's nor xterm's own
+ * textarea (a rename input, Monaco's). Exported for the plain-node check.
+ */
+export function escapeBelongsElsewhere(target: EventTarget | null, pill: Element | null): boolean {
+  const mine = (el: Element): boolean => pill !== null && pill.contains(el)
+  for (const layer of Array.from(document.querySelectorAll('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden]), [role="menu"]:not([hidden]), [role="listbox"]:not([hidden])'))) {
+    if (!mine(layer)) return true
+  }
+  if (!(target instanceof Element) || mine(target) || target.closest('.xterm') !== null) return false
+  if (target.closest('.monaco-editor') !== null) return true
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+}
 function readJumpTaught(): boolean {
   try { return window.localStorage.getItem(JUMP_TAUGHT_KEY) === 'true' } catch { return false }
 }
@@ -306,22 +325,48 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   //    It supersedes M249's "stays open across outside clicks": a person who
   //    moves to terminal B now closes the pill there, so the hand-back it
   //    guarded (to B, never A) is reached through Escape alone.
+  //  M403 (the M399 critic). Both listeners are window-level and run FIRST,
+  //  so each must know when a key or a press is somebody else's:
+  //  - Escape belongs to any OTHER open layer (a dialog, an open menu), to an
+  //    IME composition, and to an editable outside the pill and xterm (a
+  //    rename input, Monaco): each has its own Escape, and a capture-phase
+  //    stopPropagation here ate it. Only then is the pill the topmost layer.
+  //  - A press on a PANEL, or one that becomes a drag on bare canvas (a
+  //    marquee), is the selection the expanded pill's own verbs (Tidy, Line
+  //    up, Space, Group) act on, so it keeps the pill up. Bare canvas is
+  //    judged on the RELEASE: a press that did not move is a click, and a
+  //    click outside still dismisses (pill.dismiss.1).
   useEffect(() => {
     if (!expanded) return
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('.palette') !== null) return
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || document.querySelector('.palette') !== null) return
+      if (escapeBelongsElsewhere(event.target, rootRef.current)) return
       event.preventDefault()
       event.stopPropagation()
       collapse(true)
     }
-    const onPointer = (event: PointerEvent): void => {
+    let down: { x: number; y: number } | null = null
+    const outside = (target: EventTarget | null): boolean => {
       const root = rootRef.current
-      if (root !== null && event.target instanceof Node && root.contains(event.target)) return
+      return !(root !== null && target instanceof Node && root.contains(target))
+    }
+    const onPointer = (event: PointerEvent): void => {
+      down = null
+      if (!outside(event.target)) return
+      if (event.target instanceof Element && event.target.closest('.panel, [data-panel-id]') !== null) return
+      down = { x: event.clientX, y: event.clientY }
+    }
+    const onRelease = (event: PointerEvent): void => {
+      const from = down
+      down = null
+      if (from === null) return
+      if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > PILL_CLICK_SLOP) return
       collapse(false)
     }
     window.addEventListener('keydown', onKey, true)
     document.addEventListener('pointerdown', onPointer, true)
-    return () => { window.removeEventListener('keydown', onKey, true); document.removeEventListener('pointerdown', onPointer, true) }
+    document.addEventListener('pointerup', onRelease, true)
+    return () => { window.removeEventListener('keydown', onKey, true); document.removeEventListener('pointerdown', onPointer, true); document.removeEventListener('pointerup', onRelease, true) }
     // collapse closes over refs and setters only, so this render's copy is
     // equivalent to any later one's: `expanded` is the only dependency.
   }, [expanded])

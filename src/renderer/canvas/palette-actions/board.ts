@@ -15,7 +15,7 @@ import { BACKEND_IDS } from '@shared/agent-backends'
 import { WORK_ITEM_STATES, carryWorkItem, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import type { IssueChoice } from '@renderer/palette/StartWorkSheet'
 import { repoOfKey } from '@shared/work-items'
-import { startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
+import { startAgentName, startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
 import { getChat } from '@renderer/chat/chat-store'
 import { allRecipes } from '@shared/recipes'
 import { recipeUse } from '@shared/recipe-portability'
@@ -204,11 +204,16 @@ export function boardActions(ctx: ActionCtx): BoardActions {
               // exactly this folder only then, and NOTHING minted (no teammate,
               // no card) on a refusal. So it runs before `addWorkItem` below.
               let teammateId = choice.teammateId
+              // M403. The root to start in: a symlinked folder becomes the
+              // directory git works in, the one the mint granted.
+              let root = choice.root
               if (teammateId === undefined) {
-                const who = await boardVerbsRef.current?.teammateFor?.(choice.root, choice.preferTeammateId)
+                // M403. A mint is named after the engine the sheet chose (`startAgentName`), as its who line says.
+                const who = await boardVerbsRef.current?.teammateFor?.(choice.root, choice.preferTeammateId, startAgentName(choice.backend))
                 if (who === undefined) return { kind: 'refused', reason: 'the canvas is not ready yet' }
                 if (who.kind !== 'teammate') return { kind: 'refused', reason: who.reason }
                 teammateId = who.id
+                root = who.root
               }
               // The task is minted only once the triple is answered: a sheet
               // the user escapes must leave no card behind, the same rule
@@ -257,8 +262,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
               // M394. The chart's shapes learn which step each became, now the card exists.
               opts?.onCreated?.(id)
               const outcome = choice.swarm === undefined
-                ? await self.startWork(id, teammateId, choice.root)
-                : await self.startSwarm(id, teammateId, choice.root, choice.swarm)
+                ? await self.startWork(id, teammateId, root)
+                : await self.startSwarm(id, teammateId, root, choice.swarm)
               // M326. The task opens in its workspace once it has started.
               if (outcome.kind === 'started') boardVerbsRef.current?.focusItem?.(id)
               return outcome.kind === 'started' ? { kind: 'started' } : { kind: 'refused', reason: outcome.reason }

@@ -326,6 +326,32 @@ watchdog — `starter.1` green, **a baseline red retired**. `verify:canvas` 7/7,
 `verify:file` 115/115, `verify:rail` 258/258, `verify:meta` green after the audit rows. `verify:panels:product` crashed its renderer (exit 5) with the first A10 cut in three runs out of three (see A10),
 and never without it.
 
+#### M399 critic follow-ups (landed in M403's first commit)
+
+- **A7, the pill's Escape handler ate other layers' Escape.** It is window-level, capture phase, with
+  `stopPropagation`, so a Radix menu, Monaco, a rename input or an IME composition over the expanded pill never got
+  its key. *Fix:* `escapeBelongsElsewhere` (`CommandPill.tsx`) — Escape is left alone during `isComposing`, while any
+  other `[role=dialog|alertdialog|menu|listbox]:not([hidden])` is open (a force-mounted menu stays in the DOM
+  `hidden`, so that is what "open" means), and when its target is an editable outside the pill and `.xterm`
+  (Monaco's `.monaco-editor` included). Only then is the pill the topmost layer.
+- **A7, an outside press collapsed the expanded pill whose verbs act on the selection.** "Open pill → shift-click
+  panels → Tidy" was gone. *Fix:* a press on a panel (`.panel, [data-panel-id]`) keeps the pill up; a press on bare
+  canvas collapses it only on a RELEASE that travelled ≤ 4px (`PILL_CLICK_SLOP`), so a marquee drag keeps it and a
+  plain click outside still dismisses (`pill.dismiss.1` unchanged and green).
+  *Check:* `verify:panels:product pill.dismiss.2` — all real input: pill open, a real press on the terminal, a real
+  drag on bare canvas, an Escape typed into an input outside the pill (it reaches the input), the View menu opened
+  from the keyboard and closed by Escape — the pill is up after each — and the next Escape still closes it. The
+  input arm first asserted the Escape arrived un-`defaultPrevented`; something else in the window's capture path
+  prevents it (not the pill: before this fix the key never reached the input at all), so the check asserts that it
+  REACHED the input, which is the discriminating fact.
+- **A6 minor, nearest runnable neighbour.** When the held row turns unrunnable IN PLACE, `seatSelection` now moves to
+  the nearest runnable neighbour (below first on a tie) instead of the best match, which could be a screen away; a
+  row that LEFT still falls back to the best match (its old place is not known). *Check:* `verify:palette
+  palette.pin.2`.
+- **A10, said plainly:** the `render-process-gone` crash with "selection as subject" was **not diagnosed**. Anyone who
+  retries letting a selected-but-unfocused panel be the rows' subject must bisect the ~40 row builders it reaches
+  first; the crash was reproducible (three of three) and is the only evidence there is.
+
 ### M400 — one task form behind every door (B1)
 
 Screenshots in `/tmp/tc-daily-loop-shots/`: `B1-before.png`, `B1-before-palette.png`, `B1-after-open.png`,
@@ -423,6 +449,48 @@ task, the flowchart scenes with the pill or inspector open ("New task from this 
 `start.door.1/.2`, `start.answer.1`, `onboarding.intent.e2e.*`, `start.recovery.*`; `verify:panels:core` green with 48's
 new ORDER; `verify:panels:orchestrate` green with `orch-tasks.app.2`. Plain: `verify:palette` 169/169, `first-run` 29/29,
 `onboarding` 21/21, `swarm` 39/39, `rail` 258/258, `meta` 51/51 (the lb entries added in `docs/load-bearing.md`).
+
+#### M400 critic follow-ups (landed in M403's first commit)
+
+1. **`leadsQuery` promoted New task… on any prefix** — "n", "t", "s", "st", "ne" jumped it into Tasks ahead of Split,
+   Terminal and Settings. *Fix:* a prefix must be at least `LEAD_MIN` (3) characters unless it IS a whole lead
+   ("new" still leads, it is three). *Check:* `task.rank.1` gains n/t/s/st/ne on its must-not-lead list (and
+   must-not-select); the lb entry says so.
+2. **Automatic could name the wrong agent.** The who line read "Claude Code" from `backendLabel` while the mint was
+   hardcoded `Claude · <folder>`, so a Codex start minted a teammate called Claude, and one agent had two names on
+   one sheet. *Fix:* `startAgentName(backend)` (`start-work.ts`) is the ONE name — the first-launch engines' words
+   ("Claude Code", "Codex"), else the registry label — read by the who line, the Runtime line and the mint
+   (`folderTeammatePlan`'s new `agent` parameter; the executor `teammateFor` receives it from the sheet). The
+   preference list puts `installedFirstBackend(model.available)` — `onboardingReadiness`'s rule (the first installed
+   first-launch engine) over the discovery answer the sheet already holds — before the default, after the card's own
+   vendor and the last one used. *Decision:* the minted name is now **"Claude Code · <folder>"** (was "Claude ·
+   <folder>") for the launcher too, so the foot and the who line say the same word; the chat header's echo rule
+   (`chat__backend--echo`, prefix match) still hides the doubled "claude". *Checks:* `start.who.1` updated ON
+   PURPOSE (the expected name); new `verify:palette start.who.2` (Codex-only: codex preselected, the who name and
+   the mint "Codex · app"; both installed → Claude Code; no answer → nothing claimed).
+3. **Symlinked folders.** main's `git:status` echoes the root it was given (`review-engine`'s `status`), so
+   `firstWorkRepoAnswer`'s subfolder test never fired live, and a symlink was stored as a place — reused by string,
+   then refused by main's realpath gate AFTER `addWorkItem`. *Fix:* main's `git:status` HANDLER (not the engine, so
+   no other reader changes) adds `real` (the realpath) and `home` (`isHomeDir`, M398's) to the status arm;
+   `teammateForFolder` asks `git:root` (git's top level) beside it; `firstWorkRepoAnswer(status, folder, top)` then
+   answers `canonical: top` for a symlink to a repository, the subfolder refusal for a link INTO one (judged on the
+   realpath), and refuses **home** and **`/`** by name. The executor grants and STARTS in the returned `root`
+   (`teammateFor` now returns it; the sheet's submit and `startFirstWork` use it), never the typed link. Nothing is
+   widened: the realpath IS the chosen folder. *Check:* `verify:onboarding onboarding.intent.6` (link → canonical,
+   link into → refused, home, root, `/tmp`↔`/private/tmp` is not a symlink case, an old status without `real` is
+   unchanged).
+4. **Disabled Start task looked MORE primary than enabled.** `.sheet__button` comes after the shared `.is-primary`
+   fill at the same specificity, so the enabled button painted as a dark outline and only the disabled one had a
+   fill. *Fix:* `.sheet__button.is-primary` is the full `--iris` fill with `--on-iris` ink, hover adds the ring
+   (never a surface step), disabled keeps the launcher's half fill. *Check:* `verify:panels:product start.primary.1`
+   measures the painted colours: enabled = `--iris` (Δ < 2), far from Cancel's; disabled ≠ iris and nearer Cancel
+   than enabled is.
+- **Minor, the sheet's refusal path was never driven.** *Check:* `verify:panels:product start.refuse.1` — a plain
+  folder reaches the sheet through recents (`layoutStore.addRecentDirectory`, main's `spawn.recent`), a typed task,
+  nobody picked, a real Enter: "not a git repository" is said IN the sheet, the sheet stays open, and the roster and
+  the board are exactly as they were.
+- *Not done (minor, outside the four):* a draft root from Choose… dropped on restore unless it is in recents or
+  granted; the DOM path for a picked teammate outside the folder is still not driven.
 
 ### M401 — a merged task looks done, one notion of reviewed, the return covers tasks (B2, B9, B7)
 
@@ -576,6 +644,18 @@ The accepted row and the reopen lines appear in no scene.
 main checkout's Electron tier (`verify-panels-shell`, still running), and the one-hour wait for it expired. That
 check is owed.
 
+#### M401 lead decision: the B7 filter (landed in M403's first commit)
+
+`reopenTaskNews` filtered too hard (after a normal quit the task lines were almost always empty). Decided by the
+lead and applied: **needs you** is a current fact, shown on every launch while the task's handoff is still ready or
+blocked (recomputed live), as long as the need predates this launch; **finished** is told once, only when
+`merged.at > LastExit.at` (and before this launch); **asleep** is dropped (every chat's process ends with the app, so
+it was true of every conversation). `shared` stays in needs-you: the outcome function already calls it that and
+the decision did not say otherwise. *Check:* `verify:layout reopen.task.2` rewritten ON PURPOSE — launch 1 says
+needs-you b+c and finished a; launch 2 (nothing changed) still says needs-you b+c and no finished; no exit time →
+needs-you only; a need that arose during this launch is not a return; asleep never. The owed `review.accepted.1`
+(the extended one) ran green in M403's `verify:panels:product` run.
+
 ### M402 — one placement rule for every create door (B4), the review opens whole (B3), the rim's geometry
 
 Reproduced both in the real built app (slot 1, CDP 9210, window 1200×800, navigator open — canvas host 852×744),
@@ -710,4 +790,3 @@ shot time (sized to the canvas, the one-file diff full width, the rail's file co
 `focus*`; `minimap`-bearing scenes only if shot mid-flight.
 *Not done:* the lineup/swarm/template arrangements (above); a flight-time golden for the minimap. The A4 rim for an
 agent terminal (`claude` in a PTY) was not driven with a real agent (M397's note stands).
-||||||| f5e642c9

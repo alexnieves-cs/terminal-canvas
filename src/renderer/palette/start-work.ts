@@ -41,7 +41,7 @@ import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { teammateRefusal, workItemRefusal, type WorkItemState } from '@shared/work-items'
 import { SWARM_PRESETS, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 import { BACKENDS, BACKEND_IDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
-import { folderTeammatePlan, placeContains } from '@shared/onboarding'
+import { FIRST_LAUNCH_ENGINES, folderTeammatePlan, isFirstLaunchBackend, placeContains } from '@shared/onboarding'
 import { backendFit, briefIsReadOnly, briefWantsImages, taskRequirements, type BackendFit, type TaskRequirement } from '@shared/backend-fit'
 
 /** The three inputs, in the order they are asked (M400: the launcher's — what, where, who). */
@@ -183,12 +183,23 @@ export type StartWorkWho =
   | { kind: 'mint'; name: string; places: string[] }
   | { kind: 'none' }
 
+/**
+ * M403 (the M400 critic). THE ONE NAME for the agent a start will run — the
+ * sheet's who line, its Runtime line and a minted teammate's name all read
+ * it, so "Claude Code" in one place and "Claude · repo" in another cannot
+ * happen again. The first-launch engines keep the launcher's words; any other
+ * backend is its registry label.
+ */
+export function startAgentName(backend: AgentBackend = DEFAULT_BACKEND): string {
+  return isFirstLaunchBackend(backend) ? FIRST_LAUNCH_ENGINES[backend].name : BACKENDS[backend].label
+}
+
 export function startWorkWho(choice: StartWorkChoice, ctx: StartWorkContext, prefer?: string): StartWorkWho {
   const mate = mateOf(ctx, choice.teammateId)
   if (mate !== undefined) return { kind: 'picked', mate }
   const root = startWorkRoot(choice, ctx)
   if (root === null) return { kind: 'none' }
-  const plan = folderTeammatePlan(root, ctx.teammates, prefer)
+  const plan = folderTeammatePlan(root, ctx.teammates, prefer, startAgentName(choice.backend))
   if (plan.reuse !== undefined) {
     const standing = ctx.teammates.find((t) => t.id === plan.reuse)
     if (standing !== undefined) return { kind: 'reuse', mate: standing }

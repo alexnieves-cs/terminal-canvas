@@ -212,6 +212,29 @@ intent('onboarding.intent.5 the repository answer keeps three arms — a reposit
     missing.kind === 'refused' && /does not exist/.test(missing.reason), detail: { repo, noGit, plain, sub, same, sibling, missing } }
 })
 
+// M403 (the M400 critic) — onboarding.intent.6. A symlinked folder is
+// granted and started as the directory git works in; a link INTO a repository
+// is the subfolder refusal, judged on the realpath (the string test alone
+// never fired live: main's status echoes the root it was given); home and
+// the filesystem root are never a new teammate's place.
+intent('onboarding.intent.6 a symlink to a repository answers with its realpath as the canonical folder, a symlink into one is refused as a subfolder, home and / are refused by name, and a plain folder answers as before', () => {
+  const st = (root, extra = {}) => ({ kind: 'status', root, repository: root, branch: 'main', upstream: null, ...extra })
+  const link = model.firstWorkRepoAnswer(st('/Users/me/link', { real: '/Volumes/code/app' }), '/Users/me/link', '/Volumes/code/app')
+  const into = model.firstWorkRepoAnswer(st('/Users/me/src', { real: '/Volumes/code/app/src' }), '/Users/me/src', '/Volumes/code/app')
+  const home = model.firstWorkRepoAnswer(st('/Users/me', { real: '/Users/me', home: true }), '/Users/me', '/Users/me')
+  const root = model.firstWorkRepoAnswer(st('/', { real: '/' }), '/', '/')
+  const plain = model.firstWorkRepoAnswer(st('/code/app', { real: '/code/app' }), '/code/app', '/code/app')
+  const tmp = model.firstWorkRepoAnswer(st('/tmp/app', { real: '/private/tmp/app' }), '/tmp/app', '/private/tmp/app')
+  const old = model.firstWorkRepoAnswer(st('/code/app'), '/code/app')
+  return { pass: link.kind === 'repository' && link.canonical === '/Volumes/code/app' &&
+    into.kind === 'refused' && /inside the repository/.test(into.reason) &&
+    home.kind === 'refused' && /home folder/.test(home.reason) &&
+    root.kind === 'refused' && /filesystem root/.test(root.reason) &&
+    plain.kind === 'repository' && plain.canonical === undefined &&
+    tmp.kind === 'repository' && tmp.canonical === undefined && old.kind === 'repository' && old.canonical === undefined,
+  detail: { link, into, home, root, plain, tmp, old } }
+})
+
 // Static markup proves available/disabled affordances, never that a click sends
 // a turn. The real renderer owns start/send verification separately.
 try {

@@ -5328,9 +5328,12 @@ try {
     const noExit = launch(undefined, 400)
     const untimed = P.reopenTaskNews([{ id: 'f', label: 'F', outcome: 'finished' }, { id: 'g', label: 'G', outcome: 'needs-you' }, { id: 'h', label: 'H', outcome: 'asleep' }], 100, 400)
     const thisLaunch = P.reopenTaskNews([{ id: 'i', label: 'I', outcome: 'needs-you', changedAt: 450 }], 100, 400)
-    ok('reopen.task.2 across two launches the task lines report only what moved between the last exit and this launch, the second launch over unchanged state says nothing, and with no time only a real needs-you stays',
-      first.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b,finished:a' &&
-        second.length === 0 &&
+    // M403 CHANGED ON PURPOSE (the lead's B7 decision): needs-you is a current
+    // fact shown on EVERY launch while it holds (b and c both launches), a merge
+    // is told once (a on launch 1 only), and asleep is never told (d, h).
+    ok('reopen.task.2 across two launches a task that still needs you is said on both, a merge only on the launch after it landed, asleep never; with no exit time only needs-you stays, and a need that arose during this launch is not a return',
+      first.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b+c,finished:a' &&
+        second.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b+c' &&
         noExit.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b+c' &&
         untimed.map((t) => t.id).join() === 'g' && thisLaunch.length === 0,
       JSON.stringify({ first, second, noExit, untimed, thisLaunch }))

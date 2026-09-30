@@ -1951,8 +1951,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // picking anyone — the folder answers who (sam's place contains it).
         'start.door.1 the palette\'s New task… row opens the sheet with nothing pre-filled and the Repository field LIVE (never gated on the agent), already offering the repositories under every placed teammate\'s places from main; the agent rests on Automatic and offers every teammate, a placeless one DISABLED by name (a grant, never widened from here)',
         'start.door.2 a TYPED item — which names no repository, and which board:lane refused with a sentence naming a door that did not exist — reaches a REAL worktree lane through the sheet\'s repository choice with NO agent picked: the folder answers who (the teammate whose place contains it), the record carries the chat and the worktree, and the lane\'s root is the chosen repository',
-        'start.answer.1 a start whose repository the teammate may not touch is REFUSED IN THE SHEET by name and mints nothing, and the agent door\'s dispatch verb answers `refused` with the same sentence rather than reporting `ran` before the work could fail'
+        'start.answer.1 a start whose repository the teammate may not touch is REFUSED IN THE SHEET by name and mints nothing, and the agent door\'s dispatch verb answers `refused` with the same sentence rather than reporting `ran` before the work could fail',
+        // M403 (the M400 critic).
+        'start.primary.1 the ENABLED Start task is the filled accent (painted, measured) and the DISABLED one is visibly weaker — nearer the plain Cancel button than the enabled fill is — never the other way round',
+        'start.refuse.1 the sheet\'s own refusal path: a recent folder that is not a repository, started with nobody picked, is refused IN the sheet by name, and mints no teammate and no card',
       ]
+      // M403. A computed colour as [r,g,b], and the distance between two.
+      const PAINT = `(() => { const rgb = (c) => { const t = String(c), m = t.replace(/^color\\(srgb/, '').match(/[\\d.]+/g); if (!m) return null; const k = t.startsWith('color(') ? 255 : 1; return m.slice(0, 3).map((v) => Number(v) * k) }
+        const s = document.querySelector('[data-start-submit]'), c = document.querySelector('[data-start-cancel]'); if (!s || !c) return null
+        const probe = document.createElement('span'); probe.style.color = 'var(--iris)'; document.body.appendChild(probe); const iris = rgb(getComputedStyle(probe).color); probe.remove()
+        return { disabled: s.disabled, bg: rgb(getComputedStyle(s).backgroundColor), cancel: rgb(getComputedStyle(c).backgroundColor), iris } })()`
+      const dist = (a, b) => (a && b ? Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) : -1)
       const sLog = []
       const onS = (_e, _l, m) => { sLog.push(String(m).slice(0, 220)) }
       wc.on('console-message', onS)
@@ -1983,6 +1992,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // M400. No teammate is chosen: the list is read at open, for all of them.
         const repoRows = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-start-repo] option[data-start-repo-row]')]
           return o.length > 0 ? o.map((x) => x.getAttribute('data-start-repo-row')) : false })()`), 6000)
+        const paintOff = await wc.executeJavaScript(PAINT)
         ok(IDS[0],
           sheetUp && sheetUp.task === '' && sheetUp.fixed === false && sheetUp.repoDisabled === false && sheetUp.agent === '' &&
             sheetUp.rows.some((r) => r.v === 'tm-sw' && !r.d) &&
@@ -1999,6 +2009,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const chosen = repoRows && repoRows.find((p) => realpathSync(p) === realpathSync(repoS))
         await wc.executeJavaScript(`(() => { const sel = document.querySelector('[data-start-repo]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
           set.call(sel, ${JSON.stringify(chosen)}); sel.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+        await settle()
+        const paintOn = await wc.executeJavaScript(PAINT)
+        ok(IDS[3],
+          paintOff !== null && paintOn !== null && paintOff.disabled === true && paintOn.disabled === false &&
+            dist(paintOn.bg, paintOn.iris) < 2 && dist(paintOn.bg, paintOn.cancel) > 40 &&
+            dist(paintOff.bg, paintOn.iris) > 20 && dist(paintOff.bg, paintOn.cancel) < dist(paintOn.bg, paintOn.cancel),
+          JSON.stringify({ paintOff, paintOn }))
         await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true })()`)
         const startedChat = await waitUntil(async () => {
           if ((await chatCountS()) !== beforeS + 1) return false
@@ -2041,6 +2058,47 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             planAnswer && planAnswer.kind === 'refused' && /nell/.test(planAnswer.reason) && /which place|no places/i.test(planAnswer.reason) &&
             afterRefused === beforeRefused,
           JSON.stringify({ sheetRefusal, planAnswer, beforeRefused, afterRefused, log: sLog.slice(-4) }))
+
+        // ---- start.refuse.1: the SHEET's refusal, driven (the M400 critic) ----
+        // A folder reaches the sheet with nobody picked through recents (the
+        // launcher's list, main's `spawn.recent`); a plain folder is not a
+        // repository, so `teammateForFolder` refuses BEFORE the mint and
+        // before `addWorkItem` — nothing may exist afterwards.
+        const plainDir = mkdtempSync(join(tmpdir(), 'tc panels start plain '))
+        try {
+          layoutStore.addRecentDirectory(plainDir)
+          layoutStore.flushSync()
+          const matesBefore = layoutStore.teammates().map((t) => t.id).sort().join()
+          const itemsBefore = (layoutStore.initial().workItems || []).length
+          await wc.executeJavaScript(`window.__m113 ? window.__m113.start() : null`)
+          const plainRow = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-start-repo] option[data-start-repo-row]')].map((x) => x.getAttribute('data-start-repo-row'))
+            return o.includes(${JSON.stringify(plainDir)}) ? true : false })()`), 6000)
+          await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); const t = s.querySelector('[data-start-task]')
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+            set.call(t, 'refuse this start'); t.dispatchEvent(new Event('input', { bubbles: true }))
+            const sel = s.querySelector('[data-start-repo]'); const ss = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+            ss.call(sel, ${JSON.stringify(plainDir)}); sel.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+          await settle()
+          const whoLine = await wc.executeJavaScript(`(document.querySelector('[data-start-who-summary]') || {}).textContent || null`)
+          await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true })()`)
+          const said = await waitUntil(() => wc.executeJavaScript(`(document.querySelector('[data-start-refusal]') || {}).textContent || false`), 8000)
+          await settle()
+          layoutStore.flushSync()
+          const matesAfter = layoutStore.teammates().map((t) => t.id).sort().join()
+          const itemsAfter = (layoutStore.initial().workItems || []).length
+          const cardless = !(layoutStore.initial().workItems || []).some((i) => i.title === 'refuse this start')
+          const stillOpen = await wc.executeJavaScript(`document.querySelector('[data-start-sheet]') !== null`)
+          ok(IDS[4],
+            plainRow === true && typeof said === 'string' && /not a git repository/.test(said) && stillOpen === true &&
+              matesAfter === matesBefore && itemsAfter === itemsBefore && cardless,
+            JSON.stringify({ plainRow, whoLine, said, stillOpen, matesBefore, matesAfter, itemsBefore, itemsAfter, log: sLog.slice(-3) }))
+          await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return true })()`)
+          await settle()
+        } finally {
+          // The refused start keeps its draft (the plain door's rule); drop it so no later open inherits it.
+          try { await wc.executeJavaScript(`(() => { try { localStorage.removeItem('tc.startWork.draft') } catch {} return true })()`) } catch {}
+          try { rmSync(plainDir, { recursive: true, force: true }) } catch {}
+        }
 
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
@@ -5993,7 +6051,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       paste: 'pill.paste.1 Cmd+Shift+Space focuses the pill input, edit:paste lands in it and never reaches the PTY, and Escape returns the keyboard to the terminal',
       jump: 'pill.jump.1 the rest state names the waiting panel, and Jump centres it on screen',
       send: 'pill.send.1 with no orchestrator the first send makes a supervisor chat holding the text unsent; the next send reaches that chat through agent:send',
-      dismiss: 'pill.dismiss.1 a click-opened pill closes on a real Escape (taken before the terminal, which receives no ESC and keeps the keyboard) and on a real press outside it'
+      dismiss: 'pill.dismiss.1 a click-opened pill closes on a real Escape (taken before the terminal, which receives no ESC and keeps the keyboard) and on a real press outside it',
+      dismiss2: 'pill.dismiss.2 the expanded pill stays up through a real press on a panel and a real drag on bare canvas (the selection its verbs act on), leaves an Escape to an open menu and to an editable outside it, and still closes on the next Escape'
     }
     const done = new Set()
     const record = (key, pass, detail) => { done.add(key); ok(PILL_IDS[key], pass, detail) }
@@ -6115,6 +6174,53 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       record('dismiss', dOpen.expanded === true && dOpen.focused === false && dEsc.expanded === false && dEsc.activePanel === termId && escLeaked === false &&
           dReopen === true && bare !== null && dOutside.expanded === false,
         JSON.stringify({ dOpen, dEsc, escLeaked, dReopen, bare, dOutside }))
+
+      // M403 (the M399 critic) — pill.dismiss.2. The listeners above are
+      // window-level and run first, so they must know what is NOT theirs. A
+      // press on a panel and a drag on bare canvas (a marquee) make the
+      // selection Tidy/Line up/Group act on, so the pill stays; an Escape
+      // meant for an open menu or for an editable outside the pill (a rename
+      // input) reaches it and leaves the pill up. All gestures real.
+      await press('[data-pill-rest]'); await settle()
+      const eOpen = (await pillState()).expanded
+      const onPanel = await wc.executeJavaScript(`(() => { const r = document.querySelector(${q(screenSel)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      wc.sendInputEvent({ type: 'mouseDown', ...onPanel, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...onPanel, button: 'left', clickCount: 1 })
+      await settle()
+      const ePanel = (await pillState()).expanded
+      const bare2 = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect()
+        for (let y = c.top + 12; y < c.bottom - 150; y += 24) for (let x = c.left + 12; x < c.right - 120; x += 24) { const e = document.elementFromPoint(x, y), f = document.elementFromPoint(x + 80, y + 60); if (e && e.classList.contains('canvas') && f && f.classList.contains('canvas')) return { x: Math.round(x), y: Math.round(y) } }
+        return null })()`)
+      if (bare2) {
+        wc.sendInputEvent({ type: 'mouseDown', ...bare2, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 4; i += 1) wc.sendInputEvent({ type: 'mouseMove', x: bare2.x + 20 * i, y: bare2.y + 15 * i, button: 'left', modifiers: ['leftButtonDown'] })
+        wc.sendInputEvent({ type: 'mouseUp', x: bare2.x + 80, y: bare2.y + 60, button: 'left', clickCount: 1 })
+      }
+      await settle()
+      const eDrag = (await pillState()).expanded
+      // A rename-like input outside the pill and xterm, holding the keyboard.
+      await wc.executeJavaScript(`(() => { const i = document.createElement('input'); i.id = 'm403-esc-probe'; i.style.cssText = 'position:fixed;left:4px;top:4px;z-index:99999'
+        window.__m403Esc = null; i.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__m403Esc = { reached: true, prevented: e.defaultPrevented } })
+        document.body.appendChild(i); i.focus(); return document.activeElement === i })()`)
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await settle()
+      const eInput = { expanded: (await pillState()).expanded, got: await wc.executeJavaScript(`window.__m403Esc`) }
+      await wc.executeJavaScript(`document.getElementById('m403-esc-probe')?.remove(), true`)
+      // The View menu, opened from the KEYBOARD (a pointer open is a press
+      // outside the pill, which rightly closes it).
+      await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.focus(), true`)
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+      const menuOpen = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'); return m !== null && !m.hidden })()`), 3000)
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await settle()
+      const eMenu = { menuOpen, menuClosed: await wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'); return m === null || m.hidden })()`), expanded: (await pillState()).expanded }
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await settle()
+      const eLast = (await pillState()).expanded
+      record('dismiss2', eOpen === true && ePanel === true && bare2 !== null && eDrag === true &&
+          eInput.expanded === true && eInput.got !== null && eInput.got.reached === true &&
+          eMenu.menuOpen === true && eMenu.menuClosed === true && eMenu.expanded === true && eLast === false,
+        JSON.stringify({ eOpen, ePanel, bare2, eDrag, eInput, eMenu, eLast }))
+      if (eLast !== false && (await pillState()).expanded) { await press('[data-pill-rest]'); await settle() }
 
       // pill.jump.1 — a real bell puts the shell in wants-you; the camera is
       // panned well away; Jump brings the panel to the centre of the host.
