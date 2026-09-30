@@ -405,7 +405,7 @@ module.exports = async function (ok, F) {
   // ── SVG ───────────────────────────────────────────────────────────────
   const colours = {
     fill: { plain: '#f6f6f4', none: 'none', yellow: '#fff3b0', blue: '#dbeafe', green: '#dcfce7', pink: '#fce7f3' },
-    stroke: { line: '#8a8a8a', ink: '#1f1f1f', iris: '#5b5bd6', violet: 'rgb(1, 2, 3)', none: 'none' },
+    stroke: { line: '#8a8a8a', ink: '#1f1f1f', violet: 'rgb(1, 2, 3)', none: 'none' },
     ink: { fg: '#111111', muted: '#777777' },
     background: '#fafaf9',
     line: 'rgb(9, 8, 7)'
@@ -419,7 +419,7 @@ module.exports = async function (ok, F) {
   shapes[2].shape.text = 'one\ntwo\nthree'
   shapes[3].shape.text = 'a label long enough that it has to wrap inside its shape rather than run out of it'
   shapes[4].shape.text = 'nul\u0000here\uD800lone'
-  shapes[5].shape = { form: shapes[5].shape.form, text: 'styled', fill: 'blue', stroke: 'iris', ink: 'muted' }
+  shapes[5].shape = { form: shapes[5].shape.form, text: 'styled', fill: 'blue', stroke: 'violet', ink: 'muted' }
   const panel = { box: box(0, 500, 480, 300), title: 'zsh — "~/src" <b>' }
   const conn = (i, j, extra) => ({ fromBox: shapes[i].box, fromForm: shapes[i].shape.form, toBox: shapes[j].box, toForm: shapes[j].shape.form, connector: { id: `cx${i}${j}`, to: shapes[j].id, ...extra }, obstacles: shapes.filter((_, k) => k !== i && k !== j).map((s) => s.box) })
   const model = {

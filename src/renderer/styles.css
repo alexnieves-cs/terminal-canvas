@@ -3602,13 +3602,19 @@ body {
    lines. font-size, never a transform: nothing under .pf__body is transformed
    (frame.2), and no live body is in these tiers. The near tier (a flipped
    card) matches none of this and paints the title as one line, as before. */
+/* M396 (the critic's zoomed-out scenes). A short card sliced its two-line
+   name mid-glyph — top AND bottom, because a centred column that overflows
+   spills both ways. `safe center` keeps the top edge and clips the end, and
+   the name is capped at a share of the CARD's height (size containment, so
+   cqh is the card's own), so it never outgrows the card it names. */
+.world[data-detail="summary"] .panel__card--summary { justify-content: safe center; container-type: size; }
 .world[data-detail="summary"] .panel__card-summary-title {
   display: flex; flex-direction: column; min-width: 0;
   white-space: normal; line-height: 1.2;
-  font-size: calc(var(--t-md) * var(--far-scale, 1));
+  font-size: min(calc(var(--t-md) * var(--far-scale, 1)), 24cqh);
 }
 .world[data-detail="summary"] .far-name__kicker {
-  font-size: calc(var(--t-xs) * var(--far-scale, 1)); font-weight: 500; color: var(--fg-2);
+  font-size: min(calc(var(--t-xs) * var(--far-scale, 1)), 17cqh); font-weight: 500; color: var(--fg-2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .world[data-detail="summary"] .far-name__sep,
@@ -6987,7 +6993,8 @@ body {
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
 .new-object-row__plus:hover { color: var(--fg); background: var(--s-4); }
-.shell[data-bp="compact"] .new-object-row__plus span { display: none; }
+/* M396. The word stays at every breakpoint: icon-only, the Create "+" sat
+   beside zoom-in's "+" and read as a second one (the critic's compact scene). */
 .new-object-row__plus:disabled { color: var(--fg-4); cursor: default; }
 .new-object-row__plus:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
@@ -6999,7 +7006,12 @@ body {
    glyph alone; the panel above it is the contextual overlay and wears --e-3.
    The rest button stays flat and neither surface adds backdrop blur. */
 .command-pill {
-  position: absolute; left: 50%; bottom: var(--sp-5); transform: translateX(-50%); z-index: 930;
+  /* M396. --pill-shift (CommandPill's layout effect): the pill steps LEFT only
+     when its rest button would reach the HUD — which grew when Create joined
+     it and clipped "1 session running" in the critic's flip and palette
+     scenes. Zero otherwise, so the pill keeps its centre everywhere else. */
+  --pill-shift: 0px;
+  position: absolute; left: 50%; bottom: var(--sp-5); transform: translateX(calc(-50% + var(--pill-shift, 0px))); z-index: 930;
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
   max-width: min(400px, calc(100% - 2 * var(--sp-5)));
   pointer-events: auto; font-family: var(--font-ui);
@@ -7015,6 +7027,9 @@ body {
    keyed on role="menu", which a menu opening or closing is the only thing to
    change — a terminal's DOM churn never matches it. */
 .canvas:has(> .world [role="menu"]:not([hidden])) > .command-pill { opacity: 0; visibility: hidden; pointer-events: none; }
+/* M396. The HUD yields to a menu the same way (the critic's header scene: an
+   open ⋯ menu's right edge, "…run again, or", sat under "+ Create"). */
+.canvas:has(> .world [role="menu"]:not([hidden])) > .canvas-hud { opacity: 0; visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .command-pill { transition: none; } }
 /* The rest pill IS the "shared container": it never unmounts, so it reads as
    the one object the panel above grows out of rather than a button that
@@ -7026,7 +7041,10 @@ body {
   transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
 .command-pill__rest:hover { color: var(--fg); background: var(--s-3); }
-.command-pill__rest[data-pill-state="attention"] { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+/* M396: the amber wash is laid OVER an opaque surface — on its own it is
+   translucent, and a badge under the pill read through it ("1 1 panel needs
+   you" in the critic's attention and overview scenes). */
+.command-pill__rest[data-pill-state="attention"] { color: var(--amber); border-color: var(--amber); background: linear-gradient(var(--amber-dim), var(--amber-dim)), var(--s-2); }
 /* The send's outcome, said in the SAME element the rest text lives in — an
    accent bar rather than a new colour, so it reads as this pill answering
    rather than a second voice interrupting it. */
@@ -10155,7 +10173,6 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .shape[data-fill="green"]  { --shape-fill: var(--tint-green); }
 .shape[data-fill="pink"]   { --shape-fill: var(--tint-pink); }
 .shape[data-stroke="ink"]    { --shape-stroke: var(--fg-2); }
-.shape[data-stroke="iris"]   { --shape-stroke: var(--iris); }
 .shape[data-stroke="violet"] { --shape-stroke: var(--violet); }
 .shape[data-stroke="none"]   { --shape-stroke: transparent; }
 .shape[data-ink="muted"]     { --shape-ink: var(--fg-3); }
@@ -10218,7 +10235,9 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   margin: -4px 0 0 -4px;
   background: var(--s-3);
   border: 1.5px solid var(--iris);
-  border-radius: var(--r-sm);
+  /* SQUARE (M396): --r-sm on an 8px box drew a circle, the port's own shape —
+     the critic could not tell a resize handle from a connector port. */
+  border-radius: 0;
   transform: scale(var(--chrome-scale, 1));
   pointer-events: auto;
 }
@@ -10247,11 +10266,28 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   pointer-events: auto;
   cursor: crosshair;
 }
+/* M396. Ports sit OUTSIDE the outline, a counter-scaled step along the side's
+   normal: on the outline they covered the N/E/S/W resize handles (a
+   diamond's vertices ARE its box's edge midpoints) and read as the same
+   dot. The connector still attaches at the outline's port (portPoint); only
+   the grab target moves. */
+.shape__port--n { --port-dx: 0;  --port-dy: -1; }
+.shape__port--s { --port-dx: 0;  --port-dy: 1; }
+.shape__port--e { --port-dx: 1;  --port-dy: 0; }
+.shape__port--w { --port-dx: -1; --port-dy: 0; }
+.shape__port { transform: translate(calc(var(--port-dx, 0) * 14px * var(--chrome-scale, 1)), calc(var(--port-dy, 0) * 14px * var(--chrome-scale, 1))) scale(var(--chrome-scale, 1)); }
 .shape:hover .shape__port, .shape--selected .shape__port { opacity: 1; }
 .shape--editing .shape__port { opacity: 0; pointer-events: none; }
 /* Far tiers: a diagram stays a diagram. The outline thickens to about a device
    pixel's worth at the tier's entry scale (the frame's far-line rule), and the
    label goes where it could no longer be read — the silhouette is the fact. */
+/* M396 (the critic's far scene): the default outline is --line-strong, a
+   hairline colour — thickened far away it still read dimmer than the arrows
+   between the shapes (--fg-3). Far away the silhouette IS the fact, so a
+   default line takes the connectors' ink; a chosen colour keeps its own. */
+.world[data-detail="summary"] .shape[data-stroke="line"],
+.world[data-detail="block"] .shape[data-stroke="line"],
+.world[data-detail="cluster"] .shape[data-stroke="line"] { --shape-stroke: var(--fg-3); }
 .world[data-detail="summary"] .shape { --shape-sw: 4; }
 .world[data-detail="block"] .shape, .world[data-detail="cluster"] .shape { --shape-sw: 8; }
 .world[data-detail="block"] .shape__label, .world[data-detail="cluster"] .shape__label { visibility: hidden; }
@@ -10288,12 +10324,28 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    line, text). A swatch is a real button; the pressed one wears the accent
    ring, the rest the hairline — the selection colour means "this one". */
 .shape-inspector { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-4) 0 var(--sp-5); border-bottom: 1px solid var(--line); margin-bottom: var(--sp-4); }
-.shape-inspector__row { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: var(--sp-4); }
-.shape-inspector__label { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
-.shape-inspector__swatches { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* M396 (the critic: three rows ending at three right edges, a Fill row that
+   wrapped one swatch alone, two label styles in one pane). Each row's label
+   sits on its OWN line in the pane's caps label style (.inspector__label's),
+   and every swatch row shares ONE grid of equal cells, so a column is a
+   column from Shape down to Text. */
+.shape-inspector__row { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-3); }
+.shape-inspector__label { font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.shape-inspector__swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(26px, 1fr)); gap: var(--sp-2); }
+.shape-inspector__acts { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.shape-inspector__act {
+  display: inline-flex; align-items: center; height: 26px; padding: 0 var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--s-1); color: var(--fg-2);
+  font-family: var(--font-ui); font-size: var(--t-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.shape-inspector__act:hover { background: var(--s-4); color: var(--fg); }
+.shape-inspector__act:focus-visible { outline: 2px solid var(--iris); outline-offset: 1px; }
 .shape-inspector__swatch {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 28px; height: 26px; padding: 0 var(--sp-2);
+  min-width: 0; height: 26px; padding: 0;
   border: 1px solid var(--line); border-radius: var(--r-md);
   background: var(--s-1); color: var(--fg-2);
   cursor: pointer;
@@ -10306,13 +10358,16 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .shape-inspector__glyph text { fill: currentColor; font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; }
 .shape-inspector__chip { width: 14px; height: 14px; border-radius: var(--r-full); border: 1px solid var(--line-strong); background: var(--s-1); }
 .shape-inspector__chip[data-fill="none"] { background: transparent; border-style: dashed; }
+/* A fill is shown AS the fill: the tint paints the whole swatch (inset by the
+   swatch's own border), not a 14px dot nobody could tell apart on dark. */
+.shape-inspector__swatch--fill { padding: var(--sp-2); }
+.shape-inspector__swatch--fill .shape-inspector__chip { width: 100%; height: 100%; border-radius: var(--r-sm); }
 .shape-inspector__chip[data-fill="yellow"] { background: var(--tint-yellow); }
 .shape-inspector__chip[data-fill="blue"] { background: var(--tint-blue); }
 .shape-inspector__chip[data-fill="green"] { background: var(--tint-green); }
 .shape-inspector__chip[data-fill="pink"] { background: var(--tint-pink); }
 .shape-inspector__chip--line { background: transparent; border-width: 2px; border-color: var(--line-strong); }
 .shape-inspector__chip--line[data-stroke="ink"] { border-color: var(--fg-2); }
-.shape-inspector__chip--line[data-stroke="iris"] { border-color: var(--iris); }
 .shape-inspector__chip--line[data-stroke="violet"] { border-color: var(--violet); }
 .shape-inspector__chip--line[data-stroke="none"] { border-style: dashed; border-width: 1px; }
 .shape-inspector__ink { font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
@@ -10328,7 +10383,6 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .connector-layer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; z-index: 0; pointer-events: none; }
 .connector { --connector-stroke: var(--fg-3); }
 .connector[data-stroke="ink"] { --connector-stroke: var(--fg-2); }
-.connector[data-stroke="iris"] { --connector-stroke: var(--iris); }
 .connector[data-stroke="violet"] { --connector-stroke: var(--violet); }
 .connector[data-stroke="none"] { --connector-stroke: var(--line); }
 .connector__line { fill: none; stroke: var(--connector-stroke); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
@@ -10378,23 +10432,24 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .shape__live-ring { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .shape__live-ring path { fill: none; stroke: var(--tone); stroke-width: 3; stroke-linejoin: round; }
 .shape__live-ring[data-tone="asleep"] path, .shape__live-ring[data-tone="none"] path, .shape__live-ring[data-tone="starting"] path { stroke-dasharray: 6 5; stroke-width: 2; }
+/* M396 (the critic: "the bold idle chip is larger than the label it
+   annotates"). The chip IS the header's state word — a .badge (dot + word in
+   the tone, hairline capsule) — so the shape and the rail and the panel say
+   a state in one form; and it is NOT counter-scaled: it sizes with the shape
+   it annotates, like the label beside it, never louder than the words. */
 .shape__live {
   position: absolute;
   top: 0; right: 0;
-  transform: translate(35%, -60%) scale(var(--chrome-scale, 1));
+  transform: translate(35%, -60%);
   transform-origin: right bottom;
-  padding: 0 var(--sp-3);
-  border-radius: var(--r-full);
-  border: 1px solid var(--tone);
   background: var(--s-1);
-  color: var(--tone);
   font-family: var(--font-ui);
-  font-size: var(--t-xs);
-  font-weight: 600;
-  line-height: 1.6;
+  font-weight: 500;
   white-space: nowrap;
   pointer-events: none;
 }
+.shape__live[data-tone] { color: var(--tone); border-color: var(--tone-dim); }
+.shape__live[data-tone="asleep"], .shape__live[data-tone="none"], .shape__live[data-tone="starting"] { color: var(--muted); border-color: var(--border); }
 .world[data-detail="block"] .shape__live, .world[data-detail="cluster"] .shape__live { visibility: hidden; }
 .world[data-detail="summary"] .shape__live-ring path { stroke-width: 6; }
 .world[data-detail="block"] .shape__live-ring path, .world[data-detail="cluster"] .shape__live-ring path { stroke-width: 12; }

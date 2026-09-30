@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX, type MutableRefObject } from 'react'
 import { REASON_GROUP_NEEDS_TWO, type PaletteActions } from '@renderer/palette/commands'
 import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
@@ -278,8 +278,43 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
       ? `Ask about ${activeTaskTitle}…`
       : `Ask ${destinationLabel}…`
 
+  // M396. THE PILL YIELDS TO THE HUD. Both float at the bottom of the host;
+  // the pill is centred and the HUD pinned right, and once Create joined the
+  // HUD the two met on an ordinary window ("1 session runnir" in the critic's
+  // flip scene). Measured, never assumed: when the rest button's right edge
+  // would pass the HUD's left (less a gap), the pill steps left by exactly
+  // that — never past the host's own left gutter — and back to its centre
+  // when there is room. Only the bottom row is judged; an expanded panel sits
+  // above the HUD. Observed on the pill, the HUD and the host (a resize, a
+  // drawer, the HUD's own label changing).
+  const rootRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const pill = rootRef.current
+    const host = pill?.parentElement
+    if (pill === null || pill === undefined || host === null || host === undefined || typeof ResizeObserver === 'undefined') return
+    const GAP = 12
+    const place = (): void => {
+      const rest = pill.querySelector<HTMLElement>(':scope > .command-pill__rest') ?? pill
+      const hud = host.querySelector<HTMLElement>(':scope > .canvas-hud')
+      pill.style.setProperty('--pill-shift', '0px')
+      if (hud === null || hud.offsetWidth === 0) return
+      const r = rest.getBoundingClientRect(), h = hud.getBoundingClientRect(), hb = host.getBoundingClientRect()
+      const over = r.right - (h.left - GAP)
+      if (over <= 0 || r.bottom < h.top) return
+      const room = Math.max(0, r.left - hb.left - GAP)
+      pill.style.setProperty('--pill-shift', `${-Math.min(over, room)}px`)
+    }
+    place()
+    const ro = new ResizeObserver(place)
+    ro.observe(pill)
+    ro.observe(host)
+    const hud = host.querySelector<HTMLElement>(':scope > .canvas-hud')
+    if (hud !== null) ro.observe(hud)
+    return () => { ro.disconnect() }
+  }, [])
+
   return (
-    <div className="command-pill" data-command-pill="" data-pill-expanded={expanded ? '' : undefined}
+    <div ref={rootRef} className="command-pill" data-command-pill="" data-pill-expanded={expanded ? '' : undefined}
       onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       {expanded && (
         <div className="command-pill__panel" role="group" aria-label="Act on this canvas">

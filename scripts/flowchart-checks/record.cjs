@@ -13,9 +13,9 @@ module.exports = async function (ok, F) {
     bare !== null && bare.form === 'process' && bare.text === '' && !('fill' in bare) && !('stroke' in bare) && !('ink' in bare) && w.length === 0, JSON.stringify({ bare, w }))
 
   const w2 = []
-  const bad = R.parseShapeRecord({ form: 'decision', text: 7, fill: 'magenta', stroke: 'iris', ink: 'loud' }, w2, 'p2')
+  const bad = R.parseShapeRecord({ form: 'decision', text: 7, fill: 'magenta', stroke: 'violet', ink: 'loud' }, w2, 'p2')
   ok('flowchart.record.2 a malformed text or style field costs THAT field and warns; the shape and its good fields survive',
-    bad !== null && bad.form === 'decision' && bad.text === '' && bad.stroke === 'iris' && !('fill' in bad) && !('ink' in bad) && w2.length === 3, JSON.stringify({ bad, w2 }))
+    bad !== null && bad.form === 'decision' && bad.text === '' && bad.stroke === 'violet' && !('fill' in bad) && !('ink' in bad) && w2.length === 3, JSON.stringify({ bad, w2 }))
 
   const w3 = []
   const gone = [R.parseShapeRecord({ form: 'hexagon' }, w3, 'p3'), R.parseShapeRecord(undefined, w3, 'p4'), R.parseShapeRecord([], w3, 'p5')]

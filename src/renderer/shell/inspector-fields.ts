@@ -27,7 +27,7 @@ import type { PendingApproval } from './rail-sections'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { noteSummary } from '@shared/notes'
 import { isNotePanel, isRelayPanel, isShapePanel } from '@renderer/panels/panels'
-import { shapeFormWord, shapeSummary, type ShapeRecord } from '@shared/flowchart'
+import { shapeFormWord, type ShapeRecord } from '@shared/flowchart'
 
 /**
  * What the inspector renders, as plain data.
@@ -1042,14 +1042,16 @@ export function buildInspectorModelBare(
       { key: 'relay-share', label: 'shared', value: panel.relay.shareId === undefined ? 'no — only you can attach' : 'with this workspace\'s members, by their role' }
     ] }
   }
-  // M388. The seventeenth kind: its form and label as rows; the style
-  // controls are the inspector's editor section (ShapeInspector), because
-  // configuration belongs in the inspector (the density layers).
+  // M388. The seventeenth kind: the style controls are the inspector's editor
+  // section (ShapeInspector), because configuration belongs in the inspector
+  // (the density layers). M396: no FORM / LABEL rows — the heading already
+  // says both ("decision · Is it valid?") and the pressed Shape swatch says
+  // the form again (the critic: the same fact three times). An EMPTY label is
+  // the one fact the heading cannot carry, so it alone keeps a row.
   if (isShapePanel(panel)) {
-    return { kind: 'shape', shape: panel.shape, reviewable: false, state: { kind: 'shape', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
-      { key: 'form', label: 'form', value: shapeFormWord(panel.shape.form) },
-      { key: 'text', label: 'label', value: panel.shape.text === '' ? 'empty — double-click the shape to write one' : shapeSummary(panel.shape.text, panel.shape.form, 60) }
-    ] }
+    return { kind: 'shape', shape: panel.shape, reviewable: false, state: { kind: 'shape', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), restartable: false, reattached: false, links, usage: NO_USAGE, fields: panel.shape.text === ''
+      ? [{ key: 'text', label: 'label', value: `empty — double-click the ${shapeFormWord(panel.shape.form)} to write one` }]
+      : [] }
   }
   // M187. The sixteenth kind: what it IS and what changes it — its form, its
   // own text and (a sticky's) tint. No process metrics: a note has no process,

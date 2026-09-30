@@ -28,6 +28,8 @@ export interface EmptyState {
 
 export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'panels', sentence: 'no panels — ⌘N to start one' },
+  /** M396. The Panels list is empty but the canvas is not: shapes are never rows (D8), and `no panels` beside a chart read as an empty canvas. */
+  { id: 'panels-shapes', sentence: 'no panels — a chart\'s shapes stay on the canvas, not in this list; ⌘N starts a panel' },
   { id: 'workspaces', sentence: 'no workspaces — one holds a canvas of panels', verb: 'New workspace…' },
   { id: 'runs', sentence: 'no runs yet — a handoff that fires records one' },
   { id: 'snapshots', sentence: 'no snapshots yet — one is kept a minute after each save' },

@@ -623,9 +623,13 @@ const SCENES = [
   { name: 'group-collapsed', intent: 'The same group carded: its live member is now a card inside a dashed frame, and nothing was closed.',
     run: async (k) => { await k.click('.canvas-group__toggle'); await sleep(500); await k.shot('group-collapsed'); await k.click('.canvas-group__toggle'); await sleep(300) } },
   { name: 'merged', intent: 'The merged view: every workspace\'s panels at once, the api lane in frame with its header, the read-only chip in the top bar, the HUD pill at 22 %.',
-    run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
+    // M396. Everything framed first, THEN pulled back: the old camera was tuned
+    // against the host-scroll displacement M395 removed, and landed with the
+    // left third empty and `nightly sweep` cut at the right edge (the critic).
+    run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
   { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name clipped to the frame and its state on a tone wash; the minimap agrees.',
-    run: async (k) => { await k.goTo('the kinds'); await k.zoom(0.22); await k.shot('zoomed-out') } },
+    // M396. Framed, then pulled back (merged's reason, above).
+    run: async (k) => { await k.goTo('the kinds'); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.22); await k.shot('zoomed-out') } },
   { name: 'zoomed-out-dark', intent: 'The zoomed-out canvas on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.shot('zoomed-out-dark'); await k.theme('light'); await k.zoom(1) } },
   { name: 'compact', intent: 'The shell at its compact breakpoint (1000px wide): the navigator and context become drawers, the canvas keeps the width.', size: [1000, 760],

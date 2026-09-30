@@ -759,7 +759,11 @@ function InspectorPanel({
           )}
         </div>
       )}
-      <div className="inspector__state">
+      {/* M396. A shape has no state of its own — the grey dot beside the word
+          "shape" sat in the state slot saying nothing (the critic's flag); its
+          form and label are the heading. A shape wired to a live object wears
+          THAT object's state on the canvas (M393), not here. */}
+      {model.kind !== 'shape' && <div className="inspector__state">
         {/*
           The ATTRIBUTE, not only a class: a class is a styling decision a
           restyle may rename, while data-agent-state is this pane's stated
@@ -778,7 +782,7 @@ function InspectorPanel({
           <span className="inspector__badge" data-inspector-badge="reattached">reattached</span>
         )}
         {pid !== undefined && pid !== '—' && <span className="inspector__pid inspector__value--mono">pid {pid}</span>}
-      </div>
+      </div>}
       </div>
       {/* Tabs, grouped by QUESTION rather than by feature: Detail (what is
           this panel), Work (what has it done and cost), Tools (what can it
@@ -853,7 +857,10 @@ function InspectorPanel({
           workflow node's selection does not show the enclosing workflow
           panel's unrelated process metadata"). The section is absent then,
           rather than saying `not measured` about a block. */}
-      {!(model.kind === 'workflow' && nodeSelected) && (() => {
+      {/* M396. Nor for a SHAPE: a diagram's box has no process, and a section
+          that can only ever say `not measured` is the zero-value statement
+          the rest rule forbids (the critic's product-rule flag). */}
+      {!(model.kind === 'workflow' && nodeSelected) && model.kind !== 'shape' && (() => {
         // A chat's process is main's (M71) and the sampler walks terminal pids
         // only (Canvas.tsx's isTerminalPanel targets): for every kind but a
         // terminal the honest arm is `not measured`, never `not running`.

@@ -155,6 +155,13 @@ fails without its fix.
 Not changed, recorded: `redact.ts`'s GitHub pattern needs a word boundary, so two tokens pasted
 back to back with no separator match neither — the scrubber's own limit, older than this run.
 
+### D13. Iris is not an authored colour (M396)
+The visual critic's product-rule flag: iris is the canvas's selection colour and the running
+hue, and since M393 a shape's OUTLINE is where live state is painted — an iris-lined shape at
+rest read as selected or running. It leaves `SHAPE_STROKES` (shapes and connectors). Violet
+stays: groups already offer it as an authored colour. A record holding `iris` (written only on
+this unshipped branch) loads with that field dropped (`flowchart.persist.11`).
+
 ## The live-app audit (2026-09-29, 112 screenshots, old build)
 
 A fenced real-renderer driver used the canvas as a first-timer (empty canvas) and as a daily

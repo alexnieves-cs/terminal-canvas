@@ -9,7 +9,8 @@ import type { ShapeStylePatch } from '@renderer/canvas/useFlowchartVerbs'
 /**
  * M388. A shape's configuration, in the inspector — where the density layers
  * put configuration (never on the shape at rest, which is its label alone).
- * Four rows of swatches: form, fill, line, text. Each swatch is a real button
+ * Four rows of swatches on ONE grid (form, fill, line, text), then the
+ * chart's acts (arrange, export, work). Each swatch is a real button
  * with its name as its label and `aria-pressed` for the current value, and
  * each press is ONE `setShapeStyle` — one history entry, the same verb the
  * palette's `shape-style` and an agent's line reach.
@@ -32,7 +33,7 @@ export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord
       </Row>
       <Row label="Fill">
         {SHAPE_FILLS.map((f: ShapeFill) => (
-          <button key={f} type="button" className="shape-inspector__swatch" aria-pressed={fill === f} aria-label={`${f} fill`} title={f} data-shape-fill-choice={f}
+          <button key={f} type="button" className="shape-inspector__swatch shape-inspector__swatch--fill" aria-pressed={fill === f} aria-label={`${f} fill`} title={f} data-shape-fill-choice={f}
             onClick={() => { if (fill !== f) onStyle({ fill: f }) }}>
             <span className="shape-inspector__chip" data-fill={f} />
           </button>
@@ -46,18 +47,6 @@ export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord
           </button>
         ))}
       </Row>
-      {onChart !== undefined && (
-        <div className="shape-inspector__row" role="group" aria-label="Chart">
-          <span className="shape-inspector__label">Chart</span>
-          <div className="shape-inspector__swatches">
-            <button type="button" className="shape-inspector__swatch" data-shape-chart="plan" title="Start work from this chart — its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>Start work…</button>
-            <button type="button" className="shape-inspector__swatch" data-shape-chart="layout-down" title="Lay out this chart, top to bottom" onClick={() => { onChart('layout-down') }}>Lay out ↓</button>
-            <button type="button" className="shape-inspector__swatch" data-shape-chart="layout-right" title="Lay out this chart, left to right" onClick={() => { onChart('layout-right') }}>Lay out →</button>
-            <button type="button" className="shape-inspector__swatch" data-shape-chart="export-mermaid" title="Export the chart as Mermaid — secrets scrubbed" onClick={() => { onChart('export-mermaid') }}>Mermaid…</button>
-            <button type="button" className="shape-inspector__swatch" data-shape-chart="export-svg" title="Export the chart as SVG — text only" onClick={() => { onChart('export-svg') }}>SVG…</button>
-          </div>
-        </div>
-      )}
       <Row label="Text">
         {SHAPE_INKS.map((i: ShapeInk) => (
           <button key={i} type="button" className="shape-inspector__swatch" aria-pressed={ink === i} aria-label={i === 'fg' ? 'strong text' : 'quiet text'} title={i === 'fg' ? 'strong' : 'quiet'} data-shape-ink-choice={i}
@@ -66,6 +55,33 @@ export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord
           </button>
         ))}
       </Row>
+      {onChart !== undefined && (
+        <>
+          {/* M396 (the critic): Start work is a different KIND of act from
+              arranging or exporting — it proposes real work — so it has its
+              own row, never a button among the exports. */}
+          <div className="shape-inspector__row" role="group" aria-label="Arrange">
+            <span className="shape-inspector__label">Arrange</span>
+            <div className="shape-inspector__acts">
+              <button type="button" className="shape-inspector__act" data-shape-chart="layout-down" title="Lay out this chart, top to bottom" onClick={() => { onChart('layout-down') }}>Lay out ↓</button>
+              <button type="button" className="shape-inspector__act" data-shape-chart="layout-right" title="Lay out this chart, left to right" onClick={() => { onChart('layout-right') }}>Lay out →</button>
+            </div>
+          </div>
+          <div className="shape-inspector__row" role="group" aria-label="Export">
+            <span className="shape-inspector__label">Export</span>
+            <div className="shape-inspector__acts">
+              <button type="button" className="shape-inspector__act" data-shape-chart="export-mermaid" title="Export the chart as Mermaid — secrets scrubbed" onClick={() => { onChart('export-mermaid') }}>Mermaid…</button>
+              <button type="button" className="shape-inspector__act" data-shape-chart="export-svg" title="Export the chart as SVG — text only, secrets scrubbed" onClick={() => { onChart('export-svg') }}>SVG…</button>
+            </div>
+          </div>
+          <div className="shape-inspector__row" role="group" aria-label="Work">
+            <span className="shape-inspector__label">Work</span>
+            <div className="shape-inspector__acts">
+              <button type="button" className="shape-inspector__act" data-shape-chart="plan" title="Start work from this chart — its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>Start work from this chart…</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

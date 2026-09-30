@@ -264,7 +264,7 @@ function themeColours(): FlowchartSvgColours {
     return probe.fillStyle
   }
   const fill: Record<ShapeFill, string> = { plain: v('--s-1', '#f6f7fa'), none: 'none', yellow: v('--tint-yellow', '#fbf3d5'), blue: v('--tint-blue', '#e2ecf9'), green: v('--tint-green', '#e0f0e4'), pink: v('--tint-pink', '#f9e4ec') }
-  const stroke: Record<ShapeStroke, string> = { line: v('--line-strong', '#b5bcc7'), ink: v('--fg-2', '#3f4552'), iris: v('--iris', '#0b7f97'), violet: v('--violet', '#6a4fc4'), none: 'none' }
+  const stroke: Record<ShapeStroke, string> = { line: v('--line-strong', '#b5bcc7'), ink: v('--fg-2', '#3f4552'), violet: v('--violet', '#6a4fc4'), none: 'none' }
   const ink: Record<ShapeInk, string> = { fg: v('--fg', '#1b1e26'), muted: v('--fg-3', '#5b6271') }
   return { fill, stroke, ink, background: v('--s-0', '#e3e7ee'), line: v('--fg-3', '#5b6271') } as FlowchartSvgColours
 }

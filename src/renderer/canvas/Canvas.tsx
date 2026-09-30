@@ -8402,6 +8402,7 @@ export function Canvas({
       <Navigator
         onResizeHandleDown={onNavResizeDown}
         hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
+        shapeCount={shapePanels.length}
         board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}

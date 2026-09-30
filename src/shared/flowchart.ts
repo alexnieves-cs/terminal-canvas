@@ -25,11 +25,17 @@ export const SHAPE_FORMS: readonly ShapeForm[] = ['process', 'decision', 'termin
  * "needs you" from across the canvas.
  */
 export type ShapeFill = 'plain' | 'none' | 'yellow' | 'blue' | 'green' | 'pink'
-export type ShapeStroke = 'line' | 'ink' | 'iris' | 'violet' | 'none'
+export type ShapeStroke = 'line' | 'ink' | 'violet' | 'none'
 export type ShapeInk = 'fg' | 'muted'
 
 export const SHAPE_FILLS: readonly ShapeFill[] = ['plain', 'none', 'yellow', 'blue', 'green', 'pink']
-export const SHAPE_STROKES: readonly ShapeStroke[] = ['line', 'ink', 'iris', 'violet', 'none']
+// M396 (the critic's product-rule flag): no `iris`. Iris is the canvas's
+// selection colour and the running hue, and since M393 a shape's OUTLINE is
+// where live state is painted — an iris-lined shape at rest read as selected
+// or running. Violet stays: it is already an authored colour (GROUP_COLOURS).
+// A record holding `iris` (written only on the unshipped M388 branch) costs
+// that field and draws the default line.
+export const SHAPE_STROKES: readonly ShapeStroke[] = ['line', 'ink', 'violet', 'none']
 export const SHAPE_INKS: readonly ShapeInk[] = ['fg', 'muted']
 
 /** The record. `fill`/`stroke`/`ink` absent mean the form's default — every shape ever minted until a person restyles it. */

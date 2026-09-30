@@ -56,7 +56,7 @@ module.exports = async function (ok, F) {
   const layout1 = [
     term('t1', { connectors: [FULL_CONN, { id: 'cx2', to: 't1x' }] }),
     term('t1x', { x: 800, z: 3 }),
-    shp('s1', { form: 'decision', text: 'Ship it?\nyes / no', fill: 'blue', stroke: 'iris', ink: 'muted', step: { item: 'work1', step: 's3' } }, { connectors: [{ id: 'cx3', to: 't1', ends: 'none' }, { id: 'cx4', to: 's2', label: 'go', dashed: true }] }),
+    shp('s1', { form: 'decision', text: 'Ship it?\nyes / no', fill: 'blue', stroke: 'violet', ink: 'muted', step: { item: 'work1', step: 's3' } }, { connectors: [{ id: 'cx3', to: 't1', ends: 'none' }, { id: 'cx4', to: 's2', label: 'go', dashed: true }] }),
     shp('s2', { form: 'process', text: 'Do it' }, { x: 400 }),
     shp('s3', { form: 'junction', text: '' }, { x: 700, w: 28, h: 28 })
   ]
@@ -68,7 +68,7 @@ module.exports = async function (ok, F) {
   group('flowchart.persist.1 a shape (every style field and a plan-step binding) and connectors held by a TERMINAL and by a shape survive parse → toPanels → fromPanels → parse exactly — the adapter is the door a schema-only check cannot see, and a connector it forgets is lost on the next relaunch with nothing said',
     [
       ['the file parses clean', () => r1.warnings.length === 0 && r1.panels.length === 5],
-      ['the shape\'s form, text and every style field and its step binding', () => eq(byId(r1.panels, 's1').shape, { form: 'decision', text: 'Ship it?\nyes / no', fill: 'blue', stroke: 'iris', ink: 'muted', step: { item: 'work1', step: 's3' } })],
+      ['the shape\'s form, text and every style field and its step binding', () => eq(byId(r1.panels, 's1').shape, { form: 'decision', text: 'Ship it?\nyes / no', fill: 'blue', stroke: 'violet', ink: 'muted', step: { item: 'work1', step: 's3' } })],
       ['a terminal\'s connector keeps every field', () => eq(byId(r1.panels, 't1').connectors, [FULL_CONN, { id: 'cx2', to: 't1x' }])],
       ['toPanels holds the shape as a shape and the terminal\'s connectors on the terminal', () => s1.kind === 'shape' && s1.shape.step.step === 's3' && byId(live1, 't1').connectors.length === 2 && byId(live1, 't1').kind === 'terminal'],
       ['fromPanels writes back what was read, panel for panel (only the explicit terminal kind is added)', () => eq(back1.map((p) => (p.kind === 'terminal' ? strip(p) : p)), r1.panels)],
@@ -149,7 +149,7 @@ module.exports = async function (ok, F) {
     shp('bad1', { form: 'hexagon', text: 'x' }),
     shp('bad2', undefined),
     shp('bad3', 'process'),
-    shp('half', { form: 'decision', text: 7, fill: 'magenta', stroke: 'iris', ink: 'loud', step: { item: '', step: 's1' } }, { x: 300 }),
+    shp('half', { form: 'decision', text: 7, fill: 'magenta', stroke: 'violet', ink: 'loud', step: { item: '', step: 's1' } }, { x: 300 }),
     shp('step2', { form: 'process', text: 'a', step: 'nope' }, { x: 500 }),
     shp('step3', { form: 'process', text: 'a', step: { item: 'w', step: 3 } }, { x: 700 }),
     shp('good2', { form: 'io', text: 'kept', fill: 'green', step: { item: 'w9', step: 's2' } }, { x: 900 })
@@ -159,7 +159,7 @@ module.exports = async function (ok, F) {
     [
       ['the three unusable shapes are gone, the others survive', () => eq(r5.panels.map((p) => p.id), ['ok1', 'half', 'step2', 'step3', 'good2'])],
       ['each dropped panel is named, with the unknown form quoted', () => r5.warnings.some((w) => /shape panel bad1/.test(w) && /hexagon/.test(w) && /dropped/.test(w)) && r5.warnings.some((w) => /shape panel bad2/.test(w) && /dropped/.test(w)) && r5.warnings.some((w) => /shape panel bad3/.test(w) && /dropped/.test(w))],
-      ['a wrong-typed text costs the text; the good stroke survives; the bad fill, ink and step cost only themselves', () => half.shape.form === 'decision' && half.shape.text === '' && half.shape.stroke === 'iris' && !('fill' in half.shape) && !('ink' in half.shape) && !('step' in half.shape)],
+      ['a wrong-typed text costs the text; the good stroke survives; the bad fill, ink and step cost only themselves', () => half.shape.form === 'decision' && half.shape.text === '' && half.shape.stroke === 'violet' && !('fill' in half.shape) && !('ink' in half.shape) && !('step' in half.shape)],
       ['those four field losses warn, naming the panel', () => r5.warnings.filter((w) => /shape panel half/.test(w)).length === 4],
       ['a malformed step (a non-record, a non-string step id) costs the binding only', () => !('step' in byId(r5.panels, 'step2').shape) && !('step' in byId(r5.panels, 'step3').shape) && byId(r5.panels, 'step2').shape.text === 'a' && r5.warnings.some((w) => /shape panel step2/.test(w)) && r5.warnings.some((w) => /shape panel step3/.test(w))],
       ['a healthy neighbour is untouched and silent', () => eq(byId(r5.panels, 'good2').shape, { form: 'io', text: 'kept', fill: 'green', step: { item: 'w9', step: 's2' } }) && !r5.warnings.some((w) => /ok1|good2/.test(w))],
@@ -269,5 +269,21 @@ module.exports = async function (ok, F) {
     const second = P.addConnector(first, 'y', { id: 'cx9', to: 'x' })
     ok('flowchart.persist.10 a connector id held by two panels loads ONCE (the second dropped by name), and addConnector refuses an id another panel already holds (same array back)',
       ids.length === 1 && warned && second === first, JSON.stringify({ ids, warnings: parsed.warnings }))
+  }
+
+  // M396. `iris` left the authored strokes (the selection and running hue,
+  // painted on a shape's outline by M393). A layout written before — only on
+  // this branch — still LOADS: the field costs itself, the shape and its
+  // arrow keep everything else.
+  {
+    const r = parse([
+      shp('old', { form: 'decision', text: 'Old', fill: 'blue', stroke: 'iris' }, { connectors: [{ id: 'cx5', to: 'next', stroke: 'iris', label: 'yes' }] }),
+      shp('next', { form: 'process', text: 'Next' }, { y: 300 })
+    ])
+    const old = byId(r.panels, 'old')
+    ok('flowchart.persist.11 a shape or connector saved with the retired iris stroke loads with that field dropped (a warning naming it) and every other field kept',
+      old !== undefined && !('stroke' in old.shape) && old.shape.fill === 'blue' && old.shape.text === 'Old' &&
+        old.connectors?.length === 1 && !('stroke' in old.connectors[0]) && old.connectors[0].label === 'yes' && r.warnings.some((w) => /shape panel old/.test(w) && /iris/.test(w)) && r.warnings.some((w) => /cx5/.test(w) && /stroke/.test(w)),
+      JSON.stringify({ old, warnings: r.warnings }))
   }
 }

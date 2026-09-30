@@ -289,7 +289,7 @@ function LiveMark({ word, tone, title, outline, w, h, mark }: { word: string; to
   return (
     <>
       <svg className="shape__live-ring" data-tone={tone} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><path d={outline} /></svg>
-      <span className="shape__live" data-tone={tone} data-shape-live={mark} title={title}>{word}</span>
+      <span className="badge shape__live" data-tone={tone} data-shape-live={mark} title={title}>{word}</span>
     </>
   )
 }

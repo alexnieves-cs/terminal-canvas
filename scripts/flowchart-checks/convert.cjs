@@ -354,7 +354,7 @@ module.exports = async function (ok, F) {
   const term = terminal('t1', 0, 900, [connector('cx9', 'sh1')])
   const S1 = shape('sh1', 'process', 'Alpha', 0, 0, [connector('cx1', 'sh2', { label: 'go' }), connector('cx2', 't1'), connector('cx3', 'nt1'), connector('cx4', 'gone')], {
     z: 7,
-    shape: { fill: 'blue', stroke: 'iris', step: { item: 'w1', step: 's1' } },
+    shape: { fill: 'blue', stroke: 'violet', step: { item: 'w1', step: 's1' } },
     panel: { links: [{ to: 'sh2' }], locked: true, pinned: true, templateBinding: { templateId: 'tpl', key: 'k' }, maximised: { restore: { id: 'sh1', x: 0, y: 0, w: 10, h: 10 } } }
   })
   const S2 = shape('sh2', 'decision', 'Beta', 300, 0, undefined, { z: 1 })
@@ -375,7 +375,7 @@ module.exports = async function (ok, F) {
       ['sh1 keeps cx1 (sh2) and cx3 (the note) — not cx2 (the terminal, not copied) nor cx4 (gone)', () => eq(p1.connectors.map((c) => c.id), ['cx1', 'cx3'])],
       ['a copy left with no connector has NO connectors key (sh3 pointed only at the terminal)', () => !('connectors' in pick('sh3')) && !('connectors' in pick('sh2'))],
       ['links, locked, pinned, maximised and the template binding are stripped; the picture\'s links too', () => !('links' in p1) && !('locked' in p1) && !('pinned' in p1) && !('maximised' in p1) && !('templateBinding' in p1) && !('links' in pick('img1'))],
-      ['a copy of a step\'s shape is not that step; its look survives', () => !('step' in p1.shape) && p1.shape.fill === 'blue' && p1.shape.stroke === 'iris']
+      ['a copy of a step\'s shape is not that step; its look survives', () => !('step' in p1.shape) && p1.shape.fill === 'blue' && p1.shape.stroke === 'violet']
     ].concat([
       ['(after editing the copy) the original shape, its connectors, links and step binding are exactly as they were', () => untouched && S1.shape.step.item === 'w1' && S1.links.length === 1 && S1.connectors.length === 4 && S1.locked === true]
     ]),

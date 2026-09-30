@@ -42,6 +42,8 @@ export interface NavigatorProps {
   rows: RailRow[]
   /** M173. The gesture hints not yet seen, rendered in the empty state (the strip that carried them is gone). */
   hints?: ReadonlyArray<{ id: string; text: string }>
+  /** M396. Shapes on the canvas — never rows (D8); the empty list says so rather than reading as an empty canvas. */
+  shapeCount?: number
   selectedId: string | null
   onGoToPanel: (id: string) => void
   onStartPanel: (id: string) => void
@@ -279,7 +281,9 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                 // empty; every unconditionally rendered list owes an empty
                 // state, and this one names the way out.
                 <li className="rail-empty">
-                  <EmptyState id="panels" glyph={<Grid />} />
+                  {(props.shapeCount ?? 0) > 0
+                    ? <EmptyState id="panels-shapes" glyph={<Grid />} />
+                    : <EmptyState id="panels" glyph={<Grid />} />}
                   {/* M173. The hints live here now, one sentence each, each gone for good once its gesture was used (`hints.seen`). */}
                   {(props.hints ?? []).length > 0 && (
                     <ul className="rail-hints" data-rail-hints>

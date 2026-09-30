@@ -1411,7 +1411,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // gives first; the separator goes; the header's clipped copy gives way on a
   // far card; and a margin label is capped at --t-xs on screen at both far
   // tiers, under the name's --t-md — never larger than the names beside it.
-  const title = has('.world[data-detail="summary"] .panel__card-summary-title', /font-size:\s*calc\(var\(--t-md\) \* var\(--far-scale/)
+  // M396: capped by the CARD's height (cqh on a size container) and centred
+  // SAFELY, so a short card clips the name's end, never its top.
+  const title = has('.world[data-detail="summary"] .panel__card-summary-title', /font-size:\s*min\(calc\(var\(--t-md\) \* var\(--far-scale[^;]*\d+cqh\)/) &&
+    has('.world[data-detail="summary"] .panel__card--summary', /justify-content:\s*safe center/) && has('.world[data-detail="summary"] .panel__card--summary', /container-type:\s*size/)
   const clamp = has('.world[data-detail="summary"] .far-name__name', /-webkit-line-clamp:\s*2/)
   const kicker = has('.world[data-detail="summary"] .far-name__kicker', /white-space:\s*nowrap/) && has('.world[data-detail="summary"] .far-name__kicker', /text-overflow:\s*ellipsis/)
   const sep = has('.world[data-detail="summary"] .far-name__sep', /display:\s*none/)
@@ -1420,6 +1423,18 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const labelCap = ['summary', 'block'].every((t) => has(`.world[data-detail="${t}"] .annotation__label`, /font-size:\s*min\([^;]*var\(--t-xs\) \* var\(--far-scale/))
   ok('revamp.far.1', 'a far card\'s name holds --t-md on screen (the unclamped --far-scale) across up to two lines, its agent kicker gives first, the header\'s clipped copy gives way, and margin labels are capped under the names',
     title && clamp && kicker && sep && header && declaredFar && labelCap, JSON.stringify({ title, clamp, kicker, sep, header, declaredFar, labelCap }))
+
+  // revamp.hud.1 — M396 (the critic's flip/palette/compact/header scenes):
+  // the pill's centring carries a measured --pill-shift (0 unless its rest
+  // would reach the HUD), the HUD steps out for an open world menu as the pill
+  // does, and Create keeps its word at every breakpoint (icon-only it read as
+  // a second zoom-in).
+  const pillShift = has('.command-pill', /transform:\s*translateX\(calc\(-50% \+ var\(--pill-shift, 0px\)\)\)/)
+  const hudRule = all.find((r) => /^\.canvas:has\(>\s*\.world \[role="menu"\]:not\(\[hidden\]\)\)\s*>\s*\.canvas-hud$/.test(r.sel.trim()))
+  const hudYield = hudRule !== undefined && /visibility:\s*hidden/.test(hudRule.body) && /pointer-events:\s*none/.test(hudRule.body)
+  const createWord = !all.some((r) => /\.new-object-row__plus span$/.test(r.sel.trim()) && /display:\s*none/.test(r.body))
+  ok('revamp.hud.1', 'the command pill steps left of the HUD only by a measured --pill-shift, the HUD yields to an open world menu, and Create keeps its word at every breakpoint',
+    pillShift && hudYield && createWord, JSON.stringify({ pillShift, hudYield, createWord }))
 
   // revamp.motion.1 — HONEST MOTION (Assessment B): the arrival, the settle
   // and the pill's growth decelerate into place and never pass it — no

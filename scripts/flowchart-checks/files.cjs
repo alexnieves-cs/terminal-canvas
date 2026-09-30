@@ -24,7 +24,7 @@ const expectMermaid = (F, a, b, extra = {}) => F.mermaid.serializeMermaid({ dire
 /** A theme's colours as the renderer reads them (`themeColours`). */
 const COLOURS = {
   fill: { plain: '#f6f7fa', none: 'none', yellow: '#fbf3d5', blue: '#e2ecf9', green: '#e0f0e4', pink: 'rgba(249, 228, 236, .9)' },
-  stroke: { line: '#b5bcc7', ink: '#3f4552', iris: '#0b7f97', violet: 'rgb(106, 79, 196)', none: 'none' },
+  stroke: { line: '#b5bcc7', ink: '#3f4552', violet: 'rgb(106, 79, 196)', none: 'none' },
   ink: { fg: '#1b1e26', muted: '#5b6271' },
   background: '#fafafa',
   line: '#444444'
@@ -297,7 +297,7 @@ module.exports = async function (ok, F) {
       JSON.stringify({ seen }))
 
     const hostileColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, background: '#fff" onload="alert(1)' }, suggestedName: 'x' })
-    const fetchColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, stroke: { ...COLOURS.stroke, iris: 'url(https://example.com/x)' } }, suggestedName: 'x' })
+    const fetchColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, stroke: { ...COLOURS.stroke, violet: 'url(https://example.com/x)' } }, suggestedName: 'x' })
     const missingColour = await exp({ format: 'svg', model: MODEL(), colours: { ...COLOURS, ink: { fg: '#000' } }, suggestedName: 'x' })
     const empty = await exp({ format: 'svg', model: { shapes: [], connectors: [] }, colours: COLOURS, suggestedName: 'x' })
     const noModel = await exp({ format: 'svg', text: '<svg/>', suggestedName: 'x' })
