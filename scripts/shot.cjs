@@ -1262,14 +1262,28 @@ const SCENES = [
   { name: 'flowchart', intent: 'M388–M390. A flowchart built from the keyboard on an empty canvas: Start (a start/end stadium) → Read the request → Is it valid? (a decision diamond) whose `no` branch runs right to Ask for a fix and whose `yes` continues down to Build the change → Done (a stadium). Connectors are elbow lines with arrowheads leaving and entering at the shapes\' ports; the two out of the decision carry their words on ground-coloured chips; every shape at rest shows its label only, in the UI face, centred, with no chrome.', size: [1440, 900],
     run: async (k) => {
       await k.emptyCanvas()
+      // The light theme: the dark one is the next scene's, and an earlier scene may have left either.
+      await k.theme('light')
       const key = async (keyCode, modifiers = []) => { k.wc.sendInputEvent({ type: 'keyDown', keyCode, modifiers }); k.wc.sendInputEvent({ type: 'keyUp', keyCode, modifiers }); await sleep(260) }
       const typeText = async (text) => { k.wc.insertText(text); await sleep(200) }
       const press = async (x, y, clickCount = 1) => { k.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount }); k.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount }); await sleep(clickCount === 2 ? 450 : 300) }
       const dbl = async (x, y) => { k.wc.focus(); await press(x, y, 1); await press(x, y, 2) }
       const shapeAt = async (text) => JSON.parse(await k.js(`(() => { const e = [...document.querySelectorAll('.shape')].find((x) => x.getAttribute('aria-label').split(': ').slice(1).join(': ') === ${JSON.stringify(text)}); if (!e) return 'null'; const r = e.getBoundingClientRect(); return JSON.stringify({ id: e.getAttribute('data-panel-id'), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }) })()`))
+      // An earlier scene may leave the context pane open over the canvas: close it,
+      // then find GROUND beside the launcher by hit-testing (never a fixed point —
+      // a pane there took the double-click in a full run).
+      await k.context(false); await sleep(300)
+      const ground = JSON.parse(await k.js(`(() => { const h = document.querySelector('.canvas').getBoundingClientRect()
+        for (const fx of [0.82, 0.75, 0.9, 0.18]) for (const fy of [0.2, 0.3, 0.5]) { const x = Math.round(h.left + h.width * fx), y = Math.round(h.top + h.height * fy); const e = document.elementFromPoint(x, y)
+          if (e && (e.classList.contains('canvas') || e.classList.contains('world') || e.classList.contains('canvas__aura'))) return JSON.stringify({ x, y }) }
+        return 'null' })()`))
+      if (ground === null) throw new Error('flowchart scene: no bare ground on the empty canvas to double-click')
       // The ground beside the launcher: a double-click there is a process step with its label open.
-      await dbl(1180, 180)
-      if (!(await k.js(`document.activeElement !== null && document.activeElement.classList.contains('shape__editor')`))) throw new Error('flowchart scene: a double-click on the ground did not open a shape\'s label')
+      await dbl(ground.x, ground.y)
+      if (!(await k.js(`document.activeElement !== null && document.activeElement.classList.contains('shape__editor')`))) {
+        const under = await k.js(`(() => { const e = document.elementFromPoint(${ground.x}, ${ground.y}); return JSON.stringify({ under: e && (e.className && e.className.baseVal !== undefined ? e.className.baseVal : e.className), tag: e && e.tagName, shapes: document.querySelectorAll('.shape').length, active: document.activeElement && document.activeElement.className, overlays: [...document.querySelectorAll('[role=dialog], .replay, .palette, .share-dialog__card')].map((x) => x.className) }) })()`)
+        throw new Error('flowchart scene: a double-click on the ground did not open a shape\'s label ' + under)
+      }
       // Tab in a label commits it and makes the NEXT step, its own label open.
       await typeText('Start'); await key('Tab')
       await typeText('Read the request'); await key('Tab')
@@ -1295,8 +1309,11 @@ const SCENES = [
         const mid = JSON.parse(await k.js(`(() => { const h = document.querySelector('[data-connector-to="${to.id}"] [data-connector-hit]'); if (!h) return 'null'; const len = h.getTotalLength(); const p = h.getPointAtLength(len / 2); const m = h.getScreenCTM(); const pt = new DOMPoint(p.x, p.y).matrixTransform(m); return JSON.stringify({ x: Math.round(pt.x), y: Math.round(pt.y) }) })()`))
         if (mid === null) throw new Error(`flowchart scene: no line into ${toText}`)
         await dbl(mid.x, mid.y)
+        if (!(await k.js(`document.querySelector('.connector-label--editing') !== null`))) throw new Error(`flowchart scene: a double-click on the line into ${toText} did not open its label`)
         await typeText(word); await key('Return')
       }
+      // Everything in view first (the branch may have run past the window's edge).
+      await press(ground.x, ground.y); await k.press('1', { metaKey: true }); await sleep(700)
       await label('Ask for a fix', 'no')
       await label('Build the change', 'yes')
       // Nothing selected, the whole chart framed: the picture a person keeps.
@@ -1330,8 +1347,13 @@ const SCENES = [
       // The decision selected: handles, ports, and the inspector's Shape section.
       const dec = await centreOf(`.shape[data-panel-id="${await shapeId('Is it valid?')}"]`)
       await press(dec.x, dec.y)
+      // The inspector pane holds the Shape section; open it, THEN frame — Fit
+      // lands clear of an open drawer (safe-area.ts), so the chart is not under it.
+      await k.context(true); await sleep(400)
+      if (!(await k.js(`document.querySelector('.shape-inspector') !== null`))) throw new Error('flowchart-dark scene: the inspector shows no Shape section for the selected decision')
       await k.press('1', { metaKey: true }); await sleep(700)
       await k.shot('flowchart-dark')
+      await k.context(false); await sleep(300)
     } },
   // M388. Far away, a diagram stays a diagram: at the block tier the shapes
   // keep their silhouettes and the lines their weight; the words go.
