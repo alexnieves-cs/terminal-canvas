@@ -49,3 +49,23 @@ export function nextCardDetail(current: CardDetail, scale: number): CardDetail {
       return 'cluster'
   }
 }
+
+/**
+ * M395 (the critic's P1 #3). READING FROM AFAR: the far tier's name split so
+ * the part that TELLS CARDS APART survives. Agent names are `<agent> —
+ * <place>` (`claude — api (2)`), and an ellipsis at the end cut all four of
+ * the fixture's agents to the same `claude — …`. The kicker (`claude`) is the
+ * part that may give — one small line, truncated first — and the name
+ * (`api (2)`) is what the card is set in. A title with no ` — ` is all name.
+ * The separator is kept for the renderer, so the element's text is the title
+ * exactly (checks and the near tier's flipped card read it whole).
+ */
+export const FAR_TITLE_SEPARATOR = ' — '
+export function farTitleParts(title: string): { kicker?: string; name: string } {
+  const at = title.indexOf(FAR_TITLE_SEPARATOR)
+  if (at <= 0) return { name: title }
+  const kicker = title.slice(0, at)
+  const name = title.slice(at + FAR_TITLE_SEPARATOR.length)
+  if (kicker.trim() === '' || name.trim() === '') return { name: title }
+  return { kicker, name }
+}

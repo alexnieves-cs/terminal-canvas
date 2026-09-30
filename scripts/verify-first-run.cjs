@@ -111,12 +111,33 @@ check(LAUNCHER, 'fr.launcher.2 the composed next step is Start task · Ask a que
     /data-create-face="empty-strip"/.test(html) && !/data-create-object=/.test(html) && !/Ask without a folder/.test(html) &&
     !/>Start a general chat</.test(html), detail: { start, ask, create } }
 })
-check(LAUNCHER, 'fr.launcher.5 each of the three verbs says its OUTCOME — Start makes a task, Ask opens a conversation, Create adds an object — and the plan summary still names what Start will use', (m) => {
+// M395. A Start that cannot run for want of the sentence says WHY on itself
+// (the dead-end rule), so at rest its line is the reason; with a sentence it
+// is the outcome again — both arms through the one pure chooser.
+check(LAUNCHER, 'fr.launcher.5 each of the three verbs says its OUTCOME — Start makes a task, Ask opens a conversation, Create adds an object — a Start waiting on the sentence says so instead, and the plan summary still names what Start will use', (m) => {
   const html = launcher(m, { claude: '/b/claude' })
   const start = html.match(/<button\b[^>]*data-onboarding-start[\s\S]*?<\/button>/)?.[0] ?? ''
   const create = html.match(/<button\b[^>]*data-onboarding-create[\s\S]*?<\/button>/)?.[0] ?? ''
-  return { pass: /data-launcher-verb-hint="start"[^>]*>An agent works on it/.test(start) && /data-launcher-verb-hint="create"[^>]*>Add an object/.test(create) &&
-    /data-onboarding-summary=/.test(html), detail: { start: start.slice(0, 400), create } }
+  const outcome = typeof m.startVerbHint === 'function' ? [m.startVerbHint(undefined, false), m.startVerbHint(undefined, true), m.startVerbHint('folder', false)] : []
+  return { pass: /data-launcher-verb-hint="start"[^>]*>Describe the task first</.test(start) &&
+    /^An agent works on it/.test(outcome[0] ?? '') && /this folder/.test(outcome[1] ?? '') && /^An agent works on it/.test(outcome[2] ?? '') &&
+    /data-launcher-verb-hint="create"[^>]*>Add an object/.test(create) &&
+    /data-onboarding-summary=/.test(html), detail: { start: start.slice(0, 400), create, outcome } }
+})
+// M395 — revamp.launcher.1/.2. Step 3 is a CHOICE and says so, never step 1's
+// question again; the empty canvas's Create… promises what its sheet offers.
+check(LAUNCHER, 'revamp.launcher.1 step 3 is labelled "Choose how to start", no step repeats "what you want to work on", and a disabled Start task names its reason on the control', (m) => {
+  const html = launcher(m, { claude: '/b/claude' })
+  const step3 = html.match(/<li\b[^>]*data-launcher-step="start"[\s\S]*?<\/li>/)?.[0] ?? ''
+  const start = html.match(/<button\b[^>]*data-onboarding-start[\s\S]*?<\/button>/)?.[0] ?? ''
+  return { pass: /data-launcher-step-label="start"[^>]*>Choose how to start</.test(step3) && !/what you want to work on/i.test(html) &&
+    /\bdisabled=""/.test(start) && /Describe the task first/.test(start), detail: { step3: step3.slice(0, 300), start: start.slice(0, 300) } }
+})
+check(LAUNCHER, 'revamp.launcher.2 the Create… line names exactly what the create sheet offers — an agent, a terminal, a conversation, a workflow — and never a note or a file the sheet cannot make', (m) => {
+  const html = launcher(m, { claude: '/b/claude' })
+  const create = html.match(/<button\b[^>]*data-onboarding-create[\s\S]*?<\/button>/)?.[0] ?? ''
+  const hint = create.match(/data-launcher-verb-hint="create"[^>]*>([^<]*)</)?.[1] ?? ''
+  return { pass: hint === m.CREATE_SHEET_OFFERS && ['agent', 'terminal', 'conversation', 'workflow'].every((w) => hint.includes(w)) && !/\bnote\b|\bfile\b/.test(hint), detail: { hint } }
 })
 check(LAUNCHER, 'fr.launcher.3 the tmux notice and the engine status sit BELOW the action — after the start step in document order', (m) => {
   const html = launcher(m, { claude: '/b/claude' }, { tmux: 'no tmux', onDismissTmux: noop })
@@ -279,6 +300,25 @@ check(CREATE, 'create-face.2 create + stays when refused — disabled with a nam
   const html = renderToStaticMarkup(createElement(m.NewObjectRow, { onOpenCreate: noop, disabledReason: 'leave merged view to create an object' }))
   const open = tag(html, 'data-create-open') ?? ''
   return { pass: /\bdisabled=""/.test(open) && /leave merged view/.test(open), detail: { open } }
+})
+
+// M395 — revamp.create.1. THE ONE CREATE DOOR LIVES IN THE HUD: on the HUD's
+// own ground, before the zoom cluster, once; never mounted on the canvas's
+// top-left corner (where it printed onto a framed panel and clipped under the
+// top bar); and over an empty canvas the HUD offers no Fit verbs (nothing to
+// frame) — the launcher owns that surface. Static markup plus the mount site.
+const HUD = load('src/renderer/canvas/CanvasHud.tsx', 'first-run-hud.cjs', true)
+check(HUD, 'revamp.create.1 the canvas\'s one Create door sits inside the HUD before the zoom cluster, the canvas mounts it nowhere else, and an empty canvas\'s HUD offers no Fit verbs', (m) => {
+  const vp = { x: 0, y: 0, scale: 1 }
+  const html = renderToStaticMarkup(createElement(m.CanvasHud, { viewport: vp, onZoomBy: noop, onFit: noop, fitTask: { run: noop }, create: { onOpen: noop } }))
+  const empty = renderToStaticMarkup(createElement(m.CanvasHud, { viewport: vp, onZoomBy: noop, onFit: noop, fitTask: { run: noop }, empty: true }))
+  const canvas = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const once = (html.match(/data-create-open/g) ?? []).length === 1
+  const first = html.indexOf('data-create-open') > -1 && html.indexOf('data-create-open') < html.indexOf('data-hud-zoom-out')
+  return { pass: /^<div class="canvas-hud">/.test(html) && once && first && /data-hud-fit\b/.test(html) &&
+    !/data-hud-fit/.test(empty) && /data-hud-zoom-in/.test(empty) && !/data-create-open/.test(empty) &&
+    !/<NewObjectRow\b/.test(canvas) && /create=\{panels\.length > 0/.test(canvas),
+    detail: { html: html.slice(0, 320), empty: empty.slice(0, 200) } }
 })
 
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)

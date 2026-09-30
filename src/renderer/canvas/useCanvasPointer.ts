@@ -246,8 +246,11 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     // so an armed link would resolve onto whatever panel lies UNDER the pill
     // (it sits bottom-centre, where panels are), and a middle-press on it
     // would start a camera pan. shouldYieldWheel's pill rule, for the pointer.
+    // M395: the HUD (which now holds Create) and the minimap are the same kind
+    // of control over the same world — a press on Fit or on the map with link
+    // mode armed resolved the link onto the panel beneath them.
     const target = event.target as HTMLElement | null
-    if (target?.closest?.('.command-pill, .new-object-row')) return
+    if (target?.closest?.('.command-pill, .new-object-row, .canvas-hud, .minimap')) return
     if (onLinkModeMouseDownCapture(event)) return
     if (event.button !== 1) return
     if (palette.isOpen() || navGridIsOpenRef.current()) return

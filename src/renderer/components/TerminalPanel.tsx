@@ -11,7 +11,7 @@ import type { CardDetail } from '@renderer/canvas/card-detail'
 import { useTierFade } from '@renderer/canvas/tier-fade'
 import type { AgentState } from '@shared/types'
 import { CLOSE_PANEL_FACT } from '@shared/persistence'
-import { PanelFrame } from './PanelFrame'
+import { FarTitle, PanelFrame } from './PanelFrame'
 import { KindTerminal } from '@renderer/icons'
 import { agentHeader } from '@renderer/shell/rail-rows'
 
@@ -237,7 +237,7 @@ function TerminalPanelImpl({
       className={agentClass.trim()}
       // M44. A named group for a screen reader; the kind rides the label so
       // "claude — terminal" reads as one thing rather than an anonymous div.
-      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined }}
+      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
       title={panelLabel}
       agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
@@ -356,13 +356,13 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
       <div className="panel__card-cluster" data-card-cluster data-tone={shown.tone} />
     ) : d === 'block' ? (
         <div className={`panel__card-block${state ? ` panel__card-block--${state}` : ''}`} data-card-block data-tone={shown.tone}>
-          <span className="panel__card-block-title">{title}</span>
+          <span className="panel__card-block-title" title={typeof title === 'string' ? title : undefined}><FarTitle title={title} /></span>
         </div>
       ) : d === 'summary' ? (
         <div className="panel__card-summary" data-card-summary data-tone={shown.tone}>
           {/* M166. The terminal's glyph: at a fifth of the size a card is a light with a name. */}
           <span className="panel__card-summary-glyph" aria-hidden="true"><KindTerminal /></span>
-          <div className="panel__card-summary-title">{title}</div>
+          <div className="panel__card-summary-title" title={title}><FarTitle title={title} /></div>
           {/* The same affordance element the tail tier renders, with the same
               exact text: an unstarted panel's summary IS "not started", and
               three checks read this element wherever the camera is. */}

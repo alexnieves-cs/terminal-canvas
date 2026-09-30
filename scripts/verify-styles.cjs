@@ -1215,7 +1215,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // not a duration; every other literal is a duration that escaped the tokens.
   const literal = [...bare.matchAll(/(?:transition|animation|transition-duration|transition-delay|animation-duration|animation-delay)\s*:[^;}]*?(\d*\.?\d+m?s)\b/g)].filter((m) => !/^(0m?s|\.01ms)$/.test(m[1])).map((m) => m[0].replace(/\s+/g, ' ').slice(0, 60))
   // A RISE, not a scale: a scale on .pf__motion (an ancestor of .pf__body) broke product annot.1 — declined in the ledger.
-  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*translateY\(18px\)/.test(bare) && !/@keyframes\s+panel-enter\s*\{[^}]*scale\(/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-spring\)/.test(r.body))
+  // M395: a DECELERATING rise on --dur-2 (a surface arriving), no longer the
+  // hand-built 18px spring on --dur-spring; revamp.motion.1 pins "no overshoot".
+  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*translateY\(\d+px\)/.test(bare) && !/@keyframes\s+panel-enter\s*\{[^}]*scale\(/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-2\)/.test(r.body))
   const breath = /--dur-breath:\s*1\.2s/.test(bare)
   const names = [...bare.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]).sort()
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
@@ -1259,13 +1261,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // same fade and 6px rise — quieter than panel-enter's spring, never a scale.
   const allowed = ['first-arrive', 'sheet-enter', 'activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-live-type', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'tier-in', 'tier-out', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
-  ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a spring rise (never a scale above .pf__body), and only state-bearing moments declare keyframes',
+  ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a decelerating rise on --dur-2 (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
 }
 
 {
   const drag = all.some((r) => /\.panel\[data-panel-dragging\]/.test(r.sel) && /box-shadow:/.test(r.body) && !/transform:/.test(r.body))
-  const settle = all.some((r) => /\.panel\[data-panel-settling\]\s*>\s*\.panel__motion/.test(r.sel) && /panel-settle/.test(r.body) && /var\(--dur-spring\)/.test(r.body))
+  const settle = all.some((r) => /\.panel\[data-panel-settling\]\s*>\s*\.panel__motion/.test(r.sel) && /panel-settle/.test(r.body) && /var\(--dur-[\w-]+\)/.test(r.body))
   const flow = all.some((r) => /data-edge-activity="firing"/.test(r.sel) && /stroke-dasharray:/.test(r.body) && /edge-current/.test(r.body))
   const reduced = /prefers-reduced-motion:[^{]*reduce[\s\S]*?data-edge-activity="firing"[^}]*animation:\s*none/.test(bare)
   ok('motion.material.1', 'drag weight changes paint only, release settles the motion wrapper, and firing edges carry a reduced-motion-safe traveling current',
@@ -1364,6 +1366,83 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one floating ⋯ menu, absent from layout while closed, with its destructive action set off by a divider',
     menu !== undefined && /position:\s*absolute/.test(menu.body) && hidden !== undefined && /display:\s*none/.test(hidden.body) && divider !== undefined,
     JSON.stringify({ menu: menu?.body, hidden: hidden?.body, divider: divider?.body }))
+}
+
+// M395 — revamp.*. CHROME THAT YIELDS, AND READING FROM AFAR (the canvas
+// revamp, part B). Each is a stylesheet fact that fails silently if undone:
+// the map stops stepping aside, Create drifts back over the world, the pill
+// paints over an open menu again, a far name is set in world units again, a
+// keyframe grows its hand-built spring back.
+{
+  const rulesOf = (sel) => all.filter((r) => r.sel.split(',').map((x) => x.trim()).includes(sel))
+  const has = (sel, re) => rulesOf(sel).some((r) => re.test(r.body))
+  // revamp.minimap.3 — aside is a tucked tile that takes no pointer (the map
+  // AND its view rectangle, which carries its own pointer-events: auto);
+  // hidden fades out but keeps its box (visibility, never display); a
+  // transform and opacity on --dur-1; reduced motion drops the transition.
+  const aside = has('.minimap[data-presence="aside"]', /transform:\s*scale\(\s*0?\.\d+\s*\)/)
+  const asideNoPointer = has('.minimap[data-presence="aside"] *', /pointer-events:\s*none/) && has('.minimap[data-presence="aside"]', /pointer-events:\s*none/)
+  const hidden = has('.minimap[data-presence="hidden"]', /visibility:\s*hidden/) && has('.minimap[data-presence="hidden"]', /opacity:\s*0\s*(;|$)/) && !has('.minimap[data-presence="hidden"]', /display:/) && has('.minimap[data-presence="hidden"] *', /pointer-events:\s*none/)
+  const motion = has('.minimap', /transition:[^;]*transform var\(--dur-1\)[^;]*opacity var\(--dur-1\)/)
+  const reducedMap = /@media \(prefers-reduced-motion: reduce\) \{ \.minimap \{ transition: none; \} \}/.test(bare)
+  ok('revamp.minimap.3', 'the map steps aside as a tucked tile that takes no pointer (its view rectangle too), hides with its box kept, moves on --dur-1 and stands still under reduced motion',
+    aside && asideNoPointer && hidden && motion && reducedMap, JSON.stringify({ aside, asideNoPointer, hidden, motion, reducedMap }))
+
+  // revamp.create.2 — Create is HUD chrome: no rule positions the row over the
+  // world (absolute/top/left), and nothing fills it (primary.1's other half).
+  const row = all.filter((r) => /\.new-object-row\b/.test(r.sel))
+  const floating = row.filter((r) => /position:\s*absolute|(^|;)\s*top:|(^|;)\s*left:/.test(r.body)).map((r) => r.sel)
+  const filled = row.filter((r) => /background:\s*var\(--iris\)|is-primary/.test(r.body + r.sel)).map((r) => r.sel)
+  const divider = has('.new-object-row', /border-right:\s*1px solid var\(--line\)/)
+  ok('revamp.create.2', 'the Create door sits in the HUD\'s flow (no rule floats it over the world), set off by a hairline, and is never filled',
+    row.length > 0 && floating.length === 0 && filled.length === 0 && divider, JSON.stringify({ floating, filled, divider }))
+
+  // revamp.pill.1 — the pill yields to any open menu in the world: out
+  // entirely (opacity 0, hidden, no pointer), its box untouched (no display,
+  // no geometry — pill.rects.1's rule), anchored on the host with :has().
+  const yieldRule = all.find((r) => /^\.canvas:has\(>\s*\.world \[role="menu"\]:not\(\[hidden\]\)\)\s*>\s*\.command-pill$/.test(r.sel.trim()))
+  const yieldOk = yieldRule !== undefined && /opacity:\s*0\s*(;|$)/.test(yieldRule.body) && /visibility:\s*hidden/.test(yieldRule.body) && /pointer-events:\s*none/.test(yieldRule.body) && !/display:|width:|height:|bottom:|left:/.test(yieldRule.body)
+  ok('revamp.pill.1', 'while a menu is open in the world the command pill steps out — opacity 0, hidden, no pointer — without moving its box',
+    yieldOk, JSON.stringify(yieldRule ?? null))
+
+  // revamp.far.1 — at the summary tier a card's name holds a minimum SCREEN
+  // size through the unclamped --far-scale (declared on .world like
+  // --chrome-scale), across at most two lines; the kicker is one line that
+  // gives first; the separator goes; the header's clipped copy gives way on a
+  // far card; and a margin label is capped at --t-xs on screen at both far
+  // tiers, under the name's --t-md — never larger than the names beside it.
+  const title = has('.world[data-detail="summary"] .panel__card-summary-title', /font-size:\s*calc\(var\(--t-md\) \* var\(--far-scale/)
+  const clamp = has('.world[data-detail="summary"] .far-name__name', /-webkit-line-clamp:\s*2/)
+  const kicker = has('.world[data-detail="summary"] .far-name__kicker', /white-space:\s*nowrap/) && has('.world[data-detail="summary"] .far-name__kicker', /text-overflow:\s*ellipsis/)
+  const sep = has('.world[data-detail="summary"] .far-name__sep', /display:\s*none/)
+  const header = has('.world[data-detail="summary"] .pf[data-far-card] .pf__title', /visibility:\s*hidden/)
+  const declaredFar = has('.world', /--far-scale:\s*1/)
+  const labelCap = ['summary', 'block'].every((t) => has(`.world[data-detail="${t}"] .annotation__label`, /font-size:\s*min\([^;]*var\(--t-xs\) \* var\(--far-scale/))
+  ok('revamp.far.1', 'a far card\'s name holds --t-md on screen (the unclamped --far-scale) across up to two lines, its agent kicker gives first, the header\'s clipped copy gives way, and margin labels are capped under the names',
+    title && clamp && kicker && sep && header && declaredFar && labelCap, JSON.stringify({ title, clamp, kicker, sep, header, declaredFar, labelCap }))
+
+  // revamp.motion.1 — HONEST MOTION (Assessment B): the arrival, the settle
+  // and the pill's growth decelerate into place and never pass it — no
+  // translate that changes sign, no scale above 1, no animated blur — and
+  // reduced motion is covered: the global block shortens EVERY animation to
+  // .01ms and one iteration (which still fires animationend, what clears a
+  // panel's entering state), and the settle and the beacon drop out outright.
+  const frames = (name) => (new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`).exec(bare) || [])[1] ?? ''
+  const honest = (name) => {
+    const body = frames(name)
+    const ys = [...body.matchAll(/translateY\((-?\d*\.?\d+)px\)/g)].map((m) => Number(m[1]))
+    const scales = [...body.matchAll(/scale\((\d*\.?\d+)\)/g)].map((m) => Number(m[1]))
+    return body !== '' && !ys.some((y) => y < 0) && !scales.some((k) => k > 1) && !/filter|blur/.test(body)
+  }
+  const kf = ['panel-enter', 'panel-settle', 'pill-expand'].map((n) => [n, honest(n)])
+  const global = /@media \(prefers-reduced-motion: reduce\) \{\s*\*,\s*\*::before,\s*\*::after \{[^}]*animation-duration:\s*\.01ms !important;[^}]*animation-iteration-count:\s*1 !important;/.test(bare)
+  const settleRm = /@media \(prefers-reduced-motion: reduce\) \{ \.panel\[data-panel-settling\] > \.panel__motion \{ animation: none; \} \}/.test(bare)
+  const beaconRm = /@media \(prefers-reduced-motion: reduce\) \{ \.command-pill\[data-pill-expanded\] \.command-pill__rest \{ animation: none; \} \}/.test(bare)
+  // The explicit none must come AFTER the rule it cancels (same specificity).
+  const beaconAfter = bare.indexOf('.command-pill[data-pill-expanded] .command-pill__rest { animation: pill-beacon') < bare.indexOf('.command-pill[data-pill-expanded] .command-pill__rest { animation: none; }')
+  const settleAfter = bare.indexOf('.panel[data-panel-settling] > .panel__motion { animation: panel-settle') < bare.indexOf('.panel[data-panel-settling] > .panel__motion { animation: none; }')
+  ok('revamp.motion.1', 'the arrival, the settle and the pill\'s growth decelerate without overshoot or blur, and reduced motion covers the entering panel (global block), the settle and the beacon',
+    kf.every(([, v]) => v) && global && settleRm && beaconRm && beaconAfter && settleAfter, JSON.stringify({ kf, global, settleRm, beaconRm, beaconAfter, settleAfter }))
 }
 
 // M258 — nav.* / frame-identity.* / dormant.1. Navigation and object

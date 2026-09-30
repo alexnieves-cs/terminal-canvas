@@ -3,6 +3,7 @@ import type { Viewport } from './viewport'
 import { zoomReadoutShown } from './minimap'
 import { shellControl } from '@renderer/shell/shell-control'
 import { Maximize, Minus, Plus } from '@renderer/icons'
+import { NewObjectRow } from './NewObjectRow'
 
 export interface CanvasHudProps {
   viewport: Viewport
@@ -14,6 +15,17 @@ export interface CanvasHudProps {
   agentLinks?: { on: boolean; onToggle: () => void }
   /** M258. Fit task — the canvas door of `fit-task`. Disabled with the named reason when there is no task context; never removed. */
   fitTask?: { disabledReason?: string; run: () => void }
+  /**
+   * M395. The canvas's ONE create door, on the HUD's own ground. Absent on an
+   * empty canvas, where the launcher's Start work · Ask · Create… owns it.
+   */
+  create?: { onOpen: () => void; disabledReason?: string }
+  /**
+   * M395. Nothing on the canvas: Fit task and Fit all have nothing to frame,
+   * so they are not offered (a verb that can only reset reads as broken, and
+   * the launcher is the empty canvas's surface). The zoom steppers stay.
+   */
+  empty?: boolean
 }
 
 // M258. A target glyph: the active task framed, beside Fit all's four corners.
@@ -46,7 +58,7 @@ const ZOOM_STEP = 1.2
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, fitTask }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, fitTask, create, empty }: CanvasHudProps): JSX.Element {
   // M258. The readout is news, not furniture: on while the scale is moving,
   // then only when it differs materially from 100% (zoomReadoutShown). The
   // element stays in the DOM and fades — the rest rule's opacity, never
@@ -63,6 +75,14 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
   const readoutShown = zoomReadoutShown(viewport.scale, zooming)
   return (
     <div className="canvas-hud">
+      {/* M395 (the critic's P1 #2). CREATE LIVES HERE, on the HUD's own
+          opaque ground behind its moat — the one surface over the canvas that
+          panels already pass under without reading as part of it, and the one
+          every framing and placement already keeps clear of (safe-area.ts).
+          Top-left it printed onto whatever panel was framed there and clipped
+          under the top bar. Still the ONE canvas door to the create sheet,
+          still a quiet text button (primary.1: never the filled primary). */}
+      {create !== undefined && <NewObjectRow onOpenCreate={create.onOpen} {...(create.disabledReason === undefined ? {} : { disabledReason: create.disabledReason })} />}
       {/* M46. The zoom cluster: the ONE pointer surface in the HUD (the rest
           stays pointer-events: none). shouldYieldWheel names the HUD so a
           wheel over these buttons never pans the world underneath. */}
@@ -74,14 +94,16 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
           aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
         {/* M264. Fit task is the PRIMARY zoom framing control; Fit all stays
             reachable beside it (and via the palette). */}
-        {fitTask !== undefined && (
+        {fitTask !== undefined && empty !== true && (
           <button type="button" className="icon-button" data-hud-fit-task disabled={fitTask.disabledReason !== undefined}
             title={fitTask.disabledReason ?? 'Fit task — the active task\'s panels in view'}
             aria-label={fitTask.disabledReason === undefined ? 'Fit task' : `Fit task: ${fitTask.disabledReason}`}
             {...shellControl(() => { if (fitTask.disabledReason === undefined) fitTask.run() })}><FitTaskGlyph /><span className="canvas-hud__fit-label">Fit task</span></button>
         )}
-        <button type="button" className="icon-button" data-hud-fit title="Fit all — every panel in view (⌘1)"
-          aria-label="Fit all" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">Fit all</span></button>
+        {empty !== true && (
+          <button type="button" className="icon-button" data-hud-fit title="Fit all — every panel in view (⌘1)"
+            aria-label="Fit all" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">Fit all</span></button>
+        )}
         {/* M247. Inside the zoom cluster, the HUD's one pointer surface, so it
             inherits that cluster's wheel yielding rather than needing its own. */}
         {agentLinks !== undefined && (

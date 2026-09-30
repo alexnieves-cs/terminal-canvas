@@ -154,6 +154,108 @@ export function clearOfOverlays(centre: Point, panel: Size, obstacles: readonly 
 }
 
 /**
+ * M395. Screen pixels a FRAMING keeps between its content and the floating
+ * chrome. Smaller than `clearOfOverlays`' spawn margin on purpose: fitTo's
+ * 64px margin already clears the HUD and the pill's rest (each ~54px off the
+ * bottom edge) by about 10px, and a gap that flagged them would move every fit
+ * on every canvas — only the minimap (and a drawer) reach far enough in to
+ * matter, and those are what this exists for.
+ */
+export const FRAME_CLEAR_GAP = 8
+
+function overlapsRect(a: ScreenRect, b: ScreenRect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+/** The screen box `rects` occupy at camera `vp`. */
+export function framedBox(rects: readonly { x: number; y: number; w: number; h: number }[], vp: Viewport): ScreenRect {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const r of rects) {
+    minX = Math.min(minX, r.x); minY = Math.min(minY, r.y)
+    maxX = Math.max(maxX, r.x + r.w); maxY = Math.max(maxY, r.y + r.h)
+  }
+  const tl = worldToScreen({ x: minX, y: minY }, vp)
+  return { x: tl.x, y: tl.y, w: (maxX - minX) * vp.scale, h: (maxY - minY) * vp.scale }
+}
+
+/**
+ * M395. LAND A FRAMING CLEAR OF THE CHROME. `target` is what a framing verb
+ * asked for (fitTo, fitReadable, centreOn); `obstacles` are the surfaces
+ * floating over the canvas in host-local screen pixels (the minimap, the HUD,
+ * the pill's rest, a drawer over the canvas). A framing whose content already
+ * clears every obstacle by `gap` is returned UNTOUCHED — the common case, and
+ * the reason Fit stays idempotent and every existing fit check keeps its
+ * numbers. Otherwise, in order:
+ *
+ * 1. The same scale, moved along the cheaper axis (`clearOfOverlays`, the
+ *    spawn rule) — taken when it clears everything and stays inside the host.
+ * 2. `keepScale` (centreOn's contract: framing a panel never discards the
+ *    zoom the person chose) stops there with the best move it found.
+ * 3. Otherwise the content is refitted into the LARGEST part of the host the
+ *    obstacles leave: each obstacle that cuts the frame is cleared by moving
+ *    one of the frame's four edges past it, every combination is tried (three
+ *    to five obstacles, so at most a thousand tiny rects), and the frame that
+ *    allows the largest scale wins — never zooming IN past `target`, so a
+ *    fitReadable cap or a fit's own clamp survives.
+ */
+export function clearFraming(
+  target: Viewport,
+  rects: readonly { x: number; y: number; w: number; h: number }[],
+  size: Size,
+  obstacles: readonly ScreenRect[],
+  opts: { keepScale?: boolean; margin?: number; gap?: number } = {}
+): Viewport {
+  const gap = opts.gap ?? FRAME_CLEAR_GAP
+  const real = obstacles.filter((o) => o.w > 0 && o.h > 0)
+  if (rects.length === 0 || real.length === 0) return target
+  const blocks = real.map((o) => ({ x: o.x - gap, y: o.y - gap, w: o.w + 2 * gap, h: o.h + 2 * gap }))
+  const hits = (b: ScreenRect): boolean => blocks.some((o) => overlapsRect(b, o))
+  const box = framedBox(rects, target)
+  if (!hits(box)) return target
+  // 1. Move, same scale.
+  const centre = { x: box.x + box.w / 2, y: box.y + box.h / 2 }
+  const c = clearOfOverlays(centre, { width: box.w, height: box.h }, real, gap)
+  const moved: Viewport = { scale: target.scale, x: target.x + (c.x - centre.x), y: target.y + (c.y - centre.y) }
+  const mb = framedBox(rects, moved)
+  const inside = mb.x >= 0 && mb.y >= 0 && mb.x + mb.w <= size.width && mb.y + mb.h <= size.height
+  if (!hits(mb) && inside) return moved
+  if (opts.keepScale === true) return moved
+  // 3. Refit into the largest free frame.
+  const margin = opts.margin ?? 64
+  let frames: ScreenRect[] = [{ x: margin, y: margin, w: size.width - 2 * margin, h: size.height - 2 * margin }]
+  for (const o of blocks) {
+    const next: ScreenRect[] = []
+    for (const f of frames) {
+      if (!overlapsRect(f, o)) { next.push(f); continue }
+      const cuts: ScreenRect[] = [
+        { ...f, w: o.x - f.x },
+        { ...f, x: o.x + o.w, w: f.x + f.w - (o.x + o.w) },
+        { ...f, h: o.y - f.y },
+        { ...f, y: o.y + o.h, h: f.y + f.h - (o.y + o.h) }
+      ]
+      for (const g of cuts) if (g.w > 0 && g.h > 0) next.push(g)
+    }
+    frames = next
+    if (frames.length > 1024) break
+  }
+  const bw = box.w / target.scale, bh = box.h / target.scale
+  if (frames.length === 0 || !(bw > 0) || !(bh > 0)) return moved
+  let best: { f: ScreenRect; s: number } | null = null
+  for (const f of frames) {
+    const s = Math.min(target.scale, clampScale(Math.min(f.w / bw, f.h / bh)))
+    if (best === null || s > best.s + 1e-9 || (Math.abs(s - best.s) <= 1e-9 && f.w * f.h > best.f.w * best.f.h)) best = { f, s }
+  }
+  const { f, s } = best!
+  const worldLeft = (box.x - target.x) / target.scale
+  const worldTop = (box.y - target.y) / target.scale
+  return {
+    scale: s,
+    x: f.x + f.w / 2 - (worldLeft + bw / 2) * s,
+    y: f.y + f.h / 2 - (worldTop + bh / 2) * s
+  }
+}
+
+/**
  * The fourth camera verb (after resetViewport, worldCentre and centreOn),
  * factored out as pure math for the same reason those are: so the one fact
  * that separates it from centreOn — it sets the SCALE, because a workspace's
@@ -263,6 +365,17 @@ export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
     x: size.width / 2 - centreX * scale,
     y: size.height / 2 - centreY * scale
   }
+}
+
+/**
+ * M395. The canvas host's size that `worldCentre` (the world point at the
+ * host's centre) implies at camera `vp` — worldToScreen of that point IS the
+ * host's centre. For a caller that holds only the narrow camera verbs (the
+ * palette's actions) and must not grow a host ref or measure the window.
+ */
+export function viewSizeAround(centre: Point, vp: Viewport): Size {
+  const c = worldToScreen(centre, vp)
+  return { width: 2 * c.x, height: 2 * c.y }
 }
 
 /** Below this, a panel's body text is no longer comfortably read. */

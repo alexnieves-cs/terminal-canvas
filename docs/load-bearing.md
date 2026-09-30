@@ -682,6 +682,20 @@ spawns batched into one tick each see the previous one's array; and it WRAPS at
 `CASCADE_MAX_STEPS` rather than marching a panel outside the cull region, where it would never
 promote and `Cmd+N` would appear to do nothing.
 
+**A new AUTHORED object goes to free space; a terminal still cascades (`placement.ts`'s
+`freeSpot`, `safe-area.ts`'s `placementRoom`/`placeIn`, M395).** A sticky, a text, a shape, a
+picture, a new file, a workflow or a browser pane with no point of its own used to land on
+whatever sat at the view's centre (the live audit measured a free text covering 53% of a
+sticky). `freeSpot` searches square rings around the centre, nearest first, for a rect that
+clears every object AND the floating chrome (as world rects) by 24 world units and lies wholly
+in view — and returns `null` rather than an off-screen spot, so the caller falls back to its
+old point: an object that appears where nobody is looking reads as "nothing happened". It runs
+inside the `setPanels` updater over `current` (the cascade's batching rule); the DOM reads
+happen once, outside. A point the person GAVE (a double-click, a drop, a Tab-made next step)
+is kept exactly. A frame keeps the centre (it goes behind, to enclose). The cascade entry above
+still holds for terminals, conversations and relays: panels spawned to work in, where overlap
+is normal and ⌘N promises the centre. `verify:viewport revamp.place.1–.2`.
+
 **The header's honest chain, and the backfill that must never happen (`TerminalPanel.tsx`).**
 The label is `title ?? status.command ?? spec.command ?? 'login shell'`. The resolved command
 (from `pty:create`'s reply) is **never copied back into `PanelSpec`** — doing so would make it a
@@ -2151,6 +2165,21 @@ structurally safe, and the result is idempotent (`verify:viewport` `tidy.1`). On
 twenty — the same rule a drag and a rename follow. The palette row acts on the selection when
 two or more are selected and on everything otherwise, disabled with a reason on a lone panel.
 
+**Tidy packs toward the VIEW's shape by re-flowing the reading order (`placement.ts`'s
+`tidyPanels` with `opts.view`, M395).** With the canvas's size, an arrangement that the rows
+would pack into a STRIP — wider than the view's aspect and framing under READABLE_SCALE — is
+laid out as the rows' own sequence (top to bottom, left to right) flowing into lines, wrapped
+at the width whose result frames largest in the view. Wrapping each ROW on its own was tried
+first and is wrong twice: rows of 8 at a 5-wide target leave 5+3 ragged lines that frame no
+better than the strip, and a second tidy re-wraps finer lines differently, so it was not
+idempotent. The flow is: its lines ARE the next tidy's rows, in the same sequence with the
+same sizes, so the same candidates are measured and the same lines come back. A set that
+already frames readably, or is taller than the view, keeps its rows (three panels stay a row);
+the flow is taken only when it frames larger. The host size reaches the palette's actions as
+`viewSizeAround(worldCentre(), camera)` — no host ref, no window read. The agent door's `tidy`
+arm now calls the palette's member through `self`: its old copy only called `commitHistory`,
+which moves nothing. `verify:viewport revamp.tidy.1–.2`, `revamp.view.1`.
+
 **A hover is corrected per event against the slot under the cursor; only main opens a link, and
 only on Cmd (`components/xterm-pointer.ts`, `terminal/session-factory.ts`'s link provider,
 `main/link-open.ts`, `link:open`).** Pointer correction was anchored to a slot pinned at
@@ -3149,6 +3178,18 @@ drag during a flight otherwise measures its delta against a camera still sliding
 `.panel`/`.pf`/`.xterm` transitions a geometry property, and the workflow blocks carry no Motion
 `layout` — its projection springs a dragged node towards where the pointer already put it.
 
+**Arrivals decelerate and never overshoot, and a panel's entering state is cleared by
+`animationend` — so reduced motion SHORTENS it, never removes it (`styles.css`'s `panel-enter`,
+`panel-settle`, `pill-expand`, the global reduced-motion block, M395).** The three keyframes had
+become hand-built springs (an 18px rise to −3px and back, a settle ringing 5/−2/1px, a pill
+growing to 1.025 through a 10px blur) on `--dur-spring`; they are now decelerating moves on
+`--dur-2`, the surface tier. The entering class is removed by `PanelFrame`'s
+`onAnimationEnd` → `onEntryEnd`: an explicit `animation: none` under reduced motion would never
+fire it and leave every panel `entering` forever, so the global block's `.01ms`/one iteration
+is its reduced-motion rule. The settle (cleared by `usePanelDrag`'s timer) and the pill's
+beacon (decoration) do take `none`, declared AFTER the rules they cancel — same specificity, so
+an earlier `@media` block loses on source order. `verify:styles revamp.motion.1`, `motion.2`.
+
 **Every DISCRETE camera jump is a flight through one path, no gesture ever is, and tiering
 waits for the flight to land (`canvas/flight.ts`, `useViewport.ts`'s `flyTo`/`jump`,
 `Canvas.tsx`'s tier effect).** `centreOn`, `fitAll`, `resetViewport`, `goToViewport` and the
@@ -3240,6 +3281,35 @@ scale over every rect AND the camera's own world rectangle, so the camera is alw
 map even when it is far from every panel — the case a map fitted to panels alone gets wrong
 silently, drawing the rectangle off its edge.
 
+**The minimap YIELDS, stays MOUNTED while it does, and every framing lands clear of it
+(`canvas/minimap.ts`'s `minimapPresence`/`minimapNeeded`, `MinimapOverlay.tsx`,
+`canvas/safe-area.ts`, `viewport.ts`'s `clearFraming`, M395).** It is a screen-space overlay
+over a world that moves, so a chat's Send or a panel's corner ends up under it. Two states
+answer that. `aside` — the pointer working in a panel the map covers (in a 16px approach ring,
+or arriving on the map in one move from such a panel), or a gesture crossing it — tucks it into
+its corner as a quarter-size tile that takes no pointer; the view rectangle carries its own
+`pointer-events: auto`, so the rule names the map's descendants too or the tile still swallows
+clicks. `over` is the DOM's answer (the panel under the pointer), not geometry: the HUD sits
+over panels too, and a map that stepped aside for a pointer on the HUD could never be reached.
+Once aside it stays aside while the pointer is in reach — a map springing back under the
+pointer that moved it would chase it. `hidden` — every object already in the camera's view,
+where a click on the map goes nowhere — fades it with `visibility`, keeping its box: the
+`ResizeObserver` that measures the canvas lives on the map's element (unmounting it on the
+first "all in view" leaves the size at 1×1 forever), and the safe area reserves that box when
+a framing is about to bring the map back. Every framing verb in `useViewport` (fitAll,
+fitSelection, frameRects, frameReadable, centreOn) passes its target through `clearFraming`
+with the chrome read at press time: a target already clear is returned UNTOUCHED, which is why
+the gap is 8px and not the spawn rule's 16 — fitTo's 64px margin clears the HUD and the pill's
+rest by ~10px, and a 16px gap would have moved every fit on every canvas. The map is reserved
+only when the target leaves some object out of view (`minimapNeeded` over the TARGET):
+reserving it for Fit all shrank the fit away from a map that the fit itself was about to hide,
+and reading the map's live presence instead made Fit twice land in two places (shell 77's
+idempotence clause). centreOn keeps its scale (`keepScale`) and only moves; a panel larger than
+the canvas is left leading-edge aligned. A pane lying OVER the canvas (a compact drawer) is an
+obstacle too; a grid column beside it is not, because it does not intersect the host.
+`verify:viewport revamp.minimap.1–.2`, `revamp.frame.1–.4`; `verify:styles revamp.minimap.3`;
+`verify:panels:agents revamp.minimap.app.1`.
+
 **The frame's far tiers HIDE a kind's body; they never unmount it (`components/PanelFrame.tsx`,
 `.pf__keep`).** Below `SUMMARY_ENTER` every sessionless kind renders `edge · title · word` in
 place of its body, and the first cut did that with `farBody ?? children`. A Jira ticket's
@@ -3247,6 +3317,20 @@ comment draft lives in that child subtree; zooming out past 26% discarded typed,
 with no sign. The body is wrapped in `.pf__keep` (`display: contents`, so the DOM the checks
 select is unchanged) and given the `hidden` attribute under the far tiers. `hidden.1` in
 `verify:styles` is why the class carries its own `[hidden]` reset.
+
+**A far card's name is COUNTER-SCALED by `--far-scale` and split so the distinguishing part
+survives (`PanelFrame.tsx`'s `FarTitle`, `card-detail.ts`'s `farTitleParts`, `Canvas.tsx`'s
+`.world` style, M395).** `--chrome-scale` stops at 2.5, so a name riding it is 5–10px on screen
+at the summary tier; Canvas stamps the UNCLAMPED `--far-scale` (1/scale) beside it, and only
+`.world[data-detail="summary"|"block"]` rules read it — as a FONT-SIZE, never a transform
+(nothing under `.pf__body` is transformed, `frame.2`), and no live body is in those tiers.
+`claude — api (2)` renders as kicker, separator and name spans, so the element's text is still
+the title exactly (checks read it) and the near tier (a flipped card) paints one line as
+before; the far rules drop the separator, give the kicker one small line that truncates first,
+and the name two lines — an ellipsis at the end had cut four agents to the same `claude — …`.
+The header's own copy of the title is hidden on a far CARD (`data-far-card`; a pinned terminal
+stays live at every zoom and keeps its title). Margin labels are capped at `--t-xs` on screen,
+under the names. `verify:styles revamp.far.1`, `verify:viewport revamp.far.2`.
 
 **An agent session's process is gated on TWO identities, and the second one is the
 exit-then-resume case (`main/agent-session.ts`).** M61 fixed the PTY layer's late-event bug
@@ -4540,6 +4624,26 @@ box and the `.world` transform: a host shrunk from the bottom moves no panel rec
 world origin is the host's top-left. `shouldYieldWheel` yields over `.command-pill`, because
 the root's bubble-phase `onWheel` stop runs AFTER `useViewport`'s capture listener has already
 panned.
+
+**The pill YIELDS to any open menu in the world, and Create lives in the HUD (`styles.css`'s
+`.canvas:has(> .world [role="menu"]…) > .command-pill`, `CanvasHud.tsx`'s `create`, M395).**
+Nothing inside `.world` can stack above a z-930 sibling, so an open panel ⋯ menu hanging to the
+canvas's foot had its rows painted over by the rest button. While a `role="menu"` is open in
+the world the pill goes to opacity 0, `visibility: hidden`, no pointer — never `display` or a
+geometry change, so `pill.rects.1` still holds. The `:has()` is keyed on `role="menu"`: a
+terminal's DOM churn never matches it. Create moved from the canvas's top-left corner (where it
+printed onto the panel framed there and slid under the top bar when the host scrolled) onto the
+HUD's own ground — the one overlay panels already pass under, and one every framing and
+placement keeps clear of. The pointer's capture stand-down names `.canvas-hud` and `.minimap`
+too: a press on Fit or on the map with link mode armed resolved the link onto the panel beneath.
+The host never stays scrolled (`Canvas.tsx`'s `onScroll`): `overflow: hidden` still lets a
+focus() without `preventScroll` scroll it — and, measured, TYPING into an editor that lies past
+the host's edge does too (the browser reveals the caret; `preventScroll` covers only the
+focus), so a label typed into a shape at the canvas's foot left the host scrolled and every
+later Fit displaced by it: the lead's chart framed at x≈257 under a host starting at 348.
+Resetting the scroll on the host's own scroll event covers every such path at once.
+`verify:styles revamp.pill.1`, `revamp.create.2`; `verify:first-run revamp.create.1`;
+`verify:panels:core revamp.chrome.app.1`, `revamp.frame.app.1`.
 
 **Screen-space controls inside `.canvas` must stand the CAPTURE slot down, not only stop
 bubbling (`useCanvasPointer.ts`'s `onCanvasMouseDownCapture`, M249).** The pill and the

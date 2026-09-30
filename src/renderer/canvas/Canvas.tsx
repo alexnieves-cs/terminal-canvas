@@ -2,7 +2,6 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
-import { NewObjectRow } from './NewObjectRow'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
 import { DECK_SEED, type DeckView } from '@shared/deck'
@@ -74,6 +73,7 @@ import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
+import { chromeObstacles, placementRoom as readPlacementRoom, placeIn } from './safe-area'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -143,7 +143,8 @@ import { findConnector, isShapePanel, makeRelayPanel, isRelayPanel, RELAY_W, REL
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE,
   addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
-  type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel } from '@renderer/panels/panels'
+  type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel,
+  NOTE_W, NOTE_H, IMAGE_W, IMAGE_H, FILE_W, FILE_H, WORKFLOW_W, WORKFLOW_H, BROWSER_W, BROWSER_H } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
 import { shellQuote } from '@renderer/shell/file-tree-model'
@@ -5563,9 +5564,10 @@ export function Canvas({
       const hb = host.getBoundingClientRect()
       const vp = viewportRef.current
       const local = (r: DOMRect): ScreenRect => ({ x: r.left - hb.left, y: r.top - hb.top, w: r.width, h: r.height })
-      const obstacles = [...document.querySelectorAll<HTMLElement>('.minimap, .canvas-hud, .command-pill__rest')]
-        .map((n) => local(n.getBoundingClientRect()))
-        .filter((r) => r.w > 0 && r.h > 0)
+      // M395: the one reader of the chrome (safe-area.ts) — the map by its
+      // LAYOUT box, whether it is tucked aside or hidden with everything in
+      // view (it returns), plus any drawer lying over the canvas.
+      const obstacles = chromeObstacles(host, { minimap: 'always' })
       // The minimap renders NOTHING on an empty canvas and arrives one render
       // after this chat does — onto its Send. So when it is absent, reserve its
       // box where the CSS will put it: stacked above the zoom pill on a wide
@@ -6418,12 +6420,18 @@ export function Canvas({
     if (!isNoteForm(form)) return { kind: 'refused', reason: `${form} is not a note form — ${NOTE_FORMS.join(', ')}` }
     const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const noteId = `nt${nextIdRef.current++}`
+    // M395. A sticky or a text with no place of its own lands in the FREE spot
+    // nearest the view's centre (placement.ts's freeSpot), never on top of what
+    // is there — the audit measured a new text over 53% of a sticky. A frame
+    // keeps the centre: it goes BEHIND and is made to enclose what is there.
+    const room = world === undefined && form !== 'frame' ? readPlacementRoom(hostRef.current, viewportRef.current) : null
     setPanels((current) => {
       // A FRAME goes to the BACK: a region drawn over the objects it encloses
       // would cover them at the moment it is made, and the first thing a
       // person would have to do is send it backwards.
       const z = form === 'frame' ? Math.min(0, ...current.map((p) => p.z)) - 1 : nextZ(current)
-      const next = [...current, makeNotePanel(noteId, cascadeCentre(at, current), z, form, normaliseNoteText(text ?? ''))]
+      const free = room === null ? null : placeIn(room, at, { w: NOTE_W, h: NOTE_H }, current.map((p) => p.rect))
+      const next = [...current, makeNotePanel(noteId, free ?? cascadeCentre(at, current), z, form, normaliseNoteText(text ?? ''))]
       commitHistory(next)
       return next
     })
@@ -6473,7 +6481,9 @@ export function Canvas({
     return { x: -vp.x / vp.scale, y: -vp.y / vp.scale, w: w / vp.scale, h: h / vp.scale }
   }, [])
   const shapeStepRef = useRef<{ nextStep: (id: string) => void; previousStep: (id: string) => void } | null>(null)
-  const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef })
+  // M395. The chrome and the world in view, read when a new object needs a free spot (safe-area.ts).
+  const placementRoom = useCallback(() => readPlacementRoom(hostRef.current, viewportRef.current), [])
+  const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef, placementRoom })
   // The shapes, in their own array for the ShapeLayer: a new array only when
   // `displayPanels` is (a panel changed) — never on a camera frame.
   const shapePanels = useMemo(() => displayPanels.filter(isShapePanel), [displayPanels])
@@ -6546,8 +6556,12 @@ export function Canvas({
     if (stored.kind === 'refused') return { kind: 'refused', reason: stored.reason }
     const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const imageId = `img${nextIdRef.current++}`
+    // M395. With no place of its own (the palette row, the agent's verb) a
+    // picture lands in the free spot nearest the centre; a drop keeps its point.
+    const room = world === undefined ? readPlacementRoom(hostRef.current, viewportRef.current) : null
     setPanels((current) => {
-      const next = [...current, makeImagePanel(imageId, at, nextZ(current), stored.path, displayPath(path).short, stored.id)]
+      const free = room === null ? null : placeIn(room, at, { w: IMAGE_W, h: IMAGE_H }, current.map((p) => p.rect))
+      const next = [...current, makeImagePanel(imageId, free ?? at, nextZ(current), stored.path, displayPath(path).short, stored.id)]
       commitHistory(next)
       return next
     })
@@ -7046,6 +7060,13 @@ export function Canvas({
     // A late answer must not mint into another workspace after a switch.
     const workspace = creationWorkspaceRef.current
     const at = worldCentre()
+    // M395. An AUTHORED object (a file, a picture, a workflow, a browser) goes
+    // to the free spot nearest the view's centre, measured when it is placed —
+    // after any chooser answered — so it never lands on what is already there.
+    // A terminal, an agent's conversation and a relay keep the centre and the
+    // cascade: panels a person spawns to work in (placement.ts's freeSpot).
+    const spotFor = (size: { w: number; h: number }): Point =>
+      placeIn(readPlacementRoom(hostRef.current, viewportRef.current), at, size, panelsRef.current.map((p) => p.rect)) ?? at
     const current = (): boolean => creationWorkspaceRef.current === workspace && !mergedRef.current && !transitionRef.current
     const refused = (): CreationResult => ({ kind: 'refused', reason: 'the workspace changed — create the object again here' })
     const host: CreationHost = {
@@ -7068,7 +7089,7 @@ export function Canvas({
           const made = await window.canvas.file.create({ root, name: filename, seed: '' })
           if (made.kind !== 'created') return { kind: 'refused', reason: made.kind === 'exists' ? 'that file already exists — choose another filename' : made.detail }
           if (!current()) return { kind: 'refused', reason: `created ${made.path}; the workspace changed, so open the file there explicitly` }
-          openFilePanel(made.path, at, { exact: true, sheet: {} })
+          openFilePanel(made.path, spotFor({ w: FILE_W, h: FILE_H }), { exact: true, sheet: {} })
           return { kind: 'ran' }
         }
         const checklist = view === 'checklist'
@@ -7078,14 +7099,14 @@ export function Canvas({
         const result = await window.canvas.file.create({ root, name: filename, seed })
         if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists — choose another filename' : result.detail }
         if (!current()) return { kind: 'refused', reason: `created ${result.path}; the workspace changed, so open the file there explicitly` }
-        openFilePanel(result.path, at, view === 'deck' ? { deck: {}, exact: true } : { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
+        openFilePanel(result.path, spotFor({ w: FILE_W, h: FILE_H }), view === 'deck' ? { deck: {}, exact: true } : { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
         return { kind: 'ran' }
       },
       image: async (path) => {
         const chosen = path ?? await window.canvas.asset.choose()
         if (!current()) return refused()
         if (!chosen) return { kind: 'refused', reason: 'no image chosen' }
-        return addImageFromPath(chosen, at)
+        return addImageFromPath(chosen, spotFor({ w: IMAGE_W, h: IMAGE_H }))
       },
       workflow: async () => {
         const result = await window.canvas.template.save({ name: 'New workflow', nodes: [], edges: [] })
@@ -7095,13 +7116,13 @@ export function Canvas({
         if (!current()) return refused()
         templateRowsRef.current = rows
         setTemplateRows(rows)
-        openWorkflowPanel(result.template.id, at)
+        openWorkflowPanel(result.template.id, spotFor({ w: WORKFLOW_W, h: WORKFLOW_H }))
         return { kind: 'ran' }
       },
       browser: async (url) => {
         const parsed = normaliseTypedUrl(url ?? 'http://localhost:3000')
         if (parsed.kind === 'refused') return { kind: 'refused', reason: 'use an http(s) URL' }
-        openBrowserPanel(parsed.url, undefined, at)
+        openBrowserPanel(parsed.url, undefined, spotFor({ w: BROWSER_W, h: BROWSER_H }))
         return { kind: 'ran' }
       },
       relay: async (value) => {
@@ -8602,14 +8623,15 @@ export function Canvas({
         onDoubleClick={onCanvasDoubleClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        // M395. The canvas never SCROLLS — the camera is the only thing that
+        // moves the world. `overflow: hidden` still lets a focus() without
+        // preventScroll, or a scrollIntoView, scroll it: that slid every
+        // overlay (the HUD, the map, Create) up under the top bar in the
+        // `group` and `overview` shots, and every host-local measurement with
+        // them. Put it back the moment it happens (React's onScroll does not
+        // bubble, so this is the host's own scroll only).
+        onScroll={(event) => { const el = event.currentTarget; if (el.scrollTop !== 0 || el.scrollLeft !== 0) { el.scrollTop = 0; el.scrollLeft = 0 } }}
       >
-        {/* M263. Occupied canvas only: one Create + into the shared sheet. Empty
-            canvas owns Start work · Ask · Create… on the launcher — mounting
-            both would duplicate the primary verbs. */}
-        {panels.length > 0 && (
-          <NewObjectRow onOpenCreate={paletteActions.beginSpawnSheet}
-            disabledReason={merged ? 'leave merged view to create an object' : undefined} />
-        )}
         {/* M249. A SIBLING of .world, never inside it: outside the transformed
             layer it cannot change a panel's size, and it is absolutely
             positioned so expanding it pushes nothing (pill.rects.1). The
@@ -8643,7 +8665,11 @@ export function Canvas({
           // and below, where the panels are cards. ONE variable on the world,
           // so no panel re-renders for a zoom; and a CSS transform on the
           // chrome only, so no layout box moves and no agent is reflowed.
-          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`, '--chrome-scale': String(Math.min(2.5, Math.max(1, 1 / viewport.scale))) } as CSSProperties}
+          // M395. `--far-scale`: the UNCLAMPED 1/scale the far tiers set a
+          // card's name in (styles.css), so it holds a minimum SCREEN size
+          // where --chrome-scale has stopped growing; read only under
+          // .world[data-detail="summary"|"block"], never by a live body.
+          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`, '--chrome-scale': String(Math.min(2.5, Math.max(1, 1 / viewport.scale))), '--far-scale': String(1 / viewport.scale) } as CSSProperties}
         >
           {/* M79. Run frames: derived, read-only, never groups. */}
           <GroupLayer
@@ -9412,6 +9438,11 @@ export function Canvas({
           onFit={fitAll}
           fitTask={{ disabledReason: fitTaskContext ? undefined : FIT_TASK_NO_CONTEXT, run: () => { const r = boardVerbsRef.current.fitTask?.(); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) } }}
           agentLinks={{ on: agentLinksOn, onToggle: toggleAgentLinks }}
+          // M263/M395. Occupied canvas only: one Create + into the shared
+          // sheet, on the HUD's ground (CanvasHud). The empty canvas's launcher
+          // owns Start work · Ask · Create… and the Fit verbs have nothing to frame.
+          create={panels.length > 0 ? { onOpen: paletteActions.beginSpawnSheet, ...(merged ? { disabledReason: 'leave merged view to create an object' } : {}) } : undefined}
+          empty={panels.length === 0}
         />
         {packPreview !== null && (
           <PackPreview preview={packPreview} onAdd={addPack} onClose={() => setPackPreview(null)} />

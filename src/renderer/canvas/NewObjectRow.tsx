@@ -13,6 +13,10 @@ import { shellControl } from '@renderer/shell/shell-control'
  *
  * Empty canvas: this component is not mounted; the launcher owns the composed
  * Start work · Ask · Create… strip.
+ *
+ * M395. It is mounted INSIDE the HUD (`CanvasHud`'s `create`), never on the
+ * canvas's top-left corner: there it printed onto whatever panel was framed
+ * beneath it and clipped under the top bar (the critic's P1 #2).
  */
 export function NewObjectRow(props: {
   onOpenCreate: () => void

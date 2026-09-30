@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
-import type { CardDetail } from '@renderer/canvas/card-detail'
+import { farTitleParts, FAR_TITLE_SEPARATOR, type CardDetail } from '@renderer/canvas/card-detail'
 import { useTierFade } from '@renderer/canvas/tier-fade'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
@@ -137,6 +137,28 @@ export interface PanelFrameProps {
   owner?: string
 }
 
+/**
+ * M395 (the critic's P1 #3). A far card's NAME: the kicker (an agent's
+ * `claude`) and the name (`api (2)`) as spans, with the separator between them
+ * — so the element's text is still the title exactly, and the near tier (a
+ * flipped card) paints it as one line as before. Only the far tiers' rules in
+ * styles.css pull it apart: the kicker becomes one small line that gives
+ * first, the separator goes, and the name holds a minimum SCREEN size across
+ * up to two lines — the part that tells four `claude — …` cards apart survives.
+ */
+export function FarTitle({ title }: { title: ReactNode }): JSX.Element {
+  if (typeof title !== 'string') return <>{title}</>
+  const parts = farTitleParts(title)
+  if (parts.kicker === undefined) return <span className="far-name__name">{title}</span>
+  return (
+    <>
+      <span className="far-name__kicker">{parts.kicker}</span>
+      <span className="far-name__sep">{FAR_TITLE_SEPARATOR}</span>
+      <span className="far-name__name">{parts.name}</span>
+    </>
+  )
+}
+
 /** M69. The word a sessionless kind shows in its summary's state slot. */
 const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note', relay: 'relay', shape: 'shape' }
 
@@ -261,14 +283,14 @@ export function PanelFrame({
       </div>
     ) : d === 'block' ? (
       <div className="pf__body pf__far pf__far--block" data-card-block data-tone={tone}>
-        <div className="panel__card-block" data-tone={tone}><span className="panel__card-block-title">{title}</span></div>
+        <div className="panel__card-block" data-tone={tone}><span className="panel__card-block-title" title={typeof title === 'string' ? title : undefined}><FarTitle title={title} /></span></div>
       </div>
     ) : d === 'summary' ? (
       <div className="pf__body pf__far" data-card-summary>
         <div className="panel__card-summary" data-tone={tone}>
           {/* M166. The kind's glyph, large: a light with a name. */}
           <span className="panel__card-summary-glyph" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind as Exclude<Panel['kind'], 'terminal'>]; return G ? <G /> : null })()}</span>
-          <div className="panel__card-summary-title">{title}</div>
+          <div className="panel__card-summary-title" title={typeof title === 'string' ? title : undefined}><FarTitle title={title} /></div>
           <div className="panel__card-summary-state" data-tone={tone}>{state?.word ?? kindWord ?? KIND_WORD[kind as Exclude<Panel['kind'], 'terminal'>]}</div>
           {far}
         </div>
@@ -475,6 +497,10 @@ export function PanelFrame({
       // rootAttrs; every other kind is its kind.
       data-tone={tone}
       data-agent-owner={owner}
+      // M395. The body is a far CARD (its own name, large): the far tiers hide
+      // the header's duplicate, clipped title (styles.css). A terminal states
+      // it through rootAttrs, since only it knows whether its slot is live.
+      data-far-card={farBody !== null ? '' : undefined}
       // M233. A join arrival landed HERE. It flashes `.pf::before` — M109's
       // state-edge glow — rather than adding a second mechanism for
       // "something reached me": the flash inherits that pseudo-element's

@@ -3207,21 +3207,27 @@ body {
   min-height: 0;
   flex-direction: column;
 }
-/* M176. A panel ARRIVES: a rise of 8px with its opacity over --dur-2 on the
-   brief's ease. The brief asked for a scale from .98 and M176 tried it: the
-   keyframe runs on `.pf__motion`, an ANCESTOR of `.pf__body`, and a scale
-   there broke the annotation stage (product `annot.1`: the panel's note and
-   the frame stopped agreeing on where the frame was) — the M3/M144 rule that
-   nothing above the body is transformed reaches the arrival too. The rise
-   stays; the scale is declined by name in the ledger. */
+/* M176. A panel ARRIVES: a rise with its opacity. The brief asked for a scale
+   from .98 and M176 tried it: the keyframe runs on `.pf__motion`, an ANCESTOR
+   of `.pf__body`, and a scale there broke the annotation stage (product
+   `annot.1`: the panel's note and the frame stopped agreeing on where the
+   frame was) — the M3/M144 rule that nothing above the body is transformed
+   reaches the arrival too. The rise stays; the scale is declined by name in
+   the ledger.
+   M395 (Assessment B). HONEST MOTION: this comment said "8px over --dur-2"
+   while the keyframe had become an 18px rise over --dur-spring that
+   overshot to -3px and back — a spring built by hand, on a surface the
+   motion tiers call a surface arriving. It is now a plain rise that
+   DECELERATES into place (--ease is an ease-out) over --dur-2 and never
+   passes it. Reduced motion is the global block's (animation-duration
+   .01ms): NOT `animation: none`, because `onAnimationEnd` is what clears
+   the entering state (PanelFrame's onEntryEnd) and `none` never fires it. */
 @keyframes panel-enter {
-  0%   { opacity: 0; transform: translateY(18px); }
-  64%  { opacity: 1; transform: translateY(-3px); }
-  82%  { transform: translateY(1px); }
-  100% { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .panel__motion--entering {
-  animation: panel-enter var(--dur-spring) var(--ease) both;
+  animation: panel-enter var(--dur-2) var(--ease) both;
 }
 
 /* M63. IRIS, not blue: blue is now only ever "working", and the interface's
@@ -3575,6 +3581,41 @@ body {
 .panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); align-self: flex-start; padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--tone-dim); }
 .panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
+/* M395 (the critic's P1 #3). READING FROM AFAR. At the summary tier a card's
+   name was set in world units — 24px at 0.22 is 5px on screen — and clipped
+   at its end, so four agents read `claude — …` while the margin labels beside
+   them printed larger. The name is now COUNTER-SCALED: --far-scale is the
+   unclamped 1/scale Canvas stamps beside --chrome-scale (which stops at 2.5,
+   the chrome's own ceiling), so it holds --t-md on screen at every summary
+   zoom. FarTitle (PanelFrame.tsx) splits `claude — api (2)` into a kicker and
+   a name: the kicker is one small line that truncates FIRST, the separator
+   goes, and the name — the part that tells cards apart — gets up to two
+   lines. font-size, never a transform: nothing under .pf__body is transformed
+   (frame.2), and no live body is in these tiers. The near tier (a flipped
+   card) matches none of this and paints the title as one line, as before. */
+.world[data-detail="summary"] .panel__card-summary-title {
+  display: flex; flex-direction: column; min-width: 0;
+  white-space: normal; line-height: 1.2;
+  font-size: calc(var(--t-md) * var(--far-scale, 1));
+}
+.world[data-detail="summary"] .far-name__kicker {
+  font-size: calc(var(--t-xs) * var(--far-scale, 1)); font-weight: 500; color: var(--fg-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.world[data-detail="summary"] .far-name__sep,
+.world[data-detail="block"] .far-name__sep,
+.world[data-detail="block"] .far-name__kicker { display: none; }
+.world[data-detail="summary"] .far-name__name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+/* The body carries the name, large; the header's copy of it — counter-scaled
+   only to 2.5×, so clipped to `claude — …` at these zooms — is a second, worse
+   name, and gives way. Its box stays (visibility), so the chrome row keeps
+   its layout and its controls. `data-far-card`: the body really is a card
+   (a pinned terminal stays live at every zoom, and keeps its title). */
+.world[data-detail="summary"] .pf[data-far-card] .pf__title,
+.world[data-detail="block"] .pf[data-far-card] .pf__title { visibility: hidden; }
 /* M166. THE STATUS WALL: the summary tier is a glyph, a name and the tone's
    wash — the SAME color-mix the block tier and the minimap draw (far.1 / far.2)
    — and nothing else. The last line of scrollback went with M105's rail; the
@@ -3745,6 +3786,26 @@ body {
 }
 .minimap__view--dragging { border-style: dashed; }
 .shell[data-bp="compact"] .minimap { display: none; }
+/* M395 (backlog #83). THE MAP YIELDS (MinimapOverlay's data-presence, over
+   minimap.ts's minimapPresence / minimapNeeded). ASIDE — the pointer working
+   in a panel the map covers, or a gesture crossing it — tucks the map into
+   its corner as a quarter-size tile that takes no pointer, so the Send or the
+   corner beneath is reachable; a presence, not an absence (the rest rule's
+   opacity is 0 or 1, so "fainter" is not on the table). HIDDEN — every object
+   already in view, where a click on the map goes nowhere — fades it out and
+   keeps its box (visibility, never display), which the safe area reserves
+   when a framing is about to bring it back. A transform and opacity only, on
+   the map's own element, --dur-1; the corner it tucks into is the one it is
+   anchored to (the cluster rule below moves it to the bottom). */
+.minimap {
+  transform-origin: right top;
+  transition: transform var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease), visibility var(--dur-1);
+}
+.minimap[data-presence="aside"] { transform: scale(.25); }
+.minimap[data-presence="aside"], .minimap[data-presence="aside"] *,
+.minimap[data-presence="hidden"], .minimap[data-presence="hidden"] * { pointer-events: none; }
+.minimap[data-presence="hidden"] { opacity: 0; visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .minimap { transition: none; } }
 
 .canvas-hud {
   border-radius: var(--r-full); /* M173. A floating PILL: the zoom controls and the update notice, nothing else */
@@ -5768,9 +5829,13 @@ body {
 /* M93. The annotate sheet: over every panel, under the strip; the host's mousedown places the note. */
 .annotate-sheet { position: absolute; inset: -100000px; z-index: 100000; cursor: crosshair; }
 
-/* M93. Far tiers: the label scales in world units like the frame border (M91), so a note stays a word and not a smear. */
-.world[data-detail="summary"] .annotation__label { font-size: calc(var(--t-xs) * 3.5); max-width: 1100px; }
-.world[data-detail="block"] .annotation__label { font-size: calc(var(--t-xs) * 8); max-width: 2400px; }
+/* M93. Far tiers: the label scales in world units like the frame border (M91), so a note stays a word and not a smear.
+   M395: and it is CAPPED at --t-xs on screen (--far-scale is 1/scale), so a
+   margin label never prints larger than the card names beside it (--t-md at
+   the summary tier; at the block tier also under the block title's own world
+   size, --t-2xl × 3) — the critic saw labels outsize names and collide. */
+.world[data-detail="summary"] .annotation__label { font-size: min(calc(var(--t-xs) * 3.5), calc(var(--t-xs) * var(--far-scale, 1))); max-width: 1100px; }
+.world[data-detail="block"] .annotation__label { font-size: min(calc(var(--t-2xl) * 2.5), calc(var(--t-xs) * var(--far-scale, 1))); max-width: 2400px; }
 
 /* M97. The auto chip beside the chat's pill: the kind mark's face with the
    state tone, a ring while running (a rotating hairline, reduced-motion
@@ -6323,8 +6388,9 @@ body {
    .world unscaled. */
 .pf__chrome { transform: scale(var(--chrome-scale, 1)); transform-origin: top left; width: calc(100% / var(--chrome-scale, 1)); }
 .panel__resize { transform: scale(var(--chrome-scale, 1)); }
-/* Declared here at 1 so the token exists in the stylesheet (styles check 2); Canvas overrides it inline per zoom. */
-.world { --chrome-scale: 1; }
+/* Declared here at 1 so the token exists in the stylesheet (styles check 2); Canvas overrides it inline per zoom.
+   M395: --far-scale likewise (the far tiers' unclamped counter-scale). */
+.world { --chrome-scale: 1; --far-scale: 1; }
 .panel__resize--e { transform-origin: right center; }
 .panel__resize--s { transform-origin: center bottom; }
 
@@ -6836,21 +6902,28 @@ body {
    a second line INSIDE the same left/right bounds instead of scrolling it
    out of sight, so it never enters the minimap's reserved corner and needs
    no new gesture to reach it. */
-/* M263. Occupied canvas: one Create +, never a wrap of creatable-kind pills. */
+/* M263. Occupied canvas: one Create +, never a wrap of creatable-kind pills.
+   M395. It lives INSIDE the HUD (CanvasHud's `create`), first in the row and
+   set off from the zoom cluster by a hairline, on the HUD's own opaque ground
+   — never absolutely positioned over the world, where it printed onto the
+   panel framed at the top-left corner and clipped under the top bar. The HUD
+   is pointer-events: none; this row takes the pointer itself. */
 .new-object-row {
-  position: absolute; top: 12px; left: 16px; z-index: 20;
-  display: flex; gap: var(--sp-3); padding: var(--sp-1);
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  padding-right: var(--sp-3); border-right: 1px solid var(--line);
   pointer-events: auto; font-family: var(--font-ui);
 }
 /* A quiet TEXT button, no box at rest: it repeats the title bar's Create,
-   which is the dominant door, so here it only needs to be findable. */
+   which is the dominant door, so here it only needs to be findable. It takes
+   the HUD's control shape (the fit buttons' height and radius). */
 .new-object-row__plus {
-  display: inline-flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto;
-  border: 1px solid transparent; border-radius: var(--r-full); padding: var(--sp-3) var(--sp-5);
-  background: transparent; color: var(--fg-3); font: inherit; font-size: var(--t-sm);
+  display: inline-flex; align-items: center; gap: var(--sp-1); flex: 0 0 auto;
+  min-height: 28px; border: 1px solid transparent; border-radius: var(--r-md); padding: 0 var(--sp-2);
+  background: transparent; color: var(--fg-3); font: inherit; font-size: var(--t-xs);
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
-.new-object-row__plus:hover { color: var(--fg); background: var(--s-2); }
+.new-object-row__plus:hover { color: var(--fg); background: var(--s-4); }
+.shell[data-bp="compact"] .new-object-row__plus span { display: none; }
 .new-object-row__plus:disabled { color: var(--fg-4); cursor: default; }
 .new-object-row__plus:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
@@ -6866,7 +6939,19 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
   max-width: min(400px, calc(100% - 2 * var(--sp-5)));
   pointer-events: auto; font-family: var(--font-ui);
+  transition: opacity var(--dur-1) var(--ease), visibility var(--dur-1);
 }
+/* M395. THE PILL YIELDS TO A MENU. It is a sibling of .world at z 930, so
+   nothing inside the world can ever stack above it: an open panel ⋯ menu that
+   hung down to the bottom of the canvas had its rows — "Automate with a
+   workflow…" in the `header` scene — painted over by the pill's rest button.
+   While any menu in the world is open the pill steps out entirely (opacity 0,
+   hidden, no pointer) and returns when it closes; its box never moves, so
+   nothing reflows (pill.rects.1's rule). :has() is anchored on the host and
+   keyed on role="menu", which a menu opening or closing is the only thing to
+   change — a terminal's DOM churn never matches it. */
+.canvas:has(> .world [role="menu"]:not([hidden])) > .command-pill { opacity: 0; visibility: hidden; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .command-pill { transition: none; } }
 /* The rest pill IS the "shared container": it never unmounts, so it reads as
    the one object the panel above grows out of rather than a button that
    summons a second, disconnected surface. */
@@ -6893,19 +6978,21 @@ body {
 /* The panel GROWS from the rest pill: transform-origin pins the animation to
    where the rest pill sits, so the motion reads as one object changing shape
    rather than a second one appearing beside it. Transform + opacity only —
-   see .palette's own note on why nothing here animates a layout property. */
+   see .palette's own note on why nothing here animates a layout property.
+   M395 (Assessment B): it decelerates from a slightly smaller, lower start
+   into place over --dur-2 (a surface arriving) and never passes it — the old
+   keyframe overshot to 1.025 and bounced, and animated a 10px blur, a filter
+   repaint on every frame of a surface over a live canvas. */
 @keyframes pill-expand {
-  0%   { opacity: 0; filter: blur(10px); transform: translateY(22px) scale(.88); }
-  58%  { opacity: 1; filter: blur(0); transform: translateY(-5px) scale(1.025); }
-  78%  { transform: translateY(2px) scale(.992); }
-  100% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .command-pill__panel {
   display: flex; flex-direction: column; gap: var(--sp-4); width: 100%;
   border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: var(--sp-5);
   background: var(--s-2);
   transform-origin: bottom center;
-  animation: pill-expand var(--dur-spring) var(--ease) both;
+  animation: pill-expand var(--dur-2) var(--ease) both;
 }
 @media (prefers-reduced-motion: reduce) { .command-pill__panel { animation: none; } }
 
@@ -7341,7 +7428,7 @@ body {
    the zoom pill in the bottom-right corner, right edges aligned. Narrow,
    they stay apart — the map in the top-right corner as before. */
 @media (min-width: 1280px) {
-  .minimap { top: auto; bottom: calc(var(--sp-5) + var(--nav-hud-h) + var(--sp-3)); }
+  .minimap { top: auto; bottom: calc(var(--sp-5) + var(--nav-hud-h) + var(--sp-3)); transform-origin: right bottom; }
 }
 
 /* THE FRAME. The kind glyph sits in a FIXED-WIDTH column, so titles align
@@ -7703,14 +7790,17 @@ body {
   box-shadow: 0 24px 58px -18px color-mix(in srgb, var(--iris) 28%, transparent), var(--lift), var(--rim-top);
 }
 .panel[data-panel-dragging] .panel__chrome { cursor: grabbing; }
+/* M395 (Assessment B). The settle is ONE small dip that eases back into
+   place and never passes it — the old keyframe rang (5px, -2px, 1px) like a
+   spring built by hand. --dur-2; usePanelDrag's timer outlasts it. Reduced
+   motion: none — the attribute is cleared by that timer, not by the animation. */
 @keyframes panel-settle {
   0%   { transform: translateY(0); }
-  28%  { transform: translateY(5px); }
-  54%  { transform: translateY(-2px); }
-  74%  { transform: translateY(1px); }
+  35%  { transform: translateY(2px); }
   100% { transform: translateY(0); }
 }
-.panel[data-panel-settling] > .panel__motion { animation: panel-settle var(--dur-spring) var(--ease) both; }
+.panel[data-panel-settling] > .panel__motion { animation: panel-settle var(--dur-2) var(--ease) both; }
+@media (prefers-reduced-motion: reduce) { .panel[data-panel-settling] > .panel__motion { animation: none; } }
 
 /* A live signal announces itself as a finite expanding wave, then returns to
    the same calm dot. Re-entering working state restarts the wave because the
@@ -7723,14 +7813,18 @@ body {
 .status-dot[data-tone="working"] { animation: signal-live var(--dur-breath) var(--ease) 3; }
 
 /* The rest control is the summoning point. Its one finite beacon overlaps the
-   panel's spring arrival, making the expanded surface read as energy pulled
-   out of the pill rather than an unrelated popover fading in. */
+   panel's arrival, making the expanded surface read as energy pulled out of
+   the pill rather than an unrelated popover fading in. */
 @keyframes pill-beacon {
   0%   { box-shadow: 0 0 0 0 var(--iris), var(--rim-top); }
   55%  { box-shadow: 0 0 0 9px transparent, 0 0 28px var(--iris-dim), var(--rim-top); }
   100% { box-shadow: 0 0 0 0 transparent, var(--rim-top); }
 }
 .command-pill[data-pill-expanded] .command-pill__rest { animation: pill-beacon var(--dur-spring) var(--ease) 1; }
+/* M395. Declared here, after the rule it cancels (same specificity — an
+   earlier @media block would lose on source order): the global block only
+   shortens it; a beacon is decoration, so reduced motion drops it. */
+@media (prefers-reduced-motion: reduce) { .command-pill[data-pill-expanded] .command-pill__rest { animation: none; } }
 
 /* ─── M268. Center view toggle (TopBar) + Orchestration HUD ─── */
 /* M279. The toggle IS the `.seg` primitive now; these rules only keep the
@@ -9457,12 +9551,11 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* M315. A primary that cannot run is not a primary: a disabled filled button
    read as dark text on the accent, illegible and still claiming the eye. */
 .pf__verb--word.review-node__primary:disabled { background: transparent; color: var(--fg-3); border-color: var(--line); font-weight: 400; }
-/* M315. The canvas's Create sits ABOVE the panels (z 20) at the world's top-left
+/* M315. The canvas's Create sat ABOVE the panels (z 20) at the world's top-left
    corner, so a box-less text button printed straight onto whatever panel was
    framed there — "claude—Create" over a title, "Create" through a review's
-   header. It keeps its quiet weight but gets a surface at rest, so it reads as
-   a control over a panel, never as text on text. */
-.new-object-row__plus { background: var(--s-1); border-color: var(--line); padding: var(--sp-2) var(--sp-4); }
+   header; M315 gave it a surface. M395 moved it into the HUD, whose ground is
+   that surface, so it no longer carries one of its own. */
 /* M315. The Needs-you popover scrolls inside its 50vh, and its Notify / Sound
    footer is the LAST child — so with an approval expanded the footer sat at
    the scroll edge, sliced in half, reading as broken. It belongs to the whole

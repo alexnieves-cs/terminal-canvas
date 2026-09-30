@@ -8,7 +8,7 @@ import type { UpdateState } from '@renderer/session/update-store'
 import { displayPath } from '@shared/display-path'
 import { TMUX_HINT } from './hints'
 import { agentStepNeeded, recentFolderRows, repositoryExamples } from '@shared/first-run'
-import { firstWorkPlan, onboardingReadiness, LANE_ENGINE, type FirstWorkContext, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
+import { DESCRIBE_FIRST, firstWorkPlan, onboardingReadiness, LANE_ENGINE, type FirstWorkContext, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 
 export interface LauncherProps {
   presets: PresetRow[]
@@ -118,6 +118,19 @@ const INSTALL: Record<string, string> = {
   claude: 'install the Claude Code CLI so `claude` is on your PATH',
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
+
+/**
+ * M395. The Start verb's second line: its OUTCOME, or — while the sentence is
+ * the thing missing — the reason it cannot run (the dead-end rule: a control
+ * that cannot run says why, on itself). Pure, so both arms are checked.
+ */
+export function startVerbHint(refusedField: string | undefined, opensChat: boolean): string {
+  if (refusedField === 'intention') return DESCRIBE_FIRST
+  return opensChat ? 'Talk it through in this folder.' : 'An agent works on it on its own branch.'
+}
+
+/** M395. What the launcher's Create… says it adds — exactly what its sheet offers (verify:first-run revamp.launcher.2). */
+export const CREATE_SHEET_OFFERS = 'Add an object — an agent, a terminal, a conversation or a workflow.'
 
 export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, starterHint, onDismissStarterHint, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
   const readiness = onboardingReadiness(report)
@@ -356,13 +369,19 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         <li className="launcher__step launcher__step--start" data-launcher-step="start">
           <span className="launcher__step-num" aria-hidden="true">{step()}</span>
           <div className="launcher__field">
+            {/* M395 (the critic's P3 #8). Step 3 is a CHOICE — Start task, Ask a
+                question or Create… — and says so; it used to open on "say what
+                you want to work on", step 1's question a second time. */}
+            <span className="launcher__label" data-launcher-step-label="start">Choose how to start</span>
             {/* What will happen — the grant included — before anything does; or the
                 one thing still missing. One sentence, never a list of three. */}
             {/* M315. Hidden while the last press's refusal stands: "Claude Code will
                 work on its own branch of nothing" above "…/nothing does not exist"
-                promised what the line below it refused. */}
+                promised what the line below it refused. M395: hidden too while the
+                only thing missing is the sentence and there is no folder to preview
+                — the disabled Start says "Describe the task first" itself. */}
             <p className="launcher__summary" id="launcher-summary" data-onboarding-summary={plan.kind === 'refused' ? plan.field : plan.kind} title={plan.kind === 'refused' ? undefined : plan.folder}
-              hidden={answer !== null && plan.kind !== 'refused'}>
+              hidden={(answer !== null && plan.kind !== 'refused') || (plan.kind === 'refused' && plan.field === 'intention' && folder.trim() === '')}>
               {plan.kind === 'refused' ? plan.reason : plan.summary}
             </p>
             {answer !== null && (
@@ -387,7 +406,10 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                     have to infer that Start makes a task, Ask a conversation
                     and Create an object. The agent · folder · branch it will
                     use is the summary line above — never repeated here. */}
-                <span className="launcher__verb-hint" data-launcher-verb-hint="start">{opensChat ? 'Talk it through in this folder.' : 'An agent works on it on its own branch.'}</span>
+                {/* M395. The dead-end rule: a Start that cannot run for want of the
+                    sentence says so ON the control, where the eye is; its
+                    outcome returns the moment there is one. */}
+                <span className="launcher__verb-hint" data-launcher-verb-hint="start">{startVerbHint(plan.kind === 'refused' ? plan.field : undefined, opensChat)}</span>
               </button>
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null} aria-describedby={askReason !== null ? 'launcher-summary' : undefined}
                 title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
@@ -401,7 +423,10 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 title="Add an object to the canvas — opens the create sheet (Task or Panel)"
                 {...shellControl(() => onOpenSheet())}>
                 <span className="launcher__verb-name">Create…</span>
-                <span className="launcher__verb-hint" data-launcher-verb-hint="create">Add an object — a terminal, note, file or workflow.</span>
+                {/* M395. The sheet this opens (SpawnSheet's Panel side) offers an
+                    agent, a terminal (a command), a conversation and a workflow
+                    template — no note and no file, which the old line promised. */}
+                <span className="launcher__verb-hint" data-launcher-verb-hint="create">{CREATE_SHEET_OFFERS}</span>
               </button>
             </div>
           </div>

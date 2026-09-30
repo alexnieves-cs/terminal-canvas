@@ -14,7 +14,7 @@ import { tidyPanels } from '../placement'
 import { removeLink, setLinkLabel } from '@renderer/panels/panels'
 import { expandGroup, removeGroup, toggleGroup } from '@renderer/groups/groups'
 import { GROUP_COLOURS } from '@shared/groups'
-import { zoomTarget } from '../viewport'
+import { viewSizeAround, zoomTarget } from '../viewport'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
 
@@ -44,7 +44,7 @@ export type ArrangementActions = Pick<PaletteActions,
 export function arrangementActions(ctx: ActionCtx): ArrangementActions {
   const {
     palette, linkMode, panelsRef, mergedRef, nextGroupIdRef, broadcastInput, broadcastReady,
-    resetViewport, fitAll, fitSelection, selectedIdsRef, goToViewport, cameraBack,
+    resetViewport, fitAll, fitSelection, selectedIdsRef, goToViewport, cameraBack, worldCentre,
     cameraForward, bookmarksRef, setBookmarks, viewportRef, selectOnly, commitHistory,
     toggleMerged, setPanels, setGroups, setInputMode, setBroadcastInput, setCenterView,
     toggleFlip
@@ -108,12 +108,15 @@ export function arrangementActions(ctx: ActionCtx): ArrangementActions {
       // one gesture to undo, not twenty. Sizes never change (tidyPanels'
       // contract), so no rect can fall under the floor the validator
       // rejects; order never changes, so the arrangement keeps its meaning.
+      // M395: packed toward the VIEW's shape, so it frames at a readable zoom
+      // (placement.ts) — the host's size, read once, outside the updater.
+      const view = viewSizeAround(worldCentre(), viewportRef.current)
       setPanels((prev) => {
         const wanted = new Set(ids)
         // M92. A locked panel stays where it is under Arrange too.
         const chosen = prev.filter((p) => wanted.has(p.rect.id) && p.locked !== true)
         if (chosen.length < 2) return prev
-        const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
+        const tidied = new Map(tidyPanels(chosen.map((p) => p.rect), undefined, { view }).map((r) => [r.id, r]))
         const next = prev.map((p) => {
           const r = tidied.get(p.rect.id)
           return r === undefined || (r.x === p.rect.x && r.y === p.rect.y) ? p : { ...p, rect: r }

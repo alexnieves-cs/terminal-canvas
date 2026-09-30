@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
-import { minimapPanViewport, minimapProjection, minimapToWorld, minimapViewHit, viewportCentredAt, type MinimapProjection } from './minimap'
+import { minimapCovered, minimapNeeded, minimapPanViewport, minimapPresence, minimapProjection, minimapToWorld, minimapViewHit, viewportCentredAt, type MinimapPointer, type MinimapPresence, type MinimapProjection } from './minimap'
 import type { Size, Viewport, WorldRect } from './viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { MINIMAP_LEGEND, panelState, type StateInput } from '@renderer/panels/panel-state'
@@ -129,6 +129,54 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
     document.addEventListener('mousemove', move); document.addEventListener('mouseup', up)
   }, [projection, viewport, size, goTo])
 
+  // M395 (backlog #83). THE MAP YIELDS. `aside` tucks it into its corner
+  // while the pointer works in a panel it covers or crosses it mid-gesture
+  // (minimap.ts's minimapPresence); `hidden` while every object is already in
+  // view, where a click on it goes nowhere (minimapNeeded). The element STAYS
+  // MOUNTED either way: the ResizeObserver above lives on it, and the safe
+  // area (safe-area.ts) reads its box to reserve it while hidden.
+  const needed = minimapNeeded(rects, viewport, size)
+  const [presence, setPresence] = useState<MinimapPresence>('rest')
+  const presenceRef = useRef<MinimapPresence>('rest')
+  const beforeRef = useRef<MinimapPointer | null>(null)
+  // The latest camera and rects for the document listener, which is
+  // installed once — re-installing it on every camera frame would cost more
+  // than the reads it saves.
+  const liveRef = useRef({ rects, viewport })
+  liveRef.current = { rects, viewport }
+  useEffect(() => {
+    const set = (next: MinimapPresence): void => {
+      if (presenceRef.current === next) return
+      presenceRef.current = next
+      setPresence(next)
+    }
+    const onMove = (event: MouseEvent): void => {
+      const map = hostRef.current
+      const parent = map?.parentElement
+      if (map === null || map === undefined || parent === null || parent === undefined || map.offsetWidth === 0) { beforeRef.current = null; set('rest'); return }
+      // Our own drag is intent by definition; leave the presence alone.
+      if (dragRef.current !== null) return
+      const hb = parent.getBoundingClientRect()
+      const box = map.offsetParent === parent
+        ? { x: map.offsetLeft, y: map.offsetTop, w: map.offsetWidth, h: map.offsetHeight }
+        : (() => { const b = map.getBoundingClientRect(); return { x: b.left - hb.left, y: b.top - hb.top, w: b.width, h: b.height } })()
+      const at = { x: event.clientX - hb.left, y: event.clientY - hb.top }
+      const target = event.target instanceof Element ? event.target : null
+      const over = target?.closest('[data-panel-id]')?.getAttribute('data-panel-id') ?? null
+      const now: MinimapPointer = { at, over, pressed: event.buttons !== 0 }
+      const { rects: rs, viewport: vp } = liveRef.current
+      set(minimapPresence(presenceRef.current, now, beforeRef.current, box, minimapCovered(box, rs, vp)))
+      beforeRef.current = now
+    }
+    const onLeave = (): void => { beforeRef.current = null; set('rest') }
+    document.addEventListener('mousemove', onMove, { passive: true })
+    document.documentElement.addEventListener('mouseleave', onLeave)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.documentElement.removeEventListener('mouseleave', onLeave)
+    }
+  }, [])
+
   const viewBox = ghost === null ? projection.view : { ...projection.view, x: ghost.x, y: ghost.y }
   // An empty canvas has no board to show: nothing, rather than an iris box
   // beside the launcher with no purpose a person could name.
@@ -140,6 +188,8 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
       className="minimap"
       data-minimap
       data-cover={cover > 0.9 ? 'full' : 'part'}
+      data-presence={!needed ? 'hidden' : presence}
+      aria-hidden={!needed ? true : undefined}
       data-grabbing={grabbing ? '' : undefined}
       role="img"
       aria-label={`Overview: ${rects.length} panel${rects.length === 1 ? '' : 's'}; click to move the camera, or drag the view rectangle to pan`}

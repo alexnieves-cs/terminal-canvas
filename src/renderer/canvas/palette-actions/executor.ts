@@ -30,7 +30,6 @@ import { allTemplates } from '@shared/templates'
 import { WORK_ITEM_STATES, type PersistedWorkItem } from '@shared/work-items'
 import { repoOfKey } from '@shared/work-items'
 import { resolveRepository, startWorkNeeds, type StartWorkRepo } from '@renderer/palette/start-work'
-import { tidyPanels } from '../placement'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { SWARM_PRESETS, SWARM_PRESET_IDS, parseSwarmPresetId } from '@shared/swarm'
 import type { HandoffTrigger } from '@shared/handoff'
@@ -48,7 +47,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
     recheckEnvironment, applyStarter, templateRowsRef, registry, palette, panelsRef, presetRows,
     settingRows, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise,
     onSelectPanel, onClosePanel, openReview, beginNewChat, lockPanel, unlockPanel, pinPanel,
-    unpinPanel, maximisePanel, restorePanel, restartWithSpec, commitHistory, switchWorkspace,
+    unpinPanel, maximisePanel, restorePanel, restartWithSpec, switchWorkspace,
     reloadSettings, reloadWorktrees, worktreeRows, setInputMode, teammatesRef, workItemsRef,
     self
   } = ctx
@@ -266,14 +265,16 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'maximise': maximisePanel(a.panel!); return { kind: 'ran' }
       case 'restore': restorePanel(a.panel!); return { kind: 'ran' }
       case 'tidy': {
-        // The same arithmetic as the `tidyPanels` member above (one history
-        // entry, locked panels stay), repeated rather than called because a
-        // member of this literal cannot name a sibling before the object
-        // exists — and `verify:verbs closure.1` maps this verb to it.
+        // M395. The palette's own `tidyPanels` (arrangement.ts), reached
+        // through `self` at CALL time — the object exists by then. The copy
+        // that lived here only called commitHistory, which moves nothing
+        // (lb :4498): the agent door's tidy reported `ran` and left every
+        // panel where it was (recorded in the M203/M204 log and the M388
+        // ledger). One setPanels, one history entry, locked panels stay, and
+        // the same pack toward the view's shape as the palette row.
         const chosen = panelsRef.current.filter((p) => p.locked !== true)
         if (chosen.length < 2) return { kind: 'refused', reason: 'nothing to tidy — fewer than two unlocked panels' }
-        const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
-        commitHistory(panelsRef.current.map((p) => { const r = tidied.get(p.rect.id); return r === undefined ? p : { ...p, rect: r } }))
+        self.tidyPanels(chosen.map((p) => p.rect.id))
         return { kind: 'ran' }
       }
       case 'zoom-fit': {

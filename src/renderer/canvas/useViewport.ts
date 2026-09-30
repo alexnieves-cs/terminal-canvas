@@ -9,10 +9,15 @@ import {
   restoreCamera as restoreCameraExact,
   screenToWorld,
   zoomAt,
+  clearFraming,
+  READABLE_SCALE,
   type Point,
+  type Size,
   type Viewport,
   type WorldRect
 } from './viewport'
+import { minimapNeeded } from './minimap'
+import { chromeObstacles, hostSize } from './safe-area'
 import { easeInOut, flightDuration, interpolateViewport } from './flight'
 import { canRedo, canUndo, createHistory, pushHistory, redoHistory, undoHistory, type History } from '@renderer/panels/history'
 import type { JumpDirection } from './attention'
@@ -419,38 +424,59 @@ export function useViewport(
     setViewport((vp) => zoomAt(vp, centre, factor))
   }, [hostRef])
 
+  /**
+   * M395. EVERY FRAMING LANDS IN THE SAFE AREA. A framing verb computes its
+   * target as before (fitTo, fitReadable, centreOn) and then passes it through
+   * `clearFraming` with the chrome floating over the canvas, read at press
+   * time (`safe-area.ts`): a target already clear of the minimap, the HUD, the
+   * pill and any drawer over the canvas is untouched, one that is not moves —
+   * or, for a fit, refits into the part of the host they leave. The map is
+   * reserved only when the target leaves some object out of view: framing
+   * everything is exactly what hides it (`minimapNeeded`), so Fit all does not
+   * shrink away from a map that is about to disappear, and a second Fit lands
+   * where the first did.
+   */
+  const safely = useCallback((host: HTMLElement, target: Viewport, subject: readonly WorldRect[], size: Size, keepScale = false): Viewport => {
+    const reserve = minimapNeeded(rectsRef.current, target, size) ? 'always' : 'never'
+    return clearFraming(target, subject, size, chromeObstacles(host, { minimap: reserve }), { keepScale })
+  }, [])
+
   /** Cmd+1's target, named. Same stability requirement as zoomBy. */
   const fitAll = useCallback(() => {
     const host = hostRef.current
     if (!host) return
-    const bounds = host.getBoundingClientRect()
+    const size = hostSize(host)
     // rectsRef, not `rects`: read at press time, so the fit frames what is on
     // the canvas NOW without the array's per-frame identity churn reaching a
     // dep list. Same reason the keydown effect reads it through the ref.
-    jump(fitTo(rectsRef.current, { width: bounds.width, height: bounds.height }))
-  }, [hostRef, jump])
+    const all = rectsRef.current
+    jump(safely(host, fitTo(all, size), all, size))
+  }, [hostRef, jump, safely])
 
   const fitSelection = useCallback((rects: WorldRect[]) => {
     const host = hostRef.current
     if (!host || rects.length === 0) return
-    const bounds = host.getBoundingClientRect()
-    flyTo(fitTo(rects, { width: bounds.width, height: bounds.height }))
-  }, [hostRef, flyTo])
+    const size = hostSize(host)
+    flyTo(safely(host, fitTo(rects, size), rects, size))
+  }, [hostRef, flyTo, safely])
 
   const frameRects = useCallback((rects: WorldRect[]) => {
     const host = hostRef.current
     if (!host || rects.length === 0) return
-    const bounds = host.getBoundingClientRect()
-    jump(fitTo(rects, { width: bounds.width, height: bounds.height }))
-  }, [hostRef, jump])
+    const size = hostSize(host)
+    jump(safely(host, fitTo(rects, size), rects, size))
+  }, [hostRef, jump, safely])
 
   /** The first start's framing — `fitReadable`: the new task at a scale its text can be read at. */
   const frameReadable = useCallback((rects: WorldRect[], focus?: WorldRect) => {
     const host = hostRef.current
     if (!host || rects.length === 0) return
-    const bounds = host.getBoundingClientRect()
-    jump(fitReadable(rects, focus, { width: bounds.width, height: bounds.height }))
-  }, [hostRef, jump])
+    const size = hostSize(host)
+    // What fitReadable framed: every rect, or the conversation alone when
+    // the pair would read too small — the subject the chrome must clear.
+    const subject = focus === undefined || fitTo(rects, size).scale >= READABLE_SCALE ? rects : [focus]
+    jump(safely(host, fitReadable(rects, focus, size), subject, size))
+  }, [hostRef, jump, safely])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -616,9 +642,15 @@ export function useViewport(
     // throw over a call that can only happen during teardown/an unmounted
     // host, never from a normal palette action.
     if (!host) return
-    const bounds = host.getBoundingClientRect()
-    jump(centreOnRect(viewportRef.current, rect, { width: bounds.width, height: bounds.height }))
-  }, [hostRef, jump])
+    const size = hostSize(host)
+    const target = centreOnRect(viewportRef.current, rect, size)
+    // M395. A panel that fits is moved clear of the chrome at the SAME scale
+    // (centreOn's contract); one larger than the canvas is leading-edge
+    // aligned by centreOnRect and left there — its far side is off screen
+    // whatever the chrome does.
+    const fits = rect.w * target.scale <= size.width && rect.h * target.scale <= size.height
+    jump(fits ? safely(host, target, [rect], size, true) : target)
+  }, [hostRef, jump, safely])
 
   /**
    * The fourth verb that asks by name, after resetViewport, worldCentre and
