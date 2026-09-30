@@ -427,3 +427,45 @@ M401's; `attention.1`, `shell 106/126/127` and `flowchart.app.10` are NOT in the
 environmental on this machine today (the M399 run was green on them) — the lead's gate should re-measure them. Two
 earlier product runs (mine and the baseline's) went red on `work.action.1`/`review.task.2` with "no-panel" at load
 8–14 and green on the third; recorded, not diagnosed.
+
+#### M401 follow-up (critic)
+
+A fresh critic read 00b50cdc. Its material findings, each fixed here:
+
+1. **B7 nagged on every launch.** `reopenTasks` filtered `createdAt < APP_OPENED_AT`, which stays true forever, and
+   "Got it" lasts only for the session, so every launch re-announced every old task. *Fix:* `reopenTaskNews`
+   (`shared/persistence.ts`) keeps a task line only if its fact moved after the last exit (`LastExit.at`, already
+   recorded) and before this launch opened. `finished` is judged by `merged.at`, and `needs-you`/`asleep` by the
+   item's `updatedAt`. When there is no exit time, or no time on the task, `finished` and `asleep` are dropped and
+   only `needs-you` stays. No persisted key was added. The upper bound, `openedAt`, is new and was not in the brief.
+   The notice is live, so without it the person's own acts in this session (Mark reviewed, a merge) would appear as
+   "news". *What this means, for the lead:* nothing in the app patches a work item while its renderer is gone. So
+   after a normal quit the task lines are now almost always empty. In practice they show only after a crash (no
+   exit record: `needs-you` only) or after a main-side patch while the window was closed. A lane that a tmux agent
+   changed while the app was closed does not count as news, because `updatedAt` does not see it. Seeing it would
+   need a persisted per-task handoff digest, and the brief ruled that out. *Check:* `verify:layout reopen.task.2`
+   runs the real filter and the real line builder over two launches' worth of the same five tasks. Launch 1 reports
+   only what moved between exit and open. Launch 2, with nothing changed, reports nothing. With no exit time, only
+   needs-you stays. A fact from this launch is not a return.
+2. **The Close confirm.** At rest the verb is now a plain word verb (no `review-node__primary`) labelled **Close
+   conversation…**, because that is all it closes. The armed **Close** now uses `review-node__discard-confirm`
+   (red outline, not the filled primary), because it stops an agent. The DOM aliases (`close-task`,
+   `data-review-close-confirm`) are unchanged.
+3. `PaletteActions.beginRemoveWorktree` now declares `after?: () => void` (`palette/commands.ts`), and presets.ts
+   takes it from the declared shape. *Check:* `review.accepted.1` goes on to press Remove lane, answers the
+   palette's confirm with Enter, and asserts the result: the confirm named `tc/m401`, the worktree directory is
+   gone, Remove lane is disabled with "the lane was removed", and the detail reads "its lane has been removed". It
+   also asserts the new rest label, that the verb is not primary, and the armed Close's class.
+4. **The B9 line.** `VERIFIED_MEANS` is now "Only a check this canvas runs counts — the agent's own runs don't.".
+   The verdict's Run checks door is removed, along with its plumbing (`runChecksAsk`, the scroll-into-view effect
+   and the inline-verb CSS). The Run checks form's own door is the only one left.
+
+Minor: `review-readiness.ts`'s doc comment is back on `ReviewHandoffState`. **One word: "seen"**, for the tally
+("N of M seen") and for both row states (recorded: "seen, recorded"; session: "seen this session"). "Reviewed" stays
+the name of the one persisted act, Mark reviewed, so a session toggle never sounds like the recorded fact. The
+toggle already said "mark seen". The merge sentence showed twice on an accepted review, once in the head's note and
+once in the verdict. The note is no longer rendered when the task is accepted, and the verdict's line carries
+`data-review-task-detail`.
+
+**Goldens expected to move:** any scene with a verdict that is not verified (the shorter line, no Run checks verb).
+The accepted row and the reopen lines appear in no scene.

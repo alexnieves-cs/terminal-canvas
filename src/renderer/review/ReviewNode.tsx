@@ -363,10 +363,7 @@ function renderTask(
   laneChecks: readonly CheckRecord[] | null = null,
   accept: AcceptUi | null = null,
   /** M401 (B2). Close task's two-press arm — the node's state, since this is not a component. */
-  closeArm: { armed: boolean; set: (armed: boolean) => void } | null = null,
-  /** M401 (B9). The verdict's Run checks verb opens the lane's Run checks form below. */
-  onAskRunChecks?: () => void,
-  runChecksAsk = 0
+  closeArm: { armed: boolean; set: (armed: boolean) => void } | null = null
 ): { head: JSX.Element; decision: JSX.Element; details: JSX.Element } {
   const h = task.handoff
   // `shared` is markable too: a person CAN read a shared diff, and the
@@ -386,17 +383,19 @@ function renderTask(
         <span className="review-node__section-label">{task.title}</span>
         <span className="review-node__section-count" data-review-task-word={h.state} data-review-task-standing={h.standing} data-tone={h.tone}>{h.word}</span>
       </h4>
-      <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>
+      {/* M401 follow-up (critic). An accepted task says its detail ONCE, in the
+          verdict below, which carries the same attribute — the note here was
+          the merge sentence a second time, a line above itself. */}
+      {h.state !== 'accepted' && <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>}
       {h.state === 'accepted' ? (
         // M315. Accepted is the task's LAST word: the review conditions below it
         // described a lane that has since landed, and read as a warning.
         <div className="task-review__verdict" data-task-verification="accepted" data-tone="green">
           <span className="task-review__word">{h.word}</span>
-          <ul className="task-review__conditions"><li className="task-review__holds" data-task-holds>{h.detail}</li></ul>
+          <ul className="task-review__conditions"><li className="task-review__holds" data-task-holds data-review-task-detail>{h.detail}</li></ul>
         </div>
       ) : task.onComments !== undefined && (
         <TaskVerdict
-          {...(onAskRunChecks === undefined || readOnly ? {} : { onRunChecks: onAskRunChecks })}
           standing={h.standing}
           agentWorking={agentWorkingOf(h.state)}
           checks={laneChecks}
@@ -455,10 +454,13 @@ function renderTask(
         // stays a door while it cannot run, and says why by the palette's
         // own sentence.
         closeArm?.armed === true && task.chatPanelId !== undefined ? (
-          <div className="review-node__accept-armed" data-review-close-armed role="alertdialog" aria-label="Confirm close task">
+          <div className="review-node__accept-armed" data-review-close-armed role="alertdialog" aria-label="Confirm close conversation">
             <p className="review-node__accept-sentence">Close this task&#39;s conversation? Its agent stops and its panel closes; the branch, the lane and this review stay.</p>
             <div className="review-node__task-verbs">
-              <button type="button" className="pf__verb pf__verb--word review-node__primary" data-review-close-confirm
+              {/* M401 follow-up (critic). Closing stops an agent: the armed verb
+                  is the discard confirm's red outline, never the surface's
+                  filled primary, which reads as "the thing to do next". */}
+              <button type="button" className="review-node__discard-confirm" data-review-close-confirm
                 onMouseDown={press(() => { closeArm.set(false); task.onCloseTask?.(task.itemId) })}>Close</button>
               <button type="button" className="pf__verb pf__verb--word" data-review-close-cancel
                 onMouseDown={press(() => closeArm.set(false))}>Cancel</button>
@@ -467,11 +469,15 @@ function renderTask(
         ) : (
           <div className="review-node__task-verbs" data-review-task-next="accepted">
             {task.onCloseTask !== undefined && (
-              <button type="button" className={`pf__verb pf__verb--word${task.chatPanelId !== undefined ? ' review-node__primary' : ''}`} data-review-task-verb="close-task"
+              // M401 follow-up (critic). A plain word verb at rest: it ends a
+              // conversation, so it is never the surface's filled primary. It
+              // says "conversation" because that is all it closes — the task,
+              // its lane and this review stay.
+              <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="close-task"
                 disabled={readOnly || task.chatPanelId === undefined}
                 title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the task\'s conversation is already closed' : 'close the task\'s conversation — you confirm first'}
                 onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => closeArm?.set(true))}>
-                Close task…
+                Close conversation…
               </button>
             )}
             {task.onRemoveLane !== undefined && (
@@ -564,7 +570,6 @@ function renderTask(
           {...(task.pr === undefined ? {} : { pr: task.pr })}
           {...(task.note === undefined ? {} : { note: task.note })}
           {...(task.onRunChecks === undefined ? {} : { onRunChecks: task.onRunChecks })}
-          runChecksAsk={runChecksAsk}
           {...(task.suggestCheck === undefined ? {} : { suggestCheck: task.suggestCheck })}
           {...(task.deliverables === undefined ? {} : { deliverables: task.deliverables })}
           {...(task.onSaveRecipe === undefined ? {} : { onSaveRecipe: task.onSaveRecipe })}
@@ -938,12 +943,8 @@ function ReviewNodeImpl({
   // M401 (B2). Close task's arm, dropped whenever the conversation it would close goes.
   const [closeArmed, setCloseArmed] = useState(false)
   useEffect(() => { if (task?.chatPanelId === undefined) setCloseArmed(false) }, [task?.chatPanelId])
-  // M401 (B9). A counter, not a flag: each press of the verdict's Run checks
-  // asks the form below to open again, even when it was opened and cancelled.
-  const [runChecksAsk, setRunChecksAsk] = useState(0)
   const taskParts = task === undefined ? undefined : renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks, accept,
-    { armed: closeArmed, set: setCloseArmed },
-    task.onRunChecks === undefined ? undefined : () => setRunChecksAsk((n) => n + 1), runChecksAsk)
+    { armed: closeArmed, set: setCloseArmed })
 
   // M260. Prune `locallyReviewed` to whatever the current result still
   // lists: a discarded or reverted file must not keep inflating "N of M
@@ -1166,8 +1167,10 @@ function ReviewNodeImpl({
   const renderFileRow = (f: ReviewNodeRow): JSX.Element => {
     const removing = removingPaths.has(f.path)
     // M401 (B9). ONE state per file: a file the task's current mark covers is
-    // REVIEWED (recorded), and outranks the session's own "seen" — which is
-    // then no longer offered, because the recorded fact already says more.
+    // RECORDED, and outranks the session's own mark — which is then no longer
+    // offered, because the recorded fact already says more. Both are SEEN in
+    // the words (the tally's word too, M401 follow-up): "reviewed" stays the
+    // one persisted act, Mark reviewed, so a session toggle never reads as it.
     const recorded = recordedPaths.has(f.path)
     const reviewedHere = recorded || locallyReviewed.has(f.path)
     return (
@@ -1193,7 +1196,7 @@ function ReviewNodeImpl({
               visible (never hover-gated) — the row's own "seen" state, as
               opposed to the toggle that sets it (below), which follows the
               same hover-reveal the discard verb does. */}
-          {reviewedHere && <span className="review-node__reviewed-mark" data-review-node-file-state={recorded ? 'reviewed' : 'seen'} title={recorded ? 'reviewed — recorded by Mark reviewed, and the lane has not moved since' : 'seen this session — Mark reviewed records it'} aria-label={recorded ? 'reviewed' : 'seen this session'}><Check /></span>}
+          {reviewedHere && <span className="review-node__reviewed-mark" data-review-node-file-state={recorded ? 'reviewed' : 'seen'} title={recorded ? 'seen — recorded by Mark reviewed, and the lane has not moved since' : 'seen this session — Mark reviewed records it'} aria-label={recorded ? 'seen, recorded' : 'seen this session'}><Check /></span>}
         </button>
         {!readOnly && !recorded && (
           <button
@@ -1480,7 +1483,7 @@ function ReviewNodeImpl({
           <div className="review-node__footer" data-review-node-footer>
             {!readOnly && model.files.length > 0 && (
               // M401 (B9). The tally counts the SAME per-file state the rows
-              // show — recorded or seen — so it can never read "0 of 1" beside
+              // show — recorded or this session's — so it can never read "0 of 1" beside
               // "you reviewed 1 file here" for the file that mark covers.
               <span className="review-node__footer-progress" data-review-node-progress={seenCount}>
                 {seenCount} of {model.files.length} seen

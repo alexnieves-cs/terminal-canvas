@@ -177,6 +177,33 @@ export interface ReopenTask extends ReopenPanel {
   outcome: ReopenTaskOutcome
   /** What a lone line adds after the outcome — "merged into main as abc1234", "ready to review". */
   detail?: string
+  /**
+   * When the fact the line reports last moved: the merge's `at` for
+   * `finished`, the work item's `updatedAt` otherwise. `reopenTaskNews`
+   * compares it with the last exit. Absent = unknown.
+   */
+  changedAt?: number
+}
+
+/**
+ * M401 follow-up (critic). ONLY NEWS COMES BACK. Without this every launch
+ * re-announced every old task — "finished" for a merge from last week, "asleep"
+ * for every chat (a chat's process always ends with the app) — and "Got it"
+ * holds only for the session, so the nag was permanent. The last exit's `at`
+ * is the one "since you were here" this app already records, so no new key:
+ * a line survives only if its fact moved after that exit. With no exit time,
+ * or no time on the task, `finished` and `asleep` say nothing (they are never
+ * a thing to do) and only `needs-you` stays, because that one IS a thing to do.
+ * `openedAt` closes the window at the other end: the notice is live, and a
+ * fact that moved during THIS launch (Mark reviewed, a merge) is the person's
+ * own act, not something that happened while they were away.
+ * The limit: `updatedAt` moves on the work item's own patches, so a lane that
+ * changed while the app was closed (a tmux agent committing) is not seen as
+ * news until something patches its item.
+ */
+export function reopenTaskNews(tasks: readonly ReopenTask[], exitAt: number | undefined, openedAt = Infinity): ReopenTask[] {
+  const known = exitAt !== undefined && Number.isFinite(exitAt)
+  return tasks.filter((t) => (known && t.changedAt !== undefined ? t.changedAt > exitAt && t.changedAt < openedAt : t.outcome === 'needs-you'))
 }
 
 /**

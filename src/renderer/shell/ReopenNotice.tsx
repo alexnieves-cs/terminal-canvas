@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import {
-  lifecycleFacts, reopenLines, reopenSummary, reopenTaskLines,
+  lifecycleFacts, reopenLines, reopenSummary, reopenTaskLines, reopenTaskNews,
   type LastExit, type LifecycleFacts, type ReopenLine, type ReopenPanel, type ReopenTask
 } from '@shared/persistence'
 import { bootIssues } from '@renderer/session/boot-issues'
@@ -47,6 +47,8 @@ export interface ReopenDeps {
    * terminal-only notice.
    */
   tasks?: readonly ReopenTask[]
+  /** M401 follow-up. When this launch began — a task fact newer than it is not a return. */
+  openedAt?: number
 }
 
 export interface ReopenModel {
@@ -60,7 +62,7 @@ export interface ReopenModel {
 }
 
 export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
-  const { restored, liveAtBoot, present, dormant, backend, tasks } = deps
+  const { restored, liveAtBoot, present, dormant, backend, tasks, openedAt } = deps
   // `undefined` while main is being asked; `null` is main's answer "no record".
   const [lastExit, setLastExit] = useState<LastExit | null | undefined>(undefined)
   useEffect(() => {
@@ -101,8 +103,10 @@ export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
       lastExit: summary.lastExit
     })
     // M401 (B7). Task lines follow the terminal ones, and only for a task
-    // whose panel is still here — "Show" must land on something.
-    all.push(...reopenTaskLines((tasks ?? []).filter((t) => present.has(t.id))))
+    // whose panel is still here — "Show" must land on something — and only
+    // for what moved since the last exit (`reopenTaskNews`), or every launch
+    // re-announces every old task and "Got it" never sticks.
+    all.push(...reopenTaskLines(reopenTaskNews((tasks ?? []).filter((t) => present.has(t.id)), summary.lastExit?.at, openedAt)))
     const lines = acknowledged ? all.filter((l) => l.group === 'ended') : all
     if (lines.length === 0) return null
     return {
@@ -112,7 +116,7 @@ export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
       acknowledge: () => setAcknowledged(true),
       leave: (ids) => setLeft((cur) => { const next = new Set(cur); for (const id of ids) next.add(id); return next })
     }
-  }, [summary, present, dormant, left, acknowledged, backend, keepOnQuit, tasks])
+  }, [summary, present, dormant, left, acknowledged, backend, keepOnQuit, tasks, openedAt])
 }
 
 /** Past this many panels a line offers one "Start all" instead of a button each. */

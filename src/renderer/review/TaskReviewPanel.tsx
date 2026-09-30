@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { proposalDecisionTitle } from '@shared/decision-audit'
 import { adoptedRunId, recordOrchEvent } from '@renderer/orchestration/orch-record'
 import { outward } from '@shared/outward'
@@ -60,8 +60,6 @@ export interface TaskReviewPanelProps {
   onSaveRecipe?: (itemId: string, name: string, passedChecks: string[]) => Promise<string | null>
   /** M315. The verdict is rendered at the TOP of the review by `TaskVerdict`; this panel then starts at the evidence. */
   hideVerdict?: boolean
-  /** M401 (B9). Bumped by the verdict's Run checks: each change opens the Run checks form and brings it into view. */
-  runChecksAsk?: number
 }
 
 /**
@@ -81,19 +79,17 @@ function recordProposalAnswer(itemId: string, c: ReviewComment, keep: boolean): 
 }
 
 /**
- * M401 (B9). What "verified" asks for, in one line under a verdict that is not
- * it yet. The critique's reader saw "not verified" after the agent had run the
- * tests and took the banner for a stale one: the agent's own runs are its
- * ACCOUNT (readiness.4 keeps the two sources apart), and only a check this
- * canvas watched exit counts. Saying so, with the verb that produces one, is
- * the fix; loosening the rule would be the false claim it exists to refuse.
+ * M401 (B9). Why a verdict is not `verified` yet, in one short line. The
+ * critique's reader saw "not verified" after the agent had run the tests and
+ * took the banner for a stale one: the agent's own runs are its ACCOUNT
+ * (readiness.4 keeps the two sources apart), and only a check this canvas
+ * watched exit counts. Saying so is the fix; loosening the rule would be the
+ * false claim it exists to refuse. The one door that produces such a check is
+ * the Run checks form below (M401 follow-up: a second door here duplicated it).
  */
-export const VERIFIED_MEANS = 'Verified means you reviewed this revision, a check this canvas ran passed on it, and nothing is left open. Tests the agent ran itself are its account, not a check this canvas saw.'
+export const VERIFIED_MEANS = 'Only a check this canvas runs counts — the agent\'s own runs don\'t.'
 
-export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'standing' | 'checks' | 'comments' | 'criteria' | 'criteriaMet'> & {
-  /** M401 (B9). Opens the Run checks form below; absent where the canvas cannot run one. */
-  onRunChecks?: () => void
-}): JSX.Element {
+export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'standing' | 'checks' | 'comments' | 'criteria' | 'criteriaMet'>): JSX.Element {
   const verification = verificationOf({
     agentWorking: p.agentWorking,
     standing: p.standing,
@@ -114,11 +110,6 @@ export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'stan
       {(verification.stage === 'agent-finished' || verification.stage === 'stale') && (
         <p className="task-review__means" data-task-verified-means>
           {VERIFIED_MEANS}
-          {p.onRunChecks !== undefined && !(p.checks ?? []).some((c) => c.outcome === 'passed') && (
-            <>{' '}<button type="button" className="pf__verb pf__verb--word" data-task-verified-run
-              title="Run this lane's checks in a watcher in the lane — the form opens below"
-              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); p.onRunChecks?.() }}>Run checks…</button></>
-          )}
         </p>
       )}
     </div>
@@ -202,20 +193,6 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       setRecipeNote(`saved — “${name}” is in Start work's Recipe list`)
     })
   }
-
-  // M401 (B9). The verdict's Run checks lands HERE, on the one form — never a
-  // second one up top. The same open the form's own button does, then the
-  // block is scrolled into the review's view.
-  const runBlockRef = useRef<HTMLDivElement | null>(null)
-  const askedRef = useRef(p.runChecksAsk ?? 0)
-  useEffect(() => {
-    if (p.runChecksAsk === undefined || p.runChecksAsk === askedRef.current) return
-    askedRef.current = p.runChecksAsk
-    setCheckNote(null)
-    setCheckDraft((cur) => cur ?? '')
-    void p.suggestCheck?.().then((cmd) => setCheckDraft((cur) => (cur === '' && cmd !== null ? cmd : cur)), () => {})
-    runBlockRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [p.runChecksAsk]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const runChecks = (): void => {
     if (checkDraft === null || checkDraft.trim() === '' || p.onRunChecks === undefined) return
@@ -304,7 +281,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       </div>
 
       {p.onRunChecks !== undefined && !p.readOnly && (
-        <div className="task-review__block task-review__run" data-task-run-checks ref={runBlockRef}>
+        <div className="task-review__block task-review__run" data-task-run-checks>
           {checkDraft === null ? (
             <button type="button" className="pf__verb pf__verb--word" data-task-run-open
               title="Run this lane's checks in a watcher in the lane — each run keeps its own output"

@@ -857,7 +857,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       onRemoveLane: (id) => {
         const it = workItemsRef.current.find((i) => i.id === id)
         if (it?.worktreeId === undefined) return
-        // The second argument is presets.ts's optional `after`: the handoffs
+        // The second argument is PaletteActions' optional `after`: the handoffs
         // are re-read once the lane is really gone, so this section says so.
         startWorkRef.current?.beginRemoveWorktree(it.worktreeId, refreshTaskHandoffs)
       },

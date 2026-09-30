@@ -161,11 +161,10 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       // the toggle row's own title flip.
       void window.canvas.preset.setWorktree(id, on).then(reloadPresets)
     },
-    // M401 (B2). `after` is optional and outside PaletteActions' declared
-    // shape on purpose: only the review's Remove lane passes it (through
-    // useBoardVerbs' own typing of this ref), to re-read its task once the
-    // lane is really gone. Every other door calls it with the id alone.
-    beginRemoveWorktree: (id: string, after?: () => void) => {
+    // M401 (B2). `after` (declared on PaletteActions) is passed only by the
+    // review's Remove lane, to re-read its task once the lane is really gone.
+    // Every other door calls it with the id alone.
+    beginRemoveWorktree: (id, after) => {
       // Gated, for deletePreset's reason. The question names the BRANCH,
       // because that is what the user would recognise; the path is in the
       // row's subtitle they just read. A dirty tree is refused by git itself

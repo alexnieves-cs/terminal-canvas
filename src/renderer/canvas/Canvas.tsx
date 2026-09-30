@@ -8175,7 +8175,10 @@ export function Canvas({
       const outcome = reopenTaskOutcome(h?.state, item.merged !== undefined, chat !== undefined)
       if (outcome === null) continue
       const detail = reopenTaskDetail(outcome, { ...(item.merged === undefined ? {} : { merged: item.merged }), ...(h === undefined ? {} : { state: h.state, word: h.word }) })
-      out.push({ id: shown.rect.id, label: item.title, outcome, ...(detail === undefined ? {} : { detail }) })
+      // The time the notice compares with the last exit (`reopenTaskNews`): a
+      // finished task by its merge, anything else by its item's last change.
+      const changedAt = outcome === 'finished' ? item.merged?.at : item.updatedAt
+      out.push({ id: shown.rect.id, label: item.title, outcome, ...(detail === undefined ? {} : { detail }), ...(changedAt === undefined ? {} : { changedAt }) })
     }
     return out
   }, [workItems, displayPanels, taskHandoffOf, handoffsVersion]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -8185,7 +8188,8 @@ export function Canvas({
     present: presentIds,
     dormant: dormantIds,
     backend: backendInfo?.kind ?? null,
-    tasks: reopenTasks
+    tasks: reopenTasks,
+    openedAt: APP_OPENED_AT
   })
 
   // M316. What an interrupted job left — the pool's journal from main, and

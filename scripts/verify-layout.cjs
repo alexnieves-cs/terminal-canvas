@@ -5307,6 +5307,34 @@ try {
         P.reopenTaskDetail('needs-you', { state: 'ready', word: 'ready to review' }) === 'ready to review',
       JSON.stringify({ outcomes, one, mixed }))
   } catch (e) { ok('reopen.task.1 (threw)', false, String(e)) }
+  // M401 follow-up (critic). reopen.task.2 — the task lines are NEWS, not a
+  // standing list. Two launches over the same four tasks, through the real
+  // filter and the real line builder: launch 1 (last exit at 100, opened at
+  // 400) reports only what moved in between; launch 2 (exit at 500, nothing
+  // moved since) reports nothing — before this, both launches said the same
+  // four things forever. With no exit time, only a real needs-you survives,
+  // and a fact from THIS launch (after openedAt) is the person's own act.
+  try {
+    const tasks = [
+      { id: 'a', label: 'Merged away', outcome: 'finished', detail: 'merged into main as ef90985', changedAt: 150 },
+      { id: 'b', label: 'Ready', outcome: 'needs-you', detail: 'ready to review', changedAt: 160 },
+      { id: 'c', label: 'Old ready', outcome: 'needs-you', changedAt: 50 },
+      { id: 'd', label: 'Old chat', outcome: 'asleep', changedAt: 40 },
+      { id: 'e', label: 'Merged last week', outcome: 'finished', changedAt: 20 }
+    ]
+    const launch = (exitAt, openedAt) => P.reopenTaskLines(P.reopenTaskNews(tasks, exitAt, openedAt))
+    const first = launch(100, 400)
+    const second = launch(500, 900)
+    const noExit = launch(undefined, 400)
+    const untimed = P.reopenTaskNews([{ id: 'f', label: 'F', outcome: 'finished' }, { id: 'g', label: 'G', outcome: 'needs-you' }, { id: 'h', label: 'H', outcome: 'asleep' }], 100, 400)
+    const thisLaunch = P.reopenTaskNews([{ id: 'i', label: 'I', outcome: 'needs-you', changedAt: 450 }], 100, 400)
+    ok('reopen.task.2 across two launches the task lines report only what moved between the last exit and this launch, the second launch over unchanged state says nothing, and with no time only a real needs-you stays',
+      first.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b,finished:a' &&
+        second.length === 0 &&
+        noExit.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b+c' &&
+        untimed.map((t) => t.id).join() === 'g' && thisLaunch.length === 0,
+      JSON.stringify({ first, second, noExit, untimed, thisLaunch }))
+  } catch (e) { ok('reopen.task.2 (threw)', false, String(e)) }
   try {
     const { mkdtempSync, existsSync } = require('node:fs')
     const { tmpdir } = require('node:os')

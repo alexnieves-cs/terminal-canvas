@@ -4330,7 +4330,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // whose branch is merged into main, the conversation still open in it.
     {
       const IDS = [
-        'review.accepted.1 a merged task\'s review retires Mark reviewed and Accept and offers exactly Close task and Remove lane; Remove lane is PRESENT and disabled with the palette\'s own reason while the conversation holds the lane; the conversation\'s navigator row reads "merged into main as <sha7>"; and Close task, confirmed, closes the conversation and lights Remove lane'
+        'review.accepted.1 a merged task\'s review retires Mark reviewed and Accept and offers exactly Close conversation (a plain verb at rest, its armed Close the discard confirm\'s outline) and Remove lane; Remove lane is PRESENT and disabled with the palette\'s own reason while the conversation holds the lane; the conversation\'s navigator row reads "merged into main as <sha7>"; the merge sentence is said once; Close, confirmed, closes the conversation and lights Remove lane; and Remove lane, confirmed in the palette, removes the worktree and the review then says the lane was removed with Remove lane disabled by that fact'
       ]
       const repoM = mkdtempSync(join(tmpdir(), 'tc panels m401 repo '))
       const laneM = mkdtempSync(join(tmpdir(), 'tc panels m401 lane '))
@@ -4367,8 +4367,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           const t = document.querySelector('[data-review-task="wi-m401"]'); if (!t) return false
           const verbs = [...t.querySelectorAll('[data-review-task-verb]')].map((b) => ({ verb: b.getAttribute('data-review-task-verb'), disabled: b.disabled, title: b.getAttribute('title') || '' }))
           const last = document.querySelector('[data-rail-row="m401C"] [data-rail-last]')
+          const details = [...t.querySelectorAll('[data-review-task-detail]')].map((d) => d.textContent)
+          const closeVerb = t.querySelector('[data-review-task-verb="close-task"]')
+          const confirm = t.querySelector('[data-review-close-confirm]')
           return { state: (t.querySelector('[data-review-task-word]') || {}).getAttribute ? t.querySelector('[data-review-task-word]').getAttribute('data-review-task-word') : null,
-            verbs, rail: last ? last.textContent : null, outcome: last ? last.hasAttribute('data-rail-outcome') : false,
+            verbs, rail: last ? last.textContent : null, outcome: last ? last.hasAttribute('data-rail-outcome') : false, details,
+            mergedSaid: (t.textContent.match(/merged into main as [0-9a-f]{7}/g) || []).length,
+            closeLabel: closeVerb ? closeVerb.textContent.trim() : null, closePrimary: closeVerb ? closeVerb.classList.contains('review-node__primary') : null,
+            confirmClass: confirm ? confirm.className : null,
             chat: !!document.querySelector('.panel[data-panel-id="m401C"]') }
         })()`)
         // The navigator's Panels pane holds the row; open it the way the board check opens its pane.
@@ -4378,8 +4384,19 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
         const armed = await press('[data-review-task-verb="close-task"]')
         await settle()
+        const armedRow = await row()
         const confirmed = await press('[data-review-close-confirm]')
         const after = await waitUntil(async () => { const r = await row(); return r && r.chat === false && r.verbs.some((v) => v.verb === 'remove-lane' && v.disabled === false) ? r : false }, 8000)
+        // Remove lane: the palette's own confirm, answered with Enter as a
+        // person would, then the review re-reads its task (PaletteActions'
+        // declared `after`) and says the lane is gone.
+        const removePressed = await press('[data-review-task-verb="remove-lane"]')
+        const asked = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('.palette__confirm'); return c ? c.textContent : false })()`), 6000)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
+          i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true })()`)
+        const removed = await waitUntil(async () => { const r = await row(); const rm = r && r.verbs.find((v) => v.verb === 'remove-lane')
+          return rm && rm.disabled === true && /lane was removed/.test(rm.title) ? r : false }, 10000)
+        const laneOnDisk = existsSync(lanePath)
         const verbsOf = (r) => (r ? r.verbs.map((v) => v.verb).join(',') : '')
         const remove = (r) => (r ? r.verbs.find((v) => v.verb === 'remove-lane') : undefined)
         ok(IDS[0],
@@ -4387,9 +4404,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             remove(before).disabled === true && remove(before).title === 'a panel is still running in it — close that panel first' &&
             before.verbs[0].disabled === false &&
             before.rail === 'merged into main as ' + sha.slice(0, 7) && before.outcome === true &&
-            armed === true && confirmed === true && after !== false && verbsOf(after) === 'close-task,remove-lane' &&
-            after.verbs[0].disabled === true,
-          JSON.stringify({ before, armed, confirmed, after }))
+            before.closeLabel === 'Close conversation…' && before.closePrimary === false &&
+            before.details.length === 1 && before.mergedSaid === 1 &&
+            armed === true && armedRow && armedRow.confirmClass === 'review-node__discard-confirm' &&
+            confirmed === true && after !== false && verbsOf(after) === 'close-task,remove-lane' &&
+            after.verbs[0].disabled === true &&
+            removePressed === true && typeof asked === 'string' && asked.includes('tc/m401') &&
+            removed !== false && removed.details.length === 1 && /its lane has been removed/.test(removed.details[0]) && laneOnDisk === false,
+          JSON.stringify({ before, armed, armedRow, confirmed, after, removePressed, asked, removed, laneOnDisk }))
       } catch (mErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(mErr && mErr.message || mErr))
       } finally {

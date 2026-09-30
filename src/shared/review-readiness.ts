@@ -57,7 +57,6 @@ import { sameReviewIdentity, type ReviewIdentity } from './review-identity'
  * nothing. `verify:review readiness.1–.5`.
  */
 
-/** What is true of the task now, in the priority order `reviewHandoff` applies. */
 /**
  * M401 (B2). The merge record in the words every surface that names a merged
  * task uses — the review's detail, the navigator row, the return notice — so
@@ -68,6 +67,7 @@ export function mergedLine(merged: { into: string; sha: string }): string {
   return `merged into ${merged.into} as ${merged.sha.slice(0, 7)}`
 }
 
+/** What is true of the task now, in the priority order `reviewHandoff` applies. */
 export type ReviewHandoffState =
   | 'no-lane' | 'lane-missing' | 'unreadable' | 'blocked' | 'working' | 'empty' | 'shared' | 'ready'
   /** M315. The person accepted it: the lane was merged into the main tree's branch. */
