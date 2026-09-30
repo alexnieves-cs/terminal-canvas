@@ -25,13 +25,15 @@ import {
   arrowHead,
   bounds,
   ioSkew,
+  pathFromPoints,
   pickPorts,
   routeConnector,
   shapeDetail,
   shapeOutline,
   waveAmplitude,
   type Box,
-  type ConnectorPath
+  type ConnectorPath,
+  type Point
 } from './flowchart-geometry'
 
 export interface FlowchartSvgModel {
@@ -42,8 +44,13 @@ export interface FlowchartSvgModel {
     toBox: Box
     toForm: ShapeForm | null
     connector: Connector
-    /** The other shapes this connector routes around — the same list the canvas passes. */
-    obstacles: Box[]
+    /**
+     * The route, ALREADY computed (the canvas's own) — drawn as given, no
+     * search. Main builds from these: it never routes (`pathFromPoints`).
+     */
+    points?: Point[]
+    /** Without `points`: the other shapes this connector routes around — the same list the canvas passes. */
+    obstacles?: Box[]
   }[]
   /** Live objects a connector touches (a terminal, a file, a note), drawn as a plain labelled rect. */
   panels?: { box: Box; title: string }[]
@@ -160,14 +167,16 @@ export function flowchartSvg(model: FlowchartSvgModel, colours: FlowchartSvgColo
       { box: c.toBox, form: c.toForm, port: c.connector.toPort }
     )
     const ends = c.connector.ends ?? 'end'
-    const path: ConnectorPath = routeConnector({
-      from: { box: c.fromBox, form: c.fromForm, port: ports.from },
-      to: { box: c.toBox, form: c.toForm, port: ports.to },
-      route: c.connector.route ?? 'orthogonal',
-      obstacles: c.obstacles,
-      ends,
-      arrowSize: ARROW_SIZE
-    })
+    const path: ConnectorPath = c.points !== undefined
+      ? pathFromPoints(c.points, c.connector.route ?? 'orthogonal', ends, ports, ARROW_SIZE)
+      : routeConnector({
+        from: { box: c.fromBox, form: c.fromForm, port: ports.from },
+        to: { box: c.toBox, form: c.toForm, port: ports.to },
+        route: c.connector.route ?? 'orthogonal',
+        obstacles: c.obstacles ?? [],
+        ends,
+        arrowSize: ARROW_SIZE
+      })
     const labelLines = c.connector.label ? wrap(c.connector.label, 220, LABEL_FONT) : []
     const longest = labelLines.reduce((m, l) => Math.max(m, l.length), 0)
     const pillW = longest * LABEL_FONT * ADVANCE + 12

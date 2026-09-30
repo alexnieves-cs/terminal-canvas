@@ -14,15 +14,16 @@
 export type FlowchartExportFormat = 'mermaid' | 'svg'
 
 /**
- * Mermaid is sent as TEXT (its labels stay whole on one line, so the gate sees
- * them whole). An SVG is sent as its MODEL and BUILT IN MAIN, after every label
- * has crossed the gate: an SVG wraps a long label across several `<tspan>`s,
- * and a token split across lines no longer matches the scrubber — the boundary
- * critic measured a `ghp_` token leaving in three pieces while the count said
- * one secret was scrubbed (docs/load-bearing.md, "the SVG is built in main").
+ * Both formats are sent as a MODEL and BUILT IN MAIN, after every label has
+ * crossed the gate whole: a builder that wraps or encodes splits words — an
+ * SVG wraps a long label across `<tspan>`s (a `ghp_` token left in three
+ * pieces), and Mermaid encodes a newline as `<br/>` ("Bearer\n<token>" left
+ * unmatched). The scrubber matches whole strings, so it runs first
+ * (docs/load-bearing.md, "the SVG is built in main"). An SVG's routes arrive
+ * as POINTS — main draws, it never routes.
  */
 export type FlowchartExportRequest =
-  | { format: 'mermaid'; text: string; suggestedName: string }
+  | { format: 'mermaid'; graph: unknown; suggestedName: string }
   | { format: 'svg'; model: unknown; colours: unknown; suggestedName: string }
 
 /**

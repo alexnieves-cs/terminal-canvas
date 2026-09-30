@@ -424,22 +424,34 @@ export function routeConnector(input: RouteInput): ConnectorPath {
   const { from, to } = input
   const p0 = portPoint(from.form, from.box, from.port)
   const p1 = portPoint(to.form, to.box, to.port)
-  const size = input.arrowSize ?? ARROW_SIZE
-  const ends = input.ends ?? 'none'
-  const trimStart = ends === 'start' || ends === 'both'
-  const trimEnd = ends === 'end' || ends === 'both'
-
+  let points: Point[]
   if (input.route === 'curved') {
     const offset = Math.min(CURVE_MAX, Math.max(CURVE_MIN, dist(p0, p1) * CURVE_RATIO))
     const n0 = NORMAL[from.port]
     const n1 = NORMAL[to.port]
-    const c1 = { x: p0.x + n0.x * offset, y: p0.y + n0.y * offset }
-    const c2 = { x: p1.x + n1.x * offset, y: p1.y + n1.y * offset }
-    const points = [p0, c1, c2, p1]
-    const drawn = trimPoints(points, 'curved', trimStart, trimEnd, size)
+    points = [p0, { x: p0.x + n0.x * offset, y: p0.y + n0.y * offset }, { x: p1.x + n1.x * offset, y: p1.y + n1.y * offset }, p1]
+  } else {
+    points = input.route === 'straight' ? [p0, p1] : orthogonalPoints(input, p0, p1)
+  }
+  return pathFromPoints(points, input.route, input.ends ?? 'none', { from: from.port, to: to.port }, input.arrowSize ?? ARROW_SIZE)
+}
+
+/**
+ * A ConnectorPath from points ALREADY ROUTED — the half of `routeConnector`
+ * that does no search. Main's SVG builder draws with this from the points the
+ * renderer routed (the boundary confirm: an A* per connector in MAIN, against
+ * every shape, blocked every PTY for seconds on a large chart an agent line
+ * could export without a click). Linear in the points. A curved route is its
+ * four points [p0, c1, c2, p1]; any other count draws as a polyline.
+ */
+export function pathFromPoints(points: readonly Point[], route: Route, ends: Ends, ports: { from: Port; to: Port }, size = ARROW_SIZE): ConnectorPath {
+  const trimStart = ends === 'start' || ends === 'both'
+  const trimEnd = ends === 'end' || ends === 'both'
+  if (route === 'curved' && points.length === 4) {
+    const [p0, c1, c2, p1] = points
     return {
-      d: connectorD(drawn, 'curved'),
-      points,
+      d: connectorD(trimPoints(points, 'curved', trimStart, trimEnd, size), 'curved'),
+      points: [...points],
       labelAt: cubicHalfway(p0, c1, c2, p1),
       // The tangent at each end is the control arm, which is the port
       // normal — so a curved connector's head always enters square to the side.
@@ -447,19 +459,17 @@ export function routeConnector(input: RouteInput): ConnectorPath {
       endAngle: angleOf(c2, p1)
     }
   }
-
-  const points = input.route === 'straight' ? [p0, p1] : orthogonalPoints(input, p0, p1)
-  const drawn = trimPoints(points, input.route, trimStart, trimEnd, size)
+  const drawnAs: Route = route === 'curved' ? 'straight' : route
   const n = points.length
   // A zero-length end segment has no direction of its own; the port does.
   const startSeg = n >= 2 && dist(points[0], points[1]) > 0
   const endSeg = n >= 2 && dist(points[n - 2], points[n - 1]) > 0
   return {
-    d: connectorD(drawn, input.route),
-    points,
+    d: connectorD(trimPoints(points, drawnAs, trimStart, trimEnd, size), drawnAs),
+    points: [...points],
     labelAt: polylineHalfway(points),
-    startAngle: startSeg ? angleOf(points[1], points[0]) : inward(from.port),
-    endAngle: endSeg ? angleOf(points[n - 2], points[n - 1]) : inward(to.port)
+    startAngle: startSeg ? angleOf(points[1], points[0]) : inward(ports.from),
+    endAngle: endSeg ? angleOf(points[n - 2], points[n - 1]) : inward(ports.to)
   }
 }
 

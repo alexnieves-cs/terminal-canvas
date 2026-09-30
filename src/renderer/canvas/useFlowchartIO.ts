@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react'
 import type { FlowDirection, ShapeFill, ShapeInk, ShapeStroke } from '@shared/flowchart'
-import { looksLikeMermaid, mermaidImportSentence, parseMermaid, serializeMermaid, stripFence } from '@shared/flowchart-mermaid'
+import { looksLikeMermaid, mermaidImportSentence, parseMermaid, stripFence } from '@shared/flowchart-mermaid'
+import type { FlowchartExportResult } from '@shared/flowchart-files'
 import { layoutFlow } from '@shared/flowchart-layout'
 import type { FlowchartSvgColours } from '@shared/flowchart-svg'
 import { GROUP_COLOURS, type PersistedGroup } from '@shared/groups'
@@ -98,7 +99,7 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
     const groupsToMake = made.groups.length > 0 ? made.groups : [{ label: parsed.title ?? source, ids: made.panels.map((p) => p.rect.id) }]
     setGroups((current) => [...current, ...groupsToMake.filter((g) => g.ids.length > 0).map((g) => {
       const n = nextGroupIdRef.current++
-      return { id: `g${n}`, label: g.label.slice(0, 80), colour: GROUP_COLOURS[(n - 1) % GROUP_COLOURS.length], panelIds: g.ids }
+      return { id: `g${n}`, label: groupLabel(g.label), colour: GROUP_COLOURS[(n - 1) % GROUP_COLOURS.length], panelIds: g.ids }
     })])
     selectMany(made.panels.map((p) => p.rect.id))
     if (made.panels.length > 0) frameRects(made.panels.map((p) => p.rect))
@@ -135,18 +136,17 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
     // One shape selected means ITS CHART, as for a layout.
     if (scope.size === 1) scope = reachable(panels, [...scope][0])
     if (!panels.some((p) => isShapePanel(p) && (scope.size === 0 || scope.has(p.rect.id)))) return { kind: 'refused', reason: 'there is no diagram on this canvas to export' }
-    let text = ''
+    // Each goes as its MODEL: main scrubs every label WHOLE, then builds the
+    // file (FlowchartExportRequest's header — a builder splits words).
+    let out: FlowchartExportResult
     let note = ''
     if (format === 'mermaid') {
       const { graph, leftOut } = panelsToGraph(panels, scope)
-      text = serializeMermaid(graph)
       if (leftOut > 0) note = ` · ${leftOut} line${leftOut === 1 ? '' : 's'} to a live object left out (Mermaid has no word for one)`
+      out = await window.canvas.export.flowchart({ format, graph, suggestedName: 'diagram.mmd' })
+    } else {
+      out = await window.canvas.export.flowchart({ format, model: svgModelOf(panels, scope, nameOf), colours: themeColours(), suggestedName: 'diagram.svg' })
     }
-    // An SVG goes as its MODEL: main scrubs every label WHOLE, then builds it
-    // (FlowchartExportRequest's header — a wrapped label splits a token).
-    const out = format === 'mermaid'
-      ? await window.canvas.export.flowchart({ format, text, suggestedName: 'diagram.mmd' })
-      : await window.canvas.export.flowchart({ format, model: svgModelOf(panels, scope, nameOf), colours: themeColours(), suggestedName: 'diagram.svg' })
     if (out.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
     if (out.kind === 'refused') return { kind: 'refused', reason: out.reason }
     const scrubbed = out.redacted === 0 ? 'nothing looked like a secret' : `${out.redacted} secret${out.redacted === 1 ? '' : 's'} scrubbed`
@@ -234,6 +234,21 @@ function reachable(panels: readonly Panel[], id: string): Set<string> {
  * resolve in a file opened elsewhere (the recharts lesson, chart-tokens.ts),
  * so each token is read off the live document once, at export.
  */
+/**
+ * A group's name from an imported diagram, cut to 80 characters at a WORD
+ * boundary: it is shared as typed and scrubbed only when it leaves (canvas-doc
+ * `diffLocal`), and a cut mid-word could leave the head of a secret too short
+ * for the scrubber to know (the boundary confirm's finding C). A secret is one
+ * word — kept whole, and so scrubbed, or dropped whole.
+ */
+function groupLabel(label: string): string {
+  const flat = label.replace(/\s+/g, ' ').trim()
+  if (flat.length <= 80) return flat
+  const cut = flat.slice(0, 81)
+  const space = cut.lastIndexOf(' ')
+  return space > 0 ? `${cut.slice(0, space)}…` : '…'
+}
+
 function themeColours(): FlowchartSvgColours {
   const css = getComputedStyle(document.documentElement)
   // Normalised through a 2D context, which answers any CSS colour as #rrggbb or

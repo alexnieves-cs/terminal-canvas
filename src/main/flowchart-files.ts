@@ -1,7 +1,11 @@
-import { mkdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, constants as fsc, fstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, isAbsolute } from 'node:path'
 import { outward as outwardGate } from '../shared/outward'
-import { SHAPE_FILLS, SHAPE_INKS, SHAPE_STROKES, isShapeForm, parseConnectors, parseShapeRecord } from '../shared/flowchart'
+import {
+  SHAPE_FILLS, SHAPE_INKS, SHAPE_SIZE, SHAPE_STROKES, isEnds, isRoute, isShapeForm, parseConnectors, parseShapeRecord,
+  type FlowDirection, type FlowEdge, type FlowGraph, type FlowGroup, type FlowNode
+} from '../shared/flowchart'
+import { serializeMermaid } from '../shared/flowchart-mermaid'
 import { flowchartSvg } from '../shared/flowchart-svg'
 import {
   FLOWCHART_EXPORT_MAX_CHARS, FLOWCHART_READ_EXTENSIONS, FLOWCHART_READ_MAX_BYTES,
@@ -65,57 +69,144 @@ const said = (error: unknown): string => (error instanceof Error ? error.message
 
 /** A colour an exported SVG may carry: a hex, an rgb()/rgba(), or none/transparent — nothing that could close an attribute or fetch. */
 const COLOUR = /^(?:#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*[\d.]+\s*)?\)|none|transparent)$/i
-const MAX_SVG_SHAPES = 2000
-const MAX_SVG_CONNECTORS = 6000
-const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+const MAX_SHAPES = 2000
+const MAX_CONNECTORS = 6000
+const MAX_GROUPS = 500
+/** A route's points: an elbow route simplifies to a handful; a curve is four. */
+const MAX_ROUTE_POINTS = 64
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) < 1e7
 const boxOf = (b: unknown): { x: number; y: number; w: number; h: number } | null => {
   const o = b as Record<string, unknown> | null
   return o !== null && typeof o === 'object' && finite(o.x) && finite(o.y) && finite(o.w) && finite(o.h) && o.w >= 0 && o.h >= 0 && o.w < 1e6 && o.h < 1e6 ? { x: o.x, y: o.y, w: o.w, h: o.h } : null
+}
+const pointsOf = (raw: unknown, route: unknown): { x: number; y: number }[] | null => {
+  if (!Array.isArray(raw) || raw.length < 2 || raw.length > MAX_ROUTE_POINTS) return null
+  if (route === 'curved' && raw.length !== 4) return null
+  const out: { x: number; y: number }[] = []
+  for (const p of raw) {
+    const o = p as Record<string, unknown> | null
+    if (o === null || typeof o !== 'object' || !finite(o.x) || !finite(o.y)) return null
+    out.push({ x: o.x, y: o.y })
+  }
+  return out
+}
+
+/**
+ * Every string a model holds, measured BEFORE any is scrubbed: the scrub is a
+ * set of regexes over whole strings, and a request past the export's own cap
+ * must be refused before main spends that time — and never "fixed" by cutting
+ * the strings first (a cut can split a secret the scrubber would have matched:
+ * the boundary confirm's finding C).
+ */
+function wordsLength(value: unknown, depth = 0): number {
+  if (typeof value === 'string') return value.length
+  if (depth > 4 || value === null || typeof value !== 'object') return 0
+  let n = 0
+  for (const v of Array.isArray(value) ? value : Object.values(value as Record<string, unknown>)) {
+    n += wordsLength(v, depth + 1)
+    if (n > FLOWCHART_EXPORT_MAX_CHARS) return n
+  }
+  return n
+}
+const tooBig = (): { kind: 'refused'; reason: string } => ({ kind: 'refused', reason: `the diagram holds over ${(FLOWCHART_EXPORT_MAX_CHARS / 1_000_000).toFixed(0)} million characters of words — over what this app exports; split it into smaller diagrams` })
+
+/**
+ * The Mermaid, built in MAIN from the graph: each shape's words, each arrow's
+ * label and each group's name cross `outward` WHOLE, then the shared
+ * serializer (which encodes a newline as `<br/>` — after the gate, never
+ * before). Ids are main's own (`n1`, `g1`), so nothing the renderer named
+ * reaches the file but the scrubbed words.
+ */
+function buildScrubbedMermaid(rawGraph: unknown, gate: (text: string, source: string) => { text: string; redacted: number }): { kind: 'ok'; text: string; redacted: number } | { kind: 'refused'; reason: string } {
+  const g = (typeof rawGraph === 'object' && rawGraph !== null ? rawGraph : {}) as { direction?: unknown; nodes?: unknown; edges?: unknown; groups?: unknown }
+  if (!Array.isArray(g.nodes) || g.nodes.length === 0) return { kind: 'refused', reason: 'the diagram is empty — add a shape, then export it' }
+  if (g.nodes.length > MAX_SHAPES || (Array.isArray(g.edges) && g.edges.length > MAX_CONNECTORS) || (Array.isArray(g.groups) && g.groups.length > MAX_GROUPS)) {
+    return { kind: 'refused', reason: 'the diagram is too large to export — split it into smaller diagrams' }
+  }
+  if (wordsLength(g) > FLOWCHART_EXPORT_MAX_CHARS) return tooBig()
+  let redacted = 0
+  const clean = (text: string): string => { const out = gate(text, 'flowchart'); redacted += out.redacted; return out.text }
+  const idOf = new Map<string, string>()
+  const nodes: FlowNode[] = []
+  for (const raw of g.nodes) {
+    const n = raw as { id?: unknown; form?: unknown; text?: unknown }
+    if (typeof n.id !== 'string' || idOf.has(n.id) || !isShapeForm(n.form)) continue
+    const id = `n${nodes.length + 1}`
+    idOf.set(n.id, id)
+    nodes.push({ id, form: n.form, text: typeof n.text === 'string' ? clean(n.text) : '', w: SHAPE_SIZE[n.form].w, h: SHAPE_SIZE[n.form].h })
+  }
+  if (nodes.length === 0) return { kind: 'refused', reason: 'the diagram is empty — add a shape, then export it' }
+  const edges: FlowEdge[] = []
+  for (const raw of Array.isArray(g.edges) ? g.edges : []) {
+    const e = raw as { from?: unknown; to?: unknown; label?: unknown; ends?: unknown; dashed?: unknown; route?: unknown }
+    const from = typeof e.from === 'string' ? idOf.get(e.from) : undefined
+    const to = typeof e.to === 'string' ? idOf.get(e.to) : undefined
+    if (from === undefined || to === undefined) continue
+    edges.push({
+      from, to,
+      ...(typeof e.label === 'string' && e.label !== '' ? { label: clean(e.label) } : {}),
+      ...(isEnds(e.ends) ? { ends: e.ends } : {}),
+      ...(e.dashed === true ? { dashed: true } : {}),
+      ...(isRoute(e.route) ? { route: e.route } : {})
+    })
+  }
+  const groups: FlowGroup[] = []
+  for (const raw of Array.isArray(g.groups) ? g.groups : []) {
+    const gr = raw as { label?: unknown; nodes?: unknown }
+    const members = (Array.isArray(gr.nodes) ? gr.nodes : []).flatMap((id) => (typeof id === 'string' && idOf.has(id) ? [idOf.get(id) as string] : []))
+    if (members.length === 0) continue
+    groups.push({ id: `g${groups.length + 1}`, label: typeof gr.label === 'string' ? clean(gr.label) : '', nodes: members })
+  }
+  const direction: FlowDirection = g.direction === 'BT' || g.direction === 'LR' || g.direction === 'RL' ? g.direction : 'TB'
+  const graph: FlowGraph = { direction, nodes, edges, ...(groups.length > 0 ? { groups } : {}) }
+  return { kind: 'ok', text: serializeMermaid(graph), redacted }
 }
 
 /**
  * M391 (the boundary critic's finding 1). The SVG, built in MAIN from the
  * renderer's model: every shape's words, every connector's label and every
- * live object's title cross `outward` WHOLE first (the count summed), the
- * records are re-read through the layout's own readers, the colours must be
- * literal colours — then the pure builder the canvas's own routes come from.
+ * live object's title cross `outward` WHOLE first (the count summed) — before
+ * any reader caps them — the records are re-read through the layout's own
+ * readers, the colours must be literal colours, each route is the POINTS the
+ * canvas routed (main never searches: the boundary confirm measured an A* per
+ * connector here blocking every PTY for seconds), then the pure builder.
  */
 function buildScrubbedSvg(rawModel: unknown, rawColours: unknown, gate: (text: string, source: string) => { text: string; redacted: number }): { kind: 'ok'; svg: string; redacted: number } | { kind: 'refused'; reason: string } {
   const m = (typeof rawModel === 'object' && rawModel !== null ? rawModel : {}) as { shapes?: unknown; connectors?: unknown; panels?: unknown }
   if (!Array.isArray(m.shapes) || m.shapes.length === 0) return { kind: 'refused', reason: 'the diagram is empty — add a shape, then export it' }
-  if (m.shapes.length > MAX_SVG_SHAPES || (Array.isArray(m.connectors) && m.connectors.length > MAX_SVG_CONNECTORS)) return { kind: 'refused', reason: 'the diagram is too large to export as a picture — export it as Mermaid' }
+  if (m.shapes.length > MAX_SHAPES || (Array.isArray(m.connectors) && m.connectors.length > MAX_CONNECTORS) || (Array.isArray(m.panels) && m.panels.length > MAX_SHAPES)) {
+    return { kind: 'refused', reason: 'the diagram is too large to export as a picture — export it as Mermaid' }
+  }
+  if (wordsLength(m) > FLOWCHART_EXPORT_MAX_CHARS) return tooBig()
   let redacted = 0
   const clean = (text: string): string => { const out = gate(text, 'flowchart'); redacted += out.redacted; return out.text }
   const warnings: string[] = []
   const shapes = m.shapes.flatMap((raw, i) => {
     const s = raw as { id?: unknown; box?: unknown; shape?: unknown }
     const box = boxOf(s.box)
-    const shape = parseShapeRecord(s.shape, warnings, `shape ${i}`)
+    const rec = (typeof s.shape === 'object' && s.shape !== null ? s.shape : null) as Record<string, unknown> | null
+    // Scrubbed BEFORE the reader caps it (a cap first could split a secret).
+    const shape = rec === null ? null : parseShapeRecord(typeof rec.text === 'string' ? { ...rec, text: clean(rec.text) } : rec, warnings, `shape ${i}`)
     if (box === null || shape === null) return []
     const { step: _step, ...rest } = shape
     void _step
-    return [{ id: typeof s.id === 'string' ? s.id.slice(0, 64) : `s${i}`, box, shape: { ...rest, text: clean(rest.text) } }]
+    return [{ id: `s${i}`, box, shape: rest }]
   })
   const connectors = (Array.isArray(m.connectors) ? m.connectors : []).flatMap((raw, i) => {
-    const c = raw as { fromBox?: unknown; toBox?: unknown; fromForm?: unknown; toForm?: unknown; connector?: unknown; obstacles?: unknown }
+    const c = raw as { fromBox?: unknown; toBox?: unknown; fromForm?: unknown; toForm?: unknown; connector?: unknown; points?: unknown }
     const fromBox = boxOf(c.fromBox)
     const toBox = boxOf(c.toBox)
-    const parsed = parseConnectors([c.connector], warnings, `connector ${i}`)
-    const connector = parsed?.[0]
-    if (fromBox === null || toBox === null || connector === undefined) return []
-    const obstacles = (Array.isArray(c.obstacles) ? c.obstacles : []).slice(0, MAX_SVG_SHAPES).map(boxOf).filter((b): b is NonNullable<typeof b> => b !== null)
-    return [{
-      fromBox, toBox,
-      fromForm: isShapeForm(c.fromForm) ? c.fromForm : null,
-      toForm: isShapeForm(c.toForm) ? c.toForm : null,
-      connector: { ...connector, ...(connector.label === undefined ? {} : { label: clean(connector.label) }) },
-      obstacles
-    }]
+    const rec = (typeof c.connector === 'object' && c.connector !== null ? c.connector : null) as Record<string, unknown> | null
+    const connector = rec === null ? undefined : parseConnectors([typeof rec.label === 'string' ? { ...rec, label: clean(rec.label) } : rec], warnings, `connector ${i}`)?.[0]
+    const points = pointsOf(c.points, connector?.route ?? 'orthogonal')
+    if (fromBox === null || toBox === null || connector === undefined || points === null) return []
+    return [{ fromBox, toBox, fromForm: isShapeForm(c.fromForm) ? c.fromForm : null, toForm: isShapeForm(c.toForm) ? c.toForm : null, connector, points }]
   })
-  const panels = (Array.isArray(m.panels) ? m.panels : []).slice(0, MAX_SVG_SHAPES).flatMap((raw) => {
+  const panels = (Array.isArray(m.panels) ? m.panels : []).flatMap((raw) => {
     const p = raw as { box?: unknown; title?: unknown }
     const box = boxOf(p.box)
-    return box === null || typeof p.title !== 'string' ? [] : [{ box, title: clean(p.title.slice(0, 500)) }]
+    // Scrubbed WHOLE, then cut to what a picture's label holds.
+    return box === null || typeof p.title !== 'string' ? [] : [{ box, title: clean(p.title).slice(0, 500) }]
   })
   const cr = (typeof rawColours === 'object' && rawColours !== null ? rawColours : {}) as Record<string, unknown>
   const pick = <K extends string>(group: unknown, keys: readonly K[]): Record<K, string> | null => {
@@ -137,7 +228,7 @@ function buildScrubbedSvg(rawModel: unknown, rawColours: unknown, gate: (text: s
 
 /** A diagram's text to a file the person chooses, scrubbed on the way out. */
 export async function exportFlowchart(req: unknown, deps: FlowchartFileDeps): Promise<FlowchartExportResult> {
-  const r = (typeof req === 'object' && req !== null ? req : {}) as { format?: unknown; text?: unknown; model?: unknown; colours?: unknown; suggestedName?: unknown }
+  const r = (typeof req === 'object' && req !== null ? req : {}) as { format?: unknown; graph?: unknown; model?: unknown; colours?: unknown; suggestedName?: unknown }
   const format = r.format
   if (format !== 'mermaid' && format !== 'svg') return { kind: 'refused', reason: 'a flowchart exports as mermaid or svg — choose one of those' }
   const gate = deps.outward ?? outwardGate
@@ -155,15 +246,13 @@ export async function exportFlowchart(req: unknown, deps: FlowchartFileDeps): Pr
     scrubbed = built.svg
     redacted = built.redacted
   } else {
-    const text = r.text
-    if (typeof text !== 'string') return { kind: 'refused', reason: 'there is no diagram text to export' }
-    if (text.trim() === '') return { kind: 'refused', reason: 'the diagram is empty — add a shape, then export it' }
-    if (text.length > FLOWCHART_EXPORT_MAX_CHARS) {
-      return { kind: 'refused', reason: `the diagram is ${(text.length / 1_000_000).toFixed(1)} million characters — over the ${(FLOWCHART_EXPORT_MAX_CHARS / 1_000_000).toFixed(0)} million this app exports; split it into smaller diagrams` }
-    }
-    const out = gate(text, 'flowchart')
-    scrubbed = out.text
-    redacted = out.redacted
+    // BUILT HERE too, from the graph, after each label crossed the gate whole
+    // (the boundary confirm: `encodeLabel` turns a newline into `<br/>`, so
+    // "Bearer\n<token>" in one label left the Mermaid door unscrubbed).
+    const built = buildScrubbedMermaid(r.graph, gate)
+    if (built.kind === 'refused') return built
+    scrubbed = built.text
+    redacted = built.redacted
   }
   let path: string | null
   try {
@@ -178,6 +267,76 @@ export async function exportFlowchart(req: unknown, deps: FlowchartFileDeps): Pr
     return { kind: 'refused', reason: `the file could not be written: ${said(error)} — choose another folder` }
   }
   return { kind: 'written', path, redacted }
+}
+
+type Opened =
+  | { kind: 'text'; text: string }
+  | { kind: 'missing' }
+  | { kind: 'error'; error: unknown }
+  | { kind: 'dir' }
+  | { kind: 'special' }
+  | { kind: 'big'; size: number }
+
+const isMissing = (error: unknown): boolean => { const code = (error as { code?: unknown } | null)?.code; return code === 'ENOENT' || code === 'ENOTDIR' }
+
+/**
+ * The real read: ONE descriptor, judged and read through itself (the boundary
+ * confirm's TOCTOU — a stat and a read by NAME let the file be swapped between
+ * them for a FIFO, which blocks main forever, or /dev/zero, which never ends).
+ * O_NOFOLLOW refuses a link swapped in after `realpath`; O_NONBLOCK makes a
+ * FIFO open without a writer; `fstat` judges THIS file; the read stops one
+ * byte past the cap whatever the size said.
+ */
+function boundedRead(path: string, _deps?: FlowchartFileDeps): Opened {
+  void _deps
+  let fd: number
+  try {
+    fd = openSync(path, fsc.O_RDONLY | fsc.O_NOFOLLOW | fsc.O_NONBLOCK)
+  } catch (error) {
+    return isMissing(error) ? { kind: 'missing' } : { kind: 'error', error }
+  }
+  try {
+    const st = fstatSync(fd)
+    if (st.isDirectory()) return { kind: 'dir' }
+    if (!st.isFile()) return { kind: 'special' }
+    if (st.size > FLOWCHART_READ_MAX_BYTES) return { kind: 'big', size: st.size }
+    const buf = Buffer.alloc(FLOWCHART_READ_MAX_BYTES + 1)
+    let n = 0
+    for (;;) {
+      const got = readSync(fd, buf, n, buf.length - n, null)
+      if (got === 0) break
+      n += got
+      if (n > FLOWCHART_READ_MAX_BYTES) return { kind: 'big', size: n }
+    }
+    return { kind: 'text', text: buf.subarray(0, n).toString('utf8') }
+  } catch (error) {
+    return { kind: 'error', error }
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** The plain-node tier's read, over its injected stat and text — the same answers, no disk. */
+function injectedRead(path: string, deps: FlowchartFileDeps): Opened {
+  let st: { isFile(): boolean; isDirectory(): boolean; size: number }
+  try {
+    if (deps.stat === undefined) throw new Error('no stat injected')
+    st = deps.stat(path)
+  } catch (error) {
+    return isMissing(error) ? { kind: 'missing' } : { kind: 'error', error }
+  }
+  if (st.isDirectory()) return { kind: 'dir' }
+  if (!st.isFile()) return { kind: 'special' }
+  if (st.size > FLOWCHART_READ_MAX_BYTES) return { kind: 'big', size: st.size }
+  let text: string
+  try {
+    if (deps.readText === undefined) throw new Error('no read injected')
+    text = deps.readText(path)
+  } catch (error) {
+    return { kind: 'error', error }
+  }
+  // Held to the cap AFTER the read too (a file can grow between the stat and the read).
+  return Buffer.byteLength(text) > FLOWCHART_READ_MAX_BYTES ? { kind: 'big', size: Buffer.byteLength(text) } : { kind: 'text', text }
 }
 
 /** A Mermaid file as text — the system's chooser with no path, else the path an agent or a recent list named. */
@@ -207,10 +366,8 @@ export async function readFlowchart(req: unknown, deps: FlowchartFileDeps): Prom
   // read the key file. An agent's line names this path, so the name it gives
   // is not the file it reaches until the link is resolved.
   let real: string
-  let st: ReturnType<NonNullable<FlowchartFileDeps['stat']>>
   try {
     real = (deps.realpath ?? realpathSync)(path)
-    st = (deps.stat ?? statSync)(real)
   } catch (error) {
     const code = (error as { code?: unknown } | null)?.code
     return { kind: 'refused', reason: code === 'ENOENT' || code === 'ENOTDIR' ? `there is no file at ${path} — check the path` : `${file} could not be read: ${said(error)}` }
@@ -218,22 +375,15 @@ export async function readFlowchart(req: unknown, deps: FlowchartFileDeps): Prom
   if (!FLOWCHART_READ_EXTENSIONS.includes(extname(real).toLowerCase())) {
     return { kind: 'refused', reason: `${file} links to a file that is not a Mermaid file — a flowchart is read from ${FLOWCHART_READ_EXTENSIONS.join(', ')}` }
   }
-  if (st.isDirectory()) return { kind: 'refused', reason: `${path} is a folder, not a file — name the .mmd file inside it` }
-  if (!st.isFile()) return { kind: 'refused', reason: `${path} is not a regular file — name a .mmd file` }
-  if (st.size > FLOWCHART_READ_MAX_BYTES) {
-    return { kind: 'refused', reason: `${file} is ${Math.ceil(st.size / 1000)} KB — over the ${FLOWCHART_READ_MAX_BYTES / 1000} KB a flowchart is read from; split it into smaller diagrams` }
+  const got = (deps.stat !== undefined || deps.readText !== undefined ? injectedRead : boundedRead)(real, deps)
+  switch (got.kind) {
+    case 'missing': return { kind: 'refused', reason: `there is no file at ${path} — check the path` }
+    case 'error': return { kind: 'refused', reason: `${file} could not be read: ${said(got.error)}` }
+    case 'dir': return { kind: 'refused', reason: `${path} is a folder, not a file — name the .mmd file inside it` }
+    case 'special': return { kind: 'refused', reason: `${path} is not a regular file — name a .mmd file` }
+    case 'big': return { kind: 'refused', reason: `${file} is ${got.size > FLOWCHART_READ_MAX_BYTES ? `${Math.ceil(got.size / 1000)} KB — ` : ''}over the ${FLOWCHART_READ_MAX_BYTES / 1000} KB a flowchart is read from; split it into smaller diagrams` }
   }
-  let text: string
-  try {
-    text = (deps.readText ?? ((p: string) => readFileSync(p, 'utf8')))(real)
-  } catch (error) {
-    return { kind: 'refused', reason: `${file} could not be read: ${said(error)}` }
-  }
-  // Again after the read: a file that grew between the stat and the read is
-  // held to the same cap (a UTF-8 character is at least one byte).
-  if (text.length > FLOWCHART_READ_MAX_BYTES) {
-    return { kind: 'refused', reason: `${file} is over the ${FLOWCHART_READ_MAX_BYTES / 1000} KB a flowchart is read from; split it into smaller diagrams` }
-  }
+  let text = got.text
   // A .txt that is really a binary decodes to text with NULs in it, and Mermaid
   // parsed from that is noise the person would have to debug by eye.
   if (text.includes('\u0000')) return { kind: 'refused', reason: `${file} is not text — a flowchart is read from a plain-text Mermaid file` }

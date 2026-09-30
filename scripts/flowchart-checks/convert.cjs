@@ -323,17 +323,29 @@ module.exports = async function (ok, F) {
   const everything = C.svgModelOf(P10, new Set(), name10)
   const boxOf = (id) => rectOf(P10.find((p) => p.rect.id === id))
   const cm = (id) => model.connectors.find((c) => c.connector.id === id)
-  group('flowchart.convert.10 svgModelOf: a scope draws the connectors touching it (not the far chart\'s, not one to a panel that is gone) and the live panels those reach — once each, with the caller\'s title; each connector\'s obstacles are the other shapes, never its own two ends and never a bare text label; an empty scope is every shape',
+  group('flowchart.convert.10 svgModelOf: a scope draws the connectors touching it (not the far chart\'s, not one to a panel that is gone) and the live panels those reach — once each, with the caller\'s title; each connector\'s route is the canvas\'s own, as points (around the other shapes, never its own two ends or a bare text label); an empty scope is every shape',
     [
       ['the scoped shapes, in panel order', () => eq(model.shapes.map((s) => s.id), ['s1', 's2', 's3', 's4'])],
       ['the four connectors touching the scope, not m5 (far chart) or m9 (target gone)', () => eq(model.connectors.map((c) => c.connector.id).sort(), ['m1', 'm2', 'm3', 'm4'])],
       ['the terminal appears once, titled by the caller, at its box', () => model.panels.length === 1 && model.panels[0].title === 'name:TT' && eq(model.panels[0].box, boxOf('TT'))],
-      ['obstacles exclude each connector\'s own ends', () => eq(cm('m2').obstacles, [boxOf('s2')]) && eq(cm('m3').obstacles, [boxOf('s3')]) && eq(cm('m1').obstacles, [boxOf('s2'), boxOf('s3')]) && eq(cm('m4').obstacles, [boxOf('s1'), boxOf('s2')])],
+      // Routed HERE and sent as points (main never routes): each route is the
+      // canvas's own — around the other shapes, never its own two ends or a label.
+      ['each connector carries the canvas\'s route as points, routed around the other shapes (not its own ends, not a text label), and no obstacle list', () => {
+        const G = F.geometry
+        const want = (id, fromId, toId, others) => {
+          const fb = boxOf(fromId), tb = boxOf(toId), ff = fromId === 'TT' ? null : 'process', tf = toId === 'TT' ? null : 'process'
+          const ports = G.pickPorts({ box: fb, form: ff }, { box: tb, form: tf })
+          return G.routeConnector({ from: { box: fb, form: ff, port: ports.from }, to: { box: tb, form: tf, port: ports.to }, route: 'orthogonal', obstacles: others.map(boxOf) }).points
+        }
+        return ['m1', 'm2', 'm3', 'm4'].every((id) => cm(id).obstacles === undefined && Array.isArray(cm(id).points)) &&
+          eq(cm('m2').points, want('m2', 's1', 's3', ['s2'])) && eq(cm('m3').points, want('m3', 's1', 's2', ['s3'])) &&
+          eq(cm('m1').points, want('m1', 'TT', 's1', ['s2', 's3'])) && eq(cm('m4').points, want('m4', 's3', 'TT', ['s1', 's2']))
+      }],
       ['boxes and forms follow the ends (a live end has no form)', () => cm('m2').fromForm === 'process' && cm('m1').fromForm === null && cm('m4').toForm === null && eq(cm('m2').fromBox, boxOf('s1'))],
       ['one shape still draws every connector that touches it, both ways', () => eq(partial.shapes.map((s) => s.id), ['s1']) && eq(partial.connectors.map((c) => c.connector.id).sort(), ['m1', 'm2', 'm3']) && partial.panels.length === 1],
       ['an empty scope is every shape, the far chart included', () => everything.shapes.length === 6 && everything.connectors.some((c) => c.connector.id === 'm5')]
     ],
-    () => JSON.stringify({ shapes: model.shapes.map((s) => s.id), connectors: model.connectors.map((c) => [c.connector.id, c.obstacles.length]), panels: model.panels }))
+    () => JSON.stringify({ shapes: model.shapes.map((s) => s.id), connectors: model.connectors.map((c) => [c.connector.id, c.points?.length]), panels: model.panels }))
 
   // ── 11–13. The object clipboard ────────────────────────────────────────────
   zNext = 1

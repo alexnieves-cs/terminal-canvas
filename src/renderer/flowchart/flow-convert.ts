@@ -1,5 +1,6 @@
 import { CONNECTORS_MAX, SHAPE_SIZE, type Connector, type FlowDirection, type FlowEdge, type FlowGraph, type FlowNode, type ShapeForm } from '@shared/flowchart'
 import { layoutFlow } from '@shared/flowchart-layout'
+import { pickPorts, routeConnector } from '@shared/flowchart-geometry'
 import type { FlowchartSvgModel } from '@shared/flowchart-svg'
 import { isShapePanel, type Panel, type ShapePanel } from '@renderer/panels/panels'
 import { PLAN_STEPS_MAX, type PlanStep, type TaskPlan } from '@shared/task-plan'
@@ -139,7 +140,18 @@ export function svgModelOf(panels: readonly Panel[], ids: ReadonlySet<string>, n
       if (t === undefined) continue
       if (!isShapePanel(p)) live.set(p.rect.id, p)
       if (!isShapePanel(t)) live.set(t.rect.id, t)
-      connectors.push({ fromBox: box(p), fromForm: formOf(p), toBox: box(t), toForm: formOf(t), connector: c, obstacles: obstacles.filter((o) => o.rect.id !== p.rect.id && o.rect.id !== t.rect.id).map(box) })
+      // Routed HERE, as the canvas routes it, and sent as POINTS: main draws
+      // them and never searches (an A* per connector in main blocked every
+      // PTY on a large chart — geometry's `pathFromPoints`).
+      const fromBox = box(p), toBox = box(t), fromForm = formOf(p), toForm = formOf(t)
+      const ports = pickPorts({ box: fromBox, form: fromForm, port: c.from }, { box: toBox, form: toForm, port: c.toPort })
+      const route = routeConnector({
+        from: { box: fromBox, form: fromForm, port: ports.from },
+        to: { box: toBox, form: toForm, port: ports.to },
+        route: c.route ?? 'orthogonal',
+        obstacles: obstacles.filter((o) => o.rect.id !== p.rect.id && o.rect.id !== t.rect.id).map(box)
+      })
+      connectors.push({ fromBox, fromForm, toBox, toForm, connector: c, points: route.points })
     }
   }
   return {

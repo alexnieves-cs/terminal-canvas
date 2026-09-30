@@ -5298,14 +5298,28 @@ escapes must run AFTER the gate, never before it. The renderer now sends the mod
 records, connector records, live objects' titles) and the theme's colours; main re-reads each
 record through the layout's own readers, takes only literal colours (the renderer normalises
 through a 2D context so a token in `oklch()` still exports), builds, and runs the tripwire on
-its own output. Mermaid stays text: its labels sit whole on one line. `flowchart.files.13–15`.
+its own output. `flowchart.files.13–15`.
+The confirm round widened it: **Mermaid is built in main from the graph too** — `encodeLabel`
+turns a newline into `<br/>`, so "Bearer\n<token>" in one label left unscrubbed
+(`flowchart.files.18`); **nothing is cut before it is scrubbed** — a reader's cap (a shape's 500
+characters, a title's 500, an imported group name's 80) applied first can split a secret into
+a head too short to match, so main scrubs the raw string then cuts, and the renderer cuts a
+group name at a word boundary (`flowchart.files.19`); and **main never routes** — the routing
+A* per connector against every shape, moved into main with the builder, blocked every PTY for
+seconds on a chart an agent line could export without a click (measured 9.4 s, 69.5 s at the
+caps). The renderer sends each route as the POINTS the canvas drew; main validates and draws
+them (`flowchart-geometry.ts pathFromPoints`, linear) — `flowchart.files.17`: the cap-sized
+chart in ~1.3 s.
 
 **`flowchart:read` resolves the link before it judges the name (`readFlowchart`, finding 5).**
 An agent's line names the path, and `flow.mmd` linked to `~/.ssh/config` passed the extension
 check and read the key file into a refusal sentence that quoted its first line. The real path
 is taken first and its extension checked again; the read is held to the byte cap AFTER it too
 (a file can grow between the stat and the read); and a parse refusal never quotes the file.
-`flowchart.files.16`, `flowchart.mermaid.28`.
+`flowchart.files.16`, `flowchart.mermaid.28`. The real read is ONE descriptor —
+`O_NOFOLLOW | O_NONBLOCK`, `fstat` on it, a read that stops a byte past the cap — because a
+stat and a read by NAME let the file be swapped between them for a FIFO (main blocks forever)
+or `/dev/zero` (the read never ends). `flowchart.files.20`.
 
 **A resize floor is the OBJECT's (`panel-interaction.ts` `DragState.min`, `arrange.ts` `smartSnap`,
 M388/M390).** `MIN_PANEL_W/H` (200x160) is a terminal's floor; applied to a shape it made a 28px

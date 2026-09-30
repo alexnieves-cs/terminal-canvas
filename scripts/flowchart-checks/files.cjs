@@ -9,13 +9,18 @@
 
    Driven with fake dialogs and an in-memory fs (the deps are injected), then
    once against the real fs and the real default deps in a scratch directory. */
-const { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } = require('node:fs')
+const { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } = require('node:fs')
+const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
 // Built by concatenation so no scanner reads this file as holding a token.
 const TOKEN = 'ghp_' + 'abcdefghijklmnopqrstuvwxyz0123456789'
 const MERMAID = 'flowchart TD\n  A["Start"] --> B["Done"]\n'
+/** A two-step graph as the renderer's `panelsToGraph` sends it — the Mermaid export's request. */
+const GRAPH = (a = 'Start', b = 'Done', extra = {}) => ({ direction: 'TB', nodes: [{ id: 'sh1', form: 'terminator', text: a, w: 0, h: 0 }, { id: 'sh2', form: 'process', text: b, w: 0, h: 0 }], edges: [{ from: 'sh1', to: 'sh2', ...(extra.label === undefined ? {} : { label: extra.label }) }], ...(extra.groups === undefined ? {} : { groups: extra.groups }) })
+/** What main should write for GRAPH(a, b): main's own ids, the shared serializer. */
+const expectMermaid = (F, a, b, extra = {}) => F.mermaid.serializeMermaid({ direction: 'TB', nodes: [{ id: 'n1', form: 'terminator', text: a, w: 0, h: 0 }, { id: 'n2', form: 'process', text: b, w: 0, h: 0 }], edges: [{ from: 'n1', to: 'n2', ...(extra.label === undefined ? {} : { label: extra.label }) }], ...(extra.groups === undefined ? {} : { groups: extra.groups }) })
 /** A theme's colours as the renderer reads them (`themeColours`). */
 const COLOURS = {
   fill: { plain: '#f6f7fa', none: 'none', yellow: '#fbf3d5', blue: '#e2ecf9', green: '#e0f0e4', pink: 'rgba(249, 228, 236, .9)' },
@@ -30,7 +35,7 @@ const MODEL = (words = {}) => ({
     { id: 'a', box: { x: 0, y: 0, w: 160, h: 72 }, shape: { form: 'process', text: words.a ?? 'Start' } },
     { id: 'b', box: { x: 0, y: 200, w: 160, h: 90 }, shape: { form: 'decision', text: words.b ?? 'Done?' } }
   ],
-  connectors: [{ fromBox: { x: 0, y: 0, w: 160, h: 72 }, fromForm: 'process', toBox: { x: 0, y: 200, w: 160, h: 90 }, toForm: 'decision', connector: { id: 'cx1', to: 'b', ...(words.label === undefined ? {} : { label: words.label }) }, obstacles: [] }],
+  connectors: [{ fromBox: { x: 0, y: 0, w: 160, h: 72 }, fromForm: 'process', toBox: { x: 0, y: 200, w: 160, h: 90 }, toForm: 'decision', connector: { id: 'cx1', to: 'b', ...(words.label === undefined ? {} : { label: words.label }) }, points: [{ x: 80, y: 72 }, { x: 80, y: 200 }] }],
   panels: words.panel === undefined ? [] : [{ box: { x: 400, y: 0, w: 300, h: 200 }, title: words.panel }]
 })
 
@@ -78,7 +83,7 @@ module.exports = async function (ok, F) {
     const both = build({ files: { '/w/a.mmd': MERMAID } })
     const doors = M.createFlowchartFiles(both.deps)
     const inn = await doors.read({ path: '/w/a.mmd' })
-    const out = await doors.export({ format: 'mermaid', text: MERMAID, suggestedName: 'via doors' })
+    const out = await doors.export({ format: 'mermaid', graph: GRAPH(), suggestedName: 'via doors' })
     return inn.kind === 'ok' && out.kind === 'written' && both.log.writes.length === 1
   })(), `exports: ${Object.keys(M).join(',')}`)
   if (!has) return
@@ -87,30 +92,31 @@ module.exports = async function (ok, F) {
 
   // ---- export: the gate ----
   {
-    const text = `flowchart TD\n  A["key ${TOKEN}"] --> B["Done"]\n`
-    const { result, log } = await exp({ format: 'mermaid', text, suggestedName: 'Order flow' })
+    const { result, log } = await exp({ format: 'mermaid', graph: GRAPH(`key ${TOKEN}`, 'Done'), suggestedName: 'Order flow' })
     const written = log.writes[0]?.[1] ?? ''
-    const clean = await exp({ format: 'mermaid', text: MERMAID, suggestedName: 'clean' })
-    ok('flowchart.files.2 an exported Mermaid file holds the SCRUBBED text — the token is gone, its placeholder and the rest of the diagram are there, and the answer counts it; a diagram with nothing to scrub is written verbatim with redacted: 0',
+    const clean = await exp({ format: 'mermaid', graph: GRAPH(), suggestedName: 'clean' })
+    ok('flowchart.files.2 an exported Mermaid file is BUILT IN MAIN from the graph with every word SCRUBBED — the token is gone, its placeholder and the rest of the diagram are there, and the answer counts it; a diagram with nothing to scrub is written as the serializer writes it with redacted: 0',
       result.kind === 'written' && result.path === '/out/Order flow.mmd' && result.redacted === 1 &&
-        log.writes.length === 1 && !written.includes(TOKEN) && written === 'flowchart TD\n  A["key [redacted github token]"] --> B["Done"]\n' &&
-        clean.result.kind === 'written' && clean.result.redacted === 0 && clean.log.writes[0][1] === MERMAID,
+        log.writes.length === 1 && !written.includes(TOKEN) && written === expectMermaid(F, 'key [redacted github token]', 'Done') &&
+        clean.result.kind === 'written' && clean.result.redacted === 0 && clean.log.writes[0][1] === expectMermaid(F, 'Start', 'Done'),
       JSON.stringify({ result, written }))
 
     const seen = []
     const b = build()
-    const gated = await M.exportFlowchart({ format: 'mermaid', text: MERMAID, suggestedName: 'x' }, { ...b.deps, outward: (t, source) => { seen.push([t, source]); return { text: 'FROM THE GATE', redacted: 7 } } })
-    ok('flowchart.files.3 what is written is what the OUTWARD gate returned, not the request text, and the gate is named with a source — a write of the raw text would still say "written"',
-      seen.length === 1 && seen[0][0] === MERMAID && typeof seen[0][1] === 'string' && /flowchart/.test(seen[0][1]) &&
-        b.log.writes.length === 1 && b.log.writes[0][1] === 'FROM THE GATE' && gated.kind === 'written' && gated.redacted === 7,
-      JSON.stringify({ seen, writes: b.log.writes, gated }))
+    const gated = await M.exportFlowchart({ format: 'mermaid', graph: GRAPH('Start', 'Done', { label: 'yes', groups: [{ id: 'grp', label: 'lane', nodes: ['sh1'] }] }), suggestedName: 'x' }, { ...b.deps, outward: (t, source) => { seen.push([t, source]); return { text: `GATE(${t})`, redacted: 7 } } })
+    const w3 = b.log.writes[0]?.[1] ?? ''
+    ok('flowchart.files.3 each WORD crosses the outward gate whole, one call per word (the two shapes, the arrow\'s label, the group\'s name), named with a source; what is written holds what the gate returned for each and never a raw word; the count is the gate\'s sum',
+      JSON.stringify(seen.map((x) => x[0]).sort()) === JSON.stringify(['Done', 'Start', 'lane', 'yes']) && seen.every((x) => /flowchart/.test(x[1])) &&
+        b.log.writes.length === 1 && ['GATE(Start)', 'GATE(Done)', 'GATE(yes)', 'GATE(lane)'].every((g) => w3.includes(g)) && !/"Start"|"Done"/.test(w3) &&
+        gated.kind === 'written' && gated.redacted === 28,
+      JSON.stringify({ seen, w3, gated }))
   }
 
   // ---- export: cancel, failure, malformed, size ----
   {
-    const cancelled = await exp({ format: 'mermaid', text: MERMAID, suggestedName: 'x' }, { savePath: null })
-    const failed = await exp({ format: 'mermaid', text: MERMAID, suggestedName: 'x' }, { writeThrows: true })
-    const sheet = await exp({ format: 'mermaid', text: MERMAID, suggestedName: 'x' }, { saveThrows: true })
+    const cancelled = await exp({ format: 'mermaid', graph: GRAPH(), suggestedName: 'x' }, { savePath: null })
+    const failed = await exp({ format: 'mermaid', graph: GRAPH(), suggestedName: 'x' }, { writeThrows: true })
+    const sheet = await exp({ format: 'mermaid', graph: GRAPH(), suggestedName: 'x' }, { saveThrows: true })
     ok('flowchart.files.4 a cancelled save sheet writes nothing and answers cancelled; a failed write and a sheet that cannot open each answer a refusal with their own sentence — the door never rejects',
       cancelled.result.kind === 'cancelled' && cancelled.log.writes.length === 0 && cancelled.log.saves.length === 1 &&
         failed.result.kind === 'refused' && /could not be written/.test(failed.result.reason) && /another folder/.test(failed.result.reason) &&
@@ -118,15 +124,16 @@ module.exports = async function (ok, F) {
       JSON.stringify([cancelled.result, failed.result, sheet.result]))
 
     const bad = await Promise.all([
-      exp(undefined), exp({ format: 'png', text: MERMAID, suggestedName: 'x' }), exp({ format: 'mermaid', text: 5, suggestedName: 'x' }),
-      exp({ format: 'mermaid', text: '   \n ', suggestedName: 'x' }), exp({ format: 'mermaid', text: 'x'.repeat(2_000_001), suggestedName: 'big' })
+      exp(undefined), exp({ format: 'png', graph: GRAPH(), suggestedName: 'x' }), exp({ format: 'mermaid', text: MERMAID, suggestedName: 'x' }),
+      exp({ format: 'mermaid', graph: { direction: 'TB', nodes: [{ id: 'a', form: 'hexagon', text: 'x' }], edges: [] }, suggestedName: 'x' }),
+      exp({ format: 'mermaid', graph: GRAPH('x'.repeat(2_000_001)), suggestedName: 'big' })
     ])
     const reasons = bad.map((r) => r.result.reason)
-    const at = await exp({ format: 'mermaid', text: 'x'.repeat(2_000_000), suggestedName: 'edge' })
-    ok('flowchart.files.5 a malformed request (no request or an unknown format, no text, an empty diagram) and text over 2,000,000 characters are each refused by their own sentence before any sheet opens or byte is written; exactly 2,000,000 characters is written',
+    const at = await exp({ format: 'mermaid', graph: GRAPH('x'.repeat(1_999_900), 'y'), suggestedName: 'edge' })
+    ok('flowchart.files.5 a malformed request (no request or an unknown format; Mermaid TEXT from the renderer, no longer accepted; a graph with no readable shape) and words over 2,000,000 characters are each refused by their own sentence before any sheet opens or byte is written; just under 2,000,000 is written',
       bad.every((r) => r.result.kind === 'refused' && r.log.saves.length === 0 && r.log.writes.length === 0) &&
-        /mermaid or svg/.test(reasons[0]) && reasons[0] === reasons[1] && /no diagram text/.test(reasons[2]) && /empty/.test(reasons[3]) && /million/.test(reasons[4]) &&
-        new Set(reasons.slice(1)).size === 4 && at.result.kind === 'written' && at.log.writes.length === 1,
+        /mermaid or svg/.test(reasons[0]) && reasons[0] === reasons[1] && /empty/.test(reasons[2]) && /empty/.test(reasons[3]) && /million/.test(reasons[4]) &&
+        at.result.kind === 'written' && at.log.writes.length === 1,
       JSON.stringify(reasons))
   }
 
@@ -165,7 +172,7 @@ module.exports = async function (ok, F) {
 
   // ---- export: the file name ----
   {
-    const name = async (suggestedName, format = 'mermaid') => (await exp(format === 'svg' ? { format, model: MODEL(), colours: COLOURS, suggestedName } : { format, text: MERMAID, suggestedName })).log.saves[0]?.suggestedName
+    const name = async (suggestedName, format = 'mermaid') => (await exp(format === 'svg' ? { format, model: MODEL(), colours: COLOURS, suggestedName } : { format, graph: GRAPH(), suggestedName })).log.saves[0]?.suggestedName
     const got = {
       plain: await name('Order flow'),
       svg: await name('Order flow', 'svg'),
@@ -245,8 +252,7 @@ module.exports = async function (ok, F) {
     try {
       const target = join(dir, 'nested', 'out.mmd')
       const deps = { askSave: async () => target, askOpen: async () => null }
-      const text = `flowchart TD\n  A["${TOKEN}"] --> B\n`
-      const wrote = await M.exportFlowchart({ format: 'mermaid', text, suggestedName: 'out' }, deps)
+      const wrote = await M.exportFlowchart({ format: 'mermaid', graph: GRAPH(TOKEN, 'B'), suggestedName: 'out' }, deps)
       const onDisk = existsSync(target) ? readFileSync(target, 'utf8') : ''
       const mode = existsSync(target) ? statSync(target).mode & 0o777 : -1
       const leftovers = readdirSync(join(dir, 'nested')).filter((n) => n.endsWith('.tmp'))
@@ -318,5 +324,73 @@ module.exports = async function (ok, F) {
         alias.result.kind === 'ok' && alias.result.text === MERMAID && alias.log.reads[0] === '/w/real.mmd' &&
         grew.result.kind === 'refused' && /KB/.test(grew.result.reason),
       JSON.stringify([linked.result, alias.result.kind, grew.result]))
+  }
+
+  // ---- the boundary confirm: main never ROUTES; it draws the points it is sent ----
+  {
+    const G = F.geometry ?? {}
+    const box = (i) => ({ x: (i % 50) * 220, y: Math.floor(i / 50) * 160, w: 160, h: 72 })
+    const bigShapes = Array.from({ length: 2000 }, (_, i) => ({ id: `s${i}`, box: box(i), shape: { form: 'process', text: `step ${i}` } }))
+    const everyBox = bigShapes.map((x) => x.box)
+    const bigConnectors = Array.from({ length: 6000 }, (_, i) => ({ fromBox: box(i % 2000), fromForm: 'process', toBox: box((i * 7 + 1) % 2000), toForm: 'process', connector: { id: `c${i}`, to: `s${(i * 7 + 1) % 2000}` }, points: [{ x: 1, y: 2 }, { x: 1, y: 50 }, { x: 90, y: 50 }], obstacles: everyBox }))
+    const t0 = process.hrtime.bigint()
+    const huge = await exp({ format: 'svg', model: { shapes: bigShapes, connectors: bigConnectors, panels: [] }, colours: COLOURS, suggestedName: 'huge' })
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6
+    const one = await exp({ format: 'svg', model: { ...MODEL(), connectors: [{ ...MODEL().connectors[0], points: [{ x: 80, y: 72 }, { x: 80, y: 136 }, { x: 40, y: 136 }, { x: 40, y: 200 }] }] }, colours: COLOURS, suggestedName: 'one' })
+    const want = typeof G.pathFromPoints === 'function' ? G.pathFromPoints([{ x: 80, y: 72 }, { x: 80, y: 136 }, { x: 40, y: 136 }, { x: 40, y: 200 }], 'orthogonal', 'end', { from: 's', to: 'n' }).d : '(no pathFromPoints)'
+    const badPoints = await Promise.all([
+      [{ x: 0, y: 0 }], Array.from({ length: 65 }, (_, i) => ({ x: i, y: 0 })), [{ x: 0, y: 0 }, { x: NaN, y: 1 }], [{ x: 0, y: 0 }, { x: '1', y: 1 }], 'M 0 0 L 9 9'
+    ].map((points) => exp({ format: 'svg', model: { ...MODEL(), connectors: [{ ...MODEL().connectors[0], points }] }, colours: COLOURS, suggestedName: 'bad' })))
+    const curved3 = await exp({ format: 'svg', model: { ...MODEL(), connectors: [{ ...MODEL().connectors[0], connector: { id: 'cx1', to: 'b', route: 'curved' }, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }] }, colours: COLOURS, suggestedName: 'bad' })
+    const lineCount = (r) => ((r.log.writes[0]?.[1] ?? '').match(/class="connector"|<path[^>]*marker|stroke-linecap/g) ?? []).length
+    ok('flowchart.files.17 main never routes: 2,000 shapes and 6,000 connectors, each sent with every shape as an "obstacle", export in under 2.5s (an A* per connector took minutes); a route is drawn exactly as the points it was sent; a malformed point list (one point, 65, a NaN, a string, a path string, a curve that is not four) costs only that line',
+      huge.result.kind === 'written' && ms < 2500 && (one.log.writes[0]?.[1] ?? '').includes(want) &&
+        [...badPoints, curved3].every((r) => r.result.kind === 'written' && !(r.log.writes[0]?.[1] ?? '').includes('M 0 0 L 9 9')) &&
+        [...badPoints, curved3].every((r) => lineCount(r) === lineCount(badPoints[0])),
+      JSON.stringify({ ms: Math.round(ms), huge: huge.result.kind, drawn: (one.log.writes[0]?.[1] ?? '').includes(want) }))
+  }
+
+  // ---- the boundary confirm: the Mermaid door splits no word before the gate; nothing is cut before it ----
+  {
+    const bearer = 'Bearer ' + 'abcdefghijklmnopqrstuvwxyz0123'
+    const wrapped = await exp({ format: 'mermaid', graph: GRAPH('Call with', bearer.replace(' ', '\n')), suggestedName: 'x' })
+    const w = wrapped.log.writes[0]?.[1] ?? ''
+    ok('flowchart.files.18 a label holding "Bearer\\n<token>" is scrubbed on the MERMAID door too — the gate reads the label before the serializer turns its newline into <br/> — and the count says so',
+      wrapped.result.kind === 'written' && wrapped.result.redacted === 1 && !w.includes('abcdefghijklmnopqrstuvwxyz0123'), JSON.stringify({ result: wrapped.result, w }))
+
+    const title = 'w'.repeat(480) + ` ${TOKEN} ` + 'z'.repeat(100)
+    const text = 'x '.repeat(245) + TOKEN
+    const cut = await exp({ format: 'svg', model: MODEL({ a: text, panel: title }), colours: COLOURS, suggestedName: 'cut' })
+    const cw = cut.log.writes[0]?.[1] ?? ''
+    const frag = TOKEN.slice(0, 8)
+    ok('flowchart.files.19 nothing is CUT before it is scrubbed: a token straddling a live object\'s 500-character title limit and one straddling a shape\'s 500-character label limit leave no fragment (the scrub runs on the whole string, the cut after it), and both are counted',
+      cut.result.kind === 'written' && cut.result.redacted === 2 && !cw.includes(frag), JSON.stringify({ result: cut.result, frag: cw.includes(frag) }))
+  }
+
+  // ---- the boundary confirm: the real read is one descriptor, bounded ----
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc-flowchart-read-'))
+    try {
+      const deps = { askSave: async () => null, askOpen: async () => null }
+      const fifo = join(dir, 'pipe.mmd')
+      execFileSync('mkfifo', [fifo])
+      const t0 = process.hrtime.bigint()
+      const pipe = await M.readFlowchart({ path: fifo }, deps)
+      const pipeMs = Number(process.hrtime.bigint() - t0) / 1e6
+      const zero = join(dir, 'zero.mmd')
+      symlinkSync('/dev/zero', zero)
+      const z = await M.readFlowchart({ path: zero }, deps)
+      const good = join(dir, 'real.mmd')
+      writeFileSync(good, MERMAID)
+      const alias = join(dir, 'alias.mmd')
+      symlinkSync(good, alias)
+      const a = await M.readFlowchart({ path: alias }, deps)
+      ok('flowchart.files.20 against the real fs: a FIFO named .mmd is refused at once (no writer, no hang), a .mmd linked to /dev/zero is refused by its real name, and a .mmd linked to a real Mermaid file reads that file',
+        pipe.kind === 'refused' && /not a regular file/.test(pipe.reason) && pipeMs < 1000 &&
+          z.kind === 'refused' && /links to/.test(z.reason) && a.kind === 'ok' && a.text === MERMAID,
+        JSON.stringify({ pipe, pipeMs: Math.round(pipeMs), z, a: a.kind }))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   }
 }

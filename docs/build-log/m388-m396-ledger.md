@@ -142,6 +142,16 @@ confirmed defects and two defence-in-depth gaps; all five fixed, each with a che
 5. LOW — `flowchart:read` followed links and a refusal quoted the file's first line. Real path
    first, extension re-checked, cap re-checked after the read, no quoting
    (`flowchart.files.16`, `flowchart.mermaid.28`).
+**Confirm round (a second fresh critic, told to break the fixes).** All five held, and it found
+what the first fix itself broke: (A, MEDIUM) moving the SVG builder into main moved the router
+with it — an A* per connector, measured blocking main 9.4 s on one capped Mermaid paste and
+69.5 s at the caps, reachable from an agent line with no click. The renderer now sends route
+POINTS and main draws them (`pathFromPoints`); `flowchart.files.17` runs the cap-sized chart in
+~1.3 s. (B, MEDIUM) the Mermaid door had #1's defect in another form — `<br/>` split
+"Bearer\n<token>" — so Mermaid is built in main from the graph too (`.18`). (C, LOW) caps
+applied before the scrub (`.19`; group names cut at a word boundary). (LOW) the read's stat and
+read were by name — one descriptor now (`.20`). No third round: every finding has a check that
+fails without its fix.
 Not changed, recorded: `redact.ts`'s GitHub pattern needs a word boundary, so two tokens pasted
 back to back with no separator match neither — the scrubber's own limit, older than this run.
 
