@@ -1130,8 +1130,12 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `chat.sandbox.${backend}`,
-          title: `New chat (no folder) — ${row.label}`,
-          searchText: `new chat no folder sandbox ${row.label} conversation without a repository`,
+          // M403 (B8). The launcher's own words lead: "Ask a question" existed
+          // only on the launcher, which is gone once a panel exists, and the
+          // palette called the same door "New chat (no folder)". Both names
+          // find it; the id and the no-folder fact are unchanged (sandbox.1).
+          title: `Ask a question (new chat, no folder) — ${row.label}`,
+          searchText: `ask a question new chat no folder sandbox ${row.label} conversation without a repository`,
           group: 'spawn',
           run: () => actions.newSandboxChat(backend)
         },

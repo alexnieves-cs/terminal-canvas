@@ -1177,6 +1177,43 @@ const write = (rel, text) => {
       JSON.stringify({ spellings, under, sibling }))
   }
 
+  // M403 (B5) — toolbox.mode.1 / .2. THE MODE THAT DECIDES WHETHER CLAUDE
+  // ASKS, projected and fenced. `defaultMode` is a CLOSED projection (a known
+  // mode or absent — "default", a future word, a number are absent), and the
+  // effective one is the last file in read order (user < project < local),
+  // with the gitignored local file left out for a lane's worktree. Then the
+  // fence: the start sheet reads `~`, which is the TOOLBOX home — under
+  // TC_TOOLBOX_HOME the mode comes from the fence, never the developer's own
+  // settings (this machine's real ~/.claude says `auto`), so a golden cannot
+  // leak it.
+  {
+    const pc = (mode) => T.parsePermissionCounts({ permissions: { allow: [], defaultMode: mode } }, 'user', '/u/.claude/settings.json')
+    const known = pc('acceptEdits'), dflt = pc('default'), future = pc('yolo'), num = pc(5), none = T.parsePermissionCounts({ permissions: { allow: ['a'] } }, 'user', '/x')
+    const counts = (path, mode) => ({ path, scope: 'user', allow: 0, deny: 0, ask: 0, additionalDirectories: 0, ...(mode === undefined ? {} : { defaultMode: mode }) })
+    const order = [counts('/h/.claude/settings.json', 'auto'), counts('/r/.claude/settings.json', 'plan'), counts('/r/.claude/settings.local.json', 'bypassPermissions')]
+    const all = T.effectivePermissionMode(order), lane = T.effectivePermissionMode(order, { local: false })
+    const userOnly = T.effectivePermissionMode([order[0], counts('/r/.claude/settings.json')])
+    // Home as the folder: the same file read as the user AND the project arm is the user's.
+    const homeTwice = T.effectivePermissionMode([order[0], { ...order[0], scope: 'project' }])
+    ok('toolbox.mode.1 defaultMode is projected (a known mode or absent — "default", an unknown word and a number are absent) and the effective mode is the last file that sets one, local over project over user, with the local file left out for a lane; the line says what the agent does and which file says so, and with nothing set it says asking is the default',
+      known.defaultMode === 'acceptEdits' && !('defaultMode' in dflt) && !('defaultMode' in future) && !('defaultMode' in num) && !('defaultMode' in none) &&
+        all.mode === 'bypassPermissions' && lane.mode === 'plan' && userOnly.mode === 'auto' && T.effectivePermissionMode([]) === null && homeTwice.scope === 'user' &&
+        /decides for itself when to ask — auto mode, set in ~\/\.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', userOnly)) &&
+        /plan mode, set in this repository's \.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', { ...lane, scope: 'project' })) &&
+        /asks before .* your settings set no permission mode/.test(T.permissionModeLine('Claude Code', null)),
+      JSON.stringify({ known, dflt, future, all, lane, userOnly, line: T.permissionModeLine('Claude Code', userOnly) }))
+    const fence = mkdtempSync(join(tmpdir(), 'tc toolbox mode fence '))
+    const empty = T.readToolbox({ cwd: T.toolboxCwd('~', fence), home: fence })
+    mkdirSync(join(fence, '.claude'), { recursive: true })
+    writeFileSync(join(fence, '.claude', 'settings.json'), JSON.stringify({ permissions: { defaultMode: 'plan' } }))
+    const fenced = T.readToolbox({ cwd: T.toolboxCwd('~', fence), home: fence })
+    const modeOf = (r) => (r.kind === 'inventory' ? T.effectivePermissionMode(r.inventory.permissions, { local: false }) : 'unread')
+    rmSync(fence, { recursive: true, force: true })
+    ok('toolbox.mode.2 under a fenced toolbox home the sheet\'s `~` read answers from the fence: nothing set is null, and a fence that says plan says plan — never the real home\'s mode',
+      modeOf(empty) === null && modeOf(fenced) !== null && modeOf(fenced) !== 'unread' && modeOf(fenced).mode === 'plan' && modeOf(fenced).path.startsWith(fence),
+      JSON.stringify({ empty: modeOf(empty), fenced: modeOf(fenced) }))
+  }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

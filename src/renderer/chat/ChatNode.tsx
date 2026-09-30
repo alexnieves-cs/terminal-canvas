@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { ChatPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
@@ -11,6 +11,7 @@ import { useChat, dismissAuto, useApprovals, isAnswered } from './chat-store'
 import { chatPhase, chatPhaseWord, chatStateInput, deliveredUserTurns, toolArgument, toolArgumentIsCode } from './chat-model'
 import { ChatConversation, answerRequest } from './ChatConversation'
 import { useConversationClaimed } from './conversation-host'
+import { chatNameFromMessage } from '@renderer/palette/panel-name'
 
 /**
  * M73. THE CHAT PANEL — a conversation with an agent, on the canvas, through
@@ -69,6 +70,10 @@ export interface ChatNodeProps {
   teammateName?: string
   /** D12: the dispatched task is provenance for an accepted decision, not its scope. */
   taskId?: string
+  /** M403 (B6). The first start's guide strip, rendered inside this conversation's body. */
+  guide?: ReactNode
+  /** M403 (B8). Name a chat with no folder after its first message (only while it has no title). */
+  onNameChat?(id: string, title: string): void
 }
 
 export function ChatNode(props: ChatNodeProps): JSX.Element {
@@ -94,6 +99,17 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   // Counted from the TRANSCRIPT, never the snapshot (the conversation's own rule, M322's delivered-only count).
   const turnCount = deliveredUserTurns(chat.turns)
   const title = panel.title ?? `chat · ${(panel.chat.cwd.replace(/\/+$/, '').split('/').pop() || panel.chat.cwd)}`
+  // M403 (B8). A chat with no folder has no place to be named after (its
+  // folder is main's sandbox/<panelId>), so its first message names it —
+  // once, and never over a title the person gave.
+  const firstText = chat.turns.find((t) => t.role === 'user')?.blocks.find((b) => b.type === 'text')
+  const firstWords = firstText !== undefined && firstText.type === 'text' ? firstText.text : undefined
+  const { onNameChat } = props
+  useEffect(() => {
+    if (panel.chat.sandbox !== true || panel.title !== undefined || props.readOnly === true || firstWords === undefined || onNameChat === undefined) return
+    const name = chatNameFromMessage(firstWords)
+    if (name !== null) onNameChat(id, name)
+  }, [panel.chat.sandbox, panel.title, props.readOnly, firstWords, onNameChat, id])
   // M107. The branch, from M86's git:status — asked once per directory.
   const [branch, setBranch] = useState<string | null>(null)
   useEffect(() => {
@@ -182,8 +198,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             the frame. Dismissing the chip brings the door back; the palette's
             Auto rows are there throughout. */}
         {props.readOnly !== true && snapshot?.auto === undefined && (
-          <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns — Complete, Harden, Review, or a task of yours" aria-label="Auto…"
-            {...shellControl(() => props.onOpenAuto?.(id))}>auto</button>
+          // M403 (B5). Labelled as the ACTION it is: a bare "auto" beside the
+          // state pill read as a mode the chat was in (people took it for
+          // Claude's own auto permission mode). It opens the Auto rows.
+          <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns — Complete, Harden, Review, or a task of yours" aria-label="Auto run…"
+            {...shellControl(() => props.onOpenAuto?.(id))}>Auto run…</button>
         )}
         {/* M74. A LABELLED verb after the pill — the terminal's own row shape
             (`title · pill · controls`), and a word rather than the `>_` glyph
@@ -210,6 +229,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {...(props.readOnly === undefined ? {} : { readOnly: props.readOnly })}
         {...(props.teammateName === undefined ? {} : { teammateName: props.teammateName })}
         {...(props.taskId === undefined ? {} : { taskId: props.taskId })}
+        {...(props.guide === undefined ? {} : { guide: props.guide })}
         onFocus={props.onFocus} />}
     </PanelFrame>
   )

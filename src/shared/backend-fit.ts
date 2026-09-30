@@ -1,5 +1,7 @@
 import { BACKENDS, type AgentBackend } from './agent-backends'
 import { outward } from './outward'
+import type { PermissionMode } from './cost'
+import { PERMISSION_MODE_WORDS } from './toolbox'
 
 /**
  * M319. BACKEND FIT — whether the backend a person chose can do THIS task,
@@ -128,7 +130,7 @@ export interface BackendFit {
 const REPORTS_WINDOW: Readonly<Record<AgentBackend, boolean>> = { claude: true, codex: false, copilot: false, acp: false }
 
 /** The one sentence a requirement gets for a backend, met or not. */
-function rowLine(backend: AgentBackend, id: TaskRequirementId, available: boolean): { ok: boolean; line: string } {
+function rowLine(backend: AgentBackend, id: TaskRequirementId, available: boolean, mode?: PermissionMode | null): { ok: boolean; line: string } {
   const row = BACKENDS[backend]
   switch (id) {
     case 'cli': return available ? { ok: true, line: `${row.binary} is on the login PATH` } : { ok: false, line: row.reasons.noCli }
@@ -156,9 +158,14 @@ function rowLine(backend: AgentBackend, id: TaskRequirementId, available: boolea
     case 'read-only': return row.sandboxArgs !== undefined
       ? { ok: true, line: `${row.label} has a read-only mode (the brief is still the only rule inside a lane)` }
       : { ok: false, line: row.reasons.noSandbox }
-    case 'permissions': return row.asksPermission
-      ? { ok: true, line: `${row.label} asks before a command runs` }
-      : { ok: false, line: row.reasons.noPermissions }
+    // M403 (B5). "Asks" was promised unconditionally, but the app passes no
+    // --permission-mode: the person's settings decide. A mode that does not
+    // ask (auto, dontAsk, bypassPermissions) is said as what it is, and the
+    // row is unmet — the task wanted a person approving commands.
+    case 'permissions':
+      if (!row.asksPermission) return { ok: false, line: row.reasons.noPermissions }
+      if (mode !== undefined && mode !== null && !PERMISSION_MODE_WORDS[mode].asks) return { ok: false, line: `${row.label} ${PERMISSION_MODE_WORDS[mode].does} — ${mode} mode, from your settings` }
+      return { ok: true, line: `${row.label} asks before a command runs` }
   }
 }
 
@@ -167,8 +174,8 @@ function rowLine(backend: AgentBackend, id: TaskRequirementId, available: boolea
  * the backend's CLI; absent reads as available (a caller with no discovery,
  * e.g. a check) — never as absent, which would refuse every start.
  */
-export function backendFit(backend: AgentBackend, requirements: readonly TaskRequirement[], available = true): BackendFit {
-  const rows: FitRow[] = requirements.map((r) => ({ id: r.id, level: r.level, ...rowLine(backend, r.id, available) }))
+export function backendFit(backend: AgentBackend, requirements: readonly TaskRequirement[], available = true, mode?: PermissionMode | null): BackendFit {
+  const rows: FitRow[] = requirements.map((r) => ({ id: r.id, level: r.level, ...rowLine(backend, r.id, available, mode) }))
   const refusedRow = rows.find((r) => r.level === 'required' && !r.ok)
   const degraded = rows.some((r) => r.level === 'wanted' && !r.ok)
   return {

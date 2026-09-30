@@ -12,6 +12,7 @@
  * a panel at, which makes every count and every byte length an attacker-shaped
  * input in the ordinary case of "I opened a panel in a repo I just cloned".
  */
+import type { PermissionMode } from './cost'
 
 /**
  * `agent`, not `subagent`. M15 already owns that word: `SubagentRecord` is a
@@ -317,6 +318,61 @@ export interface PermissionCounts {
   deny: number
   ask: number
   additionalDirectories: number
+  /**
+   * M403 (B5). `permissions.defaultMode`, PROJECTED: one of `PERMISSION_MODES`
+   * or absent. An unknown string (a future mode, `"default"`, a typo) is
+   * absent, never passed through — the projector rule (`toolbox-scan.ts`), and
+   * the renderer only ever says a mode it has words for.
+   */
+  defaultMode?: PermissionMode
+}
+
+/**
+ * M403 (B5). THE MODE THAT DECIDES WHETHER CLAUDE ASKS. The app starts claude
+ * with `--permission-prompt-tool stdio` and no `--permission-mode`, so the
+ * person's own settings decide, and nothing said which. Claude's precedence is
+ * local over project over user, and `readToolbox` returns the counts in READ
+ * order — user, project, `settings.local.json` — so the LAST one that sets a
+ * mode wins. `local: false` leaves the local file out: it is gitignored, so a
+ * task's worktree does not have it and the lane's agent never reads it.
+ * Managed (enterprise) settings are not read; the words say "your settings".
+ */
+export interface EffectiveMode { mode: PermissionMode; path: string; scope: ToolScope }
+export function effectivePermissionMode(permissions: readonly PermissionCounts[], opts: { local?: boolean } = {}): EffectiveMode | null {
+  let found: EffectiveMode | null = null
+  const seen = new Set<string>()
+  for (const p of permissions) {
+    if (opts.local === false && /(^|\/)settings\.local\.json$/.test(p.path)) continue
+    // A folder that IS home reads home's `.claude/settings.json` as both its
+    // user and its project arm: one file, and it is the user's.
+    if (seen.has(p.path)) continue
+    seen.add(p.path)
+    if (p.defaultMode !== undefined) found = { mode: p.defaultMode, path: p.path, scope: p.scope }
+  }
+  return found
+}
+
+/**
+ * M403 (B5). What each mode means for "does it ask", in a person's words. `asks`
+ * is whether a person approves a command before it runs — the promise the
+ * start sheet's fit row used to make unconditionally. `plan` asks before
+ * anything changes; `acceptEdits` still asks before a command.
+ */
+export const PERMISSION_MODE_WORDS: Readonly<Record<PermissionMode, { asks: boolean; does: string }>> = {
+  manual: { asks: true, does: 'asks before it runs a command or edits a file' },
+  acceptEdits: { asks: true, does: 'edits files without asking, and asks before it runs a command' },
+  plan: { asks: true, does: 'only plans — it changes nothing until you approve the plan' },
+  auto: { asks: false, does: 'decides for itself when to ask' },
+  dontAsk: { asks: false, does: 'never asks — anything not already allowed is refused' },
+  bypassPermissions: { asks: false, does: 'never asks — it runs every command and edit' }
+}
+
+/** M403 (B5). The one plain line a start shows: what the agent will do, and which setting says so. */
+export function permissionModeLine(agent: string, found: EffectiveMode | null): string {
+  if (found === null) return `${agent} asks before it runs a command or edits a file — your settings set no permission mode`
+  const file = found.path.split('/').slice(-2).join('/')
+  const where = found.scope === 'user' ? `~/${file}` : `this repository's ${file}`
+  return `${agent} ${PERMISSION_MODE_WORDS[found.mode].does} — ${found.mode} mode, set in ${where}`
 }
 
 /**

@@ -7922,6 +7922,8 @@ body {
    under Advanced, and a footer of real buttons with the keys beside them. */
 .sheet__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; margin-bottom: var(--sp-2); }
 .sheet__head .sheet__title { margin: 0; }
+/* M403 (B8). "Ask a question" sits with the Task | Panel switch on the right, a plain word verb (not a tab). */
+.sheet__head .sheet__ask { margin-left: auto; }
 .sheet__switch { display: inline-flex; padding: var(--sp-1); gap: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
 .sheet__switch-tab { display: inline-flex; align-items: baseline; gap: var(--sp-3); padding: var(--sp-2) var(--sp-5); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
 .sheet__switch-tab:hover { color: var(--fg); }
@@ -7953,6 +7955,9 @@ body {
    muted toggle: the name reads at body colour, and only "Change" is quiet. */
 .sheet__who > .sheet__advanced-toggle { color: var(--fg-2); }
 .sheet__who-change { color: var(--fg-4); }
+/* M403 (B5). The effective permission mode: one plain line under who, at the
+   who line's own size and a step quieter — a fact about the run, not a field. */
+.sheet__mode { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
 .sheet__route { margin: calc(-1 * var(--sp-2)) 0 0; }
 .sheet__actions { flex: 1 1 100%; display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-4); }
 .sheet__actions .sheet__keys { flex: 1 1 auto; color: var(--fg-4); }
@@ -9619,6 +9624,25 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 @media (prefers-reduced-motion: reduce) {
   .first-task-hint { animation: none; }
 }
+
+/* M403 (B6). THE GUIDE AS A STRIP INSIDE ITS CONVERSATION. The popover above
+   floated over the composer's Send/Answer — the buttons its own sentence
+   points at. Here it is ABSOLUTELY positioned over the top of the transcript:
+   the body's box and the composer never move (the M236 frame rule — a strip
+   that took a flex row would shrink the transcript under a live answer), and
+   the transcript pads its own top by the strip's measured height
+   (`--guide-h`, set by FirstTaskHint) so the first message scrolls clear.
+   Quiet: the panel's own surface, one hairline, the small type step. */
+.chat__body:has(> .first-task-hint--strip) { position: relative; --guide-h: 0px; }
+.chat__body:has(> .first-task-hint--strip) > .chat__transcript { padding-top: calc(var(--sp-5) + var(--guide-h)); }
+.first-task-hint--strip {
+  position: absolute; top: 0; left: 0; right: 0; bottom: auto; translate: none; z-index: 2;
+  max-width: none; margin: 0; padding: var(--sp-2) var(--sp-5); gap: var(--sp-2) var(--sp-4);
+  border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  background: var(--s-1); color: var(--fg-3); font-size: var(--t-xs);
+  animation: none;
+}
+.first-task-hint--strip[data-first-task-hint="needs-input"] { border-color: var(--line); border-bottom-color: var(--amber); }
 
 /* M311. COMBINE — the workbench tab that says whether a repository's lanes
    are safe to put together. Blocks stack; the contention label takes the

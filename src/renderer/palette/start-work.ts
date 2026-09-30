@@ -42,6 +42,7 @@ import { teammateRefusal, workItemRefusal, type WorkItemState } from '@shared/wo
 import { SWARM_PRESETS, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 import { BACKENDS, BACKEND_IDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
 import { FIRST_LAUNCH_ENGINES, folderTeammatePlan, isFirstLaunchBackend, placeContains } from '@shared/onboarding'
+import type { PermissionMode } from '@shared/cost'
 import { backendFit, briefIsReadOnly, briefWantsImages, taskRequirements, type BackendFit, type TaskRequirement } from '@shared/backend-fit'
 
 /** The three inputs, in the order they are asked (M400: the launcher's — what, where, who). */
@@ -93,6 +94,12 @@ export interface StartWorkContext {
   itemState?: WorkItemState
   /** M319. Discovery's answer per backend CLI. Absent reads as available (a caller with no discovery). */
   available?: Partial<Record<AgentBackend, boolean>>
+  /**
+   * M403 (B5). The effective `permissions.defaultMode` from the person's Claude
+   * settings for the chosen repository: null when read and none is set, absent
+   * when not read yet (the fit then says what claude does by default).
+   */
+  permissionMode?: PermissionMode | null
   /** M319. The canvas's enforced ceilings, read live — a budget a backend cannot report to is stated before the start. */
   budgetUsd?: number
   windowPercent?: number
@@ -292,7 +299,8 @@ export function startWorkRequirements(choice: StartWorkChoice, ctx: StartWorkCon
 /** M319. The chosen backend's fit — the sheet's rows, its disabled Start and the executor's last gate read this one answer. */
 export function startWorkBackendFit(choice: StartWorkChoice, ctx: StartWorkContext, text = ''): BackendFit {
   const backend = choice.backend ?? DEFAULT_BACKEND
-  return backendFit(backend, startWorkRequirements(choice, ctx, text), ctx.available?.[backend] ?? true)
+  // M403. The settings read are Claude Code's own, so only the claude row is judged by them.
+  return backendFit(backend, startWorkRequirements(choice, ctx, text), ctx.available?.[backend] ?? true, backend === DEFAULT_BACKEND ? ctx.permissionMode : undefined)
 }
 
 /** M319. Every backend's fit for the picker, in registry order — a row that cannot do the task is offered disabled with why, never dropped. */

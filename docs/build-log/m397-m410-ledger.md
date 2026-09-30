@@ -790,3 +790,86 @@ shot time (sized to the canvas, the one-file diff full width, the rail's file co
 `focus*`; `minimap`-bearing scenes only if shot mid-flight.
 *Not done:* the lineup/swarm/template arrangements (above); a flight-time golden for the minimap. The A4 rim for an
 agent terminal (`claude` in a PTY) was not driven with a real agent (M397's note stands).
+
+### M403 — the permission mode said where a task starts (B5), the guide inside its conversation (B6), Ask a question kept (B8)
+
+Built in the main checkout on `m397-daily-loop`, app slot 1. Two commits: the first carries the M399/M400 critic
+follow-ups and the lead's B7 filter decision (their notes are under M399, M400 and M401 above); this section is the
+second. Screenshots in `/tmp/tc-daily-loop-shots/`: `B5-before`, `B5-after`, `B6-before`, `B6-after`, `B8-before-palette`, `B8-before-named`, `B8-after-palette`, `B8-after-create`, `B8-after-named`. The before shots were taken on HEAD `3f9c01be` (this work stashed, rebuilt, slot 1 fresh at 1200×800); two tiny real first starts ran in throwaway repos (`/tmp/tc-m403-repo`, `-b`: "Reply with the single word ok. Do not change any files." — the agent answered `ok`, nothing changed). HOME is not fenced: the real `~/.claude/settings.json` says `defaultMode: auto`, which is the case B5 is about.
+
+**B5 (P2), the inherited permission mode is invisible.** *Reproduced* (`B5-before`): with the real settings in auto mode, "+ New task" → Change showed "✓ claude asks before a command runs", and nothing on the sheet said which mode applies. *After* (`B5-after`): "Claude Code decides for itself when to ask — auto mode, set in ~/.claude/settings.json" under who, and the fit row reads the same, unmet (amber). The first after-drive said "this repository's .claude/settings.json" for `~`: a folder that IS home reads home's file as both its user and its project arm, so the same path is now counted once, as the user's (`toolbox.mode.1` pins it).
+*Cause:* `agent-session-args.ts` passes `--permission-prompt-tool stdio` and no `--permission-mode` (kept — lb 3358),
+so `permissions.defaultMode` in the person's own settings decides; nothing read it, and `backend-fit.ts`'s
+permissions row promised "claude asks before a command runs" unconditionally. The chat header's `auto` is a door to
+the bounded Auto run, and read as a mode.
+*Fix:*
+- `toolbox-scan.ts`'s `parsePermissionCounts` projects `defaultMode` (a known `PERMISSION_MODES` word or ABSENT —
+  `"default"`, a future word, a number are absent; the projector rule, lb 1705). No new door: the existing
+  `toolbox:read`.
+- `shared/toolbox.ts`: `effectivePermissionMode` (read order user → project → local, last wins; `local: false` for a
+  lane, because `settings.local.json` is gitignored and a worktree never has it; managed settings are not read, so
+  the words say "your settings"), `PERMISSION_MODE_WORDS` (does it ask, in plain words) and `permissionModeLine`.
+- The New task sheet reads the chosen repository (or `~` before one is chosen — the TOOLBOX home, fenced by
+  `TC_TOOLBOX_HOME` in every harness) once per folder, and says ONE line under who, for the claude row only:
+  e.g. "Claude Code decides for itself when to ask — auto mode, set in ~/.claude/settings.json", or "Claude Code asks
+  before it runs a command or edits a file — your settings set no permission mode".
+- The permissions fit row is judged by the mode (`backendFit`'s new `mode`): auto, dontAsk and bypassPermissions are
+  said as what they are and the row is unmet (the lane reads degraded) — no promise of asking; absent, manual,
+  acceptEdits and plan keep it.
+- The chat's button reads **Auto run…** (aria-label too); `data-chat-auto-open` kept.
+*Decisions:* only the sheet says the line — the launcher's three steps and step-3 sentence are on the Keep list, and
+the launcher's start runs through the same executor; the launcher gains nothing here (recorded, not done). A folder
+the toolbox reader cannot read says nothing rather than guessing. The read can run `claude plugin list` once per
+new folder on a cache miss (the toolbox door's existing behaviour).
+*Checks:* `verify:toolbox toolbox.mode.1` (projection, precedence, local left out, the line's words) and
+`toolbox.mode.2` (under a fence the `~` read is the fence's, never the real home's `auto`); `verify:agent-session
+fit.mode.1`; `verify:panels:product start.mode.1` (the fence says auto → the sheet's line and the fit row, then the
+fence file is put back).
+
+**B6 (P2), the progress coachmark covers the composer.** *Reproduced* (`B6-before`): on a real first start the guide measured (597,668)–(999,767) over the composer (533,639)–(1065,753) at 1200×800 — the caption lay across the message field its sentence points to. *After* (`B6-after`): the strip sits under the header, (153→222) px, the composer (610→723) px, no floating hint.
+*Cause:* `FirstTaskHint` rendered outside `.world`, anchored under (or flipped over) its panel and clamped into the
+host, so on an ordinary window it sat over the composer's Send/Answer.
+*Fix:* the same component with `strip`, handed to its ChatNode as `guide` (Canvas's `firstTaskStrip`; the floating
+mount is gone), rendered as the first child of the chat body: `position: absolute` over the top of the transcript,
+the body `position: relative` only while it is there, the transcript padded by the strip's measured height
+(`--guide-h`, set on the body by the strip and removed with it). Permanent (with its panel until Got it — the old
+"step aside while another panel is selected" rule has nothing to guard inside the panel), quiet (the panel surface,
+one hairline, `--t-xs`). Got it and the review verb are unchanged. The body's box and the composer never move (the
+M236 frame rule).
+*Check:* `verify:panels:product first.strip.1`, on the real first start of `onboarding.intent.e2e.1`: the strip is
+inside `.chat__body`, computed `absolute`, no hint outside the panel, no overlap with the composer or any of its
+buttons (each hit-tested by `elementFromPoint`), and after a Got it press the body and composer rects are identical.
+
+**B8 (P2), "Ask a question" disappears after first use.** *Reproduced*: ⌘K "ask a question" selected "Agents working at once", a setting (`B8-before-palette`); a folderless chat from the launcher's Ask kept the name "chat · c1" after its first message was answered (`B8-before-named`). *After*: "ask a question" selects "Ask a question (new chat, no folder) — claude" (`B8-after-palette`); the Create sheet has Ask a question beside Task | Panel (`B8-after-create`); the same first message names the chat "What is two plus two? Answer in one…" in the header and the navigator (`B8-after-named`).
+*Fix:* (1) ⌘K: the no-folder chat rows lead with the launcher's words — "Ask a question (new chat, no folder) —
+claude" — and "ask a question"/"ask" select them; the old words still find them; the id and the no-folder fact are
+unchanged (`sandbox.1`). (2) Create: the sheet "+ Create" opens carries **Ask a question** beside Task | Panel (a word
+verb, not a third tab: it opens a folderless chat on the installed engine and closes the sheet; disabled by name
+with `REASON_NO_CLAUDE` when no engine was found). (3) A chat with NO folder is named after its first message
+(`chatNameFromMessage`: first non-blank line, flattened, cut at a word with an ellipsis at 40) the moment its first
+user turn exists — a plain title write, not a history step, never over a title already set. *Decision:* only
+folderless chats are renamed; a chat in a folder already has an honest name (teammate · place).
+*Checks:* `verify:palette ask.alias.1`, `verify:rail chat.name.2`, `verify:panels:product ask.create.1` (a real press
+on the sheet's Ask a question → a sandbox chat record, the sheet closed). Planned and not kept: `chat.name.1` (the first message sent →
+the header and the stored title read its words) — *dropped*: in the panels harness a sandbox chat cannot send (main's fake session answers a recycled panel id with a STALE session's folder, beginNewChat's M120 note; the composer is replaced by "no such directory"), and a transcript turn written behind it is not hydrated without a live session. Measured in two runs; the naming is pinned pure (`chat.name.2`) and was driven in the real app (above). A comment in the suite says so.
+
+**Goldens expected to move:** `start-work` (the mode line under who — the fence's "your settings set no permission
+mode"; the filled Start task; the who line/mint name "Claude Code · …"), `spawn-sheet` and any New panel sheet scene
+(Ask a question in the head), every chat scene whose header shows the Auto door (`chat`, `kinds`, `kinds-dark`,
+`header`, first-run scenes: "Auto run…" is wider than "auto"), any scene with the first-task guide (it is now inside
+the panel), `palette*` scenes listing the no-folder rows.
+
+**Seen while driving, not fixed (outside the IDs):** with "Auto run…" the chat header at the default chat width clips
+its last control ("Open terminal sessio…", `B6-after`) — D5's header template is where that belongs.
+
+**Suites (M403, both commits' tree).** Plain: `verify:palette` 172/172, `onboarding` 22/22, `layout` 285/285,
+`toolbox` 109/109, `agent-session` 188/188, `rail` 261/261, `review` 163/163, `first-run` 29/29, `styles` 93/93,
+`meta` 51/51. Electron, each alone under the lock: `verify:panels:agents` 85/86 — only `template.1` (baseline);
+`verify:panels:product` **142/142** (186.9 s of 230 s, 81%), including `pill.dismiss.1/.2`, `start.door.1/.2`,
+`start.primary.1`, `start.refuse.1`, `start.mode.1`, `first.strip.1`, `ask.create.1` and the extended
+`review.accepted.1` owed by M401. Earlier product runs on the way: one red on my own draft leak (`start.door.1`/
+`start.primary.1` — `start.refuse.1` left a plain-door draft in the harness's persistent localStorage; it is now
+cleared before door.1 and after refuse.1), and one run with `workflow.wire.1`, `wfx.ui.1`, `workflow.inspect.1` red
+(checks that run BEFORE any M403 block and passed in the three other runs; re-run alone: green) — unattributed,
+recorded, not called a flake by assumption. `npm run affected` was NOT run as a whole: the machine sat at load 70
+with three builders, and the lock was contended; the suites above are the ones the change reaches.

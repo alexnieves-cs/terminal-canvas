@@ -361,7 +361,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // temporary git repo, so the lane is a real worktree (M198's own setup).
     const IDS = [
       'onboarding.intent.e2e.1 a sentence and a repository folder typed into the launcher start work through D05 — a teammate whose only place is that folder, a typed task, a conversation in its lane whose first user line is the sentence, the caret in its composer, no terminal and no starter tour',
-      'onboarding.intent.e2e.2 a folder that is not a repository is refused by name with nothing minted, and Chat in this folder instead opens a conversation there with the sentence in its composer, unsent'
+      'onboarding.intent.e2e.2 a folder that is not a repository is refused by name with nothing minted, and Chat in this folder instead opens a conversation there with the sentence in its composer, unsent',
+      // M403 (B6).
+      'first.strip.1 the first start\'s guide is a strip INSIDE its conversation — absolutely positioned in the chat body, no floating popover — that overlaps none of the composer\'s buttons (Send/Answer, measured and hit-tested), and dismissing it moves neither the body nor the composer'
     ]
     const savedReport = state.harnessEnvReport
     await settle()
@@ -432,6 +434,36 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         item !== undefined && item.source === 'typed' && item.title === sentence && item.teammateId === mates[0]?.id &&
         ws && ws.starter === undefined && ptyManager.list().length === before.ptys,
       JSON.stringify({ typed, summary, ready, pressed, chatId, firstLine, caret, focusWhere, mates, lane, item, starter: ws && ws.starter, ptys: [before.ptys, ptyManager.list().length] }))
+
+      // M403 (B6) — first.strip.1. The guide used to be a popover outside
+      // .world that sat over the composer's Send/Answer. Measured here on the
+      // real first start: where it is, what it overlaps, and that taking it
+      // away moves nothing (it never took a row from the body).
+      const stripAt = typeof chatId === 'string' ? await waitUntil(() => wc.executeJavaScript(`(() => {
+        const panel = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"]`)}); if (!panel) return false
+        const strip = panel.querySelector('[data-first-task-strip]'); if (!strip) return false
+        const body = panel.querySelector('.chat__body'), composer = panel.querySelector('.chat__composer')
+        const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height } }
+        const buttons = [...(composer ? composer.querySelectorAll('button') : [])].filter((b) => b.getBoundingClientRect().width > 0).map((b) => {
+          const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2
+          return { label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 24), box: box(b), hit: b.contains(document.elementFromPoint(x, y)) } })
+        return { inBody: strip.parentElement === body, position: getComputedStyle(strip).position, strip: box(strip), body: box(body), composer: composer ? box(composer) : null, buttons,
+          floating: [...document.querySelectorAll('.first-task-hint')].filter((h) => !panel.contains(h)).length }
+      })()`), 6000) : false
+      const overlaps = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b
+      const gotIt = stripAt ? await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"] [data-first-task-strip] [data-first-task-hint-dismiss]`)}); if (!b) return false
+        b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`) : false
+      await settle()
+      const afterGone = typeof chatId === 'string' ? await wc.executeJavaScript(`(() => { const panel = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"]`)}); if (!panel) return null
+        const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height } }
+        const composer = panel.querySelector('.chat__composer')
+        return { strip: panel.querySelector('[data-first-task-strip]') !== null, body: box(panel.querySelector('.chat__body')), composer: composer ? box(composer) : null } })()`) : null
+      const same = (a, b) => a && b && Math.abs(a.t - b.t) < 0.5 && Math.abs(a.h - b.h) < 0.5 && Math.abs(a.w - b.w) < 0.5
+      ok(IDS[2], stripAt && stripAt.inBody === true && stripAt.position === 'absolute' && stripAt.floating === 0 &&
+          stripAt.composer !== null && !overlaps(stripAt.strip, stripAt.composer) && stripAt.buttons.length > 0 &&
+          stripAt.buttons.every((b) => b.hit === true && !overlaps(stripAt.strip, b.box)) &&
+          gotIt === true && afterGone && afterGone.strip === false && same(stripAt.body, afterGone.body) && same(stripAt.composer, afterGone.composer),
+        JSON.stringify({ stripAt, gotIt, afterGone }))
 
       // e2e.2 — a plain folder. Back to an empty canvas (the launcher).
       for (const id of chatIds.splice(0)) await clickPanelClose(wc, id)
@@ -1955,6 +1987,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // M403 (the M400 critic).
         'start.primary.1 the ENABLED Start task is the filled accent (painted, measured) and the DISABLED one is visibly weaker — nearer the plain Cancel button than the enabled fill is — never the other way round',
         'start.refuse.1 the sheet\'s own refusal path: a recent folder that is not a repository, started with nobody picked, is refused IN the sheet by name, and mints no teammate and no card',
+        // M403 (B5).
+        'start.mode.1 the sheet says the EFFECTIVE permission mode in one line, read from the fenced toolbox home (never the real ~/.claude): with the fence saying auto it says the agent decides when to ask, and the permissions fit row stops promising asking'
       ]
       // M403. A computed colour as [r,g,b], and the distance between two.
       const PAINT = `(() => { const rgb = (c) => { const t = String(c), m = t.replace(/^color\\(srgb/, '').match(/[\\d.]+/g); if (!m) return null; const k = t.startsWith('color(') ? 255 : 1; return m.slice(0, 3).map((v) => Number(v) * k) }
@@ -1965,6 +1999,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const sLog = []
       const onS = (_e, _l, m) => { sLog.push(String(m).slice(0, 220)) }
       wc.on('console-message', onS)
+      let restoreFence = () => {}
       const repoS = mkdtempSync(join(tmpdir(), 'tc panels start repo '))
       const outside = mkdtempSync(join(tmpdir(), 'tc panels start outside '))
       try {
@@ -1981,7 +2016,18 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         wc.reload(); await reS
         await settle()
 
+        // M403 (B5). The fence's user settings say auto for start.mode.1; the
+        // file is put back as it was in the finally below.
+        const fenceSettings = join(process.env.TC_TOOLBOX_HOME, '.claude', 'settings.json')
+        const fenceBefore = existsSync(fenceSettings) ? readFileSync(fenceSettings, 'utf8') : null
+        mkdirSync(join(process.env.TC_TOOLBOX_HOME, '.claude'), { recursive: true })
+        writeFileSync(fenceSettings, JSON.stringify({ ...(fenceBefore === null ? {} : JSON.parse(fenceBefore)), permissions: { ...((fenceBefore === null ? {} : JSON.parse(fenceBefore)).permissions || {}), defaultMode: 'auto' } }))
+        restoreFence = () => { if (fenceBefore === null) rmSync(fenceSettings, { force: true }); else writeFileSync(fenceSettings, fenceBefore) }
+
         // ---- start.door.1: the palette row, the sheet, the agent field ----
+        // M403. From a clean plain door: a draft left by an earlier run (the
+        // harness keeps its userData) would pre-fill the task and enable Start.
+        await wc.executeJavaScript(`(() => { try { localStorage.removeItem('tc.startWork.draft') } catch {} return true })()`)
         await wc.executeJavaScript(`window.__m113 ? window.__m113.start() : null`)
         const sheetUp = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); if (!s) return false
           const task = s.querySelector('[data-start-task]'); const agent = s.querySelector('[data-start-agent]')
@@ -1993,6 +2039,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const repoRows = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-start-repo] option[data-start-repo-row]')]
           return o.length > 0 ? o.map((x) => x.getAttribute('data-start-repo-row')) : false })()`), 6000)
         const paintOff = await wc.executeJavaScript(PAINT)
+        const modeAt = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('[data-start-permission-mode]'); if (!m) return false
+          const fit = document.querySelector('[data-start-fit-row="permissions"]')
+          return { mode: m.getAttribute('data-start-permission-mode'), text: m.textContent, fitOk: fit ? fit.getAttribute('data-start-fit-ok') : null, fitText: fit ? fit.textContent : null } })()`), 6000)
+        ok(IDS[5], modeAt && modeAt.mode === 'auto' && /decides for itself when to ask/.test(modeAt.text) && /auto mode, set in ~\/\.claude\/settings\.json/.test(modeAt.text) &&
+            modeAt.fitOk === 'no' && !/asks before a command runs/.test(modeAt.fitText || ''),
+          JSON.stringify({ modeAt }))
+        restoreFence(); restoreFence = () => {}
         ok(IDS[0],
           sheetUp && sheetUp.task === '' && sheetUp.fixed === false && sheetUp.repoDisabled === false && sheetUp.agent === '' &&
             sheetUp.rows.some((r) => r.v === 'tm-sw' && !r.d) &&
@@ -2111,6 +2164,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onS)
+        try { restoreFence() } catch {}
         for (const d of [repoS, outside]) { try { rmSync(d, { recursive: true, force: true }) } catch {} }
       }
     }
@@ -2129,6 +2183,58 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
         await settle()
       } catch (e) { for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e)) }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* M403 (B8). "Ask a question" outlives the launcher                  */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = [
+        'ask.create.1 the create sheet carries the launcher\'s "Ask a question": a real press closes the sheet and opens a conversation with NO folder (a sandbox chat record)'
+      ]
+      const aLog = []
+      const onA = (_e, _l, m) => { aLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onA)
+      let askId = null
+      try {
+        // A claude-kind preset over /bin/sh answers `claudeAvailable` the way a
+        // machine with the CLI does (the chat doors' ONE fact, lb 3448).
+        layoutStore.addPreset({ id: 'ask-claude', name: 'Claude (ask fixture)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        flushLayoutStore()
+        const reA = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reA
+        await settle()
+        const chatsNow = () => wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id'))`)
+        const beforeA = await chatsNow()
+        win.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET)
+        const askBtn = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-spawn-sheet] [data-sheet-ask]'); return b ? { disabled: b.disabled, text: b.textContent, title: b.title } : false })()`), 5000)
+        const pressed = askBtn && !askBtn.disabled ? await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-sheet-ask]'); const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2
+          if (!b.contains(document.elementFromPoint(x, y))) return 'covered'
+          b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y })); return true })()`) : false
+        askId = pressed === true ? await waitUntil(async () => (await chatsNow()).find((id) => !beforeA.includes(id)) || false, 8000) : null
+        const sheetGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') === null`), 3000)
+        await settle(); layoutStore.flushSync()
+        const rec = typeof askId === 'string' ? (layoutStore.initial().panels || []).find((p) => (p.id ?? (p.rect && p.rect.id)) === askId) : undefined
+        ok(IDS[0], askBtn && askBtn.disabled === false && /Ask a question/.test(askBtn.text) && pressed === true && typeof askId === 'string' && sheetGone === true &&
+            rec !== undefined && rec.chat && rec.chat.sandbox === true && rec.title === undefined,
+          JSON.stringify({ askBtn, pressed, askId, sheetGone, rec: rec && { title: rec.title, sandbox: rec.chat && rec.chat.sandbox }, log: aLog.slice(-3) }))
+
+        // chat.name.* is NOT driven here: in this harness a sandbox chat cannot
+        // send (main's fake session answers a recycled panel id with a STALE
+        // session's folder — beginNewChat's M120 note, codex.1's finding — so the
+        // composer is replaced by "no such directory"), and a transcript turn
+        // written behind it is not hydrated without a live session. The naming
+        // rule is pinned pure (`verify:rail chat.name.2`) and was driven by hand
+        // in the real app (the M403 ledger, B8).
+      } catch (e) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e) + ' | ' + aLog.slice(-3).join(' || '))
+      } finally {
+        wc.removeListener('console-message', onA)
+        if (typeof askId === 'string') { try { await clickPanelClose(wc, askId) } catch {} }
+        try { layoutStore.deletePreset('ask-claude') } catch {}
+        flushLayoutStore()
+        await settle()
+      }
     }
 
     /* ---------------------------------------------------------------- */

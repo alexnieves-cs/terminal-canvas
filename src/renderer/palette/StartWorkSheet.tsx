@@ -13,6 +13,7 @@ import type { SetupReadResult } from '@shared/ipc-contract'
 import { startAgentName, startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, startWorkWho, type StartWorkRepo } from './start-work'
 import { DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
 import { fitSummary } from '@shared/backend-fit'
+import { effectivePermissionMode, permissionModeLine, type EffectiveMode, type ToolInventoryResult } from '@shared/toolbox'
 import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@shared/recipe-portability'
 import { installedFirstBackend, optionsOpenAtRest, preselectBackend, preselectRoot, preselectTeammate, startDraftStore } from './start-work-first'
 
@@ -129,6 +130,12 @@ export interface StartWorkSheetModel {
   backend?: AgentBackend
   /** M321. Probe the tools a start would invoke and the next lane's ports — nothing runs. Absent skips the probe (every tool unprobed). */
   preflightOf?(req: { root: string; tools: readonly string[] }): Promise<{ tools: Record<string, boolean>; ports: Record<string, number | null> | null }>
+  /**
+   * M403 (B5). The existing `toolbox:read` for a folder — the sheet reads the
+   * person's Claude settings through it to say the effective permission mode.
+   * Absent says nothing (and promises nothing).
+   */
+  toolboxOf?(cwd: string): Promise<ToolInventoryResult>
   /** M319. The canvas's enforced ceilings, so a backend the budget cannot see says so before the start. */
   budgetUsd?: number
   windowPercent?: number
@@ -281,14 +288,21 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     })
   }
 
+  // M403 (B5). The effective permission mode for the folder the task will
+  // run in, read through the existing toolbox reader and cached per folder:
+  // the fit row and the one plain line below both read it. It lags the folder
+  // by one read, so the line is shown only once it answers for THIS folder.
+  const [modeRead, setModeRead] = useState<{ cwd: string; found: EffectiveMode | null } | null>(null)
+  const modeCache = useRef(new Map<string, EffectiveMode | null>())
   const ctx = useMemo(() => ({
+    ...(modeRead === null ? {} : { permissionMode: modeRead.found?.mode ?? null }),
     teammates: model.teammates, repos, wanted,
     ...(model.agentAvailable === undefined ? {} : { agentAvailable: model.agentAvailable }),
     ...(model.itemState === undefined ? {} : { itemState: model.itemState }),
     ...(model.available === undefined ? {} : { available: model.available }),
     ...(model.budgetUsd === undefined ? {} : { budgetUsd: model.budgetUsd }),
     ...(model.windowPercent === undefined ? {} : { windowPercent: model.windowPercent })
-  }), [model.teammates, repos, wanted, model.agentAvailable, model.itemState, model.available, model.budgetUsd, model.windowPercent])
+  }), [modeRead, model.teammates, repos, wanted, model.agentAvailable, model.itemState, model.available, model.budgetUsd, model.windowPercent])
   // M319. Whether each backend can do what THIS task asks — its rows are the
   // capabilities the task touches. A row is judged as if it were chosen, so
   // the rows do not depend on the choice: computed first, the preselection
@@ -313,6 +327,27 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const mate = who.kind === 'picked' || who.kind === 'reuse' ? who.mate : undefined
   const chosenRoot = startWorkRoot(choice, ctx)
   rootRef.current = chosenRoot
+  // Before a repository is chosen the user file alone decides; `~` is the
+  // toolbox home, which the harness fences (TC_TOOLBOX_HOME) — never the
+  // developer's real settings in a golden.
+  const modeCwd = chosenRoot ?? '~'
+  useEffect(() => {
+    if (model.toolboxOf === undefined) return
+    const cached = modeCache.current.get(modeCwd)
+    if (cached !== undefined) { setModeRead({ cwd: modeCwd, found: cached }); return }
+    let live = true
+    void model.toolboxOf(modeCwd).then((r) => {
+      // An unreadable folder claims nothing: no line, and the fit says the default.
+      if (r.kind !== 'inventory') return
+      // The local file is gitignored, so a lane's worktree never has it.
+      const found = effectivePermissionMode(r.inventory.permissions, { local: false })
+      modeCache.current.set(modeCwd, found)
+      if (live) setModeRead({ cwd: modeCwd, found })
+    }, () => undefined)
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeCwd])
+  const modeLine = modeRead !== null && modeRead.cwd === modeCwd && backend === DEFAULT_BACKEND ? permissionModeLine(startAgentName(backend), modeRead.found) : null
   const summary = startWorkSummary(choice, who.kind === 'mint' ? who.name : mate, chosenRoot)
   // M323/M400. Who does it is a QUESTION only when it has no answer — a
   // picked teammate that cannot work in this folder or has no places, or a
@@ -600,6 +635,13 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
           onClick={(e) => { e.preventDefault(); model.openTeammates() }}>Open the Teammates pane</button>
       </details>
+
+      {/* M403 (B5). Whether the agent will ask, said where the task starts:
+          the app passes no --permission-mode, so the person's own settings
+          decide, and a start that promised "asks" under auto mode was false. */}
+      {modeLine !== null && (
+        <p className="sheet__mode" data-start-permission-mode={modeRead?.found?.mode ?? 'none'} title={modeRead?.found?.path}>{modeLine}</p>
+      )}
 
       {/* M323. OPTIONS — recipe, outcome, criteria, checks, deliverables and
           the arrangement. Closed at rest for "fix this bug"; open by itself

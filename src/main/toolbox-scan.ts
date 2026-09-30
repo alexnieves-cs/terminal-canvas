@@ -32,6 +32,7 @@ import {
   type ToolActive,
   type ToolScope
 } from '../shared/toolbox'
+import { PERMISSION_MODES } from '../shared/cost'
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -405,13 +406,17 @@ export function parsePermissionCounts(
   const p = settings.permissions
   if (!isRecord(p)) return null
   const n = (v: unknown): number => (Array.isArray(v) ? v.length : 0)
+  // M403 (B5). A CLOSED projection: a known mode or nothing. `"default"` and
+  // any string this app has no words for are absent, never passed through.
+  const mode = PERMISSION_MODES.find((m) => m === p.defaultMode)
   return {
     path,
     scope,
     allow: n(p.allow),
     deny: n(p.deny),
     ask: n(p.ask),
-    additionalDirectories: n(p.additionalDirectories)
+    additionalDirectories: n(p.additionalDirectories),
+    ...(mode === undefined ? {} : { defaultMode: mode })
   }
 }
 

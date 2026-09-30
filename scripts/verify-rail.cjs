@@ -3110,6 +3110,23 @@ const session = (id, over = {}) => ({
     JSON.stringify({ lead: lead('api', 'Ada'), named, placeOnly, railNamed }))
 }
 
+// M403 (B8) — chat.name.2. A chat with no folder is named after its first
+//     message (its folder is main's sandbox/<panelId>, so the place rule named
+//     it "c3"). The first non-blank line, whitespace flattened, cut at a word
+//     with an ellipsis; no words, no name.
+{
+  const n = typeof R.chatNameFromMessage === 'function' ? R.chatNameFromMessage : () => 'missing'
+  const short = n('  fix the login test  ')
+  const multi = n('\n\n  why is   CI red?\nsecond line')
+  const long = n('Why does the parser drop trailing commas in nested arrays?')
+  const oneWord = n('x'.repeat(80))
+  ok('chat.name.2 a folderless chat\'s name is its first message\'s first line, flattened, cut at a word with an ellipsis within the cap; blank is no name',
+    short === 'fix the login test' && multi === 'why is CI red?' &&
+      long === 'Why does the parser drop trailing…' && long.length <= R.CHAT_NAME_MAX &&
+      oneWord.length === R.CHAT_NAME_MAX && oneWord.endsWith('…') && n('   \n  ') === null,
+    JSON.stringify({ short, multi, long, oneWord }))
+}
+
 // M66 — labels.1/.2. EVERY CONTROL SAYS WHAT IT IS. Read as text, like
 //     verify:styles: every <button in the renderer carries an aria-label, a
 //     title, or visible text inside its element (labels.1); every element

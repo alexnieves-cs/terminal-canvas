@@ -16,7 +16,8 @@ import { normalisePreviewPath } from '@shared/preview'
 import { openReplay as openReplaySheet } from '@renderer/replay/replay-store'
 import { inspectionDirectory } from '../inspection-directory'
 import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
-import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { backendAvailable, claudeAvailable, codexAvailable, REASON_NO_CLAUDE } from '@renderer/palette/commands'
+import { installedFirstBackend } from '@renderer/palette/start-work-first'
 import { carryMarks } from '@renderer/panels/panels'
 import { approvals, isAnswered, markAnswered, reportedModels, scrollToTurn, unmarkAnswered } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
@@ -283,6 +284,13 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
             // for a template or a new-workspace instantiation — both are a
             // shape already chosen, and a task would drop it.
             ...(templateId === undefined && into === undefined ? { startTask: () => self.beginStartWork() } : {}),
+            // M403 (B8). The launcher's third verb, kept once the launcher has
+            // gone: a conversation with no folder, on the installed engine (the
+            // launcher's own rule), through the palette's sandbox door.
+            ...(() => {
+              const engine = installedFirstBackend(Object.fromEntries(BACKEND_IDS.map((id) => [id, backendAvailable(presetRows, id)])))
+              return engine === undefined ? { askReason: REASON_NO_CLAUDE } : { askQuestion: () => self.newSandboxChat(engine) }
+            })(),
             claudeAvailable: claudeOk,
             codexAvailable: codexAvailable(presetRows),
             // M118. Every row's availability from the registry's order — a third row needs no new boolean.

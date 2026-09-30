@@ -65,6 +65,9 @@ export interface SpawnSheetModel {
   recentUsed?: Readonly<Record<string, number>>
   /** M262. The task-first route: close this sheet and open Start work. Absent hides the switch. */
   startTask?(): void
+  /** M403 (B8). The launcher's "Ask a question": a conversation with no folder. Absent with `askReason` shows it disabled by name. */
+  askQuestion?(): void
+  askReason?: string
 }
 
 export interface SpawnSheetProps {
@@ -218,7 +221,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
-      <SheetHeader current="panel" onTask={model.startTask} />
+      <SheetHeader current="panel" onTask={model.startTask}
+        {...(model.askQuestion === undefined && model.askReason === undefined ? {} : { ask: { ...(model.askReason === undefined ? {} : { reason: model.askReason }), run: () => { model.askQuestion?.(); onDone() } } })} />
 
       {chosenTemplate === undefined && (
       <label className="sheet__field sheet__field--where">
@@ -425,11 +429,21 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
  * closes one and opens the other through the palette's own verbs, so neither
  * learns the other's fields.
  */
-export function SheetHeader({ current, onTask, onPanel }: { current: 'task' | 'panel'; onTask?: () => void; onPanel?: () => void }): JSX.Element {
+export function SheetHeader({ current, onTask, onPanel, ask }: { current: 'task' | 'panel'; onTask?: () => void; onPanel?: () => void; ask?: { run: () => void; reason?: string } }): JSX.Element {
   const other = current === 'task' ? onPanel : onTask
   return (
     <div className="sheet__head">
       <div className="sheet__title">{current === 'task' ? 'New task' : 'New panel'}</div>
+      {/* M403 (B8). "Ask a question" under the launcher's own words, beside
+          Task | Panel — not a third tab: it does not change this sheet, it
+          opens a conversation with no folder and closes it. Disabled by name
+          when no engine was found, never hidden. */}
+      {ask !== undefined && (
+        <button type="button" className="pf__verb pf__verb--word sheet__ask" data-sheet-ask disabled={ask.reason !== undefined}
+          title={ask.reason ?? 'A conversation with no folder — read-only, nothing to write to'}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+          onClick={(e) => { e.preventDefault(); if (ask.reason === undefined) ask.run() }}>Ask a question</button>
+      )}
       {other !== undefined && (
         <div className="sheet__switch" role="tablist" aria-label="What to create" data-sheet-switch>
           {(['task', 'panel'] as const).map((side) => (

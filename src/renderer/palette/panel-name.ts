@@ -33,6 +33,25 @@ export function chatDisplayLead(placeBasename: string, teammateName?: string): s
   return 'chat'
 }
 
+/** M403 (B8). The most of a first message a chat's name keeps. */
+export const CHAT_NAME_MAX = 40
+
+/**
+ * M403 (B8). A chat with no folder is named after its FIRST MESSAGE. Its
+ * folder is main's `userData/sandbox/<panelId>`, so the place-basename rule
+ * above named it "c3" — a panel id — in the header, the navigator and ⌘K.
+ * The first non-blank line, whitespace flattened, cut at a word near
+ * `CHAT_NAME_MAX` with an ellipsis; null when there are no words.
+ */
+export function chatNameFromMessage(text: string): string | null {
+  const line = (text.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '').replace(/\s+/g, ' ')
+  if (line === '') return null
+  if (line.length <= CHAT_NAME_MAX) return line
+  const cut = line.slice(0, CHAT_NAME_MAX - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space >= CHAT_NAME_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
 export interface PanelNameOpts {
   /** Resolved teammate display name for a chat with `chat.teammateId`. */
   teammateName?: string

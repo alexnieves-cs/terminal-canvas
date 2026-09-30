@@ -8410,6 +8410,45 @@ export function Canvas({
     return out
   }, [panels, railRows, workItems, taskQueue])
 
+  /**
+   * M403 (B6). THE FIRST START'S GUIDE, as a quiet strip inside its own
+   * conversation. It used to float outside `.world` under (or over) the panel
+   * and covered the composer's Send/Answer — the buttons its sentence points
+   * at. Inside the panel it is ABSOLUTELY positioned over the top of the
+   * transcript (never a box that collapses the body, the M236 frame rule), so
+   * it is permanent — with its panel, until Got it — and needs no anchor,
+   * flip or selection rule. The facts are read off the task as before (M310).
+   */
+  // M403 (B8). A folderless chat's first message names it — a plain title
+  // write, never a history step (nobody asked to rename it, so there is no
+  // act to undo), and never over a title already there.
+  const nameChat = useCallback((id: string, title: string): void => {
+    setPanels((current) => current.map((p) => (p.rect.id === id && p.title === undefined ? { ...p, title } : p)))
+  }, [])
+  const firstTaskStrip = (panelId: string): JSX.Element | undefined => {
+    if (firstTask === null || firstTask.panelId !== panelId || hintsSeen.has('first-task')) return undefined
+    const itemId = firstTask.itemId
+    const item = itemId === undefined ? undefined : workItems.find((w) => w.id === itemId)
+    const facts = (() => {
+      if (item === undefined || itemId === undefined) return {}
+      const handoff = taskHandoffOf(itemId)
+      const lane = taskLaneOf(itemId)
+      const laneWatchers = lane === undefined ? [] : displayPanels.filter(isWatcherPanel).filter((p) => p.watch.cwd === lane.path || p.watch.cwd.startsWith(`${lane.path}/`))
+      return {
+        facts: {
+          ...(handoff === undefined ? {} : { standing: handoff.standing }),
+          hasChanges: handoff?.changes !== undefined && handoff.changes.files > 0,
+          checksPassed: laneWatchers.some((p) => getWatch(p.rect.id).status === 'passed'),
+          github: item.source === 'github',
+          pr: item.pr !== undefined,
+          merged: item.merged !== undefined
+        },
+        onReview: () => { const r = boardVerbsRef.current.review?.(itemId); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }
+      }
+    })()
+    return <FirstTaskHint strip panelId={panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }} {...facts} />
+  }
+
   return (
     <div
       ref={shellRef}
@@ -9285,6 +9324,8 @@ export function Canvas({
                   onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
                   teammateName={panel.chat.teammateId === undefined ? undefined : (teammates ?? []).find((t) => t.id === panel.chat.teammateId)?.name ?? panel.chat.teammateId}
                   taskId={workItems.find((item) => item.panelId === panel.rect.id)?.id}
+                  guide={firstTaskStrip(panel.rect.id)}
+                  onNameChat={nameChat}
                 />
               )
             }
@@ -9560,38 +9601,10 @@ export function Canvas({
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}
-        {/* The first start's one handoff hint — gone once dismissed, and with its panel. */}
-        {/* M315. The guide is its conversation's caption: it steps aside while
-            the person has another panel selected — the review it opened sat
-            UNDER it, the guide floating over the diff it had just sent them to. */}
-        {firstTask !== null && !hintsSeen.has('first-task') && panels.some((p) => p.rect.id === firstTask.panelId) &&
-          (selectedIds.size === 0 || selectedIds.has(firstTask.panelId)) && (
-          <FirstTaskHint panelId={firstTask.panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }}
-            // Attached to its conversation: the panel's bottom-centre through
-            // the viewport, so the hint rides a pan like the lane headers do.
-            anchor={(() => { const r = panels.find((p) => p.rect.id === firstTask.panelId)?.rect; return r === undefined ? undefined : worldToScreen({ x: r.x + r.w / 2, y: r.y + r.h }, viewport) })()}
-            above={(() => { const r = panels.find((p) => p.rect.id === firstTask.panelId)?.rect; return r === undefined ? undefined : worldToScreen({ x: r.x + r.w / 2, y: r.y }, viewport) })()}
-            {...(() => {
-              // M310. The flagship guide's facts, read off the task as it stands.
-              const itemId = firstTask.itemId
-              const item = itemId === undefined ? undefined : workItems.find((w) => w.id === itemId)
-              if (item === undefined || itemId === undefined) return {}
-              const handoff = taskHandoffOf(itemId)
-              const lane = taskLaneOf(itemId)
-              const laneWatchers = lane === undefined ? [] : displayPanels.filter(isWatcherPanel).filter((p) => p.watch.cwd === lane.path || p.watch.cwd.startsWith(`${lane.path}/`))
-              return {
-                facts: {
-                  ...(handoff === undefined ? {} : { standing: handoff.standing }),
-                  hasChanges: handoff?.changes !== undefined && handoff.changes.files > 0,
-                  checksPassed: laneWatchers.some((p) => getWatch(p.rect.id).status === 'passed'),
-                  github: item.source === 'github',
-                  pr: item.pr !== undefined,
-                  merged: item.merged !== undefined
-                },
-                onReview: () => { const r = boardVerbsRef.current.review?.(itemId); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }
-              }
-            })()} />
-        )}
+        {/* M403 (B6). The first start's guide is no longer a popover here: it
+            sat over the composer's Send/Answer, the buttons its own copy told
+            the person to use. It is a strip INSIDE its conversation
+            (`firstTaskStrip`, handed to that ChatNode as `guide`). */}
         {panels.length === 0 && !merged && !launcherPutAway && (() => {
           // Computed once so the tmux/starter notices and the starter door's
           // own disabled reason read the SAME facts — two separate ternaries

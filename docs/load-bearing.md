@@ -5382,3 +5382,26 @@ reader clamps a shape to `SHAPE_MIN` for the same reason. `flowchart.arrange.20`
 chord every design tool gives duplicate and what a person presses first; the overlay is a
 developer's and was pinned by nothing. A future "free chord" survey must not hand ⌘D back.
 `flowchart.app.4`.
+
+**Whether claude asks is the person's SETTINGS, and the app says which (`shared/toolbox.ts`'s `effectivePermissionMode`/`permissionModeLine`, `main/toolbox-scan.ts`'s `parsePermissionCounts`, `StartWorkSheet`, M403 B5).**
+The app starts claude with `--permission-prompt-tool stdio` and NO `--permission-mode` (lb 3358's
+flag set is unchanged), so `permissions.defaultMode` in the person's own files decides — and the
+start sheet promised "asks before a command runs" under `auto`. The mode is read through the
+EXISTING `toolbox:read` (no new door), projected like every toolbox field: a known
+`PERMISSION_MODES` word or absent, never the raw string. Precedence is read order, last wins
+(user → project → local), and a lane leaves the local file out because it is gitignored and a
+worktree never has it. The sheet reads `~` before a repository is chosen, and `~` is the TOOLBOX
+home, so under `TC_TOOLBOX_HOME` a golden shows the fence's mode, never the developer's (this
+machine's real file says `auto`). Only the claude row is judged by it (`backend === DEFAULT_BACKEND`
+in `startWorkBackendFit`): the settings are Claude Code's. `toolbox.mode.1/.2`, `fit.mode.1`,
+`verify:panels:product start.mode.1`.
+
+**The first start's guide lives INSIDE its conversation, absolutely (`FirstTaskHint` `strip`, `ChatConversation`'s `guide`, `.first-task-hint--strip`, M403 B6).**
+As a popover outside `.world` it covered the composer's Send/Answer — the buttons its sentence
+names. It is now a strip over the top of the chat body: `position: absolute`, the body
+`position: relative` only while it is there, and the transcript pads its top by the strip's
+measured height (`--guide-h`, set on the body by the strip, removed with it). A flex row would
+have shrunk the transcript and moved the composer under a live answer — the collapsing-box
+failure the M236 frame rule names. `verify:panels:product first.strip.1` measures it: inside the
+body, absolute, no floating hint left, no overlap with any composer button (each hit-tested), and
+Got it moves neither the body nor the composer.

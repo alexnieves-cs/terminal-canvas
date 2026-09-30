@@ -2871,6 +2871,19 @@ const isResult = (l) => l.includes('"type":"result"')
         /can do everything/.test(F.fitSummary(cl)) && /without an appended prompt/.test(F.fitSummary(cx)) && /cannot do this task/.test(F.fitSummary(cxSwarm)),
       JSON.stringify({ lane: ids(lane), swarm: ids(swarm), sum: [F.fitSummary(cl), F.fitSummary(cx), F.fitSummary(cxSwarm)] }))
 
+    // M403 (B5) — fit.mode.1. The permissions row promised "asks before a
+    // command runs" whatever the person's settings said. Now a mode that does
+    // not ask is said as what it is and the row is unmet (the lane degrades),
+    // while no mode, manual, acceptEdits and plan keep the promise.
+    const perm = (mode) => F.backendFit('claude', lane, true, mode).rows.find((r) => r.id === 'permissions')
+    const asks = [undefined, null, 'manual', 'acceptEdits', 'plan'].map(perm)
+    const quiet = ['auto', 'dontAsk', 'bypassPermissions'].map(perm)
+    ok('fit.mode.1 the permissions row is judged by the effective mode: absent, manual, acceptEdits and plan keep "asks before a command runs"; auto, dontAsk and bypassPermissions are unmet and say the mode and that it comes from the settings — the lane degrades rather than promising asking',
+      asks.every((r) => r.ok === true && /asks before a command runs/.test(r.line)) &&
+        quiet.every((r) => r.ok === false && /mode, from your settings/.test(r.line) && !/asks before a command runs/.test(r.line)) &&
+        F.backendFit('claude', lane, true, 'auto').verdict === 'degraded' && F.backendFit('codex', lane, true, 'auto').rows.find((r) => r.id === 'permissions').line === fit('codex', lane).rows.find((r) => r.id === 'permissions').line,
+      JSON.stringify({ asks: asks.map((r) => r.line), quiet: quiet.map((r) => r.line) }))
+
     const s1 = F.stopOptions('claude', { generating: true, queued: 2 })
     const s2 = F.stopOptions('codex', { generating: true, queued: 0 })
     const s3 = F.stopOptions('claude', { generating: false, queued: 0, processUp: false })

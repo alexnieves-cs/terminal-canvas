@@ -189,6 +189,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
             ...(opts?.preferRoot === undefined ? {} : { preferRoot: opts.preferRoot }),
             // M312. The chosen repository's setup, and the route to edit it.
             setupOf: (root) => window.canvas.setup.read(root),
+            // M403 (B5). The existing toolbox reader, for the effective permission mode (no new door).
+            toolboxOf: (cwd) => window.canvas.toolbox.read({ panelId: 'start-sheet', cwd }),
             // M321. The preflight's probe: tools on PATH and the next lane's ports, nothing run.
             ...(typeof window.canvas.setup.preflight === 'function' ? { preflightOf: (req: { root: string; tools: readonly string[] }) => window.canvas.setup.preflight(req) } : {}),
             openSetup: (root) => self.beginRepoSetup(root),

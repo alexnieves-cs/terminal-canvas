@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import type { ChatPanel } from '@renderer/panels/panels'
 import { displayPath } from '@shared/display-path'
 import { sendRefusalSentence, type AgentSessionSnapshot, type ChatAttachment } from '@shared/agent-session'
@@ -49,6 +49,12 @@ export interface ChatConversationProps {
   readOnly?: boolean
   teammateName?: string
   taskId?: string
+  /**
+   * M403 (B6). The first start's guide strip. It rides at the top of the body
+   * ABSOLUTELY (never a flex row that would shrink the transcript or move the
+   * composer); the transcript pads its own top to scroll clear of it.
+   */
+  guide?: ReactNode
   /** The host's focus call: the canvas focuses the panel; the focus view has nothing to focus. */
   onFocus?(id: string): void
 }
@@ -605,6 +611,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
 
   return (
     <div className="pf__body chat__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus?.(id) }}>
+      {props.guide}
       <div className="chat__transcript" data-chat-transcript data-scroll-host ref={bodyRef} onScroll={onScroll}>
         {/* M177. The empty state's one shape; the not-found arm stays a note — it is a fact about the machine, not a place. */}
         {rows.length === 0 && chat.refusal === null && (props.claudeAvailable

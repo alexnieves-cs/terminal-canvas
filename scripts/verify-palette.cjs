@@ -2569,6 +2569,26 @@ const WS = [
     JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.group, r.disabledReason]), choices }))
 }
 
+// M403 (B8) — ask.alias.1. "Ask a question" existed only on the launcher,
+// which is gone once a panel exists; ⌘K called the door "New chat (no
+// folder)". The launcher's words now lead the row and find it; the old
+// words still do.
+{
+  let res = {}, threw = null
+  try {
+    const rows = P.buildCommands(ctx({ presets: [{ id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', agent: 'claude-code' }] }))
+    for (const q of ['ask a question', 'ask', 'new chat no folder']) {
+      const list = P.filterCommands(rows, q)
+      const best = P.bestMatchIndex(list, q)
+      res[q] = { selected: list[best] && list[best].id, title: list[best] && list[best].title }
+    }
+  } catch (e) { threw = String(e) }
+  ok('ask.alias.1 "Ask a question" (and "ask") selects the no-folder chat row, titled with the launcher\'s words and still saying no folder; the old words find the same row',
+    threw === null && ['ask a question', 'ask', 'new chat no folder'].every((q) => res[q].selected === 'chat.sandbox.claude') &&
+      /^Ask a question/.test(res['ask a question'].title) && /no folder/.test(res['ask a question'].title),
+    threw ?? JSON.stringify(res))
+}
+
 // M122 — psearch.1. THE SCOPE'S FIRST ROWS say what the answer left out: the
 // cap (`the first N matches — narrow the search`) and the redaction count,
 // each only when non-zero, before the hits; a transcript hit is a row like a
