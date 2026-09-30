@@ -14,6 +14,11 @@ export const withReason = (command: Command, reason: string | undefined): Comman
  * "not started") still teaches that state at rest, and `verify:palette` 31
  * pins Rename visible with its reason on purpose. Searching still finds every
  * one, with its reason — hiding them from search would be the bug (check 39).
+ * No FOCUS is not no subject (the M409 critic): with panels on the canvas and
+ * none clicked into, Open review, Link, Toolbox, Lock/Pin and Export output
+ * stay at rest saying "click into a panel first" — the subject is one click
+ * away, and that sentence is how a person learns the verb exists. They hide
+ * only on a canvas with no panel at all.
  */
 export const hiddenAtRestIf = (missing: boolean): { hiddenAtRest?: true } =>
   missing ? { hiddenAtRest: true } : {}

@@ -320,9 +320,17 @@ function tierBonus(query: string, command: Command): number {
   return 0
 }
 
-/** M409. Found only by a scattered subsequence: no tier, no lead, not a path hit. */
+/**
+ * M409. Found only by a scattered subsequence of the HIDDEN text: no tier, no
+ * lead, not a path hit, and not a subsequence of the title. The M409 critic:
+ * a title subsequence is an abbreviation a person typed on purpose ("rnme" for
+ * Rename, "gh" for GitHub) — the letters light up in the row they meant — so
+ * it is never capped; only scatter across searchText/subtitle, which paints
+ * nothing and was where "undo" found 123 rows, is.
+ */
 export function isWeakMatch(query: string, command: Command): boolean {
   if (query.trim() === '' || tierBonus(query, command) > 0 || leadsQuery(query, command)) return false
+  if (fuzzyMatch(query, command.title) !== null) return false
   return fuzzyMatch(query, haystack(command)) !== null
 }
 

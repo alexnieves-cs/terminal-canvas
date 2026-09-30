@@ -2670,11 +2670,15 @@ const WS = [
   // M409 (C5): the fit row is named for what it frames, in the HUD's words —
   // `Fit all` with nothing selected, `Fit selection` with a selection — and
   // "zoom to fit" still finds it (its searchText).
-  const withSel = P.buildCommands(ctx({ presets: [], selectedIds: ['a'] })).find((r) => r.id === 'canvas.zoom-fit')
+  // The M409 critic: the title follows zoomTarget — a selection naming no
+  // panel ('gone') frames everything, so it says Fit all.
+  const pa = { id: 'a', label: 'a', kind: 'terminal', restartable: true, agent: false }
+  const withSel = P.buildCommands(ctx({ presets: [], panels: [pa], selectedIds: ['a'] })).find((r) => r.id === 'canvas.zoom-fit')
+  const stale = P.buildCommands(ctx({ presets: [], panels: [pa], selectedIds: ['gone'] })).find((r) => r.id === 'canvas.zoom-fit')
   const found = P.filterCommands(rows, 'zoom to fit').some((r) => r.id === 'canvas.zoom-fit')
   ok('zoom.fit.1 the palette has a `Reset zoom` row and a fit row (`Fit all`, or `Fit selection` with one; found by "zoom to fit"), two titles running two actions (resetZoom, zoomToFit)',
     reset !== undefined && /Reset zoom/.test(reset.title) && resetCalled === 'resetZoom' &&
-      fit !== undefined && fit.title === 'Fit all' && withSel !== undefined && withSel.title === 'Fit selection' && found &&
+      fit !== undefined && fit.title === 'Fit all' && withSel !== undefined && withSel.title === 'Fit selection' && stale.title === 'Fit all' && found &&
       fitCalled === 'zoomToFit' && reset.title !== fit.title,
     JSON.stringify({ reset: reset && reset.title, fit: fit && fit.title, resetCalled, fitCalled }))
 }
@@ -3097,7 +3101,11 @@ const FRESH = () => ctx({
   const rest = P.filterCommands(all, '')
   const disabled = rest.filter((r) => r.disabledReason !== undefined).map((r) => r.id)
   const KEPT = new Set(['panel.rename', 'panel.restart', 'panel.new-note', 'panel.new-chat', 'github.open', 'jira.open', 'manage.prompts', 'manage.worktrees', 'manage.environment'])
-  const stray = disabled.filter((id) => !KEPT.has(id))
+  // The M409 critic: one Ask-a-question row per missing ENGINE stays, its
+  // reason the install hint — never two for one binary.
+  const hints = rest.filter((r) => /^chat\.sandbox\./.test(r.id) && r.disabledReason !== undefined)
+  const hintBinaries = hints.map((r) => (/^(\S+) was not found on the login PATH/.exec(r.disabledReason) || [])[1])
+  const stray = disabled.filter((id) => !KEPT.has(id) && !hints.some((h) => h.id === id))
   const rename = rest.find((r) => r.id === 'panel.rename')
   const first = P.bestMatchIndex(rest, '')
   const term = { id: 't1', label: 't1', kind: 'terminal', restartable: true, agent: false }
@@ -3105,8 +3113,25 @@ const FRESH = () => ctx({
   const back = ['panel.toolbox', 'panel.lock', 'panel.link', 'panel.export-text', 'panel.tidy', 'arrange.align.left'].filter((id) => !focused.some((r) => r.id === id))
   ok('palette.rest.1 a fresh profile rests on at most 100 rows and 12 refused ones, every refused row one of the kept decisions (Rename with its focus reason), the first runnable row within the first 8; with a focused panel and a selection their rows come back at rest',
     rest.length <= 100 && disabled.length <= 12 && stray.length === 0 &&
-      rename !== undefined && rename.disabledReason === P.REASON_NO_FOCUS && first >= 0 && first <= 8 && back.length === 0,
-    JSON.stringify({ rows: rest.length, disabled: disabled.length, stray, first, back }))
+      rename !== undefined && rename.disabledReason === P.REASON_NO_FOCUS && first >= 0 && first <= 8 && back.length === 0 &&
+      hints.length >= 1 && hintBinaries.every((b) => b !== undefined) && new Set(hintBinaries).size === hints.length,
+    JSON.stringify({ rows: rest.length, disabled: disabled.length, stray, first, back, hints: hints.map((r) => r.id) }))
+}
+
+// palette.rest.3 (the M409 critic). No FOCUS is not no subject: panels on the
+// canvas and none clicked into, the panel verbs stay at rest saying "click
+// into a panel first" — one click from runnable. Only an empty canvas drops them.
+{
+  const term = { id: 't1', label: 't1', kind: 'terminal', restartable: true, agent: false }
+  const rest = P.filterCommands(P.buildCommands({ ...FRESH(), panels: [term, { ...term, id: 't2', label: 't2' }] }), '')
+  const IDS = ['panel.review', 'panel.link', 'panel.toolbox', 'panel.lock', 'panel.pin', 'panel.export-text']
+  const missing = IDS.filter((id) => !rest.some((r) => r.id === id))
+  const review = rest.find((r) => r.id === 'panel.review')
+  const empty = P.filterCommands(P.buildCommands(FRESH()), '')
+  const leaked = IDS.filter((id) => empty.some((r) => r.id === id))
+  ok('palette.rest.3 with panels and no focus, Open review, Link, Toolbox, Lock, Pin and Export output rest with "click into a panel first"; on an empty canvas they rest in search',
+    missing.length === 0 && review !== undefined && review.disabledReason === P.REASON_NO_FOCUS && leaked.length === 0,
+    JSON.stringify({ missing, review: review && review.disabledReason, leaked }))
 }
 
 // palette.rest.2. Hidden at rest is never hidden from SEARCH (check 39's
@@ -3183,6 +3208,24 @@ const FRESH = () => ctx({
     JSON.stringify({ sel: sel && sel.id, rows: rows.length, redo: redoSel && redoSel.id, calls, refused: refused.disabledReason }))
 }
 
+// palette.undo.2 (the M409 critic). The rows are the CANVAS's history, and say
+// so; where ⌘Z belongs to someone else — a draft held the keyboard when ⌘K
+// opened (Monaco, a note, a checklist or a sheet), or a view covers the
+// canvas — they refuse by name rather than rewind a spawn behind the text.
+{
+  const base = { ...FRESH(), canUndo: true, canRedo: true }
+  const inDraft = P.buildCommands({ ...base, draftHeld: true })
+  const covered = P.buildCommands({ ...base, canvasCovered: true })
+  const free = P.buildCommands(base)
+  const r = (rows, id) => (byId(rows, id) || {}).disabledReason
+  ok('palette.undo.2 the rows are titled "Undo canvas change" / "Redo canvas change", refused "the editor has its own ⌘Z" when a draft held the keyboard and refused while a view covers the canvas; runnable otherwise',
+    byId(free, 'canvas.undo').title === 'Undo canvas change' && byId(free, 'canvas.redo').title === 'Redo canvas change' &&
+      /^the editor has its own ⌘Z/.test(r(inDraft, 'canvas.undo') || '') && /^the editor has its own ⌘Z/.test(r(inDraft, 'canvas.redo') || '') &&
+      /covered/.test(r(covered, 'canvas.undo') || '') && /covered/.test(r(covered, 'canvas.redo') || '') &&
+      r(free, 'canvas.undo') === undefined && r(free, 'canvas.redo') === undefined,
+    JSON.stringify({ draft: r(inDraft, 'canvas.undo'), covered: r(covered, 'canvas.undo'), free: r(free, 'canvas.undo') }))
+}
+
 // palette.rank.1. Word starts outrank scatter: "add a" was "adda" to the
 // matcher (spaces are skipped) and answered 174 rows. Now the terms must
 // start words, in order, to rank; "add a" selects an "Add a…" row and lists
@@ -3198,18 +3241,33 @@ const FRESH = () => ctx({
     JSON.stringify({ rows: rows.length, sel: sel && sel.title }))
 }
 
-// palette.rank.2. The weak cap: twenty rows only a scattered subsequence
-// finds, and one whose title the query starts. The strong row stays, first
-// and selected; five weak ones survive, the best of them; inside a scope
-// (the query is the scope's term) nothing is capped.
+// palette.rank.2. The weak cap: twenty rows only a scattered subsequence of
+// their HIDDEN text finds, and one whose title the query starts. The strong
+// row stays, first and selected; five weak ones survive, the best of them;
+// inside a scope (the query is the scope's term) nothing is capped.
 {
-  const weak = Array.from({ length: 20 }, (_, i) => cmd(`w${i}`, `qxuxexrxy row ${i}`))
+  const weak = Array.from({ length: 20 }, (_, i) => cmd(`w${i}`, `Row ${i}`, { searchText: 'qxuxexrxy' }))
   const strong = cmd('s', 'Query the log')
   const rows = P.filterCommands([...weak, strong], 'query')
   const scoped = P.filterCommands([...weak.map((r) => ({ ...r, scope: 'search' }))], 'query', 'search')
   ok('palette.rank.2 a subsequence-only match is capped at WEAK_CAP rows behind the word-start row; a scope is not capped',
     P.WEAK_CAP === 5 && rows.length === 6 && rows[P.bestMatchIndex(rows, 'query')].id === 's' && scoped.length === 20,
     JSON.stringify({ rows: rows.length, scoped: scoped.length }))
+}
+
+// palette.rank.3 (the M409 critic). The cap is for scatter nobody can see,
+// not for an abbreviation of the title: "rnme" is Rename and "gh" is GitHub,
+// their letters lit in the row, and both were weak by the tiers alone. A
+// title subsequence is never capped — here twenty title-scatter rows all stay.
+{
+  const all = P.buildCommands(FRESH())
+  const rnme = P.filterCommands(all, 'rnme').map((r) => r.id)
+  const gh = P.filterCommands(all, 'gh').map((r) => r.id)
+  const titled = Array.from({ length: 20 }, (_, i) => cmd(`t${i}`, `qxuxexrxy ${i}`))
+  const kept = P.filterCommands(titled, 'query')
+  ok('palette.rank.3 a title subsequence is never capped: "rnme" finds Rename, "gh" finds Open GitHub work, and twenty title-scatter rows all stay',
+    rnme.includes('panel.rename') && gh.includes('github.open') && kept.length === 20 && !P.isWeakMatch('gh', byId(all, 'github.open')),
+    JSON.stringify({ rnme: rnme.length, rename: rnme.includes('panel.rename'), gh: gh.length, github: gh.includes('github.open'), kept: kept.length }))
 }
 
 const failed = results.filter((r) => !r.pass)

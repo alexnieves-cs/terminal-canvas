@@ -158,6 +158,8 @@ export interface PaletteProps {
   /** M409. Whether the canvas history has a step each way — the Undo/Redo rows' reasons. */
   canUndo?: boolean
   canRedo?: boolean
+  /** M409. A view (Orchestrate) covers the canvas the Undo row would rewind. */
+  canvasCovered?: boolean
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   /** M92. How many panels are pinned — the pin row's refusal reads it. */
@@ -268,6 +270,8 @@ export function Palette(props: PaletteProps): JSX.Element {
         cameraTrail: props.cameraTrail,
         ...(props.canUndo === undefined ? {} : { canUndo: props.canUndo }),
         ...(props.canRedo === undefined ? {} : { canRedo: props.canRedo }),
+        draftHeld: controller.capturedDraft,
+        ...(props.canvasCovered === undefined ? {} : { canvasCovered: props.canvasCovered }),
         noteRoot: props.noteRoot,
         // M83. The memory row's subject is the captured panel's DIRECTORY;
         // main resolves it to the repository. Without this the row was
@@ -298,7 +302,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         scrollbackEnabled: props.scrollbackEnabled,
         actions: props.actions
       }),
-    [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail, props.canUndo, props.canRedo,
+    [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail, props.canUndo, props.canRedo, controller.capturedDraft, props.canvasCovered,
      props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, teamAsks, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]

@@ -56,6 +56,13 @@ export interface PaletteContext {
   /** M409. Whether the canvas history can step back / forward; absent reads as yes (the step is a no-op). */
   canUndo?: boolean
   canRedo?: boolean
+  /**
+   * M409 (the critic). Who else answers ⌘Z: a text draft held the keyboard
+   * when the palette opened, or a view covers the canvas (Orchestrate). Either
+   * way the canvas history is not what the person was undoing in.
+   */
+  draftHeld?: boolean
+  canvasCovered?: boolean
   workspaces: WorkspaceRow[]
   /**
    * Metadata only, from window.canvas.credential.list() — never a token, and

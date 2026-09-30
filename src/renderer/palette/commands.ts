@@ -836,7 +836,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       const need = ctx.capturedId === null || target === undefined ? REASON_NO_FOCUS : undefined
       const pins = ctx.pinnedCount ?? 0
       const pair = (id: string, title: string, run: (pid: string) => void, reason: string | undefined): void => {
-        out.push(withReason({ id, title, subtitle: target ? (target.title ?? target.label) : 'no panel', group: 'panel', ...hiddenAtRestIf(need !== undefined), run: () => run(ctx.capturedId!) }, need ?? reason))
+        out.push(withReason({ id, title, subtitle: target ? (target.title ?? target.label) : 'no panel', group: 'panel', ...hiddenAtRestIf(ctx.panels.length === 0), run: () => run(ctx.capturedId!) }, need ?? reason))
       }
       pair('panel.lock', 'Lock panel', actions.lockPanel, target?.locked === true ? 'already locked — Unlock panel is the row' : undefined)
       pair('panel.unlock', 'Unlock panel', actions.unlockPanel, target?.locked === true ? undefined : 'not locked')
@@ -897,7 +897,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'panel.link', ...hiddenAtRestIf(ctx.capturedId === null),
+          id: 'panel.link', ...hiddenAtRestIf(ctx.panels.length === 0),
           title: 'Link this panel to\u2026',
           subtitle: target ? (target.title ?? target.label) : 'no panel',
           group: 'panel',
@@ -919,7 +919,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(
       withReason(
         {
-          id: 'panel.toolbox', ...hiddenAtRestIf(ctx.capturedId === null),
+          id: 'panel.toolbox', ...hiddenAtRestIf(ctx.panels.length === 0),
           title: target === undefined ? 'Open toolbox' : `Open toolbox for ${displayLabel(target.label)}`,
           subtitle: 'its skills, tools and permissions — add a skill so it loads instructions only when they apply',
           searchText: 'toolbox skills mcp hooks commands subagents permissions what can this agent do',
@@ -942,7 +942,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
     withReason(
       {
-        id: 'panel.review.across', ...hiddenAtRestIf(ctx.capturedId === null || target === undefined),
+        id: 'panel.review.across', ...hiddenAtRestIf(ctx.panels.length === 0),
         title: target === undefined ? 'Review every worktree' : `Review every worktree of ${displayLabel(target.label)}'s repository`,
         searchText: 'review worktree worktrees branches across all git',
         group: 'panel',
@@ -962,7 +962,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(
       withReason(
         {
-          id: 'panel.review', ...hiddenAtRestIf(ctx.capturedId === null || target === undefined),
+          id: 'panel.review', ...hiddenAtRestIf(ctx.panels.length === 0),
           title: target === undefined ? 'Open review' : `Open review of ${displayLabel(target.label)}`,
           searchText: 'review changes diff git what changed',
           group: 'panel',
@@ -1145,14 +1145,23 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // (the sheet's own order), disabled by name for a binary not on the PATH
   // and by the row's own `noSandbox` sentence for a row with no read-only
   // mode — never dropped, so a backend that cannot is a backend that says so.
+  // M409 (the critic). One refused row per missing ENGINE stays at rest: its
+  // reason is the install hint ("codex was not found … install it"), the only
+  // place ⌘K says an engine exists that this Mac lacks. The second backend on
+  // the same binary (acp rides copilot) adds nothing, and rests in search.
+  const hinted = new Set<string>()
   for (const backend of BACKEND_IDS) {
     const row = BACKENDS[backend]
+    const available = backendAvailable(ctx.presets, backend)
+    const hint = row.sandboxArgs !== undefined && !available && !hinted.has(row.binary)
+    if (hint) hinted.add(row.binary)
     out.push(
       withReason(
         {
           id: `chat.sandbox.${backend}`,
-          // M409. The subject is the CLI (or a read-only mode): absent, the row rests in search.
-          ...hiddenAtRestIf(row.sandboxArgs === undefined || !backendAvailable(ctx.presets, backend)),
+          // M409. The subject is a read-only mode, then the CLI: absent, the row rests in
+          // search — except the one install hint per missing engine above.
+          ...hiddenAtRestIf(row.sandboxArgs === undefined || (!available && !hint)),
           // M403 (B8). The launcher's own words lead: "Ask a question" existed
           // only on the launcher, which is gone once a panel exists, and the
           // palette called the same door "New chat (no folder)". Both names
@@ -1309,7 +1318,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // to fit", "Fit task" and the HUD's "Fit all" read as three names for one
     // thing. With a selection it is Fit selection; without one it IS Fit all.
     // "zoom to fit" stays in searchText, so the old phrase still finds it.
-    title: ctx.selectedIds.length > 0 ? 'Fit selection' : 'Fit all',
+    // The title follows zoomTarget's arms (the M409 critic): a selection only
+    // counts when it holds a PANEL the fit can frame, and an empty canvas —
+    // where the verb resets, and Reset zoom is the row — rests in search.
+    title: ctx.selectedIds.some((id) => ctx.panels.some((p) => p.id === id)) ? 'Fit selection' : 'Fit all',
+    ...hiddenAtRestIf(ctx.panels.length === 0),
     // No ⌘1 hint: that chord runs useViewport's fitAll (every panel), not
     // this selection-aware verb — a hint naming it lied when a selection
     // existed (the Act II critic). The row is the verb's one door.
@@ -1320,11 +1333,18 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   })
   // M409 (C5). Undo and Redo, which ⌘K did not have ("undo" matched 123 rows
   // and selected a usage-window setting). The shortcut chips are the menu's.
+  // Titled "canvas change" and refused BY NAME where ⌘Z is someone else's (the
+  // M409 critic): the menu's ⌘Z goes to a focused draft first (serveDraftEdit)
+  // and stands down behind a covering view (shouldIgnoreKeys), but these rows
+  // call undoCanvas bare — a person in a note who typed "undo" would have
+  // rewound a panel spawn behind the text they meant to fix.
+  const historyOwner = ctx.draftHeld === true ? 'the editor has its own ⌘Z — this would rewind the canvas behind it'
+    : ctx.canvasCovered === true ? 'the canvas is covered — go back to it to undo there' : undefined
   out.push(
-    withReason({ id: 'canvas.undo', title: 'Undo', subtitle: 'the last change to the canvas — a move, a close, a spawn', searchText: 'undo revert back history', group: 'canvas', shortcut: '⌘Z', ...hiddenAtRestIf(ctx.canUndo === false), run: () => actions.undoCanvas() },
-      ctx.canUndo === false ? 'nothing to undo' : undefined),
-    withReason({ id: 'canvas.redo', title: 'Redo', subtitle: 'the change Undo took back', searchText: 'redo again history', group: 'canvas', shortcut: '⌘⇧Z', ...hiddenAtRestIf(ctx.canRedo === false), run: () => actions.redoCanvas() },
-      ctx.canRedo === false ? 'nothing to redo' : undefined)
+    withReason({ id: 'canvas.undo', title: 'Undo canvas change', subtitle: 'the last change to the canvas — a move, a close, a spawn', searchText: 'undo revert back history', group: 'canvas', shortcut: '⌘Z', ...hiddenAtRestIf(ctx.canUndo === false), run: () => actions.undoCanvas() },
+      historyOwner ?? (ctx.canUndo === false ? 'nothing to undo' : undefined)),
+    withReason({ id: 'canvas.redo', title: 'Redo canvas change', subtitle: 'the change Undo took back', searchText: 'redo again history', group: 'canvas', shortcut: '⌘⇧Z', ...hiddenAtRestIf(ctx.canRedo === false), run: () => actions.redoCanvas() },
+      historyOwner ?? (ctx.canRedo === false ? 'nothing to redo' : undefined))
   )
   out.push({
     // The row is deliberately NOT hiddenAtRest, unlike every administration
@@ -1529,7 +1549,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           ? REASON_NOT_TERMINAL_OUTPUT
           : (ctx.scrollbackEnabled === false && target.spawned !== true ? REASON_NOTHING_TO_EXPORT : undefined))
     out.push(withReason({
-      id: 'panel.export-text', ...hiddenAtRestIf(ctx.capturedId === null || target === undefined),
+      id: 'panel.export-text', ...hiddenAtRestIf(ctx.panels.length === 0),
       title: 'Export panel output…',
       // M112. Honest about both sources now: the durable log (2 MB cap)
       // when scrollback is on and has bytes, else the live buffer (10 000

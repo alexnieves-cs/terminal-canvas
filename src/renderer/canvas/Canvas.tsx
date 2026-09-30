@@ -107,7 +107,7 @@ import { DeckNode } from '@renderer/file/DeckNode'
 import { deckFocused } from '@renderer/file/deck-controllers'
 import { SheetNode } from '@renderer/file/SheetNode'
 import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
-import { serveDraftEdit } from './draft-focus'
+import { focusedDraft, serveDraftEdit } from './draft-focus'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -1414,7 +1414,9 @@ export function Canvas({
   const restoreFocus = useCallback((id: string) => {
     registry.get(id)?.handle.focus()
   }, [])
-  const palette = usePalette({ focusedIdRef, restoreFocus })
+  // M409 (the critic): the draft is read as the palette OPENS — a moment later
+  // the palette's own input has the keyboard.
+  const palette = usePalette({ focusedIdRef, restoreFocus, draftHeld: () => focusedDraft() !== null })
   // null is command mode. Set by beginRenamePreset and beginSavePrompt.
   const [inputMode, setInputMode] = useState<InputMode | null>(null)
   // The palette always OPENS in command mode. Both ends of a rename leave the
@@ -9796,6 +9798,7 @@ export function Canvas({
             cameraTrail={trail}
             canUndo={undoStack.past.length > 0}
             canRedo={undoStack.future.length > 0}
+            canvasCovered={canvasCoveredRef.current}
             globalFontSize={globalFontSize}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are

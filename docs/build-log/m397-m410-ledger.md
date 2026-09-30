@@ -1346,3 +1346,36 @@ rows' "a Explore" copy.
 
 *Not done, and why:* `New task as a Explore swarm…` ("a Explore") and the four swarm/four recipe/five preview rows at
 rest are grammar and density outside C5's list; left. `panel.goto.*` rows are untouched.
+
+#### M409 follow-up (critic)
+
+1. **No focus is not no subject.** The lock/pin/maximise pairs, Link, Toolbox, Open review, Review every
+   worktree and Export panel output hid at rest on `capturedId === null` — with panels on the canvas and none
+   clicked into, the verb vanished though its subject was one click away. *Fix:* `hiddenAtRestIf(ctx.panels.length
+   === 0)`; the reasons are unchanged ("click into a panel first"). `with-reason.ts`'s comment records the rule.
+   *Check:* `palette.rest.3` (two panels, no focus: the six rows rest, Open review with `REASON_NO_FOCUS`; an empty
+   canvas drops them). Open-as-chat, Replay and Open in terminal keep the capturedId gate: their subject is a KIND
+   (a claude terminal, a chat) that `PanelRow` cannot promise from "some panel exists".
+2. **Undo vs the draft owner.** Titles are "Undo canvas change" / "Redo canvas change" (ids kept). The rows call
+   `undoCanvas` bare, while the menu's ⌘Z goes to a focused draft first (`serveDraftEdit`) and stands down behind
+   a covering view (`shouldIgnoreKeys`). *Fix:* `usePalette` captures `capturedDraft` at OPEN from a `draftHeld`
+   callback Canvas passes (`focusedDraft() !== null` — the same DOM rule `serveDraftEdit` uses, so Monaco, the rich
+   note, checklist/sheet editors and every plain field count); Canvas passes `canvasCovered` from
+   `canvasCoveredRef`. Either refuses both rows by name ("the editor has its own ⌘Z — this would rewind the canvas
+   behind it" / "the canvas is covered — go back to it to undo there"). *Check:* `palette.undo.2`.
+3. **The weak cap.** `isWeakMatch` now exempts any row whose TITLE holds the query as a subsequence — the letters
+   light in the row, so it is an abbreviation typed on purpose; only scatter across hidden searchText/subtitle is
+   capped. "add a" 28 → 33 rows, "undo" still ≤ 15. *Check:* `palette.rank.3` ("rnme" finds Rename, "gh" finds Open
+   GitHub work, twenty title-scatter rows all stay; RED with the exemption removed — kept 5). `palette.rank.2`'s
+   synthetic rows moved their scatter into searchText (they had it in the title, which is now exempt).
+
+*Minor.* **Install hint:** one Ask-a-question row per missing ENGINE (by binary; acp rides copilot) stays at rest
+refused with its `noCli` install sentence; `palette.rest.1` allows those and requires one per binary (fresh
+profile: 12 refused, at the bound). **Fit all:** the title says Fit selection only when the selection holds a panel
+(`zoomTarget`'s arm), and the row rests in search on an empty canvas, where it resets and Reset zoom is the row
+(`zoom.fit.1` adds the stale-selection case). **closure.v9.1:** its comment says why reading ids as text stays
+honest with rows hidden at rest — `palette.rest.2` proves every hidden row is found by its title. *Skipped:*
+deck/sheet grammar rows keep `hiddenAtRest: true` — `PanelRow` has no deck/sheet/checklist fact (all are `file`),
+and these verbs name their panel on the line, not the selection. The template seat: with a template the first
+runnable row at rest is `template.new.*`; the only other runnable panel-section row is "Which agents can…", a
+scope door and no better a seat, so the order is left.
