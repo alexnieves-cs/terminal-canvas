@@ -4,6 +4,7 @@ import { ioSkew, portPoint, shapeDetail, shapeOutline } from '@shared/flowchart-
 import type { ShapePanel } from '@renderer/panels/panels'
 import type { ResizeEdge } from '@renderer/canvas/panel-interaction'
 import { setEditingShape, useEditingShape } from './shape-edit-store'
+import { fieldKeepsKey } from '@renderer/canvas/draft-focus'
 import { useShownState } from '@renderer/panels/useShownState'
 import type { StateInput } from '@renderer/panels/panel-state'
 import type { PeerShapeMark } from './shared-shapes'
@@ -297,8 +298,10 @@ function LiveMark({ word, tone, title, outline, w, h, mark }: { word: string; to
  * The label's editor. A textarea, not contenteditable: its value is plain
  * text by construction (a label is words, never markup an agent could smuggle
  * into the DOM), and draft-focus.ts already routes ⌘V/⌘C/⌘Z to a focused
- * textarea. Every key stops HERE — a bare Tab, Delete or arrow in a label is
- * typing, never a canvas verb (the ledger's D3).
+ * textarea. Every bare key stops HERE — a bare Tab, Delete or arrow in a
+ * label is typing, never a canvas verb (the ledger's D3). M395: a ⌘ chord that
+ * is not a text edit goes on to the canvas (draft-focus.ts's `fieldKeepsKey`)
+ * — the first cut stopped every key, and ⌘K / ⌘= died while a label was open.
  */
 function ShapeEditor({ id, text, onCommitText }: { id: string; text: string; onCommitText: ShapeNodeProps['onCommitText'] }): JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -331,7 +334,9 @@ function ShapeEditor({ id, text, onCommitText }: { id: string; text: string; onC
     if (!closedRef.current) setEditingShape(null)
   }, [])
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
-    event.stopPropagation()
+    // M395. Bare keys (and the ⌘ text edits, ⌘Enter among them) stop here;
+    // any other ⌘ chord — ⌘K, ⌘=, ⌘0 — reaches the canvas (fieldKeepsKey).
+    if (fieldKeepsKey(event)) event.stopPropagation()
     if (event.key === 'Escape' || (event.key === 'Enter' && event.metaKey)) {
       event.preventDefault()
       close('escape')

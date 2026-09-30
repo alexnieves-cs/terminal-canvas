@@ -409,6 +409,87 @@ export function isShapePanel(panel: Panel): panel is ShapePanel {
   return panel.kind === 'shape'
 }
 
+/**
+ * M395. M187's named region — the `note` kind in its `frame` form. A frame is
+ * a region drawn BEHIND what it encloses, so three rules read this test: it is
+ * never raised by a selection (`raisePanel`, `raiseGroup`), the canvas's own
+ * pick sees only its label band and its ring (`pickRects`), and a move of it
+ * carries what lies wholly inside it (`frameContents`).
+ */
+export function isFramePanel(panel: Panel): boolean {
+  return panel.kind === 'note' && panel.note.form === 'frame'
+}
+
+/** M395. World units: the label band a frame is picked by, and the ring around the rest of it. */
+export const FRAME_BAND = 36
+export const FRAME_RING = 12
+
+/**
+ * M395. THE OBJECTS A FRAME CARRIES. Every other object whose rect lies WHOLLY
+ * inside the frame's at the moment a move of the frame begins — FigJam's
+ * section, computed at the gesture and never stored. M187's sentence, "a frame
+ * owns NOTHING", stays true of the RECORD: no field names the contents, the
+ * layout file is unchanged, and an object dragged half out of the frame simply
+ * stops being carried the next time. A locked object stays where it is (M92's
+ * rule for a group member), and a frame nested wholly inside is carried with
+ * whatever it encloses, since that lies inside the outer frame too.
+ */
+export function frameContents(panels: readonly Panel[], frameId: string): Panel[] {
+  const frame = panels.find((p) => p.rect.id === frameId)
+  if (frame === undefined || !isFramePanel(frame)) return []
+  const f = frame.rect
+  return panels.filter((p) => {
+    if (p.rect.id === frameId || p.locked === true) return false
+    const r = p.rect
+    return r.x >= f.x && r.y >= f.y && r.x + r.w <= f.x + f.w && r.y + r.h <= f.y + f.h
+  })
+}
+
+/**
+ * M395. A move's members plus what every FRAME among them carries, each
+ * object once and in the order given (the pressed member's own state is the
+ * caller's to keep).
+ */
+export function withFrameContents(members: readonly Panel[], panels: readonly Panel[]): Panel[] {
+  const seen = new Set(members.map((p) => p.rect.id))
+  const out = [...members]
+  for (const member of members) {
+    if (!isFramePanel(member)) continue
+    for (const inside of frameContents(panels, member.rect.id)) {
+      if (seen.has(inside.rect.id)) continue
+      seen.add(inside.rect.id)
+      out.push(inside)
+    }
+  }
+  return out
+}
+
+/**
+ * M395. WHAT THE CANVAS'S OWN PICK SEES of each object, in the order given
+ * (paint order — `hitTest` answers the last match). Every object is its rect,
+ * except a frame: its MIDDLE is ground, so a press there reaches the canvas
+ * as a press on nothing (a marquee, a deselect) and never selects the region
+ * the person is sweeping inside. A frame contributes its label band along the
+ * top and a thin ring down the sides and along the foot — the parts its DOM
+ * takes the pointer on (styles.css's frame rules) — each carrying the frame's
+ * id. Only the background press and link mode read this; every consumer that
+ * wants ONE rect per panel (a link's source, a drop's target) keeps hitOrder.
+ */
+export function pickRects(ordered: readonly Panel[]): WorldRect[] {
+  return ordered.flatMap((p): WorldRect[] => {
+    const r = p.rect
+    if (!isFramePanel(p) || r.w <= 2 * FRAME_RING || r.h <= FRAME_BAND + FRAME_RING) return [r]
+    const below = r.y + FRAME_BAND
+    const sideH = r.h - FRAME_BAND
+    return [
+      { id: r.id, x: r.x, y: r.y, w: r.w, h: FRAME_BAND },
+      { id: r.id, x: r.x, y: below, w: FRAME_RING, h: sideH },
+      { id: r.id, x: r.x + r.w - FRAME_RING, y: below, w: FRAME_RING, h: sideH },
+      { id: r.id, x: r.x, y: r.y + r.h - FRAME_RING, w: r.w, h: FRAME_RING }
+    ]
+  })
+}
+
 /** M388. A shape at a point, at its form's mint size. */
 export function makeShapePanel(id: string, centre: Point, z: number, form: ShapeForm, text = ''): ShapePanel {
   const { w, h } = SHAPE_SIZE[form]
@@ -928,8 +1009,17 @@ export function setRestartOnExit(
   return setLinkAutomation(panels, from, to, { kind: 'restart-on-exit', enabled })
 }
 
-/** Raise by z, never by array position — see the note on Panel.z. */
+/**
+ * Raise by z, never by array position — see the note on Panel.z.
+ *
+ * M395. A FRAME IS NEVER RAISED: it is a region drawn behind what it encloses,
+ * and a click that lifted it over its own contents was the trap the live audit
+ * measured (z −1 → 2, and an enclosed sticky could no longer be picked). The
+ * SAME array comes back, so a caller can tell "nothing to raise" from a raise
+ * and push no history entry for it.
+ */
 export function raisePanel(panels: Panel[], id: string): Panel[] {
+  if (panels.some((p) => p.rect.id === id && isFramePanel(p))) return panels
   const top = nextZ(panels)
   return panels.map((p) => (p.rect.id === id ? { ...p, z: top } : p))
 }

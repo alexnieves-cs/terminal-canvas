@@ -110,6 +110,14 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     const host = hostRef.current
     if (!host) return
     marqueeFromRef.current = from
+    // M395. A SWEEP IS NOT A TEXT SELECTION. The press is left to do its
+    // default (it moves focus off a terminal — the focus rule below depends
+    // on it), so the browser also starts selecting text, and the band's drag
+    // painted rail rows, "Create" and the pill's "4 selected" blue. For the
+    // gesture's life the document takes no selection (`data-marquee`, the
+    // rule beside `.canvas-marquee`); the attribute goes with the band.
+    document.documentElement.setAttribute('data-marquee', '')
+    window.getSelection()?.removeAllRanges()
 
     const onMove = (event: globalThis.MouseEvent): void => {
       const start = marqueeFromRef.current
@@ -147,6 +155,7 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     function endMarquee(): void {
       marqueeFromRef.current = null
       marqueeEndRef.current = null
+      document.documentElement.removeAttribute('data-marquee')
       setMarquee(null)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', endMarquee)
@@ -247,7 +256,9 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     // (it sits bottom-centre, where panels are), and a middle-press on it
     // would start a camera pan. shouldYieldWheel's pill rule, for the pointer.
     const target = event.target as HTMLElement | null
-    if (target?.closest?.('.command-pill, .new-object-row')) return
+    // M395. The annotate strip is the same kind of control (it takes the
+    // pointer now, and keeps its presses from the ground beneath it).
+    if (target?.closest?.('.command-pill, .new-object-row, [data-annotate-strip]')) return
     if (onLinkModeMouseDownCapture(event)) return
     if (event.button !== 1) return
     if (palette.isOpen() || navGridIsOpenRef.current()) return

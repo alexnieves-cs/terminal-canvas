@@ -2983,11 +2983,20 @@ body {
 
 /* M50. Snap guides: world-space hairlines inside .world, iris because a
    guide answers an interaction with the interface, never an agent's state.
-   Never a target. */
-.snap-guides { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 1; pointer-events: none; }
+   Never a target.
+   M395. CLEARLY VISIBLE, and for two reasons the first cut was not. It sat at
+   z-index 1 in .world's stacking context — UNDER every panel above z 1, so a
+   guide along a panel's edge was painted behind that panel — and it was one
+   WORLD pixel, half a screen pixel at scale 0.5. Now it paints above the
+   panels (under the annotation layer's 5000, which a margin note keeps) and is
+   2px counter-scaled by --chrome-scale like the handles, so it stays a 2px
+   screen line down to 0.4 and centred on the edge it names. Still iris, the
+   token both themes already carry at full strength; still transient (cleared
+   on release). `verify:styles revamp.snap.css.1`. */
+.snap-guides { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 4000; pointer-events: none; }
 .snap-guide { position: absolute; background: var(--iris); pointer-events: none; }
-.snap-guide--x { width: 1px; }
-.snap-guide--y { height: 1px; }
+.snap-guide--x { width: calc(2px * var(--chrome-scale, 1)); margin-left: calc(-1px * var(--chrome-scale, 1)); }
+.snap-guide--y { height: calc(2px * var(--chrome-scale, 1)); margin-top: calc(-1px * var(--chrome-scale, 1)); }
 
 /* A group frame is positioned once in WORLD pixels. Only .world's transform
    moves. */
@@ -4673,6 +4682,12 @@ body {
   border-radius: var(--r-sm);
   pointer-events: none;
 }
+/* M395. While a band is being swept the document selects no text — the press
+   keeps its default (it moves focus off a terminal), which also starts a text
+   selection, and the drag painted rail rows, "Create" and "4 selected" blue.
+   The attribute lives exactly as long as the band (useCanvasPointer.ts), so
+   everything selectable is selectable again the moment it ends. */
+:root[data-marquee], :root[data-marquee] * { -webkit-user-select: none !important; user-select: none !important; }
 
 /* M15. Subagent nodes: one per subagent, positioned beside the panel that
    spawned it. INSIDE .world (see SubagentLayer.tsx): a subagent node belongs
@@ -5760,8 +5775,15 @@ body {
 
 .minimap__mark { position: absolute; width: 2px; height: 2px; border-radius: var(--r-full); background: var(--fg-3); pointer-events: none; }
 
-/* M93. The annotate strip is the link banner's shape, iris rather than the link's tone, so the mode reads as a different one. */
-.link-banner--annotate { border-color: var(--iris); }
+/* M93. The annotate strip is the link banner's shape, iris rather than the link's tone, so the mode reads as a different one.
+   M395. It TAKES THE POINTER, unlike the link banner it borrows from. That
+   banner is pointer-events: none so it never eats the click it asks for; this
+   strip holds controls (label, draw, Done) and only Done had opted back in, so
+   a press on a tool fell through to the annotate sheet and dropped an empty
+   label under the strip. The strip is above the sheet in paint order (a
+   sibling of .world at z 930) and now in hit order too; its own mousedown
+   keeps the press from the canvas (Canvas.tsx). `verify:styles revamp.annotate.css.1`. */
+.link-banner--annotate { border-color: var(--iris); pointer-events: auto; }
 .rail-snapshots { margin-top: var(--sp-3); }
 .rail-snapshot__restore { margin-left: auto; }
 
@@ -6251,7 +6273,49 @@ body {
 /* The interior takes NO gesture: the boundary and the name stay hittable. */
 .note-node[data-note-form="frame"] .note-node__body { pointer-events: none; }
 .note-node[data-note-form="frame"] .note-node__field { pointer-events: auto; align-self: flex-start; height: 2.2em; }
-.note-node__tint.is-on { color: var(--iris); border-color: var(--iris); }
+/* M395. A FRAME TRAPS NOTHING. The body rule above was half of it: the ROOT
+   still took every click in the middle and blurred whatever lay under it
+   (`.panel`'s glass), so once a selection had raised the frame an enclosed
+   sticky could not be picked. The root now takes no pointer and paints no
+   blur — a region is a line and a name, never glass — and exactly the parts
+   that must stay hittable opt back in: the header (select, move, the ⋯ menu,
+   close), the name field, the ring, the resize handles and the ports.
+   `verify:styles revamp.frame.css.1`. */
+.note-node[data-note-form="frame"] { pointer-events: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.note-node[data-note-form="frame"] .pf__chrome,
+.note-node[data-note-form="frame"] .note-node__ring,
+.note-node[data-note-form="frame"] .panel__resize,
+.note-node[data-note-form="frame"] .panel__port { pointer-events: auto; }
+/* The ring: thin bands down the sides and along the foot (the header is its
+   top), each a move handle for the frame. Absolutely positioned — `.pf__keep`
+   is display: contents — and under the resize handles (z 2), which keep the
+   outer 8px of the east and south edges. Its width is FRAME_RING's, a world
+   width like the handles', counter-scaled with them. */
+.note-node__ring { position: absolute; z-index: 1; cursor: move; }
+.note-node__ring--e { top: 0; right: 0; bottom: 0; width: calc(12px * var(--chrome-scale, 1)); }
+.note-node__ring--w { top: 0; left: 0; bottom: 0; width: calc(12px * var(--chrome-scale, 1)); }
+.note-node__ring--s { left: 0; right: 0; bottom: 0; height: calc(12px * var(--chrome-scale, 1)); }
+/* M395. The tint swatches, along the sticky's foot rather than in its header
+   (where four word chips pushed the close ~28px past the frame's edge). The
+   sticky's contextual layer: opacity 0 → 1 with the frame's own verbs, never
+   display, so the box and a script's click stay; absolutely positioned, and
+   the body keeps a foot of room so no text sits under them. Each swatch is a
+   24px target around a 14px dot in its own tint token, ringed by the line so
+   the tint the sticky already wears still reads; the pressed one takes the
+   iris ring selection uses. The row sits one --sp-6 above the foot, clear
+   of the south link port (14px, centred on the foot) that covered the fourth
+   swatch at the 200px floor, and of the south resize edge. */
+.note-node--sticky .note-node__body { padding-bottom: calc(var(--sp-6) + 24px); }
+.note-node__tints { position: absolute; left: var(--sp-3); bottom: var(--sp-6); z-index: 2; display: flex; gap: var(--sp-1); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pf:hover .note-node__tints, .pf:focus-within .note-node__tints, .panel--selected .note-node__tints { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .note-node__tints { transition: none; } }
+.note-node__tint { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-full); background: transparent; cursor: pointer; }
+.note-node__tint::before { content: ''; box-sizing: border-box; width: 14px; height: 14px; border-radius: var(--r-full); border: 1px solid var(--line-strong); background: var(--tint-yellow); }
+.note-node__tint[data-tint="blue"]::before { background: var(--tint-blue); }
+.note-node__tint[data-tint="green"]::before { background: var(--tint-green); }
+.note-node__tint[data-tint="pink"]::before { background: var(--tint-pink); }
+.note-node__tint:hover::before { border-color: var(--fg-2); }
+.note-node__tint.is-on::before { border: 2px solid var(--iris); }
 .image-node__gone { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3); font-family: var(--font-ui); }
 .browser-node__host[data-preview-width]:not([data-preview-width="full"]) { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 .browser-node__live { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

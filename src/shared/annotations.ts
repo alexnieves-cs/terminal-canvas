@@ -68,6 +68,19 @@ export function resolveAnchor(point: { x: number; y: number }, panels: readonly 
   return { kind: 'panel', panelId: hit.rect.id, dx: point.x - hit.rect.x, dy: point.y - hit.rect.y }
 }
 
+/**
+ * M395. AN EMPTY LABEL IS NO LABEL. A label is kept only once it says
+ * something; the one whose editor is open (`editing`) is the single exception,
+ * because a person is still typing it. Ink keeps `text: ''` by design (one
+ * record shape) and is never dropped here. The live audit found seven "…"
+ * labels left behind after Done: each press on the annotate strip had dropped
+ * a fresh label whose editor was then unmounted without a blur, so the "an
+ * empty FRESH note removes itself" rule (on blur) never ran for it.
+ */
+export function dropEmptyLabels(list: readonly Annotation[], editing: string | null): Annotation[] {
+  return list.filter((a) => a.ink !== undefined || a.text !== '' || a.id === editing)
+}
+
 /** Drops a panel-anchored note whose panel is gone; keeps everything else in order. */
 export function pruneAnnotations(list: readonly Annotation[], panelIds: ReadonlySet<string>): Annotation[] {
   return list.filter((a) => a.anchor.kind === 'world' || panelIds.has(a.anchor.panelId))

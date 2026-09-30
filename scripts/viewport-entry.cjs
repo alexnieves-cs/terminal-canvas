@@ -6,6 +6,8 @@ module.exports = {
   ...require('../src/renderer/canvas/lod'),
   ...require('../src/renderer/canvas/spatial-order'),
   ...require('../src/renderer/canvas/panel-interaction'),
+  // M395. Which keys a text field on the canvas keeps (fieldKeepsKey) — pure over the event's fields.
+  ...require('../src/renderer/canvas/draft-focus'),
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),
   // The startup splash's mode table and field math (splash.1, splash.2).

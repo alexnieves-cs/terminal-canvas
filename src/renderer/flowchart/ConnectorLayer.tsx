@@ -2,6 +2,7 @@ import { memo, useLayoutEffect, useRef, type JSX, type KeyboardEvent as ReactKey
 import { CONNECTOR_LABEL_MAX } from '@shared/flowchart'
 import { arrowHead, type ConnectorPath } from '@shared/flowchart-geometry'
 import type { ConnectorView } from './connector-model'
+import { fieldKeepsKey } from '@renderer/canvas/draft-focus'
 
 /**
  * M389. THE CONNECTOR LAYER — every diagram arrow, in one SVG inside `.world`
@@ -133,7 +134,9 @@ function LabelEditor({ view, onCommit }: { view: ConnectorView; onCommit: Connec
     onCommit(view.id, (ref.current?.value ?? '').trim().slice(0, CONNECTOR_LABEL_MAX))
   }
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
-    event.stopPropagation()
+    // M395. Bare keys stop at the field; a ⌘ chord that is not a text edit
+    // reaches the canvas (draft-focus.ts's `fieldKeepsKey`).
+    if (fieldKeepsKey(event)) event.stopPropagation()
     if (event.key === 'Enter' || event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); close() }
   }
   return (
