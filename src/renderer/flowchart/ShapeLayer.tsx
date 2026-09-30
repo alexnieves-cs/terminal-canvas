@@ -52,12 +52,15 @@ export interface ShapeLayerProps {
   live?: ReadonlyMap<string, LiveBinding>
 }
 
-/** M393. The live object a shape is joined to — Canvas derives it from the connectors and the rail's own rows. */
-export interface LiveBinding {
-  panelId: string
-  input: StateInput
-  name: string
-}
+/**
+ * M393/M394. What a shape is live FOR: a live object it is joined to (Canvas
+ * derives it from the connectors and the rail's own rows — the word comes
+ * from the panel's own subscriptions), or the plan step it became (the word
+ * and tone come from M327's planView, already derived).
+ */
+export type LiveBinding =
+  | { kind: 'panel'; panelId: string; input: StateInput; name: string }
+  | { kind: 'step'; word: string; tone: string; name: string }
 
 /** The eight handles, clockwise from the top. A handle is counter-scaled in CSS (`--chrome-scale`), so it stays grabbable zoomed out. */
 const HANDLES: readonly ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
@@ -143,7 +146,9 @@ const ShapeNode = memo(function ShapeNode(props: ShapeNodeProps): JSX.Element {
         <path className="shape__outline" d={hit} data-empty-outline={outline === '' ? '' : undefined} onMouseDown={press} onDoubleClick={edit} />
         {detail !== '' && <path className="shape__detail" d={detail} />}
       </svg>
-      {live !== undefined && outline !== '' && <ShapeLive binding={live} outline={outline} w={rect.w} h={rect.h} />}
+      {live !== undefined && outline !== '' && (live.kind === 'panel'
+        ? <PanelLive binding={live} outline={outline} w={rect.w} h={rect.h} />
+        : <LiveMark word={live.word} tone={live.tone} title={`${live.name} — ${live.word}`} outline={outline} w={rect.w} h={rect.h} mark="step" />)}
       {editing
         ? <ShapeEditor id={id} text={shape.text} onCommitText={onCommitText} />
         : shape.text !== '' && <div className="shape__label">{shape.text}</div>}
@@ -191,13 +196,18 @@ const ShapeNode = memo(function ShapeNode(props: ShapeNodeProps): JSX.Element {
  * uses. Its own subscriptions, so an agent's state change re-renders this
  * badge and nothing else. A kind with no state (a file, a note) draws nothing.
  */
-function ShapeLive({ binding, outline, w, h }: { binding: LiveBinding; outline: string; w: number; h: number }): JSX.Element | null {
+function PanelLive({ binding, outline, w, h }: { binding: Extract<LiveBinding, { kind: 'panel' }>; outline: string; w: number; h: number }): JSX.Element | null {
   const shown = useShownState(binding.panelId, binding.input)
   if (shown.tone === 'kind') return null
+  return <LiveMark word={shown.word} tone={shown.tone} title={`${binding.name} — ${shown.word}`} outline={outline} w={w} h={h} mark={binding.panelId} />
+}
+
+/** The ring and the word — the one picture both bindings draw. */
+function LiveMark({ word, tone, title, outline, w, h, mark }: { word: string; tone: string; title: string; outline: string; w: number; h: number; mark: string }): JSX.Element {
   return (
     <>
-      <svg className="shape__live-ring" data-tone={shown.tone} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><path d={outline} /></svg>
-      <span className="shape__live" data-tone={shown.tone} data-shape-live={binding.panelId} title={`${binding.name} — ${shown.word}`}>{shown.word}</span>
+      <svg className="shape__live-ring" data-tone={tone} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><path d={outline} /></svg>
+      <span className="shape__live" data-tone={tone} data-shape-live={mark} title={title}>{word}</span>
     </>
   )
 }

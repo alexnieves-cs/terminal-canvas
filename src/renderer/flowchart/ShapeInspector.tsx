@@ -14,7 +14,7 @@ import type { ShapeStylePatch } from '@renderer/canvas/useFlowchartVerbs'
  * each press is ONE `setShapeStyle` — one history entry, the same verb the
  * palette's `shape-style` and an agent's line reach.
  */
-export type ShapeChartAct = 'layout-down' | 'layout-right' | 'export-mermaid' | 'export-svg'
+export type ShapeChartAct = 'layout-down' | 'layout-right' | 'export-mermaid' | 'export-svg' | 'plan'
 
 export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord; onStyle: (patch: ShapeStylePatch) => void; onChart?: (act: ShapeChartAct) => void }): JSX.Element {
   const fill = shape.fill ?? 'plain'
@@ -50,6 +50,7 @@ export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord
         <div className="shape-inspector__row" role="group" aria-label="Chart">
           <span className="shape-inspector__label">Chart</span>
           <div className="shape-inspector__swatches">
+            <button type="button" className="shape-inspector__swatch" data-shape-chart="plan" title="Start work from this chart — its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>Start work…</button>
             <button type="button" className="shape-inspector__swatch" data-shape-chart="layout-down" title="Lay out this chart, top to bottom" onClick={() => { onChart('layout-down') }}>Lay out ↓</button>
             <button type="button" className="shape-inspector__swatch" data-shape-chart="layout-right" title="Lay out this chart, left to right" onClick={() => { onChart('layout-right') }}>Lay out →</button>
             <button type="button" className="shape-inspector__swatch" data-shape-chart="export-mermaid" title="Export the chart as Mermaid — secrets scrubbed" onClick={() => { onChart('export-mermaid') }}>Mermaid…</button>

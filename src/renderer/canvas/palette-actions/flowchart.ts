@@ -1,6 +1,7 @@
 import type { PaletteActions } from '@renderer/palette/commands'
 import { isShapePanel } from '@renderer/panels/panels'
 import { setEditingShape } from '@renderer/flowchart/shape-edit-store'
+import { chartToPlan } from '@renderer/flowchart/flow-convert'
 import type { ActionCtx } from './types'
 
 /**
@@ -22,6 +23,7 @@ export type FlowchartActions = Pick<PaletteActions,
   | 'layoutFlowchart'
   | 'importFlowchart'
   | 'exportFlowchart'
+  | 'planFromChart'
 >
 
 /** A door's id list: space- or comma-separated; absent or blank is the person's selection. */
@@ -31,7 +33,7 @@ const idList = (ids?: string): string[] | undefined => {
 }
 
 export function flowchartActions(ctx: ActionCtx): FlowchartActions {
-  const { flowchartVerbs, connectorVerbs, flowchartIO, panelsRef, selectedIdsRef } = ctx
+  const { flowchartVerbs, connectorVerbs, flowchartIO, panelsRef, selectedIdsRef, self } = ctx
   return {
     addShape: (form, text) => {
       const out = flowchartVerbs.addShape(form, text)
@@ -66,6 +68,14 @@ export function flowchartActions(ctx: ActionCtx): FlowchartActions {
     layoutFlowchart: (direction, ids) => flowchartIO.layout(direction, idList(ids)),
     importFlowchart: (path) => flowchartIO.importMermaidFile(path === undefined || path.trim() === '' ? undefined : path.trim()),
     exportFlowchart: (format) => flowchartIO.exportFlowchart(format),
+    planFromChart: (ids) => {
+      const out = chartToPlan(panelsRef.current ?? [], flowchartIO.chartScope(idList(ids)), Date.now())
+      if (out.kind === 'refused') return out
+      // The sheet is the approval: nothing is minted until the person presses
+      // Start there, and every step is then started by that person (M327).
+      self.beginStartWork({ title: out.title, brief: out.brief, plan: out.plan, onCreated: (itemId) => { flowchartVerbs.bindPlanSteps(itemId, out.stepOf) } })
+      return { kind: 'ran', note: `${out.plan.steps.length} step${out.plan.steps.length === 1 ? '' : 's'} in the Start work sheet — nothing runs until you press Start` }
+    },
     editShapeLabel: () => {
       const id = [...(selectedIdsRef.current ?? [])].find((sid) => { const p = panelsRef.current?.find((q) => q.rect.id === sid); return p !== undefined && isShapePanel(p) })
       if (id === undefined) return { kind: 'refused', reason: 'select a shape first' }

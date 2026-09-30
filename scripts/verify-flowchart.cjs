@@ -37,6 +37,8 @@ rmSync(outfile, { force: true })
   await require('./flowchart-checks/geometry.cjs')(ok, F)
   await require('./flowchart-checks/arrange.cjs')(ok, F)
   await require('./flowchart-checks/files.cjs')(ok, F)
+  await require('./flowchart-checks/convert.cjs')(ok, F)
+  await require('./flowchart-checks/persist.cjs')(ok, F)
   const failures = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
   process.exitCode = failures.length ? 1 : 0

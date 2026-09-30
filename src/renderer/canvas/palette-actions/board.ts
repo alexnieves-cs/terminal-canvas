@@ -206,6 +206,9 @@ export function boardActions(ctx: ActionCtx): BoardActions {
                 ...(choice.checks === undefined ? {} : { checks: choice.checks }),
                 ...(choice.deliverables === undefined ? {} : { deliverables: choice.deliverables }),
                 ...(choice.recipeId === undefined ? {} : { recipeId: choice.recipeId }),
+                // M394. A plan drawn as a chart rides onto the card as it is
+                // created; its steps are each started by the person (M327).
+                ...(opts?.plan === undefined ? {} : { plan: opts.plan }),
                 // M319. The chosen backend lands on the card; the executor reads it there.
                 // Written even when absent (claude): a card that ran on codex and is
                 // re-started on claude must lose its old vendor, and `carryWorkItem`
@@ -233,6 +236,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
               // and nothing else does: a swarm that fell through to `startWork`
               // would open one lane and report `started`, which is the silent
               // half of a feature that looks like it ran.
+              // M394. The chart's shapes learn which step each became, now the card exists.
+              opts?.onCreated?.(id)
               const outcome = choice.swarm === undefined
                 ? await self.startWork(id, choice.teammateId, choice.root)
                 : await self.startSwarm(id, choice.teammateId, choice.root, choice.swarm)

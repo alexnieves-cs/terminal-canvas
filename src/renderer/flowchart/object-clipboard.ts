@@ -50,6 +50,8 @@ export function collectCopy(panels: readonly Panel[], ids: ReadonlySet<string>):
     delete copy.locked
     delete copy.pinned
     delete copy.templateBinding
+    // M394. A copy of a step's shape is not that step: the binding stays with the original.
+    if (isShapePanel(copy) && copy.shape.step !== undefined) { const { step: _s, ...rest } = copy.shape; void _s; copy.shape = rest }
     return copy
   })
 }

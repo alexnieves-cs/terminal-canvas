@@ -129,6 +129,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'flowchart-layout': return self.layoutFlowchart(a.direction!, a.objects)
       case 'flowchart-import': return self.importFlowchart(a.path)
       case 'flowchart-export': return self.exportFlowchart(a.format!)
+      case 'flowchart-plan': return self.planFromChart(a.objects)
       case 'image-add': return self.addImage(a.path!)
       case 'image-replace': return self.replaceImage(a.panel!, a.path)
       case 'preview-open': return self.openPreview(a.url)

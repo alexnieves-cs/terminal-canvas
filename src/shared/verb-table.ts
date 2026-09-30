@@ -204,6 +204,8 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'flowchart-layout', label: 'Flowchart: lay out', args: [{ name: 'direction', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['layoutFlowchart'], target: 'canvas', hint: 'down, right, up or left — one shape lays out its whole chart' },
   { id: 'flowchart-import', label: 'Flowchart: import Mermaid', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importFlowchart'], target: 'canvas', hint: 'a .mmd or .md file (an absolute path) becomes editable shapes; nothing in it runs' },
   { id: 'flowchart-export', label: 'Flowchart: export', args: [{ name: 'format', kind: 'value' }], destructive: false, actions: ['exportFlowchart'], target: 'canvas', hint: 'mermaid or svg, through a save dialog — scrubbed, the count said' },
+  // M394. Sketch → plan: opens the Start work sheet with the chart's steps as its plan — a person presses Start.
+  { id: 'flowchart-plan', label: 'Flowchart: start work from this chart', args: [{ name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['planFromChart'], target: 'canvas', hint: 'each labelled step becomes a plan step in the Start work sheet; nothing runs until a person presses Start' },
   // M186. A picture in, and a picture repaired. Both take a path, and both go
   // through the store, so an agent's picture has the same identity a person's
   // dropped one has.
@@ -527,6 +529,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'flowchart-layout': { canvas: "the command pill's Lay out on a selected chart", palette: 'flowchart.layout.down', agent: 'tc plan flowchart-layout down nt1', workflow: 'an action node whose line is: flowchart-layout right nt1' },
   'flowchart-import': { canvas: 'paste Mermaid text on the canvas — ⌘V with no panel focused', palette: 'flowchart.import', agent: 'tc plan flowchart-import /tmp/auth.mmd', workflow: 'an action node whose line is: flowchart-import /tmp/auth.mmd' },
   'flowchart-export': { canvas: "Export on the Shape section of a selected shape's inspector", palette: 'flowchart.export.mermaid', agent: 'tc plan flowchart-export mermaid', workflow: 'an action node whose line is: flowchart-export svg' },
+  'flowchart-plan': { canvas: "Start work… on the Shape section of a selected shape's inspector, and the pill's Start work on a selected chart", palette: 'flowchart.plan', agent: 'tc plan flowchart-plan nt1', workflow: 'an action node whose line is: flowchart-plan nt1' },
   'image-add': { canvas: 'drop a picture on the canvas, or paste one with no agent to take it', palette: 'image.add', agent: 'tc plan image-add /tmp/shot.png', workflow: 'an action node whose line is: image-add /tmp/shot.png' },
   'image-replace': { canvas: 'Replace on a picture panel', palette: 'image.replace', agent: 'tc plan image-replace img1 /tmp/other.png', workflow: 'an action node whose line is: image-replace img1 /tmp/other.png' },
   'preview-open': { canvas: 'Find the project on the preview pane, and a candidate in its list', palette: 'preview.open', agent: 'tc plan preview-open', workflow: 'an action node whose line is: preview-open' },

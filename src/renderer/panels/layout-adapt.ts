@@ -44,7 +44,7 @@ function copyTrigger(trigger: WatchTrigger): WatchTrigger {
 
 /** M388. The shape record, field by field; an absent style field stays absent (never `fill: undefined`). */
 function copyShape(r: ShapeRecord): ShapeRecord {
-  return { form: r.form, text: r.text, ...(r.fill === undefined ? {} : { fill: r.fill }), ...(r.stroke === undefined ? {} : { stroke: r.stroke }), ...(r.ink === undefined ? {} : { ink: r.ink }) }
+  return { form: r.form, text: r.text, ...(r.fill === undefined ? {} : { fill: r.fill }), ...(r.stroke === undefined ? {} : { stroke: r.stroke }), ...(r.ink === undefined ? {} : { ink: r.ink }), ...(r.step === undefined ? {} : { step: { item: r.step.item, step: r.step.step } }) }
 }
 
 export function toPanels(persisted: PersistedPanel[]): Panel[] {

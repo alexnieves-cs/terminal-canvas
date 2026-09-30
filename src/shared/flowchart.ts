@@ -40,6 +40,13 @@ export interface ShapeRecord {
   fill?: ShapeFill
   stroke?: ShapeStroke
   ink?: ShapeInk
+  /**
+   * M394. The plan step this shape became when a person started work from its
+   * chart — the work item and the step. A shape bound to a step shows the
+   * step's state (the living flowchart). Absent on every shape until then.
+   * Never travels (a portable file, a copy): the item is this machine's.
+   */
+  step?: { item: string; step: string }
 }
 
 /** A label is a label; a paragraph is a sticky or a file. */
@@ -198,6 +205,11 @@ export function parseShapeRecord(raw: unknown, warnings: string[], where: string
   if (r.fill !== undefined) { if (isShapeFill(r.fill)) out.fill = r.fill; else warnings.push(`${where}: unknown shape fill ${JSON.stringify(r.fill)} — dropped the field`) }
   if (r.stroke !== undefined) { if (isShapeStroke(r.stroke)) out.stroke = r.stroke; else warnings.push(`${where}: unknown shape stroke ${JSON.stringify(r.stroke)} — dropped the field`) }
   if (r.ink !== undefined) { if (isShapeInk(r.ink)) out.ink = r.ink; else warnings.push(`${where}: unknown shape ink ${JSON.stringify(r.ink)} — dropped the field`) }
+  if (r.step !== undefined) {
+    const st = r.step as Record<string, unknown> | null
+    if (typeof st === 'object' && st !== null && typeof st.item === 'string' && st.item !== '' && typeof st.step === 'string' && st.step !== '') out.step = { item: st.item, step: st.step }
+    else warnings.push(`${where}: a malformed plan-step binding — dropped the field`)
+  }
   return out
 }
 

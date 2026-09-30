@@ -1,3 +1,4 @@
+import type { TaskPlan } from '@shared/task-plan'
 import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
 import { shapeFormSentence } from '@shared/flowchart'
@@ -477,6 +478,8 @@ export interface PaletteActions {
   layoutFlowchart(direction: string, ids?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   importFlowchart(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   exportFlowchart(format: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M394. Start work from the selected chart: its steps become a task plan in the Start work sheet; nothing runs until a person presses Start. */
+  planFromChart(ids?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteTint(panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   addImage(path: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -547,7 +550,7 @@ export interface PaletteActions {
    * only for what it cannot derive: with the triple complete it dispatches
    * with no sheet, and otherwise it opens the sheet on the missing input.
    */
-  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string; swarm?: SwarmPresetId; recipeId?: string; brief?: string; criteria?: string[]; preferRoot?: string }): void
+  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string; swarm?: SwarmPresetId; recipeId?: string; brief?: string; criteria?: string[]; preferRoot?: string; plan?: TaskPlan; onCreated?: (itemId: string) => void }): void
   /** M312. The repository setup sheet for a directory's repository (the captured panel's when absent). */
   beginRepoSetup(cwd?: string): void
   /** M313. The captured panel (or the given path) in the person's editor. */
@@ -2284,6 +2287,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({ id: 'arrange.distribute.down', title: 'Space evenly down', subtitle: 'equal gaps, top to bottom; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly vertical down arrange', run: () => { actions.distributeObjects('down') } }, many < 3 ? 'select three or more objects first' : undefined))
   out.push(withReason({ id: 'flowchart.layout.down', title: 'Lay out this chart, top to bottom', subtitle: 'the selected chart in ranks, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram vertical down', run: () => { actions.layoutFlowchart('down') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
   out.push(withReason({ id: 'flowchart.layout.right', title: 'Lay out this chart, left to right', subtitle: 'the selected chart in columns, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram horizontal right', run: () => { actions.layoutFlowchart('right') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
+  out.push(withReason({ id: 'flowchart.plan', title: 'Start work from this chart…', subtitle: 'its steps become a task plan — nothing runs until you press Start', group: 'canvas', searchText: 'flowchart plan start work task steps sketch diagram', run: () => { actions.planFromChart() } }, shapeSelected === undefined ? 'select a shape in a chart first' : undefined))
   out.push({ id: 'flowchart.import', title: 'Import a Mermaid flowchart…', subtitle: 'a .mmd or .md file becomes shapes you can edit — nothing in it runs', group: 'canvas', searchText: 'mermaid import flowchart diagram graph file', run: () => { void actions.importFlowchart() } })
   out.push({ id: 'flowchart.export.mermaid', title: 'Export the diagram as Mermaid…', subtitle: 'the selected chart, or every shape — secrets scrubbed, the count said', group: 'canvas', searchText: 'mermaid export flowchart diagram save text', run: () => { void actions.exportFlowchart('mermaid') } })
   out.push({ id: 'flowchart.export.svg', title: 'Export the diagram as SVG…', subtitle: 'a vector picture of the chart — text only, secrets scrubbed', group: 'canvas', searchText: 'svg export flowchart diagram image vector save', run: () => { void actions.exportFlowchart('svg') } })

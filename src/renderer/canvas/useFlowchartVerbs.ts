@@ -77,6 +77,8 @@ export interface FlowchartVerbs {
   distribute: (axis: string, ids?: readonly string[]) => VerbResult
   /** M390. Move the selection by a world delta; `commit` false while a key repeats, true on release. */
   nudge: (dx: number, dy: number, commit: boolean) => void
+  /** M394. Each shape learns the plan step it became (`stepOf`: shape id → step id), once the work item exists. */
+  bindPlanSteps: (itemId: string, stepOf: ReadonlyMap<string, string>) => void
   addShape: (form: string, text?: string, world?: Point) => VerbResult & { id?: string }
   setShapeText: (panelId: string, text: string) => VerbResult
   setShapeStyle: (panelIds: readonly string[], patch: ShapeStylePatch) => VerbResult
@@ -317,11 +319,22 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
     })
   }, [commitHistory, mergedRef, selectedIdsRef, setPanels])
 
+  const bindPlanSteps = useCallback((itemId: string, stepOf: ReadonlyMap<string, string>): void => {
+    setPanels((current) => {
+      const next = current.map((p) => {
+        const step = stepOf.get(p.rect.id)
+        return step === undefined || !isShapePanel(p) ? p : { ...p, shape: { ...p.shape, step: { item: itemId, step } } }
+      })
+      if (next.some((p, i) => p !== current[i])) commitHistory(next)
+      return next
+    })
+  }, [commitHistory, setPanels])
+
   // One object for the life of these callbacks: usePaletteActions takes it
   // as a dep, and a fresh literal per render would rebuild every verb on
   // every pan frame (usePaletteActions.ts's header).
-  return useMemo(() => ({ addShape, setShapeText, setShapeStyle, onShapePress, onShapeResize, onShapeText, duplicate, copyObjects, pasteObjects, deleteObjects, align, distribute, nudge }),
-    [addShape, setShapeText, setShapeStyle, onShapePress, onShapeResize, onShapeText, duplicate, copyObjects, pasteObjects, deleteObjects, align, distribute, nudge])
+  return useMemo(() => ({ addShape, setShapeText, setShapeStyle, onShapePress, onShapeResize, onShapeText, duplicate, copyObjects, pasteObjects, deleteObjects, align, distribute, nudge, bindPlanSteps }),
+    [addShape, setShapeText, setShapeStyle, onShapePress, onShapeResize, onShapeText, duplicate, copyObjects, pasteObjects, deleteObjects, align, distribute, nudge, bindPlanSteps])
 }
 
 /** Mint a shape and open its label — the keyboard's and quick-connect's way in (M389/M390). */

@@ -5126,3 +5126,72 @@ the renderer's answer is to open Start work filled in, where a person presses St
 still is not accepted at the URL door: it writes a record. A proposal's `cwd` is checked to
 exist in main and only CHOOSES among the repositories the teammate's places already grant.
 `task.1`.
+
+**A flowchart SHAPE never renders through PanelFrame (`flowchart/ShapeLayer.tsx`, M388).** A
+frame is ~20 DOM nodes and ~6 store subscriptions per object, is not memoised, reads computed
+style on every render, clamps to 200x160 and turns every non-terminal body into a glyph card at
+far zoom — so 200 shapes through it were ~4k nodes re-rendering on every camera frame, and a
+diamond became a card when you zoomed out. Shapes render in ONE memoised layer returning a
+FRAGMENT (no wrapper, so `Panel.z` still interleaves them with panels in `.world`'s one stacking
+context), each shape memoised on its own panel object, handles and ports only on the selected
+or hovered shape. The panel map skips the kind explicitly; a later "unify the kinds" change that
+routes shapes back through PanelFrame undoes the 200-shape bar with no red anywhere.
+`flowchart.perf.*`.
+
+**A line that touches a SHAPE is a CONNECTOR, never a PanelLink (`panels.ts` `connectors`,
+`Canvas.tsx`'s link-draw commit, M389).** A link MEANS something: one-hop task membership
+(`task-members.ts`), Orchestrate's dependency lines, the agent snapshot, preset saves and, with
+`automation`, handoff. A diagram's arrow from a shape to a terminal must not make the shape a
+task member or a dependency. Connectors are their own record, held by the SOURCE panel beside
+`links` (so `History<Panel[]>` covers them — undo, close-pruning and copy come free), with an id,
+ports, a route, ends and a label. The link draw from a panel's port decides by its ends: two live
+objects make a link as before; either end a shape makes a connector. `flowchart.app.8`, `.9`.
+
+**Add a shape and its connector in ONE updater (`useConnectors.ts` `extend`, M390).** The first
+cut added the shape (setPanels), then called `connect`, which looks both ends up in
+`panelsRef` — still the pre-add array until React renders — refused "no object is called sh2",
+and left an unconnected box and TWO history entries; Tab from a label silently made a loose
+shape. The next-step path now mints both ids outside, and one updater appends the shape and
+adds the connector, one `commitHistory`. Found by driving the real renderer, not by a type error.
+`flowchart.app.1`, `.2`.
+
+**Never mint an id (or do anything with a side effect) inside a `setPanels` updater (M388–M391).**
+StrictMode runs updaters twice; `nextIdRef.current++` inside one mints two ids for one object in
+development and diverges from production. Every flowchart verb mints outside and only sets `z`
+(from `nextZ(current)`) inside. Duplicate, paste and Mermaid import were each written the wrong
+way first. Structural — no check can see it in a production build.
+
+**The diagram's BARE keys are safe only behind three gates (`useShapeKeys.ts`, D3, M390).** Every
+other canvas chord is ⌘-gated because a focused terminal claims every bare key. Enter/Tab/⌥-arrow/
+arrows/Delete act only when DOM focus is the canvas host or nothing (never a terminal's textarea,
+an input, an editor), no overlay holds the keyboard (`shouldIgnoreKeys`), and the selection is
+non-empty and made of authored objects alone. A shape PRESS calls `preventDefault`, which keeps
+DOM focus where it was — so the press also hands the keyboard to the host (`releaseKeyboard`,
+⌘Esc's own steps), or the next Enter would go to the terminal that last had focus.
+`flowchart.app.1`, `.3`.
+
+**Object copy is IN THE APP; the system clipboard carries a content-free marker
+(`flowchart/object-clipboard.ts`, D9, M390).** Writing a shape's label to the system clipboard would
+be a new, ungated outward door (every other app reads it). The marker ("N objects from terminal
+canvas · nonce") lets ⌘V tell "the person's last copy was ours" from "they copied something else
+since" by comparing text. A terminal or chat is never copied — a copy would be a second process.
+`flowchart.app.5`, `flowchart.convert.*`.
+
+**The SVG export's active-content scan reads MARKUP only (`shared/flowchart-files.ts`
+`svgActiveContent`, M391).** The first version matched `data:` and `href=` anywhere, so a label
+reading "Fetch data: rows" refused the whole export. Labels are escaped character data
+(`flowchart-svg.ts` `escapeXml` — a `<` in one is `&lt;` and cannot open a tag); what can act in
+an SVG lives in tags and attributes, so text between `>` and `<` is removed before the scan.
+`flowchart.files.*`.
+
+**A resize floor is the OBJECT's (`panel-interaction.ts` `DragState.min`, `arrange.ts` `smartSnap`,
+M388/M390).** `MIN_PANEL_W/H` (200x160) is a terminal's floor; applied to a shape it made a 28px
+junction unresizable and made `snapRect` refuse every snap under 200 wide. A gesture carries its
+own `min` (absent = the panel floor) and `smartSnap` never proposes a snap below it. The layout
+reader clamps a shape to `SHAPE_MIN` for the same reason. `flowchart.arrange.20`, `.21`,
+`flowchart.persist.2`.
+
+**⌘D is Duplicate; the diagnostics overlay is ⌘⌥D (`useDiagnostics.ts`, D4, M390).** ⌘D is the
+chord every design tool gives duplicate and what a person presses first; the overlay is a
+developer's and was pinned by nothing. A future "free chord" survey must not hand ⌘D back.
+`flowchart.app.4`.

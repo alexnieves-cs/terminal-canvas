@@ -53,6 +53,8 @@ export interface FlowchartIO {
   importMermaidFile: (path?: string) => Promise<VerbResult>
   exportFlowchart: (format: string, ids?: readonly string[]) => Promise<VerbResult>
   layout: (direction: string, ids?: readonly string[]) => VerbResult
+  /** The chart a selection (or a door's ids) means: one shape → every shape it reaches; several → those. */
+  chartScope: (ids?: readonly string[]) => Set<string>
 }
 
 const DIRECTION_WORDS: Record<string, FlowDirection> = { down: 'TB', tb: 'TB', td: 'TB', up: 'BT', bt: 'BT', right: 'LR', lr: 'LR', left: 'RL', rl: 'RL' }
@@ -197,7 +199,13 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
     return { kind: 'ran', note: `${shapes.length} shapes laid out ${direction === 'tb' || direction === 'td' ? 'down' : direction}` }
   }, [commitHistory, mergedRef, panelsRef, reducedMotion, selectedIdsRef, setPanels])
 
-  return useMemo(() => ({ importMermaid, importPasted, importMermaidFile, exportFlowchart, layout }), [importMermaid, importPasted, importMermaidFile, exportFlowchart, layout])
+  const chartScope = useCallback((ids?: readonly string[]): Set<string> => {
+    const panels = panelsRef.current ?? []
+    const picked = [...new Set(ids !== undefined && ids.length > 0 ? ids : [...(selectedIdsRef.current ?? [])])].filter((id) => { const p = panels.find((q) => q.rect.id === id); return p !== undefined && isShapePanel(p) })
+    return picked.length === 1 ? reachable(panels, picked[0]) : new Set(picked)
+  }, [panelsRef, selectedIdsRef])
+
+  return useMemo(() => ({ importMermaid, importPasted, importMermaidFile, exportFlowchart, layout, chartScope }), [importMermaid, importPasted, importMermaidFile, exportFlowchart, layout, chartScope])
 }
 
 /** Every shape connected to `id` by connectors, in either direction. */

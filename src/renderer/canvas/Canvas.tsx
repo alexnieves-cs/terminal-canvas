@@ -7459,37 +7459,6 @@ export function Canvas({
     lanes: worktreeRows
   })
 
-  // M393. THE LIVING FLOWCHART. A shape joined by a connector to a live
-  // object — a terminal, an agent's chat, a watcher, a work card — shows that
-  // object's state: a ring on its outline in the state's tone and ONE word,
-  // the same word the rail shows for it (useShownState). The first such
-  // connection binds; a diagram drawn over the work becomes a dashboard of
-  // it. Bindings are REUSED across renders when nothing about them changed,
-  // so a drag re-renders only the shape that moved.
-  const liveCacheRef = useRef<Map<string, LiveBinding>>(new Map())
-  const shapeLive = useMemo(() => {
-    const rows = new Map(railRows.map((r) => [r.id, r]))
-    const byId = new Map(panels.map((p) => [p.rect.id, p]))
-    const out = new Map<string, LiveBinding>()
-    const bind = (shapeId: string, panelId: string): void => {
-      if (out.has(shapeId)) return
-      const row = rows.get(panelId)
-      if (row === undefined) return
-      const prev = liveCacheRef.current.get(shapeId)
-      out.set(shapeId, prev !== undefined && prev.panelId === panelId && prev.input === row.state && prev.name === row.label ? prev : { panelId, input: row.state, name: row.label })
-    }
-    for (const p of panels) {
-      for (const c of p.connectors ?? []) {
-        const t = byId.get(c.to)
-        if (t === undefined) continue
-        if (isShapePanel(p) && !isShapePanel(t)) bind(p.rect.id, t.rect.id)
-        else if (!isShapePanel(p) && isShapePanel(t)) bind(t.rect.id, p.rect.id)
-      }
-    }
-    liveCacheRef.current = out
-    return out
-  }, [panels, railRows])
-
   const inspectorContextBand = useMemo(() => {
     if (selectedPanel === undefined || inspectorModel === null) return undefined
     const approval = pendingApprovals.find((a) => a.id === selectedPanel.rect.id)
@@ -8133,6 +8102,61 @@ export function Canvas({
   // The briefing keeps its floating slot: it is a list, not a line.
   const resumeStrip = briefing === null && resumeSummary !== null && panels.length > 0 && !(chrome.navVisible && chrome.navigator === 'panels')
     ? resumeOf('strip') : null
+  // M327's plan derivation, ONE reader for Orchestrate's task row and the
+  // chart shapes bound to a plan's steps (M394) — so a shape and the task
+  // list can never disagree about whether a step finished or stopped.
+  const planViewsFor = (itemId: string): ReturnType<typeof planView> | undefined => {
+    const item = workItems.find((w) => w.id === itemId)
+    if (item?.plan === undefined) return undefined
+    const members = new Set(taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? [])
+    const owners = new Set(item.plan.steps.map((st) => st.owner).filter((o): o is string => o !== undefined))
+    const chats = panels.filter(isChatPanel).filter((p) => p.rect.id === item.panelId || members.has(p.rect.id) || owners.has(p.rect.id)).map((p) => ({ id: p.rect.id, title: p.title ?? p.rect.id }))
+    const h = taskHandoffOf(itemId)
+    return planView(item.plan, planFactsOf({ chats, runs: taskQueue.runs[itemId] ?? [], review: { standing: h?.standing ?? 'none', accepted: h?.state === 'accepted' || item.merged !== undefined } }))
+  }
+  // M393. THE LIVING FLOWCHART. A shape joined by a connector to a live
+  // object — a terminal, an agent's chat, a watcher, a work card — shows that
+  // object's state: a ring on its outline in the state's tone and ONE word,
+  // the same word the rail shows for it (useShownState). The first such
+  // connection binds; a diagram drawn over the work becomes a dashboard of
+  // it. Bindings are REUSED across renders when nothing about them changed,
+  // so a drag re-renders only the shape that moved.
+  const liveCacheRef = useRef<Map<string, LiveBinding>>(new Map())
+  const shapeLive = useMemo(() => {
+    const rows = new Map(railRows.map((r) => [r.id, r]))
+    const byId = new Map(panels.map((p) => [p.rect.id, p]))
+    const out = new Map<string, LiveBinding>()
+    const bind = (shapeId: string, panelId: string): void => {
+      if (out.has(shapeId)) return
+      const row = rows.get(panelId)
+      if (row === undefined) return
+      const prev = liveCacheRef.current.get(shapeId)
+      out.set(shapeId, prev !== undefined && prev.kind === 'panel' && prev.panelId === panelId && prev.input === row.state && prev.name === row.label ? prev : { kind: 'panel', panelId, input: row.state, name: row.label })
+    }
+    // M394. A shape bound to a plan step shows the STEP's state first: the
+    // chart the person drew became that plan, and the step is what it means.
+    const views = new Map<string, ReturnType<typeof planView> | undefined>()
+    for (const p of panels) {
+      if (!isShapePanel(p) || p.shape.step === undefined) continue
+      const { item, step } = p.shape.step
+      if (!views.has(item)) views.set(item, planViewsFor(item))
+      const v = views.get(item)?.find((x) => x.id === step)
+      if (v === undefined) continue
+      const prev = liveCacheRef.current.get(p.rect.id)
+      out.set(p.rect.id, prev !== undefined && prev.kind === 'step' && prev.word === v.word && prev.tone === v.tone ? prev : { kind: 'step', word: v.word, tone: v.tone, name: 'this step' })
+    }
+    for (const p of panels) {
+      for (const c of p.connectors ?? []) {
+        const t = byId.get(c.to)
+        if (t === undefined) continue
+        if (isShapePanel(p) && !isShapePanel(t)) bind(p.rect.id, t.rect.id)
+        else if (!isShapePanel(p) && isShapePanel(t)) bind(t.rect.id, p.rect.id)
+      }
+    }
+    liveCacheRef.current = out
+    return out
+  }, [panels, railRows, workItems, taskQueue])
+
   return (
     <div
       ref={shellRef}
@@ -8430,13 +8454,8 @@ export function Canvas({
             // M327. A task's plan progress on its row, read the way its plan side reads it.
             planOf={(itemId) => {
               const item = workItems.find((w) => w.id === itemId)
-              if (item?.plan === undefined) return undefined
-              const members = new Set(taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? [])
-              const owners = new Set(item.plan.steps.map((st) => st.owner).filter((o): o is string => o !== undefined))
-              const chats = panels.filter(isChatPanel).filter((p) => p.rect.id === item.panelId || members.has(p.rect.id) || owners.has(p.rect.id)).map((p) => ({ id: p.rect.id, title: p.title ?? p.rect.id }))
-              const h = taskHandoffOf(itemId)
-              const views = planView(item.plan, planFactsOf({ chats, runs: taskQueue.runs[itemId] ?? [], review: { standing: h?.standing ?? 'none', accepted: h?.state === 'accepted' || item.merged !== undefined } }))
-              return planSummary(item.plan, views)
+              const views = planViewsFor(itemId)
+              return item?.plan === undefined || views === undefined ? undefined : planSummary(item.plan, views)
             }}
             onStartWork={(id) => { leaveForCanvas(); paletteActions.beginStartWork({ itemId: id }) }}
             onSend={async (id, text) => sendRefusalSentence(await window.canvas.agentSession.send(id, text, []))}
@@ -9510,7 +9529,8 @@ export function Canvas({
         onStyleShape={(id, patch) => { const r = flowchart.setShapeStyle([id], patch); if (r.kind === 'refused') paletteActions.say(r.reason) }}
         onShapeChart={(id, act) => {
           const said = (r: { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }): void => { paletteActions.say(r.kind === 'ran' ? (r.note ?? 'done') : r.reason) }
-          if (act === 'layout-down' || act === 'layout-right') said(flowchartIO.layout(act === 'layout-down' ? 'down' : 'right', [id]))
+          if (act === 'plan') said(paletteActions.planFromChart(id))
+          else if (act === 'layout-down' || act === 'layout-right') said(flowchartIO.layout(act === 'layout-down' ? 'down' : 'right', [id]))
           else void flowchartIO.exportFlowchart(act === 'export-mermaid' ? 'mermaid' : 'svg').then(said)
         }}
         onSetRestartOnExit={onSetRestartOnExit}

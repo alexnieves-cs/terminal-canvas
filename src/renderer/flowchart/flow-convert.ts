@@ -2,6 +2,7 @@ import { SHAPE_SIZE, type Connector, type FlowDirection, type FlowEdge, type Flo
 import { layoutFlow } from '@shared/flowchart-layout'
 import type { FlowchartSvgModel } from '@shared/flowchart-svg'
 import { isShapePanel, type Panel, type ShapePanel } from '@renderer/panels/panels'
+import { PLAN_STEPS_MAX, type PlanStep, type TaskPlan } from '@shared/task-plan'
 
 /**
  * M391. Canvas ⇄ graph: the one place the canvas's records meet the pure
@@ -140,4 +141,94 @@ export function svgModelOf(panels: readonly Panel[], ids: ReadonlySet<string>, n
 /** Mint sizes for a graph whose nodes came without them (a hand-built graph) — Mermaid import fills them already. */
 export function withMintSizes(graph: FlowGraph): FlowGraph {
   return { ...graph, nodes: graph.nodes.map((n) => (n.w > 0 && n.h > 0 ? n : { ...n, w: SHAPE_SIZE[n.form].w, h: SHAPE_SIZE[n.form].h })) }
+}
+
+// ── M394. Sketch → plan ─────────────────────────────────────────────────────
+
+/**
+ * A drawn chart as a TASK PLAN (shared/task-plan.ts): each PROCESS-like shape
+ * (process, subprocess, input/output, document) becomes an agent step, each
+ * DECISION a review step — a question a person answers — in the order the
+ * connectors say, each depending on the nearest steps before it (a start/end,
+ * a junction or a label passes its dependencies through). Nothing here runs
+ * anything: the plan is handed to the Start work sheet, a person presses
+ * Start, and every step is then started by that person (M327's rule — a plan
+ * starts nothing). Over PLAN_STEPS_MAX steps is refused by name.
+ */
+export type ChartPlan =
+  | { kind: 'ok'; title: string; brief: string; plan: TaskPlan; stepOf: Map<string, string> }
+  | { kind: 'refused'; reason: string }
+
+export function chartToPlan(panels: readonly Panel[], scope: ReadonlySet<string>, now: number): ChartPlan {
+  const shapes = panels.filter((p): p is ShapePanel => isShapePanel(p) && scope.has(p.rect.id))
+  if (shapes.length === 0) return { kind: 'refused', reason: 'select a shape in a chart first' }
+  const inSet = new Set(shapes.map((s) => s.rect.id))
+  const preds = new Map<string, string[]>()
+  const succs = new Map<string, string[]>()
+  for (const p of shapes) {
+    for (const c of p.connectors ?? []) {
+      if (!inSet.has(c.to)) continue
+      preds.set(c.to, [...(preds.get(c.to) ?? []), p.rect.id])
+      succs.set(p.rect.id, [...(succs.get(p.rect.id) ?? []), c.to])
+    }
+  }
+  const isStep = (s: ShapePanel): boolean => s.shape.text.trim() !== '' && (s.shape.form === 'process' || s.shape.form === 'subprocess' || s.shape.form === 'io' || s.shape.form === 'document' || s.shape.form === 'decision')
+  // Order: a topological walk from the sources, ties by reading order (top to
+  // bottom, left to right) — the order a person reads the chart. A cycle
+  // (a loop back to retry) is broken where the walk meets it.
+  const reading = [...shapes].sort((a, b) => (a.rect.y - b.rect.y) || (a.rect.x - b.rect.x))
+  const indeg = new Map(shapes.map((s) => [s.rect.id, (preds.get(s.rect.id) ?? []).length]))
+  const order: ShapePanel[] = []
+  const placed = new Set<string>()
+  while (order.length < shapes.length) {
+    let next = reading.find((s) => !placed.has(s.rect.id) && (indeg.get(s.rect.id) ?? 0) === 0)
+    if (next === undefined) next = reading.find((s) => !placed.has(s.rect.id)) as ShapePanel
+    placed.add(next.rect.id)
+    order.push(next)
+    for (const t of succs.get(next.rect.id) ?? []) indeg.set(t, (indeg.get(t) ?? 1) - 1)
+  }
+  const steps = order.filter(isStep)
+  if (steps.length === 0) return { kind: 'refused', reason: 'the chart has no labelled step — a process or a decision with words in it becomes a step' }
+  if (steps.length > PLAN_STEPS_MAX) return { kind: 'refused', reason: `a plan holds ${PLAN_STEPS_MAX} steps and this chart has ${steps.length} — select a part of it` }
+  const stepOf = new Map(steps.map((s, i) => [s.rect.id, `s${i + 1}`]))
+  // The nearest STEP ancestors of a shape, walking back through the shapes
+  // that are not steps (a start, a junction) — with a guard against loops.
+  const stepAncestors = (id: string): string[] => {
+    const out = new Set<string>()
+    const seen = new Set<string>([id])
+    const queue = [...(preds.get(id) ?? [])]
+    while (queue.length > 0) {
+      const cur = queue.shift() as string
+      if (seen.has(cur)) continue
+      seen.add(cur)
+      const sid = stepOf.get(cur)
+      if (sid !== undefined) { out.add(sid); continue }
+      queue.push(...(preds.get(cur) ?? []))
+    }
+    return [...out]
+  }
+  const position = new Map(steps.map((s, i) => [s.rect.id, i]))
+  const shapeOfStep = new Map([...stepOf].map(([shape, step]) => [step, shape]))
+  const plan: TaskPlan = {
+    createdAt: now,
+    steps: steps.map((s) => {
+      const label = s.shape.text.split('\n').map((l) => l.trim()).filter(Boolean).join(' ')
+      // A dependency that comes LATER in the order is a loop back (a retry
+      // arrow): it is left off, or every step in the loop would wait forever.
+      const deps = stepAncestors(s.rect.id).filter((d) => (position.get(shapeOfStep.get(d) ?? '') ?? 0) < (position.get(s.rect.id) ?? 0))
+      const review = s.shape.form === 'decision'
+      return {
+        id: stepOf.get(s.rect.id) as string,
+        title: label,
+        kind: review ? 'review' : 'agent',
+        role: review ? 'you' : 'agent',
+        dependsOn: deps,
+        expected: review ? `An answer to “${label}” — decided by a person.` : `“${label}” done, with a plain account of what changed.`
+      } as PlanStep
+    })
+  }
+  const start = order.find((s) => s.shape.form === 'terminator' && s.shape.text.trim() !== '' && (preds.get(s.rect.id) ?? []).length === 0)
+  const title = (start !== undefined ? `${start.shape.text.split('\n')[0].trim()} — ${steps[0].shape.text.split('\n')[0].trim()}` : steps[0].shape.text.split('\n')[0].trim()).slice(0, 120)
+  const brief = ['Work drawn as a chart on the canvas. The steps, in order:', ...plan.steps.map((st, i) => `${i + 1}. ${st.kind === 'review' ? 'Decide: ' : ''}${st.title}`)].join('\n')
+  return { kind: 'ok', title, brief, plan, stepOf }
 }

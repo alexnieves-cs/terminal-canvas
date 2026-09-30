@@ -33,7 +33,7 @@ import { pillRestState, retiresJumpHint, runningAgents, showJumpHint, type Orche
  * seventh button every milestone stops reading as "compact").
  */
 
-export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say' | 'alignObjects' | 'distributeObjects' | 'layoutFlowchart'>
+export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say' | 'alignObjects' | 'distributeObjects' | 'layoutFlowchart' | 'planFromChart'>
 
 export interface CommandPillProps {
   actions: PillActions
@@ -249,7 +249,11 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
           // of two or more can be lined up and, from three, spaced evenly —
           // each along the selection's own long axis (a row lines up its
           // middles; a column its centres), the same verbs the palette runs.
-          ...(selectedShape ? [{ key: 'layout', label: 'Lay out', icon: <Lanes />, run: () => { refusedSaid(actions.layoutFlowchart('down')) } }] : []),
+          ...(selectedShape ? [
+            // M394. Sketch → plan, where the chart is: the Start work sheet opens with its steps.
+            { key: 'plan', label: 'Start work', icon: <Lanes />, run: () => { refusedSaid(actions.planFromChart()) } },
+            { key: 'layout', label: 'Lay out', icon: <Lanes />, run: () => { refusedSaid(actions.layoutFlowchart('down')) } }
+          ] : []),
           { key: 'tidy', label: 'Tidy', icon: <Grid />, run: () => actions.tidyPanels([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : 'select at least two panels to tidy' },
           { key: 'align', label: 'Line up', icon: <Grid />, run: () => { refusedSaid(actions.alignObjects(longAxis === 'x' ? 'vcentre' : 'hcentre')) }, reason: selectedIds.length >= 2 ? undefined : 'select two or more objects to line up' },
           { key: 'space', label: 'Space evenly', icon: <Grid />, run: () => { refusedSaid(actions.distributeObjects(longAxis === 'x' ? 'across' : 'down')) }, reason: selectedIds.length >= 3 ? undefined : 'select three or more objects to space evenly' },
