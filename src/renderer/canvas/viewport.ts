@@ -109,22 +109,57 @@ export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
 export const CENTRE_MARGIN = 16
 
 /**
- * M402 (B4). Where the camera goes to SHOW a new object: `null` when it is
- * already wholly in view at a readable scale (it appeared where the person is
- * looking, and a camera that moved anyway would take their place from them);
- * otherwise the object centred at a READABLE scale — the current one when it
- * already is, READABLE_SCALE when the camera is further out — and never so
- * close that the object does not fit (then its fit, whatever that reads at).
- * The caller passes the result through the safe area, keeping the scale.
+ * M402 (B4), reworked by its critic. Where the camera goes to SHOW a new
+ * object — and the answer is almost always NOWHERE. A create door that moved
+ * the camera took the person's place from them: the first cut flew to
+ * READABLE_SCALE whenever the camera was further out, so ⌘N at a 50%
+ * overview zoomed the whole canvas in to 80% for an object already in view.
+ *
+ * At any scale from `floor` (the near tier's floor, lod.ts's LIVE_MIN_SCALE —
+ * passed in, lod.ts imports this module) up:
+ * - `null` when the object is wholly in view and clear of `covered` (the
+ *   floating chrome as it is showing now): it appeared where the person is
+ *   looking;
+ * - otherwise the SMALLEST PAN, at the current scale, that brings it into
+ *   the view clear of `keepClear` (the chrome it must end clear of — the
+ *   minimap reserved, a pan can bring it back): the free frame
+ *   (`freeFrames`) needing the shortest move, or the view itself when no
+ *   free frame holds it. Never a rescale. Too big for the view at this
+ *   scale, its leading corner is brought in on that axis.
+ * Below `floor` the object would be a card, which reads as nothing made: the
+ * old flight, centred at READABLE_SCALE (its fit when too big for that); the
+ * caller lands it in a free frame.
  */
-export function revealTarget(vp: Viewport, rect: WorldRect, size: Size): Viewport | null {
+export function revealTarget(
+  vp: Viewport,
+  rect: WorldRect,
+  size: Size,
+  opts: { floor: number; covered?: readonly ScreenRect[]; keepClear?: readonly ScreenRect[] }
+): Viewport | null {
   const room = { w: size.width - 2 * CENTRE_MARGIN, h: size.height - 2 * CENTRE_MARGIN }
   if (!(room.w > 0) || !(room.h > 0) || !(rect.w > 0) || !(rect.h > 0)) return null
-  const fits = Math.min(room.w / rect.w, room.h / rect.h)
-  const scale = clampScale(Math.min(Math.max(vp.scale, READABLE_SCALE), fits))
   const tl = worldToScreen({ x: rect.x, y: rect.y }, vp)
-  const inView = tl.x >= 0 && tl.y >= 0 && tl.x + rect.w * vp.scale <= size.width && tl.y + rect.h * vp.scale <= size.height
-  if (inView && vp.scale >= Math.min(READABLE_SCALE, fits) - 1e-9) return null
+  const box = { x: tl.x, y: tl.y, w: rect.w * vp.scale, h: rect.h * vp.scale }
+  const hit = (o: ScreenRect): boolean => box.x < o.x + o.w && o.x < box.x + box.w && box.y < o.y + o.h && o.y < box.y + box.h
+  const inView = box.x >= 0 && box.y >= 0 && box.x + box.w <= size.width && box.y + box.h <= size.height
+  if (vp.scale >= opts.floor - 1e-9) {
+    if (inView && !(opts.covered ?? []).some(hit)) return null
+    // The move along one axis that puts [at, at+len) inside [lo, lo+span):
+    // none when it is already there; its leading edge at `lo` when too long.
+    const shift = (at: number, len: number, lo: number, span: number): number =>
+      len > span ? lo - at : at < lo ? lo - at : at + len > lo + span ? lo + span - (at + len) : 0
+    const host = { x: CENTRE_MARGIN, y: CENTRE_MARGIN, w: room.w, h: room.h }
+    let best = { dx: shift(box.x, box.w, host.x, host.w), dy: shift(box.y, box.h, host.y, host.h) }
+    let found = false
+    for (const f of freeFrames(size, opts.keepClear ?? [], CENTRE_MARGIN)) {
+      if (f.w < box.w || f.h < box.h) continue
+      const d = { dx: shift(box.x, box.w, f.x, f.w), dy: shift(box.y, box.h, f.y, f.h) }
+      if (!found || Math.hypot(d.dx, d.dy) < Math.hypot(best.dx, best.dy)) { best = d; found = true }
+    }
+    return { scale: vp.scale, x: vp.x + best.dx, y: vp.y + best.dy }
+  }
+  const fits = Math.min(room.w / rect.w, room.h / rect.h)
+  const scale = clampScale(Math.min(READABLE_SCALE, fits))
   return centreOn({ ...vp, scale }, rect, size)
 }
 
@@ -257,6 +292,23 @@ export function clearFraming(
     x: f.x + f.w / 2 - (worldLeft + bw / 2) * s,
     y: f.y + f.h / 2 - (worldTop + bh / 2) * s
   }
+}
+
+/**
+ * M402 (B3), the pure half of safe-area.ts's `sizeToView`: the largest free
+ * frame of a `size` canvas past `obstacles` (screen px, CENTRE_MARGIN in),
+ * read as WORLD units at 100%, capped at `max`, never under `min`. It takes
+ * no scale on purpose — the size persists, so the zoom at the press must not
+ * be baked into it.
+ */
+export function sizeForCanvas(size: Size, obstacles: readonly ScreenRect[], max: { w: number; h: number }, min: { w: number; h: number }): { w: number; h: number } | undefined {
+  let best: { w: number; h: number } | undefined
+  for (const f of freeFrames(size, obstacles, CENTRE_MARGIN)) {
+    const w = Math.min(max.w, f.w), h = Math.min(max.h, f.h)
+    if (best === undefined || w * h > best.w * best.h) best = { w, h }
+  }
+  if (best === undefined) return undefined
+  return { w: Math.round(Math.max(min.w, best.w)), h: Math.round(Math.max(min.h, best.h)) }
 }
 
 /**

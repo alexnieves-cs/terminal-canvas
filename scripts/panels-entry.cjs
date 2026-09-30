@@ -152,6 +152,12 @@ module.exports = {
      did something else. Same rule as SEED_PANELS/DEFAULT_CAMERA above. */
   CASCADE_STEP: require('../src/renderer/panels/panels').CASCADE_STEP,
   DEFAULT_CAMERA: require('../src/shared/layout-schema').DEFAULT_CAMERA,
+  /* M402 follow-up. Checks 7 and 51 pin ⌘N's store rect to 1px against the
+     spot the one placement rule gives for what the canvas shows, computed in
+     the harness (lib/place-probe.cjs's expectedSpot) from the pure rule and
+     the rim it reserves — the rule itself is pinned by verify:viewport. */
+  placeNew: require('../src/renderer/canvas/placement').placeNew,
+  PLACE_RIM: require('../src/renderer/canvas/place-new').PLACE_RIM,
   /* Check 32 installs the SAME did-finish-load push production installs, so
      it can prove the renderer is listening at the moment main really sends —
      a send hand-written here would prove the harness right and leave the app

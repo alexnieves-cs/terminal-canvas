@@ -2285,6 +2285,24 @@ console.log('\n' + '='.repeat(60))
       Math.hypot(r2.rect.x - r1.rect.x, r2.rect.y - r1.rect.y) < 2000,
     JSON.stringify({ r1: r1?.rect, r2: r2?.rect }))
 }
+// M402 follow-up. An anchored object names its PARENT, whose group's frame
+// is then no obstacle: a review of an agent inside a group was pushed out of
+// the frame. Another group's frame still is one.
+{
+  const have = typeof V.placePanel === 'function'
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  const agent = have ? V.makeChatPanel('ag', { x: 0, y: 0 }, 1, { cwd: '~', sessionId: 's' }) : null
+  const mate = have ? V.makeNotePanel('mt', { x: agent.rect.x + agent.rect.w + 900, y: 0 }, 2, 'sticky', '') : null
+  const group = { id: 'g', label: 'team', colour: 'blue', panelIds: ['ag', 'mt'] }
+  const room = { chrome: [], within: { x: -2000, y: -2000, w: 4000, h: 4000 } }
+  const mk = () => V.makeReviewPanel('rv', V.reviewCentre(agent.rect, 640, 520), 5, { subjectId: 'ag', repoRoot: '/r', baselineSha: 'x', label: 'l' }, { w: 640, h: 520 })
+  const withParent = have ? V.placePanel(mk(), [agent, mate], room, [group], { anchored: true, parentId: 'ag' }) : null
+  const without = have ? V.placePanel(mk(), [agent, mate], room, [group], { anchored: true }) : null
+  const frame = have ? V.groupRect(group, [agent, mate]) : null
+  ok('place.rule.4 a review beside an agent INSIDE a group stays beside it, inside the frame (parentId), where without the parent it was pushed out',
+    have && withParent.rect.x === agent.rect.x + agent.rect.w + V.REVIEW_GAP && withParent.rect.y === agent.rect.y && !overlaps(withParent.rect, mate.rect) && !overlaps(without.rect, frame),
+    JSON.stringify({ withParent: withParent?.rect, without: without?.rect, frame }))
+}
 // M402. The rim a terminal's name paints above its frame: every layout
 // routine reads occupiedRect, and a stack snaps the lower name clear.
 {
@@ -2310,20 +2328,71 @@ console.log('\n' + '='.repeat(60))
     have && snapped.y === bottom + V.TERMINAL_RIM && nearFlush.y !== bottom && plain.y === bottom && sideBySide.y === upper.rect.y,
     JSON.stringify({ snapped: snapped?.y, nearFlush: nearFlush?.y, plain: plain?.y, side: sideBySide?.y, bottom }))
 }
-// M402. The flight every create door ends with (revealTarget).
+// M402. The reveal every create door ends with (revealTarget), as its critic
+// reworked it: the least camera move — none in view, a pan at the same scale
+// out of view, a flight to a readable scale only from the card tier.
 {
   const have = typeof V.revealTarget === 'function'
   const size = { width: 1000, height: 700 }
+  const floor = V.LIVE_MIN_SCALE
   const rect = { id: 'x', x: 100, y: 100, w: 400, h: 300 }
-  const here = have ? V.revealTarget({ x: 0, y: 0, scale: 1 }, rect, size) : undefined
-  const far = have ? V.revealTarget({ x: 0, y: 0, scale: 0.3 }, rect, size) : undefined
-  const off = have ? V.revealTarget({ x: -3000, y: 0, scale: 1 }, rect, size) : undefined
-  const big = have ? V.revealTarget({ x: 0, y: 0, scale: 1 }, { id: 'b', x: 2000, y: 0, w: 1600, h: 1200 }, size) : undefined
+  const R = (vp, r = rect, o = {}) => (have ? V.revealTarget(vp, r, size, { floor, ...o }) : undefined)
+  const here = R({ x: 0, y: 0, scale: 1 })
+  const overview = R({ x: 0, y: 0, scale: 0.5 })
+  const far = R({ x: 0, y: 0, scale: 0.3 })
+  const off = R({ x: -3000, y: 0, scale: 1 })
+  const offHalf = R({ x: -3000, y: 0, scale: 0.5 })
+  const big = R({ x: 0, y: 0, scale: 1 }, { id: 'b', x: 2000, y: 0, w: 1600, h: 1200 })
+  // A top-right "minimap" over the object: covered, so it pans clear of it.
+  const map = { x: 440, y: 60, w: 200, h: 140 }
+  const under = R({ x: 0, y: 0, scale: 1 }, rect, { covered: [map], keepClear: [map] })
   const shows = (vp, r) => { const b = V.framedBox([r], vp); return b.x >= -1e-6 && b.y >= -1e-6 && b.x + b.w <= size.width + 1e-6 && b.y + b.h <= size.height + 1e-6 }
-  ok('place.reveal.1 a new object already in view at a readable scale moves no camera; one out of view, or seen from too far, is centred at a readable scale; one too large for that is fitted whole',
-    have && here === null && far !== null && Math.abs(far.scale - V.READABLE_SCALE) < 1e-9 && shows(far, rect) &&
-      off !== null && off.scale === 1 && shows(off, rect) && big !== null && big.scale < V.READABLE_SCALE && shows(big, { id: 'b', x: 2000, y: 0, w: 1600, h: 1200 }),
-    JSON.stringify({ here, far, off, big }))
+  const clearOf = (vp, r, o) => { const b = V.framedBox([r], vp); return !(b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h) }
+  // Out of view at 100%: the object's left edge is at -2900 on screen, so
+  // the least pan brings it to the margin and no further — 2900 + 16, along x only.
+  const panned = off !== null && off !== undefined ? Math.hypot(off.x - -3000, off.y) : NaN
+  ok('place.reveal.1 a new object in view and clear moves no camera at ANY scale from the near tier\'s floor (a 50% overview included); out of view it is PANNED the least distance at the same scale; from the card tier it is centred at a readable scale; too large, its leading corner is brought in',
+    have && here === null && overview === null &&
+      off !== null && off.scale === 1 && shows(off, rect) && Math.abs(panned - (2900 + V.CENTRE_MARGIN)) < 1e-6 &&
+      offHalf !== null && offHalf.scale === 0.5 && shows(offHalf, rect) &&
+      far !== null && Math.abs(far.scale - V.READABLE_SCALE) < 1e-9 && shows(far, rect) &&
+      big !== null && big.scale === 1 && Math.abs(V.worldToScreen({ x: 2000, y: 0 }, big).x - V.CENTRE_MARGIN) < 1e-6,
+    JSON.stringify({ here, overview, far, off, offHalf, big, panned }))
+  ok('place.reveal.2 an object in view but under the floating chrome is panned clear of it at the same scale — never rescaled',
+    have && under !== null && under.scale === 1 && shows(under, rect) && clearOf(under, rect, map),
+    JSON.stringify({ under }))
+}
+// M402 follow-up. The rim at a zoom, and what a placement reserves.
+{
+  const have = typeof V.terminalRimAt === 'function' && typeof V.smartSnap === 'function'
+  const upper = have ? V.makePanel('up', { x: 0, y: 0 }, 1) : null
+  const lower = have ? V.makePanel('lo', { x: 0, y: 600 }, 2) : null
+  const rim50 = have ? V.terminalRimAt(0.5) : NaN
+  const bottom = have ? upper.rect.y + upper.rect.h : 0
+  const rimOf = (id) => (id === 'up' || id === 'lo' ? rim50 : 0)
+  // Dragged 3 world px past where the 100% rim would stop it: at 50% the
+  // strip is 32 world tall, and the snap stops the lower top 32 below.
+  const snapped = have ? V.smartSnap({ ...lower.rect, y: bottom + V.TERMINAL_RIM + 3 }, [upper.rect], 16, { rimOf, spacing: false }).rect : null
+  ok('place.rim.3 the rim grows with --chrome-scale below 100% (32 world units at 50%, capped at 2.5x); a stack snapped at 50% stops the lower top that far below the upper bottom, and a placement reserves the tallest live rim',
+    have && V.terminalRimAt(1) === V.TERMINAL_RIM && V.terminalRimAt(2) === V.TERMINAL_RIM && rim50 === 2 * V.TERMINAL_RIM && V.terminalRimAt(0.1) === V.TERMINAL_RIM * V.CHROME_SCALE_MAX &&
+      snapped.y === bottom + rim50 && V.PLACE_RIM === V.terminalRimAt(V.LIVE_MIN_SCALE),
+    JSON.stringify({ rim50, snapped: snapped?.y, bottom, placeRim: V.PLACE_RIM }))
+}
+// M402 follow-up. A review's persisted size is the canvas's at 100%, never
+// the zoom at the press (sizeForCanvas takes no scale — the first cut divided
+// by the press-time zoom, so a review opened at 200% minted at half size).
+{
+  const have = typeof V.sizeForCanvas === 'function'
+  const size = { width: 852, height: 744 }
+  const map = { x: 676, y: 16, w: 160, h: 100 }
+  const got = have ? V.sizeForCanvas(size, [map], { w: 960, h: 760 }, { w: 520, h: 400 }) : undefined
+  const frames = have ? V.freeFrames(size, [map], V.CENTRE_MARGIN) : []
+  const fitsOne = got !== undefined && frames.some((f) => got.w <= f.w + 1 && got.h <= f.h + 1)
+  const tiny = have ? V.sizeForCanvas({ width: 300, height: 200 }, [], { w: 960, h: 760 }, { w: 520, h: 400 }) : undefined
+  ok('review.size.1 a review is sized to the free canvas at 100% — the same box whatever the zoom at the press (no scale in), capped at its max, never under its min',
+    have && V.sizeForCanvas.length === 4 && got !== undefined && fitsOne && got.w <= 960 && got.h <= 760 && got.w >= 520 && got.h >= 400 &&
+      tiny !== undefined && tiny.w === 520 && tiny.h === 400,
+    JSON.stringify({ got, tiny }))
 }
 {
   const have = typeof V.tidyPanels === 'function'

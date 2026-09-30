@@ -75,7 +75,8 @@ import { useTiering } from './useTiering'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
 import { chromeObstacles, placementRoom as readPlacementRoom, sizeToView } from './safe-area'
-import { placePanel, type PlaceFn } from './place-new'
+import { placePanel, type PlaceFn, type PlaceHow } from './place-new'
+import { placementQuiet } from './place-quiet'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -143,7 +144,7 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, maximiseRect, nextZ, occupiedRect, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_GAP, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
+  makePanel, makeReviewPanel, maximiseRect, nextZ, occupiedRect, terminalRimAt, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_GAP, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
   addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel,
   IMAGE_W, IMAGE_H } from '@renderer/panels/panels'
@@ -738,7 +739,9 @@ export function Canvas({
   // once the object is rendered; `quiet` is for a mint no person asked for
   // (a workflow's pool), where a camera that moved by itself would be taken
   // from them. `lit` lands with the attention jump's arrival glow.
-  const pendingRevealRef = useRef<{ id: string; lit?: true } | null>(null)
+  // Every object made since the last reveal (M402 follow-up: a list — one
+  // slot showed only the last of N creates batched into one tick).
+  const pendingRevealRef = useRef<{ id: string; lit?: true }[]>([])
   const clusterHullsRef = useRef<readonly TaskCluster[]>([])
   const placer = useCallback((opts: { quiet?: true; lit?: true; exact?: boolean } = {}): PlaceFn => {
     // A point the person GAVE (a double-click, a drop, the starter's layout)
@@ -750,9 +753,13 @@ export function Canvas({
     // groups). An ANCHORED object goes beside its parent and joins the
     // parent's task, so the regions are obstacles only for the others.
     const regions = clusterHullsRef.current.filter((c) => c.kind === 'task').map((c) => c.rect)
-    return <T extends Panel>(current: readonly Panel[], made: T, how?: { anchored?: boolean; memberOf?: string }): T => {
-      if (opts.quiet !== true) pendingRevealRef.current = { id: made.rect.id, ...(opts.lit === true ? { lit: true as const } : {}) }
-      return placePanel(made, current, room, groupsNow, how?.anchored === true ? how : { ...how, regions })
+    // QUIET too when an agent's line or a workflow node made it (place-quiet.ts):
+    // no reveal follows, so an anchored object takes a spot in view first.
+    const quiet = opts.quiet === true || placementQuiet()
+    return <T extends Panel>(current: readonly Panel[], made: T, how?: PlaceHow): T => {
+      // The updater may run twice (StrictMode): queue the id once.
+      if (!quiet && !pendingRevealRef.current.some((p) => p.id === made.rect.id)) pendingRevealRef.current.push({ id: made.rect.id, ...(opts.lit === true ? { lit: true as const } : {}) })
+      return placePanel(made, current, room, groupsNow, { ...(how?.anchored === true ? how : { ...how, regions }), ...(quiet ? { preferView: true } : {}) })
     }
   }, [])
   const onSpawn = useCallback(
@@ -2380,10 +2387,15 @@ export function Canvas({
     const others = panelsRef.current.filter((p) => !exclude.has(p.rect.id)).map((p) => p.rect)
     // M402. The rim a terminal's name paints above its frame (occupiedRect),
     // so a stack snaps the lower name clear of the upper one's bottom row. A
-    // multi-move's bounds (`selection`) carry the rim of a terminal on its top edge.
+    // multi-move's bounds (`selection`) carry the rim of a terminal on its top
+    // edge — its members' TOPMOST, read from their pre-drag rects (the bounds
+    // have moved, the members in panelsRef have not). The rim at THIS zoom
+    // (terminalRimAt): the strip is taller in the world below 100%.
+    const rim = terminalRimAt(viewportRef.current.scale)
     const rimOf = (id: string): number => {
-      const ids = id === 'selection' ? [...exclude] : [id]
-      return Math.max(0, ...panelsRef.current.filter((p) => ids.includes(p.rect.id) && (id !== 'selection' || p.rect.y === rect.y)).map((p) => p.rect.y - occupiedRect(p).y))
+      const members = panelsRef.current.filter((p) => (id === 'selection' ? exclude.has(p.rect.id) : p.rect.id === id))
+      const top = Math.min(...members.map((p) => p.rect.y))
+      return Math.max(0, ...members.filter((p) => p.rect.y === top).map((p) => p.rect.y - occupiedRect(p, rim).y))
     }
     const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, rimOf })
     setSnapGuides(out.guides, out.spacing)
@@ -3202,20 +3214,26 @@ export function Canvas({
     pendingJumpRef.current = null
     jumpToAttention(id)
   }, [displayPanels, jumpToAttention])
-  // M402 (B4). The flight that ends every create door (`placer`, by onSpawn):
-  // once the made object is rendered, the camera goes to it at a readable
-  // zoom unless it is already in view at one (useViewport's reveal). Its
-  // OCCUPIED rect, so a terminal's rim name is shown with it. `lit` arms the
-  // attention jump's arrival glow, disarmed again when the camera stays put
-  // (no settle would ever consume it).
+  // M402 (B4). The reveal that ends every create door (`placer`, by onSpawn):
+  // once the made objects are rendered, the camera shows them with the least
+  // move (useViewport's reveal — none when they are in view and clear).
+  // Their OCCUPIED rects at this zoom, so a terminal's rim name is shown too;
+  // every object made in one tick together (their bounds), those not yet
+  // rendered left for the next pass. `lit` arms the attention jump's arrival
+  // glow, disarmed again when the camera stays put (no settle would consume it).
   useEffect(() => {
     const pending = pendingRevealRef.current
-    if (pending === null) return
-    const panel = displayPanels.find((p) => p.rect.id === pending.id)
-    if (panel === undefined) return
-    pendingRevealRef.current = null
-    if (pending.lit === true) landingTargetRef.current = pending.id
-    if (!reveal(occupiedRect(panel)) && pending.lit === true) landingTargetRef.current = null
+    if (pending.length === 0) return
+    const ready = pending.flatMap((q) => { const panel = displayPanels.find((p) => p.rect.id === q.id); return panel === undefined ? [] : [{ q, panel }] })
+    if (ready.length === 0) return
+    pendingRevealRef.current = pending.filter((q) => !ready.some((r) => r.q === q))
+    const rim = terminalRimAt(viewportRef.current.scale)
+    const boxes = ready.map((r) => occupiedRect(r.panel, rim))
+    const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y))
+    const bounds = { id: 'reveal', x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y }
+    const lit = [...ready].reverse().find((r) => r.q.lit === true)
+    if (lit !== undefined) landingTargetRef.current = lit.q.id
+    if (!reveal(bounds) && lit !== undefined) landingTargetRef.current = null
   }, [displayPanels, reveal])
 
   /**
@@ -4147,7 +4165,7 @@ export function Canvas({
       // M402. Sized to the canvas it opens into (B3), placed by the one rule
       // beside its subject (B4) — never on another review of the same panel —
       // and flown to.
-      const size = sizeToView(hostRef.current, viewportRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
+      const size = sizeToView(hostRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
       const place = placer({ lit: true })
       setPanels((existing) => {
         const centre = reviewCentre(current.rect, size?.w, size?.h)
@@ -4158,7 +4176,7 @@ export function Canvas({
             repoRoot: baseline.root,
             baselineSha: baseline.sha,
             label
-          }, size), { anchored: true })
+          }, size), { anchored: true, parentId: subjectId })
         ]
         commitHistory(next)
         return next
@@ -4212,7 +4230,7 @@ export function Canvas({
       // M402 (B3). The review opens at the size of the canvas it opens into,
       // up to TASK_REVIEW_SIZE — a fixed 960 was wider than a 1200px window's
       // canvas, so its controls sat off screen under the minimap.
-      const size = sizeToView(hostRef.current, viewportRef.current, TASK_REVIEW_SIZE, REVIEW_MIN) ?? TASK_REVIEW_SIZE
+      const size = sizeToView(hostRef.current, TASK_REVIEW_SIZE, REVIEW_MIN) ?? TASK_REVIEW_SIZE
       // The review opens where the person can SEE it: minted beside the
       // conversation it was otherwise placed off-screen with no camera move,
       // and the press looked like it did nothing. The placer's reveal waits
@@ -4223,7 +4241,7 @@ export function Canvas({
         const existing = subject.across === true ? current : current.filter((p) => !(isReviewPanel(p) && p.subject.workItemId === itemId))
         const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
         const made = makeReviewPanel(id, anchorPanel === undefined ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current) : reviewCentre(anchorPanel.rect, size.w, size.h), nextZ(existing), subject, size)
-        const next = [...existing, place(existing, made, anchorPanel === undefined ? undefined : { anchored: true })]
+        const next = [...existing, place(existing, made, anchorPanel === undefined ? undefined : { anchored: true, parentId: anchorPanel.rect.id })]
         commitHistory(next)
         return next
       })
@@ -4270,12 +4288,12 @@ export function Canvas({
       const current = panelsRef.current.find((p) => p.rect.id === subjectId)
       if (current === undefined || !(isTerminalPanel(current) || isChatPanel(current))) return
       const id = `r${nextIdRef.current++}`
-      const size = sizeToView(hostRef.current, viewportRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
+      const size = sizeToView(hostRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
       const place = placer({ lit: true })
       setPanels((existing) => {
         const next = [
           ...existing,
-          place(existing, makeReviewPanel(id, reviewCentre(current.rect, size?.w, size?.h), nextZ(existing), { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: `every worktree of ${baseline.root.split('/').pop() ?? baseline.root}`, across: true }, size), { anchored: true })
+          place(existing, makeReviewPanel(id, reviewCentre(current.rect, size?.w, size?.h), nextZ(existing), { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: `every worktree of ${baseline.root.split('/').pop() ?? baseline.root}`, across: true }, size), { anchored: true, parentId: subjectId })
         ]
         commitHistory(next)
         return next
@@ -6991,7 +7009,7 @@ export function Canvas({
     // M402. Beside the pane it is a picture of — its parent — by the one rule.
     const place = placer()
     setPanels((current) => {
-      const next = [...current, place(current, makeImagePanel(imageId, { x: pane.rect.x + pane.rect.w + REVIEW_GAP + IMAGE_W / 2, y: pane.rect.y + IMAGE_H / 2 }, nextZ(current), shot.path, `capture · ${shot.host}`, undefined, artifact), { anchored: true })]
+      const next = [...current, place(current, makeImagePanel(imageId, { x: pane.rect.x + pane.rect.w + REVIEW_GAP + IMAGE_W / 2, y: pane.rect.y + IMAGE_H / 2 }, nextZ(current), shot.path, `capture · ${shot.host}`, undefined, artifact), { anchored: true, parentId: pane.rect.id })]
       commitHistory(next)
       return next
     })

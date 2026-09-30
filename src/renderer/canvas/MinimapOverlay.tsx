@@ -149,7 +149,10 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
   // M402. `needed` as it was when the camera last stood still (the flying prop's note).
   const settledNeededRef = useRef(needed)
   if (flying !== true) settledNeededRef.current = needed
-  const shownPresence: MinimapPresence | 'hidden' = !needed || (flying === true && !settledNeededRef.current) ? 'hidden' : flying === true ? 'aside' : presence
+  // During a flight `needed` is the TAKE-OFF value only — the live one led
+  // the first cut, so a flight that left a framing brought the map in anyway.
+  const shownNeeded = flying === true ? settledNeededRef.current : needed
+  const shownPresence: MinimapPresence | 'hidden' = !shownNeeded ? 'hidden' : flying === true ? 'aside' : presence
   const presenceRef = useRef<MinimapPresence>('rest')
   const beforeRef = useRef<MinimapPointer | null>(null)
   // The latest camera and rects for the document listener, which is

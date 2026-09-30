@@ -694,8 +694,11 @@ below). The old reason was: "overlap is the NORMAL state of a working canvas, so
 rule would step nearly every press away from where the user is looking." That held only
 because an object placed away from the view's centre was an object nobody saw — "nothing
 happened". It no longer holds: every create door now ends with a flight to what it made
-(`useViewport`'s `reveal`, which moves no camera when the object is already in view at a
-readable scale), so a step away from the centre is SEEN, and the live critique measured
+(`useViewport`'s `reveal` — after the M402 critic, the LEAST camera move: none when the
+object is in view and clear of the chrome at any scale from the near tier's floor, the
+smallest pan at the same scale otherwise, a flight to a readable scale only from the card
+tier; a create that zoomed a 50% overview in to 80% took the person's view from them, and
+an agent's line or a workflow node places QUIETLY, `place-quiet.ts`, with no move at all), so a step away from the centre is SEEN, and the live critique measured
 the cost of the old rule instead — a new terminal buried the one under it, and the rule
 depended on the door. What survives of this entry: the batching rule (the placer runs
 inside the `setPanels` updater over `current`; its DOM reads happen once, outside), and

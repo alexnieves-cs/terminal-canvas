@@ -345,7 +345,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       // M402. The one placement rule: beside its card when there is one (an
       // anchored free spot), where the person is looking otherwise — here over
       // the ref, not inside an updater, for the recovery record's reason above.
-      const chatPanel = placer()(before, { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...carryBackend(item), ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }, { anchored: card !== undefined })
+      const chatPanel = placer()(before, { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...carryBackend(item), ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }, card === undefined ? {} : { anchored: true, parentId: card.rect.id })
       const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
       let next: Panel[] = [...before, chatPanel]
       if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
@@ -822,7 +822,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         // M402. Under its conversation by the one rule (an anchored free spot).
         const place = placer()
         setPanels((current) => {
-          const made = place(current, makeWatcherPanel(watcherId, centre, nextZ(current), { cwd: lane.path, command: argv.command, args: argv.args, trigger }), { anchored: chat !== undefined })
+          const made = place(current, makeWatcherPanel(watcherId, centre, nextZ(current), { cwd: lane.path, command: argv.command, args: argv.args, trigger }), chat === undefined ? {} : { anchored: true, parentId: chat.rect.id })
           const next = [...current, { ...made, title: `checks · ${it.title}`, watch: { ...made.watch, armed: false as const } }]
           panelsRef.current = next
           commitHistory(next)

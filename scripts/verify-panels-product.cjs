@@ -11,6 +11,28 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 const WATCHDOG_MS = 230000 // measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
 
 const { cameraStill } = require('./lib/place-probe.cjs')
+
+/**
+ * M402 follow-up. A reload whose wait is BOUNDED: `once('did-finish-load')`
+ * alone waits forever when the load never finishes (a failed load, a renderer
+ * that died mid-reload), and the suite then hangs to its watchdog with the
+ * cause unnamed — the M402 run hung once awaiting a reload in the D07 block.
+ * Resolves true on load, false on a failed main-frame load or after `ms`, so
+ * the checks after it fail BY NAME. Used by the D07 and M401 blocks.
+ */
+function reloadWithin(wc, ms = 20000) {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (loaded) => { if (done) return; done = true; clearTimeout(timer); wc.removeListener('did-finish-load', onLoad); wc.removeListener('did-fail-load', onFail); resolve(loaded) }
+    const onLoad = () => finish(true)
+    // -3 is ERR_ABORTED: a reload superseding a load in flight, not a failure.
+    const onFail = (_e, code, _desc, _url, isMainFrame) => { if (isMainFrame !== false && code !== -3) finish(false) }
+    const timer = setTimeout(() => { console.log(`reloadWithin: no did-finish-load in ${ms} ms`); finish(false) }, ms)
+    wc.once('did-finish-load', onLoad)
+    wc.on('did-fail-load', onFail)
+    wc.reload()
+  })
+}
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
@@ -4202,8 +4224,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           ]
         })
         flushLayoutStore()
-        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD
+        await reloadWithin(wc)
         await settle()
 
         const cardState = (id) => wc.executeJavaScript(`(() => {
@@ -4315,8 +4336,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.review-node__refresh'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         // The card reads on a chat turn ending or a root-set change, so the
         // refresh here is the node's; the card is re-read by remounting it.
-        const reD2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD2
+        await reloadWithin(wc)
         await settle()
         const stale = await waitUntil(async () => { const c = await cardState('d07A'); return c && c.standing === 'stale' ? c : false }, 15000)
 
@@ -4380,7 +4400,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } finally {
         try { layoutStore.dropWorktree('wt-d07') } catch { /* nothing recorded */ }
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
-        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        try { await reloadWithin(wc); await settle() } catch { /* nothing to drain */ }
         for (const d of [repoD, laneD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
@@ -4416,8 +4436,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             merged: { into: 'main', sha, at: 2 }, reviewed: { at: 1, signature: 'deadbeef', files: 1 }, createdAt: 10, updatedAt: 20 }]
         })
         flushLayoutStore()
-        const reM = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reM
+        await reloadWithin(wc)
         await settle()
         // The card's Review, mousedown and click in separate tasks (M195).
         for (const type of ['mousedown', 'click']) {
@@ -4479,7 +4498,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } finally {
         try { layoutStore.dropWorktree('wt-m401') } catch { /* nothing recorded */ }
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
-        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        try { await reloadWithin(wc); await settle() } catch { /* nothing to drain */ }
         for (const d of [repoM, laneM]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
