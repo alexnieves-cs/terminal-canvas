@@ -498,6 +498,65 @@ ok('subagent.home.1 $HOME is never a repository: home, home with a trailing slas
     S.isHomeDir('~', '/Users/me') && S.isHomeDir('/Users/me', '/Users/me/') &&
     !S.isHomeDir('/Users/me/repo', '/Users/me') && !S.isHomeDir('/Users/meg', '/Users/me') && !S.isHomeDir('/', '/Users/me'))
 
+// M398 follow-up. tmux reports the REALPATH of a pane's cwd, so a symlinked
+// HOME answered with its target and got past the string compare; `/.`, `..`
+// and (APFS, case-insensitive by default) a case variant did too. Real
+// directories, because the realpath is the point.
+{
+  const { mkdtempSync, mkdirSync, symlinkSync, realpathSync, rmSync } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'tc subagent home ')))
+  const target = join(base, 'Real'); const link = join(base, 'homelink')
+  mkdirSync(join(target, 'repo'), { recursive: true })
+  symlinkSync(target, link)
+  const got = {
+    realpath: S.isHomeDir(target, link, false), dot: S.isHomeDir(target + '/.', link, false),
+    dotdot: S.isHomeDir(join(target, 'repo') + '/..', link, false),
+    folded: S.isHomeDir(target.toUpperCase(), link, true), unfolded: S.isHomeDir(target.toUpperCase(), link, false),
+    under: S.isHomeDir(join(target, 'repo'), link, false), relative: S.isHomeDir('Real', link, false)
+  }
+  rmSync(base, { recursive: true, force: true })
+  ok('subagent.home.2 a symlinked home is home by its realpath, /. and .. resolve, a case variant is home only when case folds (darwin), and a folder under it or a relative path is not',
+    got.realpath && got.dot && got.dotdot && got.folded && !got.unfolded && !got.under && !got.relative, JSON.stringify(got))
+}
+
+// M398 follow-up, MEASURED 2026-09-30 (tmux 3.7c, native install 2.1.285):
+// a running Claude Code's pane_current_command is `2.1.285`, the basename of
+// ~/.local/share/claude/versions/2.1.285 that ~/.local/bin/claude links to,
+// typed into zsh and as the pane's own command alike; argv[0] stays `claude`.
+// So `currentCommand: 'claude'` (feed.1's tmux arm) never happens for a native
+// install. Wrappers (env, npx, pnpm dlx) hid the name from the other two arms.
+ok('subagent.feed.3 the measured tmux name of a native install (a version) counts, as do its versions/ path, env/exec/npx/pnpm-dlx launches and the npm package; a version-shaped RUN command, a look-alike package and a non-wrapper do not',
+  S.isClaudeSession({ command: '/bin/zsh', currentCommand: '2.1.285' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', currentCommand: '2.2.0-beta.1' }) &&
+    S.isClaudeSession({ command: '/Users/me/.local/share/claude/versions/2.1.285' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', runCommand: 'env FOO=1 claude --resume x' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', runCommand: 'exec claude' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', runCommand: 'npx -y @anthropic-ai/claude-code' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', runCommand: 'pnpm dlx @anthropic-ai/claude-code@2.1.285' }) &&
+    S.isClaudeSession({ command: 'npx', runCommand: 'bunx @anthropic-ai/claude-code' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', runCommand: '2.1.285' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', currentCommand: 'node' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', runCommand: 'npx @anthropic-ai/claude-code-helper' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', runCommand: 'echo claude' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', runCommand: 'env' }))
+
+// M398 follow-up. `holds` is what pty-manager keeps feeding an exited agent's
+// shell by (its done nodes stay, and are re-sent after a reload), in place of
+// a per-session sticky flag that one `claude --version` set forever and a
+// reload lost. A claim is held once confirmed, and let go when ambiguity
+// drops it.
+{
+  const w = new S.SubagentWatch(fakeFs(tree1()))
+  const before = w.holds('a')
+  w.poll([{ panelId: 'a', cwd: '/repo', spawnedAt: 100 }])
+  const claimed = w.holds('a')
+  w.poll([{ panelId: 'a', cwd: '/repo', spawnedAt: 100 }, { panelId: 'b', cwd: '/repo', spawnedAt: 100 }])
+  const ambiguous = w.holds('a')
+  ok('subagent.holds.1 a panel holds a claim only once one is confirmed, and not after ambiguity drops it',
+    before === false && claimed === true && ambiguous === false, JSON.stringify({ before, claimed, ambiguous }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

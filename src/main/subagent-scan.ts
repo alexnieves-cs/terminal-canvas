@@ -216,7 +216,8 @@ export function scanForResults(chunk: string, ids: ReadonlySet<string>): Set<str
  * command in flight (typed into a shell with integration, either backend —
  * the direct backend reports no current command at all). A first word is
  * compared by BASENAME, so `/opt/homebrew/bin/claude` and `claude --resume x`
- * both count and `claude-helper` does not.
+ * both count and `claude-helper` does not. See `isClaudeProcessName` for
+ * tmux's measured answer and `launchesClaude` for wrappers and npx.
  */
 export function isClaudeSession(session: {
   agent?: string
@@ -225,23 +226,61 @@ export function isClaudeSession(session: {
   runCommand?: string
 }): boolean {
   if (session.agent === 'claude-code') return true
-  const named = (line: string | undefined): boolean => {
-    if (line === undefined) return false
-    const first = line.trim().split(/\s+/)[0] ?? ''
-    return first.slice(first.lastIndexOf('/') + 1) === 'claude'
-  }
-  return named(session.command) || named(session.currentCommand) || named(session.runCommand)
+  return (
+    launchesClaude(session.command) ||
+    launchesClaude(session.runCommand) ||
+    (session.currentCommand !== undefined && isClaudeProcessName(session.currentCommand))
+  )
 }
 
 /**
- * M398 (A3). `$HOME` is never a repository. An agent started there shares its
- * project directory with every other session ever started there, so no claim
- * can be told apart and "N panels share this repository" would be a false
- * sentence about a folder that is not one. A panel whose cwd is home is not
- * watched: no nodes, the direction this module prefers to be wrong in.
- * A trailing slash and the literal `~` are the same place.
+ * M398. tmux's `pane_current_command` for a running Claude Code, MEASURED
+ * (tmux 3.7c, native install 2.1.285, 2026-09-30): `2.1.285`, not `claude`.
+ * The native installer's `~/.local/bin/claude` is a symlink to
+ * `~/.local/share/claude/versions/<version>`, and tmux reports the kernel's
+ * process name, which is the EXECUTABLE's basename — the same `2.1.285` that
+ * `ps -o ucomm` shows, while argv[0] stays `claude`. Measured the same typed
+ * into zsh and as the pane's own command. So a version-shaped name counts,
+ * alongside `claude` itself (an npm or Homebrew install, whose executable is
+ * named that). A version-shaped name is not proof, only the best signal tmux
+ * gives without a `ps` per pane per tick; the watcher's confirmation read
+ * (the transcript's own cwd) is still what makes a claim safe.
  */
-export function isHomeDir(cwd: string, home: string): boolean {
-  const trim = (p: string): string => (p.length > 1 ? p.replace(/\/+$/, '') : p)
-  return cwd.trim() === '~' || trim(cwd) === trim(home)
+export function isClaudeProcessName(name: string): boolean {
+  const base = name.trim().slice(name.trim().lastIndexOf('/') + 1)
+  return base === 'claude' || /^\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.-]*)?$/.test(base)
+}
+
+/**
+ * Words that run the NEXT word as the program, skipped (with their flags and
+ * `VAR=value` assignments) before the command's name is read, so
+ * `env FOO=1 claude`, `npx -y @anthropic-ai/claude-code` and `exec claude`
+ * count. A wrapper script under another name still does not, and cannot:
+ * nothing in its command line says what it runs.
+ */
+const LAUNCH_WRAPPERS = new Set(['env', 'exec', 'command', 'nohup', 'time', 'caffeinate', 'npx', 'bunx', 'pnpx', 'dlx'])
+
+/** A command line whose program is Claude Code: by name, by the native install's path, or by npm package. */
+export function launchesClaude(line: string | undefined): boolean {
+  if (line === undefined) return false
+  const words = line.trim().split(/\s+/)
+  let i = 0
+  while (i < words.length) {
+    const word = words[i]
+    const base = word.slice(word.lastIndexOf('/') + 1)
+    // `pnpm dlx` / `yarn dlx`: the package manager, then `dlx`, then the package.
+    const isDlxHost = (base === 'pnpm' || base === 'yarn') && words[i + 1] === 'dlx'
+    if (LAUNCH_WRAPPERS.has(base) || isDlxHost || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word) || (i > 0 && word.startsWith('-'))) {
+      i += 1
+      continue
+    }
+    break
+  }
+  const program = words[i] ?? ''
+  const base = program.slice(program.lastIndexOf('/') + 1)
+  return (
+    base === 'claude' ||
+    program.includes('/claude/versions/') ||
+    /^@anthropic-ai\/claude-code(?:@\S*)?$/.test(program)
+  )
 }

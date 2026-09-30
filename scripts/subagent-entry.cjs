@@ -4,5 +4,8 @@
    and for the same reason. */
 module.exports = {
   ...require('../src/main/subagent-scan'),
-  ...require('../src/main/subagent-watch')
+  ...require('../src/main/subagent-watch'),
+  // M398. The home test both the watcher's feed and the toolbox fence ask.
+  // node:fs (a cached realpath) and nothing else, so the tier is unchanged.
+  ...require('../src/main/home-dir')
 }

@@ -6,7 +6,7 @@
    lifecycle is where the subtle bugs live: an OS process exits milliseconds
    after we asked it to, and by then the panel may have been recreated. */
 const { buildSync } = require('esbuild')
-const { join } = require('node:path')
+const { join, dirname } = require('node:path')
 const os = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } = require('node:fs')
@@ -27,6 +27,14 @@ const FAKE_CLAUDE = (() => {
   writeFileSync(path, '#!/bin/sh\nexec /bin/sh "$@"\n', { mode: 0o755 })
   return path
 })()
+// M398 follow-up. The PRESET route: a spec with `agent: 'claude-code'` whose
+// command is not named claude at all, so the agent fact alone is what feeds
+// it. Not /bin/sh itself: an agent spec gets `--session-id <uuid>` appended
+// (agentArgs), which sh refuses as an invalid option, and the pane dies at
+// once, so any "was never fed" check on it passed vacuously. This one ignores
+// its arguments and stays up.
+const AGENT_SH = join(dirname(FAKE_CLAUDE), 'agent-sh')
+writeFileSync(AGENT_SH, '#!/bin/sh\nexec /bin/sh\n', { mode: 0o755 })
 
 /* THE FENCE, at MODULE SCOPE and not inside any one check.
 
@@ -1378,17 +1386,29 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       const subagentCwd = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager subagent-cwd ')))
       const priorProjectsRoot = process.env.TC_CLAUDE_PROJECTS
       process.env.TC_CLAUDE_PROJECTS = projectsRoot
+      // M398 follow-up. Liveness, so no check below can pass on a pane that
+      // died: a panel is ALIVE when a live tick reported it and no exit came.
+      const liveSeen = new Set()
+      const exited = new Set()
       try {
         const { manager } = makeHarness(tmuxBackend, {
-          onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
+          onSend: (channel, payload) => {
+            if (channel === 'subagent:state') seen.push(payload)
+            if (channel === 'session:live') liveSeen.add(payload.panelId)
+            if (channel === 'pty:exit') exited.add(payload.panelId)
+          }
         })
+        const alive = (id) => liveSeen.has(id) && !exited.has(id)
         await manager.create({ panelId: 'sa2', cwd: subagentCwd, command: FAKE_CLAUDE, args: [], cols: 80, rows: 24 })
         // M398 (A3). A plain shell in the SAME directory, and an agent in
         // $HOME with a session seeded for it below. Before M398 the shell was
         // fed to the watcher too, so sa2 went ambiguous ("2 panels share this
-        // repository") and 26 went red; and home was a repository like any other.
+        // repository") and 26 went red. The home agent is spawned the way
+        // every built-in claude preset spawns (agent: 'claude-code', cwd ~),
+        // and M398's first draft refused home outright, which switched the
+        // feature off for all of them; it is watched like any folder now.
         await manager.create({ panelId: 'sa2sh', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
-        await manager.create({ panelId: 'sa2home', cwd: homedir(), command: FAKE_CLAUDE, args: [], cols: 80, rows: 24 })
+        await manager.create({ panelId: 'sa2home', cwd: homedir(), command: AGENT_SH, agent: 'claude-code', args: [], cols: 80, rows: 24 })
 
         // The ONE rule slugFor states in subagent-scan.ts, restated here
         // rather than imported: this suite bundles pty-manager.ts alone and
@@ -1407,7 +1427,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         // matched — see the realpath note above for why this must be the
         // RESOLVED cwd tmux will report, not the raw mkdtempSync path.
         writeFileSync(`${sessionDir}.jsonl`, JSON.stringify({ type: 'user', cwd: subagentCwd }) + '\n')
-        // The home agent's own session, fully claimable had home counted:
+        // The home agent's own session, claimable now that home is watched:
         // under the FENCED projects root, so nothing real is read or written.
         const homeCwd = realpathSync(homedir())
         const homeSession = join(projectsRoot, homeCwd.replace(/[^A-Za-z0-9]/g, '-'), 'H1')
@@ -1418,15 +1438,32 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         writeFileSync(`${homeSession}.jsonl`, JSON.stringify({ type: 'user', cwd: homeCwd }) + '\n')
 
         await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
-        ok('subagent.feed.2 a plain shell beside an agent is never fed to the watcher, and an agent in $HOME is not watched',
-          !seen.some((u) => u.panelId === 'sa2sh' || u.panelId === 'sa2home'),
-          `seen=${JSON.stringify(seen.map((u) => [u.panelId, u.ambiguous, u.sharing]))}`)
+        const homeSeen = seen.filter((u) => u.panelId === 'sa2home')
+        ok('subagent.feed.2 a plain shell beside an agent is never fed to the watcher; an agent preset in $HOME (agent: claude-code, a command not named claude) is, and its own session gives it its node; both panes measured alive',
+          alive('sa2sh') && alive('sa2home') && !seen.some((u) => u.panelId === 'sa2sh') &&
+            homeSeen.length === 1 && homeSeen[0].ambiguous === false && homeSeen[0].records[0]?.id === 'agent-h',
+          `alive=${JSON.stringify({ sa2sh: alive('sa2sh'), sa2home: alive('sa2home') })} seen=${JSON.stringify(seen.map((u) => [u.panelId, u.ambiguous, u.sharing, u.records.map((r) => r.id)]))}`)
+
+        // A SECOND agent in $HOME: the two cannot be told apart, so the claim
+        // is refused (sa2home's node clears), but "2 panels share this
+        // repository" is never said about home.
+        const mark = seen.length
+        await manager.create({ panelId: 'sa2home2', cwd: homedir(), command: AGENT_SH, agent: 'claude-code', args: [], cols: 80, rows: 24 })
+        await sleep(5000)
+        const after = seen.slice(mark)
+        const lastHome = after.filter((u) => u.panelId === 'sa2home').at(-1)
+        ok('subagent.home.card.1 two agents in $HOME are refused without the ambiguity sentence: the first one\'s node clears, and neither is ever sent ambiguous',
+          alive('sa2home2') && lastHome !== undefined && lastHome.records.length === 0 &&
+            !seen.some((u) => (u.panelId === 'sa2home' || u.panelId === 'sa2home2') && u.ambiguous),
+          `alive=${alive('sa2home2')} after=${JSON.stringify(after.map((u) => [u.panelId, u.ambiguous, u.sharing, u.records.length]))}`)
         manager.kill('sa2sh')
         manager.kill('sa2home')
-        const record = seen[0]?.records?.[0]
+        manager.kill('sa2home2')
+        const mine = seen.filter((u) => u.panelId === 'sa2')
+        const record = mine[0]?.records?.[0]
         ok('26 a real Claude Code session directory produces exactly one subagent:state carrying one running record, then nothing further',
-          seen.length === 1 && seen[0].panelId === 'sa2' && seen[0].ambiguous === false &&
-            seen[0].records.length === 1 && record?.id === 'agent-x' && record?.state === 'running' &&
+          mine.length === 1 && mine[0].ambiguous === false &&
+            mine[0].records.length === 1 && record?.id === 'agent-x' && record?.state === 'running' &&
             // Field by field, never a spread (see pollLive's own comment):
             // toolUseId is main's internal completion key and must not reach
             // the wire, where it means nothing and belongs to a format this

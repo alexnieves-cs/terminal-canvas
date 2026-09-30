@@ -1150,6 +1150,33 @@ const write = (rel, text) => {
       JSON.stringify(words))
   }
 
+  // M398 — toolbox.home.1. toolboxCwd first compared home by string, so every
+  //     other spelling of the real home got past the fence and read the real
+  //     ~/.claude: a symlinked HOME (tmux reports the realpath, the target),
+  //     a link TO home, `/.` and `..` segments, and a case variant (APFS is
+  //     case-insensitive by default). Against a planted "real home" that is
+  //     itself a symlink, every spelling lands on the fenced home; a folder
+  //     under it, and a sibling whose name only starts the same, do not.
+  {
+    const { symlinkSync, realpathSync } = require('node:fs')
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tc toolbox home ')))
+    const target = join(base, 'Real'); const homeLink = join(base, 'homelink'); const toHome = join(base, 'to-home')
+    const fenced = join(base, 'fenced')
+    mkdirSync(join(target, 'proj'), { recursive: true }); mkdirSync(join(base, 'Realm'), { recursive: true })
+    symlinkSync(target, homeLink); symlinkSync(homeLink, toHome)
+    const at = (cwd) => T.toolboxCwd(cwd, fenced, homeLink)
+    const spellings = {
+      home: at(homeLink), realpath: at(target), dot: at(target + '/.'), dotdot: at(join(target, 'proj') + '/..'),
+      slash: at(homeLink + '/'), linkToHome: at(toHome), tilde: at('~'),
+      ...(process.platform === 'darwin' ? { upper: at(target.toUpperCase()) } : {})
+    }
+    const under = at(join(target, 'proj')); const sibling = at(join(base, 'Realm'))
+    rmSync(base, { recursive: true, force: true })
+    ok('toolbox.home.1 every spelling of a symlinked real home (the link, its realpath, /., .., a trailing slash, a link to it, a case variant on darwin) lands on the fenced home; a folder under it and a same-prefix sibling do not',
+      Object.values(spellings).every((v) => v === fenced) && under === join(target, 'proj') && sibling === join(base, 'Realm'),
+      JSON.stringify({ spellings, under, sibling }))
+  }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

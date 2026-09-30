@@ -19,10 +19,11 @@
  * and this has nine.
  */
 
-import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { PluginRecord } from './plugin-list'
+import { isHomeDir } from './home-dir'
 import {
   AGENTS_MAX,
   CLAUDE_JSON_MAX_BYTES,
@@ -367,8 +368,19 @@ export function resolveToolboxHome(): string {
 export function toolboxCwd(cwd: string, home: string, realHome: string = homedir()): string {
   if (cwd === '~' || cwd === '~/') return home
   if (cwd.startsWith('~/')) return join(home, cwd.slice(2))
-  const bare = (p: string): string => (p.length > 1 ? p.replace(/\/+$/, '') : p)
-  return bare(cwd) === bare(realHome) ? home : cwd
+  // Every other spelling of the real home lands on the toolbox home too: a
+  // symlink to it, a case variant (darwin) and `/.` or `..` segments each
+  // walked past the first draft's string compare and read the real
+  // `~/.claude` under a fence. See isHomeDir (home-dir.ts). The cwd is
+  // realpath'd here, once per read, because a link TO home is a spelling
+  // isHomeDir does not resolve on its own.
+  if (isHomeDir(cwd, realHome)) return home
+  try {
+    if (isHomeDir(realpathSync(cwd), realHome)) return home
+  } catch {
+    // A missing directory is not home; the door says it is gone.
+  }
+  return cwd
 }
 
 export interface ToolboxPaths {

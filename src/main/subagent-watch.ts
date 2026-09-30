@@ -309,6 +309,16 @@ export class SubagentWatch {
     return out
   }
 
+  /**
+   * M398. Whether this panel holds a confirmed claim. pty-manager keeps
+   * feeding a panel that does, after its agent has exited, so the finished
+   * nodes stay beside it `done` (M15's rule) and are re-sent after a reload;
+   * an ambiguous panel holds none (poll drops the claim), so it is let go.
+   */
+  holds(panelId: string): boolean {
+    return this.panels.has(panelId)
+  }
+
   /** A panel is gone: drop its offset, its claimed dir, its records and its dedupe key. */
   drop(panelId: string): void {
     this.panels.delete(panelId)

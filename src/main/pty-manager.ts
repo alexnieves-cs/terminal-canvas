@@ -36,7 +36,8 @@ import { shellIntegrationFor } from './shell-integration'
 import type { RunLedger } from './run-ledger'
 import type { SessionBackend } from './session-backend'
 import { SubagentWatch, type WatchDeps } from './subagent-watch'
-import { isClaudeSession, isHomeDir } from './subagent-scan'
+import { isClaudeSession } from './subagent-scan'
+import { isHomeDir } from './home-dir'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
 import { resolveTranscript as realResolveTranscript, readFrom as realReadFrom } from './transcript-reader'
 import {
@@ -338,13 +339,6 @@ interface Session {
   run: { command: string; startedAt: number; capture: OutputCapture | null } | null
   /** M398 (A3). The spawn spec's agent kind, one of `isClaudeSession`'s four facts. */
   agent: PanelSpec['agent']
-  /**
-   * M398 (A3). Set the first tick `isClaudeSession` says yes, and never unset:
-   * an agent typed into a shell exits back to the prompt, and its finished
-   * nodes stay beside the panel `done` (M15's rule) rather than vanishing the
-   * moment the shell's current command stops being `claude`.
-   */
-  agentSeen: boolean
   /** M398 (A3). Whether the last tick fed this session to the watcher, so leaving it can clear the card. */
   watched: boolean
 }
@@ -857,7 +851,6 @@ export class PtyManager {
       run: null,
       spawnedAt,
       agent: spec.agent,
-      agentSeen: false,
       watched: false
     }
     this.sessions.set(spec.panelId, session)
@@ -1259,38 +1252,50 @@ export class PtyManager {
       }
     }
 
-    // M398 (A3). Only agent sessions, and never one sitting in $HOME: see
-    // isClaudeSession and isHomeDir (subagent-scan.ts) for why each. Filtered
-    // BEFORE poll, so a plain shell is not even counted into a neighbour's
-    // `sharing` — three login shells in ~ were each told "3 panels share this
-    // repository". Home is read per tick, not captured: the same reason the
-    // toolbox's home is a resolver.
+    // M398 (A3). Only agent sessions: see isClaudeSession (subagent-scan.ts).
+    // Filtered BEFORE poll, so a plain shell is not even counted into a
+    // neighbour's `sharing` — three login shells in ~ were each told "3
+    // panels share this repository".
+    //
+    // A session is fed while it IS an agent this tick, or while the watcher
+    // still HOLDS a claim for it. The second half is what keeps an agent's
+    // finished nodes beside its shell `done` after it exits (M15's rule),
+    // without the first draft's sticky flag: that one watched a shell for
+    // good after one `claude --version`, and, being per Session, was lost
+    // at detachAll, so a reloaded renderer never got the done nodes back.
+    // The claim survives detachAll (clearDedupe), so it is the fact to key on.
+    //
+    // $HOME is fed like any folder (every built-in claude preset spawns in
+    // ~, so refusing home disabled the feature for all of them). Only the
+    // AMBIGUITY card is withheld there: see homePanels below. Home is read
+    // per tick, not captured: the same reason the toolbox's home is a
+    // resolver.
     const home = homedir()
     const panels: Array<{ panelId: PanelId; cwd: string; spawnedAt: number }> = []
+    const homePanels = new Set<PanelId>()
     for (const session of this.sessions.values()) {
       // M12's consumer-fallback rule: a consumer that needs A directory,
       // rather than one making a present-tense claim, falls back happily to
       // the resolved spawn cwd when there is no live answer yet — or, under
       // the direct backend, ever.
       const cwd = liveCwd.get(session.panelId) ?? session.cwd
-      if (!session.agentSeen) {
-        session.agentSeen = isClaudeSession({
-          agent: session.agent,
-          command: session.command,
-          currentCommand: liveCommand.get(session.panelId),
-          runCommand: session.run?.command
-        })
-      }
-      if (session.agentSeen && !isHomeDir(cwd, home)) {
+      const agentNow = isClaudeSession({
+        agent: session.agent,
+        command: session.command,
+        currentCommand: liveCommand.get(session.panelId),
+        runCommand: session.run?.command
+      })
+      if (agentNow || this.subagentWatch.holds(session.panelId)) {
         session.watched = true
         panels.push({ panelId: session.panelId, cwd, spawnedAt: session.spawnedAt })
+        if (isHomeDir(cwd, home)) homePanels.add(session.panelId)
         continue
       }
       if (!session.watched) continue
-      // Leaving the watch (an agent's shell that cd'd home): its claim is
-      // dropped and the renderer told there is nothing, once. Without the
-      // send, a card drawn while it was watched would stay up forever,
-      // since poll only ever reports the panels it is handed.
+      // Leaving the watch (an agent that exited before any claim, or whose
+      // claim was refused): dropped and the renderer told there is nothing,
+      // once. Without the send, a card drawn while it was watched would stay
+      // up forever, since poll only ever reports the panels it is handed.
       session.watched = false
       this.subagentWatch.drop(session.panelId)
       this.send(IPC_EVENTS.SUBAGENT_STATE, { panelId: session.panelId, ambiguous: false, sharing: 0, overflow: 0, records: [] } satisfies SubagentUpdate)
@@ -1299,9 +1304,15 @@ export class PtyManager {
     for (const entry of this.subagentWatch.poll(panels)) {
       // The watcher already deduped (see SubagentWatch.poll's own comment);
       // this is not a second gate, only the wire mapping.
+      // M398. In $HOME the refusal stands (no nodes: two agents there cannot
+      // be told apart) but the SENTENCE is withheld: "N panels share this
+      // repository" is false about a folder that is not one, and home is
+      // where every built-in preset opens. Sent as an empty, unambiguous
+      // update, so a card or nodes drawn before still clear.
+      const ambiguous = entry.ambiguous && !homePanels.has(entry.panelId)
       const payload: SubagentUpdate = {
         panelId: entry.panelId,
-        ambiguous: entry.ambiguous,
+        ambiguous,
         // Both numbers are main's own derivations, carried rather than
         // recomputed on the far side: `sharing` because the renderer cannot
         // see the other panels' slugs at all, and `overflow` because the
