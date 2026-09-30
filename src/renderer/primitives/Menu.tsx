@@ -1,5 +1,5 @@
 import * as Radix from '@radix-ui/react-dropdown-menu'
-import { createContext, useContext, useEffect, useState, type JSX } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type JSX } from 'react'
 import type { ReactNode, ComponentPropsWithoutRef } from 'react'
 import { useOpenIntent, triggerProps, contentProps } from './useOpenIntent'
 import type { OpenIntent } from './useOpenIntent'
@@ -53,6 +53,8 @@ interface MenuContext {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onExitComplete: () => void
+  /** M399 (A7). The trigger's element, so a force-mounted menu can hand focus back itself (see MenuContent). */
+  readonly triggerRef: { current: HTMLButtonElement | null }
 }
 
 const Ctx = createContext<MenuContext | null>(null)
@@ -71,13 +73,14 @@ export interface MenuProps {
 
 export function Menu({ open, onOpenChange, children }: MenuProps): JSX.Element {
   const intent = useOpenIntent()
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   // Keep Radix mounted for Motion's exit, then let it remove ordinary menus.
   // Force-mounted adopters retain their existing hidden-addressability after
   // this same exit has completed.
   const [mounted, setMounted] = useState(open)
   useEffect(() => { if (open) setMounted(true) }, [open])
   return (
-    <Ctx.Provider value={{ intent, open, onOpenChange, onExitComplete: () => { if (!open) setMounted(false) } }}>
+    <Ctx.Provider value={{ intent, open, onOpenChange, onExitComplete: () => { if (!open) setMounted(false) }, triggerRef }}>
       <Radix.Root open={mounted} onOpenChange={onOpenChange} modal={false}>{children}</Radix.Root>
     </Ctx.Provider>
   )
@@ -92,10 +95,10 @@ export function Menu({ open, onOpenChange, children }: MenuProps): JSX.Element {
  * fallback and leave the menu shut on every other press.
  */
 export function MenuTrigger({ children, ...rest }: ComponentPropsWithoutRef<'button'>): JSX.Element {
-  const { intent, open, onOpenChange } = useMenu()
+  const { intent, open, onOpenChange, triggerRef } = useMenu()
   return (
     <Radix.Trigger asChild {...triggerProps(intent, () => onOpenChange(!open))}>
-      <button type="button" {...rest}>{children}</button>
+      <button type="button" ref={triggerRef} {...rest}>{children}</button>
     </Radix.Trigger>
   )
 }
@@ -124,7 +127,7 @@ export interface MenuContentProps extends ComponentPropsWithoutRef<'div'> {
 }
 
 export function MenuContent({ children, forceMount, ...rest }: MenuContentProps): JSX.Element {
-  const { intent, open, onExitComplete } = useMenu()
+  const { intent, open, onExitComplete, triggerRef } = useMenu()
   // THE GESTURE THAT OPENS A FORCE-MOUNTED MENU MUST NOT ALSO DISMISS IT.
   //
   // Radix keeps MenuContentImpl — and with it a live DismissableLayer —
@@ -150,8 +153,38 @@ export function MenuContent({ children, forceMount, ...rest }: MenuContentProps)
   const guard = forceMount === true
     ? { onInteractOutside: (event: { preventDefault: () => void }) => { if (intent.sawPointer.current) event.preventDefault() } }
     : {}
+  // M399 (A7). A FORCE-MOUNTED MENU IS REMOUNTED EACH TIME IT OPENS, so its
+  // dismissable layer is the newest one again. Radix gives Escape only to the
+  // HIGHEST layer, ranked by mount order — and a force-mounted menu's layer
+  // lives on while the menu is closed. The Account menu mounts after View, so
+  // its CLOSED layer was always the highest: it took every Escape (dismissing
+  // a menu that was not open) and View's own never fired, while an outside
+  // click — which every layer hears — still worked. A new key on the opening
+  // render re-registers this menu's layer on top; closing keeps the key, so
+  // the exit animation plays on the same element. Counted in render, not in
+  // an effect, so the frame that opens the menu is already the remounted one.
+  const opens = useRef(0)
+  const wasOpen = useRef(open)
+  const closing = wasOpen.current && !open
+  if (open && !wasOpen.current) opens.current += 1
+  wasOpen.current = open
+  // And a force-mounted menu hands focus back ITSELF. Radix returns focus to
+  // the trigger when its focus scope UNMOUNTS, and this one never does: a
+  // keyboard-opened View menu closed by Escape left focus on a row the
+  // `hidden` attribute had just removed, i.e. on <body> (view.dismiss.1).
+  // Only for a KEYBOARD open — a pointer open never moved focus
+  // (useOpenIntent), so there is nothing to hand back — and only when focus
+  // is lost or still on a row of the menu that is closing this render (a
+  // menu's rows are `role="menu"` descendants), never stolen from a place a
+  // person has since moved to.
+  useEffect(() => {
+    if (!closing || forceMount !== true || intent.byPointer.current) return
+    const active = document.activeElement
+    if (active === null || active === document.body || (active instanceof HTMLElement && active.closest('[role="menu"]') !== null)) triggerRef.current?.focus()
+  })
   return (
     <Radix.Content
+      key={forceMount === true ? opens.current : undefined}
       {...INERT_PLACEMENT}
       asChild
       forceMount={forceMount}

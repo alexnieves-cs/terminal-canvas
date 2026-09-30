@@ -2894,6 +2894,55 @@ const WS = [
     JSON.stringify({ row: row && row.disabledReason, onTerm: onTerm && onTerm.disabledReason, calls: onChat.actions.calls }))
 }
 
+// M399 (A6) — palette.hold.1 / palette.pin.1. THE LIST DOES NOT MOVE UNDER
+//     THE KEYBOARD. During the critique ⌘K re-sorted while the tester was
+//     arrowing, and Enter started a `claude` nobody chose. Two halves, both
+//     pure: holdOrder keeps the order a person is navigating (present rows in
+//     their held places with their NEW content, gone rows dropped, arrivals
+//     after their own section's last held row), and seatSelection follows the
+//     selected ROW by id through a re-rank, re-seating only on a query or
+//     scope change.
+{
+  const row = (id, group, extra = {}) => ({ id, title: id, group, run: () => {}, ...extra })
+  const held = ['p1', 'p2', 'c1', 'c2']
+  // A rebuild re-ranked everything (c2 now scores first), p2 changed its
+  // title, c1 left, and two rows arrived — one in an existing section, one
+  // in a section with no held row.
+  const reranked = [row('c2', 'canvas'), row('n1', 'panels'), row('p2', 'panels', { title: 'p2 · idle' }), row('p1', 'panels'), row('x1', 'settings')]
+  const out = P.holdOrder(reranked, held)
+  const ids = out.map((r) => r.id)
+  ok('palette.hold.1 a held order survives a re-rank: held rows keep their places with their new content, a row that left is gone, an arrival goes after its own section\'s last held row (never splitting a section) or at the end',
+    JSON.stringify(ids) === JSON.stringify(['p1', 'p2', 'n1', 'c2', 'x1']) && out[1].title === 'p2 · idle' &&
+      JSON.stringify(P.holdOrder(reranked, []).map((r) => r.id)) === JSON.stringify(reranked.map((r) => r.id)),
+    JSON.stringify(ids))
+
+  const rows = [row('a', 'panels'), row('b', 'panels'), row('c', 'canvas', { disabledReason: 'no' })]
+  const moved = [rows[1], row('z', 'panels'), rows[0], rows[2]]
+  const follow = P.seatSelection({ rows: moved, query: 'x', scope: null, leaving: null, reseat: false, current: 'a' })
+  const gone = P.seatSelection({ rows: [rows[1]], query: '', scope: null, leaving: null, reseat: false, current: 'a' })
+  const dead = P.seatSelection({ rows: [row('a', 'panels', { disabledReason: 'no' }), rows[1]], query: '', scope: null, leaving: null, reseat: false, current: 'a' })
+  const fresh = P.seatSelection({ rows: moved, query: '', scope: null, leaving: null, reseat: true, current: 'a' })
+  ok('palette.pin.1 the selection is a ROW: through a re-rank it stays on the same id wherever that row moved; it falls back to the best runnable match only when its row is gone or unrunnable, and a query change re-seats',
+    follow === 'a' && gone === 'b' && dead === 'b' && fresh === 'b',
+    JSON.stringify({ follow, gone, dead, fresh }))
+}
+
+// M399 (A10) — palette.reason.1. THE REFUSAL SAYS WHAT IS TRUE. The prompt-mark
+//     rows borrowed the font-size sentence for a non-terminal subject, and every
+//     focus-gated row said "click into a panel first" beside a HUD reading
+//     "1 selected".
+{
+  const note = { id: 'f1', label: 'note.md', kind: 'file', restartable: false, agent: false }
+  const onNote = P.buildCommands(ctx({ panels: [note], capturedId: 'f1' }))
+  const selected = P.buildCommands(ctx({ panels: [note], selectedIds: ['f1'] }))
+  const none = P.buildCommands(ctx({ panels: [note] }))
+  const r = (rows, id) => (byId(rows, id) || {}).disabledReason
+  ok('palette.reason.1 the prompt-mark rows refuse a non-terminal with their own sentence, and a focus-gated row says selecting is not focusing while something is selected (and the plain sentence when nothing is)',
+    r(onNote, 'panel.prompt.next') === P.REASON_NOT_TERMINAL_MARKS && r(onNote, 'panel.copy-last-output') === P.REASON_NOT_TERMINAL_MARKS &&
+      r(selected, 'panel.prompt.next') === P.REASON_NO_FOCUS_SELECTED && r(none, 'panel.prompt.next') === P.REASON_NO_FOCUS,
+    JSON.stringify({ onNote: r(onNote, 'panel.prompt.next'), selected: r(selected, 'panel.prompt.next'), none: r(none, 'panel.prompt.next') }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

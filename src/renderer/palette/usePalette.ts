@@ -69,6 +69,15 @@ export interface PaletteController {
    */
   scope: PaletteScope | null
   setScope: (scope: PaletteScope | null) => void
+  /**
+   * M399 (A7). The scope the palette was OPENED into (the dock's ⚙ opens
+   * Settings, ⌘F opens Search), or null — and null again the moment the
+   * person moves to another scope. Escape inside a scope pops to the root,
+   * which is right for a door a person walked through and wrong for one they
+   * never saw: the gear's first Escape used to land on the root palette. So
+   * Escape in the ENTRY scope closes, and hands the keyboard back.
+   */
+  entryScope: PaletteScope | null
 }
 
 export function usePalette(deps: {
@@ -77,7 +86,20 @@ export function usePalette(deps: {
 }): PaletteController {
   const [open, setOpen] = useState(false)
   const [capturedId, setCapturedId] = useState<string | null>(null)
-  const [scope, setScope] = useState<PaletteScope | null>(null)
+  const [scope, setScopeState] = useState<PaletteScope | null>(null)
+  const [entryScope, setEntryScope] = useState<PaletteScope | null>(null)
+  // Any scope move made INSIDE the palette (a door, a pop) spends the entry:
+  // from then on Escape pops as it always has.
+  const setScope = useCallback((next: PaletteScope | null) => {
+    setEntryScope(null)
+    setScopeState(next)
+  }, [])
+  // M399 (A7). What held the keyboard when the palette opened, when that was
+  // a control of the shell (a keyboard-reached ⚙, the top bar's search): the
+  // trigger a closing Escape hands focus back to. A terminal's textarea is
+  // NOT recorded — rule 4's restoreFocus(capturedId) already gives that back,
+  // through the session, which is the one path that also re-pins the panel.
+  const returnRef = useRef<HTMLElement | null>(null)
 
   const openRef = useRef(open)
   openRef.current = open
@@ -112,7 +134,10 @@ export function usePalette(deps: {
    */
   const openPalette = useCallback((initialScope?: PaletteScope) => {
     setCapturedId(depsRef.current.focusedIdRef.current)
-    setScope(initialScope ?? null)
+    setScopeState(initialScope ?? null)
+    setEntryScope(initialScope ?? null)
+    const active = document.activeElement
+    returnRef.current = active instanceof HTMLElement && active !== document.body && !active.closest('.xterm') && !active.closest('.palette') ? active : null
     setOpen(true)
   }, [])
 
@@ -120,17 +145,28 @@ export function usePalette(deps: {
     setOpen(false)
     // Explicit now that the state outlives the overlay's unmount — see the
     // `scope` note on the interface above.
-    setScope(null)
+    setScopeState(null)
+    setEntryScope(null)
+    const back = returnRef.current
+    returnRef.current = null
     const id = capturedRef.current
+    // M399 (A7). A shell control that held the keyboard at open (the ⚙
+    // reached with Tab) gets it back: that trigger, not a terminal, is where
+    // the keyboard was, and restoring the captured panel would type the next
+    // key into an agent the person had tabbed away from. A pointer open never
+    // moved focus (shellControl), so `back` is null and rule 4 runs as before.
+    if (back !== null && back.isConnected) back.focus()
     // Restore the terminal's keyboard. Nothing else gives it back: the input
     // is about to unmount, and an unmounted element's blur focuses <body>.
-    if (id) depsRef.current.restoreFocus(id)
+    else if (id) depsRef.current.restoreFocus(id)
   }, [])
 
   // Rule 4 with its one documented exception; see the interface above.
   const dismissPalette = useCallback(() => {
     setOpen(false)
-    setScope(null)
+    setScopeState(null)
+    setEntryScope(null)
+    returnRef.current = null
   }, [])
 
   useEffect(() => {
@@ -177,5 +213,5 @@ export function usePalette(deps: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPalette, closePalette])
 
-  return { open, capturedId, openPalette, closePalette, dismissPalette, isOpen, scope, setScope }
+  return { open, capturedId, openPalette, closePalette, dismissPalette, isOpen, scope, setScope, entryScope }
 }

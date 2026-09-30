@@ -38,8 +38,8 @@ import type { PaletteContext } from './commands/context'
 // `export *` below re-exports these for consumers but does NOT bind them in
 // this module’s scope — buildCommands names them directly, so they are imported too.
 import {
-  REASON_NO_FOCUS, REASON_NO_SELECTION, REASON_BUILT_IN_RENAME, REASON_BUILT_IN_DELETE,
-  REASON_PROJECT_PROMPT, REASON_NOT_ON_PATH, REASON_UNREAD_PRESET, REASON_NOT_TERMINAL,
+  REASON_NO_FOCUS, REASON_NO_FOCUS_SELECTED, REASON_NO_SELECTION, REASON_BUILT_IN_RENAME, REASON_BUILT_IN_DELETE,
+  REASON_PROJECT_PROMPT, REASON_NOT_ON_PATH, REASON_UNREAD_PRESET, REASON_NOT_TERMINAL, REASON_NOT_TERMINAL_MARKS,
   REASON_TIDY_NEEDS_TWO, REASON_NOT_TERMINAL_OUTPUT, REASON_NOTHING_TO_EXPORT,
   REASON_ALREADY_DEFAULT, REASON_BUILT_IN_WORKTREE, REASON_NO_REVIEW_TARGET_ACROSS,
   REASON_NO_GITHUB, REASON_NO_WORKTREES, REASON_WORKTREE_ATTACHED, REASON_SEARCH_OFF,
@@ -1435,7 +1435,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     const target = ctx.capturedId === null ? undefined : ctx.panels.find((p) => p.id === ctx.capturedId)
     const reason = ctx.capturedId === null || target === undefined
       ? REASON_NO_FOCUS
-      : (target.kind === 'terminal' ? undefined : REASON_NOT_TERMINAL)
+      : (target.kind === 'terminal' ? undefined : REASON_NOT_TERMINAL_MARKS)
     out.push(withReason({ id: 'panel.prompt.previous', title: 'Previous prompt', subtitle: 'scroll to the command before this one', group: 'panel', searchText: 'prompt previous up jump command mark', hiddenAtRest: true,
       run: () => { if (target !== undefined) actions.jumpPrompt(target.id, -1) } }, reason))
     out.push(withReason({ id: 'panel.prompt.next', title: 'Next prompt', subtitle: 'scroll to the command after this one', group: 'panel', searchText: 'prompt next down jump command mark', hiddenAtRest: true,
@@ -2107,7 +2107,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       const t = work === null
         ? `searched ${plural(searched.terminals, 'terminal')} and ${plural(searched.chats, 'chat')}`
         : `searched ${plural(searched.terminals, 'terminal')}, ${plural(searched.chats, 'chat')}, ${plural(work.searched.tasks, 'task')} and ${plural(work.searched.retained, 'retained outcome')} in this workspace`
-      out.push(withReason({ id: 'search.scope', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t))
+      // M399 (A9): `searchText` is the query itself. The palette's own filter
+      // runs over every row, so this line (what was read) showed only for a
+      // query that happened to fuzzy-match "searched … terminals" — typing
+      // `alex` hid it. It describes THIS answer, so it matches whatever asked.
+      out.push(withReason({ id: 'search.scope', title: t, searchText: ctx.searchQuery, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t))
     }
     for (const failure of result.failures ?? []) {
       const t = `could not read ${failure.source} — ${failure.reason}`
@@ -2388,5 +2392,15 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     run: () => actions.toggleFlip()
   })
 
+  // M399 (A10). SAY THE DIFFERENCE. With a panel selected (the HUD reads "1
+  // selected") and none clicked into, every focus-gated row said "click into
+  // a panel first", which reads as a lie beside the selection. Selection and
+  // focus stay two things — these rows act on the panel the keyboard is in,
+  // and letting a selection stand in for it changed the subject of ~40 rows at
+  // once (measured: a renderer crash in verify:panels:product) — so the
+  // sentence names the difference instead.
+  if (ctx.capturedId === null && ctx.selectedIds.length > 0) {
+    return out.map((row) => (row.disabledReason === REASON_NO_FOCUS ? { ...row, disabledReason: REASON_NO_FOCUS_SELECTED } : row))
+  }
   return out
 }

@@ -1317,6 +1317,19 @@ export function Canvas({
     // requires, the one thing the canvas ignores here.
     if (event.ctrlKey || event.metaKey) return false
 
+    // M399 (A5). The first-run launcher card, rule 1's reason once more: a
+    // screen-space card inside .canvas with its own scroller (`.launcher`,
+    // max-height and overflow-y: auto). At 1200×800 and below its lower
+    // doors — the Starter canvas line the amber tip points at among them —
+    // sit under the fold, and without this rule the wheel panned the empty
+    // canvas behind the card instead, so nothing below the fold could be
+    // reached with a wheel at all. Only while the card HAS something to
+    // scroll, and after rule 2: a card that fits leaves the wheel to the
+    // camera as before (verify:canvas 2 pans over it), and a pinch still
+    // zooms.
+    const card = target?.closest?.('.launcher')
+    if (card && card.scrollHeight > card.clientHeight) return true
+
     // 3. A wheel belongs to a PANEL only when it is over the FOCUSED one AND
     // that panel owns internal scroll. Which panels do is answered by the
     // KIND, through what it renders: a live terminal's slot and a review

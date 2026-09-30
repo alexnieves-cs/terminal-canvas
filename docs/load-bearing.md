@@ -560,7 +560,10 @@ reaching the agent). **(2)** DOM focus is not app focus: `focusedId` is CAPTURED
 rule 1) stand down via `isOpen()`, a `useCallback` reading a ref rather than state so it can sit
 in dependency arrays without tearing listeners down on every open/close. **(4)** closing calls
 `restoreFocus(capturedId)` — nothing else gives the keyboard back, since an unmounted input's
-blur leaves focus on `<body>` and every keystroke goes nowhere. There are exactly **three ways
+blur leaves focus on `<body>` and every keystroke goes nowhere (M399: unless a shell control —
+a ⚙ reached with Tab — held DOM focus at open; that trigger gets the keyboard back instead, and
+`Escape` in the scope the palette OPENED into closes rather than popping to a root the person
+never saw). There are exactly **three ways
 out**: `Escape`, `Enter` on a runnable row, and a click outside — `Tab` is folded into the same
 `switch` as `Escape` rather than left to the browser's default focus walk (which could land on
 xterm's own tabbable helper textarea and leave the overlay up with the keyboard on the agent).
@@ -630,7 +633,11 @@ and `resetViewport`/`centreOn`/`restoreCamera` not being stable `useCallback`s (
 identity propagates into `Palette.tsx`'s `commands` memo, whose `[rows]` effect re-seats the
 selection on every unrelated re-render, e.g. a mousemove over the canvas). The selected row also
 carries a ref and `scrollIntoView({ block: 'nearest' })`, because the list is long by
-construction (four rows per preset, one per panel, two per prompt).
+construction (four rows per preset, one per panel, two per prompt). M399 (A6): the selection is
+a row ID (`selectedId`, with `index` derived in render, so no frame points Enter at whatever
+slid into the old slot), and the first arrow or hover HOLDS the order being navigated
+(`palette-model.ts`'s `holdOrder`) until the query or scope changes — a rebuild that re-ranks
+(a state word in a row's haystack flipping) no longer moves rows under the keyboard.
 
 **Hover is a fourth way the selection moves, and needs two guards to keep the rule above true
 (`Palette.tsx`'s `lastPointerRef`/`pointerSelectRef`).** Hovering a row sets the same `index`
@@ -4600,9 +4607,12 @@ never saw. Four mechanisms stop that, and each covers a different path:
 - Escape, a send and a rest-button collapse hand focus back to the element the input was
   ENTERED FROM. That element is recorded on the input's focus event (`relatedTarget` outside
   the pill) and forgotten on a blur to somewhere outside. It is not the element captured when
-  the shortcut fired: the pill stays open across outside clicks, so a person can move from
-  terminal A to terminal B and back into the input, and restoring A would type into an agent
-  that is not the highlighted one (M249's critic).
+  the shortcut fired: a person can move from terminal A to terminal B and back into the input,
+  and restoring A would type into an agent that is not the highlighted one (M249's critic).
+  M399 (A7): the expanded pill is a LAYER — a document-level Escape (capture phase, so it is
+  taken before xterm's textarea and the agent never sees it) collapses it with that same
+  hand-back, and an outside pointerdown collapses it WITHOUT restoring (the press is the focus
+  gesture). It no longer stays open across outside clicks.
 - `pillFocused()` sits in `shouldIgnoreKeys`.
 
 The last one is the one that fails silently. `Cmd+V`/`Cmd+Z` are menu accelerators, so with the

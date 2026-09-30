@@ -37,6 +37,8 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'vault-missing', sentence: 'the vault\'s folder could not be read — it may have moved' },
   { id: 'skills-column', sentence: 'drop a card here' },
   { id: 'palette', sentence: 'No matching command' },
+  /** M399 (A9). ⌘F opens the search scope before anything is typed; `No matching command` there answered a question nobody asked. */
+  { id: 'palette-search', sentence: 'Type to search terminal output, chat turns and tasks in this workspace' },
   /** `{backend}` is filled by the node — the sentence names the engine, as codex.1 reads it. */
   { id: 'chat', sentence: 'No turns yet. Send a message to start {backend} here.' },
   { id: 'attention', sentence: 'nothing waiting' },

@@ -3320,6 +3320,73 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
               Array.isArray(layer.kbd) && layer.kbd.includes('⇧⌘\\'),
             JSON.stringify(layer))
         }
+        // M399 (A7) — view.dismiss.1. THE VIEW MENU LEAVES ON ESCAPE. The
+        // Account menu is force-mounted too and mounts after View, so its
+        // CLOSED dismissable layer was always Radix's highest: it took every
+        // Escape and View's never fired, while an outside click (which every
+        // layer hears) still worked. Three real gestures, each read back:
+        // a pointer open closed by a real Escape (focus never moved, so it
+        // stays where it was), a pointer open closed by a real press on the
+        // canvas, and a KEYBOARD open (Enter on the focused trigger), whose
+        // Escape must hand focus back to the trigger.
+        {
+          let dismiss = null
+          try {
+            const menuOpen = () => wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'); return !!m && !m.hidden })()`)
+            const trig = await wc.executeJavaScript(`(() => { const t = document.querySelector('.shell__view-trigger'); if (!t) return null; const r = t.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+            const away = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(c.left + c.width / 2), y: Math.round(c.top + c.height * 0.85) } })()`)
+            const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
+            const key = (k) => { wc.sendInputEvent({ type: 'keyDown', keyCode: k }); wc.sendInputEvent({ type: 'keyUp', keyCode: k }) }
+            if (trig) {
+              press(trig); const a = await waitUntil(menuOpen, 3000) === true
+              key('Escape'); const aShut = await waitUntil(async () => !(await menuOpen()), 2000) === true
+              press(trig); const b = await waitUntil(menuOpen, 3000) === true
+              press(away); const bShut = await waitUntil(async () => !(await menuOpen()), 2000) === true
+              await settle()
+              await wc.executeJavaScript(`document.querySelector('.shell__view-trigger').focus(), true`)
+              key('Enter'); const c = await waitUntil(menuOpen, 3000) === true
+              const inside = await wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'); return !!m && m.contains(document.activeElement) })()`)
+              key('Escape'); const cShut = await waitUntil(async () => !(await menuOpen()), 2000) === true
+              await settle()
+              const back = await wc.executeJavaScript(`document.activeElement === document.querySelector('.shell__view-trigger')`)
+              dismiss = { a, aShut, b, bShut, c, inside, cShut, back }
+            }
+          } catch (error) { dismiss = { error: String(error && error.message || error) } }
+          ok('view.dismiss.1 the View menu closes on a real Escape and on a real press outside it after a pointer open, and a keyboard open (Enter on the trigger) takes focus in and hands it back to the trigger on Escape',
+            dismiss !== null && dismiss.a === true && dismiss.aShut === true && dismiss.b === true && dismiss.bShut === true &&
+              dismiss.c === true && dismiss.inside === true && dismiss.cShut === true && dismiss.back === true,
+            JSON.stringify(dismiss))
+        }
+        // M399 (A7) — settings.dismiss.1. SETTINGS OPENED FROM THE DOCK
+        // LEAVES ON ONE ESCAPE. The gear opens the palette straight INTO the
+        // settings scope, and Escape inside a scope pops it — so the first
+        // Esc landed on the root palette, a place the person never visited.
+        // Escape now closes when the scope is the one the palette OPENED into
+        // (a door walked through still pops back to it). A real press on the
+        // gear, real keys; then a real press outside dismisses the reopened
+        // palette the way it always has.
+        {
+          let settings = null
+          try {
+            const gear = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-dock="settings"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+            const away = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(c.left + 12), y: Math.round(c.top + c.height * 0.9) } })()`)
+            const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
+            const state = () => wc.executeJavaScript(`(() => { const p = document.querySelector('.palette'); const s = p && p.querySelector('.palette__scope'); return { open: !!p, scope: s ? s.textContent : null } })()`)
+            if (gear) {
+              press(gear); const opened = await waitUntil(async () => { const s = await state(); return s.open && s.scope === 'Settings' ? s : false }, 3000)
+              wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+              await settle()
+              const afterEsc = await state()
+              press(gear); const again = await waitUntil(async () => (await state()).open, 3000) === true
+              press(away); const outside = await waitUntil(async () => !(await state()).open, 2000) === true
+              settings = { opened, afterEsc, again, outside }
+            }
+          } catch (error) { settings = { error: String(error && error.message || error) } }
+          ok('settings.dismiss.1 Settings opened from the dock gear closes on ONE real Escape (never landing on the root palette) and on a real press outside',
+            settings !== null && settings.opened && settings.opened.scope === 'Settings' && settings.afterEsc && settings.afterEsc.open === false &&
+              settings.again === true && settings.outside === true,
+            JSON.stringify(settings))
+        }
         // Merged view: the mounted View-menu button, then its pressed label and the headers.
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()

@@ -508,6 +508,22 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // its summary, then press the line — both through the hit-test.
       const opened = await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-launcher-more-toggle]')`), 1500) === true && await clickVisible('[data-launcher-more-toggle]')
       const primary = opened && await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-launcher-starter]'); return b && !b.disabled && b.offsetParent !== null ? true : false })()`), 1500)
+      // M399 (A5). The line sits below the fold at the harness's window size
+      // (the reason this check was red since M205), so reach it the way a
+      // person does: REAL wheel notches over the card, until the line is
+      // hit-testable. Before A5 the wheel panned the canvas behind the card
+      // and the card never moved; launcher.wheel.1 below states that half.
+      const cam0 = await wc.executeJavaScript(`getComputedStyle(document.querySelector('.world')).transform`)
+      const over = await wc.executeJavaScript(`(() => { const l = document.querySelector('.launcher'); if (!l) return null; const r = l.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      const lineHit = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-launcher-starter]'); if (!b) return false; const r = b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) })()`)
+      let notches = 0
+      if (primary === true && over) {
+        while (notches < 8 && !(await lineHit())) { wc.focus(); wc.sendInputEvent({ type: 'mouseWheel', x: over.x, y: over.y, deltaX: 0, deltaY: -120, canScroll: true }); notches += 1; await sleep(120) }
+      }
+      const wheel = { notches, scrollTop: await wc.executeJavaScript(`document.querySelector('.launcher')?.scrollTop ?? null`), reached: await lineHit(),
+        cameraStill: (await wc.executeJavaScript(`getComputedStyle(document.querySelector('.world')).transform`)) === cam0 }
+      ok('launcher.wheel.1 a real wheel over the first-run card scrolls the CARD — its Starter canvas line comes into reach below the fold — and never pans the canvas behind it',
+        wheel.reached === true && wheel.notches > 0 && wheel.scrollTop > 0 && wheel.cameraStill === true, JSON.stringify(wheel))
       const started = primary === true && await clickVisible('[data-launcher-starter]')
       const kinds = started ? await waitUntil(() => wc.executeJavaScript(`(() => { const k = [...document.querySelectorAll('.panel[data-panel-kind]')].map((p) => p.getAttribute('data-panel-kind')).sort(); return k.length >= 5 ? k.join(',') : false })()`), 6000) : false
       chatId = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? null`)
@@ -5815,7 +5831,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       rects: 'pill.rects.1 expanding and collapsing the pill leaves every panel rect and the terminal\'s cols/rows unchanged',
       paste: 'pill.paste.1 Cmd+Shift+Space focuses the pill input, edit:paste lands in it and never reaches the PTY, and Escape returns the keyboard to the terminal',
       jump: 'pill.jump.1 the rest state names the waiting panel, and Jump centres it on screen',
-      send: 'pill.send.1 with no orchestrator the first send makes a supervisor chat holding the text unsent; the next send reaches that chat through agent:send'
+      send: 'pill.send.1 with no orchestrator the first send makes a supervisor chat holding the text unsent; the next send reaches that chat through agent:send',
+      dismiss: 'pill.dismiss.1 a click-opened pill closes on a real Escape (taken before the terminal, which receives no ESC and keeps the keyboard) and on a real press outside it'
     }
     const done = new Set()
     const record = (key, pass, detail) => { done.add(key); ok(PILL_IDS[key], pass, detail) }
@@ -5910,6 +5927,33 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const afterEscape = await pillState()
       record('paste', viaShortcut.expanded === true && viaShortcut.focused === true && landed === true && leaked === false && afterEscape.expanded === false && afterEscape.activePanel === termId,
         JSON.stringify({ viaShortcut, landed, leaked, afterEscape }))
+
+      // M399 (A7) — pill.dismiss.1. THE PILL IS A LAYER. Opened by a click it
+      // never takes the keyboard, so its input's Escape never heard the key:
+      // Esc went to the terminal and the pill stayed up, and so did an outside
+      // click. Both gestures are REAL here (sendInputEvent): the Escape lands
+      // on xterm's focused textarea exactly as a keyboard's would, and the
+      // outside press is a real mouse down on bare canvas, which is what
+      // raises the pointerdown the pill listens for.
+      await focusTerminal(); await settle()
+      await press('[data-pill-rest]'); await settle()
+      const dOpen = await pillState()
+      const writesAtEsc = writes.length
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await settle()
+      const dEsc = await pillState()
+      const escLeaked = writes.slice(writesAtEsc).join('').includes('\u001b')
+      await press('[data-pill-rest]'); await settle()
+      const dReopen = (await pillState()).expanded
+      const bare = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect()
+        for (let y = c.top + 12; y < c.bottom - 90; y += 24) for (let x = c.left + 12; x < c.right - 12; x += 24) { const e = document.elementFromPoint(x, y); if (e && e.classList.contains('canvas')) return { x: Math.round(x), y: Math.round(y) } }
+        return null })()`)
+      if (bare) { wc.sendInputEvent({ type: 'mouseDown', ...bare, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...bare, button: 'left', clickCount: 1 }) }
+      await settle()
+      const dOutside = await pillState()
+      record('dismiss', dOpen.expanded === true && dOpen.focused === false && dEsc.expanded === false && dEsc.activePanel === termId && escLeaked === false &&
+          dReopen === true && bare !== null && dOutside.expanded === false,
+        JSON.stringify({ dOpen, dEsc, escLeaked, dReopen, bare, dOutside }))
 
       // pill.jump.1 — a real bell puts the shell in wants-you; the camera is
       // panned well away; Jump brings the panel to the centre of the host.

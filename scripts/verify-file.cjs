@@ -1707,6 +1707,18 @@ const p = (name) => join(DIR, name)
         boom.hits.some((h) => h.panelId === 'c1') && !boom.hits.some((h) => h.panelId === 'c2'),
       JSON.stringify({ searched: none.searched, failures: none.failures, boomFail: boom.failures, boomHits: boom.hits.map((h) => h.panelId) }))
   } catch (e) { ok('psearch.scope.1 (threw)', false, String(e)) }
+  // M399 (A9) — psearch.count.1. The count names what was READ: a note, a
+  // file, a workflow and a picture beside one shell are not four more
+  // terminals (the critique's "searched 4 terminals" on a one-shell canvas),
+  // and they are not handed to the scrollback log either.
+  try {
+    const asked = []
+    const panels = [{ id: 'n1', kind: 'terminal' }, { id: 'f1', kind: 'file' }, { id: 'w1', kind: 'workflow' }, { id: 'i1', kind: 'image' }, { id: 'c1', kind: 'chat' }]
+    const r = await F.searchPanels('x', panels, { scrollback: async (ids) => { asked.push(...ids); return [] }, transcript: () => [] }, { maxHits: 50, maxPerPanel: 10 })
+    ok('psearch.count.1 only terminal panels are counted and searched as terminals; a note, file, workflow or picture is neither',
+      r.searched?.terminals === 1 && r.searched?.chats === 1 && JSON.stringify(asked) === JSON.stringify(['n1']),
+      JSON.stringify({ searched: r.searched, asked }))
+  } catch (e) { ok('psearch.count.1 (threw)', false, String(e)) }
   // M123 — update.1. THE UPDATE CHECK, pure over an injected fetcher. Three
   // states and never two: `current`, `newer` (with the release's url) and
   // `could-not-check` (with the reason) — a check that folded the last into

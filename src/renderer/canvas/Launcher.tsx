@@ -468,6 +468,13 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
       {starterHint !== undefined && starterHint !== null && (
         <p className="launcher__banner" data-launcher-starter-hint role="status">
           {starterHint}
+          {/* M399 (A5). The tip's promise and its door are one control: it
+              used to point at a line below the fold that the wheel could not
+              reach. Opening it retires the tip too — it has been followed. */}
+          {onOpenStarter !== undefined && (starterReason ?? null) === null && (
+            <button type="button" className="pf__verb pf__verb--word launcher__banner-open" data-launcher-starter-hint-open title="Your agent and one captioned example of each kind of object"
+              {...shellControl(() => { onDismissStarterHint?.(); onOpenStarter() })}>Open the starter canvas</button>
+          )}
           <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-starter-hint-dismiss title="Dismiss this notice" {...shellControl(() => onDismissStarterHint?.())}>Got it</button>
         </p>
       )}

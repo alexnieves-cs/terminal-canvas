@@ -49,7 +49,12 @@ export async function searchPanels(
   caps: { maxHits: number; maxPerPanel: number }
 ): Promise<PanelSearchResult> {
   const q = query.trim().toLowerCase()
-  const terminalIds = panels.filter((p) => p.kind !== 'chat').map((p) => p.id)
+  // M399 (A9). TERMINALS ARE TERMINALS. `kind !== 'chat'` counted every note,
+  // file, workflow and picture as a terminal, so a canvas holding one shell
+  // and the starter's three examples said "searched 4 terminals" — and handed
+  // the scrollback log ids that never had a log. The handler maps an absent
+  // kind (a pre-M9b terminal) to 'terminal' before it gets here.
+  const terminalIds = panels.filter((p) => p.kind === 'terminal').map((p) => p.id)
   const chatPanels = panels.filter((p) => p.kind === 'chat')
   const searched = { terminals: terminalIds.length, chats: chatPanels.length }
   const empty: PanelSearchResult = { hits: [], capped: false, cap: caps.maxHits, redacted: 0, failures: [], searched }

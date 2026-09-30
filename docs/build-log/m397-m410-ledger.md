@@ -221,3 +221,105 @@ scene with two or more shells in one fixture folder loses its "N panels share th
 **Suites:** `verify:subagent` 29/29, `verify:control` 38/38, `verify:toolbox` 106/106, `verify:pty-manager` 64/64,
 `verify:panels:kinds` 52/52 (headroom 85%). `npm run affected` (46 suites): 44 passed. The two reds are
 `panels:agents template.1` and `panels:product starter.1`, both baseline, with every part's headroom at 67–86%.
+
+### M399 — wheel yield, palette hold, layers that leave, ⌘F edges, disabled reasons
+
+Screenshots in `/tmp/tc-daily-loop-shots/`: `A5-before`, `A5-after-tip`, `A5-after-scrolled`, `A5-after-starter`,
+`A7-{pill,view,settings}-{before,after}`, `A9-before-{empty,query}`, `A9-after-{empty,query}`,
+`A10-before-{selected,note}`, `A10-after-selected`.
+
+**A5 (P1), the launcher card can't be wheel-scrolled.** *Reproduced* (slot 1, 1200×800): with More ways to start
+open the card is 1136px of content in a 710px scroller, the Starter canvas line at y 797; a wheel over the card moved
+the camera from y 120 to −280 and left the card's `scrollTop` at 0. *Cause:* `shouldYieldWheel` exempted the palette,
+HUD, minimap and pill, not `.launcher`, so useViewport's capture listener panned the empty canvas behind it. *Fix:* a
+`.launcher` rule beside the zoom rule, taken only while the card has something to scroll (a card that fits leaves the wheel to the camera,
+and a pinch still zooms — `verify:canvas` 2/3 went red on the first cut, which yielded everything over the card;
+check 2 now pans over bare canvas found by hit test, because its window opens on an overflowing card), and the
+amber tip carries its own door, `Open the starter canvas` (runs the same `onOpenStarter`, retires the tip). The tip's
+sentence no longer sends a person to "More ways to start, below". *After:* the same wheel scrolls the card 400px, the
+camera is still, the line is hit-testable; the tip's button lays out the starter (chat, terminal, note, workflow,
+image in one group). *Checks:* `verify:panels:product launcher.wheel.1` (real wheel notches over the card until the
+line is hit-testable; the card scrolled and the camera did not). `starter.1`, the baseline red, now reaches its line
+the way a person does — those same real notches — instead of failing `clickVisible` below the fold, and it is GREEN:
+**a baseline red retired** (`verify:panels:product` 133/133).
+
+**A6 (P1), the palette re-sorts under the keyboard.** *Not reproduced live*: a shell looping `echo tick; sleep 4`
+under an open query, the first twelve rows sampled every 500 ms for 12 s, held still. *Reproduced in the code*: every
+`commands` rebuild re-ranks through `filterCommands`, and a row's haystack carries live words (a state word, a
+title), so a rebuild that changes a score moves rows; the selection followed its id only in an EFFECT after the
+render that moved them. The lead assigned the fix and its check, so it landed as a defence. *Fix:* the selection is a
+row id (`selectedId`; `index` derived in render), and the first arrow or hover holds the order being navigated
+(`palette-model.ts` `holdOrder`: held rows keep their places with their new content, gone rows drop, arrivals go after
+their own section's last held row) until the query or scope changes. The seat logic is lifted out whole into
+`seatSelection` (pure). Arrows, hover and Enter checked live after the change. *Checks:* `verify:palette
+palette.hold.1` and `palette.pin.1` (pure). No DOM check: no harness route re-ranks rows on demand; recorded.
+
+**A7 (P2), layers that won't dismiss.** *Reproduced* all three: the pill (click-opened) stayed up after a real Esc and
+after a real click on bare canvas; the View menu stayed open after Esc (an outside click did close it); Settings from
+the dock gear went to the root palette on Esc. *Causes and fixes:*
+- *Pill:* opened by a click it never takes the keyboard, and Esc was handled only in its input. It now listens while
+  expanded: Escape in the CAPTURE phase (before xterm's textarea, so the agent never receives that ESC) collapses with
+  the pill's own hand-back, and an outside pointerdown collapses without restoring (the press is the focus gesture).
+  *Decision:* this retires M249's "stays open across outside clicks"; the load-bearing entry is updated. The draft
+  survives a collapse. The palette, when open, owns Escape.
+- *View menu:* Radix gives Escape only to the HIGHEST dismissable layer, ranked by mount order, and a force-mounted
+  menu's layer lives on while closed; the Account menu mounts after View, so its closed layer took every Escape.
+  `MenuContent` now re-keys a force-mounted menu on each opening render, which re-registers its layer on top; the key
+  holds through close, so the exit animation plays on the same element. Fixes the Account and Inspector menus the same
+  way. Pointer opens still take no focus (`useOpenIntent`), so a pointer-opened menu's Escape leaves focus where it
+  was. A keyboard open did NOT get focus back: Radix returns it when its focus scope unmounts, and a force-mounted
+  one never does, so Escape left focus on a row `hidden` had just removed (`<body>`, measured by a focus trace). The
+  primitive now hands it back itself on the closing render of a keyboard-opened force-mounted menu, only when focus
+  is lost or still on one of its rows.
+- *Settings:* `usePalette` records the scope the palette OPENED into (`entryScope`, spent by any scope move inside);
+  Escape there closes. And `closePalette` hands the keyboard back to a shell control that held it at open (a ⚙ reached
+  with Tab) before falling back to rule 4's `restoreFocus(capturedId)`; a pointer open never moved focus, so rule 4
+  runs as before. The lb entry says so.
+*Focus decision:* "returns focus to its trigger" is read as "to where the opening gesture found it": the trigger for a
+keyboard open, the unmoved owner (usually a terminal) for a pointer open — `useOpenIntent`'s rule.
+*Checks:* `verify:panels:product pill.dismiss.1` (a real Escape collapses it, no ESC reaches the PTY and the terminal
+keeps the keyboard; a real press on bare canvas collapses it), `verify:panels:agents view.dismiss.1` (pointer open +
+real Escape, pointer open + real outside press, keyboard open + Escape returns focus to the trigger) and
+`settings.dismiss.1` (one real Escape closes Settings opened from the gear; a real outside press closes it).
+
+**A9 (P2), ⌘F at the edges.** *Reproduced:* placeholder `Search search…`; `No matching command` before any typing;
+the "searched …" line printed twice; a canvas with one shell and one note said "searched 2 terminals". *Causes:* the
+placeholder is `Search ${label}` with the scope named Search; the empty scope fell to the palette's generic empty
+state; an information row is disabled with its own title as its reason, so the hint repeated it; `searchPanels`
+counted every non-chat panel as a terminal (and handed them to the scrollback log). *Fixes:* the scope's placeholder
+says what it reads; a `palette-search` empty state ("Type to search terminal output, chat turns and tasks in this
+workspace"); a reason equal to the row's title is not printed again; terminals are `kind === 'terminal'`. Also: the
+"searched …" line matched only queries that fuzzy-matched its own words (typing `alex` hid it), so its `searchText`
+is the query. *After (the starter canvas):* "searched 1 terminal, 1 chat, 0 tasks and 0 retained outcomes", once.
+*Checks:* `verify:file psearch.count.1`. *Decision, note CONTENT search: not done.* The only content index the app
+holds is the vault read (`useVault`: bodies in the renderer), and it is empty unless a notes folder is set — none by
+default, and New note and the starter write beside a panel, not into a vault. A vault-only search would still find
+nothing on a default profile. The real fix is main reading the open note panels' files in `searchPanels` through
+`redactSecrets`, a new reader on the outward-gate's caller list; that is a scoped milestone of its own, left for the
+lead.
+
+**A10 (P2), wrong disabled reasons.** *Reproduced:* with the HUD at "1 selected", `Next prompt` said "click into a
+panel first"; the prompt-mark rows use `REASON_NOT_TERMINAL` ("only a terminal panel has a font size") for a
+non-terminal subject (read in `commands.ts`; the live note case showed the focus reason first, because a selected
+note is not a captured one). *Fixes:* `REASON_NOT_TERMINAL_MARKS` ("only a terminal panel marks its commands") for
+Previous/Next prompt and Copy last command's output. *Decision: say the difference, don't let selection satisfy.*
+The first cut made the ONE selected panel the rows' subject when nothing was captured; it changed the subject of
+~40 rows at once, and `verify:panels:product` then crashed its renderer (`render-process-gone`, exit 5) after
+`board.1`, three runs out of three, and ran clean with only that line reverted (bisected). So selection and focus
+stay two things, and while something is selected and nothing captured, the focus-gated rows say
+`REASON_NO_FOCUS_SELECTED` ("selecting a panel is not focusing it — click into it first"). *The crash itself is not
+diagnosed* — some row builder misbehaves with a selected-but-unfocused subject; the lead may want it looked at before
+anyone tries the same thing. *After:* a selected, unfocused note's `Copy last command's output` reads "selecting a
+panel is not focusing it — click into it first" (`A10-after-selected.png`); the marks sentence shows for a captured
+non-terminal (pinned in plain node; a captured note could not be produced live, since clicking a note selects it
+without capturing it). `docs/dead-end-audit.md` lists both new reasons (`verify:meta audit.1`). *Check:*
+`verify:palette palette.reason.1`.
+
+**Goldens expected to move:** `palette*` if a scene's list shows a prompt-mark row or the focus reason; `starter` and
+any first-run launcher scene (the tip's button and sentence); `palette` scenes opened into Search.
+
+**Suites (M399):** `npm run affected` (49 suites): 48 passed; the one red is `verify:panels:agents template.1`
+(baseline), with `view.dismiss.1` and `settings.dismiss.1` green. `verify:panels:product` 133/133 at 78% of its
+watchdog — `starter.1` green, **a baseline red retired**. `verify:canvas` 7/7, `verify:palette` 167/167,
+`verify:file` 115/115, `verify:rail` 258/258, `verify:meta` green after the audit rows. `verify:panels:product` crashed its renderer (exit 5) with the first A10 cut in three runs out of three (see A10),
+and never without it.

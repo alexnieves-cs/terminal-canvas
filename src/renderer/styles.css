@@ -6782,6 +6782,9 @@ body {
 .rail-hint { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
 .launcher__banner { display: flex; align-items: center; gap: var(--sp-4); margin: 0 0 var(--sp-5); padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); }
 .launcher__banner-dismiss { flex: 0 0 auto; margin-left: auto; }
+/* M399 (A5). The starter tip's own door sits at the end with its dismiss. */
+.launcher__banner-open { flex: 0 0 auto; margin-left: auto; }
+.launcher__banner-open + .launcher__banner-dismiss { margin-left: 0; }
 .canvas-hud__notice { color: var(--amber); font-family: var(--font-ui); font-size: var(--t-xs); pointer-events: auto; }
 
 /* M174. THE LAUNCHER AS A WELCOME (the brief, finding 9): the wordmark in the

@@ -26,8 +26,10 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | Constant | Reason shown | What the user does |
 |---|---|---|
 | `REASON_NO_FOCUS` | click into a panel first | click into a terminal panel |
+| `REASON_NO_FOCUS_SELECTED` | selecting a panel is not focusing it — click into it first | click into the selected panel (M399: the focus reason while the HUD says "N selected") |
 | `REASON_NOT_STARTED` | that panel has not started | start it (click the card, or its rail row's ▶) |
 | `REASON_NOT_TERMINAL` | only a terminal panel has a font size | focus a terminal panel |
+| `REASON_NOT_TERMINAL_MARKS` | only a terminal panel marks its commands | focus or select a terminal panel (M399: the prompt-mark rows had borrowed the font-size sentence) |
 | `REASON_NOT_TERMINAL_OUTPUT` | only a terminal panel has output to export | focus a terminal panel |
 | `REASON_NOT_AN_AGENT` | that panel is not running a known agent | the mode rows are for claude/codex sessions |
 | `REASON_NO_SELECTION` | select some text in a panel first | drag-select in the terminal |

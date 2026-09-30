@@ -147,7 +147,14 @@ app.whenReady().then(async () => {
   ok('1 the world layer renders with a transform', before !== null, JSON.stringify(before))
 
   // A two-finger scroll: no modifiers. Must translate, must not scale.
-  wc.sendInputEvent({ type: 'mouseWheel', x: 600, y: 400, deltaX: 0, deltaY: -120, canScroll: true })
+  // M399 (A5): over BARE canvas. This window opens on the first-run launcher
+  // card, centred at (600, 400), and a card that has something to scroll now
+  // owns the wheel over itself (shouldYieldWheel) — the pan is asserted where
+  // nothing but the canvas is under the cursor, found by hit test.
+  const bare = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect()
+    for (let y = c.top + 16; y < c.bottom - 16; y += 24) for (let x = c.left + 16; x < c.right - 16; x += 24) { const e = document.elementFromPoint(x, y); if (e && (e.classList.contains('canvas') || e.classList.contains('world'))) return { x: Math.round(x), y: Math.round(y) } }
+    return { x: 600, y: 400 } })()`)
+  wc.sendInputEvent({ type: 'mouseWheel', x: bare.x, y: bare.y, deltaX: 0, deltaY: -120, canScroll: true })
   await sleep(400)
   const panned = await readTransform(wc)
   ok('2 a bare wheel pans without scaling',

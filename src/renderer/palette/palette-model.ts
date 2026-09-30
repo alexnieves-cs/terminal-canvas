@@ -336,6 +336,71 @@ export function doorIndex(rows: Command[], scope: PaletteScope): number {
 }
 
 /**
+ * M399 (A6). THE ORDER A PERSON IS ARROWING THROUGH DOES NOT MOVE.
+ *
+ * `rows` is re-ranked whenever its commands rebuild, and they rebuild on
+ * things nobody typed: a panel's state word (part of a row's haystack) turning
+ * from `working` to `idle`, a list arriving, a row going runnable. During the
+ * critique the list re-sorted under the keyboard and Enter started a `claude`
+ * the tester never chose. So once a person navigates, the view holds the
+ * order it showed (`order`, the row ids as they were) until the query or the
+ * scope changes:
+ *   - rows still present keep their held position, with their NEW content
+ *     (a changed title or disabled reason is still shown — only the order is
+ *     held);
+ *   - rows that left are gone;
+ *   - rows that arrived go after the last held row of their own section (or
+ *     at the end), so a section is never split into two headers; nothing
+ *     above them moves, and the selection stays on its row by id
+ *     (seatSelection).
+ * Pure, so the cheapest tier tests it (verify:palette palette.hold.1).
+ */
+/**
+ * M399 (A6). WHICH ROW IS SELECTED after `rows` changed, as a row ID — the
+ * palette's selection is a row, never a slot. Palette.tsx's seat effect, lifted
+ * out whole so the cheapest tier can hold it to its rules:
+ *   - a query or scope change RE-SEATS: popping out of a scope lands on its
+ *     door, anything else on the best runnable match;
+ *   - any other change (a list arriving, a re-rank under the keyboard, a row
+ *     turning unrunnable) FOLLOWS THE ROW by id wherever it moved, and falls
+ *     back to the best match only when that row is gone or cannot run.
+ * `leaving` is the scope the palette was in before this change.
+ */
+export function seatSelection(p: {
+  rows: Command[]
+  query: string
+  scope: PaletteScope | null
+  leaving: PaletteScope | null
+  reseat: boolean
+  current: string | null
+}): string | null {
+  const idAt = (i: number): string | null => (i >= 0 ? p.rows[i]?.id ?? null : null)
+  if (p.reseat) {
+    if (p.leaving !== null && p.scope === null) {
+      const door = doorIndex(p.rows, p.leaving)
+      if (door >= 0) return idAt(door)
+    }
+    return idAt(bestMatchIndex(p.rows, p.query))
+  }
+  const at = p.current === null ? -1 : p.rows.findIndex((r) => r.id === p.current)
+  return at >= 0 && p.rows[at].disabledReason === undefined ? p.current : idAt(bestMatchIndex(p.rows, p.query))
+}
+
+export function holdOrder(rows: Command[], order: readonly string[]): Command[] {
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  const held = new Set(order)
+  const out: Command[] = order.flatMap((id) => { const r = byId.get(id); return r === undefined ? [] : [r] })
+  for (const r of rows) {
+    if (held.has(r.id)) continue
+    let at = -1
+    for (let i = out.length - 1; i >= 0; i -= 1) if (out[i].group === r.group) { at = i; break }
+    if (at < 0) out.push(r)
+    else out.splice(at + 1, 0, r)
+  }
+  return out
+}
+
+/**
  * The next runnable row in `delta`'s direction, wrapping.
  *
  * Returns -1 when nothing is runnable, which the view must tell apart from

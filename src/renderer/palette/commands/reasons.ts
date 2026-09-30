@@ -12,6 +12,12 @@ import type { AgentBackend } from '@shared/agent-session'
 import type { PresetRow } from './row-types'
 
 export const REASON_NO_FOCUS = 'click into a panel first'
+/**
+ * M399 (A10). The same refusal while something IS selected: the HUD says
+ * "1 selected" and these rows act on the panel the keyboard is in, so the
+ * sentence says selecting is not that (commands.ts's closing pass).
+ */
+export const REASON_NO_FOCUS_SELECTED = 'selecting a panel is not focusing it — click into it first'
 export const REASON_NO_SELECTION = 'select some text in a panel first'
 export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
 export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
@@ -21,6 +27,13 @@ export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_UNREAD_PRESET = 'from a pack, not read yet — choose "I\'ve read this preset" first'
 /** M49. A font size belongs to a terminal; the other kinds set their own text. */
 export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
+/**
+ * M399 (A10). The prompt-mark rows (Previous/Next prompt, Copy last command's
+ * output) borrowed the font-size sentence above, so a note said it had no
+ * font size when asked for its last command. Their own fact: the marks are a
+ * shell's, and only a terminal has one.
+ */
+export const REASON_NOT_TERMINAL_MARKS = 'only a terminal panel marks its commands'
 /** M50. One panel has nothing to be tidied against. */
 export const REASON_TIDY_NEEDS_TWO = 'needs two panels on the canvas'
 export const REASON_NOT_TERMINAL_OUTPUT = 'only a terminal panel has output to export'

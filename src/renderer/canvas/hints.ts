@@ -23,7 +23,9 @@ export const HINTS: ReadonlyArray<Hint> = [
   // but that leaves it with no door a first-time person would ever open. One
   // sentence, pointing at exactly where it is, shown until dismissed like the
   // tmux notice beside it.
-  { id: 'starter', text: 'New to terminal canvas? A starter canvas — under More ways to start, below — walks through one example of every kind of object.', where: 'launcher' }
+  // M399 (A5): the banner now carries the door itself, so the sentence no
+  // longer sends a person looking for it.
+  { id: 'starter', text: 'New to terminal canvas? A starter canvas walks through one example of every kind of object.', where: 'launcher' }
 ]
 
 /** `where` narrows to one surface's hints; both surfaces read this one list (the Act III critic: two readers of one list had drifted). */

@@ -288,6 +288,43 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   // above the HUD. Observed on the pill, the HUD and the host (a resize, a
   // drawer, the HUD's own label changing).
   const rootRef = useRef<HTMLDivElement>(null)
+
+  // M399 (A7). THE EXPANDED PILL IS A LAYER, AND A LAYER LEAVES ON ESCAPE AND
+  // ON A PRESS OUTSIDE IT. Opened by a click it never takes the keyboard (the
+  // rule above), so its input's own Escape handler never heard the key: Esc
+  // went to the terminal and the pill stayed up; an outside click left it up
+  // too. Both listeners are document-level and live only while expanded.
+  //  - Escape is taken in the CAPTURE phase, before xterm's textarea handler
+  //    (which cancels the key it consumes), so the first Esc closes the
+  //    topmost layer and never reaches the agent. Collapsing hands the
+  //    keyboard back exactly as the input's Escape does (collapse(true)):
+  //    to the element the input was entered from, else it stays where it is
+  //    — the pill's trigger never took focus, so that IS its trigger's
+  //    keyboard. The palette, when open, is above the pill and owns its Esc.
+  //  - An outside pointerdown collapses WITHOUT restoring: the press is the
+  //    focus gesture (the palette's dismissPalette rule). The draft survives.
+  //    It supersedes M249's "stays open across outside clicks": a person who
+  //    moves to terminal B now closes the pill there, so the hand-back it
+  //    guarded (to B, never A) is reached through Escape alone.
+  useEffect(() => {
+    if (!expanded) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('.palette') !== null) return
+      event.preventDefault()
+      event.stopPropagation()
+      collapse(true)
+    }
+    const onPointer = (event: PointerEvent): void => {
+      const root = rootRef.current
+      if (root !== null && event.target instanceof Node && root.contains(event.target)) return
+      collapse(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    document.addEventListener('pointerdown', onPointer, true)
+    return () => { window.removeEventListener('keydown', onKey, true); document.removeEventListener('pointerdown', onPointer, true) }
+    // collapse closes over refs and setters only, so this render's copy is
+    // equivalent to any later one's: `expanded` is the only dependency.
+  }, [expanded])
   useLayoutEffect(() => {
     const pill = rootRef.current
     const host = pill?.parentElement

@@ -16,8 +16,9 @@ import {
 import {
   SECTIONS,
   bestMatchIndex,
-  doorIndex,
   filterCommands,
+  holdOrder,
+  seatSelection,
   splitHighlight,
   stepRunnable,
   type Command,
@@ -202,7 +203,15 @@ const sectionLabel = (id: SectionId): string =>
 export function Palette(props: PaletteProps): JSX.Element {
   const { controller, inputMode } = props
   const [query, setQuery] = useState('')
-  const [index, setIndex] = useState(0)
+  // M399 (A6). The selection is a ROW, not a slot: the id of the command
+  // Enter will run. `index` is derived from it on every render, so there is
+  // no frame in which a re-ranked list leaves the highlight — and Enter — on
+  // whatever row slid into the old position. (It was an index, re-pointed by
+  // an effect after the render that moved the rows.)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // The order a person is arrowing through, held until the query or the
+  // scope changes (palette-model's holdOrder). Set on the first navigation.
+  const [held, setHeld] = useState<{ key: string; order: string[] } | null>(null)
   // Which drill-in is open. Read from the controller, NOT from local state:
   // M8a's top bar opens the palette directly into the settings scope, and the
   // scope has exactly one authority (usePalette). Keeping a copy here would
@@ -282,7 +291,18 @@ export function Palette(props: PaletteProps): JSX.Element {
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
   )
-  const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
+  const ranked = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
+  const holdKey = `${scope ?? ''}\u0000${query}`
+  const rows = useMemo(() => (held !== null && held.key === holdKey ? holdOrder(ranked, held.order) : ranked), [ranked, held, holdKey])
+  // Before the effect below has seated a selection (the first render), the
+  // best match is what is shown selected — the same seat that effect picks.
+  const found = selectedId === null ? -1 : rows.findIndex((r) => r.id === selectedId)
+  const index = found >= 0 ? found : selectedId === null ? bestMatchIndex(rows, query) : -1
+  // Navigation freezes the order it is navigating: arrows and hover both
+  // call this before they move the selection.
+  const holdRows = (): void => {
+    if (held === null || held.key !== holdKey) setHeld({ key: holdKey, order: rows.map((r) => r.id) })
+  }
 
   // M42. Report the live query to Canvas WHILE the search scope is open, so it
   // can debounce and ask main. Cleared (empty) when the scope leaves search,
@@ -311,7 +331,6 @@ export function Palette(props: PaletteProps): JSX.Element {
 
   // What the selection was pointing AT last render, so the effect below can
   // follow the command rather than the slot it happened to occupy.
-  const prevRowsRef = useRef<Command[]>(rows)
   const prevQueryRef = useRef(query)
   const prevScopeRef = useRef(scope)
 
@@ -364,24 +383,14 @@ export function Palette(props: PaletteProps): JSX.Element {
   //     is reachable.
   useEffect(() => {
     const reseat = prevQueryRef.current !== query || prevScopeRef.current !== scope
-    const previous = prevRowsRef.current
     // Read BEFORE the ref is overwritten below: this is the scope being left.
     const leaving = prevScopeRef.current
     prevQueryRef.current = query
     prevScopeRef.current = scope
-    prevRowsRef.current = rows
-    setIndex((i) => {
-      if (reseat) {
-        if (leaving !== null && scope === null) {
-          const door = doorIndex(rows, leaving)
-          if (door >= 0) return door
-        }
-        return bestMatchIndex(rows, query)
-      }
-      const selectedId = i >= 0 ? previous[i]?.id : undefined
-      const moved = selectedId === undefined ? -1 : rows.findIndex((r) => r.id === selectedId)
-      return moved >= 0 && rows[moved].disabledReason === undefined ? moved : bestMatchIndex(rows, query)
-    })
+    // A new query or scope is a new list: the held order is spent, so the
+    // same query typed again later is ranked afresh rather than frozen stale.
+    if (reseat) setHeld(null)
+    setSelectedId((current) => seatSelection({ rows, query, scope, leaving, reseat, current }))
   }, [rows, query, scope])
 
   // Keep the selected row on screen. .palette__list is max-height: 46vh with
@@ -504,7 +513,10 @@ export function Palette(props: PaletteProps): JSX.Element {
       // makes Escape a real cancel for a rename and for a delete alike.
       case 'Escape':
         event.preventDefault()
-        if (!inputMode && scope !== null) setScope(null)
+        // M399 (A7): the scope the palette OPENED into (the ⚙'s Settings,
+        // ⌘F's Search) has no root behind it the person ever saw — Escape
+        // there closes, as it does at the root. A door walked through pops.
+        if (!inputMode && scope !== null && scope !== controller.entryScope) setScope(null)
         else controller.closePalette()
         break
       // Backspace past the start of an empty query pops the scope, the way the
@@ -519,11 +531,13 @@ export function Palette(props: PaletteProps): JSX.Element {
         break
       case 'ArrowDown':
         event.preventDefault()
-        setIndex((i) => stepRunnable(rows, i, 1))
+        holdRows()
+        setSelectedId(rows[stepRunnable(rows, index, 1)]?.id ?? null)
         break
       case 'ArrowUp':
         event.preventDefault()
-        setIndex((i) => stepRunnable(rows, i, -1))
+        holdRows()
+        setSelectedId(rows[stepRunnable(rows, index, -1)]?.id ?? null)
         break
       // ArrowRight/ArrowLeft are the horizontal spelling of Enter-on-a-door
       // and Escape-in-a-scope: right opens the drill-in under the selection,
@@ -677,9 +691,13 @@ export function Palette(props: PaletteProps): JSX.Element {
             placeholder={
               inputMode
                 ? inputMode.label
-                : scope
-                  ? `Search ${SCOPE_LABEL[scope].toLowerCase()}…`
-                  : 'Type a command…'
+                : scope === 'search'
+                  // M399 (A9): `Search ${label}` read "Search search…". What
+                  // the scope reads, instead of its own name twice.
+                  ? 'Search terminal output, chats and tasks…'
+                  : scope
+                    ? `Search ${SCOPE_LABEL[scope].toLowerCase()}…`
+                    : 'Type a command…'
             }
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -759,7 +777,8 @@ export function Palette(props: PaletteProps): JSX.Element {
                     lastPointerRef.current = { x: e.clientX, y: e.clientY }
                     if (row.disabledReason !== undefined || i === index) return
                     pointerSelectRef.current = true
-                    setIndex(i)
+                    holdRows()
+                    setSelectedId(row.id)
                   }}
                 >
                   <span className="palette__title">
@@ -788,8 +807,12 @@ export function Palette(props: PaletteProps): JSX.Element {
                   {/* M64. A search hit's line is terminal output: the term is
                       marked in it, the way the title's match is. */}
                   <span className="palette__hint">
+                    {/* M399 (A9): an INFORMATION row (the search's "searched 1
+                        terminal and 0 chats", a cap, a redaction count) is
+                        disabled with its own title as the reason, so Enter
+                        skips it — and that printed the same sentence twice. */}
                     {row.disabledReason !== undefined
-                      ? <>{Lock}{row.disabledReason}</>
+                      ? (row.disabledReason === row.title ? null : <>{Lock}{row.disabledReason}</>)
                       : (scope === 'search' && row.subtitle !== undefined
                           ? splitHighlight(row.subtitle, query).map((seg, si) => seg.hit ? <mark key={si} className="palette__hit">{seg.text}</mark> : <span key={si}>{seg.text}</span>)
                           : (row.subtitle ?? ''))}
@@ -800,7 +823,9 @@ export function Palette(props: PaletteProps): JSX.Element {
               </Fragment>
             )
           })}
-          {rows.length === 0 && <li className="palette__empty"><EmptyState id="palette" /></li>}
+          {/* M399 (A9): ⌘F opens the search scope with nothing typed, and
+              "No matching command" answered a search nobody had made. */}
+          {rows.length === 0 && <li className="palette__empty">{scope === 'search' && query.trim() === '' ? <EmptyState id="palette-search" /> : <EmptyState id="palette" />}</li>}
         </ul>
       )}
 
