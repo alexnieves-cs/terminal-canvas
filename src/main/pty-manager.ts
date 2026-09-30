@@ -16,7 +16,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
-import { configStamps as readConfigStamps, resolveToolboxHome } from './toolbox-read'
+import { configStamps as readConfigStamps, resolveToolboxHome, toolboxCwd } from './toolbox-read'
 import { join, resolve, dirname } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import type { WebContents } from 'electron'
@@ -36,6 +36,7 @@ import { shellIntegrationFor } from './shell-integration'
 import type { RunLedger } from './run-ledger'
 import type { SessionBackend } from './session-backend'
 import { SubagentWatch, type WatchDeps } from './subagent-watch'
+import { isClaudeSession, isHomeDir } from './subagent-scan'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
 import { resolveTranscript as realResolveTranscript, readFrom as realReadFrom } from './transcript-reader'
 import {
@@ -335,6 +336,17 @@ interface Session {
   spawnedAt: number
   /** M52. The command in flight, from OSC 133 C to D. M306: with its output, when a store is wired. */
   run: { command: string; startedAt: number; capture: OutputCapture | null } | null
+  /** M398 (A3). The spawn spec's agent kind, one of `isClaudeSession`'s four facts. */
+  agent: PanelSpec['agent']
+  /**
+   * M398 (A3). Set the first tick `isClaudeSession` says yes, and never unset:
+   * an agent typed into a shell exits back to the prompt, and its finished
+   * nodes stay beside the panel `done` (M15's rule) rather than vanishing the
+   * moment the shell's current command stops being `claude`.
+   */
+  agentSeen: boolean
+  /** M398 (A3). Whether the last tick fed this session to the watcher, so leaving it can clear the card. */
+  watched: boolean
 }
 
 /** M52. The run ledger and the shell-integration directory, injected. */
@@ -820,7 +832,11 @@ export class PtyManager {
     // as `fresh` — the safe direction, since `fresh` would be a claim.
     if (!reattached || !this.configStamps.has(spec.panelId)) {
       try {
-        this.configStamps.set(spec.panelId, readConfigStamps(cwd, resolveToolboxHome()))
+        // M398 (A2). Stamped over the directory the toolbox door will READ
+        // (toolboxCwd), or a fenced home-cwd panel compares stamps of one
+        // directory against a read of another and reports a false `changed`.
+        const toolboxHome = resolveToolboxHome()
+        this.configStamps.set(spec.panelId, readConfigStamps(toolboxCwd(cwd, toolboxHome), toolboxHome))
       } catch {
         // A panel whose config cannot be stamped answers `unknown` freshness.
       }
@@ -839,7 +855,10 @@ export class PtyManager {
       reattached,
       detector: initialDetector(Date.now()),
       run: null,
-      spawnedAt
+      spawnedAt,
+      agent: spec.agent,
+      agentSeen: false,
+      watched: false
     }
     this.sessions.set(spec.panelId, session)
     // Only ever ticks while something is in the map; see startIdleTick.
@@ -1213,9 +1232,11 @@ export class PtyManager {
     // answer changed — used below as the subagent half's live-cwd source, so
     // that half need not re-derive it from lastLive's packed dedupe string.
     const liveCwd = new Map<PanelId, string>()
+    const liveCommand = new Map<PanelId, string>()
     if (entries) {
       for (const entry of entries) {
         liveCwd.set(entry.panelId, entry.cwd)
+        if (entry.currentCommand !== undefined) liveCommand.set(entry.panelId, entry.currentCommand)
         // Only panels this manager is actually holding. An entry for a
         // session this renderer has no local session for belongs to a panel
         // nothing is subscribed to, and sending for it would grow lastLive
@@ -1238,15 +1259,42 @@ export class PtyManager {
       }
     }
 
-    const panels = [...this.sessions.values()].map((session) => ({
-      panelId: session.panelId,
+    // M398 (A3). Only agent sessions, and never one sitting in $HOME: see
+    // isClaudeSession and isHomeDir (subagent-scan.ts) for why each. Filtered
+    // BEFORE poll, so a plain shell is not even counted into a neighbour's
+    // `sharing` — three login shells in ~ were each told "3 panels share this
+    // repository". Home is read per tick, not captured: the same reason the
+    // toolbox's home is a resolver.
+    const home = homedir()
+    const panels: Array<{ panelId: PanelId; cwd: string; spawnedAt: number }> = []
+    for (const session of this.sessions.values()) {
       // M12's consumer-fallback rule: a consumer that needs A directory,
       // rather than one making a present-tense claim, falls back happily to
       // the resolved spawn cwd when there is no live answer yet — or, under
       // the direct backend, ever.
-      cwd: liveCwd.get(session.panelId) ?? session.cwd,
-      spawnedAt: session.spawnedAt
-    }))
+      const cwd = liveCwd.get(session.panelId) ?? session.cwd
+      if (!session.agentSeen) {
+        session.agentSeen = isClaudeSession({
+          agent: session.agent,
+          command: session.command,
+          currentCommand: liveCommand.get(session.panelId),
+          runCommand: session.run?.command
+        })
+      }
+      if (session.agentSeen && !isHomeDir(cwd, home)) {
+        session.watched = true
+        panels.push({ panelId: session.panelId, cwd, spawnedAt: session.spawnedAt })
+        continue
+      }
+      if (!session.watched) continue
+      // Leaving the watch (an agent's shell that cd'd home): its claim is
+      // dropped and the renderer told there is nothing, once. Without the
+      // send, a card drawn while it was watched would stay up forever,
+      // since poll only ever reports the panels it is handed.
+      session.watched = false
+      this.subagentWatch.drop(session.panelId)
+      this.send(IPC_EVENTS.SUBAGENT_STATE, { panelId: session.panelId, ambiguous: false, sharing: 0, overflow: 0, records: [] } satisfies SubagentUpdate)
+    }
 
     for (const entry of this.subagentWatch.poll(panels)) {
       // The watcher already deduped (see SubagentWatch.poll's own comment);

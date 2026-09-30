@@ -10,7 +10,23 @@ const { join } = require('node:path')
 const os = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } = require('node:fs')
-const { tmpdir } = require('node:os')
+const { tmpdir, homedir } = require('node:os')
+
+// M398 (A3). The subagent watcher is fed only CLAUDE CODE sessions
+// (subagent-scan.ts's isClaudeSession), and one of its four facts is the
+// spawned command's own basename. So the positive-path checks below spawn a
+// shell under the name `claude` rather than /bin/sh: a real sh, nothing
+// installed, and nothing about the real CLI assumed. NOT a spaced directory,
+// against this repo's rule and on purpose: tmux hands a lone command argument
+// (args: []) to `$SHELL -c`, which splits a spaced path, so the pane dies at
+// once and the check would measure that instead (measured: no tick ever saw
+// the panel). That is a separate fact about spaced COMMAND paths, not this one.
+const FAKE_CLAUDE = (() => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tc-pty-manager-bin-')))
+  const path = join(dir, 'claude')
+  writeFileSync(path, '#!/bin/sh\nexec /bin/sh "$@"\n', { mode: 0o755 })
+  return path
+})()
 
 /* THE FENCE, at MODULE SCOPE and not inside any one check.
 
@@ -1366,7 +1382,13 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         const { manager } = makeHarness(tmuxBackend, {
           onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
         })
-        await manager.create({ panelId: 'sa2', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+        await manager.create({ panelId: 'sa2', cwd: subagentCwd, command: FAKE_CLAUDE, args: [], cols: 80, rows: 24 })
+        // M398 (A3). A plain shell in the SAME directory, and an agent in
+        // $HOME with a session seeded for it below. Before M398 the shell was
+        // fed to the watcher too, so sa2 went ambiguous ("2 panels share this
+        // repository") and 26 went red; and home was a repository like any other.
+        await manager.create({ panelId: 'sa2sh', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+        await manager.create({ panelId: 'sa2home', cwd: homedir(), command: FAKE_CLAUDE, args: [], cols: 80, rows: 24 })
 
         // The ONE rule slugFor states in subagent-scan.ts, restated here
         // rather than imported: this suite bundles pty-manager.ts alone and
@@ -1385,8 +1407,22 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         // matched — see the realpath note above for why this must be the
         // RESOLVED cwd tmux will report, not the raw mkdtempSync path.
         writeFileSync(`${sessionDir}.jsonl`, JSON.stringify({ type: 'user', cwd: subagentCwd }) + '\n')
+        // The home agent's own session, fully claimable had home counted:
+        // under the FENCED projects root, so nothing real is read or written.
+        const homeCwd = realpathSync(homedir())
+        const homeSession = join(projectsRoot, homeCwd.replace(/[^A-Za-z0-9]/g, '-'), 'H1')
+        mkdirSync(join(homeSession, 'subagents'), { recursive: true })
+        writeFileSync(join(homeSession, 'subagents', 'agent-h.meta.json'), JSON.stringify({
+          agentType: 'general-purpose', description: 'home', toolUseId: 'toolu_verify26h', spawnDepth: 1, model: 'sonnet'
+        }))
+        writeFileSync(`${homeSession}.jsonl`, JSON.stringify({ type: 'user', cwd: homeCwd }) + '\n')
 
         await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
+        ok('subagent.feed.2 a plain shell beside an agent is never fed to the watcher, and an agent in $HOME is not watched',
+          !seen.some((u) => u.panelId === 'sa2sh' || u.panelId === 'sa2home'),
+          `seen=${JSON.stringify(seen.map((u) => [u.panelId, u.ambiguous, u.sharing]))}`)
+        manager.kill('sa2sh')
+        manager.kill('sa2home')
         const record = seen[0]?.records?.[0]
         ok('26 a real Claude Code session directory produces exactly one subagent:state carrying one running record, then nothing further',
           seen.length === 1 && seen[0].panelId === 'sa2' && seen[0].ambiguous === false &&
@@ -1456,7 +1492,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         const { manager } = makeHarness(tmuxBackend, {
           onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
         })
-        await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+        await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: FAKE_CLAUDE, args: [], cols: 80, rows: 24 })
         // Let the session settle before touching it, the same margin checks
         // 16/16b give a fresh session before detaching it — new-session -A's
         // local client needs a moment to actually attach before the session
@@ -1489,7 +1525,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         // window this check needs to isolate.
         manager.detachAll()
         await sleep(500)
-        const reattachResult = await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+        const reattachResult = await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: FAKE_CLAUDE, args: [], cols: 80, rows: 24 })
 
         await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
         const record = seen[0]?.records?.[0]
@@ -1979,6 +2015,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     h.manager.kill('at4b')
   }
 
+  try { rmSync(join(FAKE_CLAUDE, '..'), { recursive: true, force: true }) } catch { /* best effort */ }
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)

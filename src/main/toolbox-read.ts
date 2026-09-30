@@ -349,6 +349,28 @@ export function resolveToolboxHome(): string {
   return override !== undefined && override.trim() !== '' ? override : homedir()
 }
 
+/**
+ * M398 (A2). The directory a toolbox read treats as the panel's `cwd`, with
+ * `~` meaning the TOOLBOX home rather than the process's.
+ *
+ * `resolveToolboxHome` fenced only the USER arm. An agent whose cwd is home
+ * (every `~` preset, and the starter's chat) reads its PROJECT arm from
+ * `join(cwd, '.claude')`, which is home's `.claude` again, and under a fence
+ * that was the real one: the `starter` golden printed the developer's own
+ * skills, hooks and "628 allow" rules, the leak the fence was written to stop,
+ * through the arm it did not cover. So `~`, `~/…` and the real home itself all
+ * land on the toolbox home. Unfenced (production) the toolbox home IS the real
+ * home and every answer here is `expandTilde`'s, unchanged. A folder UNDER the
+ * real home is left alone: it is a real project, and no harness scene sits in
+ * one.
+ */
+export function toolboxCwd(cwd: string, home: string, realHome: string = homedir()): string {
+  if (cwd === '~' || cwd === '~/') return home
+  if (cwd.startsWith('~/')) return join(home, cwd.slice(2))
+  const bare = (p: string): string => (p.length > 1 ? p.replace(/\/+$/, '') : p)
+  return bare(cwd) === bare(realHome) ? home : cwd
+}
+
 export interface ToolboxPaths {
   userRoot: string
   projectRoot: string

@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs'
-import { expandTilde } from './pty-manager'
+import { toolboxCwd } from './toolbox-read'
 import type { ToolboxCache } from './toolbox-cache'
 import type { PluginListResult } from './plugin-list'
 import type { ToolboxReadRequest } from '../shared/ipc-contract'
@@ -31,7 +31,12 @@ export function createToolboxDoor(deps: ToolboxDoorDeps): (req: ToolboxReadReque
     // M194. Inspection must never borrow the spawn resolver's home fallback:
     // a deleted project would otherwise display HOME's tools as its own.
     if (req.cwd === '') return { kind: 'no-cwd' }
-    const cwd = expandTilde(req.cwd)
+    // M398 (A2). `~` and home itself resolve against the TOOLBOX home, so a
+    // fence covers the project arm of an agent sitting in home as well as the
+    // user arm (`toolboxCwd`'s own comment). Read once: the cache is asked
+    // with the same home below.
+    const home = deps.home()
+    const cwd = toolboxCwd(req.cwd, home)
     // Three facts, three sentences. An earlier round of this had two, and the
     // one that named non-existence was the arm that never saw it: `statSync`
     // THROWS on a missing path, so a deleted project always lands in the
@@ -44,7 +49,7 @@ export function createToolboxDoor(deps: ToolboxDoorDeps): (req: ToolboxReadReque
       return { kind: 'unavailable', reason: 'the directory is no longer there — it may have been moved or deleted' }
     }
     return deps.cache.read(
-      { cwd, home: deps.home(), spawnStamps: deps.stampsFor(req.panelId) },
+      { cwd, home, spawnStamps: deps.stampsFor(req.panelId) },
       // Passed as a RESOLVER, never pre-awaited here: the cache asks this
       // only on an actual miss, so N toolbox panels sharing one cwd spawn
       // `claude plugin list --json` once, not once per panel. `unknown`

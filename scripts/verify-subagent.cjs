@@ -477,6 +477,27 @@ const tree1 = () => ({
     JSON.stringify({ boundedFirstRead, rereads, later }))
 }
 
+// M398 (A3). Which PTY sessions the watcher is fed at all. Three login shells
+// in ~ were each told "3 panels share this repository", because every PTY was
+// fed and home counted as a repository. The live wiring (pty-manager's
+// pollLive) is proven end to end by verify:pty-manager subagent.feed.2; these
+// pin the two rules it applies.
+ok('subagent.feed.1 only a Claude Code session is fed: a login shell, codex and a look-alike are not; each of the four facts alone is enough',
+  !S.isClaudeSession({ command: '/bin/zsh' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', currentCommand: 'zsh', runCommand: 'ls -la' }) &&
+    !S.isClaudeSession({ command: 'codex', agent: 'codex' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', runCommand: 'claude-helper run' }) &&
+    !S.isClaudeSession({ command: '/bin/zsh', runCommand: 'echo claude' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', agent: 'claude-code' }) &&
+    S.isClaudeSession({ command: '/opt/homebrew/bin/claude' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', currentCommand: 'claude' }) &&
+    S.isClaudeSession({ command: '/bin/zsh', runCommand: '  claude --resume abc' }))
+
+ok('subagent.home.1 $HOME is never a repository: home, home with a trailing slash and ~ are home; a folder under it is not',
+  S.isHomeDir('/Users/me', '/Users/me') && S.isHomeDir('/Users/me/', '/Users/me') &&
+    S.isHomeDir('~', '/Users/me') && S.isHomeDir('/Users/me', '/Users/me/') &&
+    !S.isHomeDir('/Users/me/repo', '/Users/me') && !S.isHomeDir('/Users/meg', '/Users/me') && !S.isHomeDir('/', '/Users/me'))
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

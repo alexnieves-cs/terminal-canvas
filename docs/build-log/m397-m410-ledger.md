@@ -102,3 +102,68 @@ frame (A8).
 83/84: only `template.1` (baseline). `verify:panels:product` 130/131: only `starter.1` (baseline). Two earlier product
 runs hit the watchdog and three workflow drag checks went red while macOS's `mediaanalysisd` held the load average at
 20–85. At load 5 the same code ran green but for the baseline in 182 s, so those reds were load, measured by the re-run. `npm run affected` (39 suites): 37 passed. The two reds are `panels:agents` (`template.1`, baseline) and `panels:product` (`starter.1`, baseline, plus a watchdog at 230.7 s while the load average was 7–16). Re-run alone at load 4–5, product finished in 181.7 s (79% of its watchdog) with only `starter.1` red.
+
+### M398 — the harness fence covers the project arm, and the subagent card leaves plain shells
+
+Screenshots in `/tmp/tc-daily-loop-shots/`: `A3-before.png`, `A3-after.png` (and `A3-fresh.png`, the fresh canvas
+both started from).
+
+**A2 (P1), the `starter` golden prints the developer's own `~/.claude`.** *Reproduced* through the door itself, not by
+shooting: with a fenced toolbox home, `createToolboxDoor` asked for `~` (the starter chat's cwd, `beginNewChat`'s
+fallback) answered `cwd: /Users/alexnieves`, 15 real skills and 7 source/permission paths outside the fence. The live
+app's Skills pane shows the same shape (its PROJECT column repeats USER for a `~` panel), which is correct in
+production, where the cwd really is home. *Cause:* `shot.cjs` fences the USER arm (`TC_TOOLBOX_HOME`), but the door
+expanded `~` with `expandTilde` (the process's `homedir()`), and the PROJECT arm is `join(cwd, '.claude')`, which is
+the real `~/.claude` again. *Fix:* `toolboxCwd` (`main/toolbox-read.ts`) resolves `~`, `~/…` and the real home's own
+path against the TOOLBOX home. Unfenced, the toolbox home is the real home, so production answers are unchanged. The
+door (`toolbox:read`, `tc toolbox`) uses it, and so does `pty-manager`'s spawn-time config stamp, so a fenced home-cwd
+panel doesn't compare stamps of one directory against a read of another. A folder UNDER the real home is left alone,
+because it's a real project and no harness scene sits in one. *Other harness scenes that could read the real home:*
+checked. `prompt:list` is stubbed in shot, the vault reads only a set notes folder (default none), `navigator-files`
+is rooted on the fixture repo, and every `~` preset's toolbox read goes through the same door, so the one fence covers
+them. `fs:list` on a literal `~` would still list the real home, but no scene asks it to. *Check:* `verify:control
+toolbox.fence.1`: through the same door, `~` and the real home's path both read only under a fenced home, both arms
+(every source and permission path), with the planted skill found. A non-home folder keeps its own project arm. It was
+red against the old expansion (`outside: 7, skills: 15`). The brief's other option (running the shot starter far enough
+to eval the inspector) wasn't needed: the starter reaches exactly this door with exactly this cwd. *History:* the
+leaked `starter.png` is already on `origin/main` (last written by 04f375d8, M267; also on `origin/archive/carried-reds`
+and `origin/cursor/cos-waves-1-4-ec2c`). Whether to purge it from history is **the user's decision**. Nothing was
+rewritten, amended or forced. *Golden:* `starter` must be re-shot and LOOKED at: its inspector should now show the
+fenced home's planted skills, not the developer's.
+
+**A3 (P1), SUBAGENTS on plain shells.** *Reproduced* in the real app (fresh userData, three ⌘N login shells in `~`):
+three cards, each "3 panels share this repository, so their subagents cannot be told apart" (`A3-before.png`). *Cause:*
+`pollLive` fed every PTY to `SubagentWatch.poll`, and `~` slugs like any folder, so the three shells were "one
+repository". The cards took their parent's z, so a parent that out-ranked a neighbour painted over its header. *Fix:*
+(1) `isClaudeSession` (`subagent-scan.ts`, pure): a session is fed only if the spawn spec's `agent` is `claude-code`,
+or the spawned command, tmux's current command or the OSC 133 command in flight has the basename `claude`. It's sticky
+per session (`agentSeen`), so an agent typed into a shell keeps its `done` nodes after it exits (M15's rule). (2)
+`isHomeDir`: a panel whose cwd is home is never watched. It's filtered BEFORE `poll`, so it isn't counted into anyone's
+`sharing` either. A panel that leaves the watch (an agent's shell that `cd ~`) has its claim dropped and one empty
+update sent, so a card drawn earlier doesn't stay up forever. (3) `SubagentLayer` draws nodes, the card and `+N more`
+at z 0, below every panel (Panel.z ≥ 1, the lanes' rule). *Decision:* z-below rather than placement-aware positioning.
+The layer knows only terminal panels, and passing every rect would defeat its per-panel memo. Below a neighbour, the
+neighbour wins, and on open canvas nothing changes. *After:* the same three shells show no card (`A3-after.png`).
+*Checks:* `verify:subagent subagent.feed.1` (which sessions count: login shell, codex, `claude-helper`, `echo claude`
+don't; each of the four facts alone does) and `subagent.home.1` (home, trailing slash and `~` are home, and `/Users/meg`
+isn't `/Users/me`). `verify:pty-manager subagent.feed.2` is end to end on a real PtyManager and real fs: a plain shell
+beside an agent in the same folder gets no update and doesn't make the agent ambiguous, and an agent in `$HOME` with a
+claimable seeded session gets nothing. `verify:panels:kinds subagent.cover.1` is measured: a plain shell is spawned, the
+parent is raised over it by a chrome press, and the shell's header is moved under the first node. `elementFromPoint`
+(node made hit-testable for the probe only, since `pointer-events: none` would otherwise make it pass vacuously) must
+land in the neighbour. It was red with the old `zIndex: panel.z` (hits `subagent-node__desc`, z 3 over 2).
+*Fixture change:* the positive-path checks (`verify:pty-manager` 26/27, `verify:panels:kinds` 131–133) now spawn a real
+`/bin/sh` under the name `claude` (a two-line script), because a `/bin/sh` panel is no longer an agent. That script's
+directory is NOT spaced, against the repo's rule and on purpose: tmux hands a lone command argument to `$SHELL -c`,
+which splits a spaced path, and the pane died at once (measured: no tick ever saw it). *Lead may want to note:* a real
+preset whose COMMAND path contains a space would die the same way under tmux. That's a separate pre-existing fact, not
+fixed here.
+
+**Goldens expected to move (not written):** `starter` (A2: fenced toolbox in the inspector, plus A1 from M397). Every
+scene with two or more shells in one fixture folder loses its "N panels share this repository" card (A3), e.g.
+`navigator-files` shows two now, and likely `kinds*`, `header`, `overview`, `group*`, `attention`, `palette*`, `trail`,
+`zoomed-out*`, `compact`, `wide`, `merged`: any scene whose shells share `REPO` or `~`.
+
+**Suites:** `verify:subagent` 29/29, `verify:control` 38/38, `verify:toolbox` 106/106, `verify:pty-manager` 64/64,
+`verify:panels:kinds` 52/52 (headroom 85%). `npm run affected` (46 suites): 44 passed. The two reds are
+`panels:agents template.1` and `panels:product starter.1`, both baseline, with every part's headroom at 67–86%.

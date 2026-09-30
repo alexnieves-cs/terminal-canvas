@@ -69,11 +69,19 @@ const SubagentGroup = memo(function SubagentGroup({ panel }: SubagentGroupProps)
   const subagents = useSubagents(panel.rect.id)
   if (subagents === undefined) return null
 
-  const { rect, z } = panel
+  const { rect } = panel
   // World units, never divided by viewport.scale: nodes scale WITH the
   // panels, the same rule cascadeCentre's step already follows. `.world`'s
   // own transform is what turns this into a screen position.
   const nodeX = rect.x + rect.w + REVIEW_GAP
+  // M398 (A3). BELOW every panel (Panel.z >= 1), never at the parent's z. The
+  // column is placed by arithmetic beside its parent with no idea what else
+  // is there, so at the parent's z it drew over a neighbour's header whenever
+  // the parent was the newer panel: three shells side by side each painted
+  // their card across the next one's title. A derived annotation never
+  // out-ranks an authored object; on open canvas nothing changes, and beside
+  // a neighbour the neighbour wins. The lanes sit at 0 for the same reason.
+  const z = 0
 
   if (subagents.ambiguous) {
     // Visible, never silent: an absent feature reads as a broken one. One

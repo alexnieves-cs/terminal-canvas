@@ -1761,10 +1761,20 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // than reused, because their own `spawnAt` is declared inside the
       // GIT_OK block and out of reach down here.
       const saCwd = mkdtempSync(join(tmpdir(), 'tc sa cwd '))
+      // M398 (A3). The watcher is fed only Claude Code sessions, and one of
+      // isClaudeSession's facts is the command's own basename: a real sh
+      // spawned under the name `claude`, so nothing about the real CLI is
+      // assumed. In a space-FREE directory, against this repo's rule on
+      // purpose: tmux hands a lone command argument to `$SHELL -c`, which
+      // splits a spaced path and the pane dies at once (verify:pty-manager's
+      // FAKE_CLAUDE measured it).
+      const fakeClaudeDir = mkdtempSync(join(tmpdir(), 'tc-sa-bin-'))
+      const fakeClaude = join(fakeClaudeDir, 'claude')
+      writeFileSync(fakeClaude, '#!/bin/sh\nexec /bin/sh "$@"\n', { mode: 0o755 })
       const spawnFixturePanel = async (cwd) => {
         const before = new Set(await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
-        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd, command: '/bin/sh', args: [], w: 400, h: 300 })
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd, command: fakeClaude, args: [], w: 400, h: 300 })
         const ids = await waitUntil(async () => {
           const now = await wc.executeJavaScript(
             `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -1968,6 +1978,77 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           Math.abs(afterBox.x - beforeBox.x - 120) < 4,
         `parent=${domParentId} before=${JSON.stringify(beforeBox)} after=${JSON.stringify(afterBox)}`)
 
+      // M398 (A3). The column never covers ANOTHER panel's header. The bug:
+      // nodes and the ambiguity card took their parent's z, so a parent that
+      // out-ranked a neighbour painted its column over the neighbour's title
+      // (three shells side by side, each card across the next one's name).
+      // MEASURED by z-order, not by style. A plain shell is spawned in its own
+      // folder (a plain shell is not an agent, so it cannot make the subject
+      // ambiguous), the parent raised over it, and the neighbour moved so its
+      // header sits under the first node; elementFromPoint at their overlap must land in it. Nodes
+      // are pointer-events: none, which elementFromPoint skips, so the node is
+      // made hit-testable for the probe only: otherwise the probe could never
+      // see the node and would pass against the bug. Everything is put back.
+      const coverCwd = mkdtempSync(join(tmpdir(), 'tc sa cover '))
+      const coverBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: coverCwd, command: '/bin/sh', args: [], w: 400, h: 300 })
+      const coverIds = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > coverBefore.size ? now : false
+      }, 3000)
+      const neighbourId = coverIds ? coverIds.find((id) => !coverBefore.has(id)) : undefined
+      await settle()
+      // The neighbour is the newest panel, so it tops the stack; a press on
+      // the PARENT's chrome raises the parent over it, through the route a
+      // person takes (133's dispatch, which no overlapping panel can eat).
+      // Now the parent out-ranks the neighbour, the state the bug needed.
+      if (domParentId) {
+        await wc.executeJavaScript(`(() => {
+          const c = document.querySelector('.world > .panel[data-panel-id="' + ${JSON.stringify(domParentId)} + '"] .panel__chrome')
+          if (!c) return false
+          const r = c.getBoundingClientRect()
+          const at = { bubbles: true, button: 0, buttons: 1, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
+          c.dispatchEvent(new MouseEvent('mousedown', at))
+          document.dispatchEvent(new MouseEvent('mouseup', { ...at, buttons: 0 }))
+          return true
+        })()`)
+        await settle()
+      }
+      const cover = nodeIds.length > 0 && neighbourId ? await wc.executeJavaScript(`(() => {
+        const node = document.querySelector('[data-subagent-id="' + ${JSON.stringify(nodeIds[0])} + '"]')
+        const n = document.querySelector('.world > .panel[data-panel-id="' + ${JSON.stringify(neighbourId)} + '"]')
+        if (!node || !n) return { why: 'no node or no neighbour' }
+        const parent = document.querySelector('.world > .panel[data-panel-id="' + node.getAttribute('data-panel-id') + '"]')
+        const head = n.querySelector('.panel__chrome')
+        if (!parent || !head) return { why: 'no parent or no header' }
+        const saved = { left: n.style.left, top: n.style.top, pe: node.style.pointerEvents }
+        n.style.left = node.style.left
+        n.style.top = (parseFloat(node.style.top) + 10) + 'px'
+        node.style.pointerEvents = 'auto'
+        const h = head.getBoundingClientRect()
+        const r = node.getBoundingClientRect()
+        const x0 = Math.max(h.left, r.left), x1 = Math.min(h.right, r.right)
+        const y0 = Math.max(h.top, r.top), y1 = Math.min(h.bottom, r.bottom)
+        const probes = x1 > x0 && y1 > y0
+          ? [0.25, 0.5, 0.75].map((fx) => document.elementFromPoint(x0 + (x1 - x0) * fx, (y0 + y1) / 2))
+          : []
+        const result = {
+          overlap: probes.length > 0,
+          neighbourWins: probes.length > 0 && probes.every((hit) => hit !== null && n.contains(hit)),
+          hits: probes.map((hit) => hit ? String(hit.className || hit.tagName).slice(0, 40) : null),
+          z: { parent: parent.style.zIndex, neighbour: n.style.zIndex, node: node.style.zIndex }
+        }
+        n.style.left = saved.left; n.style.top = saved.top; node.style.pointerEvents = saved.pe
+        return result
+      })()`) : { why: `nodes=${nodeIds.length} neighbour=${neighbourId}` }
+      ok('subagent.cover.1 a subagent node never paints over another panel\'s header, even one its parent out-ranks (elementFromPoint at the overlap lands in the neighbour)',
+        cover.overlap === true && cover.neighbourWins === true && Number(cover.z.parent) > Number(cover.z.neighbour),
+        JSON.stringify(cover))
+      if (neighbourId) await clickPanelClose(wc, neighbourId)
+      try { rmSync(coverCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+
       // Best-effort, the rule every other fixture root in this file
       // already follows (`repo`, `notRepo`, `crepo` above are all
       // explicitly rmSync'd): a failure to clean up must never turn a
@@ -1979,6 +2060,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // to call out for the peers beside it.
       try { rmSync(SA_ROOT, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(saCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+      try { rmSync(fakeClaudeDir, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
     // ---------------------------------------------------------------------

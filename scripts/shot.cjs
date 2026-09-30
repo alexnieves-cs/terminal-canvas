@@ -49,6 +49,11 @@ process.env.TC_CLAUDE_PROJECTS = mkdtempSync(join(tmpdir(), 'tc shot projects ')
 // columns on every machine, and somebody's private skill names in a PNG that
 // gets handed to a critic. Ours rather than the entry's throwaway because the
 // scene plants user skills and a plugin under it. A spaced path, this repo's rule.
+// M398 (A2). It fences the PROJECT arm too, for any panel whose cwd is `~` or
+// the real home (the starter's chat, every `~` preset): main's `toolboxCwd`
+// reads those against this home. Before that, `starter` printed the
+// developer's own ~/.claude through `join(cwd, '.claude')` (verify:control
+// toolbox.fence.1).
 const SHOT_HOME = mkdtempSync(join(tmpdir(), 'tc shot home '))
 process.env.TC_TOOLBOX_HOME = SHOT_HOME
 

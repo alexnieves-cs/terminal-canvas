@@ -199,3 +199,49 @@ export function scanForResults(chunk: string, ids: ReadonlySet<string>): Set<str
   }
   return done
 }
+
+/**
+ * M398 (A3). Whether a PTY session is one the subagent watcher should look at.
+ *
+ * Only a CLAUDE CODE session has a `~/.claude/projects` directory to claim, so
+ * only one is fed to the watcher. Before this every PTY was, login shells
+ * included, and three plain shells opened in `~` shared one slug: each drew
+ * "3 panels share this repository…" over its neighbours' titles, a sentence
+ * about subagents on panels that had never run an agent.
+ *
+ * Any one of four facts makes a session an agent's, because each is the only
+ * one some real way of starting `claude` leaves behind: the spawn spec's
+ * `agent` (a Claude Code preset), the spawned command's own name, tmux's
+ * `pane_current_command` (typed into a shell, tmux backend), and the OSC 133
+ * command in flight (typed into a shell with integration, either backend —
+ * the direct backend reports no current command at all). A first word is
+ * compared by BASENAME, so `/opt/homebrew/bin/claude` and `claude --resume x`
+ * both count and `claude-helper` does not.
+ */
+export function isClaudeSession(session: {
+  agent?: string
+  command: string
+  currentCommand?: string
+  runCommand?: string
+}): boolean {
+  if (session.agent === 'claude-code') return true
+  const named = (line: string | undefined): boolean => {
+    if (line === undefined) return false
+    const first = line.trim().split(/\s+/)[0] ?? ''
+    return first.slice(first.lastIndexOf('/') + 1) === 'claude'
+  }
+  return named(session.command) || named(session.currentCommand) || named(session.runCommand)
+}
+
+/**
+ * M398 (A3). `$HOME` is never a repository. An agent started there shares its
+ * project directory with every other session ever started there, so no claim
+ * can be told apart and "N panels share this repository" would be a false
+ * sentence about a folder that is not one. A panel whose cwd is home is not
+ * watched: no nodes, the direction this module prefers to be wrong in.
+ * A trailing slash and the literal `~` are the same place.
+ */
+export function isHomeDir(cwd: string, home: string): boolean {
+  const trim = (p: string): string => (p.length > 1 ? p.replace(/\/+$/, '') : p)
+  return cwd.trim() === '~' || trim(cwd) === trim(home)
+}

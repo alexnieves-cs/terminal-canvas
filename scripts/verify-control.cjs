@@ -807,6 +807,38 @@ const ok = (n, pass, detail = '') => {
         has !== null && has.kind === 'has' && has.matches[0].scope === 'project' && second.kind === 'inventory' && pluginAsks === 1,
       JSON.stringify({ none, relative, file, gone, has, pluginAsks }))
   }
+  // M398 — toolbox.fence.1. The shot harness fences the toolbox's USER arm
+  //     (TC_TOOLBOX_HOME), but the starter's chat sits in `~`, and its
+  //     PROJECT arm (`join(cwd, '.claude')`) read the developer's real
+  //     ~/.claude straight into the `starter` golden: real skills, hooks and
+  //     628 allow rules. Through the same door `toolbox:read` answers, with a
+  //     fenced home: `~` (the starter's cwd) and the real home's own path both
+  //     read ONLY under the fence, every source and permission file included,
+  //     and a folder that is not home is left alone.
+  {
+    const fs = require('node:fs')
+    const dir = mkdtempSync(join(tmpdir(), 'tc toolbox fence '))
+    const fenced = join(dir, 'home'); const proj = join(dir, 'proj')
+    fs.mkdirSync(join(fenced, '.claude', 'skills', 'fenced-only'), { recursive: true })
+    fs.writeFileSync(join(fenced, '.claude', 'skills', 'fenced-only', 'SKILL.md'), '---\nname: fenced-only\ndescription: Planted.\n---\n')
+    fs.writeFileSync(join(fenced, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(ls)'] } }))
+    fs.mkdirSync(proj, { recursive: true })
+    const door = C.createToolboxDoor({ cache: new C.ToolboxCache(), home: () => fenced, stampsFor: () => undefined, listPlugins: async () => ({ kind: 'ok', plugins: [] }) })
+    const under = (p) => typeof p === 'string' && (p === fenced || p.startsWith(fenced + '/'))
+    const fencedOnly = (r) => r.kind === 'inventory' && under(r.inventory.cwd) &&
+      r.inventory.sources.length > 0 && r.inventory.sources.every((x) => under(x.path)) &&
+      r.inventory.permissions.every((x) => under(x.path)) &&
+      r.inventory.entries.filter((e) => e.kind === 'skill').every((e) => e.name === 'fenced-only')
+    const tilde = await door({ panelId: 'starter-chat', cwd: '~' })
+    const realHome = await door({ panelId: 'starter-chat', cwd: require('node:os').homedir() })
+    const other = await door({ panelId: 'p', cwd: proj })
+    rmSync(dir, { recursive: true, force: true })
+    const leak = (r) => r.kind !== 'inventory' ? r : { cwd: r.inventory.cwd, outside: [...r.inventory.sources, ...r.inventory.permissions].map((x) => x.path).filter((p) => !under(p)).length, skills: r.inventory.entries.filter((e) => e.kind === 'skill').length }
+    ok('toolbox.fence.1 under a fenced toolbox home, a toolbox read of ~ (the starter chat\'s cwd) and of the real home\'s own path reads only under the fence, both arms, and a folder that is not home keeps its own project arm',
+      fencedOnly(tilde) && fencedOnly(realHome) && C.capabilityOf('/fenced-only', tilde)?.kind === 'has' &&
+        other.kind === 'inventory' && other.inventory.cwd === proj,
+      JSON.stringify({ tilde: leak(tilde), realHome: leak(realHome), other: other.kind === 'inventory' ? other.inventory.cwd : other }))
+  }
   // M366 — toolbox.1. `tc toolbox <name>` is the palette's "Which agents
   //     can…" from a shell: the CLI builds it, the protocol refuses an empty
   //     or multi-line name, and the handler reads each DISTINCT tools
