@@ -65,13 +65,15 @@ export const SHAPE_SIZE: Readonly<Record<ShapeForm, { w: number; h: number }>> =
 }
 
 /**
- * The form the NEXT step takes when a person pulls one off `form` (Tab, ⌥+arrow,
- * a port dropped on empty ground). A process begets a process, an input a
- * process after it; but the step after a DECISION, a START/END, a junction or
- * a label is a plain step — two diamonds in a row is almost never meant.
+ * The form the NEXT step takes when a person pulls one off a shape (Tab,
+ * ⌥+arrow, a port dropped on empty ground): a plain PROCESS step, whatever it
+ * follows. Measured in the M388 smoke test — the step after a decision is not
+ * another diamond, after a start it is not another start, and after an input or
+ * a document it is the work done with it. A person changes the form in the
+ * inspector when the next thing really is a question or an output.
  */
-export function nextStepForm(form: ShapeForm | null): ShapeForm {
-  return form === 'process' || form === 'subprocess' || form === 'document' || form === 'io' ? form : 'process'
+export function nextStepForm(_form: ShapeForm | null): ShapeForm {
+  return 'process'
 }
 
 /** The floor a resize stops at. Far below MIN_PANEL_W/H (200x160) on purpose: that floor is a terminal's, and a junction is 28 wide. */

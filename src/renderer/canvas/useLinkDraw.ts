@@ -160,15 +160,22 @@ export function useLinkDraw(deps: LinkDrawDeps): LinkDraw {
       setState(next)
     }
 
-    const onUp = (): void => {
+    const onUp = (event: MouseEvent): void => {
       const current = gestureRef.current
       if (!current) return
+      // M389. A release OUTSIDE the canvas host — over the navigator, the
+      // inspector, the HUD — is not a drop on the canvas: it makes nothing
+      // (the empty-ground drop below would otherwise mint a shape the person
+      // cannot see, under the rail).
+      const hostBox = depsRef.current.hostRef.current?.getBoundingClientRect()
+      const outside = hostBox !== undefined && (event.clientX < hostBox.left || event.clientX > hostBox.right || event.clientY < hostBox.top || event.clientY > hostBox.bottom)
       gestureRef.current = null
       setState(null)
       // addLink refuses a self-link anyway; returning here is what keeps the
       // cancel SILENT rather than a no-op that reads as a link which failed.
       if (current.target === current.from) return
       if (!current.target) {
+        if (outside) return
         // A press and release that never left the source is a click, not a
         // pull into empty space: nothing is made for a person who only
         // pressed a port. `cursor` is world space; so are the rects.

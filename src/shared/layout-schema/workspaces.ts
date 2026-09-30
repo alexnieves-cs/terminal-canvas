@@ -263,9 +263,18 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
   }
   // M389. The same on-disk half for connectors: a connector naming a panel
   // that did not survive is dropped, and only it — never the holder's set.
+  // And a connector id is unique in the WORKSPACE, not only per holder (the
+  // renderer keys its views by id, and remove/patch find the first holder):
+  // a second holder's copy of an id — a hand-merged file — is dropped by name.
+  const connectorIds = new Set<string>()
   for (const p of panels) {
     if (p.connectors === undefined) continue
-    const kept = p.connectors.filter((c) => surviving.has(c.to))
+    const kept = p.connectors.filter((c) => {
+      if (!surviving.has(c.to)) return false
+      if (connectorIds.has(c.id)) { warnings.push(`dropped connector ${c.id} on panel ${p.id}: another panel already holds that id`); return false }
+      connectorIds.add(c.id)
+      return true
+    })
     if (kept.length === p.connectors.length) continue
     warnings.push(`dropped ${p.connectors.length - kept.length} connector(s) on panel ${p.id}: no such panel`)
     if (kept.length === 0) delete p.connectors

@@ -1958,6 +1958,21 @@ console.log('\n' + '='.repeat(60))
   const untouched = can ? V.seedAfter(['n3'], 12) : null
   ok('recover.2 seedAfter moves the counter past every adopted n/r/f/j/t id, ignores foreign ids, and never moves it backwards',
     can && seeded === 41 && untouched === 12, JSON.stringify({ seeded, untouched }))
+  // M388. The prefixes the first five left invisible: a canvas holding only
+  // notes seeded the counter at 1 and minted `nt1` again, and load drops a
+  // duplicate id silently. Each prefix is asked ALONE — a list holding cx40
+  // would pass a check that only knew the biggest — and a FOREIGN id (an
+  // adopted tmux session's arbitrary name, `my-nt9` or `nt9-old` included: the
+  // pattern is anchored at both ends) still does not move the counter.
+  const ours = ['nt9', 'sh12', 'cx40', 'img7', 'im3', 'wf5']
+  const foreign = ['x99', 'orph1', 'my-nt9', 'nt9-old']
+  const alone = can ? Object.fromEntries([...ours, ...foreign].map((id) => [id, V.seedAfter([id], 1)])) : null
+  const together = can ? V.seedAfter([...ours, ...foreign], 1) : null
+  const notBack = can ? V.seedAfter(['nt9', 'sh12', 'cx40'], 500) : null
+  ok('recover.3 seedAfter moves the counter past every nt/sh/cx/img/im/wf id (each alone), still ignores x99/orph1 and ids that merely contain one of ours, and never moves it backwards',
+    can && alone['nt9'] === 10 && alone['sh12'] === 13 && alone['cx40'] === 41 && alone['img7'] === 8 && alone['im3'] === 4 && alone['wf5'] === 6 &&
+      foreign.every((id) => alone[id] === 1) && together === 41 && notBack === 500,
+    JSON.stringify({ alone, together, notBack }))
 }
 
 // M56 — flights. A tween that interpolates scale linearly, or derives its

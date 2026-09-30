@@ -710,6 +710,8 @@ export function pruneConnectorsTo(panel: Panel, id: string): Panel {
 export function addConnector(panels: Panel[], from: string, connector: Connector): Panel[] {
   if (from === connector.to) return panels
   if (!panels.some((p) => p.rect.id === from) || !panels.some((p) => p.rect.id === connector.to)) return panels
+  // Unique in the workspace: an id another panel already holds is refused.
+  if (findConnector(panels, connector.id) !== null) return panels
   return panels.map((p) => (p.rect.id === from ? { ...p, connectors: [...connectorsOf(p), connector] } : p))
 }
 

@@ -255,11 +255,15 @@ export function useConnectors(deps: ConnectorsDeps): Connectors {
       drawRef.current = next
       setDraw(next)
     }
-    const onUp = (): void => {
+    const onUp = (event: MouseEvent): void => {
       const cur = drawRef.current
       drawRef.current = null
       setDraw(null)
       if (cur === null) return
+      // A release outside the canvas host (the rail, the inspector, the HUD)
+      // is not a drop on the canvas: nothing is made or connected.
+      const box = hostRef.current?.getBoundingClientRect()
+      if (box !== undefined && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) return
       // A press and release on the port itself is a click, not a drag: no
       // shape out of nowhere for a person who only wanted to look.
       const source = (panelsRef.current ?? []).find((p) => p.rect.id === cur.from)

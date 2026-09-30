@@ -1,4 +1,4 @@
-import { SHAPE_SIZE, type Connector, type FlowDirection, type FlowEdge, type FlowGraph, type FlowNode, type ShapeForm } from '@shared/flowchart'
+import { CONNECTORS_MAX, SHAPE_SIZE, type Connector, type FlowDirection, type FlowEdge, type FlowGraph, type FlowNode, type ShapeForm } from '@shared/flowchart'
 import { layoutFlow } from '@shared/flowchart-layout'
 import type { FlowchartSvgModel } from '@shared/flowchart-svg'
 import { isShapePanel, type Panel, type ShapePanel } from '@renderer/panels/panels'
@@ -20,46 +20,57 @@ interface Box { x: number; y: number; w: number; h: number }
  * NOTHING here can act: a shape is a label and a form (the import-inertness
  * rule holds by construction — there is no field to carry a callback into).
  */
-export function graphToPanels(graph: FlowGraph, mint: () => number, origin: { x: number; y: number }, zBase: number): { panels: ShapePanel[]; groups: { label: string; ids: string[] }[]; width: number; height: number } {
+export function graphToPanels(graph: FlowGraph, mint: () => number, origin: { x: number; y: number }, zBase: number): { panels: ShapePanel[]; groups: { label: string; ids: string[] }[]; width: number; height: number; dropped: number } {
   const rename = new Map<string, string>()
   for (const n of graph.nodes) rename.set(n.id, `sh${mint()}`)
-  const laid = layoutFlow({ nodes: graph.nodes.map((n) => ({ id: n.id, w: n.w, h: n.h })), edges: graph.edges.map((e) => ({ from: e.from, to: e.to })) }, graph.direction)
-  const outgoing = new Map<string, Connector[]>()
-  for (const e of graph.edges) {
-    const from = rename.get(e.from)
-    const to = rename.get(e.to)
-    if (from === undefined || to === undefined || from === to) continue
-    // 'start' ends are drawn as the edge reversed with an end arrow — the
-    // same normalisation serializeMermaid makes, so a round trip is stable.
-    const [src, dst] = e.ends === 'start' ? [to, from] : [from, to]
-    const c: Connector = {
-      id: `cx${mint()}`,
-      to: dst,
-      ...(e.ends === 'none' || e.ends === 'both' ? { ends: e.ends } : {}),
+  // Each edge in the direction it is DRAWN: a 'start'-ended edge is the edge
+  // reversed with an end arrow (serializeMermaid's own normalisation), and the
+  // layout ranks by the drawn direction so the arrow never points against it.
+  const drawn = graph.edges
+    .map((e) => (e.ends === 'start' ? { ...e, from: e.to, to: e.from, ends: 'end' as const } : e))
+    .filter((e) => rename.has(e.from) && rename.has(e.to) && e.from !== e.to)
+  const laid = layoutFlow({ nodes: graph.nodes.map((n) => ({ id: n.id, w: n.w, h: n.h })), edges: drawn.map((e) => ({ from: e.from, to: e.to })) }, graph.direction)
+  const held = new Map<string, Connector[]>()
+  const hold = (id: string, c: Connector): boolean => {
+    const list = held.get(id) ?? []
+    if (list.length >= CONNECTORS_MAX) return false
+    list.push(c)
+    held.set(id, list)
+    return true
+  }
+  let dropped = 0
+  for (const e of drawn) {
+    const src = rename.get(e.from) as string
+    const dst = rename.get(e.to) as string
+    const style = {
       ...(e.label === undefined || e.label === '' ? {} : { label: e.label }),
       ...(e.dashed === true ? { dashed: true as const } : {}),
       ...(e.route === undefined || e.route === 'orthogonal' ? {} : { route: e.route })
     }
-    const list = outgoing.get(src) ?? []
-    list.push(c)
-    outgoing.set(src, list)
+    // A source already holding CONNECTORS_MAX lines (a hub) hands the line to
+    // its TARGET, drawn the same way — the arrowhead at the holder's end
+    // (`start`) instead of the far end. Only a line neither end can hold is
+    // dropped, and the import says how many.
+    if (hold(src, { id: `cx${mint()}`, to: dst, ...(e.ends === 'none' || e.ends === 'both' ? { ends: e.ends } : {}), ...style })) continue
+    const flipped = e.ends === 'none' || e.ends === 'both' ? { ends: e.ends } : { ends: 'start' as const }
+    if (!hold(dst, { id: `cx${mint()}`, to: src, ...flipped, ...style })) dropped++
   }
   const panels: ShapePanel[] = graph.nodes.map((n, i) => {
     const id = rename.get(n.id) as string
     const at = laid.positions.get(n.id) ?? { x: 0, y: 0 }
-    const out = outgoing.get(id)
+    const out = held.get(id)
     return {
       kind: 'shape',
       rect: { id, x: origin.x + at.x, y: origin.y + at.y, w: n.w, h: n.h },
       z: zBase + i,
       shape: { form: n.form, text: n.text },
-      ...(out === undefined ? {} : { connectors: out.slice(0, 64) })
+      ...(out === undefined ? {} : { connectors: out })
     }
   })
   const groups = (graph.groups ?? [])
     .map((g) => ({ label: g.label, ids: g.nodes.map((n) => rename.get(n)).filter((x): x is string => x !== undefined) }))
     .filter((g) => g.ids.length > 0)
-  return { panels, groups, width: laid.width, height: laid.height }
+  return { panels, groups, width: laid.width, height: laid.height, dropped }
 }
 
 /**

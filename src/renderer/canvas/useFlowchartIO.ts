@@ -104,7 +104,9 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
     })])
     selectMany(made.panels.map((p) => p.rect.id))
     if (made.panels.length > 0) frameRects(made.panels.map((p) => p.rect))
-    return { kind: 'ran', note: `${mermaidImportSentence(parsed)} · from ${source}` }
+    // Lines neither end could hold (a node with more than 64 lines in AND out) are said, never lost silently.
+    const lost = laid.dropped === 0 ? '' : ` · ${laid.dropped} line${laid.dropped === 1 ? '' : 's'} left out (more than 64 on one shape)`
+    return { kind: 'ran', note: `${mermaidImportSentence(parsed)}${lost} · from ${source}` }
   }, [commitHistory, frameRects, mergedRef, nextGroupIdRef, nextIdRef, setGroups, setPanels, worldCentre])
 
   const importPasted = useCallback((text: string): boolean => {

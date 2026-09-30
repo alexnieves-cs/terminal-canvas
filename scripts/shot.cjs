@@ -1304,6 +1304,44 @@ const SCENES = [
       await k.press('1', { metaKey: true }); await sleep(700)
       await k.shot('flowchart')
     } },
+  // M388–M393. The same chart on the DARK theme, as a person works on it: the
+  // decision selected (its handles, its ports, the inspector's Shape section
+  // floating beside it), and a real terminal wired to "Build the change" — the
+  // step wears the terminal's state (the living flowchart).
+  { name: 'flowchart-dark', intent: 'M388–M393. The flowchart on the dark theme with the decision `Is it valid?` selected: eight square handles on its box, its four ports, the inspector floating on the right with the Shape section (form swatches drawn as the outlines themselves, fill tints, line colours, text strength, and the Chart row — Start work…, Lay out, Mermaid…, SVG…). A live terminal to the chart\'s right is joined by a connector to `Build the change`, which wears a ring in the terminal\'s state tone and a chip with the rail\'s own word for it.', size: [1440, 900],
+    run: async (k) => {
+      await k.theme('dark')
+      const press = async (x, y, clickCount = 1) => { k.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount }); k.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount }); await sleep(300) }
+      const centreOf = async (sel) => JSON.parse(await k.js(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return 'null'; const r = e.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) }) })()`))
+      const shapeId = async (text) => k.js(`(() => { const e = [...document.querySelectorAll('.shape')].find((x) => x.getAttribute('aria-label').split(': ').slice(1).join(': ') === ${JSON.stringify(text)}); return e ? e.getAttribute('data-panel-id') : null })()`)
+      // A real shell, spawned the ordinary way (⌘N at the camera centre) —
+      // the camera first panned so its centre is clear of the chart, to its right.
+      const build = await shapeId('Build the change')
+      k.wc.sendInputEvent({ type: 'mouseWheel', x: 900, y: 450, deltaX: -700, deltaY: 0 }); await sleep(400)
+      await k.press('n', { metaKey: true }); await sleep(2500)
+      const term = await k.js(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-id]')].find((e) => !e.classList.contains('shape')); return p ? p.getAttribute('data-panel-id') : null })()`)
+      if (term === null) throw new Error('flowchart-dark scene: no terminal was spawned')
+      await k.press('1', { metaKey: true }); await sleep(700)
+      // The wire, through the agent door — the same executor as a port drag
+      // (verify:panels:flowchart drives the drag itself): the terminal to the step.
+      k.wc.send('canvas:plan', { replyChannel: 'shot-flow-plan', req: { line: `connect ${term} ${build}` } }); await sleep(800)
+      const live = await k.js(`document.querySelector('[data-shape-live]') !== null`)
+      if (!live) throw new Error('flowchart-dark scene: the step wired to the terminal wears no state')
+      // The decision selected: handles, ports, and the inspector's Shape section.
+      const dec = await centreOf(`.shape[data-panel-id="${await shapeId('Is it valid?')}"]`)
+      await press(dec.x, dec.y)
+      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.shot('flowchart-dark')
+    } },
+  // M388. Far away, a diagram stays a diagram: at the block tier the shapes
+  // keep their silhouettes and the lines their weight; the words go.
+  { name: 'flowchart-far', intent: 'M388. The same chart zoomed far out (about 12%): every shape still its own silhouette — stadium, box, diamond — with outlines and connectors thickened to read at this size, labels gone because they could no longer be read, the terminal a block in its state tone beside it; nothing turned into a generic card.', size: [1440, 900],
+    run: async (k) => {
+      await k.press('Escape'); await sleep(200)
+      await k.zoom(0.12); await sleep(800)
+      await k.shot('flowchart-far')
+      await k.theme('light')
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'

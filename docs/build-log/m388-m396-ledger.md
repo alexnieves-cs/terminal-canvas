@@ -21,7 +21,7 @@ this file, not memory.
 | M391 | Auto-layout (animated) and Mermaid in/out, SVG export through the gate | built (checkpoint) |
 | M392 | Shared flowcharts: shapes and connectors through the Yjs shared canvas | planned |
 | M393 | The living flowchart: a shape connected to a live object shows its state | built (checkpoint); Electron check owed |
-| M394 | Sketch → plan: "Start work from this" | planned |
+| M394 | Sketch → plan: "Start work from this" | built (7c8f9dcb) |
 | M395 | The canvas revamp: the ranked surface changes (below) | planned |
 | M396 | Critique → one fix batch → gate | planned |
 
@@ -240,5 +240,28 @@ test and fixed: a next step made from a label's Tab was looked up before React h
 updater now adds the shape AND its connector — one history entry); a decision's next step
 was another decision (`nextStepForm`); a form change kept the old form's mint size.
 
-Next: M395 revamp builders in two worktrees; M392 sync; M394 sketch → plan; the flowchart
-Electron checks + the 200-shape measurement.
+## In flight — 2026-09-29 late
+
+Parallel, each in its own worktree off the checkpoint `d3189131`, each told the lock protocol:
+- `../tc-revamp-objects` (m395-revamp-objects): frames that trap, the annotate strip, ink
+  smoothing, ⌘ chords in text fields, the sticky's ×, snap bypass/guide/group drag, marquee text.
+- `../tc-revamp-chrome` (m395-revamp-chrome): minimap yields/hides, "+ Create", safe-area
+  framing, the pill under a menu, far-tier names, free-space placement, tidy to the view's
+  shape, motion honesty, launcher copy.
+- `../tc-flow-checks` (m388-flow-checks): `verify:panels:flowchart` — real-input checks and the
+  200-shape measurement.
+- `../tc-flow-sync` (m392-flow-sync): M392.
+- In this worktree: plain checks for the renderer flowchart modules (convert/persist areas).
+
+**Found by the new `flowchart-dark` scene:** ⌘1 (fit) after a terminal was spawned to a chart's
+right framed the chart's left column UNDER the navigator rail (host left 348px, chart at x≈257)
+— a press there lands on the rail. Sent to the chrome builder (its safe-area item). And a port
+drag RELEASED over the rail minted a shape the person could not see: a link/connector draw
+released outside the canvas host now cancels (useLinkDraw, useConnectors).
+
+**Bundle:** the first chunk grew ~220 kB (6.98 → 7.20 MB, raw) — the Mermaid scanner, the
+layout and the router are all static imports. Measured, recorded; a lazy `import()` for Mermaid
+and layout is the obvious cut if the owner wants it (nothing pins the chunk size).
+
+Next: integrate the builders' branches (read every diff), full `npm run shot`, the fresh
+critic on before/after, one fix batch, goldens with the critic's sentences, the full gate.
