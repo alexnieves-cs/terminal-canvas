@@ -2110,6 +2110,180 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ cam, centre }))
 }
 
+// M395 — revamp.*. THE CANVAS REVAMP, PART B: chrome that yields, framing
+// inside a safe area, free-space placement, tidy to the view's shape, far
+// names. Pure — every rule here is a function the renderer calls with what it
+// measured, so each is pinned here rather than taken on faith from a click.
+{
+  const have = typeof V.minimapPresence === 'function' && typeof V.minimapCovered === 'function' && typeof V.minimapNeeded === 'function'
+  const map = { x: 1000, y: 600, w: 160, h: 100 }
+  const covered = new Set(['chat'])
+  const at = (x, y, over = null, pressed = false) => ({ at: { x, y }, over, pressed })
+  const P = (prev, now, before) => V.minimapPresence(prev, now, before, map, covered)
+  const cases = have ? {
+    far: P('rest', at(200, 200, 'chat'), null),
+    ringOnCovered: P('rest', at(990, 650, 'chat'), at(900, 650, 'chat')),
+    ringOnGround: P('rest', at(990, 650, null), at(900, 650, null)),
+    ringOnOther: P('rest', at(990, 650, 'other'), at(900, 650, 'other')),
+    jumpFromCovered: P('rest', at(1050, 650, null), at(960, 650, 'chat')),
+    fromGround: P('rest', at(1050, 650, null), at(960, 650, null)),
+    fromHud: P('rest', at(1050, 690, null), at(1050, 720, null)),
+    held: P('aside', at(1050, 650, 'chat'), at(1040, 650, 'chat')),
+    leaves: P('aside', at(900, 650, 'chat'), at(990, 650, 'chat')),
+    gesture: P('rest', at(1005, 650, null, true), at(980, 650, null, true))
+  } : null
+  const coveredIds = have ? [...V.minimapCovered(map, [{ id: 'chat', x: 800, y: 500, w: 400, h: 300 }, { id: 'far', x: 0, y: 0, w: 200, h: 200 }], { x: 0, y: 0, scale: 1 })] : []
+  ok('revamp.minimap.1 the map steps aside for a panel it covers (in the approach ring, or reached in one move), for a gesture crossing it, and stays aside while the pointer is in reach; reached from open ground or the HUD it is for use',
+    cases !== null && cases.far === 'rest' && cases.ringOnCovered === 'aside' && cases.ringOnGround === 'rest' && cases.ringOnOther === 'rest' &&
+      cases.jumpFromCovered === 'aside' && cases.fromGround === 'rest' && cases.fromHud === 'rest' && cases.held === 'aside' && cases.leaves === 'rest' &&
+      cases.gesture === 'aside' && JSON.stringify(coveredIds) === '["chat"]',
+    JSON.stringify({ cases, coveredIds }))
+
+  const size = { width: 1400, height: 860 }
+  const spread = [{ id: 'a', x: 0, y: 0, w: 720, h: 460 }, { id: 'b', x: 800, y: 0, w: 560, h: 620 }, { id: 'c', x: 0, y: 700, w: 640, h: 520 }]
+  const fitted = have ? V.fitTo(spread, size) : null
+  const need = have ? {
+    empty: V.minimapNeeded([], { x: 0, y: 0, scale: 1 }, size),
+    allIn: V.minimapNeeded([{ id: 'a', x: 10, y: 10, w: 100, h: 100 }], { x: 0, y: 0, scale: 1 }, size),
+    oneOut: V.minimapNeeded([{ id: 'a', x: 10, y: 10, w: 100, h: 100 }, { id: 'b', x: 1300, y: 10, w: 101, h: 100 }], { x: 0, y: 0, scale: 1 }, size),
+    afterFit: V.minimapNeeded(spread, fitted, size),
+    zoomedIn: V.minimapNeeded(spread, { ...fitted, scale: fitted.scale * 1.5 }, size)
+  } : null
+  ok('revamp.minimap.2 the map is needed only while some object is out of view: never on an empty canvas or with everything in view, and a Fit of every object hides it deterministically',
+    need !== null && need.empty === false && need.allIn === false && need.oneOut === true && need.afterFit === false && need.zoomedIn === true,
+    JSON.stringify(need))
+}
+{
+  const have = typeof V.clearFraming === 'function' && typeof V.framedBox === 'function'
+  const size = { width: 1400, height: 860 }
+  // The chrome as it lays out on a wide window: the HUD pill bottom-right,
+  // the pill's rest bottom-centre, the map stacked on the HUD.
+  const hud = { x: 1100, y: 806, w: 280, h: 34 }
+  const pill = { x: 640, y: 806, w: 120, h: 34 }
+  const minimap = { x: 1220, y: 698, w: 160, h: 100 }
+  const gap = have ? V.FRAME_CLEAR_GAP : 8
+  const clear = (box, obs) => obs.every((o) => box.x + box.w <= o.x - gap + 1e-6 || box.x >= o.x + o.w + gap - 1e-6 || box.y + box.h <= o.y - gap + 1e-6 || box.y >= o.y + o.h + gap - 1e-6)
+  const inHost = (b) => b.x >= -1e-6 && b.y >= -1e-6 && b.x + b.w <= size.width + 1e-6 && b.y + b.h <= size.height + 1e-6
+  // A canvas that fills the host's whole height and most of its width: its
+  // Fit reaches the bottom-right corner, where the map stacks on the HUD.
+  const wide = [{ id: 'a', x: 0, y: 0, w: 700, h: 450 }, { id: 'b', x: 700, y: 450, w: 700, h: 450 }]
+  const base = have ? V.fitTo(wide, size) : null
+  const untouched = have ? V.clearFraming(base, wide, size, [hud, pill]) : null
+  ok('revamp.fit.1 a framing already clear of the chrome is returned untouched — the HUD and the pill sit inside fitTo\'s margin, so an ordinary Fit keeps its numbers',
+    untouched !== null && untouched.x === base.x && untouched.y === base.y && untouched.scale === base.scale && clear(V.framedBox(wide, base), [hud, pill]),
+    JSON.stringify({ base, untouched }))
+
+  const obs = [hud, pill, minimap]
+  const framed = have ? V.clearFraming(base, wide, size, obs) : null
+  const box = framed ? V.framedBox(wide, framed) : null
+  const again = have ? V.clearFraming(base, wide, size, obs) : null
+  ok('revamp.fit.2 a Fit whose content reaches under the map is refitted into the part of the host the chrome leaves: clear of every surface by the gap, inside the host, never zoomed in, and the same answer twice',
+    framed !== null && !clear(V.framedBox(wide, base), obs) && clear(box, obs) && inHost(box) && framed.scale <= base.scale + 1e-9 && framed.scale > base.scale * 0.7 &&
+      JSON.stringify(again) === JSON.stringify(framed),
+    JSON.stringify({ base, framed, box }))
+
+  // centreOn's contract: the SAME scale. A panel centred in a small host
+  // reaches under the map; it moves clear along the cheaper axis.
+  const small = { width: 900, height: 600 }
+  const mapSmall = { x: 720, y: 400, w: 160, h: 100 }
+  const panel = { id: 'p', x: 0, y: 0, w: 640, h: 440 }
+  const centred = have ? V.centreOn({ x: 0, y: 0, scale: 1 }, panel, small) : null
+  const moved = have ? V.clearFraming(centred, [panel], small, [mapSmall], { keepScale: true }) : null
+  const mBox = moved ? V.framedBox([panel], moved) : null
+  const open = have ? V.clearFraming(centred, [panel], small, [{ x: 800, y: 20, w: 60, h: 40 }], { keepScale: true }) : null
+  ok('revamp.fit.3 a flight to one panel keeps its scale and lands the panel clear of the map when there is room; a panel already clear is not moved',
+    moved !== null && moved.scale === centred.scale && !clear(V.framedBox([panel], centred), [mapSmall]) && clear(mBox, [mapSmall]) &&
+      mBox.x >= 0 && mBox.y >= 0 && mBox.x + mBox.w <= small.width && mBox.y + mBox.h <= small.height && open.x === centred.x && open.y === centred.y,
+    JSON.stringify({ centred, moved, mBox }))
+
+  // The lead's measured case: a pane OVER the canvas (the navigator as a
+  // drawer, 300px on the left) is an obstacle like the map — a Fit never
+  // frames a chart's left column under it.
+  const drawer = { x: 0, y: 0, w: 300, h: size.height }
+  const chart = [{ id: 's1', x: 0, y: 0, w: 160, h: 80 }, { id: 's6', x: 0, y: 900, w: 160, h: 80 }, { id: 't', x: 900, y: 300, w: 720, h: 460 }]
+  const under = have ? V.fitTo(chart, size) : null
+  const cleared = have ? V.clearFraming(under, chart, size, [drawer, hud, pill]) : null
+  const cBox = cleared ? V.framedBox(chart, cleared) : null
+  ok('revamp.fit.4 a Fit never frames content under a pane that lies over the canvas (a navigator drawer): the framed box starts right of it, inside the host',
+    cleared !== null && V.framedBox(chart, under).x < drawer.w && cBox.x >= drawer.w + gap - 1e-6 && inHost(cBox) && clear(cBox, [drawer, hud, pill]),
+    JSON.stringify({ under, cleared, cBox }))
+
+  const vp = { x: -340, y: 125, scale: 0.4 }
+  const round = typeof V.viewSizeAround === 'function' ? V.viewSizeAround(V.screenToWorld({ x: size.width / 2, y: size.height / 2 }, vp), vp) : null
+  ok('revamp.view.1 the host size a caller with only worldCentre and the camera recovers is the host size (tidy\'s view)',
+    round !== null && Math.abs(round.width - size.width) < 1e-6 && Math.abs(round.height - size.height) < 1e-6, JSON.stringify(round))
+}
+{
+  const have = typeof V.freeSpot === 'function'
+  const R = (id, x, y, w, h) => ({ id, x, y, w, h })
+  const within = { x: -700, y: -430, w: 1400, h: 860 }
+  const size = { w: 320, h: 220 }
+  const gap = have ? V.FREE_GAP : 24
+  const clears = (c, rects) => rects.every((r) => c.x - size.w / 2 - gap >= r.x + r.w - 1e-6 || c.x + size.w / 2 + gap <= r.x + 1e-6 || c.y - size.h / 2 - gap >= r.y + r.h - 1e-6 || c.y + size.h / 2 + gap <= r.y + 1e-6)
+  const inside = (c) => c.x - size.w / 2 >= within.x - 1e-6 && c.y - size.h / 2 >= within.y - 1e-6 && c.x + size.w / 2 <= within.x + within.w + 1e-6 && c.y + size.h / 2 <= within.y + within.h + 1e-6
+  const empty = have ? V.freeSpot({ x: 0, y: 0 }, size, [], { within }) : null
+  // A sticky sits exactly where the view is looking, a GitHub panel beside it.
+  const busy = [R('sticky', -160, -110, 320, 220), R('github', 200, -300, 640, 520)]
+  const spot = have ? V.freeSpot({ x: 0, y: 0 }, size, busy, { within }) : null
+  const d = spot ? Math.hypot(spot.x, spot.y) : Infinity
+  // Nearest: no clear candidate on the search grid is nearer than the answer.
+  const step = Math.max(V.FREE_STEP ?? 24, Math.min(size.w, size.h) / 4)
+  let nearer = null
+  for (let i = -30; i <= 30 && have; i++) for (let j = -30; j <= 30; j++) {
+    const c = { x: i * step, y: j * step }
+    if (Math.hypot(c.x, c.y) < d - 1e-6 && clears(c, busy) && inside(c)) nearer = c
+  }
+  const full = have ? V.freeSpot({ x: 0, y: 0 }, size, [R('wall', -800, -500, 1600, 1000)], { within }) : undefined
+  const again = have ? V.freeSpot({ x: 0, y: 0 }, size, busy, { within }) : null
+  ok('revamp.place.1 a new object goes to the NEAREST spot that clears every object by the gap and lies in view — the centre when it is free, nothing (the caller\'s fallback) when the view is full, the same answer twice',
+    empty !== null && empty.x === 0 && empty.y === 0 && spot !== null && clears(spot, busy) && inside(spot) && nearer === null &&
+      full === null && JSON.stringify(again) === JSON.stringify(spot),
+    JSON.stringify({ empty, spot, nearer, full }))
+  // The chrome is an obstacle like any object: a spot never lands under the map.
+  const chrome = R('chrome:0', 380, 160, 320, 200)
+  const nearMap = have ? V.freeSpot({ x: 520, y: 260 }, size, [chrome], { within }) : null
+  ok('revamp.place.2 the floating chrome, passed as world rects, is avoided like any object',
+    nearMap !== null && clears(nearMap, [chrome]) && inside(nearMap), JSON.stringify(nearMap))
+}
+{
+  const have = typeof V.tidyPanels === 'function'
+  const view = { width: 1312, height: 800 }
+  const readOrder = (rs) => [...rs].sort((a, b) => a.y - b.y || a.x - b.x).map((r) => r.id).join(',')
+  const scaleOf = (rs) => V.fitTo(rs, view).scale
+  const verdict = (rects) => {
+    const natural = V.tidyPanels(rects, 24)
+    const shaped = V.tidyPanels(rects, 24, { view })
+    const again = V.tidyPanels(shaped, 24, { view })
+    const sizes = shaped.every((r, i) => r.id === rects[i].id && r.w === rects[i].w && r.h === rects[i].h)
+    const overlap = shaped.some((a, i) => shaped.some((b, j) => j > i && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h))
+    return { gain: scaleOf(shaped) / scaleOf(natural), order: readOrder(shaped) === readOrder(natural), sizes, overlap, idem: JSON.stringify(again) === JSON.stringify(shaped) }
+  }
+  // 22 panels in ONE overlapping band (the strip a tidy used to leave), and
+  // 22 in three bands of 8, 8 and 6 — the live audit's canvas.
+  const strip = [], bands = []
+  for (let i = 0; i < 22; i++) strip.push({ id: `s${i}`, x: i * 650 + (i % 3) * 11, y: (i % 2) * 40, w: 560 + (i % 3) * 40, h: 400 + (i % 4) * 20 })
+  for (let i = 0; i < 22; i++) bands.push({ id: `p${i}`, x: (i % 8) * 700 + (i % 3) * 13, y: Math.floor(i / 8) * 520 + (i % 2) * 30, w: 560 + (i % 3) * 40, h: 400 + (i % 4) * 20 })
+  const one = have ? verdict(strip) : null
+  const three = have ? verdict(bands) : null
+  ok('revamp.tidy.1 tidy packs toward the view\'s shape: a 22-panel strip frames at over twice its old scale and the audit\'s three bands frame larger too, no panel reordered (reading order kept), resized or overlapped, and a second tidy changes nothing',
+    one !== null && one.gain >= 2 && three.gain > 1.2 && [one, three].every((v) => v.order && v.sizes && !v.overlap && v.idem),
+    JSON.stringify({ one, three }))
+  const small = [{ id: 'c', x: 900, y: 110, w: 240, h: 160 }, { id: 'a', x: 100, y: 100, w: 200, h: 160 }, { id: 'b', x: 500, y: 105, w: 300, h: 200 }]
+  ok('revamp.tidy.2 a set that already frames readably is left as the row the natural pack makes — three panels stay a row',
+    have && JSON.stringify(V.tidyPanels(small, 24, { view })) === JSON.stringify(V.tidyPanels(small, 24)),
+    JSON.stringify(have ? V.tidyPanels(small, 24, { view }) : null))
+}
+{
+  const F = V.farTitleParts
+  const t = 'claude — api (2)'
+  const parts = typeof F === 'function' ? F(t) : null
+  const plain = typeof F === 'function' ? [F('review: the health check wiring'), F(' — api'), F('claude — ')] : []
+  ok('revamp.far.2 a far card\'s name keeps the part that tells cards apart: `claude — api (2)` is kicker `claude` and name `api (2)`, rejoined to the title exactly; a title with no agent prefix is all name',
+    parts !== null && parts.kicker === 'claude' && parts.name === 'api (2)' && parts.kicker + V.FAR_TITLE_SEPARATOR + parts.name === t &&
+      plain.length === 3 && plain.every((p, i) => p.kicker === undefined && p.name === ['review: the health check wiring', ' — api', 'claude — '][i]),
+    JSON.stringify({ parts, plain }))
+}
+
 // M92. PINS are counted INSIDE assignTiers: promoted first, in array order,
 //      before the focused panel and before recency; a pin off-screen is still
 //      live (that is what a pin is for); pins past the budget are carded in

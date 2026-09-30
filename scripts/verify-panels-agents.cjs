@@ -3545,7 +3545,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       wc.on('console-message', onO)
       const IDS = [
         'overview.1 below BLOCK_ENTER every sessionless kind is a block in the kind tone with its title, and below SUMMARY_ENTER a summary with the kind word',
-        'overview.2 the minimap draws one block per panel in its tone, a click flies the camera to that world point, and canvas.minimap off removes it'
+        'overview.2 the minimap draws one block per panel in its tone, a click flies the camera to that world point, and canvas.minimap off removes it',
+        'revamp.minimap.app.1 the map hides once Fit all has every object in view (its box kept) and returns when one leaves; it tucks aside, click-through, while the pointer works in a panel it covers, and comes back when the pointer leaves'
       ]
       try {
         const { mkdtempSync, writeFileSync } = require('node:fs')
@@ -3614,6 +3615,44 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const tonesRight = tones.ovA === 'needs-you' && tones.ovF === 'kind' && tones.ovT === 'kind' && tones.ovJ === 'kind' && tones.ovN === 'kind' && tones.ovB === 'asleep'
         ok(IDS[1], amber === true && blocks.length === 6 && tonesRight && nearFar && gone === true,
           JSON.stringify({ amber, blocks, before, after, nearFar, gone, log: oLog.slice(-3) }))
+
+        // M395 — revamp.minimap.app.1 (backlog #83). THE MAP YIELDS.
+        //   (a) ovB sits far outside INITIAL's view, so the map is at rest;
+        //       Fit all frames every panel — the map hides (visibility, its
+        //       box kept for the safe area) — and Reset brings ovB out of
+        //       view again, so it returns.
+        //   (b) a wheel pan puts ovA's centre under the map's centre; a
+        //       pointer moving on ovA into the map's approach ring tucks the
+        //       map aside, and the pixel at the map's centre is then ovA's
+        //       (click-through); the pointer leaving brings it back.
+        await cmd('0'); await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-minimap]') !== null`), 4000)
+        const presence = () => wc.executeJavaScript(`document.querySelector('[data-minimap]')?.getAttribute('data-presence') ?? null`)
+        const rest0 = await waitUntil(async () => (await presence()) === 'rest', 3000)
+        await cmd('1'); await settle()
+        const hidden = await waitUntil(async () => (await presence()) === 'hidden', 3000)
+        const hiddenBox = await wc.executeJavaScript(`(() => { const m = document.querySelector('[data-minimap]'); return m ? { vis: getComputedStyle(m).visibility, w: m.offsetWidth } : null })()`)
+        await cmd('0'); await settle()
+        const back = await waitUntil(async () => (await presence()) === 'rest', 3000)
+        const geo = await wc.executeJavaScript(`(() => { const m = document.querySelector('[data-minimap]').getBoundingClientRect(); const a = document.querySelector('.panel[data-panel-id="ovA"]').getBoundingClientRect()
+          return { m: { x: m.left, y: m.top, w: m.width, h: m.height }, a: { x: a.left, y: a.top, w: a.width, h: a.height } } })()`)
+        const dx = (geo.m.x + geo.m.w / 2) - (geo.a.x + geo.a.w / 2), dy = (geo.m.y + geo.m.h / 2) - (geo.a.y + geo.a.h / 2)
+        await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { deltaX: ${-dx}, deltaY: ${-dy}, deltaMode: 0, bubbles: true, cancelable: true }))`)
+        await settle()
+        const move = (x, y) => wc.executeJavaScript(`(() => { const t = document.elementFromPoint(${x}, ${y}); if (!t) return null
+          t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: ${x}, clientY: ${y} })); return t.closest('.panel')?.getAttribute('data-panel-id') ?? t.className })()`)
+        const ringX = Math.round(geo.m.x - 8), ringY = Math.round(geo.m.y + geo.m.h / 2)
+        const onRing = await move(ringX, ringY)
+        const aside = await waitUntil(async () => (await presence()) === 'aside', 2000)
+        await sleep(250)
+        const through = await wc.executeJavaScript(`(() => { const t = document.elementFromPoint(${Math.round(geo.m.x + geo.m.w / 2)}, ${Math.round(geo.m.y + geo.m.h / 2)}); return t ? (t.closest('.minimap') ? 'map' : t.closest('.panel')?.getAttribute('data-panel-id') ?? t.className) : null })()`)
+        const hostBox = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas').getBoundingClientRect(); return { x: h.left, y: h.top } })()`)
+        await move(Math.round(hostBox.x + 40), Math.round(hostBox.y + 40))
+        const returned = await waitUntil(async () => (await presence()) === 'rest', 2000)
+        await cmd('0'); await settle()
+        ok(IDS[2], rest0 === true && hidden === true && hiddenBox !== null && hiddenBox.vis === 'hidden' && hiddenBox.w > 0 && back === true &&
+          onRing === 'ovA' && aside === true && through === 'ovA' && returned === true,
+          JSON.stringify({ rest0, hidden, hiddenBox, back, geo, onRing, aside, through, returned, log: oLog.slice(-3) }))
       } catch (oErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(oErr && oErr.message || oErr) + ' | renderer: ' + (oLog.slice(-4).join(' || ') || '(none)'))
       } finally {

@@ -4047,6 +4047,74 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ target, hovered, clicked }))
     }
 
+    // M395 — revamp.chrome.app.1. CHROME THAT YIELDS, on a real canvas.
+    //     (a) the ONE Create door is inside the HUD, nowhere else; (b) while a
+    //     panel's ⋯ menu is open the command pill steps out — hidden, and the
+    //     pixel at its rest button's centre belongs to something else — and
+    //     returns when the menu closes; (c) the canvas host never stays
+    //     scrolled: a programmatic scroll (what a focus() without
+    //     preventScroll does) is put back, so no overlay slides under the top
+    //     bar (the `group` and `overview` shots).
+    {
+      await clickEmptyCanvas(wc)
+      await settle()
+      const create = await wc.executeJavaScript(`(() => { const all = [...document.querySelectorAll('[data-create-open]')]; return { n: all.length, inHud: all.every((b) => b.closest('.canvas-hud') !== null) } })()`)
+      const pillBefore = await wc.executeJavaScript(`(() => { const p = document.querySelector('.command-pill'); return p ? getComputedStyle(p).visibility : null })()`)
+      const opened = await wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-id]')].find((f) => f.querySelector('[data-panel-more]')); if (!p) return null
+        p.querySelector('[data-panel-more]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return p.getAttribute('data-panel-id') })()`)
+      const menu = opened === null ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-panel-menu]') !== null`), 3000)
+      await sleep(250)
+      const during = await wc.executeJavaScript(`(() => { const p = document.querySelector('.command-pill'); const r = p && p.querySelector('.command-pill__rest'); if (!r) return null
+        const b = r.getBoundingClientRect(); const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+        return { visibility: getComputedStyle(p).visibility, owned: top !== null && top.closest('.command-pill') !== null } })()`)
+      if (opened !== null) await wc.executeJavaScript(`(() => { const c = document.querySelector('[data-panel-menu-close]'); if (c) c.click() })()`)
+      await settle(); await sleep(200)
+      const after = await wc.executeJavaScript(`(() => { const p = document.querySelector('.command-pill'); return p ? getComputedStyle(p).visibility : null })()`)
+      const scrolled = await wc.executeJavaScript(`new Promise((resolve) => { const h = document.querySelector('.canvas'); h.scrollTop = 40; h.scrollLeft = 30; const set = { top: h.scrollTop, left: h.scrollLeft }
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve({ set, top: h.scrollTop, left: h.scrollLeft }))) })`)
+      ok('revamp.chrome.app.1 the one Create door is in the HUD; an open panel menu makes the command pill step out (hidden, its pixel owned by something else) and it returns when the menu closes; the canvas host never stays scrolled',
+        create.n === 1 && create.inHud === true && pillBefore === 'visible' && menu === true && during !== null && during.visibility === 'hidden' && during.owned === false &&
+          after === 'visible' && (scrolled.set.top > 0 || scrolled.set.left > 0) && scrolled.top === 0 && scrolled.left === 0,
+        JSON.stringify({ create, pillBefore, opened, menu, during, after, scrolled }))
+    }
+
+    // M395 — revamp.fit.app.1. THE LEAD'S MEASURED CASE: a Fit framed a
+    //     chart's left column UNDER the navigator (host left 348, the column
+    //     at 257). Measured cause: typing in a label editor that lies past
+    //     the host's edge scrolls the `overflow: hidden` host to reveal the
+    //     caret — `focus({ preventScroll })` covers the focus, never the
+    //     typing — and every framing after that is displaced by the scroll.
+    //     REAL typing (insertText) into a textarea in the world just past the
+    //     host's bottom-right corner: the host must not stay scrolled, and a
+    //     Fit then frames every object inside the visible host.
+    {
+      const edge = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas'); const w = h.querySelector('.world'); const vp = window.__m4aViewport(); const hb = h.getBoundingClientRect()
+        const t = document.createElement('textarea'); t.setAttribute('data-edit-owner', ''); t.setAttribute('data-revamp-edge', '')
+        t.style.cssText = 'position:absolute;width:220px;height:60px;left:' + ((hb.width - 80 - vp.x) / vp.scale) + 'px;top:' + ((hb.height + 60 - vp.y) / vp.scale) + 'px'
+        w.appendChild(t); window.__revampScrolls = 0; h.addEventListener('scroll', () => { window.__revampScrolls += 1 })
+        t.focus({ preventScroll: true }); return { focused: document.activeElement === t, top: h.scrollTop, left: h.scrollLeft } })()`)
+      wc.insertText('typing past the canvas edge')
+      await settle()
+      const typed = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas'); const t = document.querySelector('[data-revamp-edge]'); const out = { value: t ? t.value.length : 0, events: window.__revampScrolls, top: h.scrollTop, left: h.scrollLeft }
+        if (t) { t.blur(); t.remove() } return out })()`)
+      await pressChord(wc, '1')
+      await settle(); await sleep(500)
+      // Where the Fit PUT each panel is where it IS: its client rect is the
+      // camera's arithmetic from the host's own corner, to the pixel — no
+      // scroll displacing it (this fixture spreads panels past MIN_SCALE on
+      // purpose, so "all inside" is not the measure; "not displaced" is).
+      const framed = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const h = host.getBoundingClientRect(); const vp = window.__m4aViewport()
+        const off = [...document.querySelectorAll('.world .panel[data-panel-id]')].map((p) => { const r = p.getBoundingClientRect()
+          const ex = h.left + vp.x + parseFloat(p.style.left) * vp.scale, ey = h.top + vp.y + parseFloat(p.style.top) * vp.scale
+          return [p.getAttribute('data-panel-id'), Math.round(r.left - ex), Math.round(r.top - ey)] })
+        return { n: off.length, displaced: off.filter((d) => Math.abs(d[1]) > 1 || Math.abs(d[2]) > 1), top: host.scrollTop, left: host.scrollLeft } })()`)
+      await pressChord(wc, '0')
+      await settle()
+      ok('revamp.fit.app.1 typing into an editor past the canvas\'s edge does not leave the host scrolled, so a Fit lands every object exactly where the camera put it — never displaced under the navigator',
+        edge.focused === true && typed.value > 0 && typed.events > 0 && typed.top === 0 && typed.left === 0 && framed.n > 0 && framed.displaced.length === 0 && framed.top === 0 && framed.left === 0,
+        JSON.stringify({ edge, typed, framed }))
+    }
+
     // M166 — far.1 (the status wall, on a real canvas). At a fifth of the
     //     size every card is at the SUMMARY tier: it shows its kind glyph and
     //     its title, and no last line of scrollback and no machine figure —

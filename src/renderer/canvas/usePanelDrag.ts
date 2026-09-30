@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { arrangeable, changedFields, dragFrame, type CanvasWriteThrough, type DragState } from './panel-interaction'
 import { screenToWorld, type Viewport, type WorldRect } from './viewport'
+import { MOTION_SURFACE_MS } from '@renderer/motion'
 
 export interface PanelDragDeps {
   hostRef: RefObject<HTMLElement | null>
@@ -93,10 +94,12 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
         panel?.setAttribute('data-panel-settling', '')
         const previous = settleTimersRef.current.get(state.panelId)
         if (previous !== undefined) window.clearTimeout(previous)
+        // M395: the settle runs on --dur-2 (styles.css panel-settle); the
+        // attribute outlasts it by a frame or two.
         const timer = window.setTimeout(() => {
           panelElement(state.panelId)?.removeAttribute('data-panel-settling')
           settleTimersRef.current.delete(state.panelId)
-        }, 560)
+        }, MOTION_SURFACE_MS + 60)
         settleTimersRef.current.set(state.panelId, timer)
       }
     }

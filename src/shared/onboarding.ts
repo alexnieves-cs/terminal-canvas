@@ -145,6 +145,9 @@ export function placeContains(place: string, folder: string): boolean {
   return f === p || f.startsWith(p === '/' ? '/' : `${p}/`)
 }
 
+/** M395. What a Start with no sentence says — on the button and under step 3. */
+export const DESCRIBE_FIRST = 'Describe the task first'
+
 export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): FirstWorkPlan {
   // The ENGINE first: no sentence and no folder can fix a missing CLI, so a
   // person must not be asked to type into a start that cannot run (the first
@@ -182,8 +185,11 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
       // stated before it binds); the internal teammate name and the path said
       // twice went — a new user read three identifiers for one folder.
       : `${lane} will work on its own branch of ${folderBase(folder ?? '')}, and may work only in ${where}`
+  // M395. The dead-end rule's words: a Start that cannot run says what it
+  // waits for, and it is not step 1's question again ("say what you want to
+  // work on" sat under step 3, repeating "What are you working on?").
   if (sentence === '') {
-    return { kind: 'refused', field: 'intention', reason: folder === null ? 'say what you want to work on, in a sentence' : `say what you want to work on — then ${outcome}` }
+    return { kind: 'refused', field: 'intention', reason: folder === null ? DESCRIBE_FIRST : `${DESCRIBE_FIRST} — then ${outcome}` }
   }
   if (raw === '') return { kind: 'refused', field: 'folder', reason: 'choose the repository folder to work in' }
   if (folder === null) return { kind: 'refused', field: 'folder', reason: 'type the folder as a full path starting with / — or use Choose…' }

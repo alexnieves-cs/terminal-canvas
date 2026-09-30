@@ -250,7 +250,7 @@ try {
   // like any other start, never on an engine, and the agent step says the
   // start becomes a conversation in the folder.
   ok('onboarding.markup.1 with Codex alone Start work waits only on the sentence (no engine wall), the agent step names the in-folder conversation, Ask is live, and every legacy door is inside the closed disclosure',
-    Boolean(start && disabled(start) && /say what you want/.test(start) && !/not found/.test(start) && /conversation in the folder/.test(html) && ask && !disabled(ask) && !moreOpen &&
+    Boolean(start && disabled(start) && /Describe the task first/.test(start) && !/not found/.test(start) && /conversation in the folder/.test(html) && ask && !disabled(ask) && !moreOpen &&
       legacy.every(([, found]) => found) && disabled(buttonTag(more, 'data-launcher-new-chat')) && !disabled(buttonTag(more, 'data-launcher-new-codex'))),
     JSON.stringify({ start: start ?? null, ask: ask ?? null, moreOpen, legacy }))
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in',
@@ -271,9 +271,12 @@ try {
     JSON.stringify({ claudeOnly: engines(claudeOnly), nothing: engines(nothing) }))
   // M205. At rest the primary names the FIRST missing thing (the sentence),
   // is disabled until it is answered, and the starter reads as optional.
+  // M395: in the dead-end rule's words, "Describe the task first" — not step
+  // 1's question again — and said on the disabled control itself.
   const summary = claudeOnly.match(/<p\b[^>]*\bdata-onboarding-summary="([^"]+)"[^>]*>([\s\S]*?)<\/p>/)
-  ok('onboarding.markup.4 at rest the primary is disabled and the summary names the sentence as the one missing thing; the starter line reads as optional',
-    Boolean(summary && summary[1] === 'intention' && /what you want to work on/.test(summary[2]) &&
+  const startTag = claudeOnly.match(/<button\b[^>]*data-onboarding-start[\s\S]*?<\/button>/)?.[0] ?? ''
+  ok('onboarding.markup.4 at rest the primary is disabled and says the sentence is the one missing thing (the summary names the same field); the starter line reads as optional',
+    Boolean(summary && summary[1] === 'intention' && /Describe the task first/.test(summary[2]) && /Describe the task first/.test(startTag) &&
       disabled(buttonTag(claudeOnly, 'data-onboarding-start')) && !disabled(buttonTag(claudeOnly, 'data-onboarding-ask')) &&
       /optional/.test(claudeOnly.match(/<button\b[^>]*\bdata-launcher-starter[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '')),
     JSON.stringify({ summary: summary ? summary.slice(1) : null }))
@@ -281,7 +284,7 @@ try {
   ok('onboarding.markup.1 with Codex alone Start work waits only on the sentence (no engine wall), the agent step names the in-folder conversation, Ask is live, and every legacy door is inside the closed disclosure', false, error.message)
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in', false, error.message)
   ok('onboarding.markup.3 readiness appears only as needed — one row with an engine found, every row and Check again with none — and no copy says process-per-turn', false, error.message)
-  ok('onboarding.markup.4 at rest the primary is disabled and the summary names the sentence as the one missing thing; the starter line reads as optional', false, error.message)
+  ok('onboarding.markup.4 at rest the primary is disabled and says the sentence is the one missing thing (the summary names the same field); the starter line reads as optional', false, error.message)
 }
 
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
