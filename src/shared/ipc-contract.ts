@@ -18,6 +18,7 @@ import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
+import type { FlowchartExportRequest, FlowchartExportResult, FlowchartReadRequest, FlowchartReadResult } from './flowchart-files'
 import type { ToolGenerateRequest, ToolGenerateResult } from './tool-spec'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
@@ -697,6 +698,13 @@ export const IPC = {
   EXPORT_CANVAS_PNG: 'export:canvas-png',
   /** M248. A deck file to PDF, one 16:9 page per slide, through a save dialog. */
   EXPORT_DECK_PDF: 'export:deck-pdf',
+  /**
+   * A flowchart's Mermaid or SVG TEXT to a file the person chooses. Text, so it
+   * passes the outward gate and reports its scrub count (unlike the canvas PNG,
+   * the one ungated door); an SVG carrying script, a link or an embedded
+   * picture is refused before the sheet opens. Never rejects.
+   */
+  EXPORT_FLOWCHART: 'export:flowchart',
   /** M251. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
   DECK_EXPORT_PPTX: 'deck:export-pptx',
   /**
@@ -994,7 +1002,13 @@ export const IPC = {
    * system's own chooser filtered to .docx. The docx is only read; the note is
    * written through createFile's `wx`, so nothing is overwritten.
    */
-  DOCX_IMPORT: 'docx:import'
+  DOCX_IMPORT: 'docx:import',
+  /**
+   * A Mermaid file as text. With no path, the system's own chooser filtered to
+   * .mmd/.mermaid/.md/.txt; with one, an absolute path to such a file under a
+   * size cap. Not an outward door — nothing leaves — so no gate. Never rejects.
+   */
+  FLOWCHART_READ: 'flowchart:read'
 } as const
 
 /**
@@ -2088,6 +2102,8 @@ export interface CanvasBridge {
     deckPptx(req: DeckExportRequest): Promise<DeckExportResult>
     /** M248. Main reads the deck file itself; the renderer names only its path. */
     deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
+    /** A diagram's Mermaid/SVG text, scrubbed by the outward gate, to a file the person chooses; the count is on the answer. */
+    flowchart(req: FlowchartExportRequest): Promise<FlowchartExportResult>
   }
   tool: {
     /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */
@@ -2367,6 +2383,10 @@ export interface CanvasBridge {
   /** M250. Import one .docx as a new, unreviewed note; never rejects. */
   docx: {
     import(req: { path?: string }): Promise<import('./imported-note').DocxImportResult>
+  }
+  /** A Mermaid file as text (a chosen file, or an absolute path); never rejects. See FLOWCHART_READ. */
+  flowchart: {
+    read(req: FlowchartReadRequest): Promise<FlowchartReadResult>
   }
   /**
    * M188. The fetch node's one request. A GET and only a GET — any other

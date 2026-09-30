@@ -315,7 +315,8 @@ const bridge: CanvasBridge = {
     panelText: (req: PanelTextExportRequest) => ipcRenderer.invoke(IPC.EXPORT_PANEL_TEXT, req),
     canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG),
     deckPptx: (req: { path: string }) => ipcRenderer.invoke(IPC.DECK_EXPORT_PPTX, req),
-    deckPdf: (req) => ipcRenderer.invoke(IPC.EXPORT_DECK_PDF, req)
+    deckPdf: (req) => ipcRenderer.invoke(IPC.EXPORT_DECK_PDF, req),
+    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req)
   },
   tool: {
     generate: (req: { description: string; folder: string }) => ipcRenderer.invoke(IPC.TOOL_GENERATE, req)
@@ -491,6 +492,9 @@ const bridge: CanvasBridge = {
   },
   docx: {
     import: (req) => ipcRenderer.invoke(IPC.DOCX_IMPORT, req)
+  },
+  flowchart: {
+    read: (req) => ipcRenderer.invoke(IPC.FLOWCHART_READ, req)
   },
   node: {
     fetch: (req) => ipcRenderer.invoke(IPC.NODE_FETCH, req)

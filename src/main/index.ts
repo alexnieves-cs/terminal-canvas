@@ -35,7 +35,7 @@ import { createAgentHandlers } from './bootstrap/agent-handlers'
 import { createPaletteWiring } from './bootstrap/palette-handlers'
 import { createToolboxHandlers } from './bootstrap/toolbox-handlers'
 import {
-  createEnvReporter, createExportHandlers, createLinkHandlers, createPreviewHandlers,
+  createEnvReporter, createExportHandlers, createFlowchartHandlers, createLinkHandlers, createPreviewHandlers,
   createScrollbackHandlers, createTrailReader, createWorktreeHandlers
 } from './bootstrap/panel-handlers'
 import {
@@ -356,7 +356,9 @@ app.whenReady().then(async () => {
       ...shareDoors
     },
     // The pty relay: one socket per relay panel, held in main with the token.
-    relay
+    relay,
+    // The flowchart's file doors: a diagram out through the outward gate, a Mermaid file in.
+    createFlowchartHandlers(state)
   )
   createWindow(state, stores)
 

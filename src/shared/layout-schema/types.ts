@@ -17,6 +17,7 @@
 import { type DeviceWidthId, type PreviewBinding } from '../preview'
 import { type ArtifactReference } from '../artifact-reference'
 import { type NoteForm, type NoteTint } from '../notes'
+import { type Connector, type ShapeRecord } from '../flowchart'
 import { type Annotation } from '../annotations'
 import { type PersistedStarter } from '../starter'
 import type { PersistedOrchestrate } from '../orchestrate-prefs'
@@ -116,6 +117,13 @@ export interface PersistedPanelBase {
      */
     automation?: LinkAutomation
   }[]
+  /**
+   * M389. Outgoing connectors — a diagram's arrows, NOT links (the ledger's
+   * D2). Absent means none, every file ever written; parsed per entry by
+   * `parseConnectors` (shared/flowchart.ts); a target that did not survive
+   * the load is pruned by the workspace's second pass, like a link's.
+   */
+  connectors?: Connector[]
 }
 
 export interface PersistedTerminalPanel extends PersistedPanelBase {
@@ -362,7 +370,19 @@ export interface PersistedNotePanel extends PersistedPanelBase {
   note: { form: NoteForm; text: string; tint?: NoteTint }
 }
 
+/**
+ * M388. The flowchart shape on disk. `shape.form` is REQUIRED and an unknown
+ * one drops the panel by name (nothing to draw); a malformed text or style
+ * field costs the field (`parseShapeRecord`). Its rect is clamped to
+ * SHAPE_MIN, not the 200x160 panel floor.
+ */
+export interface PersistedShapePanel extends PersistedPanelBase {
+  kind: 'shape'
+  shape: ShapeRecord
+}
+
 export type PersistedPanel =
+  | PersistedShapePanel
   | PersistedNotePanel
   | PersistedImagePanel
   | PersistedMemoryPanel

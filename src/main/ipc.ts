@@ -312,6 +312,21 @@ const INERT_DOCX: DocxHandlers = {
   import: async () => ({ kind: 'refused', reason: 'importing a .docx is not available here' })
 }
 
+/**
+ * The flowchart's two file doors — a diagram's text out through the outward
+ * gate, a Mermaid file in; see main/flowchart-files.ts. One collaborator, one
+ * positional parameter, appended last.
+ */
+export interface FlowchartHandlers {
+  export(req: unknown): Promise<import('../shared/flowchart-files').FlowchartExportResult>
+  read(req: unknown): Promise<import('../shared/flowchart-files').FlowchartReadResult>
+}
+
+const INERT_FLOWCHARTS: FlowchartHandlers = {
+  export: async () => ({ kind: 'refused', reason: 'exporting a flowchart is not available here' }),
+  read: async () => ({ kind: 'refused', reason: 'reading a flowchart file is not available here' })
+}
+
 /** M188. The fetch node's one door; see main/node-run.ts. */
 export interface NodeHandlers {
   fetch(req: { url: string; method?: string }): Promise<NodeFetchResult>
@@ -775,7 +790,9 @@ export function registerIpcHandlers(
   /** Presence. Appended last, like every collaborator before it. */
   presence: PresenceHandlers = INERT_PRESENCE,
   /** The pty relay. Appended last, like every collaborator before it. */
-  relay: RelayHandlers = INERT_RELAY
+  relay: RelayHandlers = INERT_RELAY,
+  /** The flowchart's file doors. Appended last, like every collaborator before it — an unwired harness gets a named refusal, never a dialog. */
+  flowcharts: FlowchartHandlers = INERT_FLOWCHARTS
 ): void {
   registerRelayHandlers(relay)
   ipcMain.handle(IPC.PRESENCE_LOCAL, (_event, raw: unknown) => {
@@ -1103,6 +1120,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
   ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
+  // Shape-checked in main/flowchart-files.ts, which answers a refusal by name for anything malformed — so what arrives here is passed on untouched.
+  ipcMain.handle(IPC.EXPORT_FLOWCHART, (_event, req: unknown) => flowcharts.export(req))
+  ipcMain.handle(IPC.FLOWCHART_READ, (_event, req: unknown) => flowcharts.read(req))
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
   // M300. The same clamp the list read takes, for the same reason: a limit is

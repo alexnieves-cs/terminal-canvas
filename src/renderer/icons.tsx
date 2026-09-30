@@ -245,7 +245,11 @@ export const KindDeck = (p: IconProps): JSX.Element => (
 export const KindRelay = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="5.5" width="12" height="8" rx="1.5" /><path d="M4.5 8.5l1.8 1.5-1.8 1.5M8 11.5h3" strokeWidth="1" /><path d="M5.5 3.5a3.5 3.5 0 0 1 5 0" /></Svg>
 )
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow, image: KindImage, relay: KindRelay } as const
+/** M388. A flowchart shape: a box, an arrow, a diamond — the diagram's own mark. */
+export const KindShape = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="1.5" y="2.5" width="6" height="4" rx="1" /><path d="M11.5 8.5l3 3-3 3-3-3z" /><path d="M4.5 6.5v5h4" strokeWidth="1" /></Svg>
+)
+export const KIND_GLYPH = { shape: KindShape, review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow, image: KindImage, relay: KindRelay } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

@@ -1254,6 +1254,56 @@ const SCENES = [
       await k.shot('replay')
       await k.click('.replay__done'); await sleep(300)
     } },
+  // M388–M390. THE FLOWCHART, built the way a person builds one — LAST, on an
+  // empty canvas of its own (emptyCanvas), so no earlier scene's fixture moves.
+  // Every step is a real input event: a double-click on the ground, typed
+  // labels, Tab for the next step, ⌥→ for a branch, the inspector's form
+  // swatches, a double-clicked line for its label.
+  { name: 'flowchart', intent: 'M388–M390. A flowchart built from the keyboard on an empty canvas: Start (a start/end stadium) → Read the request → Is it valid? (a decision diamond) whose `no` branch runs right to Ask for a fix and whose `yes` continues down to Build the change → Done (a stadium). Connectors are elbow lines with arrowheads leaving and entering at the shapes\' ports; the two out of the decision carry their words on ground-coloured chips; every shape at rest shows its label only, in the UI face, centred, with no chrome.', size: [1440, 900],
+    run: async (k) => {
+      await k.emptyCanvas()
+      const key = async (keyCode, modifiers = []) => { k.wc.sendInputEvent({ type: 'keyDown', keyCode, modifiers }); k.wc.sendInputEvent({ type: 'keyUp', keyCode, modifiers }); await sleep(260) }
+      const typeText = async (text) => { k.wc.insertText(text); await sleep(200) }
+      const press = async (x, y, clickCount = 1) => { k.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount }); k.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount }); await sleep(clickCount === 2 ? 450 : 300) }
+      const dbl = async (x, y) => { k.wc.focus(); await press(x, y, 1); await press(x, y, 2) }
+      const shapeAt = async (text) => JSON.parse(await k.js(`(() => { const e = [...document.querySelectorAll('.shape')].find((x) => x.getAttribute('aria-label').split(': ').slice(1).join(': ') === ${JSON.stringify(text)}); if (!e) return 'null'; const r = e.getBoundingClientRect(); return JSON.stringify({ id: e.getAttribute('data-panel-id'), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }) })()`))
+      // The ground beside the launcher: a double-click there is a process step with its label open.
+      await dbl(1180, 180)
+      if (!(await k.js(`document.activeElement !== null && document.activeElement.classList.contains('shape__editor')`))) throw new Error('flowchart scene: a double-click on the ground did not open a shape\'s label')
+      // Tab in a label commits it and makes the NEXT step, its own label open.
+      await typeText('Start'); await key('Tab')
+      await typeText('Read the request'); await key('Tab')
+      await typeText('Is it valid?'); await key('Escape')
+      await k.click('[data-shape-form-choice="decision"]'); await sleep(300)
+      // ⌥→ from the decision: the `no` branch, to its right.
+      await key('Right', ['alt'])
+      await typeText('Ask for a fix'); await key('Escape')
+      // Back to the decision by its body; Tab: the `yes` step below it.
+      const decision = await shapeAt('Is it valid?')
+      if (decision === null) throw new Error('flowchart scene: no decision on the canvas')
+      await press(decision.x, decision.y)
+      await key('Tab')
+      await typeText('Build the change'); await key('Tab')
+      await typeText('Done'); await key('Escape')
+      await k.click('[data-shape-form-choice="terminator"]'); await sleep(300)
+      const start = await shapeAt('Start')
+      await press(start.x, start.y)
+      await k.click('[data-shape-form-choice="terminator"]'); await sleep(300)
+      // Each line out of the decision takes its word: a double-click on the line itself.
+      const label = async (toText, word) => {
+        const to = await shapeAt(toText)
+        const mid = JSON.parse(await k.js(`(() => { const h = document.querySelector('[data-connector-to="${to.id}"] [data-connector-hit]'); if (!h) return 'null'; const len = h.getTotalLength(); const p = h.getPointAtLength(len / 2); const m = h.getScreenCTM(); const pt = new DOMPoint(p.x, p.y).matrixTransform(m); return JSON.stringify({ x: Math.round(pt.x), y: Math.round(pt.y) }) })()`))
+        if (mid === null) throw new Error(`flowchart scene: no line into ${toText}`)
+        await dbl(mid.x, mid.y)
+        await typeText(word); await key('Return')
+      }
+      await label('Ask for a fix', 'no')
+      await label('Build the change', 'yes')
+      // Nothing selected, the whole chart framed: the picture a person keeps.
+      await press(1380, 820)
+      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.shot('flowchart')
+    } },
 ]
 
 const SCRIPT_NAME = 'shot.cjs'

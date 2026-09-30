@@ -29,6 +29,7 @@ import { isAssetId } from '../assets'
 import { parseAgentCaps } from '../agent-session'
 import { parseArtifactReference } from '../artifact-reference'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteTint } from '../notes'
+import { SHAPE_MIN, parseConnectors, parseShapeRecord } from '../flowchart'
 import type { ReviewSubject } from '../review'
 import type { FileSource } from '../file-panel'
 import type { ToolboxSource } from '../toolbox'
@@ -453,9 +454,10 @@ export function parsePanel(
     x,
     y,
     // Clamped rather than dropped: the geometry is recoverable, and losing the
-    // panel is a worse answer than resizing it.
-    w: Math.max(MIN_PANEL_W, w),
-    h: Math.max(MIN_PANEL_H, h),
+    // panel is a worse answer than resizing it. M388: a SHAPE's floor is
+    // SHAPE_MIN — the 200x160 floor is a terminal's, and a junction is 28 wide.
+    w: Math.max(raw.kind === 'shape' ? SHAPE_MIN.w : MIN_PANEL_W, w),
+    h: Math.max(raw.kind === 'shape' ? SHAPE_MIN.h : MIN_PANEL_H, h),
     z,
     ...(isStr(title) ? { title } : {}),
     // M92. Three layout facts, each absent unless set: `true` round-trips, an
@@ -485,6 +487,12 @@ export function parsePanel(
       // Absence is PRESERVED, not normalised to an empty array — the same rule
       // the `kind` and `command` reads below obey, and for the same reason.
       return links === undefined ? {} : { links }
+    })(),
+    // M389. Connectors, any kind may hold them; absent stays absent, and an
+    // all-dropped list is absent too (serialises like a panel that had none).
+    ...(() => {
+      const connectors = parseConnectors(raw.connectors, warnings, id)
+      return connectors === undefined || connectors.length === 0 ? {} : { connectors }
     })()
   }
 
@@ -631,6 +639,12 @@ export function parsePanel(
     const artifact = image.artifact === undefined ? undefined : parseArtifactReference(image.artifact)
     if (image.artifact !== undefined && artifact === undefined) warnings.push(`image panel ${id}: malformed artifact provenance dropped`)
     return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }), ...(artifact === undefined ? {} : { artifact }) } }
+  }
+  if (kind === 'shape') {
+    // M388. The seventeenth kind: its record's own reader decides, field by field.
+    const shape = parseShapeRecord((raw as Record<string, unknown>).shape, warnings, `shape panel ${id}`)
+    if (shape === null) return null
+    return { ...base, kind: 'shape', shape }
   }
   if (kind === 'note') {
     const note = (raw as Record<string, unknown>).note

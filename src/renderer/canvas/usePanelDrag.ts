@@ -12,7 +12,15 @@ export interface PanelDragDeps {
    * rect it SETTLED on — after snapping — when it has one, so the
    * write-through sends where the panel is, not where the cursor is.
    */
-  onDrag(panelId: string, rect: WorldRect, state: DragState): WorldRect | void
+  onDrag(panelId: string, rect: WorldRect, state: DragState, alreadySnapped?: boolean): WorldRect | void
+  /**
+   * M390. A move of SEVERAL members snaps as ONE rect — their bounding rect —
+   * the way a group drag always has (M50): per-member snapping shears a
+   * selected diagram apart, each shape stopping on a different neighbour.
+   * Returns the world delta to add to every member; absent keeps the old
+   * per-member path.
+   */
+  snapMany?(rects: readonly WorldRect[], ids: ReadonlySet<string>): { dx: number; dy: number }
   /**
    * Called once on release for the whole gesture. A group move carries one
    * immutable state per member, so this is the one place its history entry
@@ -133,9 +141,17 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       // rect is derived from its mousedown origin rather than the preceding
       // frame or a group bounding box — see applyDrag's own note.
       const through = depsRef.current.writeThroughRef?.current ?? null
+      const snapMany = depsRef.current.snapMany
+      const together = snapMany !== undefined && state.length > 1 && state.every((m) => m.mode.kind === 'move')
+      let shift = { dx: 0, dy: 0 }
+      if (together) {
+        const rects = state.map((m) => applyDrag(m, world))
+        shift = snapMany(rects, new Set(state.map((m) => m.panelId)))
+      }
       for (const member of state) {
-        const implied = applyDrag(member, world)
-        const settled = depsRef.current.onDrag(member.panelId, implied, member) ?? implied
+        const raw = applyDrag(member, world)
+        const implied = together ? { ...raw, x: raw.x + shift.dx, y: raw.y + shift.dy } : raw
+        const settled = depsRef.current.onDrag(member.panelId, implied, member, together) ?? implied
         if (through === null) continue
         const fields = changedFields(writtenRef.current.get(member.panelId) ?? member.originRect, settled)
         if (Object.keys(fields).length === 0) continue

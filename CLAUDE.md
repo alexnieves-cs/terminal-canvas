@@ -11,7 +11,7 @@ An index. Every rule in this repository exists because the obvious version fails
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
-| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md). Work numbered past a ledger's range is logged per milestone beside them in `docs/build-log/` (`ls` it; [milestone-history](docs/milestone-history.md) has the story). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
+| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md); and the canvas remade + flowcharts (M388–M396, by its [run prompt](docs/superpowers/specs/2026-09-29-canvas-revamp-flowchart-prompt-opus55.md)), ledger [m388-m396](docs/build-log/m388-m396-ledger.md). Work numbered past a ledger's range is logged per milestone beside them in `docs/build-log/` (`ls` it; [milestone-history](docs/milestone-history.md) has the story). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
 | [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
 
 ## What this is
@@ -47,8 +47,8 @@ its execution**. **A `note` is a Markdown FILE and nothing else is** — M187's 
 frame are *canvas objects*, never notes; nothing is renamed in code.
 
 **The frame rule (M236).** A kind is **chromeless** — no header, content to the edge, controls
-on hover over a scrim — when the object IS its content: a `terminal`, and a `note` in its text
-and frame forms. Every other kind **keeps its header**, because each header carries a fact the
+on hover over a scrim — when the object IS its content: a `terminal`, a `note` in its text
+and frame forms, and a flowchart `shape` (M388). Every other kind **keeps its header**, because each header carries a fact the
 body does not repeat (a state word, a count, a path, an address). The test is not how much
 chrome there is, it is *does removing this hide information*. The full list lives beside the
 rules in `styles.css`; a rule that is silently per-kind is how the frame drifted before M47.
@@ -116,7 +116,7 @@ review:baseline review:at review:diff git:status git:root review:across review:i
 credential:list credential:set credential:delete credential:verify jira:list github:list
 broker:audit jira:transitions jira:comment jira:transition file:open file:read file:close
 fs:list toolbox:read toolbox:permissions file:write file:create diagnostics:sample
-diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx
+diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx export:flowchart
 tool:generate env:report link:open ledger:list
 ledger:usage ledger:timeline ledger:event spawn:sheet spawn:recent spawn:recent-used agent:create agent:send agent:interrupt agent:dispose
 agent:answer agent:list agent:transcript agent:import agent:clipboard-image
@@ -128,7 +128,7 @@ browser:read preview:discover preview:capture asset:put asset:choose node:fetch
 portable:export portable:import pack:read pack:add pack:export preset:mark-reviewed
 pack:sample github:publish
 board:lane board:lane-status board:open-pr board:comment-pr
-board:repositories update:check image:read starter:prepare docx:import pty:data pty:exit edit:copy
+board:repositories update:check image:read starter:prepare docx:import flowchart:read pty:data pty:exit edit:copy
 edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset preset:spawn
 preset:default preset:capture agent:state attention:jump settings:changed spawn:open-sheet
 agent:event watcher:state vault:changed session:live session:recover subagent:state

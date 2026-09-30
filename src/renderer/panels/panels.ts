@@ -5,6 +5,7 @@ import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
 import type { DeviceWidthId, PreviewBinding } from '@shared/preview'
 import type { NoteForm, NoteTint } from '@shared/notes'
+import { SHAPE_SIZE, type Connector, type ShapeForm, type ShapeRecord } from '@shared/flowchart'
 import type { ArtifactReference } from '@shared/artifact-reference'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
@@ -92,6 +93,16 @@ export interface PanelBase {
    * render, which takes the whole canvas down rather than one link.
    */
   links?: PanelLink[]
+  /**
+   * M389. Outgoing CONNECTORS — a diagram's arrows, which are NOT links
+   * (docs/build-log/m388-m396-ledger.md, D2): a link means something (task
+   * membership, handoff, dependency lines) and an arrow must not. Held on the
+   * source for the reason links are — undo is History<Panel[]>, so a
+   * connector that rides Panel gets undo, close-pruning and copy for free.
+   * Absent means none; read it through connectorsOf. Any kind may hold one
+   * (a terminal may point at a shape), and `to` may name any panel.
+   */
+  connectors?: Connector[]
 }
 
 /**
@@ -289,7 +300,21 @@ export interface RelayPanel extends PanelBase {
   relay: { program: string; sessionId?: string; shareId?: string }
 }
 
-export type Panel = NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel | RelayPanel
+/**
+ * M388. A flowchart shape — the seventeenth kind. Sessionless like a note, and
+ * for the same reason it joins isTerminalPanel's exclusion list: it has no
+ * spec, and must never reach assignTiers or registry.ensure. It renders in the
+ * canvas's ONE ShapeLayer, never through PanelFrame (ledger D1: PanelFrame's
+ * per-object cost and its 200x160 floor are a terminal's, and a diamond must
+ * stay a diamond at far zoom). Its label is `shape.text`; `title` stays
+ * absent, and panelLabel reads the text's first line.
+ */
+export interface ShapePanel extends PanelBase {
+  kind: 'shape'
+  shape: ShapeRecord
+}
+
+export type Panel = ShapePanel | NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel | RelayPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -380,6 +405,16 @@ export function isNotePanel(panel: Panel): panel is NotePanel {
   return panel.kind === 'note'
 }
 
+export function isShapePanel(panel: Panel): panel is ShapePanel {
+  return panel.kind === 'shape'
+}
+
+/** M388. A shape at a point, at its form's mint size. */
+export function makeShapePanel(id: string, centre: Point, z: number, form: ShapeForm, text = ''): ShapePanel {
+  const { w, h } = SHAPE_SIZE[form]
+  return { kind: 'shape', rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h }, z, shape: { form, text } }
+}
+
 export const NOTE_W = 320
 export const NOTE_H = 220
 export const FRAME_W = 720
@@ -433,6 +468,8 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
     // M187. The sixteenth kind, same reason: a note has no spec and must never
     // reach assignTiers or registry.ensure as one.
     !isNotePanel(panel) &&
+    // M388. The seventeenth kind, same reason: a shape has no spec.
+    !isShapePanel(panel) &&
     // M338. A relay terminal LOOKS like a terminal and is not one here: its
     // pty is on the relay VM. Satisfying this would spawn a local shell.
     !isRelayPanel(panel)
@@ -648,7 +685,75 @@ export function setPanelRect(panels: Panel[], id: string, rect: WorldRect): Pane
  * gone" perfectly and silently empties the canvas on any close at all.
  */
 export function removePanel(panels: Panel[], id: string): Panel[] {
-  return panels.filter((p) => p.rect.id !== id).map((p) => pruneLinksTo(p, id))
+  // M389. Connectors pointing at the closed panel leave in the same gesture,
+  // for the same one-undo-entry reason as links.
+  return panels.filter((p) => p.rect.id !== id).map((p) => pruneConnectorsTo(pruneLinksTo(p, id), id))
+}
+
+/** M389. The one place `connectors` being absent is normalised. */
+export function connectorsOf(panel: Panel): Connector[] {
+  return panel.connectors ?? []
+}
+
+/** M389. Drop every connector on this panel that points at `id`; same identity when none did, and the key deleted rather than left empty. */
+export function pruneConnectorsTo(panel: Panel, id: string): Panel {
+  const cs = connectorsOf(panel)
+  if (!cs.some((c) => c.to === id)) return panel
+  const kept = cs.filter((c) => c.to !== id)
+  const next: Panel = { ...panel }
+  if (kept.length === 0) delete next.connectors
+  else next.connectors = kept
+  return next
+}
+
+/** M389. Add a connector held by `from`. Refuses a self-connector and a missing end (same array back — no history entry for a refused gesture). */
+export function addConnector(panels: Panel[], from: string, connector: Connector): Panel[] {
+  if (from === connector.to) return panels
+  if (!panels.some((p) => p.rect.id === from) || !panels.some((p) => p.rect.id === connector.to)) return panels
+  return panels.map((p) => (p.rect.id === from ? { ...p, connectors: [...connectorsOf(p), connector] } : p))
+}
+
+/** M389. The panel holding connector `id`, and the connector. */
+export function findConnector(panels: readonly Panel[], id: string): { holder: Panel; connector: Connector } | null {
+  for (const p of panels) {
+    const c = p.connectors?.find((x) => x.id === id)
+    if (c !== undefined) return { holder: p, connector: c }
+  }
+  return null
+}
+
+/** M389. Remove connector `id` wherever it is held. Same array when there is none. */
+export function removeConnector(panels: Panel[], id: string): Panel[] {
+  const found = findConnector(panels, id)
+  if (found === null) return panels
+  return panels.map((p) => {
+    if (p !== found.holder) return p
+    const kept = connectorsOf(p).filter((c) => c.id !== id)
+    const next: Panel = { ...p }
+    if (kept.length === 0) delete next.connectors
+    else next.connectors = kept
+    return next
+  })
+}
+
+/**
+ * M389. Patch connector `id` with `patch`; a key set to undefined is DELETED
+ * (absent is the default, and a record must not carry an undefined key — lb
+ * :2438). Same array when there is no such connector or nothing changed.
+ */
+export function patchConnector(panels: Panel[], id: string, patch: Partial<Omit<Connector, 'id'>>): Panel[] {
+  const found = findConnector(panels, id)
+  if (found === null) return panels
+  const next: Connector = { ...found.connector }
+  let changed = false
+  for (const [k, v] of Object.entries(patch) as [keyof Connector, unknown][]) {
+    if (v === undefined) { if (k in next) { delete (next as unknown as Record<string, unknown>)[k]; changed = true } }
+    else if ((next as unknown as Record<string, unknown>)[k] !== v) { (next as unknown as Record<string, unknown>)[k] = v; changed = true }
+  }
+  if (!changed) return panels
+  // A patch may retarget (`to`): refuse a self-connector or a missing target.
+  if (next.to === found.holder.rect.id || !panels.some((p) => p.rect.id === next.to)) return panels
+  return panels.map((p) => (p === found.holder ? { ...p, connectors: connectorsOf(p).map((c) => (c.id === id ? next : c)) } : p))
 }
 
 /** The one place `links` being absent is normalised. See PanelBase.links. */

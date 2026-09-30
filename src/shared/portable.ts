@@ -67,7 +67,7 @@ const CANNOT_TRAVEL: Readonly<Record<string, string>> = {
  * list is omitted by name, which is the honest answer for a shape this
  * version of the format cannot carry.
  */
-const TRAVELS: ReadonlySet<string> = new Set(['terminal', 'chat', 'file', 'note', 'image', 'workflow'])
+const TRAVELS: ReadonlySet<string> = new Set(['terminal', 'chat', 'file', 'note', 'image', 'workflow', 'shape'])
 
 export function travels(kind: string | undefined): boolean {
   return TRAVELS.has(kind ?? 'terminal')
@@ -111,6 +111,23 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
   } as PersistedPanel
   const raw = panel as unknown as Record<string, unknown>
   const kind = typeof raw.kind === 'string' ? raw.kind : 'terminal'
+  // M389. A diagram's arrows travel with their SOURCE, field by field, the
+  // label scrubbed like every other text; buildPortable drops any whose
+  // target did not travel, and remapPortable renames both ends.
+  const connectors = Array.isArray(raw.connectors) ? (raw.connectors as import('./flowchart').Connector[]).map((c) => ({
+    id: c.id, to: c.to,
+    ...(c.from === undefined ? {} : { from: c.from }), ...(c.toPort === undefined ? {} : { toPort: c.toPort }),
+    ...(c.route === undefined ? {} : { route: c.route }), ...(c.ends === undefined ? {} : { ends: c.ends }),
+    ...(c.label === undefined ? {} : { label: scrub(c.label, tally) }),
+    ...(c.stroke === undefined ? {} : { stroke: c.stroke }), ...(c.dashed === true ? { dashed: true as const } : {})
+  })) : undefined
+  if (connectors !== undefined && connectors.length > 0) (base as unknown as Record<string, unknown>).connectors = connectors
+  if (kind === 'shape') {
+    // M388. A shape IS its form, its label and its style — all of it travels,
+    // the label scrubbed; nothing about a shape can act on the other machine.
+    const shape = raw.shape as import('./flowchart').ShapeRecord
+    return { ...base, kind: 'shape', shape: { form: shape.form, text: scrub(shape.text, tally), ...(shape.fill === undefined ? {} : { fill: shape.fill }), ...(shape.stroke === undefined ? {} : { stroke: shape.stroke }), ...(shape.ink === undefined ? {} : { ink: shape.ink }) } } as PersistedPanel
+  }
   if (kind === 'note') {
     const note = raw.note as { form: string; text: string; tint?: string }
     return { ...base, kind: 'note', note: { form: note.form, text: scrub(note.text, tally), ...(note.tint === undefined ? {} : { tint: note.tint }) } } as PersistedPanel
@@ -163,6 +180,15 @@ export function buildPortable(input: BuildInput): PortableFile {
     const kind = (panel as unknown as { kind?: string }).kind ?? 'terminal'
     if (!travels(kind)) { dropped.set(kind, (dropped.get(kind) ?? 0) + 1); continue }
     kept.push(portablePanel(panel, tally))
+  }
+  // M389. A connector whose target stayed behind would point at nothing on
+  // the other machine; it stays behind with it.
+  const keptIds = new Set(kept.map((p) => p.id))
+  for (const p of kept) {
+    const raw = p as unknown as { connectors?: { to: string }[] }
+    if (raw.connectors === undefined) continue
+    raw.connectors = raw.connectors.filter((c) => keptIds.has(c.to))
+    if (raw.connectors.length === 0) delete raw.connectors
   }
   for (const [kind, count] of dropped) {
     omitted.push({ what: `${count} ${kind} panel${count === 1 ? '' : 's'}`, why: CANNOT_TRAVEL[kind] ?? `this version of the canvas file has no shape for a ${kind} panel` })
@@ -270,6 +296,13 @@ export function remapPortable(file: PortableFile, mint: (prefix: string) => stri
       const src = next.source
       const parsed = parseImportedNote(src.imported)
       next.source = { path: src.path, ...(src.prose === true ? { prose: true } : {}), ...(src.checklist === undefined ? {} : { checklist: {} }), ...(src.sheet === undefined ? {} : { sheet: {} }), ...(src.deck === undefined ? {} : { deck: {} }), ...(parsed.kind === 'view' ? { imported: { from: parsed.view.from, dropped: parsed.view.dropped } } : {}) }
+    }
+    // M389. Both ends renamed; a connector to a panel not in this file (a
+    // hand-authored one) is dropped rather than pointed at a stranger's id.
+    if (Array.isArray(raw.connectors)) {
+      const moved = (raw.connectors as { id: string; to: string }[]).filter((c) => panelIds.has(c.to)).map((c) => ({ ...c, id: mint('cx'), to: panelIds.get(c.to) as string }))
+      if (moved.length === 0) delete raw.connectors
+      else raw.connectors = moved
     }
     if (raw.kind === 'workflow') {
       const wf = raw.workflow as { templateId: string }

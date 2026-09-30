@@ -1,3 +1,4 @@
+import { flowchartActions, type FlowchartActions } from './palette-actions/flowchart'
 import { useMemo } from 'react'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { PersistedTemplate } from '@shared/templates'
@@ -62,7 +63,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace, movePanelsToWorkspace, toggleMerged,
     reloadPresets, reloadPrompts, reloadSettings, reloadCredentials, reloadWorkspaces,
     reloadWorktrees, worktreeRows, setInputMode, teammatesRef, chooseNavigator, setCenterView,
-    openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef
+    openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, flowchartVerbs, connectorVerbs, flowchartIO
   } = deps
 
   // Kept in the ROOT rather than in a slice because TWO domains need it:
@@ -122,7 +123,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       objectsActions(ctx),
       sharingActions(ctx),
       capsActions(ctx),
-      reviewCommentActions(ctx)
+      reviewCommentActions(ctx),
+      flowchartActions(ctx)
     )
     return self
   }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
@@ -134,7 +136,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, setCenterView, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, createObjectNow])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, setCenterView, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, createObjectNow, flowchartVerbs, connectorVerbs, flowchartIO])
 }
 
 /**
@@ -145,6 +147,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
  *
  * `AssertNever` fails to compile the moment `Exclude` yields a real key.
  */
-type Covered = keyof ExecutorActions | keyof PresetsActions | keyof PromptsActions | keyof ArrangementActions | keyof WorkspacesActions | keyof SettingsActions | keyof BoardActions | keyof ObjectsActions | keyof SharingActions | keyof CapsActions | keyof ReviewCommentActions
+type Covered = keyof ExecutorActions | keyof PresetsActions | keyof PromptsActions | keyof ArrangementActions | keyof WorkspacesActions | keyof SettingsActions | keyof BoardActions | keyof ObjectsActions | keyof SharingActions | keyof CapsActions | keyof ReviewCommentActions | keyof FlowchartActions
 type AssertNever<T extends never> = T
 export type EveryVerbIsCovered = AssertNever<Exclude<keyof PaletteActions, Covered>>

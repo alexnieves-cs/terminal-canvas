@@ -6651,6 +6651,9 @@ body {
                        output was the loudest chrome in the app (M234/M235)
      note (text)       already, since M187 — the precedent this extends
      note (frame)      a named region is a boundary, not a card
+     shape             M388: a flowchart shape is its outline and its label;
+                       handles and ports appear on the selected/hovered shape
+                       only, absolutely positioned (ShapeLayer.tsx)
 
    KEEPS ITS HEADER    the fact the header carries that the body does not
      chat              the state pill, the auto chip's count
@@ -9962,3 +9965,280 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: color-mix(in srgb, var(--well) 12%, transparent);
 }
+
+/* ------------------------------------------------------------------ M388 --
+   FLOWCHART SHAPES (renderer/flowchart/ShapeLayer.tsx). CHROMELESS by M236's
+   test — the shape IS its content (see the frame-rule list): an outline and a
+   label at rest, handles and ports only on the selected shape, each
+   ABSOLUTELY positioned so nothing in the box ever reflows under a hover.
+
+   The palette is tokens that already exist (ledger D7): fills are M187's four
+   sticky tints plus the panel surface and nothing; strokes the line ramp, the
+   ink, the accent and violet. The STATE hues are never a fill here — colour
+   means state in this app, and M393 paints a shape's live state on its
+   outline. No shadow (shadow.1: one resting shadow, on the frame), no blur
+   (200 shapes of backdrop-filter is a frame budget spent on nothing). */
+.shape {
+  position: absolute;
+  --shape-fill: var(--s-1);
+  --shape-stroke: var(--line-strong);
+  --shape-ink: var(--fg);
+  --shape-sw: 1.5;
+  /* Where the label may sit inside the outline — set per form inline by
+     ShapeLayer (a diamond's usable middle is half each way); these are the
+     rectangle's defaults. */
+  --shape-pad-x: var(--sp-5);
+  --shape-pad-y: var(--sp-3);
+  --shape-pad-bottom: var(--shape-pad-y);
+  pointer-events: none;
+}
+.shape[data-fill="none"]   { --shape-fill: transparent; }
+.shape[data-fill="yellow"] { --shape-fill: var(--tint-yellow); }
+.shape[data-fill="blue"]   { --shape-fill: var(--tint-blue); }
+.shape[data-fill="green"]  { --shape-fill: var(--tint-green); }
+.shape[data-fill="pink"]   { --shape-fill: var(--tint-pink); }
+.shape[data-stroke="ink"]    { --shape-stroke: var(--fg-2); }
+.shape[data-stroke="iris"]   { --shape-stroke: var(--iris); }
+.shape[data-stroke="violet"] { --shape-stroke: var(--violet); }
+.shape[data-stroke="none"]   { --shape-stroke: transparent; }
+.shape[data-ink="muted"]     { --shape-ink: var(--fg-3); }
+.shape__svg { position: absolute; inset: 0; overflow: visible; }
+.shape__outline {
+  fill: var(--shape-fill);
+  stroke: var(--shape-stroke);
+  stroke-width: var(--shape-sw);
+  stroke-linejoin: round;
+  /* The box takes no pointer; the OUTLINE does, fill and stroke alike and
+     whatever the fill paints — so a diamond's corners are the canvas, and a
+     shape filled with nothing is still pressed anywhere inside it. */
+  pointer-events: all;
+  cursor: default;
+}
+.shape__outline[data-empty-outline] { fill: transparent; stroke: none; }
+.shape__detail { fill: none; stroke: var(--shape-stroke); stroke-width: var(--shape-sw); pointer-events: none; }
+.shape__label {
+  position: absolute;
+  inset: var(--shape-pad-y) var(--shape-pad-x) var(--shape-pad-bottom);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-ui);
+  font-size: var(--t-base);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--shape-ink);
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  pointer-events: none;
+}
+.shape[data-shape-form="text"] .shape__label { font-weight: 400; }
+.shape__label--editing { pointer-events: auto; }
+.shape__editor {
+  width: 100%;
+  max-height: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  line-height: 1.3;
+  overflow: hidden;
+}
+/* Selected: the outline takes the accent — the canvas's selection colour —
+   at a heavier weight; nothing is added around it to reflow. */
+.shape--selected { --shape-sw: 2.25; }
+.shape--selected .shape__outline { stroke: var(--iris); }
+.shape--selected .shape__outline[data-empty-outline] { stroke: var(--iris); stroke-dasharray: 4 4; }
+.shape--target .shape__outline { stroke: var(--iris); stroke-width: 3; }
+/* Handles: eight small squares on the selected shape's box, counter-scaled so
+   they stay a target zoomed out (the frame's own --chrome-scale). */
+.shape__handle {
+  position: absolute;
+  width: 8px; height: 8px;
+  margin: -4px 0 0 -4px;
+  background: var(--s-3);
+  border: 1.5px solid var(--iris);
+  border-radius: var(--r-sm);
+  transform: scale(var(--chrome-scale, 1));
+  pointer-events: auto;
+}
+.shape__handle--n  { left: 50%;  top: 0;    cursor: ns-resize; }
+.shape__handle--s  { left: 50%;  top: 100%; cursor: ns-resize; }
+.shape__handle--e  { left: 100%; top: 50%;  cursor: ew-resize; }
+.shape__handle--w  { left: 0;    top: 50%;  cursor: ew-resize; }
+.shape__handle--ne { left: 100%; top: 0;    cursor: nesw-resize; }
+.shape__handle--sw { left: 0;    top: 100%; cursor: nesw-resize; }
+.shape__handle--nw { left: 0;    top: 0;    cursor: nwse-resize; }
+.shape__handle--se { left: 100%; top: 100%; cursor: nwse-resize; }
+/* Ports: the four places a connector starts. The CONTEXTUAL layer (rest rule:
+   opacity 0 → 1 in --dur-1, never display) — on the shape's hover, and on the
+   selected shape. */
+.shape__port {
+  position: absolute;
+  width: 10px; height: 10px;
+  margin: -5px 0 0 -5px;
+  padding: 0;
+  border-radius: var(--r-full);
+  background: var(--s-3);
+  border: 1.5px solid var(--iris);
+  transform: scale(var(--chrome-scale, 1));
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+  pointer-events: auto;
+  cursor: crosshair;
+}
+.shape:hover .shape__port, .shape--selected .shape__port { opacity: 1; }
+.shape--editing .shape__port { opacity: 0; pointer-events: none; }
+/* Far tiers: a diagram stays a diagram. The outline thickens to about a device
+   pixel's worth at the tier's entry scale (the frame's far-line rule), and the
+   label goes where it could no longer be read — the silhouette is the fact. */
+.world[data-detail="summary"] .shape { --shape-sw: 4; }
+.world[data-detail="block"] .shape, .world[data-detail="cluster"] .shape { --shape-sw: 8; }
+.world[data-detail="block"] .shape__label, .world[data-detail="cluster"] .shape__label { visibility: hidden; }
+.world[data-detail="summary"] .shape__port, .world[data-detail="block"] .shape__port, .world[data-detail="cluster"] .shape__port { display: none; }
+
+/* M390. Spacing guides: a measured span per equal gap, with its distance —
+   the snap's reason, shown while the drag lands on it. The accent, like the
+   alignment guides; the readout counter-scaled so it stays legible zoomed out. */
+.snap-space { position: absolute; pointer-events: none; }
+.snap-space--x { height: 0; border-top: 1px solid var(--iris); }
+.snap-space--y { width: 0; border-left: 1px solid var(--iris); }
+.snap-space--x::before, .snap-space--x::after { content: ''; position: absolute; top: -4px; height: 7px; border-left: 1px solid var(--iris); }
+.snap-space--x::before { left: 0; }
+.snap-space--x::after { right: 0; }
+.snap-space--y::before, .snap-space--y::after { content: ''; position: absolute; left: -4px; width: 7px; border-top: 1px solid var(--iris); }
+.snap-space--y::before { top: 0; }
+.snap-space--y::after { bottom: 0; }
+.snap-space__gap {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%) scale(var(--chrome-scale, 1));
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--iris);
+  color: var(--on-iris);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* M388. The inspector's Shape section: four rows of swatches (form, fill,
+   line, text). A swatch is a real button; the pressed one wears the accent
+   ring, the rest the hairline — the selection colour means "this one". */
+.shape-inspector { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-4) 0 var(--sp-5); border-bottom: 1px solid var(--line); margin-bottom: var(--sp-4); }
+.shape-inspector__row { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: var(--sp-4); }
+.shape-inspector__label { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
+.shape-inspector__swatches { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.shape-inspector__swatch {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 28px; height: 26px; padding: 0 var(--sp-2);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--s-1); color: var(--fg-2);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.shape-inspector__swatch:hover { background: var(--s-4); }
+.shape-inspector__swatch[aria-pressed="true"] { border-color: var(--iris); box-shadow: inset 0 0 0 1px var(--iris); color: var(--fg); }
+.shape-inspector__swatch:focus-visible { outline: 2px solid var(--iris); outline-offset: 1px; }
+.shape-inspector__glyph path { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
+.shape-inspector__glyph text { fill: currentColor; font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; }
+.shape-inspector__chip { width: 14px; height: 14px; border-radius: var(--r-full); border: 1px solid var(--line-strong); background: var(--s-1); }
+.shape-inspector__chip[data-fill="none"] { background: transparent; border-style: dashed; }
+.shape-inspector__chip[data-fill="yellow"] { background: var(--tint-yellow); }
+.shape-inspector__chip[data-fill="blue"] { background: var(--tint-blue); }
+.shape-inspector__chip[data-fill="green"] { background: var(--tint-green); }
+.shape-inspector__chip[data-fill="pink"] { background: var(--tint-pink); }
+.shape-inspector__chip--line { background: transparent; border-width: 2px; border-color: var(--line-strong); }
+.shape-inspector__chip--line[data-stroke="ink"] { border-color: var(--fg-2); }
+.shape-inspector__chip--line[data-stroke="iris"] { border-color: var(--iris); }
+.shape-inspector__chip--line[data-stroke="violet"] { border-color: var(--violet); }
+.shape-inspector__chip--line[data-stroke="none"] { border-style: dashed; border-width: 1px; }
+.shape-inspector__ink { font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.shape-inspector__ink[data-ink="muted"] { color: var(--fg-3); }
+
+/* ------------------------------------------------------------------ M389 --
+   CONNECTORS (renderer/flowchart/ConnectorLayer.tsx) — a diagram's arrows.
+   The link layer's slot and its rules: 1px, never 0px (lb :3468); deaf to
+   the pointer except the hit strokes and the labels, which never consume.
+   A line is the ink ramp, a touch heavier than a panel link — in a diagram
+   the arrows ARE the content (the critic: "edges are the faintest mark on a
+   canvas whose thesis is connections"). */
+.connector-layer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; z-index: 0; pointer-events: none; }
+.connector { --connector-stroke: var(--fg-3); }
+.connector[data-stroke="ink"] { --connector-stroke: var(--fg-2); }
+.connector[data-stroke="iris"] { --connector-stroke: var(--iris); }
+.connector[data-stroke="violet"] { --connector-stroke: var(--violet); }
+.connector[data-stroke="none"] { --connector-stroke: var(--line); }
+.connector__line { fill: none; stroke: var(--connector-stroke); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.connector[data-dashed] .connector__line { stroke-dasharray: 6 5; }
+.connector__head { fill: var(--connector-stroke); stroke: none; }
+.connector__hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.connector--selected { --connector-stroke: var(--iris); }
+.connector--selected .connector__line { stroke-width: 2.5; }
+.connector--ghost { --connector-stroke: var(--iris); opacity: 1; }
+.connector--ghost .connector__line { stroke-dasharray: 4 4; }
+.connector--ghost.connector--landing .connector__line { stroke-dasharray: none; }
+.world[data-detail="summary"] .connector__line { stroke-width: 5; }
+.world[data-detail="block"] .connector__line, .world[data-detail="cluster"] .connector__line { stroke-width: 10; }
+.connector-labels { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 0; pointer-events: none; }
+.connector-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--s-0);
+  color: var(--fg-2);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: default;
+}
+.connector-label--selected { color: var(--iris); box-shadow: inset 0 0 0 1px var(--iris); }
+.connector-label__input { border: 0; outline: none; background: transparent; font: inherit; color: var(--fg); text-align: center; padding: 0; }
+.connector-label--editing { box-shadow: inset 0 0 0 1px var(--iris); background: var(--s-1); }
+.world[data-detail="block"] .connector-label, .world[data-detail="cluster"] .connector-label { visibility: hidden; }
+.connector-inspector { padding-top: 0; }
+.connector-inspector__ends { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); overflow-wrap: anywhere; }
+.connector-inspector__label { min-width: 0; height: 26px; padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
+.connector-inspector__label:focus { outline: none; border-color: var(--iris); }
+.connector-inspector__actions { display: flex; justify-content: flex-end; }
+.shape-inspector__swatch { font-family: var(--font-ui); font-size: var(--t-sm); }
+
+/* ------------------------------------------------------------------ M393 --
+   THE LIVING FLOWCHART: a shape joined to a live object wears that object's
+   state — its outline again in the tone (the tone block's --tone; never a hue
+   named here, tone.1) and one word on a chip at its corner, the rail's own
+   word. The rest layer's "one meaningful state"; nothing else is added. */
+.shape__live-ring { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.shape__live-ring path { fill: none; stroke: var(--tone); stroke-width: 3; stroke-linejoin: round; }
+.shape__live-ring[data-tone="asleep"] path, .shape__live-ring[data-tone="none"] path, .shape__live-ring[data-tone="starting"] path { stroke-dasharray: 6 5; stroke-width: 2; }
+.shape__live {
+  position: absolute;
+  top: 0; right: 0;
+  transform: translate(35%, -60%) scale(var(--chrome-scale, 1));
+  transform-origin: right bottom;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-full);
+  border: 1px solid var(--tone);
+  background: var(--s-1);
+  color: var(--tone);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.world[data-detail="block"] .shape__live, .world[data-detail="cluster"] .shape__live { visibility: hidden; }
+.world[data-detail="summary"] .shape__live-ring path { stroke-width: 6; }
+.world[data-detail="block"] .shape__live-ring path, .world[data-detail="cluster"] .shape__live-ring path { stroke-width: 12; }
+/* M388. A diagram on the overview: its shapes as quiet outlines, under the status blocks. */
+.minimap__shapes { position: absolute; inset: 0; pointer-events: none; }
+.minimap__shapes path { fill: var(--s-4); stroke: var(--line-strong); stroke-width: 0.75; }

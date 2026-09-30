@@ -26,7 +26,8 @@ import { railLabel } from './rail-rows'
 import type { PendingApproval } from './rail-sections'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { noteSummary } from '@shared/notes'
-import { isNotePanel, isRelayPanel } from '@renderer/panels/panels'
+import { isNotePanel, isRelayPanel, isShapePanel } from '@renderer/panels/panels'
+import { shapeFormWord, shapeSummary, type ShapeRecord } from '@shared/flowchart'
 
 /**
  * What the inspector renders, as plain data.
@@ -81,6 +82,8 @@ export interface InspectorModel {
   kind: Panel['kind']
   /** M163. A terminal whose process is live (the Machine section's arm); absent on every other kind. */
   running?: boolean
+  /** M388. A shape's record — the inspector's Shape section reads it. Absent on every other kind. */
+  shape?: ShapeRecord
   /** The user's own name, if any. The rename control echoes it. */
   title?: string
   /** The COLLAPSED honest chain — the one answer the header and rail show. */
@@ -557,6 +560,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  * string would have hidden the next one exactly as well; tsc will not.
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  shape: 'A shape',
   note: 'A note',
   image: 'An image panel',
   skill: 'A skill panel',
@@ -1036,6 +1040,15 @@ export function buildInspectorModelBare(
       { key: 'relay-program', label: 'program', value: panel.relay.program },
       { key: 'relay-session', label: 'session', value: panel.relay.sessionId ?? 'not started yet' },
       { key: 'relay-share', label: 'shared', value: panel.relay.shareId === undefined ? 'no — only you can attach' : 'with this workspace\'s members, by their role' }
+    ] }
+  }
+  // M388. The seventeenth kind: its form and label as rows; the style
+  // controls are the inspector's editor section (ShapeInspector), because
+  // configuration belongs in the inspector (the density layers).
+  if (isShapePanel(panel)) {
+    return { kind: 'shape', shape: panel.shape, reviewable: false, state: { kind: 'shape', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
+      { key: 'form', label: 'form', value: shapeFormWord(panel.shape.form) },
+      { key: 'text', label: 'label', value: panel.shape.text === '' ? 'empty — double-click the shape to write one' : shapeSummary(panel.shape.text, panel.shape.form, 60) }
     ] }
   }
   // M187. The sixteenth kind: what it IS and what changes it — its form, its

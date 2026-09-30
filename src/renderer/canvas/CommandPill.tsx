@@ -33,7 +33,7 @@ import { pillRestState, retiresJumpHint, runningAgents, showJumpHint, type Orche
  * seventh button every milestone stops reading as "compact").
  */
 
-export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say'>
+export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say' | 'alignObjects' | 'distributeObjects' | 'layoutFlowchart'>
 
 export interface CommandPillProps {
   actions: PillActions
@@ -217,6 +217,11 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   }
 
   const single = selectedIds.length === 1 ? selectedIds[0] : undefined
+  // M390. What the arranging actions read off the selection: whether it holds
+  // a flowchart shape, and which way it is long.
+  const chosen = panels.filter((p) => selectedIds.includes(p.rect.id))
+  const selectedShape = chosen.some((p) => p.kind === 'shape')
+  const longAxis: 'x' | 'y' = chosen.length === 0 ? 'x' : (Math.max(...chosen.map((p) => p.rect.x + p.rect.w)) - Math.min(...chosen.map((p) => p.rect.x))) >= (Math.max(...chosen.map((p) => p.rect.y + p.rect.h)) - Math.min(...chosen.map((p) => p.rect.y))) ? 'x' : 'y'
   const refusedSaid = (r: { kind: 'ran' } | { kind: 'refused'; reason: string } | { kind: 'ran'; note?: string }): void => {
     if (r.kind === 'refused') actions.say(r.reason)
   }
@@ -240,7 +245,14 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     { key: 'fit', label: 'Fit', icon: <Maximize />, run: () => actions.zoomToFit() },
     ...(selectedIds.length > 0
       ? [
+          // M390/M391. A diagram's selection leads with Lay out; any selection
+          // of two or more can be lined up and, from three, spaced evenly —
+          // each along the selection's own long axis (a row lines up its
+          // middles; a column its centres), the same verbs the palette runs.
+          ...(selectedShape ? [{ key: 'layout', label: 'Lay out', icon: <Lanes />, run: () => { refusedSaid(actions.layoutFlowchart('down')) } }] : []),
           { key: 'tidy', label: 'Tidy', icon: <Grid />, run: () => actions.tidyPanels([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : 'select at least two panels to tidy' },
+          { key: 'align', label: 'Line up', icon: <Grid />, run: () => { refusedSaid(actions.alignObjects(longAxis === 'x' ? 'vcentre' : 'hcentre')) }, reason: selectedIds.length >= 2 ? undefined : 'select two or more objects to line up' },
+          { key: 'space', label: 'Space evenly', icon: <Grid />, run: () => { refusedSaid(actions.distributeObjects(longAxis === 'x' ? 'across' : 'down')) }, reason: selectedIds.length >= 3 ? undefined : 'select three or more objects to space evenly' },
           { key: 'arrange', label: 'Arrange task', icon: <Lanes />, run: () => { if (single !== undefined) refusedSaid(actions.arrangeTask(single)) }, reason: single !== undefined ? undefined : 'select one panel of a task' },
           { key: 'related', label: 'Related', icon: <Link />, run: () => { if (single !== undefined) refusedSaid(actions.showRelated(single)) }, reason: single !== undefined ? undefined : 'select one panel of a task' },
           { key: 'group', label: 'Group', icon: <Layers />, run: () => actions.beginCreateGroup([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : REASON_GROUP_NEEDS_TWO },

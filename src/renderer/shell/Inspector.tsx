@@ -1,3 +1,8 @@
+import { ConnectorInspector } from '@renderer/flowchart/ConnectorInspector'
+import type { ConnectorPatch } from '@renderer/canvas/useConnectors'
+import type { Connector } from '@shared/flowchart'
+import { ShapeInspector, type ShapeChartAct } from '@renderer/flowchart/ShapeInspector'
+import type { ShapeStylePatch } from '@renderer/canvas/useFlowchartVerbs'
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { PLAN_TOOL } from '@shared/transcript'
 import { useAgentState } from '@renderer/session/agent-state-store'
@@ -116,6 +121,10 @@ export interface InspectorProps {
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
+  /** M388. Restyle the inspected shape — one setShapeStyle per press. Absent leaves the Shape section out. */
+  onStyleShape?: (id: string, patch: ShapeStylePatch) => void
+  /** M391. Lay out or export the chart the inspected shape belongs to. */
+  onShapeChart?: (id: string, act: ShapeChartAct) => void
   onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
   /** M41: set or replace the one rule on a link — the handoff control's verb, and the list toggle's. */
   onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
@@ -124,6 +133,10 @@ export interface InspectorProps {
   automations: AutomationRow[]
   /** M78. The selected edge, when one is; the pane shows it with its rule as a select. */
   selectedEdge?: SelectedEdge | null
+  /** M389. The selected connector, with its two ends' names — the inspector's Connector section. */
+  selectedConnector?: { connector: Connector; fromName: string; toName: string } | null
+  onPatchConnector?: (id: string, patch: ConnectorPatch) => void
+  onRemoveConnector?: (id: string) => void
   /** M79. The newest run the selected panel belongs to, or null. */
   panelRun?: PanelRunLine | null
   onRunAgain?: (id: string) => void
@@ -249,7 +262,7 @@ function CapsSection({ id, caps, onCap }: { id: string; caps: CapsField; onCap?:
 
 function InspectorImpl({
   onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown,
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, selectedConnector, onPatchConnector, onRemoveConnector, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown, onStyleShape, onShapeChart,
   contextBand, onShowRelated, onShowTask, onChainStep, onGoToPanel
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -260,7 +273,10 @@ function InspectorImpl({
           the canvas. Mousedown only; Canvas does the drag math on `shellRef`
           and commits the setting on mouseup. */}
       <div className="inspector__resize-handle" onMouseDown={onResizeHandleDown} title="Drag to resize the inspector" />
-      {model === null && selectedEdge != null
+      {model === null && selectedConnector != null && onPatchConnector !== undefined && onRemoveConnector !== undefined
+        ? <ConnectorInspector connector={selectedConnector.connector} fromName={selectedConnector.fromName} toName={selectedConnector.toName}
+            onPatch={(patch) => { onPatchConnector(selectedConnector.connector.id, patch) }} onRemove={() => { onRemoveConnector(selectedConnector.connector.id) }} />
+        : model === null && selectedEdge != null
         ? <EdgePanel edge={selectedEdge} onSetLinkAutomation={onSetLinkAutomation} onRemoveLink={onRemoveLink} onRelabelLink={onRelabelLink} />
         : model === null
         ? <>
@@ -298,6 +314,8 @@ function InspectorImpl({
             onLink={onLink}
             onRemoveLink={onRemoveLink}
             onRelabelLink={onRelabelLink}
+            onStyleShape={onStyleShape}
+            onShapeChart={onShapeChart}
             onSetRestartOnExit={onSetRestartOnExit}
             automationResults={automationResults}
             onSetLinkAutomation={onSetLinkAutomation}
@@ -560,8 +578,11 @@ function InspectorEmpty({ summary, onGoToPanel }: { summary: InspectorSummary; o
 function InspectorPanel({
   tab, onSelectTab, automations, templateOf, onTestNode,
   model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onChainStep, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
+  onLink, onRemoveLink, onRelabelLink, onStyleShape, onShapeChart, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
+  onStyleShape?: (id: string, patch: ShapeStylePatch) => void
+  /** M391. Lay out or export the chart the inspected shape belongs to. */
+  onShapeChart?: (id: string, act: ShapeChartAct) => void
   templateOf?: (id: string) => PersistedTemplate | undefined
   /** M188. Test one node — the same executor the workflow's own run takes. */
   onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -779,6 +800,8 @@ function InspectorPanel({
       <div className="inspector__body context__body">
       <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
       {/* M183. THE NODE EDITOR: the selected block's fields from its kind's schema, committed through the draft store's one door. */}
+      {/* M388. A shape's form, fill, line and text — its configuration, here and nowhere on the shape. */}
+      {model.kind === 'shape' && model.shape !== undefined && onStyleShape !== undefined && <ShapeInspector shape={model.shape} onStyle={(patch) => { onStyleShape(model.id, patch) }} {...(onShapeChart === undefined ? {} : { onChart: (act: ShapeChartAct) => { onShapeChart(model.id, act) } })} />}
       {model.kind === 'workflow' && model.templateId !== undefined && templateOf !== undefined && <NodeFields templateId={model.templateId} templateOf={templateOf} onTestNode={onTestNode} />}
       <dl className="inspector__fields">
         {/* M68. Through the one filter: no pid (the header has it), no

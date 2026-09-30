@@ -1,5 +1,6 @@
 import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
+import { shapeFormSentence } from '@shared/flowchart'
 import type { CreationResult } from '@shared/verb-table'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { StartWorkOutcome } from './start-work'
@@ -462,6 +463,20 @@ export interface PaletteActions {
   markPresetRead(id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /** M388. The flowchart shape's verbs: add (a form, an optional label), set the label, restyle one field; and the palette's door into a selected shape's own editor. */
+  addShape(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setShapeText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  styleShape(panelId: string, field: string, value: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  editShapeLabel(): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /** M389–M391. Connect two objects, restyle a connector; duplicate, align, space and lay out objects (a space-separated id list, or the selection); Mermaid in and out. */
+  connectObjects(from: string, to: string, label?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  styleConnector(id: string, field: string, value: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  duplicateObjects(ids?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  alignObjects(edge: string, ids?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  distributeObjects(axis: string, ids?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  layoutFlowchart(direction: string, ids?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  importFlowchart(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  exportFlowchart(format: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteTint(panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   addImage(path: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2240,6 +2255,38 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'note.add.sticky', title: 'Add a sticky note', subtitle: noteFormSentence('sticky'), group: 'canvas', searchText: 'note sticky add annotate label yellow', run: () => { actions.addNote('sticky') } })
   out.push({ id: 'note.add.text', title: 'Add free text', subtitle: noteFormSentence('text'), group: 'canvas', searchText: 'note text add type words heading', run: () => { actions.addNote('text') } })
   out.push({ id: 'note.add.frame', title: 'Add a named region', subtitle: noteFormSentence('frame'), group: 'canvas', searchText: 'note frame region group area label around', run: () => { actions.addNote('frame') } })
+  // M388. The flowchart shape's rows — eight LITERAL ids, one per form, for
+  // the reason the note rows above spell out (closure.v9.1 reads this file as
+  // text; a template literal is a row it cannot see).
+  out.push({ id: 'shape.add.process', title: 'Add a process step', subtitle: shapeFormSentence('process'), group: 'canvas', searchText: 'flowchart shape process step box diagram add', run: () => { actions.addShape('process') } })
+  out.push({ id: 'shape.add.decision', title: 'Add a decision', subtitle: shapeFormSentence('decision'), group: 'canvas', searchText: 'flowchart shape decision diamond question branch diagram add', run: () => { actions.addShape('decision') } })
+  out.push({ id: 'shape.add.terminator', title: 'Add a start or end', subtitle: shapeFormSentence('terminator'), group: 'canvas', searchText: 'flowchart shape terminator start end stadium pill diagram add', run: () => { actions.addShape('terminator') } })
+  out.push({ id: 'shape.add.io', title: 'Add an input or output', subtitle: shapeFormSentence('io'), group: 'canvas', searchText: 'flowchart shape input output io parallelogram data diagram add', run: () => { actions.addShape('io') } })
+  out.push({ id: 'shape.add.document', title: 'Add a document', subtitle: shapeFormSentence('document'), group: 'canvas', searchText: 'flowchart shape document doc page diagram add', run: () => { actions.addShape('document') } })
+  out.push({ id: 'shape.add.subprocess', title: 'Add a subprocess', subtitle: shapeFormSentence('subprocess'), group: 'canvas', searchText: 'flowchart shape subprocess subroutine predefined diagram add', run: () => { actions.addShape('subprocess') } })
+  out.push({ id: 'shape.add.junction', title: 'Add a junction', subtitle: shapeFormSentence('junction'), group: 'canvas', searchText: 'flowchart shape junction connector point circle merge diagram add', run: () => { actions.addShape('junction') } })
+  out.push({ id: 'shape.add.text', title: 'Add diagram text', subtitle: shapeFormSentence('text'), group: 'canvas', searchText: 'flowchart shape text label caption diagram add', run: () => { actions.addShape('text') } })
+  const shapeSelected = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'shape')?.id
+  out.push(withReason({ id: 'shape.label', title: 'Edit this shape\'s label', subtitle: 'type on the shape itself — Escape or a click away keeps it', group: 'canvas', searchText: 'flowchart shape label text rename edit', run: () => { actions.editShapeLabel() } }, shapeSelected === undefined ? 'select a shape first' : undefined))
+  out.push(withReason({ id: 'shape.style', title: 'Restyle this shape…', subtitle: 'form, fill, line or text — type shape-style <shape> <field> <value>', group: 'canvas', searchText: 'flowchart shape style form fill line colour stroke', run: () => actions.beginRunVerb() }, shapeSelected === undefined ? 'select a shape first' : undefined))
+  // M389–M391. The arranging and flowchart rows — LITERAL ids (closure.v9.1).
+  const many = ctx.selectedIds.length
+  out.push(withReason({ id: 'flowchart.connect', title: 'Connect two objects…', subtitle: 'type connect <from> <to> [label] — or drag from a port', group: 'canvas', searchText: 'flowchart connector connect arrow line link shapes', run: () => actions.beginRunVerb() }, undefined))
+  out.push({ id: 'flowchart.connector.style', title: 'Restyle a connector…', subtitle: 'route, arrows, line, dashed or label — type connector-style <connector> <field> <value>', group: 'canvas', searchText: 'connector line arrow route curved straight elbow dashed label style', run: () => actions.beginRunVerb() })
+  out.push(withReason({ id: 'flowchart.duplicate', title: 'Duplicate', subtitle: 'shapes, notes and pictures — ⌘D', group: 'canvas', searchText: 'duplicate copy clone shape note picture', run: () => { actions.duplicateObjects() } }, many === 0 ? 'select a shape, a note or a picture first' : undefined))
+  out.push(withReason({ id: 'arrange.align.left', title: 'Align left edges', subtitle: 'line the selection up on its leftmost edge', group: 'canvas', searchText: 'align left arrange line up', run: () => { actions.alignObjects('left') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.hcentre', title: 'Align centres (horizontally)', subtitle: 'one vertical line through every centre', group: 'canvas', searchText: 'align centre center horizontal arrange', run: () => { actions.alignObjects('hcentre') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.right', title: 'Align right edges', subtitle: 'line the selection up on its rightmost edge', group: 'canvas', searchText: 'align right arrange', run: () => { actions.alignObjects('right') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.top', title: 'Align top edges', subtitle: 'line the selection up on its topmost edge', group: 'canvas', searchText: 'align top arrange', run: () => { actions.alignObjects('top') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.vcentre', title: 'Align middles (vertically)', subtitle: 'one horizontal line through every centre', group: 'canvas', searchText: 'align middle centre vertical arrange', run: () => { actions.alignObjects('vcentre') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.align.bottom', title: 'Align bottom edges', subtitle: 'line the selection up on its lowest edge', group: 'canvas', searchText: 'align bottom arrange', run: () => { actions.alignObjects('bottom') } }, many < 2 ? 'select two or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.distribute.across', title: 'Space evenly across', subtitle: 'equal gaps, left to right; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly horizontal across arrange', run: () => { actions.distributeObjects('across') } }, many < 3 ? 'select three or more objects first' : undefined))
+  out.push(withReason({ id: 'arrange.distribute.down', title: 'Space evenly down', subtitle: 'equal gaps, top to bottom; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly vertical down arrange', run: () => { actions.distributeObjects('down') } }, many < 3 ? 'select three or more objects first' : undefined))
+  out.push(withReason({ id: 'flowchart.layout.down', title: 'Lay out this chart, top to bottom', subtitle: 'the selected chart in ranks, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram vertical down', run: () => { actions.layoutFlowchart('down') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
+  out.push(withReason({ id: 'flowchart.layout.right', title: 'Lay out this chart, left to right', subtitle: 'the selected chart in columns, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram horizontal right', run: () => { actions.layoutFlowchart('right') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
+  out.push({ id: 'flowchart.import', title: 'Import a Mermaid flowchart…', subtitle: 'a .mmd or .md file becomes shapes you can edit — nothing in it runs', group: 'canvas', searchText: 'mermaid import flowchart diagram graph file', run: () => { void actions.importFlowchart() } })
+  out.push({ id: 'flowchart.export.mermaid', title: 'Export the diagram as Mermaid…', subtitle: 'the selected chart, or every shape — secrets scrubbed, the count said', group: 'canvas', searchText: 'mermaid export flowchart diagram save text', run: () => { void actions.exportFlowchart('mermaid') } })
+  out.push({ id: 'flowchart.export.svg', title: 'Export the diagram as SVG…', subtitle: 'a vector picture of the chart — text only, secrets scrubbed', group: 'canvas', searchText: 'svg export flowchart diagram image vector save', run: () => { void actions.exportFlowchart('svg') } })
   const notePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'note')?.id
   out.push(withReason({ id: 'note.tint', title: 'Tint this note…', subtitle: 'yellow, blue, green or pink — type note-tint <panel> <tint>', group: 'canvas', searchText: 'note tint colour yellow blue green pink sticky', run: () => actions.beginRunVerb() }, notePanelId === undefined ? 'select a sticky note first' : undefined))
   // M186. The picture rows. `image.add` opens the verb line (a path is what

@@ -18,6 +18,12 @@ import { EdgeIndicators } from './EdgeIndicators'
 import { Minimap, MINIMAP_W, MINIMAP_H } from './MinimapOverlay'
 import { CardDetailContext } from '@renderer/components/card-detail-context'
 import { LinkLayer } from './LinkLayer'
+import { ShapeLayer, type LiveBinding } from '@renderer/flowchart/ShapeLayer'
+import { editNewShape, useFlowchartVerbs } from './useFlowchartVerbs'
+import { useConnectors, type Connectors } from './useConnectors'
+import { useShapeKeys } from './useShapeKeys'
+import { useFlowchartIO } from './useFlowchartIO'
+import { ConnectorLayer } from '@renderer/flowchart/ConnectorLayer'
 import { AgentLinkLayer } from './AgentLinkLayer'
 import { forgetAgentLinksFor, forgetAllAgentLinks, publishAgentLinks } from './agent-links-store'
 import { agentLinks } from '@shared/agent-links'
@@ -28,7 +34,8 @@ import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
-import { snapRect, SNAP_PX, type SnapGuide } from './placement'
+import { smartSnap, type SpacingGuide } from './arrange'
+import { SNAP_PX, type SnapGuide } from './placement'
 import { attemptOf, contextualHint, hintsLeft, STARTER_HINT, type HintId } from './hints'
 import { FirstTaskHint } from './FirstTaskHint'
 import type { EnvReport } from '@shared/env-report'
@@ -52,7 +59,7 @@ import { useInspectorDetail } from './useInspectorDetail'
 import { useActivityFeed } from './useActivityFeed'
 import {
   EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
-  EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
+  EMPTY_SELECTION, NO_GUIDES, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport, prefersReducedMotion } from './useViewport'
 import { StartupSplash } from './StartupSplash'
@@ -74,7 +81,7 @@ import { usePanelDrag } from './usePanelDrag'
 import { GroupLayer } from '@renderer/groups/GroupLayer'
 import { applyGroupDrag, expandGroup, groupDragState, pruneGroups, raiseGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
 import { useGroupDrag } from '@renderer/groups/useGroupDrag'
-import { applyDrag, type DragState } from './panel-interaction'
+import { applyDrag, movesOrigin, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { jumpOrder, type Inbox } from '@renderer/shell/decision-inbox'
 import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
@@ -131,7 +138,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { findConnector, isShapePanel, makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE,
@@ -867,11 +874,15 @@ export function Canvas({
   // M78. The selected EDGE, exclusive with the panel selection: selecting a
   // panel or clicking the background clears it; selecting it clears them.
   const [selectedLink, setSelectedLink] = useState<{ from: string; to: string } | null>(null)
+  // M389. The selected CONNECTOR, exclusive with both the panel selection and
+  // the selected link — the same rule, one more kind of line.
+  const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null)
   const selectOnly = useCallback((id: string | null): void => {
     const next = id === null ? EMPTY_SELECTION : new Set([id])
     selectedIdsRef.current = next
     setSelectedIds(next)
     setSelectedLink(null)
+    setSelectedConnectorId(null)
   }, [])
   /** Additive selection is deliberately add-only: background click clears. */
   const addToSelection = useCallback((id: string): void => {
@@ -884,6 +895,7 @@ export function Canvas({
     selectedIdsRef.current = next
     setSelectedIds(next)
     setSelectedLink(null)
+    setSelectedConnectorId(null)
   }, [])
   // M13/motion: an entry animation ends and the id leaves the set. Kept
   // beside the selection helpers rather than folded into them — it is a
@@ -1612,9 +1624,14 @@ export function Canvas({
   // Menu-driven clipboard stays at this exact hook position: `focusedIdRef`
   // exists above it, while addImageRef is assigned below it. The hook reads
   // the latter lazily, once an edit event arrives after this render completes.
+  // M390/M391. The canvas's own ⌘C/⌘V for authored objects and pasted
+  // Mermaid, reached lazily for the same reason as getAddImage (the verbs are
+  // defined far below this hook).
+  const objectClipboardRef = useRef<{ copy: () => boolean; paste: (text: string) => boolean } | null>(null)
   const sayRef = useCanvasClipboard({
     registry, focusedIdRef, panelsRef, shouldIgnoreKeys,
-    getAddImage: () => addImageRef.current
+    getAddImage: () => addImageRef.current,
+    getObjects: () => objectClipboardRef.current
   })
 
   // ONE subscription for the whole canvas, not one per panel: the payload
@@ -2079,10 +2096,21 @@ export function Canvas({
   // constraint linkMode's own comment states for its position relative to
   // useViewport. hitOrderRef is declared earlier for the same reason and
   // was already in scope.
+  // M389. The connectors hook sits far below (it needs the flowchart's
+  // addShape); the link draw reaches it through this ref, created here and
+  // assigned where the hook runs — the create-above/assign-below pattern.
+  const connectorsRef = useRef<Connectors | null>(null)
   const linkDraw = useLinkDraw({
     hostRef,
     viewportRef,
     rectsRef: hitOrderRef,
+    // M389. Quick-connect from ANY object: a panel's port released on empty
+    // ground makes a connected process step there — "this agent does this".
+    // Before, the release cancelled silently.
+    onDropEmpty: (from, cursor) => {
+      if (mergedRef.current) return
+      connectorsRef.current?.extend(from, null, cursor)
+    },
     onCommit: (from, to) => {
       // The VERB refuses, not only the affordance. This repo's standing rule,
       // stated for the move verb: it "refuses on `mergedRef` too rather than
@@ -2121,6 +2149,11 @@ export function Canvas({
       // be asserting against a fixture rather than against the feature. See
       // the M35 task-8 report for the declined check 180.
       if (mergedRef.current) return
+      // M389. A line that touches a SHAPE is a connector, never a link: a link
+      // means something (task membership, handoff) and a diagram's arrow must
+      // not (ledger D2). Between two live objects it is the link it always was.
+      const ends = panelsRef.current.filter((p) => p.rect.id === from || p.rect.id === to)
+      if (ends.some(isShapePanel)) { connectorsRef.current?.connect(from, to); return }
       setPanels((current) => {
         const next = addLink(current, from, to)
         // addLink returns the SAME array when it refuses (a self-link, a
@@ -2267,14 +2300,22 @@ export function Canvas({
   const toggleAgentLinks = useCallback(() => {
     paletteActionsRef.current?.toggleSetting('canvas.agentLinks', !agentLinksOn)
   }, [agentLinksOn])
-  const [snapGuides, setSnapGuides] = useState<readonly SnapGuide[]>([])
-  const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }): WorldRect => {
+  const [snapGuides, setSnapGuidesState] = useState<{ guides: readonly SnapGuide[]; spacing: readonly SpacingGuide[] }>(NO_GUIDES)
+  // Clearing is the common call (every commit): the same object back when
+  // there is nothing to clear, so a release that snapped nothing re-renders nothing.
+  const setSnapGuides = useCallback((guides: readonly SnapGuide[], spacing: readonly SpacingGuide[] = []): void => {
+    setSnapGuidesState((current) => (guides.length === 0 && spacing.length === 0 ? (current === NO_GUIDES ? current : NO_GUIDES) : { guides, spacing }))
+  }, [])
+  // M390. smartSnap (arrange.ts) in place of snapRect: edge/centre alignment
+  // as before, plus EQUAL SPACING on a move, and a resize floor that is the
+  // object's own (`min` — a shape's is SHAPE_MIN, a panel's the 200x160).
+  const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }, min?: { w: number; h: number }): WorldRect => {
     if (!snapEnabledRef.current) return rect
     const others = panelsRef.current.filter((p) => !exclude.has(p.rect.id)).map((p) => p.rect)
-    const out = snapRect(rect, others, SNAP_PX / viewportRef.current.scale, resize ? { resize } : {})
-    setSnapGuides(out.guides)
+    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null })
+    setSnapGuides(out.guides, out.spacing)
     return out.rect
-  }, [])
+  }, [setSnapGuides])
 
   // The shared canvas (presence/canvas-sync.ts in main): a peer's move lands
   // in `panels` here without a history entry, a teammate's panels are inert
@@ -2287,12 +2328,25 @@ export function Canvas({
     hostRef,
     viewportRef,
     writeThroughRef: shared.writeThroughRef,
+    snapMany: useCallback((rects: readonly WorldRect[], ids: ReadonlySet<string>) => {
+      const bounds = {
+        id: 'selection',
+        x: Math.min(...rects.map((r) => r.x)), y: Math.min(...rects.map((r) => r.y)),
+        w: Math.max(...rects.map((r) => r.x + r.w)) - Math.min(...rects.map((r) => r.x)),
+        h: Math.max(...rects.map((r) => r.y + r.h)) - Math.min(...rects.map((r) => r.y))
+      }
+      const snapped = snapNow(bounds, ids)
+      return { dx: snapped.x - bounds.x, dy: snapped.y - bounds.y }
+    }, [snapNow]),
     onDrag: useCallback(
-      (id: string, rect: WorldRect, state: DragState) => {
+      (id: string, rect: WorldRect, state: DragState, alreadySnapped?: boolean) => {
         const resize = state.mode.kind === 'resize'
           ? { growsX: state.mode.edge === 'e' || state.mode.edge === 'se', growsY: state.mode.edge === 's' || state.mode.edge === 'se' }
           : undefined
-        const snapped = snapNow(rect, new Set([id]), resize)
+        // M388. A west/north resize (a shape's) moves the origin; snapping
+        // covers growing right/bottom edges only, so those frames do not snap
+        // rather than snapping the wrong edge.
+        const snapped = alreadySnapped === true || (state.mode.kind === 'resize' && movesOrigin(state.mode.edge)) ? rect : snapNow(rect, new Set([id]), resize, state.min)
         // A teammate's placeholder is not in `panels`: it moves in the shared
         // layer, and the drag's write-through carries it to the doc.
         if (sharedRef.current.isPlaceholder(id)) { sharedRef.current.movePlaceholder(id, snapped); return snapped }
@@ -3559,7 +3613,8 @@ export function Canvas({
   // `shell--inspector-collapsed` keeps its M46 meaning — the region is not on
   // screen — so a floating sheet that IS showing drops it; the float class
   // zeroes the column itself.
-  const ctxFloatShown = ctxFloat && selectedIds.size > 0
+  // M389. A selected connector floats the inspector too: its route, arrows and label are configuration.
+  const ctxFloatShown = ctxFloat && (selectedIds.size > 0 || selectedConnectorId !== null)
   const quietShellRef = useRef({ first: firstWorkspaceNow, nav: chrome.navVisible, ctx: ctxResident })
   useLayoutEffect(() => {
     const prev = quietShellRef.current
@@ -4593,6 +4648,7 @@ export function Canvas({
   const selectLink = useCallback((from: string, to: string) => {
     selectedIdsRef.current = EMPTY_SELECTION
     setSelectedIds(EMPTY_SELECTION)
+    setSelectedConnectorId(null)
     setSelectedLink({ from, to })
   }, [])
   // M78. Delete/Backspace removes the selected edge (one history entry, the
@@ -6398,6 +6454,85 @@ export function Canvas({
     return { kind: 'ran', note: `${tint} note` }
   }, [commitHistory])
 
+  // M388. The flowchart's verbs (useFlowchartVerbs.ts). Called HERE, below
+  // everything it reads (onBeginDrag, the selection helpers, worldCentre) and
+  // above usePaletteActions, which takes its verbs as deps.
+  // ⌘Esc's hand-back, for a press on a shape: a terminal that held the
+  // keyboard must not receive the Enter or Tab meant for the diagram.
+  const releaseKeyboard = useCallback(() => {
+    const active = document.activeElement as HTMLElement | null
+    if (active !== null && active !== hostRef.current && hostRef.current?.contains(active) === true) active.blur()
+    setFocusedId(null)
+    hostRef.current?.focus({ preventScroll: true })
+  }, [])
+  const visibleWorld = useCallback(() => {
+    const vp = viewportRef.current
+    const host = hostRef.current
+    const w = host?.clientWidth ?? window.innerWidth
+    const h = host?.clientHeight ?? window.innerHeight
+    return { x: -vp.x / vp.scale, y: -vp.y / vp.scale, w: w / vp.scale, h: h / vp.scale }
+  }, [])
+  const shapeStepRef = useRef<{ nextStep: (id: string) => void; previousStep: (id: string) => void } | null>(null)
+  const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef })
+  // The shapes, in their own array for the ShapeLayer: a new array only when
+  // `displayPanels` is (a panel changed) — never on a camera frame.
+  const shapePanels = useMemo(() => displayPanels.filter(isShapePanel), [displayPanels])
+  // The minimap's set: its identity changes only when a shape is added or removed.
+  const shapeIdKey = shapePanels.map((p) => p.rect.id).join(',')
+  const shapeIdSet = useMemo(() => new Set(shapeIdKey === '' ? [] : shapeIdKey.split(',')), [shapeIdKey])
+  // M389. Connectors: their views, the draw from a shape's port, their verbs.
+  const connectors = useConnectors({
+    setPanels, commitHistory, panelsRef, displayPanels, hitOrderRef, nextIdRef, hostRef, viewportRef, mergedRef,
+    selectedIds, selectOnly, selectedId: selectedConnectorId, setSelectedId: setSelectedConnectorId, shouldIgnoreKeys
+  })
+  connectorsRef.current = connectors
+  // M390. The diagram's bare keys (useShapeKeys' header: why they are safe).
+  shapeStepRef.current = useShapeKeys({ hostRef, panelsRef, selectedIdsRef, shouldIgnoreKeys, mergedRef, flowchart, connectors, selectOnly })
+  // M391. Mermaid in and out, and auto-layout.
+  const flowchartIO = useFlowchartIO({
+    setPanels, commitHistory, panelsRef, nextIdRef, setGroups, nextGroupIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection,
+    worldCentre, frameRects, reducedMotion: prefersReducedMotion,
+    nameOf: (p) => (isShapePanel(p) ? railLabel(p, undefined) : panelLabel(p))
+  })
+  // The palette slice reaches the connector verbs through the ref — the hook's
+  // own object is new with every route, and a dep that changes per drag frame
+  // would rebuild every verb in the palette (usePaletteActions.ts's header).
+  const connectorVerbs = useMemo(() => ({
+    connect: (...a: Parameters<Connectors['connect']>) => connectorsRef.current?.connect(...a) ?? { kind: 'refused' as const, reason: 'the canvas is not ready' },
+    patch: (...a: Parameters<Connectors['patch']>) => connectorsRef.current?.patch(...a) ?? { kind: 'refused' as const, reason: 'the canvas is not ready' },
+    remove: (...a: Parameters<Connectors['remove']>) => connectorsRef.current?.remove(...a) ?? { kind: 'refused' as const, reason: 'the canvas is not ready' }
+  }), [])
+  objectClipboardRef.current = {
+    copy: () => flowchart.copyObjects().kind === 'ran',
+    paste: (text) => flowchart.pasteObjects(text) || flowchartIO.importPasted(text)
+  }
+  const onConnectorSelect = useCallback((id: string) => { connectors.select(id) }, [connectors.select])
+  const selectedConnectorDetail = useMemo(() => {
+    if (selectedConnectorId === null) return null
+    const found = findConnector(panels, selectedConnectorId)
+    if (found === null) return null
+    const target = panels.find((p) => p.rect.id === found.connector.to)
+    const name = (p: Panel | undefined): string => (p === undefined ? 'nothing' : isShapePanel(p) ? railLabel(p, undefined) : panelLabel(p))
+    return { connector: found.connector, fromName: name(found.holder), toName: name(target) }
+  }, [selectedConnectorId, panels])
+  // M388. THE CANVAS DOOR FOR A SHAPE: a double-click on the GROUND — the
+  // host, the world layer or the aura, never a panel, a shape, a control or
+  // an annotation — places a process step there with its label open. Typing
+  // names it; Escape or a click away with nothing typed leaves an empty step,
+  // which ⌘Z takes back like any other add.
+  const onCanvasDoubleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || mergedRef.current || annotating || linkDraw.state !== null) return
+    const target = event.target as HTMLElement
+    const host = hostRef.current
+    if (host === null) return
+    const ground = target === host || target.classList.contains('world') || target.classList.contains('canvas__aura')
+    if (!ground) return
+    const bounds = host.getBoundingClientRect()
+    const world = screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewportRef.current)
+    const made = flowchart.addShape('process', '', world)
+    if (made.kind === 'ran' && made.id !== undefined) editNewShape(made.id)
+  }, [flowchart, annotating, linkDraw.state])
+
   /**
    * M186. A PICTURE INTO THE STORE AND ONTO THE CANVAS, the one door every
    * gesture takes: a drop on empty canvas, a paste with no agent to take it,
@@ -7164,6 +7299,9 @@ export function Canvas({
     addNote,
     setNoteText,
     setNoteTint,
+    flowchartVerbs: flowchart,
+    connectorVerbs,
+    flowchartIO,
     openPreviewNow: openPreview,
     bindPreviewNow: bindPreview,
     setPreviewWidthNow: setPreviewWidth,
@@ -7320,6 +7458,37 @@ export function Canvas({
     // repository a lane belongs to.
     lanes: worktreeRows
   })
+
+  // M393. THE LIVING FLOWCHART. A shape joined by a connector to a live
+  // object — a terminal, an agent's chat, a watcher, a work card — shows that
+  // object's state: a ring on its outline in the state's tone and ONE word,
+  // the same word the rail shows for it (useShownState). The first such
+  // connection binds; a diagram drawn over the work becomes a dashboard of
+  // it. Bindings are REUSED across renders when nothing about them changed,
+  // so a drag re-renders only the shape that moved.
+  const liveCacheRef = useRef<Map<string, LiveBinding>>(new Map())
+  const shapeLive = useMemo(() => {
+    const rows = new Map(railRows.map((r) => [r.id, r]))
+    const byId = new Map(panels.map((p) => [p.rect.id, p]))
+    const out = new Map<string, LiveBinding>()
+    const bind = (shapeId: string, panelId: string): void => {
+      if (out.has(shapeId)) return
+      const row = rows.get(panelId)
+      if (row === undefined) return
+      const prev = liveCacheRef.current.get(shapeId)
+      out.set(shapeId, prev !== undefined && prev.panelId === panelId && prev.input === row.state && prev.name === row.label ? prev : { panelId, input: row.state, name: row.label })
+    }
+    for (const p of panels) {
+      for (const c of p.connectors ?? []) {
+        const t = byId.get(c.to)
+        if (t === undefined) continue
+        if (isShapePanel(p) && !isShapePanel(t)) bind(p.rect.id, t.rect.id)
+        else if (!isShapePanel(p) && isShapePanel(t)) bind(t.rect.id, p.rect.id)
+      }
+    }
+    liveCacheRef.current = out
+    return out
+  }, [panels, railRows])
 
   const inspectorContextBand = useMemo(() => {
     if (selectedPanel === undefined || inspectorModel === null) return undefined
@@ -8430,6 +8599,7 @@ export function Canvas({
         onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
+        onDoubleClick={onCanvasDoubleClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
@@ -8521,7 +8691,7 @@ export function Canvas({
               click — a panel's own mousedown stops propagation, so without it a
               note could be placed on the ground but never on a panel. */}
           {annotating && <div className="annotate-sheet" data-annotate-sheet />}
-          <SnapGuides guides={snapGuides} />
+          <SnapGuides guides={snapGuides.guides} spacing={snapGuides.spacing} />
           {/* The shared canvas: teammates' panels, inert, at the doc's rects. */}
           {!merged && (
             <SharedPlaceholderLayer placeholders={shared.placeholders} workspaceId={activeWorkspaceId}
@@ -8726,6 +8896,8 @@ export function Canvas({
                 />
               )
             }
+            // M388. The seventeenth kind renders in the ShapeLayer below, never here.
+            if (isShapePanel(panel)) return null
             // M187. The sixteenth kind: a note, in one of its three forms.
             if (isNotePanel(panel)) {
               return (
@@ -8948,6 +9120,31 @@ export function Canvas({
               />
             )
           })}
+          {/* M388. Every flowchart shape, in one memoised layer (ShapeLayer's
+              header: why not PanelFrame). A fragment of boxes carrying
+              Panel.z, so shapes interleave with panels by the one stacking rule. */}
+          {/* M389. Every connector, beneath the shapes (the link layer's slot). */}
+          <ConnectorLayer
+            views={connectors.views}
+            selectedId={connectors.selectedId}
+            editingId={connectors.editingId}
+            readOnly={merged}
+            ghost={connectors.ghost}
+            onSelect={onConnectorSelect}
+            onEditLabel={connectors.editLabel}
+            onCommitLabel={connectors.commitLabel}
+          />
+          <ShapeLayer
+            shapes={shapePanels}
+            selectedIds={selectedIds}
+            readOnly={merged}
+            onPress={flowchart.onShapePress}
+            onResize={flowchart.onShapeResize}
+            onPort={connectors.beginDraw}
+            onCommitText={flowchart.onShapeText}
+            dropTargetId={connectors.dropTargetId ?? (linkDraw.state?.target ?? null)}
+            live={shapeLive}
+          />
           {/* INSIDE .world, unlike the pips and the marquee below it: a lane
               header names a region of the WORLD, so it has to pan and scale
               with the panels it labels — see MergedLanes' own comment. Last
@@ -8989,7 +9186,7 @@ export function Canvas({
         {/* An overview of nothing is noise beside the launcher: it appears
             with the first object. */}
         {minimapEnabled && !merged && panels.length > 0 && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view
@@ -9307,6 +9504,15 @@ export function Canvas({
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}
+        selectedConnector={selectedConnectorDetail}
+        onPatchConnector={(id, patch) => { const r = connectors.patch(id, patch); if (r.kind === 'refused') paletteActions.say(r.reason) }}
+        onRemoveConnector={(id) => { connectors.remove(id) }}
+        onStyleShape={(id, patch) => { const r = flowchart.setShapeStyle([id], patch); if (r.kind === 'refused') paletteActions.say(r.reason) }}
+        onShapeChart={(id, act) => {
+          const said = (r: { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }): void => { paletteActions.say(r.kind === 'ran' ? (r.note ?? 'done') : r.reason) }
+          if (act === 'layout-down' || act === 'layout-right') said(flowchartIO.layout(act === 'layout-down' ? 'down' : 'right', [id]))
+          else void flowchartIO.exportFlowchart(act === 'export-mermaid' ? 'mermaid' : 'svg').then(said)
+        }}
         onSetRestartOnExit={onSetRestartOnExit}
         onSetLinkAutomation={onSetLinkAutomation}
         automationResults={automationResult}

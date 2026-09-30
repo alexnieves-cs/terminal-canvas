@@ -36,7 +36,12 @@ export function recoverPanels(rows: readonly OrphanRow[], existing: readonly Pan
   return out
 }
 
-const ID_SEQUENCE = /^[nrfjt](\d+)$/
+// M388. Every prefix this app mints from the one counter — widened from
+// n/r/f/j/t, which left nt/img/im/sh/cx/c/w/wf/m/b/g/k ids invisible to seeding: a
+// canvas holding only notes seeded the counter at 1 and minted `nt1` again,
+// and load drops a duplicate id silently (lb :357). A FOREIGN id (an adopted
+// tmux session's arbitrary name) still does not move the counter.
+const ID_SEQUENCE = /^(?:n|r|f|j|t|c|w|wf|m|b|g|k|nt|sh|cx|img|im)(\d+)$/
 
 /** The counter to use after these ids exist: past every one of ours, never backwards. */
 export function seedAfter(ids: readonly string[], current: number): number {

@@ -9,7 +9,7 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel, isWorkPanel, isImagePanel } from '@renderer/panels/panels'
+import { isFilePanel, isShapePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel, isWorkPanel, isImagePanel } from '@renderer/panels/panels'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { watchStateInput } from '@renderer/watcher/watcher-store'
@@ -153,7 +153,7 @@ export function useRailModels(deps: RailModelsDeps) {
     () => (palette.open
       // M44. Spatial order: on-screen panels first (nearest the camera centre),
       // then the rest by focus recency. Computed once on open, reading refs.
-      ? orderPanelsFor(panelsRef.current, viewportRef.current, registry.lastFocusedAt()).map((p) =>
+      ? orderPanelsFor(panelsRef.current.filter((p) => !isShapePanel(p)), viewportRef.current, registry.lastFocusedAt()).map((p) =>
           // Field-by-field, not a spread: an untitled panel must produce a
           // row with NO `title` key, not one holding `title: undefined`.
           // Renderer-internal only (no structured clone here to carry the
@@ -254,7 +254,10 @@ export function useRailModels(deps: RailModelsDeps) {
   // panels beside a canvas showing everyone's would be the two disagreeing on
   // screen at once. goToPanel reads the same array, which is what keeps every
   // row it renders navigable.
-  const railBuilt = buildRailRows(displayPanels, (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf)
+  // M388. Shapes are not rail rows (ledger D8): a chart is many marks on the
+  // canvas, like ink and labels, and 200 rows would bury every agent. They are
+  // found on the canvas and through their chart, never one row each.
+  const railBuilt = buildRailRows(displayPanels.filter((p) => !isShapePanel(p)), (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 

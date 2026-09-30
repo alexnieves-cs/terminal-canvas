@@ -261,6 +261,16 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     if (kept.length === 0) delete p.links
     else p.links = kept
   }
+  // M389. The same on-disk half for connectors: a connector naming a panel
+  // that did not survive is dropped, and only it — never the holder's set.
+  for (const p of panels) {
+    if (p.connectors === undefined) continue
+    const kept = p.connectors.filter((c) => surviving.has(c.to))
+    if (kept.length === p.connectors.length) continue
+    warnings.push(`dropped ${p.connectors.length - kept.length} connector(s) on panel ${p.id}: no such panel`)
+    if (kept.length === 0) delete p.connectors
+    else p.connectors = kept
+  }
 
   // #24's functional half is intentionally narrower than decorative links:
   // only terminal panels can emit an exit or accept a restart. A hand-edited

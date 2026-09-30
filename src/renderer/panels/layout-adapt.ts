@@ -3,7 +3,8 @@ import { carryBackend } from '@shared/agent-backends'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
-import { isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
+import type { ShapeRecord } from '@shared/flowchart'
+import { isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
   isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, isRelayPanel, type Panel } from './panels'
 
 /**
@@ -41,6 +42,11 @@ function copyTrigger(trigger: WatchTrigger): WatchTrigger {
   }
 }
 
+/** M388. The shape record, field by field; an absent style field stays absent (never `fill: undefined`). */
+function copyShape(r: ShapeRecord): ShapeRecord {
+  return { form: r.form, text: r.text, ...(r.fill === undefined ? {} : { fill: r.fill }), ...(r.stroke === undefined ? {} : { stroke: r.stroke }), ...(r.ink === undefined ? {} : { ink: r.ink }) }
+}
+
 export function toPanels(persisted: PersistedPanel[]): Panel[] {
   return persisted.map((p) => {
     const base = {
@@ -60,7 +66,9 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       // the live Panel cannot share a mutable array.
       ...(p.links === undefined
         ? {}
-        : { links: p.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) })
+        : { links: p.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) }),
+      // M389. Connectors, element-wise for the same shared-array reason.
+      ...(p.connectors === undefined ? {} : { connectors: p.connectors.map((c) => ({ ...c })) })
     }
     // The disk rule stated once, in the one place it converts: only 'review'
     // is tested positively, so an absent kind — every pre-M9b file — becomes
@@ -113,6 +121,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
     // M181. The image panel: one field, copied by name.
+    // M388. The seventeenth kind, both copy sites: absent style fields stay absent.
+    if (p.kind === 'shape') return { ...base, kind: 'shape' as const, shape: copyShape(p.shape) }
     // M187. The sixteenth kind, both copy sites: an absent tint stays absent.
     if (p.kind === 'note') return { ...base, kind: 'note' as const, note: { form: p.note.form, text: p.note.text, ...(p.note.tint === undefined ? {} : { tint: p.note.tint }) } }
     // M186. An absent asset id stays absent through both copy sites.
@@ -170,7 +180,8 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       ...(panel.templateBinding === undefined ? {} : { templateBinding: { templateId: panel.templateBinding.templateId, key: panel.templateBinding.key } }),
       ...(panel.links === undefined
         ? {}
-        : { links: panel.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) })
+        : { links: panel.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) }),
+      ...(panel.connectors === undefined ? {} : { connectors: panel.connectors.map((c) => ({ ...c })) })
     }
     // No cwd and no args keys AT ALL on this branch — not `cwd: undefined`.
     // A review record carrying an explicit undefined cwd fails its own parse
@@ -219,6 +230,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
     // M181. Same rule; the path is the record's whole identity.
+    if (isShapePanel(panel)) return { ...base, kind: 'shape' as const, shape: copyShape(panel.shape) }
     if (isNotePanel(panel)) return { ...base, kind: 'note' as const, note: { form: panel.note.form, text: panel.note.text, ...(panel.note.tint === undefined ? {} : { tint: panel.note.tint }) } }
     if (isImagePanel(panel)) return { ...base, kind: 'image' as const, image: { path: panel.image.path, ...(panel.image.asset === undefined ? {} : { asset: panel.image.asset }), ...(panel.image.artifact === undefined ? {} : { artifact: panel.image.artifact }) } }
     // M128. Same rule; the pair is the record's whole identity.

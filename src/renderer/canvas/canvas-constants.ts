@@ -1,5 +1,5 @@
 import { triggerWord } from '@shared/watch-trigger'
-import { isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
+import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
   isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
@@ -7,6 +7,7 @@ import type { CredentialMeta } from '@shared/credential-schema'
 import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { FileRow } from '../shell/file-tree-model'
 import { noteSummary } from '@shared/notes'
+import { shapeSummary } from '@shared/flowchart'
 
 /**
  * Canvas's module-scope constants and its two pure label/selection helpers.
@@ -56,6 +57,8 @@ export const EMPTY_ROWS: FileRow[] = []
  * `useCallback` each exist to keep off this file.
  */
 export const EMPTY_SELECTION: ReadonlySet<string> = new Set()
+/** M390. No snap guides of either kind — one object, so clearing twice is not a re-render. */
+export const NO_GUIDES: { guides: readonly never[]; spacing: readonly never[] } = { guides: [], spacing: [] }
 
 /**
  * Drop every id the predicate rejects, PRESERVING the set's identity when
@@ -118,6 +121,8 @@ export function panelLabel(panel: Panel): string {
   if (isImagePanel(panel)) return `image: ${panel.title ?? panel.image.path} (${panel.rect.id})`
   // M187. The sixteenth kind, named by its own first line (`noteSummary`).
   if (isNotePanel(panel)) return `${panel.note.form}: ${panel.title ?? noteSummary(panel.note.text, panel.note.form)} (${panel.rect.id})`
+  // M388. The seventeenth kind, named by its form and its label's first line.
+  if (isShapePanel(panel)) return `${panel.shape.form}: ${shapeSummary(panel.shape.text, panel.shape.form)} (${panel.rect.id})`
   // M338. A relay terminal, named by the program it runs on the relay.
   if (isRelayPanel(panel)) return `relay: ${panel.title ?? panel.relay.program} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'

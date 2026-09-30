@@ -319,7 +319,10 @@ app.whenReady().then(() => {
   // share's people with their roles for the owner's picker.
   // team:asks / team:ask-answer (204) — M377: the team's open permission
   // requests this person may answer, and their answer, written in their name.
-  const EXPECTED_CHANNELS = 204
+  // export:flowchart / flowchart:read (206) — the flowchart's file doors: a
+  // diagram's Mermaid or SVG TEXT out through the outward gate (an SVG with
+  // script, a link or an embedded picture is refused), and a Mermaid file in.
+  const EXPECTED_CHANNELS = 206
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

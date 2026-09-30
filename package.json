@@ -54,6 +54,7 @@
     "verify:checklist": "node scripts/verify-checklist.cjs",
     "verify:pill": "node scripts/verify-pill.cjs",
     "verify:notes": "node scripts/verify-notes.cjs",
+    "verify:flowchart": "node scripts/verify-flowchart.cjs",
     "verify:deck": "node scripts/verify-deck.cjs",
     "verify:sheet": "node scripts/verify-sheet.cjs",
     "verify:draft": "node scripts/verify-draft.cjs",

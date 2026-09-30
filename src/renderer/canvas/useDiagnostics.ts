@@ -26,8 +26,10 @@ export function useDiagnostics(deps: { paletteIsOpen: () => boolean }): Diagnost
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!event.metaKey || event.ctrlKey || event.altKey) return
-      // Cmd+D. Free — Cmd+0/1/=/+/-/n/j are useViewport's, Cmd+K is the
+      // M390. ⌘⌥D, no longer ⌘D: ⌘D is Duplicate, the chord every design
+      // tool gives it (ledger D4). This overlay is a developer's.
+      if (!event.metaKey || event.ctrlKey || !event.altKey) return
+      // Cmd+D was free — Cmd+0/1/=/+/-/n/j are useViewport's, Cmd+K is the
       // palette's, Cmd+G is the nav grid's, Cmd+B is the tree's, Cmd+\ and
       // Cmd+Shift+\ are the rail/inspector's, Cmd+Shift+[/] step workspaces,
       // Cmd+Shift+A toggles the merged view, and Cmd+Z/C/V are menu

@@ -77,6 +77,9 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   // M250. The import READS a path the caller names and writes a note beside
   // it — a teammate's plan does not choose which files this app reads.
   'import-docx',
+  // M391. The same: a Mermaid import READS a path the caller names, and an
+  // export asks this person where to write — neither is a teammate's to start.
+  'flowchart-import', 'flowchart-export',
   // M248. A deck's file is the person's; a teammate may neither propose into it nor review it.
   'deck-edit', 'deck-write', 'deck-review',
   // M246: `sheet-edit` is deliberately NOT here. Through the agent door it

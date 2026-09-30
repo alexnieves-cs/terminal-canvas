@@ -64,7 +64,7 @@ check(FR, 'fr.pure.6 each creation kind is explained at selection — agent, ter
   const four = ['agent', 'terminal', 'supervisor', 'chat']
   return { pass: four.every((id) => typeof k[id] === 'string' && k[id].toLowerCase().startsWith(id)) && new Set(four.map((id) => k[id])).size === 4, detail: k }
 })
-check(HINTS, 'fr.hints.1 a gesture hint appears only after its attempt and alone; a seen one never returns; the attempt rule maps each input', (m) => {
+check(HINTS, 'fr.hints.1 a gesture hint appears only after its attempt and alone; a seen one never returns; the attempt rule maps each input (M388: a double-click places a shape, so it teaches nothing)', (m) => {
   const rest = m.contextualHint(new Set(), null)
   const zoom = m.contextualHint(new Set(), 'zoom')
   const seen = m.contextualHint(new Set(['zoom']), 'zoom')
@@ -72,7 +72,7 @@ check(HINTS, 'fr.hints.1 a gesture hint appears only after its attempt and alone
   const a = [m.attemptOf({ type: 'mousedown', button: 0 }), m.attemptOf({ type: 'wheel', deltaMode: 1 }), m.attemptOf({ type: 'wheel', deltaMode: 0 }),
     m.attemptOf({ type: 'wheel', deltaMode: 1, ctrlKey: true }), m.attemptOf({ type: 'dblclick' }), m.attemptOf({ type: 'keydown', key: 'a' }), m.attemptOf({ type: 'keydown', key: 'k', metaKey: true })]
   return { pass: rest.length === 0 && zoom.length === 1 && zoom[0].id === 'zoom' && seen.length === 0 && tmux.length === 0 &&
-    JSON.stringify(a) === JSON.stringify(['pan', 'zoom', null, null, 'new-panel', 'palette', null]), detail: { a, zoom } }
+    JSON.stringify(a) === JSON.stringify(['pan', 'zoom', null, null, null, 'palette', null]), detail: { a, zoom } }
 })
 check(SCHEMA, 'fr.recent.1 recentDirectoryUsed: absent warns nothing, a non-object warns and is dropped, a bad entry costs only itself', (m) => {
   const w1 = []; const absent = m.parseRecentDirectoryUsed(undefined, w1)

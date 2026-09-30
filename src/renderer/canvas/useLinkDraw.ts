@@ -19,6 +19,12 @@ export interface LinkDrawDeps {
   rectsRef: RefObject<WorldRect[]>
   /** Called once, on a release that resolved to a target that is not the source. */
   onCommit(from: string, to: string): void
+  /**
+   * M389. Called once on a release over NOTHING — no target in reach. The
+   * canvas makes the next step there (quick-connect). Absent keeps the old
+   * behaviour: the release cancels.
+   */
+  onDropEmpty?(from: string, cursor: { x: number; y: number }): void
 }
 
 export interface LinkDraw {
@@ -161,7 +167,16 @@ export function useLinkDraw(deps: LinkDrawDeps): LinkDraw {
       setState(null)
       // addLink refuses a self-link anyway; returning here is what keeps the
       // cancel SILENT rather than a no-op that reads as a link which failed.
-      if (!current.target || current.target === current.from) return
+      if (current.target === current.from) return
+      if (!current.target) {
+        // A press and release that never left the source is a click, not a
+        // pull into empty space: nothing is made for a person who only
+        // pressed a port. `cursor` is world space; so are the rects.
+        const src = depsRef.current.rectsRef.current?.find((r) => r.id === current.from)
+        const inside = src !== undefined && current.cursor.x >= src.x && current.cursor.x <= src.x + src.w && current.cursor.y >= src.y && current.cursor.y <= src.y + src.h
+        if (!inside) depsRef.current.onDropEmpty?.(current.from, current.cursor)
+        return
+      }
       depsRef.current.onCommit(current.from, current.target)
     }
 

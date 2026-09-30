@@ -1,10 +1,11 @@
 import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
-import { isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { WorkItemState } from '@shared/work-items'
 import { noteSummary } from '@shared/notes'
+import { shapeFormWord, shapeSummary } from '@shared/flowchart'
 import { chatDisplayLead } from '@renderer/palette/panel-name'
 
 /**
@@ -123,6 +124,9 @@ export function railLabel(
   if (isNotePanel(panel)) return `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form, 32)}`
   // M338. A relay terminal reads by what it runs, marked as the relay's.
   if (isRelayPanel(panel)) return `relay · ${panel.relay.program}`
+  // M388. A shape reads by its label (it is not listed in the rail — ledger
+  // D8 — but the inspector's heading and a search hit read through here).
+  if (isShapePanel(panel)) return `${shapeFormWord(panel.shape.form)} · ${shapeSummary(panel.shape.text, panel.shape.form, 32)}`
   // M266. Teammate · place when known; else place basename — never "agent".
   if (isChatPanel(panel)) {
     const cwd = panel.chat.cwd.replace(/\/+$/, '')

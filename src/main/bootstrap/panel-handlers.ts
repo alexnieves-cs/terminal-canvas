@@ -6,6 +6,8 @@ import { BrowserWindow, app, shell, webContents } from 'electron'
 import { createExporters } from '../export'
 import { createDeckExporter } from '../deck-export'
 import { createDeckPdf, createPdfRenderer } from '../deck-pdf'
+import { createFlowchartFiles } from '../flowchart-files'
+import { FLOWCHART_OPEN_FILTERS, FLOWCHART_SAVE_FILTERS } from '../../shared/flowchart-files'
 import { readFile } from '../file-read'
 import { readImage } from '../image-read'
 import { searchPanels } from '../panel-search'
@@ -18,7 +20,7 @@ import { capturePreview } from '../preview-capture'
 import { descendantsOf } from '../machine-cost'
 import { trailFor } from '../skill-trail-read'
 import { resolveTranscript, readFrom as readTranscriptFrom } from '../transcript-reader'
-import { askSave, inDownloads, liveWindow } from './dialogs'
+import { askOpenFile, askSave, inDownloads, liveWindow } from './dialogs'
 import type { Stores } from './stores'
 import type { MainState } from './context'
 import type { EditorOpenResult, EditorTarget } from '../../shared/editor-open'
@@ -155,6 +157,23 @@ export function createExportHandlers(state: MainState, stores: Stores) {
       })
     })
   }
+}
+
+/**
+ * A flowchart's two file doors, wired to the system's own sheets. The arms, the
+ * outward gate and the SVG refusal are main/flowchart-files.ts, plain-node
+ * tested by `verify:flowchart flowchart.files.*`; only the dialogs are here.
+ * The save sheet opens under ~/Downloads like the canvas PNG does, filtered to
+ * the format's own extension; the open sheet is parented to the window so it is
+ * a sheet on the canvas being read into, not an app-modal panel that floats free.
+ */
+export function createFlowchartHandlers(state: MainState) {
+  return createFlowchartFiles({
+    askSave: async ({ suggestedName, format }) => askSave(liveWindow(state), {
+      title: 'Export flowchart', defaultPath: inDownloads(suggestedName), filters: FLOWCHART_SAVE_FILTERS[format]
+    }),
+    askOpen: async () => askOpenFile(liveWindow(state), { title: 'Open a Mermaid file', filters: FLOWCHART_OPEN_FILTERS })
+  })
 }
 
 /**

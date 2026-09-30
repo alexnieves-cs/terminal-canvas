@@ -17,6 +17,13 @@ export interface CanvasClipboardDeps {
    * empty-canvas image paste reach the one image-minting verb.
    */
   getAddImage: () => ((path: string, world?: { x: number; y: number }) => Promise<unknown>) | null
+  /**
+   * M390/M391. The canvas's authored objects: `copy` holds the selection's
+   * shapes, notes and pictures (true when it did); `paste` places a held copy
+   * when the clipboard carries its marker, or imports pasted Mermaid (true
+   * when either happened). Read lazily, like getAddImage.
+   */
+  getObjects?: () => { copy: () => boolean; paste: (text: string) => boolean } | null
 }
 
 /**
@@ -33,7 +40,7 @@ export interface CanvasClipboardDeps {
  * churn around main-side menu accelerators.
  */
 export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(sentence: string) => void> {
-  const { registry, focusedIdRef, panelsRef, shouldIgnoreKeys, getAddImage } = deps
+  const { registry, focusedIdRef, panelsRef, shouldIgnoreKeys, getAddImage, getObjects } = deps
   // M149. The palette action object is assigned after this hook's call, so a
   // refusal on paste is said rather than swallowed.
   const sayRef = useRef<(sentence: string) => void>(() => {})
@@ -52,6 +59,9 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       // A text draft has the keyboard: its selection, not the terminal's.
       if (serveDraftEdit('copy')) return
       const id = focusedIdRef.current
+      // M390. No panel has the keyboard and objects are selected: the copy is
+      // the canvas's (an in-app clipboard; the system one gets a marker).
+      if (id === null && getObjects?.()?.copy() === true) return
       // M338. A relay terminal's xterm is not in the registry — its pty is remote.
       const relay = id === null ? undefined : existingRelayTerminal(id)
       if (relay !== undefined) { const chosen = relay.getSelection(); if (chosen) void navigator.clipboard.writeText(chosen); return }
@@ -69,6 +79,9 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       // field's, never the running agent's behind it.
       if (serveDraftEdit('paste', text)) return
       const id = focusedIdRef.current
+      // M390/M391. No panel has the keyboard: a held copy of objects, or a
+      // Mermaid diagram as text, lands on the canvas (inert — shapes only).
+      if (id === null && text && getObjects?.()?.paste(text) === true) return
       // M338. Into a relay terminal only as TEXT, through its own gate; an
       // image path would name a file on this Mac that the relay VM cannot read.
       const relay = id === null ? undefined : existingRelayTerminal(id)

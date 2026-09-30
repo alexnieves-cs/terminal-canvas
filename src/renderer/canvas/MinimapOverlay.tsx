@@ -31,6 +31,8 @@ export interface MinimapProps {
   marks?: readonly { x: number; y: number }[]
   /** M258. The selected panels — drawn with a neutral ring, never the camera's iris, so the two cannot be confused. */
   selected?: ReadonlySet<string>
+  /** M388. The flowchart shapes among `rects` — drawn as ONE outline path, no per-shape subscription: a chart is a shape on the map, not two hundred status blocks. */
+  shapeIds?: ReadonlySet<string>
 }
 
 /** The one place a minimap row's state is derived — Block and its `.sr-only`
@@ -58,7 +60,7 @@ function MinimapAltRow({ row }: { row: MinimapRow }): JSX.Element {
   return <li>{row.label} — {shown.word}</li>
 }
 
-export function Minimap({ rects, rows, viewport, goTo, marks, selected }: MinimapProps): JSX.Element | null {
+export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds }: MinimapProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
   // The CANVAS's size, not the thumb's: the camera's rectangle is the canvas
@@ -149,6 +151,12 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected }: Minima
         const row = byId.get(b.id)
         return row === undefined ? null : <Block key={b.id} row={row} box={b} selected={selected?.has(b.id) === true} />
       })}
+      {/* M388. The diagram's shapes, one path for all of them. */}
+      {shapeIds !== undefined && shapeIds.size > 0 && (
+        <svg className="minimap__shapes" data-minimap-shapes width={MINIMAP_W} height={MINIMAP_H} aria-hidden="true">
+          <path d={projection.blocks.filter((b) => shapeIds.has(b.id)).map((b) => `M${b.x.toFixed(1)} ${b.y.toFixed(1)}h${Math.max(1, b.w).toFixed(1)}v${Math.max(1, b.h).toFixed(1)}h${(-Math.max(1, b.w)).toFixed(1)}Z`).join('')} />
+        </svg>
+      )}
       {/* M93. Annotations as dots, so the map shows the margins too. */}
       {(marks ?? []).map((m, i) => (
         <span key={i} className="minimap__mark" data-minimap-mark style={{ left: m.x * projection.scale + projection.ox, top: m.y * projection.scale + projection.oy }} />

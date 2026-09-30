@@ -7,11 +7,20 @@ import { MIN_PANEL_H, MIN_PANEL_W } from '@shared/panel-geometry'
  */
 
 /**
- * East, south, south-east only. Resizing from a north or west edge changes the
- * panel's origin AND its size in one gesture — two coupled changes to verify
- * instead of one — for an affordance a terminal barely needs.
+ * East, south, south-east for a PANEL. Resizing from a north or west edge
+ * changes the panel's origin AND its size in one gesture — two coupled changes
+ * to verify instead of one — for an affordance a terminal barely needs.
+ *
+ * M388. A flowchart SHAPE takes all eight: a diagram is sized from whichever
+ * side is free, and a person dragging a diamond's west point expects the east
+ * point to stay put. The coupled origin/size change is applyDrag's, once.
  */
-export type ResizeEdge = 'e' | 's' | 'se'
+export type ResizeEdge = 'e' | 's' | 'se' | 'n' | 'w' | 'ne' | 'nw' | 'sw'
+
+/** M388. Whether this edge moves the rect's origin — the half snapping does not yet cover (only growing right/bottom edges snap). */
+export function movesOrigin(edge: ResizeEdge): boolean {
+  return edge.includes('n') || edge.includes('w')
+}
 
 export type DragMode = { kind: 'move' } | { kind: 'resize'; edge: ResizeEdge }
 
@@ -22,6 +31,8 @@ export interface DragState {
   originRect: WorldRect
   /** The world point under the cursor at mousedown. */
   originWorld: Point
+  /** M388. The resize floor for THIS object; absent is the panel floor (MIN_PANEL_W/H). A shape passes SHAPE_MIN. */
+  min?: { w: number; h: number }
 }
 
 /**
@@ -59,12 +70,23 @@ export function applyDrag(state: DragState, world: Point): WorldRect {
   }
 
   const { edge } = state.mode
-  const growsX = edge === 'e' || edge === 'se'
-  const growsY = edge === 's' || edge === 'se'
+  const minW = state.min?.w ?? MIN_PANEL_W
+  const minH = state.min?.h ?? MIN_PANEL_H
+  const growsX = edge.includes('e')
+  const growsY = edge.includes('s')
+  // M388. A west or north edge moves the origin by the delta and shrinks the
+  // size by it; at the floor the FAR edge stays where it was (x = right − w),
+  // never the origin — the edge the person is not holding does not move.
+  const shrinksX = edge.includes('w')
+  const shrinksY = edge.includes('n')
+  const w = growsX ? Math.max(minW, r.w + dx) : shrinksX ? Math.max(minW, r.w - dx) : r.w
+  const h = growsY ? Math.max(minH, r.h + dy) : shrinksY ? Math.max(minH, r.h - dy) : r.h
   return {
     ...r,
-    w: growsX ? Math.max(MIN_PANEL_W, r.w + dx) : r.w,
-    h: growsY ? Math.max(MIN_PANEL_H, r.h + dy) : r.h
+    x: shrinksX ? r.x + r.w - w : r.x,
+    y: shrinksY ? r.y + r.h - h : r.y,
+    w,
+    h
   }
 }
 

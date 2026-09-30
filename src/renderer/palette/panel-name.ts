@@ -1,4 +1,5 @@
-import { isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { shapeSummary } from '@shared/flowchart'
+import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import { noteSummary } from '@shared/notes'
 
@@ -77,6 +78,8 @@ export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNa
   if (isNotePanel(panel)) return panel.title ?? `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form)}`
   // M338. `relay · <program>` — the rail's own label, so the Go-to row agrees.
   if (isRelayPanel(panel)) return panel.title ?? `relay · ${panel.relay.program}`
+  // M388. A shape names itself by its label's first line, like a note.
+  if (isShapePanel(panel)) return shapeSummary(panel.shape.text, panel.shape.form)
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -105,5 +108,7 @@ export function panelPath(panel: Panel): string | undefined {
   if (isNotePanel(panel)) return undefined
   // M338. A relay terminal's directory is on the relay VM, not this Mac.
   if (isRelayPanel(panel)) return undefined
+  // M388. A shape is a mark on a canvas, not a place.
+  if (isShapePanel(panel)) return undefined
   return panel.spec.cwd
 }

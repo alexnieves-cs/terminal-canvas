@@ -1,3 +1,6 @@
+import type { Connectors } from '../useConnectors'
+import type { FlowchartIO } from '../useFlowchartIO'
+import type { FlowchartVerbs } from '../useFlowchartVerbs'
 /**
  * The contract every palette-action slice is written against.
  *
@@ -82,6 +85,12 @@ export interface PaletteActionsDeps {
   markPresetReadNow: (id: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M188. Test one node: the same executor the workflow's own run takes. */
   testNodeNow: (templateId: string, key?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M388. The flowchart's verbs — the Canvas half (useFlowchartVerbs), memoised there so this memo is not rebuilt per render. */
+  flowchartVerbs: FlowchartVerbs
+  /** M389. The connector verbs — a STABLE facade over useConnectors (whose own object changes with every route), read through a ref at use. */
+  connectorVerbs: Pick<Connectors, 'connect' | 'patch' | 'remove'>
+  /** M391. Mermaid in and out, and auto-layout. */
+  flowchartIO: FlowchartIO
   /** M187. The note's three verbs — one record, three forms. */
   addNote: (form: string, text?: string, world?: { x: number; y: number }) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText: (panelId: string, text: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }

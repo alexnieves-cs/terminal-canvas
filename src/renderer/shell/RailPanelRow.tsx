@@ -1,13 +1,11 @@
+import { useAgentState } from '@renderer/session/agent-state-store'
 import { useLastLine } from '@renderer/session/last-line-store'
 import { memo, type JSX } from 'react'
-import { useAgentState } from '@renderer/session/agent-state-store'
 import type { RailGroupId, RailRoleId, RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
 import { Close, KIND_GLYPH, Lock, Pin, KindTerminal } from '@renderer/icons'
-import { panelState, toneIsAsleep, toneIsRunning, toneNeedsYou } from '@renderer/panels/panel-state'
-import { useChat } from '@renderer/chat/chat-store'
-import { useWatch } from '@renderer/watcher/watcher-store'
-import { chatStateInput } from '@renderer/chat/chat-model'
+import { toneIsAsleep, toneIsRunning, toneNeedsYou } from '@renderer/panels/panel-state'
+import { useShownState } from '@renderer/panels/useShownState'
 
 /* M63. The rail's left column: a terminal's is its state dot, every other
    kind's is a glyph naming the kind — kind and state stop sharing a slot. */
@@ -43,26 +41,14 @@ function RailPanelRowImpl({
   row, selected, onGoTo, onStart, onClose, merged = false, groupId, hidden = false
 }: RailPanelRowProps): JSX.Element {
   const last = useLastLine(row.id)
+  // M63/M73/M84. The word and the tone, from the one vocabulary, with the
+  // agent state, a chat's session and a watcher's runs this row subscribes
+  // to applied — `row.tail` is the same answer without them, kept for the
+  // signature and the plain-node checks. M393 moved the derivation into
+  // useShownState so a flowchart shape wired to this panel says the same word.
+  const shown = useShownState(row.id, row.state)
+  // The terminal store's raw word, for `data-agent-state` (check 54's split).
   const state = useAgentState(row.id)
-  // M73. A chat row subscribes to its own session mirror for the same reason
-  // it subscribes to its agent state: a delta for c3 re-renders c3's row and
-  // nothing else, and none of it rides the rail's signature.
-  const chat = useChat(row.id)
-  // M84. A watcher row subscribes to its own runs for the chat row's reason:
-  // a run's state change re-renders that row and nothing else, and none of it
-  // rides the rail's signature — which is frozen against a drag's 60Hz churn
-  // and would therefore report a watcher's pass whenever a rect next moved.
-  const watch = useWatch(row.id)
-  // M63. The word and the tone, from the one vocabulary, with the agent
-  // state this row subscribes to applied — `row.tail` is the same answer
-  // without it, kept for the signature and the plain-node checks.
-  const chatInput = row.state.kind === 'chat' ? chatStateInput(chat.snapshot, chat.turns.length > 0) : undefined
-  const liveState = row.state.kind === 'chat'
-    ? { ...row.state, ...(chatInput === undefined ? {} : { chat: chatInput }) }
-    : row.state.kind === 'watcher'
-      ? { ...row.state, watch: { status: watch.status, ...(watch.exitCode === undefined ? {} : { exitCode: watch.exitCode }), ...(watch.signal === undefined ? {} : { signal: watch.signal }), ...(watch.disarmed === undefined ? {} : { disarmed: true }) } }
-      : row.state
-  const shown = panelState(liveState, state)
   // M84 (critic). A watcher is a PROCESS node, so it carries the state dot
   // every process row carries AND its kind glyph — scanning the rail's left
   // column, a row with only a glyph reads as a document.
