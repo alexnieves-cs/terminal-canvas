@@ -385,7 +385,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       'onboarding.intent.e2e.1 a sentence and a repository folder typed into the launcher start work through D05 — a teammate whose only place is that folder, a typed task, a conversation in its lane whose first user line is the sentence, the caret in its composer, no terminal and no starter tour',
       'onboarding.intent.e2e.2 a folder that is not a repository is refused by name with nothing minted, and Chat in this folder instead opens a conversation there with the sentence in its composer, unsent',
       // M403 (B6).
-      'first.strip.1 the first start\'s guide is a strip INSIDE its conversation — absolutely positioned in the chat body, no floating popover — that overlaps none of the composer\'s buttons (Send/Answer, measured and hit-tested), and dismissing it moves neither the body nor the composer'
+      'first.strip.1 the first start\'s guide is a strip INSIDE its conversation — absolutely positioned in the chat body, no floating popover — that overlaps none of the composer\'s buttons (Send/Answer, measured and hit-tested), the composer still wins every hit test with the panel dragged to its floor width, and dismissing it moves neither the body nor the composer'
     ]
     const savedReport = state.harnessEnvReport
     await settle()
@@ -473,6 +473,33 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           floating: [...document.querySelectorAll('.first-task-hint')].filter((h) => !panel.contains(h)).length }
       })()`), 6000) : false
       const overlaps = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b
+      // The boundary critic's small-panel arm: the same conversation dragged
+      // to the floor WIDTH by its real resize handle. The strip wraps taller
+      // in a narrow panel (measured 139px at 200 wide), so it CAN reach the
+      // composer there; the composer (Send/Answer, the buttons its sentence
+      // names) must still win every hit test. Width only: at the 160px
+      // height floor the composer itself does not fit the body, strip or no
+      // strip (measured: Send clipped below the body) — a chat-floor fact,
+      // not the guide's.
+      const seAt = stripAt ? await wc.executeJavaScript(`(() => { const p = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"]`)}), h = p && p.querySelector('.panel__resize--se'); if (!h) return null
+        const r = h.getBoundingClientRect(), pr = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), to: { x: Math.round(pr.left + 20), y: Math.round(r.top + r.height / 2) } } })()`) : null
+      if (seAt) {
+        wc.sendInputEvent({ type: 'mouseMove', x: seAt.x, y: seAt.y })
+        wc.sendInputEvent({ type: 'mouseDown', x: seAt.x, y: seAt.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 6; i += 1) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(seAt.x + (seAt.to.x - seAt.x) * i / 6), y: Math.round(seAt.y + (seAt.to.y - seAt.y) * i / 6), button: 'left', modifiers: ['leftButtonDown'] })
+        wc.sendInputEvent({ type: 'mouseUp', ...seAt.to, button: 'left', clickCount: 1 })
+        await settle()
+      }
+      const small = seAt ? await wc.executeJavaScript(`(() => { const panel = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"]`)}); if (!panel) return null
+        const composer = panel.querySelector('.chat__composer'), strip = panel.querySelector('[data-first-task-strip]'), r = panel.getBoundingClientRect()
+        const buttons = [...(composer ? composer.querySelectorAll('button') : [])].filter((b) => b.getBoundingClientRect().width > 0).map((b) => {
+          const br = b.getBoundingClientRect(), x = br.left + br.width / 2, y = br.top + br.height / 2
+          return { label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 24), hit: b.contains(document.elementFromPoint(x, y)) } })
+        return { w: r.width, h: r.height, strip: strip !== null, stripH: strip ? strip.getBoundingClientRect().height : null, buttons } })()`) : null
+      // Got it is judged at the small size: the body and composer there must not move either.
+      const smallBox = typeof chatId === 'string' ? await wc.executeJavaScript(`(() => { const panel = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"]`)}); if (!panel) return null
+        const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height } }
+        const composer = panel.querySelector('.chat__composer'); return { body: box(panel.querySelector('.chat__body')), composer: composer ? box(composer) : null } })()`) : null
       const gotIt = stripAt ? await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"] [data-first-task-strip] [data-first-task-hint-dismiss]`)}); if (!b) return false
         b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`) : false
       await settle()
@@ -484,8 +511,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ok(IDS[2], stripAt && stripAt.inBody === true && stripAt.position === 'absolute' && stripAt.floating === 0 &&
           stripAt.composer !== null && !overlaps(stripAt.strip, stripAt.composer) && stripAt.buttons.length > 0 &&
           stripAt.buttons.every((b) => b.hit === true && !overlaps(stripAt.strip, b.box)) &&
-          gotIt === true && afterGone && afterGone.strip === false && same(stripAt.body, afterGone.body) && same(stripAt.composer, afterGone.composer),
-        JSON.stringify({ stripAt, gotIt, afterGone }))
+          small !== null && small.strip === true && small.w < stripAt.body.w && small.buttons.length > 0 && small.buttons.every((b) => b.hit === true) &&
+          gotIt === true && afterGone && afterGone.strip === false && same(smallBox.body, afterGone.body) && same(smallBox.composer, afterGone.composer),
+        JSON.stringify({ stripAt, small, gotIt, afterGone }))
 
       // e2e.2 — a plain folder. Back to an empty canvas (the launcher).
       for (const id of chatIds.splice(0)) await clickPanelClose(wc, id)
@@ -6177,7 +6205,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       jump: 'pill.jump.1 the rest state names the waiting panel, and Jump centres it on screen',
       send: 'pill.send.1 with no orchestrator the first send makes a supervisor chat holding the text unsent; the next send reaches that chat through agent:send',
       dismiss: 'pill.dismiss.1 a click-opened pill closes on a real Escape (taken before the terminal, which receives no ESC and keeps the keyboard) and on a real press outside it',
-      dismiss2: 'pill.dismiss.2 the expanded pill stays up through a real press on a panel and a real drag on bare canvas (the selection its verbs act on), leaves an Escape to an open menu and to an editable outside it, and still closes on the next Escape'
+      dismiss2: 'pill.dismiss.2 the expanded pill stays up through a real Shift-press on a panel and a real drag on bare canvas (the selection its verbs act on), leaves an Escape to an open menu and to an editable outside it, and still closes on the next Escape',
+      esc: 'pill.esc.1 a plain real click in a terminal collapses the expanded pill, and the next real Escape reaches that terminal\'s PTY as \\x1b'
     }
     const done = new Set()
     const record = (key, pass, detail) => { done.add(key); ok(PILL_IDS[key], pass, detail) }
@@ -6309,7 +6338,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await press('[data-pill-rest]'); await settle()
       const eOpen = (await pillState()).expanded
       const onPanel = await wc.executeJavaScript(`(() => { const r = document.querySelector(${q(screenSel)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
-      wc.sendInputEvent({ type: 'mouseDown', ...onPanel, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...onPanel, button: 'left', clickCount: 1 })
+      // A SHIFT press (the boundary critic): only a modified press — the
+      // gesture that adds to a selection — keeps the pill up; a plain one is
+      // pill.esc.1's.
+      wc.sendInputEvent({ type: 'mouseDown', ...onPanel, button: 'left', clickCount: 1, modifiers: ['shift'] }); wc.sendInputEvent({ type: 'mouseUp', ...onPanel, button: 'left', clickCount: 1, modifiers: ['shift'] })
       await settle()
       const ePanel = (await pillState()).expanded
       const bare2 = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect()
@@ -6346,6 +6378,23 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           eMenu.menuOpen === true && eMenu.menuClosed === true && eMenu.expanded === true && eLast === false,
         JSON.stringify({ eOpen, ePanel, bare2, eDrag, eInput, eMenu, eLast }))
       if (eLast !== false && (await pillState()).expanded) { await press('[data-pill-rest]'); await settle() }
+
+      // M403 (the boundary critic) — pill.esc.1. escapeBelongsElsewhere leaves
+      // an xterm target to the pill, and dismiss.2's first draft kept the pill
+      // up through ANY press on a panel: click into a terminal, press Esc, and
+      // the pill's capture-phase listener ate it — the agent never saw \x1b.
+      // A plain press now collapses the pill; the Escape is the PTY's.
+      await press('[data-pill-rest]'); await settle()
+      const fOpen = (await pillState()).expanded
+      const inTerm = await wc.executeJavaScript(`(() => { const r = document.querySelector(${q(screenSel)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      wc.sendInputEvent({ type: 'mouseDown', ...inTerm, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...inTerm, button: 'left', clickCount: 1 })
+      await settle()
+      const fClicked = await pillState()
+      const writesAtEsc2 = writes.length
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      const fReached = await waitUntil(() => writes.slice(writesAtEsc2).join('').includes('\u001b'), 3000)
+      record('esc', fOpen === true && fClicked.expanded === false && fClicked.activePanel === termId && fReached === true,
+        JSON.stringify({ fOpen, fClicked, fReached, tail: JSON.stringify(writes.slice(writesAtEsc2).join('').slice(-20)) }))
 
       // pill.jump.1 — a real bell puts the shell in wants-you; the camera is
       // panned well away; Jump brings the panel to the centre of the host.

@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { statSync, readFileSync, realpathSync, watch as fsWatch, type FSWatcher } from 'node:fs'
+import { homedir } from 'node:os'
 import { app } from 'electron'
 import { expandTilde, resolveCwd } from '../pty-manager'
 import { allPresets, mintPromptId, presetFromCapture, presetRows, resolveAvailability, templateOf, unreviewedPresetReason } from '../presets'
@@ -16,6 +17,7 @@ import { parseShelf } from '../../shared/skills'
 import { allTemplates, isBuiltInTemplate } from '../../shared/templates'
 import { listAssignedWorkItems as listGithubWorkItems } from '../github-client'
 import { fsRealpath } from '../places'
+import { teammatePlaceRefusal } from '../home-dir'
 import { repoRootForBrief, notVisibleFor } from '../skill-assign'
 import { IPC_EVENTS } from '../../shared/ipc-contract'
 import type { PaletteHandlers } from '../ipc'
@@ -260,6 +262,11 @@ export function createPaletteWiring(
       const warnings: string[] = []
       const parsed = parseTeammates([teammate], warnings)[0]
       if (parsed === undefined) throw new Error(`the teammate could not be kept — ${warnings.join('; ')}`)
+      // M403 (the boundary critic). main, not the form, refuses home and `/`
+      // as a NEW place, on the realpath (a link to home is home). A place the
+      // stored record already holds is kept — see teammatePlaceRefusal.
+      const whole = teammatePlaceRefusal(parsed, layoutStore.teammates().find((t) => t.id === parsed.id), homedir())
+      if (whole !== null) throw new Error(`the teammate could not be kept — ${whole}`)
       layoutStore.saveTeammate(parsed)
       // M131 fix round 2. `cwd` arrives only from the assign door; its
       // REAL (symlink-resolved) verdict on every project-scoped key just

@@ -331,9 +331,11 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   //    IME composition, and to an editable outside the pill and xterm (a
   //    rename input, Monaco): each has its own Escape, and a capture-phase
   //    stopPropagation here ate it. Only then is the pill the topmost layer.
-  //  - A press on a PANEL, or one that becomes a drag on bare canvas (a
-  //    marquee), is the selection the expanded pill's own verbs (Tidy, Line
-  //    up, Space, Group) act on, so it keeps the pill up. Bare canvas is
+  //  - A MODIFIED press on a PANEL (Shift/Cmd), or one that becomes a drag
+  //    on bare canvas (a marquee), is the selection the expanded pill's own
+  //    verbs (Tidy, Line up, Space, Group) act on, so it keeps the pill up.
+  //    A plain press on a panel collapses it at once (the boundary critic:
+  //    a terminal's Escape was eaten). Bare canvas is
   //    judged on the RELEASE: a press that did not move is a click, and a
   //    click outside still dismisses (pill.dismiss.1).
   useEffect(() => {
@@ -353,7 +355,15 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     const onPointer = (event: PointerEvent): void => {
       down = null
       if (!outside(event.target)) return
-      if (event.target instanceof Element && event.target.closest('.panel, [data-panel-id]') !== null) return
+      if (event.target instanceof Element && event.target.closest('.panel, [data-panel-id]') !== null) {
+        // M403 (the boundary critic). Only a MODIFIED press (Shift or Cmd,
+        // the gestures that add to a selection) keeps the pill up. A plain
+        // press on a panel is the person going to work in it, and a pill
+        // left open there took that terminal's next Escape in the capture
+        // phase — the agent never saw it (pill.esc.1).
+        if (!event.shiftKey && !event.metaKey) collapse(false)
+        return
+      }
       down = { x: event.clientX, y: event.clientY }
     }
     const onRelease = (event: PointerEvent): void => {

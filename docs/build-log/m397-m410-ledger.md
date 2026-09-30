@@ -944,6 +944,69 @@ cleared before door.1 and after refuse.1), and one run with `workflow.wire.1`, `
 recorded, not called a flake by assumption. `npm run affected` was NOT run as a whole: the machine sat at load 70
 with three builders, and the lock was contended; the suites above are the ones the change reaches.
 
+**Boundary critic follow-up (on `5a74d5d7` and `792135a6`).** Main checkout, `m397-daily-loop`.
+
+1. **SECURITY: a symlink to home got past the home refusal and granted home.** *Reproduced* in plain node:
+   `isHomeDir(<link to a temp home>, <that home>)` is `false`, so main's `git:status` said `home: false` for
+   `/tmp/h → $HOME`. `firstWorkRepoAnswer` returned the canonical home, and the mint granted it. main did not stop
+   it either: `saveTeammate` took any absolute place. *Fix:* `home-dir.ts` gains `wholeMachinePlace` (home or `/`,
+   judged on `realpathSync.native` of the place, and on the typed spelling too), `statusPlaceFacts` (the `git:status`
+   handler's `real` + `home`, now judged on the realpath and moved out of `ipc.ts` so a plain-node check can pass it
+   a fake home), and `teammatePlaceRefusal`. **main is now the authority:** `saveTeammate` throws (its existing
+   refusal shape) when a save ADDS a place that is home or `/`. *Decision on existing records:* the parser is
+   unchanged, so a saved layout whose teammate holds home still loads. A re-save keeps a place the STORED record
+   already holds, so renaming such a teammate never throws. Only a new place is judged. Removing the old grant is
+   the person's, in the Teammates pane. Nothing persisted is rewritten. The Teammates pane's Add place now says a
+   refusal as a toast ("Place not added"), where it used to be an unhandled rejection that looked like nothing
+   happening. *Check:* `verify:onboarding onboarding.home.1` makes real links on disk into a temp dir passed as
+   home. The link to home is refused as home through `statusPlaceFacts` → `firstWorkRepoAnswer`, and by
+   `teammatePlaceRefusal`. `/` and a link to `/` are refused. A folder under home passes. A place the old record
+   holds is kept.
+2. **The expanded pill swallowed a terminal's Escape.** *Cause:* M403's `pill.dismiss.2` kept the pill up through
+   ANY press on a panel, and `escapeBelongsElsewhere` leaves an `.xterm` target to the pill. So the sequence click
+   into a terminal, then Esc, collapsed the pill in the capture phase, and the agent never saw `\x1b`. *Fix:* only a
+   MODIFIED press on a panel (Shift or Cmd, the gestures that add to a selection) keeps the pill up. A plain press
+   collapses it at once, without restoring focus. The marquee rule on bare canvas is unchanged. *Checks:*
+   `verify:panels:product pill.esc.1`: the pill is open, a real plain click lands in the terminal, the pill is
+   collapsed, and the next real Escape reaches the PTY as `\x1b`. `pill.dismiss.2`'s panel press is now a real
+   Shift-press. The lb entry for CommandPill is amended.
+3. **The fit row used the previous folder's mode.** The mode joined the start context whenever any read had
+   answered, so for one read a new folder was judged by the old folder's mode. *Fix:* `StartWorkSheet` computes the
+   folder first (`startWorkRoot` reads only root, repos and wanted) and passes `permissionMode` only when
+   `modeRead.cwd === modeCwd`. *Check:* none added. The race lasts one toolbox read inside a React render, and
+   `start.mode.1` pins the settled state.
+4. **The no-mode line was overconfident.** *Fix:* `permissionModeLine(null)` now reads "…asks before it runs a
+   command or edits a file, unless a managed policy says otherwise — your settings set no permission mode". The
+   projector records a `defaultMode` key that is not a known word as `defaultModeOther`: `"default"` is kept as its
+   own value, and anything else (a future word, a number) is `unrecognised`. It never records the raw value.
+   `effectivePermissionMode` lets either one win its place in the read order. An unrecognised mode in the project
+   file therefore stops the user file's `auto` from showing through, named as the mode that applies. The line says
+   "default mode, set in …" for an explicit `default`, and nothing for an unrecognised mode. `fitPermissionMode`
+   maps a default to null (asks), and maps an unrecognised mode to not-read. *Limit, recorded:* with a mode it
+   cannot read, the fit row falls back to its pre-M403 wording ("asks before a command runs"). *Check:*
+   `verify:toolbox toolbox.mode.3`, and the wording of `toolbox.mode.1` was amended.
+5. *Minor, landed:* `first.strip.1` has a small-panel arm. The same conversation is dragged to the panel floor by
+   its real `.panel__resize--se`, the strip is still there, every composer button wins `elementFromPoint`, and
+   Got it is judged at that size. The CSS makes that true: while the strip is up the composer is `z-index: 3`
+   (already positioned and opaque), so a guide that wraps taller than a short body cannot cover Send or Answer.
+6. *Minor, decided, not changed:* an armed review accept (`role=alertdialog`) keeps the expanded pill's Esc until
+   it is cleared. It is a layer and the topmost one, so the first Esc disarms it. That is the rule the pill follows
+   for every other open layer, and it is what a person expects. The pill's next Esc closes the pill.
+
+**Suites (follow-up).** Plain: `onboarding` 23/23, `toolbox` 110/110, `subagent` 32/32, `teammates` 26/26,
+`orchestration` 145/145, `verbs` 30/30, `electron` 4/4, `toast` 10/10, `team` 30/30, `meta` 51/51, `styles` 94/94,
+`palette` 172/172, `layout` 286/286, `first-run` 29/29, `agent-session` 188/188, `ipc` 1/1. Electron, alone under
+the lock: `verify:panels:product` **145/146**, 194.5 s of 230 s (85%). `first.strip.1` (with the small arm),
+`pill.dismiss.1/.2` and `pill.esc.1` passed. The one red is `names.agree.1` (M404's; it reports the dock tooltips
+"Hide Board" etc.), which touches nothing here. It is not mine and is left to the M404 owner. The first draft of the
+small arm dragged to the 160px HEIGHT floor as well. There Send is clipped below the body with or without the strip,
+so the arm is width only; that chat-floor fact is recorded here and not fixed. Three earlier product runs died at
+the watchdog mid-suite, before the pill block, while the machine sat at load 56 with ~4k free pages. They are
+unattributed and were re-run on a quiet machine.
+
+**Goldens expected to move:** any `start-work` scene that shows the no-mode line (now longer, with the managed-policy
+hedge). The composer's z-index changes no pixels unless the strip overlaps it.
+
 ### M404 — one name per place, no duplicate doors, People only when there are people (C1, C2, C3)
 
 Worktree `tc-m404-names`, branch `m404-names` off `843e02f3`. App driven on slot 2 (CDP 9220).

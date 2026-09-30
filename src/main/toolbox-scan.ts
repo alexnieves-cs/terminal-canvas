@@ -409,6 +409,9 @@ export function parsePermissionCounts(
   // M403 (B5). A CLOSED projection: a known mode or nothing. `"default"` and
   // any string this app has no words for are absent, never passed through.
   const mode = PERMISSION_MODES.find((m) => m === p.defaultMode)
+  // A key that is present but not a known word is RECORDED as such (never its
+  // raw value): the file sets a mode, so a lower file's must not show through.
+  const other = mode !== undefined || p.defaultMode === undefined ? undefined : p.defaultMode === 'default' ? 'default' as const : 'unrecognised' as const
   return {
     path,
     scope,
@@ -416,7 +419,8 @@ export function parsePermissionCounts(
     deny: n(p.deny),
     ask: n(p.ask),
     additionalDirectories: n(p.additionalDirectories),
-    ...(mode === undefined ? {} : { defaultMode: mode })
+    ...(mode === undefined ? {} : { defaultMode: mode }),
+    ...(other === undefined ? {} : { defaultModeOther: other })
   }
 }
 

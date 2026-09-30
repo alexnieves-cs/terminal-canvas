@@ -8189,7 +8189,11 @@ export function Canvas({
         if (folder === null) return
         const t = teammatesRef.current.find((x) => x.id === id)
         if (!t || t.places.includes(folder)) return
-        void window.canvas.teammate.save({ ...t, places: [...t.places, folder] }).then(reloadTeammates)
+        // M403. main refuses home and `/` as a new place; said, never an
+        // unhandled rejection the pane shows as nothing happening.
+        void window.canvas.teammate.save({ ...t, places: [...t.places, folder] }).then(reloadTeammates, (e: unknown) => {
+          notifyRefused('Place not added', String(e instanceof Error ? e.message : e).replace(/^.*?the teammate could not be kept — /, ''))
+        })
       })
     },
     onChat: (id: string) => {

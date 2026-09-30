@@ -9648,6 +9648,10 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    Quiet: the panel's own surface, one hairline, the small type step. */
 .chat__body:has(> .first-task-hint--strip) { position: relative; --guide-h: 0px; }
 .chat__body:has(> .first-task-hint--strip) > .chat__transcript { padding-top: calc(var(--sp-5) + var(--guide-h)); }
+/* M403 (the boundary critic). In a panel near its floor the strip wraps taller
+   than the body leaves room for, and it is z-index 2: the composer (already
+   positioned, opaque) sits above it, so Send/Answer are never under the guide. */
+.chat__body:has(> .first-task-hint--strip) > .chat__composer { z-index: 3; }
 .first-task-hint--strip {
   position: absolute; top: 0; left: 0; right: 0; bottom: auto; translate: none; z-index: 2;
   max-width: none; margin: 0; padding: var(--sp-2) var(--sp-5); gap: var(--sp-2) var(--sp-4);

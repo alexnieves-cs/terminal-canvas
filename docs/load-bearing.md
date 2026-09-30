@@ -4180,7 +4180,10 @@ knows), and a relative path (`api/src`), which is REFUSED rather than resolved �
 app could pick (cwd, home, the place) is a guess the user did not make. The gate is asked at
 `agent:create` and `spawn:sheet` on the EXPANDED path BEFORE `resolveCwd`, because `resolveCwd`
 falls back to home for a folder that does not exist and would turn a refused folder into an
-allowed home with no symptom. No places is nothing, never everything; a place is chosen in the
+allowed home with no symptom. Home and `/` are never a NEW place: main's `saveTeammate` refuses
+them on the REALPATH (`home-dir.ts`'s `teammatePlaceRefusal`) — a link to home walked past the
+form's typed-path test and granted all of it (the M403 boundary critic, `onboarding.home.1`); a
+place an existing record already holds still loads and re-saves. No places is nothing, never everything; a place is chosen in the
 OS folder dialog, never typed, so the record only ever holds an absolute real folder. The honest
 limit is written on the spec and the pane: Places govern what THIS APP does on the teammate's
 behalf (the cwd it spawns into, the memory it reads); the CLI's own tool calls are the CLI's
@@ -4649,9 +4652,11 @@ never saw. Four mechanisms stop that, and each covers a different path:
   Escape is left alone during an IME composition, while any other dialog or open menu is up
   (`:not([hidden])`, since force-mounted menus stay in the DOM), and when it is typed into an
   editable outside the pill and xterm (a rename input, Monaco) — `escapeBelongsElsewhere`. A
-  press on a PANEL keeps the pill up, and bare canvas collapses it only on a RELEASE that did not
-  travel (a marquee is a drag): the expanded pill's Tidy/Line up/Space/Group act on the selection
-  those gestures make (`pill.dismiss.2`).
+  MODIFIED press on a PANEL (Shift/Cmd) keeps the pill up, and bare canvas collapses it only on a
+  RELEASE that did not travel (a marquee is a drag): the expanded pill's Tidy/Line up/Space/Group
+  act on the selection those gestures make (`pill.dismiss.2`). A PLAIN press on a panel collapses
+  it at once: kept open there, the capture-phase Escape ate the terminal's next Esc and the agent
+  never saw `\x1b` (the boundary critic, `pill.esc.1`).
 - `pillFocused()` sits in `shouldIgnoreKeys`.
 
 The last one is the one that fails silently. `Cmd+V`/`Cmd+Z` are menu accelerators, so with the
@@ -5392,7 +5397,10 @@ The app starts claude with `--permission-prompt-tool stdio` and NO `--permission
 flag set is unchanged), so `permissions.defaultMode` in the person's own files decides — and the
 start sheet promised "asks before a command runs" under `auto`. The mode is read through the
 EXISTING `toolbox:read` (no new door), projected like every toolbox field: a known
-`PERMISSION_MODES` word or absent, never the raw string. Precedence is read order, last wins
+`PERMISSION_MODES` word or absent, never the raw string — and a key that is present but not one of
+those is recorded as `defaultModeOther` (`default`, or `unrecognised`), because dropping it let a
+LOWER file's mode show through as the one that applies (the boundary critic, `toolbox.mode.3`).
+An unrecognised mode says nothing; "none set" is hedged, since managed settings are not read. Precedence is read order, last wins
 (user → project → local), and a lane leaves the local file out because it is gitignored and a
 worktree never has it. The sheet reads `~` before a repository is chosen, and `~` is the TOOLBOX
 home, so under `TC_TOOLBOX_HOME` a golden shows the fence's mode, never the developer's (this

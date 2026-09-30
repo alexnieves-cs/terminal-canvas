@@ -1195,13 +1195,29 @@ const write = (rel, text) => {
     const userOnly = T.effectivePermissionMode([order[0], counts('/r/.claude/settings.json')])
     // Home as the folder: the same file read as the user AND the project arm is the user's.
     const homeTwice = T.effectivePermissionMode([order[0], { ...order[0], scope: 'project' }])
-    ok('toolbox.mode.1 defaultMode is projected (a known mode or absent — "default", an unknown word and a number are absent) and the effective mode is the last file that sets one, local over project over user, with the local file left out for a lane; the line says what the agent does and which file says so, and with nothing set it says asking is the default',
+    ok('toolbox.mode.1 defaultMode is projected (a known mode or absent — "default", an unknown word and a number are never passed through as defaultMode) and the effective mode is the last file that sets one, local over project over user, with the local file left out for a lane; the line says what the agent does and which file says so, and with nothing set it says asking is the default',
       known.defaultMode === 'acceptEdits' && !('defaultMode' in dflt) && !('defaultMode' in future) && !('defaultMode' in num) && !('defaultMode' in none) &&
         all.mode === 'bypassPermissions' && lane.mode === 'plan' && userOnly.mode === 'auto' && T.effectivePermissionMode([]) === null && homeTwice.scope === 'user' &&
         /decides for itself when to ask — auto mode, set in ~\/\.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', userOnly)) &&
         /plan mode, set in this repository's \.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', { ...lane, scope: 'project' })) &&
         /asks before .* your settings set no permission mode/.test(T.permissionModeLine('Claude Code', null)),
       JSON.stringify({ known, dflt, future, all, lane, userOnly, line: T.permissionModeLine('Claude Code', userOnly) }))
+    // M403 (the boundary critic) — toolbox.mode.3. An explicit "default" is
+    // its own value (asking, said as default mode), and an unrecognised word
+    // in a HIGHER file stops the order: the first draft dropped it as absent,
+    // so the user file's `auto` showed through, named as the mode that
+    // applies. Unrecognised says nothing and claims nothing to the fit row.
+    // "None set" is hedged: managed settings are not read.
+    const other = (path, o) => ({ ...counts(path), defaultModeOther: o })
+    const overUser = T.effectivePermissionMode([order[0], other('/r/.claude/settings.json', 'unrecognised')])
+    const explicit = T.effectivePermissionMode([order[0], other('/r/.claude/settings.json', 'default')])
+    ok('toolbox.mode.3 "default" is kept as its own value and an unrecognised mode in a higher file wins its place (no fall-through to the user file\'s auto): the line says default mode for one and nothing for the other, the fit reads null and not-read; the none-set line names a managed policy',
+      dflt.defaultModeOther === 'default' && future.defaultModeOther === 'unrecognised' && num.defaultModeOther === 'unrecognised' && !('defaultModeOther' in none) && !('defaultModeOther' in known) &&
+        overUser.mode === 'unrecognised' && T.permissionModeLine('Claude Code', overUser) === null && T.fitPermissionMode(overUser) === undefined &&
+        explicit.mode === 'default' && /asks before .* — default mode, set in this repository's \.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', { ...explicit, scope: 'project' })) && T.fitPermissionMode(explicit) === null &&
+        T.fitPermissionMode(userOnly) === 'auto' && T.fitPermissionMode(null) === null &&
+        /unless a managed policy says otherwise/.test(T.permissionModeLine('Claude Code', null)),
+      JSON.stringify({ dflt, future, num, overUser, explicit, none: T.permissionModeLine('Claude Code', null) }))
     const fence = mkdtempSync(join(tmpdir(), 'tc toolbox mode fence '))
     const empty = T.readToolbox({ cwd: T.toolboxCwd('~', fence), home: fence })
     mkdirSync(join(fence, '.claude'), { recursive: true })

@@ -13,7 +13,7 @@ import type { SetupReadResult } from '@shared/ipc-contract'
 import { startAgentName, startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, startWorkWho, type StartWorkRepo } from './start-work'
 import { DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
 import { fitSummary } from '@shared/backend-fit'
-import { effectivePermissionMode, permissionModeLine, type EffectiveMode, type ToolInventoryResult } from '@shared/toolbox'
+import { effectivePermissionMode, fitPermissionMode, permissionModeLine, type EffectiveMode, type ToolInventoryResult } from '@shared/toolbox'
 import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@shared/recipe-portability'
 import { installedFirstBackend, optionsOpenAtRest, preselectBackend, preselectRoot, preselectTeammate, startDraftStore } from './start-work-first'
 
@@ -294,21 +294,32 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   // by one read, so the line is shown only once it answers for THIS folder.
   const [modeRead, setModeRead] = useState<{ cwd: string; found: EffectiveMode | null } | null>(null)
   const modeCache = useRef(new Map<string, EffectiveMode | null>())
-  const ctx = useMemo(() => ({
-    ...(modeRead === null ? {} : { permissionMode: modeRead.found?.mode ?? null }),
+  const ctxBase = useMemo(() => ({
     teammates: model.teammates, repos, wanted,
     ...(model.agentAvailable === undefined ? {} : { agentAvailable: model.agentAvailable }),
     ...(model.itemState === undefined ? {} : { itemState: model.itemState }),
     ...(model.available === undefined ? {} : { available: model.available }),
     ...(model.budgetUsd === undefined ? {} : { budgetUsd: model.budgetUsd }),
     ...(model.windowPercent === undefined ? {} : { windowPercent: model.windowPercent })
-  }), [modeRead, model.teammates, repos, wanted, model.agentAvailable, model.itemState, model.available, model.budgetUsd, model.windowPercent])
+  }), [model.teammates, repos, wanted, model.agentAvailable, model.itemState, model.available, model.budgetUsd, model.windowPercent])
   // M319. Whether each backend can do what THIS task asks — its rows are the
   // capabilities the task touches. A row is judged as if it were chosen, so
   // the rows do not depend on the choice: computed first, the preselection
   // reads them, and a required capability unmet is a fourth refusal below.
   const taskText = [brief, criteriaText, checksText, deliverText, recipe?.brief ?? '', recipe?.criteria.join('\n') ?? ''].join('\n')
   const baseChoice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }) }
+  // Before a repository is chosen the user file alone decides; `~` is the
+  // toolbox home, which the harness fences (TC_TOOLBOX_HOME) — never the
+  // developer's real settings in a golden. The folder reads only root, repos
+  // and wanted, so it is known before the mode is.
+  const modeCwd = startWorkRoot(baseChoice, ctxBase) ?? '~'
+  // The mode joins the context only once the read answers for THIS folder
+  // (the boundary critic): the fit row judged a new folder by the previous
+  // folder's mode for one read.
+  const ctx = useMemo(() => {
+    const mode = modeRead !== null && modeRead.cwd === modeCwd ? fitPermissionMode(modeRead.found) : undefined
+    return mode === undefined ? ctxBase : { ...ctxBase, permissionMode: mode }
+  }, [ctxBase, modeRead, modeCwd])
   const backendRows = startWorkBackendRows(baseChoice, ctx, taskText)
   // M403. The installed engine (the launcher's answer) before the default.
   const backend = backendPick ?? preselectBackend(backendRows, [model.backend, last?.backend, installedFirstBackend(model.available), DEFAULT_BACKEND])
@@ -327,10 +338,6 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const mate = who.kind === 'picked' || who.kind === 'reuse' ? who.mate : undefined
   const chosenRoot = startWorkRoot(choice, ctx)
   rootRef.current = chosenRoot
-  // Before a repository is chosen the user file alone decides; `~` is the
-  // toolbox home, which the harness fences (TC_TOOLBOX_HOME) — never the
-  // developer's real settings in a golden.
-  const modeCwd = chosenRoot ?? '~'
   useEffect(() => {
     if (model.toolboxOf === undefined) return
     const cached = modeCache.current.get(modeCwd)

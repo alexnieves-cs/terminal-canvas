@@ -1,7 +1,6 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
-import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isHomeDir } from './home-dir'
+import { statusPlaceFacts } from './home-dir'
 import type { CheckOutputRead } from '../shared/check-output'
 import type { LastExit } from '../shared/persistence'
 import { INERT_JOBS, type JobHandlers } from './job-recovery'
@@ -978,9 +977,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.GIT_STATUS, async (_event, root: string) => {
     const status = await reviewEngine.status(root)
     if (status.kind !== 'status' || typeof root !== 'string' || !root.startsWith('/')) return status
-    let real: string | undefined
-    try { real = realpathSync(root) } catch { real = undefined }
-    return { ...status, ...(real === undefined ? {} : { real }), ...(isHomeDir(root, homedir()) ? { home: true as const } : {}) }
+    // Home is judged on the REALPATH (the boundary critic): a link to home
+    // answered `home: false` on its typed spelling, and the mint then granted
+    // the canonical home it resolved to.
+    return { ...status, ...statusPlaceFacts(root, homedir()) }
   })
   // Backlog #86. null for not-a-repo AND unreadable: the caller's fallback is the same short path either way.
   ipcMain.handle(IPC.GIT_ROOT, async (_event, dir: string) => {

@@ -235,6 +235,44 @@ intent('onboarding.intent.6 a symlink to a repository answers with its realpath 
   detail: { link, into, home, root, plain, tmp, old } }
 })
 
+// M403 (the boundary critic) — onboarding.home.1. A symlink TO home walked
+// past the home refusal: main judged the TYPED path (isHomeDir never
+// realpaths the cwd), the status said home: false, and the mint granted the
+// canonical home it resolved to. Real links on disk, into a temp dir passed
+// as home — the real home is never read. Both doors: git:status's facts
+// (through firstWorkRepoAnswer, as the form asks) and main's teammate save.
+try {
+  const homeOut = join(ROOT, 'out/verify/onboarding-home-dir.cjs')
+  buildSync({ entryPoints: [join(ROOT, 'src/main/home-dir.ts')], outfile: homeOut, bundle: true, platform: 'node', format: 'cjs' })
+  const H = require(homeOut)
+  const fs = require('node:fs')
+  const os = require('node:os')
+  const base = fs.realpathSync(fs.mkdtempSync(join(os.tmpdir(), 'tc-onb-home-')))
+  const home = join(base, 'home')
+  fs.mkdirSync(join(home, 'proj'), { recursive: true })
+  const link = join(base, 'h')
+  const slash = join(base, 'slash')
+  fs.symlinkSync(home, link)
+  fs.symlinkSync('/', slash)
+  // The status the engine gives for a link: the root it was handed, echoed.
+  const status = (root) => ({ kind: 'status', root, repository: root, branch: 'main', upstream: null, ...H.statusPlaceFacts(root, home) })
+  const viaLink = model.firstWorkRepoAnswer(status(link), link, home)
+  const viaProj = model.firstWorkRepoAnswer(status(join(home, 'proj')), join(home, 'proj'), join(home, 'proj'))
+  const mate = (places) => ({ places })
+  const saveLink = H.teammatePlaceRefusal(mate([link]), undefined, home)
+  const saveSlash = H.teammatePlaceRefusal(mate([slash]), undefined, home)
+  const saveRoot = H.teammatePlaceRefusal(mate(['/']), undefined, home)
+  const saveProj = H.teammatePlaceRefusal(mate([join(link, 'proj')]), undefined, home)
+  // An old layout's home place is kept on a re-save (a rename), never thrown.
+  const saveHeld = H.teammatePlaceRefusal(mate([link, join(home, 'proj')]), mate([link]), home)
+  fs.rmSync(base, { recursive: true, force: true })
+  ok('onboarding.home.1 a symlink to home is refused as home by the git:status facts and by main\'s teammate save; / and a link to / are refused; a folder under home passes; a place an old record already holds is kept',
+    viaLink.kind === 'refused' && /home folder/.test(viaLink.reason) && viaProj.kind === 'repository' &&
+    /home folder/.test(saveLink ?? '') && /filesystem root/.test(saveSlash ?? '') && /filesystem root/.test(saveRoot ?? '') &&
+    saveProj === null && saveHeld === null,
+    JSON.stringify({ viaLink, viaProj, saveLink, saveSlash, saveRoot, saveProj, saveHeld }))
+} catch (error) { ok('onboarding.home.1 a symlink to home is refused by both doors', false, error.message) }
+
 // Static markup proves available/disabled affordances, never that a click sends
 // a turn. The real renderer owns start/send verification separately.
 try {

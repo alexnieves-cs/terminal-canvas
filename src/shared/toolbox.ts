@@ -325,6 +325,14 @@ export interface PermissionCounts {
    * the renderer only ever says a mode it has words for.
    */
   defaultMode?: PermissionMode
+  /**
+   * M403 (the boundary critic). A `defaultMode` KEY that is not one of those
+   * words: `"default"` (Claude's own name for asking, kept as its own value)
+   * or `unrecognised` (a future word, a typo, a number). Without it an
+   * unknown mode in the project file was absent and the user file's mode
+   * showed through, named as the one that applies.
+   */
+  defaultModeOther?: 'default' | 'unrecognised'
 }
 
 /**
@@ -337,7 +345,7 @@ export interface PermissionCounts {
  * task's worktree does not have it and the lane's agent never reads it.
  * Managed (enterprise) settings are not read; the words say "your settings".
  */
-export interface EffectiveMode { mode: PermissionMode; path: string; scope: ToolScope }
+export interface EffectiveMode { mode: PermissionMode | 'default' | 'unrecognised'; path: string; scope: ToolScope }
 export function effectivePermissionMode(permissions: readonly PermissionCounts[], opts: { local?: boolean } = {}): EffectiveMode | null {
   let found: EffectiveMode | null = null
   const seen = new Set<string>()
@@ -347,9 +355,22 @@ export function effectivePermissionMode(permissions: readonly PermissionCounts[]
     // user and its project arm: one file, and it is the user's.
     if (seen.has(p.path)) continue
     seen.add(p.path)
-    if (p.defaultMode !== undefined) found = { mode: p.defaultMode, path: p.path, scope: p.scope }
+    // An unrecognised mode WINS its place in the order like any other: the
+    // file sets something, so a lower file's mode is not the one that applies.
+    const mode = p.defaultMode ?? p.defaultModeOther
+    if (mode !== undefined) found = { mode, path: p.path, scope: p.scope }
   }
   return found
+}
+
+/**
+ * What the fit row is judged by (`StartWorkContext.permissionMode`): an
+ * explicit `"default"` is asking (null, as nothing set), and an unrecognised
+ * mode is NOT READ (undefined) — the app has no words for it and claims none.
+ */
+export function fitPermissionMode(found: EffectiveMode | null): PermissionMode | null | undefined {
+  if (found === null || found.mode === 'default') return null
+  return found.mode === 'unrecognised' ? undefined : found.mode
 }
 
 /**
@@ -368,10 +389,15 @@ export const PERMISSION_MODE_WORDS: Readonly<Record<PermissionMode, { asks: bool
 }
 
 /** M403 (B5). The one plain line a start shows: what the agent will do, and which setting says so. */
-export function permissionModeLine(agent: string, found: EffectiveMode | null): string {
-  if (found === null) return `${agent} asks before it runs a command or edits a file — your settings set no permission mode`
+export function permissionModeLine(agent: string, found: EffectiveMode | null): string | null {
+  // Managed (enterprise) settings are not read, so "none set" is hedged
+  // rather than promised (the boundary critic).
+  if (found === null) return `${agent} asks before it runs a command or edits a file, unless a managed policy says otherwise — your settings set no permission mode`
+  // A mode this app has no words for is said as nothing, never as a guess.
+  if (found.mode === 'unrecognised') return null
   const file = found.path.split('/').slice(-2).join('/')
   const where = found.scope === 'user' ? `~/${file}` : `this repository's ${file}`
+  if (found.mode === 'default') return `${agent} asks before it runs a command or edits a file — default mode, set in ${where}`
   return `${agent} ${PERMISSION_MODE_WORDS[found.mode].does} — ${found.mode} mode, set in ${where}`
 }
 
