@@ -77,7 +77,7 @@ export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord
           <div className="shape-inspector__row" role="group" aria-label="Work">
             <span className="shape-inspector__label">Work</span>
             <div className="shape-inspector__acts">
-              <button type="button" className="shape-inspector__act" data-shape-chart="plan" title="Start work from this chart — its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>Start work from this chart…</button>
+              <button type="button" className="shape-inspector__act" data-shape-chart="plan" title="New task from this chart — its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>New task from this chart…</button>
             </div>
           </div>
         </>

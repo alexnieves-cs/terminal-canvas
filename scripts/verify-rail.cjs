@@ -2681,7 +2681,8 @@ const session = (id, over = {}) => ({
       asking && asking.go.kind === 'conversation' &&
       toReview && toReview.blocker === null && toReview.next === 'Review changes' && toReview.go.side === 'changes' &&
       blocked && blocked.blocker === 'waiting on your approval for Bash' && blocked.go.kind === 'conversation' &&
-      none && none.go === null && /Start work/.test(none.next),
+      // M400: the verb is "Start task" now ("task" is the noun) — changed on purpose.
+      none && none.go === null && /Start task/.test(none.next),
     JSON.stringify({ fromQueue, asking, toReview, blocked, none }))
 }
 

@@ -10,7 +10,7 @@ import { SWARM_LIST, SWARM_PRESETS, swarmPlan, type SwarmPresetId } from '@share
 import { applyRecipe, type Recipe } from '@shared/recipes'
 import { setupLine } from '@shared/repo-setup'
 import type { SetupReadResult } from '@shared/ipc-contract'
-import { startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, type StartWorkRepo } from './start-work'
+import { startWorkBackendFit, startWorkBackendRows, startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, startWorkWho, type StartWorkRepo } from './start-work'
 import { BACKENDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
 import { fitSummary } from '@shared/backend-fit'
 import { preflightTools, recipePreflight, recipeTexts, type Preflight } from '@shared/recipe-portability'
@@ -29,17 +29,24 @@ import { optionsOpenAtRest, preselectBackend, preselectRoot, preselectTeammate, 
  *
  * Three things here are load-bearing.
  *
- * **The repository list belongs to the CHOSEN teammate**, so it is read
- * after the agent field is answered and thrown away when it changes. A late
- * reply for an EARLIER teammate is dropped by a request counter — the stale
- * reply this repo's inspector rule already names, reached here because the
- * walk shells out to git and a second choice can easily overtake the first.
+ * **M400 (B1). What → where → who, the launcher's order, and WHERE is never
+ * gated on WHO.** The repository list is every placed teammate's
+ * repositories, read once at open, plus the recent folders and Choose…; the
+ * agent follows from the folder by the launcher's own rule
+ * (`startWorkWho` → `folderTeammatePlan`), so a fresh install with no
+ * teammate starts a task from "+ New task". Until M400 the list was the
+ * CHOSEN teammate's, read after the agent field — and an empty roster left
+ * the field disabled over "no teammate yet".
  *
- * **Nothing here widens a grant.** A teammate with no places is offered
- * disabled with `teammateRefusal`'s own sentence and `Open the Teammates
- * pane` is a NAMED ROUTE, never a checkbox that adds a place from inside a
- * start. The repositories offered are under the places already granted,
- * because the walk starts at them.
+ * **No EXISTING grant is widened here.** A teammate with no places is
+ * offered disabled with `teammateRefusal`'s own sentence, a picked teammate
+ * whose places do not contain the folder is a question (never a place added
+ * to it), and `Open the Teammates pane` stays a NAMED ROUTE. The one grant a
+ * start may make is the launcher's: a NEW teammate whose only place is
+ * exactly the chosen folder, stated on the Who line before Start, made after
+ * the repository answer and never on a refusal (Canvas's `teammateForFolder`).
+ * A proposal's directory (`tc task`) still only CHOOSES among the
+ * repositories the places already grant.
  *
  * **The triple is stated before anything is minted** — the foot's summary,
  * the root in the path rule's words with the full path on the title.
@@ -67,11 +74,18 @@ export interface StartWorkSheetModel {
   /** The item's own `owner/repo`, or null for a typed or Jira item — which names none. */
   wanted: string | null
   teammates: readonly PersistedTeammate[]
-  /** Pre-filled by the Teammates-pane drop, absent from the palette row. */
+  /** A PICKED teammate: the Teammates-pane drop's, a card's own. Absent: the folder decides who. */
   teammateId?: string
+  /** M400. The teammate a typed start PREFERS when its places contain the folder — the most recent task's. */
+  preferTeammateId?: string
   /** Main's answer: the repositories under this teammate's places. Three arms. */
   repositories(teammateId: string): Promise<BoardRepositoriesResult>
-  submit(choice: { title: string; teammateId: string; root: string; swarm?: SwarmPresetId; backend?: AgentBackend; recipeParams?: Record<string, string>; issue?: IssueChoice; brief?: string; criteria?: string[]; checks?: string[]; deliverables?: string[]; recipeId?: string }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
+  /** M400. The folders the person has worked in lately (the launcher's recents), offered beside the granted repositories. */
+  recents?: readonly string[]
+  /** M400. The system folder dialog, the launcher's Choose…; null is a cancel. Absent hides the button. */
+  chooseFolder?(): Promise<string | null>
+  /** `teammateId` absent: no teammate was picked, and the executor answers who for `root` (reusing `preferTeammateId` when it can). */
+  submit(choice: { title: string; teammateId?: string; preferTeammateId?: string; root: string; swarm?: SwarmPresetId; backend?: AgentBackend; recipeParams?: Record<string, string>; issue?: IssueChoice; brief?: string; criteria?: string[]; checks?: string[]; deliverables?: string[]; recipeId?: string }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
   /**
    * M310. The connected services' open issues, read when the sheet opens —
    * the flagship start is FROM an issue. Absent hides the field; an answer
@@ -135,9 +149,12 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const [last] = useState(() => startDraftStore.last())
   const [draftShown, setDraftShown] = useState(restored !== null)
   const [title, setTitle] = useState(restored?.title ?? model.title)
-  // M323. The teammate is PRESELECTED — the caller's, the last used, or the
-  // only one with places — and named on the summary line with a Change control.
-  const [teammateId, setTeammateId] = useState<string>(() => preselectTeammate(model.teammates, model.teammateId ?? restored?.teammateId, last))
+  // M400. The PICKED teammate, '' for Automatic — the folder decides, by the
+  // launcher's rule. Only a caller's own teammate (a drop, a card) arrives
+  // picked; the last used, a draft's and the only placed one are PREFERENCES
+  // (M323's preselection), reused when their places contain the folder.
+  const [teammateId, setTeammateId] = useState<string>(() => (model.teammateId !== undefined && model.teammates.some((t) => t.id === model.teammateId) ? model.teammateId : ''))
+  const [prefer] = useState<string>(() => preselectTeammate(model.teammates, model.preferTeammateId ?? restored?.teammateId, last))
   const [root, setRoot] = useState('')
   // M275. '' is the SOLO lane — the start M197 shipped — and it is the
   // default, because a person who opened this sheet to start one task must
@@ -197,16 +214,9 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   // An issue picked here names its repository exactly as a card's key does.
   const wanted = issue === undefined ? model.wanted : issue.source === 'github' ? repoOfKey(issue.key) : null
   const [repos, setRepos] = useState<readonly StartWorkRepo[] | undefined>(undefined)
-  const [noPlaces, setNoPlaces] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const firstRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
-  // The stale-reply guard: every read takes a ticket and only the newest one
-  // may write. Without it a slow walk over a large place lands after the user
-  // has already chosen another teammate, and the field then offers folders
-  // that teammate may not touch — which the Places gate would refuse, one
-  // question later, by name.
-  const ticket = useRef(0)
 
   useEffect(() => { firstRef.current?.focus() }, [])
   // M314. A recipe chosen before the sheet opened fills it once, on mount.
@@ -229,30 +239,47 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   }, [])
 
   // M323. The root a restored draft named is offered FIRST, then the last
-  // used — each only if this teammate's list still holds it, and only once.
+  // used — each only if the list still holds it, and only once.
+  // M400. The list is read ONCE, at open, for every placed teammate at once:
+  // it no longer depends on who is picked, so there is no later read for an
+  // earlier one to overtake (the request counter this replaced). A teammate
+  // whose walk refuses costs its own rows, never the field.
   const firstRoot = useRef(restored?.root)
   useEffect(() => {
-    setRepos(undefined); setNoPlaces(null); setRoot('')
-    if (teammateId === '') return
-    const mine = ++ticket.current
-    void model.repositories(teammateId).then((answer) => {
-      if (ticket.current !== mine) return
-      if (answer.kind === 'repos') {
-        setRepos(answer.repos)
-        // M313/M315/M323. A proposal's directory, then the draft's or the last
-        // used repository, then the only one: selected, and still changeable.
-        const remembered = firstRoot.current !== undefined ? { root: firstRoot.current } : last
-        firstRoot.current = undefined
-        const pick = preselectRoot(answer.repos, { ...(model.preferRoot === undefined ? {} : { preferRoot: model.preferRoot }), last: remembered })
-        if (pick !== '') setRoot((cur) => (cur === '' ? pick : cur))
-        return
+    let live = true
+    const placed = model.teammates.filter((t) => t.places.length > 0)
+    void Promise.all(placed.map((t) => model.repositories(t.id).catch(() => null))).then((answers) => {
+      if (!live) return
+      const granted: StartWorkRepo[] = []
+      for (const answer of answers) {
+        if (answer?.kind !== 'repos') continue
+        for (const r of answer.repos) if (!granted.some((g) => g.path === r.path)) granted.push(r)
       }
-      if (answer.kind === 'no-places') { setRepos([]); setNoPlaces(answer.reason); return }
-      setRepos([]); setRefusal(answer.reason)
+      const recent: StartWorkRepo[] = (model.recents ?? []).filter((d) => d.startsWith('/') && !granted.some((g) => g.path === d)).map((d) => ({ path: d, repo: null }))
+      const all = [...granted, ...recent]
+      setRepos((cur) => [...all, ...(cur ?? []).filter((c) => !all.some((a) => a.path === c.path))])
+      // M313/M315/M323. A proposal's directory, then the draft's or the last
+      // used repository, then the only GRANTED one: selected, and still
+      // changeable. A proposal chooses only among the granted (load-bearing:
+      // `tc task` never widens); the last used may be a recent folder.
+      const remembered = firstRoot.current !== undefined ? { root: firstRoot.current } : last
+      firstRoot.current = undefined
+      const pick = preselectRoot(granted, { ...(model.preferRoot === undefined ? {} : { preferRoot: model.preferRoot }), last: remembered })
+        || (remembered?.root !== undefined && all.some((r) => r.path === remembered.root) ? remembered.root : '')
+      if (pick !== '') setRoot((cur) => (cur === '' ? pick : cur))
     })
-    // `model` is rebuilt per open, not per render; the teammate is the subject.
+    return () => { live = false }
+    // `model` is rebuilt per open, not per render: read once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teammateId])
+  }, [])
+  // M400. Choose… — the launcher's folder dialog. The folder joins the list and is selected; nothing is granted until Start.
+  const chooseFolder = (): void => {
+    void model.chooseFolder?.().then((dir) => {
+      if (dir === null || dir === undefined || dir === '') return
+      setRepos((cur) => ((cur ?? []).some((r) => r.path === dir) ? (cur ?? []) : [...(cur ?? []), { path: dir, repo: null }]))
+      setRoot(dir); setRefusal(null)
+    })
+  }
 
   const ctx = useMemo(() => ({
     teammates: model.teammates, repos, wanted,
@@ -276,16 +303,20 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   // M275. The arrangement's own refusal is a THIRD kind: the triple can be
   // answered and the shape still not apply. It disables Start by itself, so a
   // swarm cannot half-land and then report why.
-  const swarmBlocked = startWorkSwarmRefusal(choice, ctx)
+  // M400. WHO, from the folder when nobody was picked — the launcher's answer.
+  const who = startWorkWho(choice, ctx, prefer === '' ? undefined : prefer)
+  const whoSeat = who.kind === 'mint' ? { name: who.name, places: who.places } : who.kind === 'reuse' ? { name: teammateWord(who.mate), places: who.mate.places } : undefined
+  const swarmBlocked = startWorkSwarmRefusal(choice, ctx, whoSeat)
   const fit = startWorkBackendFit(choice, ctx, taskText)
   const backendBlocked = fit.verdict === 'refused' ? (fit.refusal ?? fitSummary(fit)) : null
-  const mate = model.teammates.find((t) => t.id === teammateId)
+  const mate = who.kind === 'picked' || who.kind === 'reuse' ? who.mate : undefined
   const chosenRoot = startWorkRoot(choice, ctx)
   rootRef.current = chosenRoot
-  const summary = startWorkSummary(choice, mate, chosenRoot)
-  // M323. Who does it and on what is a QUESTION only when it has no answer —
-  // no teammate yet, or a backend this task refuses. Otherwise it is one line.
-  const whoForced = teammateId === '' || backendBlocked !== null
+  const summary = startWorkSummary(choice, who.kind === 'mint' ? who.name : mate, chosenRoot)
+  // M323/M400. Who does it is a QUESTION only when it has no answer — a
+  // picked teammate that cannot work in this folder or has no places, or a
+  // backend this task refuses. Otherwise it is one line with Change.
+  const whoForced = needs.some((n) => n.field === 'agent') || blocking !== null || backendBlocked !== null
   // M321. A recipe's `{repository}` follows the repository: re-rendered when it changes.
   useEffect(() => {
     if (recipe !== undefined) pickRecipe(recipe.id, aim)
@@ -297,6 +328,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     if (!plainDoor || busy) return
     startDraftStore.save({
       title,
+      // M400. Only a PICKED teammate is kept; a restored one is a preference again.
       ...(teammateId === '' ? {} : { teammateId }),
       ...(chosenRoot === null ? {} : { root: chosenRoot }),
       ...(backendPick === null ? {} : { backend: backendPick }),
@@ -373,7 +405,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   }
 
   const submit = (): void => {
-    if (busy || blocking !== null || swarmBlocked !== null || backendBlocked !== null || preflightBlocked !== null || needs.length > 0 || teammateId === '' || chosenRoot === null) return
+    if (busy || blocking !== null || swarmBlocked !== null || backendBlocked !== null || preflightBlocked !== null || needs.length > 0 || chosenRoot === null) return
     setBusy(true); setRefusal(null)
     const criteria = criteriaText.split('\n').map((c) => c.trim()).filter((c) => c !== '')
     const checks = checksText.split('\n').map((c) => c.trim()).filter((c) => c !== '')
@@ -382,7 +414,9 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       ...(checks.length === 0 ? {} : { checks }),
       ...(deliverables.length === 0 ? {} : { deliverables }),
       ...(recipe === undefined ? {} : { recipeId: recipe.id }),
-      title: title.trim(), teammateId, root: chosenRoot, ...(swarm === '' ? {} : { swarm }),
+      title: title.trim(), root: chosenRoot, ...(swarm === '' ? {} : { swarm }),
+      ...(teammateId === '' ? {} : { teammateId }),
+      ...(teammateId === '' && who.kind === 'reuse' ? { preferTeammateId: who.mate.id } : {}),
       ...(backend === DEFAULT_BACKEND ? {} : { backend }),
       ...(recipe === undefined || Object.keys(params).length === 0 ? {} : { recipeParams: params }),
       ...(issue === undefined ? {} : { issue }),
@@ -393,7 +427,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       if (result.kind === 'refused') { setRefusal(result.reason); return }
       // M323. Started: the draft is spent, and what it used is the next start's preselection.
       if (plainDoor) startDraftStore.clear()
-      startDraftStore.remember({ teammateId, root: chosenRoot, backend })
+      startDraftStore.remember({ ...(mate === undefined ? {} : { teammateId: mate.id }), root: chosenRoot, backend })
       onDone()
     })
   }
@@ -412,7 +446,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   }
 
   return (
-    <div className="sheet" data-start-sheet role="form" aria-label="Start work" onKeyDown={onKey}>
+    <div className="sheet" data-start-sheet role="form" aria-label="New task" onKeyDown={onKey}>
       <SheetHeader current="task" onPanel={model.openPanel} />
 
       {/* M323. A draft kept from the last time this sheet was left — said, with the way to drop it. */}
@@ -424,22 +458,6 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             onClick={(e) => { e.preventDefault(); discardDraft() }}>Discard</button>
         </p>
       )}
-
-      {/* M323. PROJECT FIRST — the repository, then what you want done. */}
-      <label className="sheet__field">
-        <span className="sheet__label">Repository</span>
-        <select ref={(el) => { if (model.titleFixed && !whoForced) firstRef.current = el }} className="sheet__select sheet__select--mono" data-start-repo value={root} aria-label="repository"
-          disabled={teammateId === '' || repos === undefined || repos.length === 0}
-          onChange={(e) => { setRoot(e.target.value); setRefusal(null) }}>
-          {/* The `auto` row names the clone it derived rather than saying
-              `auto`: the user is being told which folder the work will happen
-              in, and `auto` is a word about the app, not about the work. */}
-          <option value="">{chosenRoot !== null && root === '' ? `${shortPath(chosenRoot, 2)} — the clone of ${String(wanted)}` : teammateId === '' ? 'choose who does it below first…' : repos === undefined ? 'reading repositories…' : 'choose a repository…'}</option>
-          {(repos ?? []).map((r) => (
-            <option key={r.path} value={r.path} data-start-repo-row={r.path}>{shortPath(r.path, 2)}{r.repo === null ? '' : ` — ${r.repo}`}</option>
-          ))}
-        </select>
-      </label>
 
       {/* M310/M323. From an issue — the ALTERNATE route. Choosing one names
           the task and, for GitHub, the repository, the way a card from that
@@ -488,21 +506,49 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         </p>
       )}
 
-      {/* M323. WHO AND ON WHAT — answered already, said on one line, with
-          Change. It opens by itself only when there is no answer (no
-          teammate yet) or the answer cannot do this task. Closed, the
+      {/* M400 (B1). WHERE — after what, the launcher's order, and never
+          disabled: the list is every placed teammate's repositories and the
+          recent folders, and Choose… opens the folder dialog. Who follows
+          from it (below). */}
+      <div className="sheet__field">
+        <span className="sheet__label">Repository</span>
+        <span className="sheet__folder-row">
+          <select ref={(el) => { if (model.titleFixed && !whoForced) firstRef.current = el }} className="sheet__select sheet__select--mono" data-start-repo value={root} aria-label="repository"
+            onChange={(e) => { setRoot(e.target.value); setRefusal(null) }}>
+            {/* The `auto` row names the clone it derived rather than saying
+                `auto`: the user is being told which folder the work will happen
+                in, and `auto` is a word about the app, not about the work. */}
+            <option value="">{chosenRoot !== null && root === '' ? `${shortPath(chosenRoot, 2)} — the clone of ${String(wanted)}` : repos === undefined ? 'reading your repositories…' : 'choose a repository folder…'}</option>
+            {(repos ?? []).map((r) => (
+              <option key={r.path} value={r.path} data-start-repo-row={r.path}>{shortPath(r.path, 2)}{r.repo === null ? '' : ` — ${r.repo}`}</option>
+            ))}
+          </select>
+          {model.chooseFolder !== undefined && (
+            <button type="button" className="pf__verb pf__verb--word" data-start-choose-folder title="Choose a folder with the system dialog"
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+              onClick={(e) => { e.preventDefault(); chooseFolder() }}>Choose…</button>
+          )}
+        </span>
+      </div>
+
+      {/* M323/M400. WHO — answered already, from the folder, said on one
+          line with Change. It opens by itself only when a PICKED teammate
+          cannot work in the folder, or the answer cannot do this task. Closed, the
           pickers stay in the DOM, so every route that sets them still can. */}
       <details className="sheet__advanced sheet__who" data-start-who open={whoForced || whoOpen}
         onToggle={(e) => { if (!whoForced) setWhoOpen(e.currentTarget.open) }}>
         <summary className="sheet__advanced-toggle" data-start-who-summary>
-          {mate === undefined ? 'Choose who does it' : `${teammateWord(mate)} · ${backendLabel}`}
-          {mate !== undefined && <span className="sheet__who-change"> · Change</span>}
+          {who.kind === 'mint'
+            ? `${backendLabel} · on its own branch, and may work only in ${shortPath(who.places[0] ?? '')}`
+            : mate === undefined ? `${backendLabel} · works in the folder you choose` : `${teammateWord(mate)} · ${backendLabel}`}
+          <span className="sheet__who-change"> · Change</span>
         </summary>
         <label className="sheet__field">
           <span className="sheet__label">Agent</span>
           <select ref={(el) => { if (model.titleFixed && whoForced) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="teammate"
             onChange={(e) => { setTeammateId(e.target.value); setRefusal(null) }}>
-            <option value="">choose a teammate…</option>
+            {/* M400. Automatic is the launcher's answer: a teammate whose place holds the folder, or a new one for exactly it. */}
+            <option value="" data-start-agent-row="auto">Automatic — {who.kind === 'mint' ? `a new teammate for ${shortPath(who.places[0] ?? '')}` : who.kind === 'reuse' && teammateId === '' ? teammateWord(who.mate) : 'the teammate for this folder'}</option>
             {model.teammates.map((t) => (
               // A teammate with no places is DISABLED with the fix, never
               // dropped: a row that vanished would read as a teammate that was
@@ -701,14 +747,11 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
 
       <div className="sheet__foot">
         {/* The triple, before anything is minted. */}
-        <span className="sheet__preview" data-start-summary title={chosenRoot ?? undefined}>{summary === '' ? 'a task, the agent to do it and its repository' : summary}</span>
+        <span className="sheet__preview" data-start-summary title={chosenRoot ?? undefined}>{summary === '' ? 'a task, its repository and who does it' : summary}</span>
         {/* What is still missing — one sentence, the first need's, because a
             list of three would state two questions the flow has not reached. */}
         {needs.length > 0 && blocking === null && (
           <span className="sheet__hint" data-start-need={needs[0]?.field}>{needs[0]?.why}</span>
-        )}
-        {noPlaces !== null && (
-          <span className="sheet__refusal" data-start-no-places role="alert">{noPlaces}</span>
         )}
         {blocking !== null && (
           <span className="sheet__refusal" data-start-blocked role="alert">{blocking}</span>

@@ -1917,8 +1917,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     /* ---------------------------------------------------------------- */
     {
       const IDS = [
-        'start.door.1 the palette\'s Start work… row opens the sheet with nothing pre-filled, the agent field offers every teammate with a placeless one DISABLED by name (a grant, never widened from here), and choosing a teammate reads the repositories under its places from main — the same bounded walk the lane makes',
-        'start.door.2 a TYPED item — which names no repository, and which board:lane refused with a sentence naming a door that did not exist — reaches a REAL worktree lane through the sheet\'s repository choice: the record carries the chat and the worktree, and the lane\'s root is the chosen repository',
+        // M400 (B1) CHANGED start.door.1/.2 ON PURPOSE: the repository field was
+        // disabled until a teammate was chosen, and door.2 picked `sam` first.
+        // Now the field is live at open with every placed teammate's
+        // repositories, the agent rests on Automatic, and door.2 starts WITHOUT
+        // picking anyone — the folder answers who (sam's place contains it).
+        'start.door.1 the palette\'s New task… row opens the sheet with nothing pre-filled and the Repository field LIVE (never gated on the agent), already offering the repositories under every placed teammate\'s places from main; the agent rests on Automatic and offers every teammate, a placeless one DISABLED by name (a grant, never widened from here)',
+        'start.door.2 a TYPED item — which names no repository, and which board:lane refused with a sentence naming a door that did not exist — reaches a REAL worktree lane through the sheet\'s repository choice with NO agent picked: the folder answers who (the teammate whose place contains it), the record carries the chat and the worktree, and the lane\'s root is the chosen repository',
         'start.answer.1 a start whose repository the teammate may not touch is REFUSED IN THE SHEET by name and mints nothing, and the agent door\'s dispatch verb answers `refused` with the same sentence rather than reporting `ran` before the work could fail'
       ]
       const sLog = []
@@ -1948,14 +1953,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
                    fixed: !!s.querySelector('[data-start-task-fixed]'), agent: agent.value,
                    rows: [...agent.options].map((o) => ({ v: o.value, t: o.textContent, d: o.disabled })),
                    repoDisabled: s.querySelector('[data-start-repo]').disabled } })()`), 5000)
-        // Choosing the teammate reads main's answer; the repository field then
-        // offers the clone under its place.
-        await wc.executeJavaScript(`(() => { const sel = document.querySelector('[data-start-agent]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
-          set.call(sel, 'tm-sw'); sel.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+        // M400. No teammate is chosen: the list is read at open, for all of them.
         const repoRows = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-start-repo] option[data-start-repo-row]')]
           return o.length > 0 ? o.map((x) => x.getAttribute('data-start-repo-row')) : false })()`), 6000)
         ok(IDS[0],
-          sheetUp && sheetUp.task === '' && sheetUp.fixed === false && (sheetUp.repoDisabled === true || sheetUp.agent === 'tm-sw') &&
+          sheetUp && sheetUp.task === '' && sheetUp.fixed === false && sheetUp.repoDisabled === false && sheetUp.agent === '' &&
             sheetUp.rows.some((r) => r.v === 'tm-sw' && !r.d) &&
             sheetUp.rows.some((r) => r.v === 'tm-none' && r.d && /no places/.test(r.t)) &&
             Array.isArray(repoRows) && repoRows.some((p) => realpathSync(p) === realpathSync(repoS)),

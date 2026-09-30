@@ -2513,7 +2513,9 @@ const WS = [
     JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine, queuedAhead: queuedAhead && { queued: queuedAhead.queued, line: queuedAhead.ceilingLine }, queuedNoCeiling: queuedNoCeiling && queuedNoCeiling.queued }))
 }
 
-// M113 — board.1. THE TYPED DOOR. `New work item…` is a canvas-group row (a
+// M113 — board.1. THE TYPED DOOR. `Add a task to the board…` (M400: was
+// `New work item…` — "task" is the noun, and the old title read as a second
+// New task door that starts nothing) is a canvas-group row (a
 // panel-group row competes with Go-to rows by fuzzy score), never disabled,
 // running the palette's text mode — a plan has no typist, so the action is
 // excluded from the verb table by name rather than reached.
@@ -2525,8 +2527,8 @@ const WS = [
     if (row) row.run()
     calls = c.actions.calls.map((x) => x[0])
   } catch (e) { row = { disabledReason: String(e) } }
-  ok('board.1 New work item… is a canvas-group row with no disabled reason that runs beginNewWorkItem',
-    row !== undefined && row.group === 'canvas' && row.disabledReason === undefined && /New work item/.test(row.title) && calls.includes('beginNewWorkItem'),
+  ok('board.1 Add a task to the board… is a canvas-group row with no disabled reason that runs beginNewWorkItem',
+    row !== undefined && row.group === 'canvas' && row.disabledReason === undefined && /Add a task to the board/.test(row.title) && calls.includes('beginNewWorkItem'),
     JSON.stringify({ row: row && { id: row.id, group: row.group, title: row.title, disabledReason: row.disabledReason }, calls }))
 }
 
@@ -2687,13 +2689,22 @@ const WS = [
   const needs = (choice, ctx) => (typeof P.startWorkNeeds === 'function' ? P.startWorkNeeds(choice, ctx) : null)
   const fields = (n) => (n === null ? '(absent)' : n.map((x) => x.field).join(','))
 
-  // (a) the order, and the fact that a missing agent hides the repository question.
-  const empty = needs({ title: '' }, { teammates: [ada], repos: undefined, wanted: null })
-  const noAgent = needs({ title: 'ship the thing' }, { teammates: [ada], repos: undefined, wanted: null })
-  ok('start.1a startWorkNeeds asks in the order task → agent → repository, and an unanswered agent hides the repository question entirely: the repositories on offer are the chosen teammate\'s places\' clones, so there is nothing to list until the agent is known',
-    needs !== null && empty !== null && fields(empty) === 'task,agent' && /title/i.test(empty[0].why) &&
-      fields(noAgent) === 'agent' && /teammate|agent/i.test(noAgent[0].why),
-    JSON.stringify({ empty, noAgent }))
+  // (a) the order. M400 (B1) CHANGED THIS ASSERTION ON PURPOSE: it pinned
+  // task → agent → repository, with no agent hiding the repository question —
+  // which is exactly the fresh-install dead end B1 names (a disabled
+  // Repository over "no teammate yet"). The order is now the launcher's:
+  // task → repository, and the agent is asked only when a PICKED one cannot
+  // work in the chosen folder; nobody picked is never a need (the folder
+  // answers who).
+  const empty = needs({ title: '' }, { teammates: [], repos: [], wanted: null })
+  const noAgent = needs({ title: 'ship the thing', root: '/home/u/work/api' }, { teammates: [], repos: [], wanted: null })
+  const outside = needs({ title: 'ship the thing', teammateId: 't1', root: '/elsewhere/app' }, { teammates: [ada], repos, wanted: null })
+  const sibling = needs({ title: 'ship the thing', teammateId: 't1', root: '/home/u/work2' }, { teammates: [ada], repos, wanted: null })
+  ok('start.1a startWorkNeeds asks in the launcher\'s order task → repository, with NO teammate at all never a need (the folder answers who), and asks for the agent only when a picked one\'s places do not contain the folder (by path segment: work2 is not inside work)',
+    needs !== null && empty !== null && fields(empty) === 'task,repository' && /title/i.test(empty[0].why) &&
+      noAgent !== null && noAgent.length === 0 &&
+      fields(outside) === 'agent' && /ada may not work in/.test(outside[0].why) && fields(sibling) === 'agent',
+    JSON.stringify({ empty, noAgent, outside }))
 
   // (b) the auto arm — nothing missing, so no sheet opens. This is the
   // one-gesture drop the board already had, expressed as data.
@@ -2732,12 +2743,15 @@ const WS = [
   // (e) the refusals a SHEET cannot answer (a teammate with no places is a
   // grant, and nothing here widens one), and the summary that states the
   // triple before anything is minted.
-  const noMates = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x' }, { teammates: [], repos: undefined, wanted: null }) : null
+  // M400 CHANGED THIS ASSERTION ON PURPOSE: an empty roster was a refusal
+  // ("no teammate yet"); it is now null — the start makes the launcher's
+  // teammate for exactly the chosen folder. The placeless arm stays.
+  const noMates = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x' }, { teammates: [], repos: undefined, wanted: null }) : 'absent'
   const placeless = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x', teammateId: 't2' }, { teammates: [bo], repos: undefined, wanted: null }) : null
   const fine = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x', teammateId: 't1' }, { teammates: [ada], repos, wanted: null }) : null
   const summary = typeof P.startWorkSummary === 'function' ? P.startWorkSummary({ title: 'fix the parser', teammateId: 't1', root: '/home/u/work/api' }, ada) : null
-  ok('start.1e the refusals a sheet cannot answer are named once — no teammate at all, and a teammate with no places (a grant, never widened from here) — and the summary states the task, the repository in the path rule\'s words and the agent before anything is minted',
-    typeof noMates === 'string' && /teammate/i.test(noMates) && typeof placeless === 'string' && /place/i.test(placeless) && /Teammates pane/.test(placeless) &&
+  ok('start.1e the one refusal a sheet cannot answer is a picked teammate with no places (a grant, never widened from here) — an empty roster is NOT one (M400) — and the summary states the task, the repository in the path rule\'s words and the agent before anything is minted',
+    noMates === null && typeof placeless === 'string' && /place/i.test(placeless) && /Teammates pane/.test(placeless) &&
       fine === null && typeof summary === 'string' && /fix the parser/.test(summary) && /work\/api/.test(summary) && /ada/.test(summary),
     JSON.stringify({ noMates, placeless, fine, summary }))
 }
@@ -2807,6 +2821,58 @@ const WS = [
   try { store.save({ title: 'x' }); store.load(); store.clear(); store.last(); store.remember({ teammateId: 'ada' }) } catch { threw = true }
   ok('startwork-first.6 the draft store never throws when storage is unavailable — the sheet works without it',
     store !== undefined && threw === false && store.load() === null, `threw=${threw}`)
+}
+
+// M400 (B1) — start.who.1. WHO follows from WHERE. With nobody picked, the
+// launcher's own rule answers: a standing teammate whose place contains the
+// folder by path segment (the preferred one first), or a NEW one whose only
+// place is exactly the folder. A picked teammate stays picked. The swarm's
+// refusal reads the answered teammate, so a planned mint (which has its
+// place) never trips "has no places".
+{
+  const mate = (id, name, places) => ({ id, name, brief: '', places, services: [], memory: id, chats: [], messaging: false, scheduling: false })
+  const ada = mate('t1', 'ada', ['/home/u/work'])
+  const cy = mate('t3', 'cy', ['/home/u'])
+  const who = (choice, ts, prefer) => P.startWorkWho(choice, { teammates: ts, repos: [], wanted: null }, prefer)
+  const fresh = typeof P.startWorkWho === 'function' ? who({ title: 'x', root: '/tmp/tc-b1-repo/' }, []) : null
+  const reuse = typeof P.startWorkWho === 'function' ? who({ title: 'x', root: '/home/u/work/api' }, [cy, ada]) : null
+  const preferred = typeof P.startWorkWho === 'function' ? who({ title: 'x', root: '/home/u/work/api' }, [cy, ada], 't1') : null
+  const sibling = typeof P.startWorkWho === 'function' ? who({ title: 'x', root: '/home/u/work2' }, [ada]) : null
+  const picked = typeof P.startWorkWho === 'function' ? who({ title: 'x', teammateId: 't1', root: '/elsewhere' }, [ada]) : null
+  const none = typeof P.startWorkWho === 'function' ? who({ title: 'x' }, [ada]) : null
+  const swarmMint = typeof P.startWorkSwarmRefusal === 'function' ? P.startWorkSwarmRefusal({ title: 'x', root: '/tmp/r', swarm: 'implement' }, { teammates: [], repos: [], wanted: null, agentAvailable: true }, { name: 'Claude · r', places: ['/tmp/r'] }) : 'absent'
+  ok('start.who.1 with nobody picked the folder answers who — a fresh roster plans a NEW teammate for exactly the folder (trailing / trimmed), a containing place is reused (the preferred one first), a sibling folder is not "inside" by string prefix, a pick stays a pick, no folder is none; a planned mint does not trip the swarm\'s no-places refusal',
+    fresh !== null && fresh.kind === 'mint' && fresh.name === 'Claude · tc-b1-repo' && JSON.stringify(fresh.places) === '["/tmp/tc-b1-repo"]' &&
+      reuse !== null && reuse.kind === 'reuse' && reuse.mate.id === 't3' &&
+      preferred !== null && preferred.kind === 'reuse' && preferred.mate.id === 't1' &&
+      sibling !== null && sibling.kind === 'mint' &&
+      picked !== null && picked.kind === 'picked' && picked.mate.id === 't1' &&
+      none !== null && none.kind === 'none' && swarmMint === null,
+    JSON.stringify({ fresh, reuse: reuse && reuse.mate && reuse.mate.id, preferred: preferred && preferred.mate && preferred.mate.id, sibling: sibling && sibling.kind, picked: picked && picked.kind, none, swarmMint }))
+}
+
+// M400 (B1) — task.rank.1. "New task" is the answer to "new", "task" and
+// "start": FIRST in the list (the Tasks section, promoted by its `leads`) AND
+// where the selection seeds (bestMatchIndex), so Enter opens the sheet. Before
+// M400 "new task" selected "Open review this repository as a workflow" and
+// Start work… was row 13. The promotion is by PREFIX of a lead, so a query
+// no lead answers ("restart", "auth") leaves the list as it was, and the
+// resting list is untouched.
+{
+  let res = {}, threw = null
+  try {
+    const rows = P.buildCommands(ctx({ panels: [{ id: 'p1', label: 'zsh — ~ (p1)', title: 'auth refactor' }] }))
+    for (const q of ['new', 'new task', 'task', 'start', 'Start work', 'restart', 'auth', '']) {
+      const list = P.filterCommands(rows, q)
+      const best = P.bestMatchIndex(list, q)
+      res[q] = { first: list[0] && list[0].id, firstGroup: list[0] && list[0].group, selected: list[best] && list[best].id, title: list[0] && list[0].title }
+    }
+  } catch (e) { threw = String(e) }
+  const leads = ['new', 'new task', 'task', 'start', 'Start work']
+  ok('task.rank.1 New task… is first and selected for "new", "new task", "task", "start" (and the old "Start work"), shown under Tasks; "restart" and "auth" are not led by it, and at rest it keeps its Canvas place',
+    threw === null && leads.every((q) => res[q].first === 'start.work' && res[q].selected === 'start.work' && res[q].firstGroup === 'task' && res[q].title === 'New task…') &&
+      res.restart.first !== 'start.work' && res.restart.selected !== 'start.work' && res.auth.first !== 'start.work' && res[''].first !== 'start.work',
+    threw ?? JSON.stringify(res))
 }
 
 // Brief #19 — the advanced features, where they become relevant. From what is

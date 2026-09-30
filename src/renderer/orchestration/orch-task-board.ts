@@ -243,7 +243,7 @@ export function buildTaskBoard(input: BoardInput): TaskBoard {
       continue
     }
     if (item.panelId === undefined && agents.length === 0) {
-      rows.push({ ...base, group: 'running', status: 'Not started — no agent has this task yet.', action: { kind: 'start', label: 'Start work' }, more: 0 })
+      rows.push({ ...base, group: 'running', status: 'Not started — no agent has this task yet.', action: { kind: 'start', label: 'Start task' }, more: 0 })
       continue
     }
     const who = agentsSentence(agents)

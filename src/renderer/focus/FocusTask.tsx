@@ -416,7 +416,7 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
           <MenuContent>
             <div className="focus__menu" role="menu">
               <MenuItem className="focus__menu-item" data-focus-show-canvas onSelect={() => props.onShowOnCanvas(itemId)}>Show on canvas</MenuItem>
-              {chat === undefined && <MenuItem className="focus__menu-item" onSelect={() => props.onStartWork(itemId)}>Start work…</MenuItem>}
+              {chat === undefined && <MenuItem className="focus__menu-item" onSelect={() => props.onStartWork(itemId)}>Start task…</MenuItem>}
             </div>
           </MenuContent>
         </Menu>

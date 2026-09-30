@@ -580,13 +580,12 @@ const SCENES = [
     run: async (k) => { await k.click('.shell__spawn'); await sleep(700); await k.click('[data-sheet-switch-to="panel"]'); await sleep(500); await k.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; s.value = 'claude'; s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`); await sleep(200); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) { w.focus(); w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })) } return !!w })()`); await sleep(600); await k.shot('spawn-sheet'); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`); await sleep(300) } },
   // M197 (D05). The start sheet is the milestone's whole face and it had no
   // scene: a surface with no golden is one nobody can see regress.
-  { name: 'start-work', intent: 'M197 (D05). The Start work sheet: one place for the three things a start needs — the task, the agent and the repository — with a teammate chosen so the repository field holds the clones under its places, the triple stated in the foot before anything is minted, and the route to the Teammates pane named rather than a grant widened from inside the flow. A placeless teammate is offered DISABLED by name in the agent field, never dropped.',
-    run: async (k) => { await k.press('k', { metaKey: true }); await sleep(400); await k.type('Start work'); await sleep(400); await k.enter(); await sleep(700)
+  // M400 (B1): intent rewritten on purpose — the sheet is the launcher's what → where → who, the
+  // repository list is live at open (every placed teammate's), and no agent is picked.
+  { name: 'start-work', intent: 'M400 (B1). The New task sheet, the one form behind every start door: the task first, then the repository — live at open with every placed teammate\'s repositories and Choose…, never gated on the agent — then who as one closed line (the teammate whose place holds the folder, or a new one for exactly it) with Change, the triple stated in the foot before anything is minted. Swarm, recipe and criteria sit under Options.',
+    run: async (k) => { await k.press('k', { metaKey: true }); await sleep(400); await k.type('New task'); await sleep(400); await k.enter(); await sleep(700)
       await k.js(`(() => { const t = document.querySelector('[data-start-task]'); if (!t) return false
         const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(t, 'Fix the flush gate on the api repository'); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
-      await sleep(200)
-      await k.js(`(() => { const s = document.querySelector('[data-start-agent]'); if (!s) return false
-        const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'ada'); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
       await sleep(600)
       await k.js(`(() => { const s = document.querySelector('[data-start-repo]'); const o = s && s.querySelector('option[data-start-repo-row]'); if (!o) return false
         const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, o.value); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)

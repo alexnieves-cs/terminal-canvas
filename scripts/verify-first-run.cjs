@@ -182,10 +182,14 @@ check(START, 'fr.sheet.3 Start work has plain labels, its runtime said, and Canc
     /is-primary/.test(submit) && /\bdisabled=""/.test(submit) && />Start task</.test(submit) && /data-start-cancel/.test(html) && /data-sheet-switch-to="panel"/.test(html), detail: { submit } }
 })
 
-// M323. PROJECT FIRST: repository, then task, then who-and-on-what as ONE
-// preselected line with Change, then a closed Options — and the issue route
-// offered beside the task rather than ahead of it.
-check(START, 'startwork-first.dom.1 the sheet opens project-first — Repository before Task, the sole placed teammate preselected and named on a Change line (its picker closed), Options closed and holding criteria, checks, deliverables and the arrangement, and "Start from an issue" offered as the alternate route', (m) => {
+// M323. A closed who line with Change, then a closed Options — and the issue
+// route offered beside the task rather than ahead of it.
+// M400 (B1) CHANGED THIS ON PURPOSE: M323 opened on Repository then Task with
+// the sole placed teammate PICKED. The order is now the launcher's — Task,
+// then Repository, then who — and a placed teammate is a preference the
+// folder confirms, so with no folder yet the who line says the agent works in
+// the folder you choose, and Automatic is the picker's selection.
+check(START, 'startwork-first.dom.1 the sheet opens in the launcher\'s order — Task, then Repository, then a closed who line with Change (Automatic selected until a folder decides), Options closed and holding criteria, checks, deliverables and the arrangement, and "Start from an issue" offered as the alternate route', (m) => {
   const ada = { id: 'ada', name: 'ada', brief: '', places: ['/repo'], services: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
   const model = { title: '', titleFixed: false, wanted: null, teammates: [ada], repositories: async () => ({ kind: 'repos', repos: [] }), submit: async () => ({ kind: 'started' }), openTeammates: noop, openPanel: noop, issues: async () => ({ kind: 'items', items: [] }) }
   const html = renderToStaticMarkup(createElement(m.StartWorkSheet, { model, onDone: noop, onCancel: noop }))
@@ -193,18 +197,41 @@ check(START, 'startwork-first.dom.1 the sheet opens project-first — Repository
   const opts = html.match(/<details\b[^>]*data-start-options[\s\S]*?<\/details>/)?.[0] ?? ''
   const openTag = (d) => /^<details\b[^>]*\bopen\b/.test(d)
   return {
-    pass: html.indexOf('sheet__label">Repository<') < html.indexOf('sheet__label">Task<') && html.indexOf('sheet__label">Task<') < html.indexOf('data-start-who') &&
-      who !== '' && !openTag(who) && /data-start-who-summary[^>]*>ada · Claude Code/.test(who) && /Change/.test(who) && /<option value="ada"[^>]*selected=""/.test(who) &&
+    pass: html.indexOf('sheet__label">Task<') < html.indexOf('sheet__label">Repository<') && html.indexOf('sheet__label">Repository<') < html.indexOf('data-start-who') &&
+      who !== '' && !openTag(who) && /data-start-who-summary[^>]*>Claude Code · works in the folder you choose/.test(who) && /Change/.test(who) && /<option value=""[^>]*selected=""[^>]*>Automatic/.test(who) &&
       opts !== '' && !openTag(opts) && ['data-start-criteria', 'data-start-checks', 'data-start-deliverables', 'data-start-swarm'].every((a) => opts.includes(a)) &&
       /data-start-issue-route="typed"[^>]*>Start from an issue instead/.test(html) && !/data-start-issue-search/.test(html),
     detail: { who: who.slice(0, 200), opts: opts.slice(0, 160) }
   }
 })
-check(START, 'startwork-first.dom.2 Options opens by itself when the start arrives holding a choice (an arrangement from a palette row), and who-and-on-what opens by itself when there is no teammate to preselect', (m) => {
+// M400 CHANGED the second half ON PURPOSE: who used to open itself (on
+// "Choose who does it") whenever no teammate could be preselected — the gate
+// B1 removes. Several teammates and no history is now no question at all:
+// the folder decides, so who stays a closed line.
+check(START, 'startwork-first.dom.2 Options opens by itself when the start arrives holding a choice (an arrangement from a palette row), and who stays a closed line with several teammates and no history — the folder decides', (m) => {
   const mate = (id) => ({ id, name: id, brief: '', places: ['/r'], services: [], memory: id, chats: [], messaging: false, scheduling: false })
   const model = { title: 'x', titleFixed: false, wanted: null, teammates: [mate('ada'), mate('bo')], swarm: 'test', repositories: async () => ({ kind: 'repos', repos: [] }), submit: async () => ({ kind: 'started' }), openTeammates: noop }
   const html = renderToStaticMarkup(createElement(m.StartWorkSheet, { model, onDone: noop, onCancel: noop }))
-  return { pass: /<details\b[^>]*data-start-who[^>]*\bopen\b/.test(html) && /<details\b[^>]*data-start-options[^>]*\bopen\b/.test(html) && /Choose who does it/.test(html), detail: html.slice(html.indexOf('data-start-who') - 80, html.indexOf('data-start-who') + 120) }
+  return { pass: !/<details\b[^>]*data-start-who[^>]*\bopen\b/.test(html) && /<details\b[^>]*data-start-options[^>]*\bopen\b/.test(html) && !/Choose who does it/.test(html), detail: html.slice(html.indexOf('data-start-who') - 80, html.indexOf('data-start-who') + 120) }
+})
+
+// M400 (B1) — start.form.1. THE REPRODUCTION, as markup: a fresh install (no
+// teammate at all) opening "+ New task" showed Repository DISABLED over the
+// red "no teammate yet". Now: the Repository field is never disabled, Choose…
+// is offered, no refusal is on the sheet, the who line is closed, and Start
+// waits only on what is missing — its own title says the task first.
+check(START, 'start.form.1 with NO teammate the sheet asks what, then where (Repository enabled, Choose… offered), no "no teammate yet" refusal, who closed; Start is disabled only for a missing task', (m) => {
+  const model = { title: '', titleFixed: false, wanted: null, teammates: [], repositories: async () => ({ kind: 'repos', repos: [] }), recents: ['/tmp/tc-b1-repo'], chooseFolder: async () => null, submit: async () => ({ kind: 'started' }), openTeammates: noop, openPanel: noop }
+  const html = renderToStaticMarkup(createElement(m.StartWorkSheet, { model, onDone: noop, onCancel: noop }))
+  const repo = html.match(/<select\b[^>]*\bdata-start-repo\b[^>]*>/)?.[0] ?? ''
+  const submit = tag(html, 'data-start-submit') ?? ''
+  return {
+    pass: repo !== '' && !/\bdisabled=""/.test(repo) && /data-start-choose-folder[^>]*>Choose…</.test(html) &&
+      !/no teammate yet/.test(html) && !/data-start-blocked/.test(html) && !/<details\b[^>]*data-start-who[^>]*\bopen\b/.test(html) &&
+      html.indexOf('sheet__label">Task<') < html.indexOf('data-start-repo') && /\bdisabled=""/.test(submit) && /title="give the task a title/.test(submit) &&
+      /class="sheet__title">New task</.test(html) && /aria-label="New task"/.test(html),
+    detail: { repo, submit }
+  }
 })
 
 // Starting the first task, #8: optional setup is grouped and phrased as a benefit, never the amber banner.

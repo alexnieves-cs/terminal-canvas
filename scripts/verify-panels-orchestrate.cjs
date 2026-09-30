@@ -1708,7 +1708,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"] [data-board-row="${itemId}"]') !== null`), 3000)
       const planLine = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-board-row="${itemId}"] [data-board-plan]')?.textContent ?? false`), 3000)
       ok(IDS[1],
-        row && row.group === 'running' && row.action === 'start' && row.primary === 'Start work' && /Not started/.test(row.status ?? '') && row.checks === 'No checks run' && focus === true && back === true,
+        row && row.group === 'running' && row.action === 'start' && row.primary === 'Start task' /* M400: the noun is task — changed on purpose */ && /Not started/.test(row.status ?? '') && row.checks === 'No checks run' && focus === true && back === true,
         JSON.stringify({ row, focus, back, diag, errs: errs.slice(-4) }))
       ok(IDS[2],
         Array.isArray(steps) && steps.map((x) => x[0]).join() === 'api,ui,verify,review' && steps[0][1] === 'ready' && steps[2][1] === 'waiting' &&

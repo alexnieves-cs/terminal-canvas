@@ -41,7 +41,7 @@ export function OrchTaskBoard(props: OrchTaskBoardProps): JSX.Element {
   return (
     <div className="tboard" data-board role="region" aria-label="Tasks">
       {total === 0 && (
-        <p className="tboard__empty" data-board-empty>No tasks yet. Start work from the command palette (⌘K) or a board card, and each task appears here with what it needs from you.</p>
+        <p className="tboard__empty" data-board-empty>No tasks yet. Start one with + New task, ⌘K or a board card, and each task appears here with what it needs from you.</p>
       )}
       {props.board.groups.map((g) => {
         if (g.rows.length === 0) return null

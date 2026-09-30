@@ -465,7 +465,7 @@ function renderTask(
         ) : (
           <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="start-again"
             disabled={readOnly}
-            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed — open Start work for this task to continue it in a new conversation; nothing starts until you confirm'}
+            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed — Start task again to continue it in a new conversation; nothing starts until you confirm'}
             onMouseDown={readOnly ? undefined : press(() => task.onStartAgain?.(task.itemId))}>
             Continue in a new conversation…
           </button>

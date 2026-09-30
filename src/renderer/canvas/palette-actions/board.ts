@@ -139,11 +139,13 @@ export function boardActions(ctx: ActionCtx): BoardActions {
      */
     beginStartWork: (opts) => {
       let recipes = allRecipes([])
-      const openSheet = (title: string, titleFixed: boolean, wanted: string | null, itemId: string | undefined, teammateId: string | undefined): void => {
+      // M400. The launcher's recent folders, offered beside the granted repositories.
+      let recents: readonly string[] = []
+      const openSheet = (title: string, titleFixed: boolean, wanted: string | null, itemId: string | undefined, teammateId: string | undefined, preferTeammateId?: string): void => {
         const item = itemId === undefined ? undefined : (workItemsRef.current ?? []).find((i) => i.id === itemId)
         setInputMode({
           kind: 'start',
-          label: 'Start work',
+          label: 'New task',
           verb: 'start',
           initial: '',
           submit: () => undefined,
@@ -153,6 +155,10 @@ export function boardActions(ctx: ActionCtx): BoardActions {
             wanted,
             teammates: teammatesRef.current ?? [],
             ...(teammateId === undefined ? {} : { teammateId }),
+            ...(preferTeammateId === undefined ? {} : { preferTeammateId }),
+            recents,
+            // M400. The launcher's Choose… — main's folder dialog.
+            chooseFolder: () => window.canvas.teammate.choosePlace(),
             // M275. What an ARRANGEMENT needs to judge itself, read at open:
             // whether any CLI can take a seat at all, the card's own state,
             // and the ceiling — so the sheet can say who would queue before
@@ -192,6 +198,18 @@ export function boardActions(ctx: ActionCtx): BoardActions {
             ...(itemId === undefined ? { issues: readOpenIssues } : {}),
             repositories: (id) => window.canvas.board.repositories({ teammateId: id }),
             submit: async (choice) => {
+              // M400 (B1). WHO, when nobody was picked: the launcher's own
+              // reuse-or-mint executor (Canvas's `teammateForFolder`) — the
+              // repository answer first, a new teammate whose only place is
+              // exactly this folder only then, and NOTHING minted (no teammate,
+              // no card) on a refusal. So it runs before `addWorkItem` below.
+              let teammateId = choice.teammateId
+              if (teammateId === undefined) {
+                const who = await boardVerbsRef.current?.teammateFor?.(choice.root, choice.preferTeammateId)
+                if (who === undefined) return { kind: 'refused', reason: 'the canvas is not ready yet' }
+                if (who.kind !== 'teammate') return { kind: 'refused', reason: who.reason }
+                teammateId = who.id
+              }
               // The task is minted only once the triple is answered: a sheet
               // the user escapes must leave no card behind, the same rule
               // M149 reached for `New workspace from` (an Escape used to
@@ -239,8 +257,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
               // M394. The chart's shapes learn which step each became, now the card exists.
               opts?.onCreated?.(id)
               const outcome = choice.swarm === undefined
-                ? await self.startWork(id, choice.teammateId, choice.root)
-                : await self.startSwarm(id, choice.teammateId, choice.root, choice.swarm)
+                ? await self.startWork(id, teammateId, choice.root)
+                : await self.startSwarm(id, teammateId, choice.root, choice.swarm)
               // M326. The task opens in its workspace once it has started.
               if (outcome.kind === 'started') boardVerbsRef.current?.focusItem?.(id)
               return outcome.kind === 'started' ? { kind: 'started' } : { kind: 'refused', reason: outcome.reason }
@@ -263,7 +281,9 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       const recentTeammate = item !== undefined ? undefined : [...(workItemsRef.current ?? [])]
         .filter((i) => i.teammateId !== undefined && (teammatesRef.current ?? []).some((t) => t.id === i.teammateId))
         .sort((a, b) => b.updatedAt - a.updatedAt)[0]?.teammateId
-      const teammateId = opts?.teammateId ?? recentTeammate
+      // M400. The recent teammate is a PREFERENCE (reused when its places hold
+      // the folder), never a pick: a pick would gate the folder on it again.
+      const teammateId = opts?.teammateId
       // With no teammate chosen there is nothing to read and nothing to
       // derive: the sheet opens on the question it can answer.
       // M275. An ARRANGEMENT always opens the sheet, even when the triple is
@@ -275,9 +295,12 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       // start), after the person's recipes arrive — a slow read costs the
       // saved ones, never the sheet.
       const withRecipes = (open: () => void): void => {
-        void window.canvas.recipes.list().then((saved) => { recipes = allRecipes(saved) }, () => undefined).finally(open)
+        void Promise.all([
+          window.canvas.recipes.list().then((saved) => { recipes = allRecipes(saved) }, () => undefined),
+          window.canvas.spawn.recent().then((r) => { recents = r }, () => undefined)
+        ]).finally(open)
       }
-      if (teammateId === undefined || item === undefined || opts?.swarm !== undefined || opts?.recipeId !== undefined) { withRecipes(() => openSheet(title, item !== undefined, wanted, item?.id, teammateId)); return }
+      if (teammateId === undefined || item === undefined || opts?.swarm !== undefined || opts?.recipeId !== undefined) { withRecipes(() => openSheet(title, item !== undefined, wanted, item?.id, teammateId, recentTeammate)); return }
       void window.canvas.board.repositories({ teammateId }).then((answer) => {
         const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
         const needs = startWorkNeeds({ title, teammateId }, { teammates: teammatesRef.current ?? [], repos, wanted })
@@ -349,7 +372,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     beginNewWorkItem: () => {
       setInputMode({
         kind: 'text',
-        label: 'New work item — a title',
+        label: 'Add a task to the board — its title',
         initial: '',
         submit: (value) => {
           const refusal = workItemRefusal(value)

@@ -77,6 +77,13 @@ export interface BoardVerbs {
   /** M326. Open a task's focus view by its item — where a task a person just started lands. */
   focusItem?: (itemId: string) => void
   /**
+   * M400 (B1). The launcher's reuse-or-mint executor for a folder, shared by
+   * the New task sheet: the repository answer first, then a standing teammate
+   * whose place contains the folder (`prefer` first) or a new one whose only
+   * place is exactly it. Nothing is minted on a refusal. Installed by Canvas.
+   */
+  teammateFor?: (folder: string, prefer?: string) => Promise<{ kind: 'teammate'; id: string } | { kind: 'refused' | 'not-a-repository'; reason: string }>
+  /**
    * Decision queue. The ONE task a panel belongs to, or undefined for none or
    * several — so an answered request is filed under its task. A task
    * timeline read filters events by `itemId`, so a row without one never

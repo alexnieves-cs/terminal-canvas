@@ -10,12 +10,16 @@
  *
  * Two rules here are load-bearing and each fails silently if undone.
  *
- * **The order is a DEPENDENCY, not a preference.** `task`, then `agent`,
- * then `repository`: the repositories on offer are the ones under the CHOSEN
- * teammate's places, so there is nothing to list until the agent is known.
- * Asking for a repository first would offer a list belonging to nobody, and
- * the Places gate would then refuse the chosen root by name — a question
- * answered and then overruled.
+ * **The order is the launcher's: `task`, then `repository`, then — only
+ * when it cannot be derived — `agent`** (M400, B1). Until M400 the agent came
+ * first, because the repositories on offer were the CHOSEN teammate's; a
+ * fresh install has no teammate, so its "+ New task" showed a disabled
+ * Repository over "no teammate yet" while the launcher started the same
+ * task from a sentence and a folder. Now the repositories on offer are every
+ * placed teammate's (plus recent folders and Choose…), and WHO follows from
+ * WHERE through `folderTeammatePlan` — the launcher's own reuse-or-mint rule.
+ * The agent is a question only when the person PICKED one whose places do
+ * not contain the chosen folder; the Places gate in main stays the authority.
  *
  * **An EMPTY needs list is the dispatch-without-a-sheet signal.** M114's
  * gesture — drag a GitHub card onto a teammate whose place holds its clone —
@@ -37,10 +41,11 @@ import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { teammateRefusal, workItemRefusal, type WorkItemState } from '@shared/work-items'
 import { SWARM_PRESETS, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 import { BACKENDS, BACKEND_IDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
+import { folderTeammatePlan, placeContains } from '@shared/onboarding'
 import { backendFit, briefIsReadOnly, briefWantsImages, taskRequirements, type BackendFit, type TaskRequirement } from '@shared/backend-fit'
 
-/** The three inputs, in the order they are asked. */
-export type StartWorkNeedField = 'task' | 'agent' | 'repository'
+/** The three inputs, in the order they are asked (M400: the launcher's — what, where, who). */
+export type StartWorkNeedField = 'task' | 'repository' | 'agent'
 export interface StartWorkNeed { field: StartWorkNeedField; why: string }
 
 /** A repository under a teammate's places, as main answered it. `repo` is the normalised origin, or null for a repository with no origin — which is still a repository to work in. */
@@ -49,6 +54,7 @@ export interface StartWorkRepo { path: string; repo: string | null }
 /** What the user has chosen so far. Every field but the title is absent until answered. */
 export interface StartWorkChoice {
   title: string
+  /** M400. A teammate the person (or the caller: a drop, a card) PICKED. Absent: the folder decides, by `startWorkWho`. */
   teammateId?: string
   /** An absolute repository root the user picked. When absent, an `auto` resolution may still supply one. */
   root?: string
@@ -126,44 +132,78 @@ export function startWorkNeeds(choice: StartWorkChoice, ctx: StartWorkContext): 
   const titleRefusal = workItemRefusal(choice.title)
   if (titleRefusal !== null) needs.push({ field: 'task', why: titleRefusal })
   const mate = mateOf(ctx, choice.teammateId)
-  if (mate === undefined) {
-    needs.push({ field: 'agent', why: 'choose a teammate to do the work — it brings its own places, services and brief' })
-    // The repository list is the CHOSEN teammate's places' clones. With no
-    // teammate there is nothing to list, so the question is not asked yet.
+  const root = startWorkRoot(choice, ctx)
+  // A picked teammate's own list, when the caller read only that (the card's
+  // fast path and the agent line) — its name is the one the sentences use.
+  const whose = mate === undefined ? '' : `${teammateWord(mate)}'s `
+  if (root === null) {
+    if (ctx.repos === undefined) {
+      needs.push({ field: 'repository', why: 'reading the repositories you have worked in…' })
+      return needs
+    }
+    const resolved = resolveRepository(ctx.repos, ctx.wanted)
+    if (resolved.kind === 'ambiguous') {
+      needs.push({ field: 'repository', why: `${resolved.paths.length} of ${whose}repositories are clones of ${String(ctx.wanted)} — choose which one` })
+      return needs
+    }
+    needs.push({
+      field: 'repository',
+      why: ctx.wanted !== null
+        ? `no known repository is a clone of ${ctx.wanted} — choose its folder`
+        : ctx.repos.length === 0
+          ? (mate === undefined ? 'choose the repository folder to work in' : `${teammateWord(mate)}'s places hold no repository — choose another folder, or add one in the Teammates pane`)
+          : `choose which of ${whose === '' ? 'your' : whose}${ctx.repos.length} repositories to work in`
+    })
     return needs
   }
-  if (startWorkRoot(choice, ctx) !== null) return needs
-  const name = teammateWord(mate)
-  if (ctx.repos === undefined) {
-    needs.push({ field: 'repository', why: `reading the repositories under ${name}'s places…` })
-    return needs
+  // M400. The agent is asked ONLY when a picked one cannot work there — the
+  // folder already answers who for everyone else (reuse, or a new teammate
+  // whose only place is exactly that folder).
+  if (mate !== undefined && mate.places.length > 0 && !startWorkReaches(mate, root)) {
+    needs.push({ field: 'agent', why: `${teammateWord(mate)} may not work in ${shortPath(root)} — choose another agent, or Automatic` })
   }
-  if (ctx.repos.length === 0) {
-    needs.push({ field: 'repository', why: `${name}'s places hold no repository — add a folder with a clone in the Teammates pane` })
-    return needs
-  }
-  const resolved = resolveRepository(ctx.repos, ctx.wanted)
-  if (resolved.kind === 'ambiguous') {
-    needs.push({ field: 'repository', why: `${resolved.paths.length} of ${name}'s repositories are clones of ${String(ctx.wanted)} — choose which one` })
-    return needs
-  }
-  needs.push({
-    field: 'repository',
-    why: ctx.wanted === null
-      ? `choose which of ${name}'s ${ctx.repos.length} repositories to work in`
-      : `no place of ${name}'s holds a clone of ${ctx.wanted} — choose another repository, or add the folder in the Teammates pane`
-  })
   return needs
 }
 
+/** M400. Does a teammate's grant reach this folder? The launcher's path-segment containment, never a string prefix. */
+export function startWorkReaches(mate: Pick<PersistedTeammate, 'places'>, root: string): boolean {
+  return mate.places.some((place) => placeContains(place, root))
+}
+
 /**
- * The refusals a SHEET cannot answer: there is no teammate to choose, or the
- * chosen one may touch nothing. Both are grants, and nothing in this flow
+ * M400. WHO would do this start: the PICKED teammate, or — when none was
+ * picked — the launcher's answer for the folder (`folderTeammatePlan`): a
+ * standing teammate whose place contains it (`prefer`, the last used, first),
+ * or a NEW one whose only place is exactly the folder, made at Start and
+ * never on a refusal. `none` until there is a folder.
+ */
+export type StartWorkWho =
+  | { kind: 'picked'; mate: PersistedTeammate }
+  | { kind: 'reuse'; mate: PersistedTeammate }
+  | { kind: 'mint'; name: string; places: string[] }
+  | { kind: 'none' }
+
+export function startWorkWho(choice: StartWorkChoice, ctx: StartWorkContext, prefer?: string): StartWorkWho {
+  const mate = mateOf(ctx, choice.teammateId)
+  if (mate !== undefined) return { kind: 'picked', mate }
+  const root = startWorkRoot(choice, ctx)
+  if (root === null) return { kind: 'none' }
+  const plan = folderTeammatePlan(root, ctx.teammates, prefer)
+  if (plan.reuse !== undefined) {
+    const standing = ctx.teammates.find((t) => t.id === plan.reuse)
+    if (standing !== undefined) return { kind: 'reuse', mate: standing }
+  }
+  return plan.mint === undefined ? { kind: 'none' } : { kind: 'mint', name: plan.mint.name, places: plan.mint.places }
+}
+
+/**
+ * The refusal a SHEET cannot answer: the PICKED teammate may touch nothing. Both are grants, and nothing in this flow
  * widens one — the fix is named and it is in the Teammates pane.
  * `teammateRefusal` is M114's own sentence, imported rather than restated.
  */
 export function startWorkRefusal(choice: StartWorkChoice, ctx: StartWorkContext): string | null {
-  if (ctx.teammates.length === 0) return 'no teammate yet — add one in the Teammates pane, with a folder it may work in'
+  // M400. An empty roster is NOT a refusal any more: the folder answers who
+  // (the launcher's mint), so a fresh install starts from "+ New task".
   const mate = mateOf(ctx, choice.teammateId)
   return mate === undefined ? null : teammateRefusal(mate)
 }
@@ -181,12 +221,13 @@ export type StartWorkOutcome =
   | { kind: 'refused'; reason: string }
 
 /** The triple, stated before anything is minted. The root in the path rule's words; the full path rides the element's `title`, as everywhere. */
-export function startWorkSummary(choice: StartWorkChoice, mate: PersistedTeammate | undefined, root?: string | null): string {
+export function startWorkSummary(choice: StartWorkChoice, mate: PersistedTeammate | string | undefined, root?: string | null): string {
   const where = root === undefined ? choice.root : (root ?? choice.root)
   return [
     choice.title.trim(),
     where === undefined || where === '' ? undefined : shortPath(where),
-    mate === undefined ? undefined : teammateWord(mate),
+    // M400. A string is a teammate not made yet — the launcher's `Claude · <folder>`.
+    mate === undefined ? undefined : typeof mate === 'string' ? mate : teammateWord(mate),
     // M275. The arrangement joins the summary rather than replacing a member
     // of it: a swarm is still a task, a teammate and a repository, and the
     // person is owed the shape as well as the triple before anything mints.
@@ -207,12 +248,14 @@ export function startWorkSummary(choice: StartWorkChoice, mate: PersistedTeammat
  * sense from. Kept as one function so the sheet's disabled Start, the palette
  * row's reason and the executor's last gate cannot disagree.
  */
-export function startWorkSwarmRefusal(choice: StartWorkChoice, ctx: StartWorkContext): string | null {
+export function startWorkSwarmRefusal(choice: StartWorkChoice, ctx: StartWorkContext, who?: { name: string; places: readonly string[] }): string | null {
   if (choice.swarm === undefined) return null
   const mate = mateOf(ctx, choice.teammateId)
+  // M400. `who` is the teammate the folder decided (reused or to be made) when none was picked.
+  const seat = mate === undefined ? who : { name: teammateWord(mate), places: mate.places }
   return swarmRefusal(SWARM_PRESETS[choice.swarm], {
     agentAvailable: ctx.agentAvailable !== false,
-    ...(mate === undefined ? {} : { teammate: { name: teammateWord(mate), places: mate.places } }),
+    ...(seat === undefined ? {} : { teammate: seat }),
     ...(ctx.itemState === undefined ? {} : { item: { state: ctx.itemState } })
   })
 }

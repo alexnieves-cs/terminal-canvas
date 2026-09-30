@@ -251,7 +251,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
           // middles; a column its centres), the same verbs the palette runs.
           ...(selectedShape ? [
             // M394. Sketch → plan, where the chart is: the Start work sheet opens with its steps.
-            { key: 'plan', label: 'Start work', icon: <Lanes />, run: () => { refusedSaid(actions.planFromChart()) } },
+            { key: 'plan', label: 'New task', icon: <Lanes />, run: () => { refusedSaid(actions.planFromChart()) } },
             { key: 'layout', label: 'Lay out', icon: <Lanes />, run: () => { refusedSaid(actions.layoutFlowchart('down')) } }
           ] : []),
           { key: 'tidy', label: 'Tidy', icon: <Grid />, run: () => actions.tidyPanels([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : 'select at least two panels to tidy' },

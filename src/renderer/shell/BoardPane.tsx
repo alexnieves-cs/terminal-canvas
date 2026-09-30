@@ -25,7 +25,7 @@ import { panelState, providerState } from '@renderer/panels/panel-state'
  * instead, disabled by nothing, because a board row that did nothing on
  * click would read as a broken row.
  */
-export const BOARD_EMPTY = 'Nothing on the board — add a GitHub or Jira item, or ⌘K, then New work item…'
+export const BOARD_EMPTY = 'Nothing on the board — add a GitHub or Jira item, or ⌘K, then Add a task to the board…'
 
 export interface BoardPaneProps {
   onToggle: () => void

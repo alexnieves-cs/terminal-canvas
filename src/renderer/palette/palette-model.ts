@@ -8,6 +8,7 @@ import { fuzzyMatch } from './fuzzy'
  */
 
 export type SectionId =
+  | 'task'
   | 'panel'
   | 'spawn'
   | 'prompt'
@@ -37,6 +38,13 @@ export interface SectionDef {
  * runs are worth more vertical space than the rows they administer.
  */
 export const SECTIONS: readonly SectionDef[] = [
+  // M400 (B1). FIRST, and holding only rows PROMOTED by their `leads`
+  // (`filterCommands`): "New task" sat thirteenth for "new task", under
+  // Panels' "Open … as a workflow". No row is declared in it, so the resting
+  // list and any query no lead answers are unchanged — a declared row here
+  // would lead every query its long searchText happens to contain as a
+  // subsequence ("auth" did, measured by `verify:palette` 33).
+  { id: 'task', label: 'Tasks' },
   { id: 'panel', label: 'Panels' },
   { id: 'spawn', label: 'New panel' },
   { id: 'prompt', label: 'Prompts' },
@@ -133,6 +141,13 @@ export interface Command {
    * always-visible `manage.*` rows are the door for anyone not guessing.
    */
   hiddenAtRest?: true
+  /**
+   * M400. Words this row is THE answer to: a query that is a prefix of one
+   * (`new`, `task`, `sta`) ranks it above every fuzzy match. A prefix, never
+   * a subsequence — a long searchText matches half the alphabet as a
+   * subsequence, and a bonus on that would pull the row over `restart`.
+   */
+  leads?: readonly string[]
   /** The drill-in this row belongs to, if any. See PaletteScope. */
   scope?: PaletteScope
   /**
@@ -226,7 +241,10 @@ export function filterCommands(
   commands.forEach((command, order) => {
     if (scope !== null ? command.scope !== scope : resting && command.hiddenAtRest) return
     const match = matchCommand(query, command)
-    if (match !== null) scored.push({ command, score: match, order })
+    // M400. A row the query LEADS to is shown in the first section, Tasks —
+    // a copy, so the row keeps its own section everywhere else and the
+    // headers stay one-per-section (check 30, `verify:panels:core` 48).
+    if (match !== null) scored.push({ command: scope === null && leadsQuery(query, command) ? { ...command, group: 'task' } : command, score: match, order })
   })
   scored.sort((a, b) =>
     (sectionIndex(a.command.group) - sectionIndex(b.command.group)) ||
@@ -256,10 +274,18 @@ const PATH_SCORE = 1
  * nothing lit in it looks like a mistake.
  */
 const VISIBLE_BONUS = 40
+/** M400. Above any fuzzy score a short query reaches (a word run is ~50, plus VISIBLE_BONUS). */
+const LEAD_BONUS = 200
+
+/** M400. Is the query a prefix of one of the row's `leads`? Case- and outer-space-insensitive. */
+export function leadsQuery(query: string, command: Command): boolean {
+  const q = query.trim().toLowerCase().replace(/\s+/g, ' ')
+  return q !== '' && (command.leads ?? []).some((lead) => lead.toLowerCase().startsWith(q))
+}
 
 export function matchCommand(query: string, command: Command): number | null {
   const fuzzy = fuzzyMatch(query, haystack(command))
-  if (fuzzy !== null) return fuzzy.score + (query.trim() !== '' && fuzzyMatch(query, command.title) !== null ? VISIBLE_BONUS : 0)
+  if (fuzzy !== null) return fuzzy.score + (query.trim() !== '' && fuzzyMatch(query, command.title) !== null ? VISIBLE_BONUS : 0) + (leadsQuery(query, command) ? LEAD_BONUS : 0)
   const q = query.trim().toLowerCase()
   if (command.pathText !== undefined && q !== '' && command.pathText.toLowerCase().includes(q)) return PATH_SCORE
   return null

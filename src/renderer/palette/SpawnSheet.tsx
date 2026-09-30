@@ -429,7 +429,7 @@ export function SheetHeader({ current, onTask, onPanel }: { current: 'task' | 'p
   const other = current === 'task' ? onPanel : onTask
   return (
     <div className="sheet__head">
-      <div className="sheet__title">{current === 'task' ? 'Start a task' : 'New panel'}</div>
+      <div className="sheet__title">{current === 'task' ? 'New task' : 'New panel'}</div>
       {other !== undefined && (
         <div className="sheet__switch" role="tablist" aria-label="What to create" data-sheet-switch>
           {(['task', 'panel'] as const).map((side) => (

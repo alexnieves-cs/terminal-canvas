@@ -1322,15 +1322,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     run: () => actions.openBoard()
   })
   // M197 (D05). THE START WORK DOOR. Present always and never disabled: the
-  // flow's own sentences are the answer to every empty case (no teammate
-  // yet, no place, no repository), each naming its fix, and a row that
-  // vanished would read as a feature that was never built. It is the only
-  // door that reaches a start with no board card already in hand.
+  // flow's own sentences are the answer to every empty case (no place, no
+  // repository), each naming its fix, and a row that vanished would read as a
+  // feature that was never built. It is the only door that reaches a start
+  // with no board card already in hand.
+  // M400 (B1). "task" is the noun: the row is New task…, the same sheet the
+  // top bar's "+ New task" opens, and its `leads` lift it into the Tasks
+  // section above every other row for "new", "task" and "start"
+  // (`verify:palette task.rank.1`). The old words stay in searchText, so
+  // "start work" still finds it. At rest it keeps its Canvas place.
   out.push({
     id: 'start.work',
-    title: 'Start work…',
-    subtitle: 'a task, a teammate and a repository — one conversation in its own lane',
-    searchText: 'start work task issue dispatch teammate repository lane begin new',
+    title: 'New task…',
+    subtitle: 'what, where, and who — an agent works on it on its own branch',
+    searchText: 'new task start work issue dispatch teammate repository folder lane begin',
+    leads: ['new task', 'task', 'start task', 'start work'],
     group: 'canvas',
     run: () => actions.beginStartWork()
   })
@@ -1348,7 +1354,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // `verify:swarm rows.1` fails for a preset with no row here, which is the
   // other half: neither can drift without a red.
   const swarmRow = (preset: typeof SWARM_LIST[number]): Omit<Command, 'id'> => ({
-    title: `Start work as a ${preset.label} swarm…`, subtitle: preset.hint,
+    title: `New task as a ${preset.label} swarm…`, subtitle: preset.hint,
     searchText: `swarm arrangement start work ${preset.id} ${preset.label} supervisor handoff worktree lane multi agent seats`,
     group: 'canvas', run: () => actions.beginStartWork({ swarm: preset.id })
   })
@@ -1388,8 +1394,10 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   })
   out.push({
     id: 'board.new',
-    title: 'New work item…',
-    searchText: 'board work item task card todo kanban new',
+    // M400. Named for what it does — a card on the board, nothing started —
+    // so it cannot be mistaken for New task… (the row above it in the old list).
+    title: 'Add a task to the board…',
+    searchText: 'board work item task card todo kanban new add',
     group: 'canvas',
     run: () => actions.beginNewWorkItem()
   })
@@ -2291,7 +2299,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({ id: 'arrange.distribute.down', title: 'Space evenly down', subtitle: 'equal gaps, top to bottom; the outer two stay put', group: 'canvas', searchText: 'distribute space evenly vertical down arrange', run: () => { actions.distributeObjects('down') } }, many < 3 ? 'select three or more objects first' : undefined))
   out.push(withReason({ id: 'flowchart.layout.down', title: 'Lay out this chart, top to bottom', subtitle: 'the selected chart in ranks, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram vertical down', run: () => { actions.layoutFlowchart('down') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
   out.push(withReason({ id: 'flowchart.layout.right', title: 'Lay out this chart, left to right', subtitle: 'the selected chart in columns, each shape travelling to its place', group: 'canvas', searchText: 'flowchart layout auto arrange tidy diagram horizontal right', run: () => { actions.layoutFlowchart('right') } }, shapeSelected === undefined && many < 2 ? 'select a shape in a chart first' : undefined))
-  out.push(withReason({ id: 'flowchart.plan', title: 'Start work from this chart…', subtitle: 'its steps become a task plan — nothing runs until you press Start', group: 'canvas', searchText: 'flowchart plan start work task steps sketch diagram', run: () => { actions.planFromChart() } }, shapeSelected === undefined ? 'select a shape in a chart first' : undefined))
+  out.push(withReason({ id: 'flowchart.plan', title: 'New task from this chart…', subtitle: 'its steps become a task plan — nothing runs until you press Start', group: 'canvas', searchText: 'flowchart plan start work task steps sketch diagram', run: () => { actions.planFromChart() } }, shapeSelected === undefined ? 'select a shape in a chart first' : undefined))
   out.push({ id: 'flowchart.import', title: 'Import a Mermaid flowchart…', subtitle: 'a .mmd or .md file becomes shapes you can edit — nothing in it runs', group: 'canvas', searchText: 'mermaid import flowchart diagram graph file', run: () => { void actions.importFlowchart() } })
   out.push({ id: 'flowchart.export.mermaid', title: 'Export the diagram as Mermaid…', subtitle: 'the selected chart, or every shape — secrets scrubbed, the count said', group: 'canvas', searchText: 'mermaid export flowchart diagram save text', run: () => { void actions.exportFlowchart('mermaid') } })
   out.push({ id: 'flowchart.export.svg', title: 'Export the diagram as SVG…', subtitle: 'a vector picture of the chart — text only, secrets scrubbed', group: 'canvas', searchText: 'svg export flowchart diagram image vector save', run: () => { void actions.exportFlowchart('svg') } })

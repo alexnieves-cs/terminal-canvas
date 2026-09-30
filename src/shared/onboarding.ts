@@ -171,7 +171,8 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // absolute folder or it is refused by main one step later with less to say.
   const folder = raw.startsWith('/') ? trimSeparators(raw) : null
   const where = folder === null ? '' : shortPath(folder)
-  const standing = folder === null ? undefined : ctx.teammates.find((t) => t.places.some((place) => placeContains(place, folder)))
+  const who = folder === null ? undefined : folderTeammatePlan(folder, ctx.teammates)
+  const standing = who?.reuse === undefined ? undefined : ctx.teammates.find((t) => t.id === who.reuse)
   const standingName = standing === undefined ? undefined : standing.name.trim() === '' ? standing.id : standing.name
   // The OUTCOME, stated as soon as the folder allows it — agent, repository,
   // branch, in that order — so the line above Start work previews what the
@@ -209,18 +210,30 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // the first line to the agent (the M205 critic).
   const rest = more.join('\n').trim()
   const description = cut ? sentence : rest === '' ? undefined : rest
-  if (standing !== undefined) {
-    return {
-      kind: 'start', title, ...(description === undefined ? {} : { description }), folder,
-      teammate: { reuse: standing.id },
-      summary: outcome
-    }
-  }
   return {
     kind: 'start', title, ...(description === undefined ? {} : { description }), folder,
-    teammate: { mint: { name: `Claude · ${folderBase(folder)}`, places: [folder] } },
+    teammate: folderTeammatePlan(folder, ctx.teammates),
     summary: outcome
   }
+}
+
+/**
+ * M400 (B1). WHO works in a folder when the person has not picked — the ONE
+ * reuse-or-mint rule, shared by the launcher's first start and every door
+ * of the New task sheet, so the two cannot drift. A standing teammate whose
+ * place contains the folder by PATH SEGMENT is reused (`prefer` first, the
+ * last one the person used, when it still contains it); otherwise one is
+ * planned whose ONLY place is exactly the folder. Pure: the mint itself
+ * happens in Canvas's `teammateForFolder`, after the repository answer, and
+ * nothing is minted on a refusal.
+ */
+export function folderTeammatePlan(folder: string, teammates: FirstWorkContext['teammates'], prefer?: string): { reuse: string; mint?: undefined } | { reuse?: undefined; mint: { name: string; places: string[] } } {
+  const at = trimSeparators(folder)
+  const contains = (t: FirstWorkContext['teammates'][number]): boolean => t.places.some((place) => placeContains(place, at))
+  const preferred = prefer === undefined ? undefined : teammates.find((t) => t.id === prefer && contains(t))
+  const standing = preferred ?? teammates.find(contains)
+  if (standing !== undefined) return { reuse: standing.id }
+  return { mint: { name: `Claude · ${folderBase(at)}`, places: [at] } }
 }
 
 function folderBase(folder: string): string {
@@ -251,11 +264,11 @@ export function firstWorkRepoAnswer(status: RepoStatus, folder: string): FirstWo
     }
     return { kind: 'repository' }
   }
-  if (status.kind === 'git-missing') return { kind: 'refused', reason: 'git was not found on this machine — Start work makes a branch for the task; install git, or Ask without a folder' }
+  if (status.kind === 'git-missing') return { kind: 'refused', reason: 'git was not found on this machine — a task works on its own branch; install git, or Ask without a folder' }
   // A mistyped path is not a plain folder: offering "chat in this folder" for
   // one that does not exist is the wrong fix.
   if (/no such file|cannot change to|ENOENT|does not exist/i.test(status.detail)) {
     return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} does not exist — check the path, or use Choose…` }
   }
-  return { kind: 'not-a-repository', reason: `${shortPath(trimSeparators(folder))} is not a git repository — Start work makes a branch for the task, so it needs one` }
+  return { kind: 'not-a-repository', reason: `${shortPath(trimSeparators(folder))} is not a git repository — a task works on its own branch, so it needs one` }
 }

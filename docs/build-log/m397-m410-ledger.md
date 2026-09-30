@@ -323,3 +323,101 @@ any first-run launcher scene (the tip's button and sentence); `palette` scenes o
 watchdog — `starter.1` green, **a baseline red retired**. `verify:canvas` 7/7, `verify:palette` 167/167,
 `verify:file` 115/115, `verify:rail` 258/258, `verify:meta` green after the audit rows. `verify:panels:product` crashed its renderer (exit 5) with the first A10 cut in three runs out of three (see A10),
 and never without it.
+
+### M400 — one task form behind every door (B1)
+
+Screenshots in `/tmp/tc-daily-loop-shots/`: `B1-before.png`, `B1-before-palette.png`, `B1-after-open.png`,
+`B1-after.png`, `B1-after-started.png`, `B1-after-palette.png`.
+
+**B1 (P1). *Reproduced*** on a fresh slot-1 profile (`rm -rf /tmp/tcc-1`, 1200×800): "+ New task" opened "Start a
+task" with Repository first and DISABLED ("choose who does it below first…"), who forced open on "choose a
+teammate…", and the red "no teammate yet — add one in the Teammates pane" (`B1-before.png`). ⌘K: "new task" selected
+"Open review this repository as a workflow"; "new", "task" and "start" did not lead with Start work… at all.
+*Cause:* the sheet's model made the order a dependency — task → agent → repository — because the repositories on offer
+were the CHOSEN teammate's (`startWorkNeeds`, the list read after the agent field), and `startWorkRefusal` refused an
+empty roster outright. The launcher had solved the same problem (`firstWorkPlan`: reuse a teammate whose place contains
+the folder, else mint one for exactly it) but in Canvas-only code nobody else could call. The palette row sat in Canvas,
+the ninth section, and its searchText led with "start work".
+*Fix:*
+- **One reuse-or-mint rule, one executor.** `folderTeammatePlan` (`shared/onboarding.ts`) is extracted from
+  `firstWorkPlan` (which now calls it) and takes an optional `prefer`. Canvas's `teammateForFolder` is the launcher's
+  former inline body — `firstWorkRepoAnswer` (git status) first, then reuse or mint — installed as
+  `boardVerbs.teammateFor`. `startFirstWork` and the sheet's submit both call it; the sheet resolves who BEFORE
+  `addWorkItem`, so a refusal mints no teammate and no card. Folder-access rules unchanged: exactly the chosen folder,
+  path-segment `placeContains`, nothing on a refusal, main's Places gate the authority. The Codex-only chat branch stays
+  in `startFirstWork`, untouched. The card fast path (`beginStartWork`'s empty-needs dispatch) is unchanged.
+- **The model** (`start-work.ts`): needs are task → repository → agent, and agent is asked ONLY when a PICKED teammate's
+  places do not contain the folder (`startWorkReaches`). An empty roster is no refusal. New `startWorkWho`
+  (picked / reuse / mint / none); `startWorkSwarmRefusal` takes the answered teammate so a planned mint never trips "has
+  no places"; `startWorkSummary` accepts a not-yet-made teammate's name.
+- **The sheet** (`StartWorkSheet.tsx`), the launcher's order: Task, then Repository (never disabled; every placed
+  teammate's repositories read once at open, plus the launcher's recent folders, plus Choose… → `teammate.choosePlace`),
+  then one closed who line — `Claude Code · on its own branch, and may work only in <folder> · Change` for a mint, or
+  `<teammate> · <backend>` — whose picker has **Automatic** first. Title "New task", aria-label "New task". Options
+  (recipe, arrangement/swarm, criteria…) unchanged, and swarm/recipe rows still open it held open (`optionsOpenAtRest`).
+  *Decision:* the request counter (stale-reply guard) is gone because the list no longer depends on who is picked —
+  one read at open, nothing to overtake. *Decision:* a teammate from the typed door's recent task, the last-used or a
+  draft is a PREFERENCE (reused when its place contains the folder), not a pick; only a caller's own teammate (a drop, a
+  card) arrives picked. Persisted `tc.startWork.draft`/`.last` keep their shape and parsers; a restored `teammateId` is
+  read as a preference. *Decision:* a `preferRoot` proposal (`tc task`, URL) chooses only among the GRANTED
+  repositories, never a recent folder — the M313 lb rule.
+- **Ranking.** A `task` section ("Tasks") is first in `SECTIONS`, but no row is declared in it: a row's new `leads`
+  promote a COPY of it there when the query is a prefix of a lead, with `LEAD_BONUS` for the selection. Declaring
+  `start.work` in the section first made it lead "auth" (palette 33 went red), so the promotion is by prefix only. The
+  resting list is unchanged. `start.work` keeps its id (V9 / closure.v9.1 literal).
+- **Copy ("task" is the noun).** `start.work` → "New task…"; swarm rows → "New task as a … swarm…"; `board.new` →
+  "Add a task to the board…" (still `beginNewWorkItem`; its prompt "Add a task to the board — its title"); BOARD_EMPTY;
+  card/Focus/readiness verbs "Start task…"/"Start task again…"; Orchestrate's "Start task" and empty line; flowchart
+  "New task from this chart…" (inspector, palette row, pill); review/recipe references; onboarding's git refusals say
+  "a task works on its own branch". The launcher (its three steps, headline, step-3 sentence) is untouched.
+*After (driven, real app, fresh profile):* "+ New task" → Task / Repository (live, Choose…) / closed who line, no
+refusal (`B1-after-open.png`). Choose… opens the native dialog, which this session cannot drive (osascript has no
+accessibility access), so the folder came from the sheet's other real route: a login shell opened in
+`/tmp/tc-b1-repo` through the Panel tab put it in recents; "+ New task" restored the draft, the repository was chosen,
+who read "Claude Code · on its own branch, and may work only in /tmp/tc-b1-repo" (`B1-after.png`), and a real click on
+Start task made teammate `Claude · tc-b1-repo` with places `["/tmp/tc-b1-repo"]`, a lane `tc/c2-…`, and a streaming
+conversation in the focus view (`B1-after-started.png`); the tiny task committed `Add hello line to README` in its lane
+and the turn ended. ⌘K: "new", "new task", "task", "start" each show Tasks › *New task… selected; "restart" still leads
+with Restart panel… (`B1-after-palette.png`).
+*Checks added:* `verify:palette start.who.1` (who from where: mint for exactly the folder, reuse by containment with
+the preferred first, sibling ≠ inside, pick stays pick, swarm refusal with a planned mint) and `task.rank.1` (first and
+selected for new / new task / task / start / Start work; not for restart or auth; not at rest). `verify:first-run
+start.form.1` (the reproduction as markup: no teammate → Repository enabled, Choose… offered, no "no teammate yet", who
+closed, Task before Repository; red against the old sheet, whose select was `disabled`).
+*Checks whose assertion changed ON PURPOSE (each commented in place):*
+- `verify:palette start.1a` — pinned task → agent → repository with a missing agent hiding the repository question,
+  which IS B1's dead end; now task → repository, and agent only for a picked teammate that cannot reach the folder.
+- `verify:palette start.1e` — an empty roster was a refusal ("no teammate yet"); now null. The placeless arm stays.
+- `verify:palette board.1` — the title regex (`/New work item/` → `/Add a task to the board/`); group, reason and
+  `beginNewWorkItem` unchanged.
+- `verify:first-run startwork-first.dom.1` — was Repository before Task with the sole placed teammate PICKED; now Task
+  before Repository, Automatic selected and "works in the folder you choose" until a folder decides.
+- `verify:first-run startwork-first.dom.2` — who used to open itself when no teammate could be preselected (the gate);
+  now it stays a closed line. Options' half unchanged.
+- `verify:panels:product start.door.1` — asserted the repository disabled before a teammate is picked (or sam picked);
+  now the field is live at open with every placed teammate's repositories, agent on Automatic.
+- `verify:panels:product start.door.2` — no longer picks sam first: the typed task starts with nobody picked and the
+  folder answers who (sam, by containment) through `teammateForFolder`.
+- `verify:panels:core 48` — ORDER gains 'Tasks' first (SECTIONS changed).
+- `verify:rail focus.3` (`/Start work/` → `/Start task/`) and `verify:panels:orchestrate orch-tasks.app.2`
+  (`primary === 'Start task'`) — copy only.
+- Golden scene `start-work` (`scripts/shot.cjs`): intent rewritten and the teammate pick removed (it now types "New
+  task" in ⌘K and picks the first repository row).
+*Not changed, checked:* `verify:swarm` rows.1/doors.1/sheet.* (39/39 — literal ids kept), `verify:onboarding`
+(21/21, `onboarding.intent.*` unchanged), `onboarding.intent.e2e.*` and `start.recovery.*` (not touched; they go through
+the same executor). The plan's `verify:styles` "+ New task" literal and `panels:shell 76` needed nothing.
+*Not done / left:* no Electron check drives the fresh-roster sheet end to end: a folder outside every place reaches the
+sheet only through Choose… (a native dialog the harness cannot answer) or recents (main's `spawn.recent`, fed by a
+spawn); start.form.1 pins the markup and the drive above covered the path by hand. The flowchart pill and palette row
+were renamed; `verb-table.ts`'s descriptive `canvas:` strings still say "Start work…" (documentation text that
+`closure.v9.1` does not read as copy). The launcher's own `aria-label="Start work"` and its "Start work is unavailable"
+reason were left alone (Keep list).
+*Goldens expected to move:* `start-work` (whole sheet; `spawn-sheet` should not — only the Task side's title changed), any scene with
+a work card showing its verb (`Start task…`), `board`/Orchestrate task-list scenes with a not-started row (`Start
+task`), `palette*` only if its query leads to New task (the resting list is unchanged), `focus*` with a not-started
+task, the flowchart scenes with the pill or inspector open ("New task from this chart…").
+*Suites:* `npm run affected` (it pulled in the concurrent main builder's uncommitted `home-dir.ts` too): 55/56 passed in
+779 s. The one red is `verify:panels:agents template.1` (baseline). `verify:panels:product` green including
+`start.door.1/.2`, `start.answer.1`, `onboarding.intent.e2e.*`, `start.recovery.*`; `verify:panels:core` green with 48's
+new ORDER; `verify:panels:orchestrate` green with `orch-tasks.app.2`. Plain: `verify:palette` 169/169, `first-run` 29/29,
+`onboarding` 21/21, `swarm` 39/39, `rail` 258/258, `meta` 51/51 (the lb entries added in `docs/load-bearing.md`).

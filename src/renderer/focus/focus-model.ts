@@ -182,7 +182,7 @@ export function focusHeaderOf(input: {
   }
   return {
     blocker: null,
-    next: input.hasConversation ? 'Nothing waits on you — the conversation is open beside the evidence' : 'This task has not started — open Start work to give it a conversation',
+    next: input.hasConversation ? 'Nothing waits on you — the conversation is open beside the evidence' : 'This task has not started — Start task gives it a conversation',
     go: input.hasConversation ? { kind: 'conversation' } : null
   }
 }

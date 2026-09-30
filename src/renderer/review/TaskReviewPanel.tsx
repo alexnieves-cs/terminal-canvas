@@ -174,7 +174,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
     void p.onSaveRecipe(p.itemId, name, passedChecks).then((refusal) => {
       if (refusal !== null) { setRecipeNote(refusal); return }
       setRecipeName(null)
-      setRecipeNote(`saved — “${name}” is in Start work's Recipe list`)
+      setRecipeNote(`saved — “${name}” is in New task's Recipe list`)
     })
   }
 
@@ -408,7 +408,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
             <>
               <p className="pf__note">{verification.stage === 'verified' ? 'verified — save how this was done to start the next one the same way' : 'not verified yet — a recipe saved now keeps checks that have not passed out of it'}{passedChecks.length > 0 ? ` · keeps ${passedChecks.map((c) => `\`${c}\``).join(', ')}` : ''}</p>
               <button type="button" className="pf__verb pf__verb--word" data-task-save-recipe-open
-                title="Save this task's outcome, criteria, deliverables, arrangement and passing checks as a recipe for Start work"
+                title="Save this task's outcome, criteria, deliverables, arrangement and passing checks as a recipe for New task"
                 onMouseDown={p.press(() => { setRecipeNote(null); setRecipeName(p.title.slice(0, 60)) })}>Save as recipe…</button>
             </>
           ) : (

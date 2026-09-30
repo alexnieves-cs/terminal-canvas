@@ -248,7 +248,7 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   // lane has no diff of its own, and a projection that reported one would be
   // attributing somebody else's files to it.
   if (item.panelId === undefined || item.worktreeId === undefined) {
-    return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start work…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' }
+    return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start task…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' }
   }
 
   // M315. ACCEPTED outranks what the lane's diff now says. After a merge the
@@ -262,19 +262,19 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   // The lane is gone, or was never readable. Never review a DIFFERENT
   // directory to fill the gap: the recovery is to say which one it is.
   if (section === undefined) {
-    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start work again…', detail: 'the worktree this task was started in is not listed any more — starting work again gives it a fresh lane' })
+    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'the worktree this task was started in is not listed any more — starting work again gives it a fresh lane' })
   }
   if (section.result.kind === 'baseline-lost') {
-    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start work again…', detail: section.note ?? 'the lane could not be compared against the main tree — starting work again gives it a fresh lane' })
+    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: section.note ?? 'the lane could not be compared against the main tree — starting work again gives it a fresh lane' })
   }
   if (section.result.kind === 'git-missing') {
-    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start work again…', detail: 'git was not found on the login PATH, so this lane’s changes cannot be read — install git, or start work again once it is there' })
+    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'git was not found on the login PATH, so this lane’s changes cannot be read — install git, or start work again once it is there' })
   }
   if (section.result.kind === 'repo-unreadable') {
-    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start work again…', detail: `this lane’s changes could not be read — ${section.result.detail}` })
+    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: `this lane’s changes could not be read — ${section.result.detail}` })
   }
   if (section.result.kind === 'not-a-repo' || section.result.kind === 'never-started') {
-    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start work again…', detail: 'this lane is not a git worktree any more, so there is no diff to review — starting work again gives it a fresh one' })
+    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'this lane is not a git worktree any more, so there is no diff to review — starting work again gives it a fresh one' })
   }
 
   // Execution outranks the diff: an agent still writing means the diff under

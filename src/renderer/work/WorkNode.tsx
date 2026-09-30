@@ -273,10 +273,10 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   name: a row that disappears is indistinguishable from a
                   feature that was never built, and every one of these is
                   sometimes the right thing to press. `assign` also carries
-                  the `start` arm's own label, so a lost lane says `Start work
+                  the `start` arm's own label, so a lost lane says `Start task
                   again…` and never names a door that does not exist. */}
               <Menu open={assignOpen} onOpenChange={setAssignOpen}>
-                {menuVerb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : props.retainedOutcome !== undefined && props.laneLabel === undefined ? 'Start work again…' : 'Start work…', null, props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : undefined)}
+                {menuVerb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : props.retainedOutcome !== undefined && props.laneLabel === undefined ? 'Start task again…' : 'Start task…', null, props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : undefined)}
                 {/* The menu UNMOUNTS while closed — Radix's default, and the
                     contract verify:swarm reads on the sibling swarm menu: a
                     card at rest must not carry a menu in its markup. It moved
@@ -292,7 +292,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                       return (
                         <li key={t.id} role="none">
                           <MenuItem className="pf__verb pf__verb--word" data-work-assign={t.id} disabled={why !== null}
-                            title={why ?? `Start work on ${item.key ?? item.title} as ${teammateWord(t)}`}
+                            title={why ?? `Start task on ${item.key ?? item.title} as ${teammateWord(t)}`}
                             onSelect={() => props.onDispatch(item.id, t.id)}>{teammateWord(t)}</MenuItem>
                         </li>
                       )

@@ -2739,7 +2739,8 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         // loads the built renderer rather than bundling palette-model.ts, so
         // reaching the real SECTIONS value here would mean adding plumbing
         // this task was told not to add.
-        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Bookmarks', 'Canvas', 'Settings', 'Credentials', 'Manage']
+        // M400 prepends 'Tasks' (rows promoted there by their `leads`).
+        const ORDER = ['Tasks', 'Panels', 'New panel', 'Prompts', 'Workspaces', 'Bookmarks', 'Canvas', 'Settings', 'Credentials', 'Manage']
         const unique = headers.length === new Set(headers).size
         const ordered = headers.join(',') ===
           ORDER.filter((label) => headers.includes(label)).join(',')

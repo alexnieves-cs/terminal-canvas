@@ -210,7 +210,7 @@ import { buildPortable, exportSentence, remapPortable, type parsePortable } from
 import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
+import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -7297,6 +7297,31 @@ export function Canvas({
    * like any other rather than needing a launcher-only special case.
    */
   const firstWorkItemRef = useRef<{ key: string; itemId: string } | null>(null)
+  /**
+   * M400 (B1). THE REUSE-OR-MINT EXECUTOR for a folder — the launcher's, now
+   * shared with every door of the New task sheet (`boardVerbs.teammateFor`),
+   * so both answer "who works here?" with the same code. The ORDER is the
+   * rule, unchanged from M205: the repository answer (`git:status`, read-only)
+   * first, and only then a mint — so a folder that is not a repository, a
+   * subfolder of one, or a machine with no git refuses having minted nothing.
+   * The reuse is `folderTeammatePlan`'s path-segment containment; the mint's
+   * only place is EXACTLY the folder. Main's Places gate stays the authority.
+   */
+  const teammateForFolder = useCallback(async (folder: string, prefer?: string): Promise<{ kind: 'teammate'; id: string } | { kind: 'refused' | 'not-a-repository'; reason: string }> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const repo = firstWorkRepoAnswer(await window.canvas.git.status(folder), folder)
+    if (repo.kind !== 'repository') return repo
+    const plan = folderTeammatePlan(folder, teammatesRef.current, prefer)
+    if (plan.reuse !== undefined) return { kind: 'teammate', id: plan.reuse }
+    const id = `tm-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+    const saved = await window.canvas.teammate.save({ ...emptyTeammate(id, plan.mint.name), places: plan.mint.places })
+    // The mirror is made current HERE: `dispatchWorkItem` → main reads the
+    // roster by id, and the reload below lands a render later.
+    teammatesRef.current = [...teammatesRef.current.filter((t) => t.id !== id), saved.teammate]
+    reloadTeammates()
+    return { kind: 'teammate', id }
+  }, [reloadTeammates])
+  boardVerbsRef.current.teammateFor = teammateForFolder
   const startFirstWork = useCallback(async (req: FirstWorkRequest): Promise<FirstWorkOutcome> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const plan = firstWorkPlan(req, { teammates: teammatesRef.current, readiness: onboardingReadiness(envReportRef.current) })
@@ -7314,21 +7339,13 @@ export function Canvas({
       window.setTimeout(() => setClusterArrival(false), 1200)
       return { kind: 'started' }
     }
-    const repo = firstWorkRepoAnswer(await window.canvas.git.status(plan.folder), plan.folder)
-    if (repo.kind !== 'repository') return repo
     const actions = paletteActionsRef.current
     if (actions === null || actions === undefined) return { kind: 'refused', reason: 'the canvas is not ready yet' }
-    let teammateId = plan.teammate.reuse
-    const mint = plan.teammate.mint
-    if (mint !== undefined) {
-      const id = `tm-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-      const saved = await window.canvas.teammate.save({ ...emptyTeammate(id, mint.name), places: mint.places })
-      // The mirror is made current HERE: `dispatchWorkItem` → main reads the
-      // roster by id, and the reload below lands a render later.
-      teammatesRef.current = [...teammatesRef.current.filter((t) => t.id !== id), saved.teammate]
-      reloadTeammates()
-      teammateId = id
-    }
+    // M400. The repository answer and the reuse-or-mint, in that order — the
+    // same executor the New task sheet runs (`teammateForFolder`, above).
+    const who = await teammateForFolder(plan.folder)
+    if (who.kind !== 'teammate') return who
+    const teammateId: string | undefined = who.id
     const key = `${plan.folder}\n${plan.title}`
     const standing = firstWorkItemRef.current?.key === key && workItemsRef.current.some((i) => i.id === firstWorkItemRef.current?.itemId) ? firstWorkItemRef.current.itemId : undefined
     const itemId = standing ?? actions.addWorkItem({ source: 'typed', title: plan.title, ...(plan.description === undefined ? {} : { description: plan.description }), state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
@@ -7379,7 +7396,7 @@ export function Canvas({
     // would fold the second start into the first (the M205 critic).
     firstWorkItemRef.current = null
     return { kind: 'started' }
-  }, [reloadTeammates, fitAll, frameReadable, beginNewChat])
+  }, [teammateForFolder, fitAll, frameReadable, beginNewChat])
   /** M205. The ONE alternative: M120's no-folder conversation, on the engine readiness found, the sentence in its composer — inserted, never sent (M80). */
   const askWithoutFolder = useCallback((intention: string): void => {
     const preferred = onboardingReadiness(envReportRef.current).preferred
