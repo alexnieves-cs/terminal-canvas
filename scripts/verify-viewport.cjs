@@ -2688,6 +2688,137 @@ console.log('\n' + '='.repeat(60))
     /loadFile\(RENDERER_HTML,\s*\{\s*query:\s*\{\s*'tc-splash':\s*'off'\s*\}\s*\}\)/.test(loader), 'scripts/load-renderer.cjs')
 }
 
+// M395 — the canvas revamp's objects and input (docs/build-log/m388-m396-ledger.md).
+// Pure halves of behaviours that fail silently in the renderer: a frame that
+// traps what it encloses still paints; a sheared group drag still lands; a
+// polyline still draws; a key a field swallowed is simply never seen.
+{
+  const note = (id, x, y, w, h, form, z, extra = {}) => ({ kind: 'note', rect: { id, x, y, w, h }, z, note: { form, text: id }, ...extra })
+  const F = note('F', 0, 0, 720, 480, 'frame', -1)
+  const A = note('A', 40, 60, 200, 160, 'sticky', 3)
+  const B = note('B', 600, 400, 200, 160, 'sticky', 4) // half out of F
+  const C = note('C', 300, 60, 200, 160, 'sticky', 5, { locked: true })
+  const G = note('G', 360, 240, 300, 220, 'frame', -2) // a frame wholly inside F
+  const H = note('H', 380, 280, 200, 160, 'sticky', 6) // inside G, so inside F
+  const T = { kind: 'terminal', rect: { id: 'T', x: 900, y: 0, w: 400, h: 300 }, z: 2 }
+  const panels = [F, A, B, C, G, H, T]
+  const before = JSON.stringify(panels)
+  const have = typeof V.frameContents === 'function' && typeof V.withFrameContents === 'function' && typeof V.isFramePanel === 'function'
+  const ids = (list) => list.map((p) => p.rect.id).join(',')
+  const inF = have ? ids(V.frameContents(panels, 'F')) : null
+  const inSticky = have ? V.frameContents(panels, 'A').length : null
+  const carried = have ? ids(V.withFrameContents([F, A], panels)) : null
+  const nested = have ? ids(V.frameContents(panels, 'G')) : null
+  ok('revamp.frame.1 a frame carries exactly the objects WHOLLY inside it — not one half out, not a locked one, a nested frame with its own contents — computed from rects at the gesture (the records unchanged), each object once, and a non-frame carries nothing',
+    have && inF === 'A,G,H' && inSticky === 0 && carried === 'F,A,G,H' && nested === 'H' && JSON.stringify(panels) === before &&
+      V.isFramePanel(F) && V.isFramePanel(G) && !V.isFramePanel(A) && !V.isFramePanel(T),
+    JSON.stringify({ have, inF, inSticky, carried, nested }))
+
+  // revamp.frame.2 — the canvas's own pick: a frame's MIDDLE is ground.
+  const pickHave = typeof V.pickRects === 'function'
+  const ordered = [G, F, T, A].slice().sort((a, b) => a.z - b.z)
+  const picks = pickHave ? V.pickRects(ordered) : []
+  const at = (x, y) => V.hitTest(picks, { x, y })
+  const band = V.FRAME_BAND, ring = V.FRAME_RING
+  const verdict = pickHave ? {
+    middleEmpty: at(200, 350),           // inside F, below its band, clear of A and G: ground
+    onSticky: at(100, 100),              // A inside F: the sticky
+    band: at(500, band / 2),             // F's label band
+    west: at(ring / 2, 300), east: at(720 - ring / 2, 300), foot: at(300, 480 - ring / 2),
+    innerG: at(500, 380),                // G's own middle is ground too
+    terminal: at(1000, 100),
+    plain: picks.filter((r) => r.id === 'T').length === 1 && JSON.stringify(picks.find((r) => r.id === 'T')) === JSON.stringify(T.rect)
+  } : null
+  ok('revamp.frame.2 pickRects: a press in a frame\'s middle picks nothing (ground: a marquee, not the region), an object inside it is picked above it, and the frame is picked only by its label band and its ring; every other object is its one rect',
+    pickHave && verdict.middleEmpty === null && verdict.onSticky === 'A' && verdict.band === 'F' && verdict.west === 'F' && verdict.east === 'F' && verdict.foot === 'F' &&
+      verdict.innerG === null && verdict.terminal === 'T' && verdict.plain === true && band > 0 && ring > 0,
+    JSON.stringify(verdict))
+
+  // revamp.frame.3 — a selection never raises a frame.
+  const raisedFrame = V.raisePanel(panels, 'F')
+  const raisedSticky = V.raisePanel(panels, 'A')
+  ok('revamp.frame.3 raisePanel never lifts a frame — the SAME array comes back (so no history entry) and it stays behind what it encloses — while any other object still rises to the top',
+    raisedFrame === panels && raisedFrame.find((p) => p.rect.id === 'F').z === -1 &&
+      raisedSticky !== panels && raisedSticky.find((p) => p.rect.id === 'A').z === Math.max(...panels.map((p) => p.z)) + 1,
+    JSON.stringify({ same: raisedFrame === panels, stickyZ: raisedSticky.find((p) => p.rect.id === 'A').z }))
+
+  // revamp.snap.1 — one delta for every member, and ⌘ is a free frame.
+  const dfHave = typeof V.dragFrame === 'function'
+  const origin = { x: 500, y: 300 }
+  const member = (id, x, y) => ({ panelId: id, mode: { kind: 'move' }, originRect: { id, x, y, w: 200, h: 160 }, originWorld: origin })
+  const states = [member('p', 100, 100), member('q', 340, 106), member('r', 580, 112)]
+  const world = { x: 500 + 805, y: 300 + 7 }
+  let calls = 0; let seen = null
+  const snapMany = (rects, idset) => { calls++; seen = { n: rects.length, ids: [...idset].sort().join(','), x: Math.min(...rects.map((r) => r.x)) }; return { dx: -5, dy: 3 } }
+  const snapped = dfHave ? V.dragFrame(states, world, { free: false, snapMany }) : []
+  const deltas = snapped.map((m) => `${m.rect.x - m.state.originRect.x},${m.rect.y - m.state.originRect.y}`)
+  const callsSnapped = calls
+  const free = dfHave ? V.dragFrame(states, world, { free: true, snapMany }) : []
+  const freeDeltas = free.map((m) => `${m.rect.x - m.state.originRect.x},${m.rect.y - m.state.originRect.y}`)
+  const lone = dfHave ? V.dragFrame([states[0]], world, { free: false, snapMany }) : []
+  const loneFree = dfHave ? V.dragFrame([states[0]], world, { free: true, snapMany }) : []
+  const resize = dfHave ? V.dragFrame([{ ...states[0], mode: { kind: 'resize', edge: 'se' } }], world, { free: false, snapMany }) : []
+  ok('revamp.snap.1 dragFrame: a move of several members takes ONE snap over their bounds and every member moves by the SAME delta (the audit\'s (237,146) vs (243,140) shear is structurally impossible); with ⌘ held (free) the frame does not snap at all; a lone member or a resize is left to the caller\'s own snap unless free',
+    dfHave && callsSnapped === 1 && seen && seen.n === 3 && seen.ids === 'p,q,r' && seen.x === 905 &&
+      new Set(deltas).size === 1 && deltas[0] === '800,10' && snapped.every((m) => m.snapSelf === false) &&
+      calls === 1 && new Set(freeDeltas).size === 1 && freeDeltas[0] === '805,7' && free.every((m) => m.snapSelf === false) &&
+      lone[0].snapSelf === true && lone[0].rect.x === 905 && loneFree[0].snapSelf === false && loneFree[0].rect.x === 905 &&
+      resize[0].snapSelf === true && resize[0].rect.w === 200 + 805,
+    JSON.stringify({ callsSnapped, calls, seen, deltas, freeDeltas, lone: lone[0] && lone[0].snapSelf, loneFree: loneFree[0] && loneFree[0].snapSelf }))
+
+  // revamp.ink.1 — ink paints as a curve THROUGH its points, render only.
+  const inkHave = typeof V.smoothStrokePath === 'function'
+  const pts = [[0, 0], [40, 10], [80, -20], [120, 30], [150, 0]]
+  const frozen = JSON.stringify(pts)
+  const d = inkHave ? V.smoothStrokePath(pts) : ''
+  const nums = (str) => str.trim().split(/\s+/).map(Number)
+  const segs = [...d.matchAll(/C([^C]*)/g)].map((m) => nums(m[1]))
+  const move = /^M([-\d.]+) ([-\d.]+)/.exec(d)
+  const through = segs.length === pts.length - 1 && segs.every((c, i) => Math.abs(c[4] - pts[i + 1][0]) < 0.01 && Math.abs(c[5] - pts[i + 1][1]) < 0.01) &&
+    move !== null && Number(move[1]) === 0 && Number(move[2]) === 0
+  // C1 at every interior joint: the incoming control and the outgoing one are
+  // mirror images through the point — one tangent, no corner.
+  const smooth = segs.slice(0, -1).every((c, i) => {
+    const p = pts[i + 1], next = segs[i + 1]
+    return Math.abs((p[0] - c[2]) - (next[0] - p[0])) < 0.02 && Math.abs((p[1] - c[3]) - (next[1] - p[1])) < 0.02
+  })
+  const two = inkHave ? V.smoothStrokePath([[1, 2], [3, 4]]) : ''
+  const one = inkHave ? V.smoothStrokePath([[1, 2]]) : ''
+  ok('revamp.ink.1 smoothStrokePath draws a Catmull-Rom curve as cubic Béziers THROUGH every stored point with one tangent at each (no corner), no line segment for three or more points, a line for two, a move for one — and never touches the points it was handed',
+    inkHave && through && smooth && !/L/.test(d) && two === 'M1.00 2.00 L3.00 4.00' && one === 'M1.00 2.00' && V.smoothStrokePath([]) === '' && JSON.stringify(pts) === frozen,
+    JSON.stringify({ d: d.slice(0, 120), through, smooth, two, one }))
+  const { readFileSync } = require('node:fs')
+  const layerSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'AnnotationLayer.tsx'), 'utf8')
+  const oneD = /const d = smoothStrokePath\(/.test(layerSrc) && /className=\{`annotation__hit[^`]*`\}[^>]*\bd=\{d\}/.test(layerSrc) && /className="annotation__ink" d=\{d\}/.test(layerSrc) &&
+    /annotation__ink--draft" d=\{smoothStrokePath\(draft\)\}/.test(layerSrc) && !/function pathOf/.test(layerSrc)
+  ok('revamp.ink.2 the annotation layer paints the stored ink, its hit path and the live draft from the SAME smoothed path (a click lands on the curve a person sees), and the polyline builder is gone',
+    oneD, 'src/renderer/canvas/AnnotationLayer.tsx')
+
+  // revamp.keys.1 — which keys a canvas text field keeps.
+  const kHave = typeof V.fieldKeepsKey === 'function'
+  const k = (key, metaKey = false) => kHave && V.fieldKeepsKey({ key, metaKey })
+  const kept = ['a', 'Tab', 'Delete', 'Backspace', 'ArrowLeft', 'Escape', 'Enter', 'k', '=', '1'].filter((key) => k(key))
+  const keptMeta = ['a', 'z', 'Z', 'c', 'v', 'x', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace', 'Delete', 'Home', 'End'].filter((key) => k(key, true))
+  const passed = ['k', 'K', '=', '+', '-', '0', '1', 'j', 'n', 'Escape', '[', 'f'].filter((key) => !k(key, true))
+  ok('revamp.keys.1 fieldKeepsKey: every bare key stays at the field; ⌘K, ⌘=, ⌘−, ⌘0, ⌘1, ⌘J … go on to the canvas; ⌘A, ⌘Z/⌘⇧Z, ⌘C/⌘V/⌘X, ⌘Enter and the caret\'s ⌘-arrows and ⌘⌫/⌘⌦ stay with the text',
+    kHave && kept.length === 10 && keptMeta.length === 15 && passed.length === 12,
+    JSON.stringify({ kept, keptMeta, passed }))
+  const read = (rel) => readFileSync(join(__dirname, '..', 'src', 'renderer', ...rel.split('/')), 'utf8')
+  const editors = { 'note/NoteNode.tsx': /if \(fieldKeepsKey\(e\)\) e\.stopPropagation\(\)/, 'flowchart/ShapeLayer.tsx': /if \(fieldKeepsKey\(event\)\) event\.stopPropagation\(\)/, 'flowchart/ConnectorLayer.tsx': /if \(fieldKeepsKey\(event\)\) event\.stopPropagation\(\)/, 'canvas/AnnotationLayer.tsx': /if \(fieldKeepsKey\(e\)\) e\.stopPropagation\(\)/ }
+  const routed = Object.entries(editors).filter(([file, re]) => !re.test(read(file))).map(([file]) => file)
+  ok('revamp.keys.2 the sticky/frame editor, the shape label, the connector label and the margin label all stop a key only when fieldKeepsKey says the field keeps it — none stops every key any more',
+    routed.length === 0, `not routed: ${routed.join(', ')}`)
+
+  // revamp.annotate.1 — no empty label outlives its editor.
+  const lab = (id, text) => ({ id, text, anchor: { kind: 'world', x: 0, y: 0 } })
+  const list = [lab('a1', 'kept'), lab('a2', ''), { id: 'k1', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: [[0, 0], [5, 5]], width: 3 } }, lab('a3', ''), lab('a4', 'also')]
+  const dHave = typeof V.dropEmptyLabels === 'function'
+  const settled = dHave ? V.dropEmptyLabels(list, 'a3').map((a) => a.id).join(',') : null
+  const none = dHave ? V.dropEmptyLabels(list, null).map((a) => a.id).join(',') : null
+  ok('revamp.annotate.1 dropEmptyLabels drops every EMPTY label except the one whose editor is open, keeps ink (text is \'\' by design) and every label that says something, in order',
+    settled === 'a1,k1,a3,a4' && none === 'a1,k1,a4', JSON.stringify({ settled, none }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

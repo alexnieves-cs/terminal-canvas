@@ -1,5 +1,5 @@
 import type { PersistedGroup } from '@shared/groups'
-import type { Panel } from '@renderer/panels/panels'
+import { isFramePanel, type Panel } from '@renderer/panels/panels'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import { applyDrag, type DragState } from '@renderer/canvas/panel-interaction'
 
@@ -57,12 +57,16 @@ export function applyGroupDrag(panels: Panel[], state: GroupDragState, world: Po
   })
 }
 
-/** Raise every member without ever changing array order. */
+/**
+ * Raise every member without ever changing array order. M395: a FRAME member
+ * stays where it is — it is drawn behind what it encloses (`raisePanel`'s rule),
+ * and a group lifted over its own region would cover the members it holds.
+ */
 export function raiseGroup(panels: Panel[], group: CanvasGroup): Panel[] {
   let z = panels.reduce((highest, panel) => Math.max(highest, panel.z), 0)
   const members = new Set(group.panelIds)
   return panels.map((panel) => {
-    if (!members.has(panel.rect.id)) return panel
+    if (!members.has(panel.rect.id) || isFramePanel(panel)) return panel
     z += 1
     return { ...panel, z }
   })

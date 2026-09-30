@@ -1497,5 +1497,51 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     moving.length === 0 && flow !== '' && !layoutProp, JSON.stringify({ moving: moving.slice(0, 6), layoutProp }))
 }
 
+// M395 — the canvas revamp's objects and input (docs/build-log/m388-m396-ledger.md).
+// Each of these failed SILENTLY before: a frame that took every click looked
+// exactly like one that did not, a guide under a panel looked like no snap,
+// a strip deaf to the pointer looked clickable.
+{
+  const find = (selRe, bodyRe) => all.filter((r) => selRe.test(r.sel) && bodyRe.test(r.body))
+  // revamp.frame.css.1 — the frame's ROOT takes no pointer and paints no blur;
+  // the header, ring, handles and ports opt back in (and the name field did).
+  const rootRule = find(/^\.note-node\[data-note-form="frame"\]$/, /pointer-events:\s*none/)
+    .find((r) => /(^|;)\s*backdrop-filter:\s*none/.test(r.body) && /-webkit-backdrop-filter:\s*none/.test(r.body))
+  const optIn = all.filter((r) => /pointer-events:\s*auto/.test(r.body) && /\.note-node\[data-note-form="frame"\]/.test(r.sel)).map((r) => r.sel).join(' , ')
+  const parts = ['.pf__chrome', '.note-node__ring', '.panel__resize', '.panel__port', '.note-node__field'].filter((p) => !optIn.includes(p))
+  ok('revamp.frame.css.1', 'a frame\'s root takes no pointer and no backdrop blur; its header, ring, resize handles, ports and name field take the pointer back',
+    rootRule !== undefined && parts.length === 0, JSON.stringify({ root: rootRule ? rootRule.sel : null, missing: parts }))
+  // revamp.snap.css.1 — the guide paints ABOVE the panels (a panel's z is a
+  // small integer; the annotation layer's 5000 stays above it) and is a
+  // counter-scaled 2px line, never one world pixel.
+  const guides = all.find((r) => /^\.snap-guides$/.test(r.sel))
+  const gz = guides ? Number((/z-index:\s*(\d+)/.exec(guides.body) || [])[1]) : NaN
+  const layerZ = Number((/z-index:\s*(\d+)/.exec((all.find((r) => /^\.annotation-layer$/.test(r.sel)) || { body: '' }).body) || [])[1])
+  const gx = all.find((r) => /^\.snap-guide--x$/.test(r.sel))
+  const gy = all.find((r) => /^\.snap-guide--y$/.test(r.sel))
+  const thick = (r, prop) => r !== undefined && new RegExp(`(^|;)\\s*${prop}:\\s*calc\\(2px \\* var\\(--chrome-scale`).test(r.body)
+  ok('revamp.snap.css.1', 'the snap guide paints above every panel and under the annotation layer, 2px counter-scaled by --chrome-scale on both axes, in the iris token',
+    gz >= 1000 && gz < layerZ && thick(gx, 'width') && thick(gy, 'height') && all.some((r) => /^\.snap-guide$/.test(r.sel) && /background:\s*var\(--iris\)/.test(r.body)),
+    JSON.stringify({ gz, layerZ, gx: gx && gx.body, gy: gy && gy.body }))
+  // revamp.annotate.css.1 — the annotate strip takes the pointer (its tools
+  // with it), where the link banner it borrows its shape from does not.
+  const strip = all.find((r) => /^\.link-banner--annotate$/.test(r.sel) && /pointer-events:\s*auto/.test(r.body))
+  ok('revamp.annotate.css.1', 'the annotate strip takes the pointer, so its label/draw tools are hit above the annotate sheet',
+    strip !== undefined, strip ? strip.body.trim() : 'no .link-banner--annotate rule with pointer-events: auto')
+  // revamp.marquee.css.1 — while a band is swept the document selects no text.
+  const band = all.find((r) => /:root\[data-marquee\]/.test(r.sel) && /(^|;)\s*user-select:\s*none/.test(r.body) && /-webkit-user-select:\s*none/.test(r.body))
+  ok('revamp.marquee.css.1', 'a sweep in progress (:root[data-marquee]) turns text selection off for the whole document',
+    band !== undefined, band ? band.sel : 'none')
+  // revamp.tint.css.1 — the sticky's tint swatches are its contextual layer:
+  // absolutely positioned (no reflow), opacity 0 → 1 on hover, focus and
+  // selection, never display, and not a header control any more.
+  const tints = all.find((r) => /^\.note-node__tints$/.test(r.sel))
+  const tintsOk = tints !== undefined && /position:\s*absolute/.test(tints.body) && /(^|;)\s*opacity:\s*0\s*(;|$)/.test(tints.body) && /transition:[^;]*var\(--dur-1\)/.test(tints.body) && !/display:\s*none/.test(tints.body)
+  const revealed = all.some((r) => /\.pf:hover \.note-node__tints/.test(r.sel) && /\.pf:focus-within \.note-node__tints/.test(r.sel) && /\.panel--selected \.note-node__tints/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const swatchTokens = ['yellow', 'blue', 'green', 'pink'].every((t) => all.some((r) => /\.note-node__tint/.test(r.sel) && r.body.includes(`var(--tint-${t})`)))
+  ok('revamp.tint.css.1', 'the tint swatches sit absolutely along the sticky\'s foot at opacity 0, revealed at 1 on the frame\'s hover, focus-within and selection, each dot in its own tint token',
+    tintsOk && revealed && swatchTokens, JSON.stringify({ tints: tints && tints.body, revealed, swatchTokens }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

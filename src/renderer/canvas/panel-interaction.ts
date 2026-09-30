@@ -119,3 +119,49 @@ export function changedFields(prev: WorldRect | null, next: WorldRect): Partial<
 export function arrangeable(states: readonly DragState[], through: CanvasWriteThrough | null): DragState[] {
   return through === null ? [...states] : states.filter((s) => through.canArrange(s.panelId))
 }
+
+/** One member of a gesture's frame: the rect it implies, and whether the caller still snaps it on its own. */
+export interface DragFrameMember {
+  state: DragState
+  rect: WorldRect
+  /** True only for a lone member on a frame that snaps: a group's snap is already in `rect`. */
+  snapSelf: boolean
+}
+
+/**
+ * M395. ONE FRAME OF A PANEL GESTURE, pure — `usePanelDrag`'s arithmetic
+ * lifted out so the two rules below are checked without a renderer
+ * (`verify:viewport revamp.snap.1`).
+ *
+ * EVERY MEMBER MOVES BY ONE DELTA. Each rect is `applyDrag` from the member's
+ * OWN origin (never the previous frame), and a move of several members takes
+ * ONE snap over their bounding rect (M390's `snapMany`), whose shift is added
+ * to every member alike. The live audit measured the failure this closes on
+ * the build before M390: each member went to the snapper on its own, stopped
+ * on a different neighbour, and a three-object selection landed sheared —
+ * (237,146) against (243,140) — while with snapping off it moved together.
+ *
+ * ⌘ HELD IS A FREE FRAME (`free`). The design-tool convention: holding ⌘
+ * during a move or a resize takes the snap out of THAT frame, so a deliberate
+ * 7px nudge inside the 8px threshold is reachable. Per frame, not per gesture
+ * — releasing ⌘ mid-drag snaps again on the next move, as Figma does.
+ */
+export function dragFrame(
+  states: readonly DragState[],
+  world: Point,
+  opts: { free: boolean; snapMany?: (rects: readonly WorldRect[], ids: ReadonlySet<string>) => { dx: number; dy: number } }
+): DragFrameMember[] {
+  const together = opts.snapMany !== undefined && states.length > 1 && states.every((m) => m.mode.kind === 'move')
+  const raw = states.map((m) => applyDrag(m, world))
+  const shift = together && !opts.free && opts.snapMany !== undefined
+    ? opts.snapMany(raw, new Set(states.map((m) => m.panelId)))
+    : { dx: 0, dy: 0 }
+  return states.map((state, i) => {
+    const r = raw[i]!
+    return {
+      state,
+      rect: together ? { ...r, x: r.x + shift.dx, y: r.y + shift.dy } : r,
+      snapSelf: !together && !opts.free
+    }
+  })
+}

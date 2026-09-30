@@ -3119,6 +3119,293 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
     }
 
+    // M395 — revamp.*. THE CANVAS REVAMP'S OBJECTS AND INPUT, in the real
+    //     renderer (docs/build-log/m388-m396-ledger.md, the live audit). Each
+    //     one failed SILENTLY: a frame that traps its contents still paints, a
+    //     strip deaf to the pointer still looks clickable, a key a field
+    //     swallowed is simply never seen, a sheared drag still lands, and a
+    //     guide under a panel reads as no guide. Real input (sendInputEvent)
+    //     wherever the claim is about hit-testing or a gesture; a DOM read,
+    //     never a picture, for what is under a point.
+    {
+      const RV = {
+        frame5: 'revamp.frame.5 selecting a frame does not raise it (z stays behind, one click on its label), its root takes no pointer and paints no backdrop blur, a sticky inside it stays pickable, draggable and resizable while the frame is selected, the frame is still hit by its ring, and a frame left ABOVE its contents by an old layout traps nothing either',
+        frame6: 'revamp.frame.6 dragging a frame by its label carries the objects wholly inside it by the same delta — not one half out, not one outside — and ONE undo puts the frame and its contents back',
+        tint1: 'revamp.tint.1 a sticky\'s header fits its frame at 200, 240 and 320px — ⋯, fill and close inside the frame and the close hit at its centre — the tints are not header controls, and the four swatches along its foot are inside the frame, hit where they are drawn, and tint it',
+        keys3: 'revamp.keys.3 while a sticky\'s field or a shape\'s label editor has the keyboard, ⌘= zooms the canvas and ⌘K opens the palette (they reach the window), while a bare key and ⌘A stay at the field',
+        annotate2: 'revamp.annotate.2 annotate mode\'s strip is above the sheet and takes real clicks — draw and label switch the tool and drop no label — a label placed over an empty one replaces it, Done keeps what was typed and leaves no empty "…" label behind',
+        marquee1: 'revamp.marquee.1 a real marquee over three objects, swept out over the rail, selects the three and NO page text: the document refuses selection for the band\'s life and gives it back after',
+        snap4: 'revamp.snap.4 a real drag of a three-object selection near a neighbour, with snapping on, moves every member by the SAME delta — the snapped one (the audit measured (237,146) against (243,140) on the build before M390)',
+        snap3: 'revamp.snap.3 the alignment guide a snapping drag draws paints above every panel, in the iris token, at least 1.5 screen px thick',
+        snap2: 'revamp.snap.2 holding ⌘ through a drag bypasses snapping (a 7px offset inside the 8px threshold is kept), and without ⌘ the same neighbour snaps'
+      }
+      const reported = new Set()
+      const rvOk = (key, pass, detail) => { reported.add(key); ok(RV[key], pass, detail) }
+      const rLog = []
+      const onR = (_e, _l, m) => { rLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onR)
+      const js = (code) => wc.executeJavaScript(code)
+      const box = (sel) => js(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.right, b: r.bottom } })()`)
+      const pos = (id) => js(`(() => { const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(id)}]'); if (!p) return null; return { x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: parseFloat(p.style.width), h: parseFloat(p.style.height), z: Number(p.style.zIndex) } })()`)
+      const hitIn = (x, y, sel) => js(`(() => { const e = document.elementFromPoint(${Math.round(x)}, ${Math.round(y)}); const t = document.querySelector(${JSON.stringify(sel)}); return !!(e && t && t.contains(e)) })()`)
+      const click = async (p, mods = []) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1, modifiers: mods })
+        wc.sendInputEvent({ type: 'mouseUp', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1, modifiers: mods })
+        await settle()
+      }
+      // Paced moves (back-to-back moves coalesce), `leftButtonDown` on each
+      // (without it the DOM event's buttons is 0 and the gesture ends as a
+      // released press — the M4a lesson). `hold` runs with the button still
+      // down, after the last move: what a drag shows WHILE it is under way.
+      const drag = async (from, to, { steps = 8, mods = [], via = null, hold = null } = {}) => {
+        const f = { x: Math.round(from.x), y: Math.round(from.y) }
+        wc.sendInputEvent({ type: 'mouseDown', x: f.x, y: f.y, button: 'left', clickCount: 1 })
+        const path = via === null ? [to] : [...via, to]
+        let at = f
+        for (const leg of path) {
+          const t = { x: Math.round(leg.x), y: Math.round(leg.y) }
+          for (let i = 1; i <= steps; i++) {
+            wc.sendInputEvent({ type: 'mouseMove', x: Math.round(at.x + (t.x - at.x) * i / steps), y: Math.round(at.y + (t.y - at.y) * i / steps), button: 'left', modifiers: [...mods, 'leftButtonDown'] })
+            await sleep(30)
+          }
+          at = t
+        }
+        const held = hold === null ? null : await hold()
+        wc.sendInputEvent({ type: 'mouseUp', x: at.x, y: at.y, button: 'left', clickCount: 1 })
+        await settle()
+        return held
+      }
+      const reloadWith = async (panels, first) => {
+        layoutStore.save({ panels, camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await re
+        await settle()
+        const up = await waitUntil(() => js(`document.querySelector('.panel[data-panel-id=${JSON.stringify(first)}]') !== null`), 8000)
+        if (up !== true) throw new Error(`fixture ${first} never rendered`)
+        const h = await box('.canvas')
+        if (h === null) throw new Error('no .canvas')
+        return h
+      }
+      const sticky = (id, x, y, w, h, z, text) => ({ id, kind: 'note', x, y, w, h, z, note: { form: 'sticky', text } })
+      const frame = (id, x, y, w, h, z, text) => ({ id, kind: 'note', x, y, w, h, z, note: { form: 'frame', text } })
+      try {
+        // Geometry is laid inside the harness's canvas host (~790 x 810 at
+        // 1400 x 900 with the rail and the inspector open), clear of its
+        // overlays: + Create top-left, the minimap top-right, the command pill
+        // bottom-centre and the zoom HUD bottom-right. The host is in the
+        // details, so a changed shell reads as a changed shell.
+        // ---- Fixture 1: a frame with contents, a frame an old build left raised, stickies at the width floor and above.
+        const host = await reloadWith([
+          frame('rvF', 20, 60, 420, 300, -1, 'release'),
+          sticky('rvA', 50, 140, 200, 160, 2, 'inside'),
+          sticky('rvC', 360, 190, 200, 160, 3, 'half out'),
+          frame('rvG', 470, 380, 260, 230, 9, 'raised by the old build'),
+          sticky('rvE', 500, 430, 200, 160, 3, 'under an old frame'),
+          sticky('rvT1', 230, 390, 240, 160, 5, 'another long first line that no narrow header could ever hold'),
+          sticky('rvB', 20, 390, 200, 160, 6, 'a very long first line that would never fit a narrow header at all')
+        ], 'rvF')
+        const W = (x, y) => ({ x: host.x + x, y: host.y + y })
+        const hostDims = { w: Math.round(host.w), h: Math.round(host.h) }
+
+        // revamp.frame.5
+        const zBefore = await pos('rvF')
+        await click(W(20 + 90, 60 + 14))
+        const selected = await waitUntil(() => js(`document.querySelector('.panel[data-panel-id="rvF"]').classList.contains('panel--selected')`), 3000)
+        const zAfter = await pos('rvF')
+        const style = await js(`(() => { const f = document.querySelector('.panel[data-panel-id="rvF"]'); const cs = getComputedStyle(f); return { pe: cs.pointerEvents, blur: cs.backdropFilter, chrome: getComputedStyle(f.querySelector('.pf__chrome')).pointerEvents } })()`)
+        const aCentre = await box('.panel[data-panel-id="rvA"] .note-node__body')
+        const stickyHit = aCentre !== null && await hitIn(aCentre.cx, aCentre.cy, '.panel[data-panel-id="rvA"]')
+        const middle = W(300, 260)
+        const middleIsGround = !(await hitIn(middle.x, middle.y, '.panel[data-panel-id="rvF"]'))
+        const ringHit = await hitIn(host.x + 20 + 5, host.y + 260, '.panel[data-panel-id="rvF"] [data-note-ring="w"]')
+        const eCentre = await box('.panel[data-panel-id="rvE"] .note-node__body')
+        const oldFrameHit = eCentre !== null && await hitIn(eCentre.cx, eCentre.cy, '.panel[data-panel-id="rvE"]')
+        const a0 = await pos('rvA')
+        await drag(W(50 + 70, 140 + 14), W(50 + 70 + 30, 140 + 14 + 20))
+        const a1 = await pos('rvA')
+        const se = await box('.panel[data-panel-id="rvA"] .panel__resize--se')
+        if (se !== null) await drag({ x: se.cx, y: se.cy }, { x: se.cx + 40, y: se.cy + 30 })
+        const a2 = await pos('rvA')
+        const zEnd = await pos('rvF')
+        rvOk('frame5',
+          selected === true && zBefore && zAfter && zAfter.z === zBefore.z && zEnd.z === zBefore.z &&
+            style.pe === 'none' && style.blur === 'none' && style.chrome === 'auto' &&
+            stickyHit === true && middleIsGround === true && ringHit === true && oldFrameHit === true &&
+            a1 && a1.x - a0.x === 30 && a1.y - a0.y === 20 && a2 && a2.w - a1.w === 40 && a2.h - a1.h === 30,
+          JSON.stringify({ hostDims, selected, zBefore, zAfter, zEnd, style, stickyHit, middleIsGround, ringHit, oldFrameHit, a0, a1, a2, log: rLog.slice(-3) }))
+
+        // revamp.frame.6
+        const ids6 = ['rvF', 'rvA', 'rvC', 'rvG', 'rvE', 'rvB']
+        const before6 = {}; for (const id of ids6) before6[id] = await pos(id)
+        await drag(W(20 + 90, 60 + 14), W(20 + 90 + 50, 60 + 14 + 40))
+        const after6 = {}; for (const id of ids6) after6[id] = await pos(id)
+        const moved = (id) => after6[id] && before6[id] ? [after6[id].x - before6[id].x, after6[id].y - before6[id].y].join(',') : null
+        wc.send('edit:undo')
+        await settle()
+        const undone = {}; for (const id of ['rvF', 'rvA']) undone[id] = await pos(id)
+        rvOk('frame6',
+          moved('rvF') === '50,40' && moved('rvA') === '50,40' && moved('rvC') === '0,0' && moved('rvB') === '0,0' && moved('rvG') === '0,0' && moved('rvE') === '0,0' &&
+            undone.rvF && undone.rvF.x === before6.rvF.x && undone.rvF.y === before6.rvF.y && undone.rvA && undone.rvA.x === before6.rvA.x && undone.rvA.y === before6.rvA.y,
+          JSON.stringify({ moved: Object.fromEntries(ids6.map((id) => [id, moved(id)])), undone, before: { rvF: before6.rvF, rvA: before6.rvA } }))
+
+        // revamp.tint.1 — the header at the 200px floor, at 240 and (after a
+        // real resize of the 200) at 320; the swatches along the foot.
+        const fit = (id) => js(`(() => {
+          const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(id)}]'); if (!p) return { id: ${JSON.stringify(id)}, missing: true }
+          const f = p.getBoundingClientRect()
+          const controls = [...p.querySelectorAll('.pf__chrome .pf__verb, .pf__chrome .pf__close, .pf__chrome .pf__menu-open')]
+          const inside = controls.every((c) => { const r = c.getBoundingClientRect(); return r.width > 0 && r.right <= f.right + 1 && r.left >= f.left - 1 })
+          const close = p.querySelector('.pf__close'); const cr = close.getBoundingClientRect()
+          const at = document.elementFromPoint(Math.round(cr.left + cr.width / 2), Math.round(cr.top + cr.height / 2))
+          const chips = [...p.querySelectorAll('[data-note-tint-chip]')]
+          const chipsIn = chips.length === 4 && chips.every((c) => { const r = c.getBoundingClientRect(); const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)); return r.right <= f.right + 1 && r.bottom <= f.bottom + 1 && r.left >= f.left - 1 && r.width >= 20 && hit === c })
+          return { id: ${JSON.stringify(id)}, w: Math.round(f.width), controls: controls.length, inside, closeHit: close.contains(at), inHeader: p.querySelectorAll('.pf__chrome [data-note-tint-chip]').length, chipsIn }
+        })()`)
+        const fits = [await fit('rvB'), await fit('rvT1')]
+        const bse = await box('.panel[data-panel-id="rvB"] .panel__resize--se')
+        if (bse !== null) await drag({ x: bse.cx, y: bse.cy }, { x: bse.cx + 120, y: bse.cy })
+        fits.push(await fit('rvB'))
+        await js(`(() => { const b = document.querySelector('.panel[data-panel-id="rvB"] [data-note-tint-chip="pink"]'); b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const tinted = await waitUntil(() => js(`document.querySelector('.panel[data-panel-id="rvB"]').getAttribute('data-note-tint')`).then((t) => (t === 'pink' ? t : false)), 3000)
+        rvOk('tint1',
+          fits.length === 3 && fits.every((f) => f.missing !== true && f.controls >= 3 && f.inside === true && f.closeHit === true && f.inHeader === 0 && f.chipsIn === true) &&
+            fits.map((f) => f.w).join(',') === '200,240,320' && tinted === 'pink',
+          JSON.stringify({ hostDims, fits, tinted }))
+
+        // revamp.keys.3 — ⌘ chords through a canvas text field.
+        await js(`window.__rvKeys = []; window.__rvKeyProbe = window.__rvKeyProbe || ((e) => window.__rvKeys.push((e.metaKey ? 'cmd+' : '') + e.key)); window.addEventListener('keydown', window.__rvKeyProbe); true`)
+        const scaleNow = () => js(`(() => { const m = /scale\\(([\\d.]+)\\)/.exec(document.querySelector('.world').style.transform); return m ? Number(m[1]) : null })()`)
+        const key = (sel, init) => js(`(() => { const f = document.querySelector(${JSON.stringify(sel)}); if (!f) return false; f.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ bubbles: true, cancelable: true }, ${JSON.stringify(init)}))); return true })()`)
+        const field = '.panel[data-panel-id="rvT1"] [data-note-field]'
+        await js(`document.querySelector(${JSON.stringify(field)}).focus(); true`)
+        const s0 = await scaleNow()
+        const barePressed = await key(field, { key: 'x', code: 'KeyX' })
+        const selectAll = await key(field, { key: 'a', code: 'KeyA', metaKey: true })
+        const zoomPressed = await key(field, { key: '=', code: 'Equal', metaKey: true })
+        const zoomed = await waitUntil(async () => { const s = await scaleNow(); return s !== null && s0 !== null && s > s0 + 1e-6 ? s : false }, 3000)
+        const palettePressed = await key(field, { key: 'k', code: 'KeyK', metaKey: true })
+        const paletteOpen = await waitUntil(() => js(`document.querySelector('.palette__input') !== null`), 3000)
+        await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true })); true`)
+        await waitUntil(() => js(`document.querySelector('.palette__input') === null`), 3000)
+        const noteKeys = await js(`window.__rvKeys.slice()`)
+        // The shape's label editor: minted through the agent door, opened by a double-click.
+        const shapeAdded = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'shape-add process Build' }, null, 4000)
+        await settle()
+        await js(`window.__rvKeys = []; true`)
+        const opened = await js(`(() => { const s = [...document.querySelectorAll('.shape[data-panel-id]')].pop(); if (!s) return false; s.querySelector('.shape__outline').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0 })); return s.getAttribute('data-panel-id') })()`)
+        const editorUp = await waitUntil(() => js(`document.activeElement !== null && document.activeElement.closest('.shape__label--editing') !== null`), 3000)
+        const s1 = await scaleNow()
+        await key('.shape__label--editing textarea', { key: 'x', code: 'KeyX' })
+        await key('.shape__label--editing textarea', { key: '=', code: 'Equal', metaKey: true })
+        const zoomedInShape = await waitUntil(async () => { const s = await scaleNow(); return s !== null && s1 !== null && s > s1 + 1e-6 ? s : false }, 3000)
+        await key('.shape__label--editing textarea', { key: 'Escape', code: 'Escape' })
+        const shapeKeys = await js(`window.__rvKeys.slice()`)
+        await js(`window.removeEventListener('keydown', window.__rvKeyProbe); true`)
+        rvOk('keys3',
+          barePressed && selectAll && zoomPressed && palettePressed && zoomed !== false && paletteOpen === true &&
+            noteKeys.includes('cmd+=') && noteKeys.includes('cmd+k') && !noteKeys.includes('x') && !noteKeys.includes('cmd+a') &&
+            shapeAdded && shapeAdded.kind === 'ran' && typeof opened === 'string' && editorUp === true && zoomedInShape !== false &&
+            shapeKeys.includes('cmd+=') && !shapeKeys.includes('x') && !shapeKeys.includes('Escape'),
+          JSON.stringify({ s0, zoomed, paletteOpen, noteKeys, shapeAdded, opened, editorUp, s1, zoomedInShape, shapeKeys, log: rLog.slice(-3) }))
+
+        // ---- Fixture 2: annotate, the marquee, snapping — ON for this fixture
+        // only (the harness keeps it off so older checks pin raw arithmetic;
+        // the finally below puts it back).
+        layoutStore.setPreference('placement.snap', true)
+        const host2 = await reloadWith([
+          sticky('rvD', 500, 60, 200, 160, 1, 'neighbour'),
+          sticky('rvP', 20, 260, 200, 160, 2, 'p'),
+          sticky('rvQ', 240, 266, 200, 160, 3, 'q'),
+          sticky('rvR', 460, 272, 200, 160, 4, 'r'),
+          sticky('rvS', 20, 470, 200, 160, 5, 's')
+        ], 'rvD')
+        const V2 = (x, y) => ({ x: host2.x + x, y: host2.y + y })
+        const labels = () => js(`[...document.querySelectorAll('[data-annotation]:not([data-annotation-ink])')].map((g) => { const l = g.querySelector('[data-annotation-label]'); return l ? l.textContent : '<editing>' })`)
+
+        // revamp.annotate.2
+        await js(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })); true`)
+        await waitUntil(() => js(`document.querySelector('.palette__input') !== null`), 3000)
+        const entered = await js(`(() => { const el = document.querySelector('[data-command-id="canvas.annotate"]'); if (!el) return 'no row'; el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        await waitUntil(() => js(`document.querySelector('[data-annotate-strip]') !== null`), 3000)
+        await settle()
+        const drawBox = await box('[data-annotate-tool="draw"]')
+        const drawOnTop = drawBox !== null && await hitIn(drawBox.cx, drawBox.cy, '[data-annotate-tool="draw"]')
+        if (drawBox !== null) await click({ x: drawBox.cx, y: drawBox.cy })
+        const drawOn = await js(`document.querySelector('[data-annotate-tool="draw"]')?.getAttribute('aria-pressed')`)
+        const afterDraw = await labels()
+        const labelBox = await box('[data-annotate-tool="label"]')
+        if (labelBox !== null) await click({ x: labelBox.cx, y: labelBox.cy })
+        const labelOn = await js(`document.querySelector('[data-annotate-tool="label"]')?.getAttribute('aria-pressed')`)
+        const afterTools = await labels()
+        await click(V2(600, 470))
+        const firstOpen = await waitUntil(() => js(`document.activeElement !== null && document.activeElement.hasAttribute('data-annotation-editor')`), 3000)
+        await click(V2(600, 540))
+        await waitUntil(() => js(`document.activeElement !== null && document.activeElement.hasAttribute('data-annotation-editor')`), 3000)
+        const afterSecond = await labels()
+        for (const ch of 'kept') wc.sendInputEvent({ type: 'char', keyCode: ch })
+        await settle()
+        const doneBox = await box('[data-annotate-done]')
+        if (doneBox !== null) await click({ x: doneBox.cx, y: doneBox.cy })
+        const stripGone = await waitUntil(() => js(`document.querySelector('[data-annotate-strip]') === null`), 3000)
+        const afterDone = await labels()
+        rvOk('annotate2',
+          entered === true && drawOnTop === true && drawOn === 'true' && afterDraw.length === 0 && labelOn === 'true' && afterTools.length === 0 &&
+            firstOpen === true && afterSecond.length === 1 && stripGone === true && afterDone.length === 1 && afterDone[0] === 'kept' && !afterDone.includes('…'),
+          JSON.stringify({ entered, drawOnTop, drawOn, afterDraw, labelOn, afterTools, firstOpen, afterSecond, stripGone, afterDone, log: rLog.slice(-3) }))
+
+        // revamp.marquee.1 — swept from beside R, out over the rail and back.
+        const railSel = '.shell__rail, .dock, .shell__dock'
+        const userSelectOf = () => js(`getComputedStyle(document.querySelector(${JSON.stringify(railSel)}) || document.body).userSelect`)
+        const selectBefore = await userSelectOf()
+        await js(`window.getSelection()?.removeAllRanges(); true`)
+        const during = await drag(V2(670, 450), V2(10, 240), {
+          via: [{ x: host2.x - 60, y: host2.y + 240 }],
+          hold: () => js(`({ attr: document.documentElement.hasAttribute('data-marquee'), text: String(window.getSelection() || ''), us: getComputedStyle(document.querySelector(${JSON.stringify(railSel)}) || document.body).userSelect })`)
+        })
+        const selectedIds = await js(`[...document.querySelectorAll('.panel.panel--selected')].map((p) => p.getAttribute('data-panel-id')).sort().join(',')`)
+        const afterBand = await js(`({ attr: document.documentElement.hasAttribute('data-marquee'), text: String(window.getSelection() || '') })`)
+        const selectAfter = await userSelectOf()
+        rvOk('marquee1',
+          during && during.attr === true && during.text === '' && during.us === 'none' && selectedIds === 'rvP,rvQ,rvR' &&
+            afterBand.attr === false && afterBand.text === '' && selectAfter === selectBefore,
+          JSON.stringify({ during, selectedIds, afterBand, selectBefore, selectAfter }))
+
+        // revamp.snap.4 + snap.3 — the three, dragged up to 5px under the
+        // neighbour's foot: the bounds snap to it and every member moves -40.
+        const p0 = {}; for (const id of ['rvP', 'rvQ', 'rvR']) p0[id] = await pos(id)
+        const guide = await drag(V2(20 + 60, 260 + 14), V2(20 + 60, 260 + 14 - 35), {
+          hold: () => js(`(() => {
+            const g = document.querySelector('.snap-guide'); const layer = document.querySelector('.snap-guides')
+            if (!g || !layer) return { none: true }
+            const r = g.getBoundingClientRect()
+            const probe = document.createElement('div'); probe.style.background = 'var(--iris)'; document.body.appendChild(probe)
+            const iris = getComputedStyle(probe).backgroundColor; probe.remove()
+            const panelZ = Math.max(...[...document.querySelectorAll('.world .panel[data-panel-id]')].map((p) => Number(getComputedStyle(p).zIndex) || 0))
+            return { axis: g.getAttribute('data-snap-guide'), thick: Math.min(r.width, r.height), colour: getComputedStyle(g).backgroundColor, iris, layerZ: Number(getComputedStyle(layer).zIndex), panelZ }
+          })()`)
+        })
+        const p1 = {}; for (const id of ['rvP', 'rvQ', 'rvR']) p1[id] = await pos(id)
+        const deltas = ['rvP', 'rvQ', 'rvR'].map((id) => p1[id] && p0[id] ? `${p1[id].x - p0[id].x},${p1[id].y - p0[id].y}` : null)
+        rvOk('snap4', new Set(deltas).size === 1 && deltas[0] === '0,-40', JSON.stringify({ deltas, p0, p1 }))
+        rvOk('snap3', guide && guide.none !== true && guide.thick >= 1.5 && guide.colour === guide.iris && guide.layerZ > guide.panelZ,
+          JSON.stringify(guide))
+
+        // revamp.snap.2 — ⌘ held: 7px short of the neighbour's edge is kept; released: it snaps.
+        const sA = await pos('rvS')
+        await drag(V2(20 + 60, 470 + 14), V2(20 + 60 + 473, 470 + 14), { mods: ['meta'] })
+        const sB = await pos('rvS')
+        await drag(V2(493 + 60, 470 + 14), V2(493 + 60 + 1, 470 + 14), { steps: 2 })
+        const sC = await pos('rvS')
+        rvOk('snap2', sA && sB && sC && sB.x === 493 && sC.x === 500, JSON.stringify({ sA, sB, sC }))
+      } catch (rErr) {
+        for (const key of Object.keys(RV)) if (!reported.has(key)) ok(RV[key], false, 'threw: ' + String(rErr && rErr.message || rErr) + ' | renderer: ' + (rLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onR)
+        layoutStore.setPreference('placement.snap', false)
+      }
+    }
+
     // M190 — feedback.1. THE DRAFT DOOR, and the claim that matters: this app
     //     SUBMITS NOTHING. The `link:open` calls are recorded by the harness,
     //     so the check reads the exact url the door opened: it is the

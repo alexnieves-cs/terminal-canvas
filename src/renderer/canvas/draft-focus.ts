@@ -63,3 +63,30 @@ export function serveDraftEdit(verb: 'copy' | 'paste' | 'undo' | 'redo', text?: 
   }
   return true
 }
+
+/**
+ * M395. WHICH KEYS A TEXT FIELD ON THE CANVAS KEEPS — a sticky's or a frame's
+ * editor, a shape's label, a connector's label. Pure, over the event's own
+ * fields (`verify:viewport revamp.keys.1`).
+ *
+ * Every BARE key stays at the field: a Tab, a Delete or an arrow in a label is
+ * typing, never a canvas verb (the ledger's D3). A ⌘ chord goes on to the
+ * canvas — ⌘K, ⌘=, ⌘−, ⌘0, ⌘1, ⌘J … are the app's, and the live audit found
+ * all of them dead while a note was being typed in, because the editor
+ * stopped every key. Except the ⌘ chords that EDIT or MOVE WITHIN the text,
+ * which the field must own:
+ *  - ⌘A select-all, ⌘Z / ⌘⇧Z, ⌘C, ⌘V, ⌘X — the last four arrive as menu IPC
+ *    anyway (`serveDraftEdit` above serves them into the field); stopping the
+ *    keydown too keeps a canvas listener from ever reading them as its own;
+ *  - ⌘Enter, which the shape editor commits on;
+ *  - ⌘←/→/↑/↓ (and with ⇧, the selecting forms) and ⌘⌫ / ⌘⌦ — the caret's
+ *    line and document moves, which the canvas would otherwise take as
+ *    Cmd+Arrow traversal (`useKeyboardNav`) and preventDefault out of the text.
+ * A Ctrl or ⌥ chord without ⌘ is still a bare key here: it is the field's
+ * (emacs-style caret keys, ⌥-arrows by word).
+ */
+const FIELD_META_KEYS = new Set(['a', 'z', 'c', 'v', 'x', 'enter', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'backspace', 'delete', 'home', 'end'])
+export function fieldKeepsKey(event: { key: string; metaKey: boolean }): boolean {
+  if (!event.metaKey) return true
+  return FIELD_META_KEYS.has(event.key.toLowerCase())
+}

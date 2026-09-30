@@ -141,7 +141,7 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE,
+  makePanel, makeReviewPanel, maximiseRect, nextZ, pickRects, raisePanel, removePanel, reviewCentre, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
   addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
@@ -239,7 +239,7 @@ import { SkillNode } from '@renderer/skills/SkillNode'
    that takes the shelf as a dependency. */
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
-import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
+import { ANNOTATIONS_MAX, annotationPoint, dropEmptyLabels, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusalSync, teammateRefusal, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
 import { ACROSS_BASELINE, type ReviewSubject } from '@shared/review'
@@ -452,6 +452,10 @@ export function Canvas({
   const [annotating, setAnnotating] = useState(false)
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null)
   const [editingAnnotation, setEditingAnnotation] = useState<string | null>(null)
+  // M395. Read by endAnnotate at press time: the label still being typed is
+  // left to its editor's own commit, never dropped as empty under it.
+  const editingAnnotationRef = useRef(editingAnnotation)
+  editingAnnotationRef.current = editingAnnotation
   const annotationSeq = useRef(0)
   // The pointer hook is called above the verb's declaration (the M28 ordering
   // rule): it reads the verb through a ref, as beginNewChatRef does.
@@ -601,6 +605,15 @@ export function Canvas({
   // array position — see the note on Panel.z.
   const hitOrder = useMemo(
     () => [...displayPanels].sort((a, b) => a.z - b.z).map((p) => p.rect),
+    [displayPanels]
+  )
+  // M395. What a press on the canvas's own ground picks: hitOrder, except that
+  // a frame's MIDDLE is ground (panels.ts's `pickRects`) — so a sweep that
+  // starts inside a region is a marquee over its contents, never a click on
+  // the region. Only the background press and link mode read it; everything
+  // that looks a panel's rect up by id keeps hitOrder's one rect per panel.
+  const pickOrder = useMemo(
+    () => pickRects([...displayPanels].sort((a, b) => a.z - b.z)),
     [displayPanels]
   )
   // M35. Read through a ref because hitOrder is a fresh array on every frame
@@ -2339,10 +2352,14 @@ export function Canvas({
       return { dx: snapped.x - bounds.x, dy: snapped.y - bounds.y }
     }, [snapNow]),
     onDrag: useCallback(
-      (id: string, rect: WorldRect, state: DragState, alreadySnapped?: boolean) => {
+      (id: string, rect: WorldRect, state: DragState, alreadySnapped?: boolean, free?: boolean) => {
         const resize = state.mode.kind === 'resize'
           ? { growsX: state.mode.edge === 'e' || state.mode.edge === 'se', growsY: state.mode.edge === 's' || state.mode.edge === 'se' }
           : undefined
+        // M395. ⌘ held: this frame does not snap, and a guide a snapping
+        // frame drew a moment ago goes with it — a guide beside an object
+        // that did not stop on it would explain a snap that is not happening.
+        if (free === true) setSnapGuides([])
         // M388. A west/north resize (a shape's) moves the origin; snapping
         // covers growing right/bottom edges only, so those frames do not snap
         // rather than snapping the wrong edge.
@@ -2355,7 +2372,7 @@ export function Canvas({
         setPanels((current) => setPanelRect(current, id, snapped).map((p) => (p.rect.id === id && p.maximised !== undefined ? (({ maximised: _m, ...rest }) => rest as Panel)(p) : p)))
         return snapped
       },
-      [snapNow]
+      [snapNow, setSnapGuides]
     ),
     onCommit: useCallback((states: readonly DragState[]) => {
       setSnapGuides([])
@@ -2389,14 +2406,16 @@ export function Canvas({
   const beginGroupDrag = useGroupDrag({
     hostRef,
     viewportRef,
-    onDrag: useCallback((state, world) => {
+    onDrag: useCallback((state, world, free) => {
       // M50. The group snaps as ONE rect — its members' bounding rect —
       // and the snap's delta shifts the cursor's world point, so every
       // member moves by the same amount and nothing shears.
       const members = new Set(state.members.map((m) => m.panelId))
       const rects = state.members.map((m) => applyDrag(m, world))
       let snappedWorld = world
-      if (rects.length > 0) {
+      // M395. ⌘ held: a free frame, as for a panel (dragFrame's rule).
+      if (free) setSnapGuides([])
+      else if (rects.length > 0) {
         const bounds = {
           id: `group:${state.groupId}`,
           x: Math.min(...rects.map((r) => r.x)), y: Math.min(...rects.map((r) => r.y)),
@@ -2407,7 +2426,7 @@ export function Canvas({
         snappedWorld = { x: world.x + (snapped.x - bounds.x), y: world.y + (snapped.y - bounds.y) }
       }
       setPanels((current) => applyGroupDrag(current, state, snappedWorld))
-    }, [snapNow]),
+    }, [snapNow, setSnapGuides]),
     onCommit: useCallback(() => {
       setSnapGuides([])
       setPanels((current) => {
@@ -2489,13 +2508,29 @@ export function Canvas({
       // then apply the same pointer delta to each immutable origin in
       // usePanelDrag. The pressed member is always present; a resize stays a
       // one-member gesture even when a selection exists.
-      const group = state.mode.kind === 'move' && selectedIdsRef.current.has(state.panelId)
-        ? panelsRef.current.filter((panel) => selectedIdsRef.current.has(panel.rect.id)).map((panel) => ({
+      //
+      // M395. A FRAME CARRIES WHAT IS WHOLLY INSIDE IT, as FigJam's sections
+      // do: a move of a frame (by its label or its ring, alone or in a
+      // selection) takes every object lying wholly within it at THIS moment
+      // along — computed here, at the gesture, and never stored, so M187's
+      // "a frame owns nothing" stays true of the record (`frameContents`).
+      // The carried objects are ordinary members: one delta, one snap over
+      // the bounds, one history entry on release. A locked object stays put
+      // (M92), in a selection as in a group.
+      const all = panelsRef.current
+      const pressed = all.find((panel) => panel.rect.id === state.panelId)
+      const moving = state.mode.kind !== 'move' || pressed === undefined
+        ? []
+        : withFrameContents(selectedIdsRef.current.has(state.panelId)
+          ? all.filter((panel) => selectedIdsRef.current.has(panel.rect.id) && (panel.locked !== true || panel.rect.id === state.panelId))
+          : [pressed], all)
+      const group = moving.length <= 1
+        ? [state]
+        : moving.map((panel) => (panel.rect.id === state.panelId ? state : {
             ...state,
             panelId: panel.rect.id,
             originRect: panel.rect
           }))
-        : [state]
       beginDrag(group.map((member) => ({
         ...member,
         originWorld: screenToWorld(
@@ -2618,6 +2653,9 @@ export function Canvas({
       const alreadyTop = panel !== undefined && current.every((p) => p.z <= panel.z)
       if (alreadyTop) return current
       const next = raisePanel(current, id)
+      // M395. A frame is never raised (raisePanel hands back the SAME array):
+      // selecting it leaves it behind what it encloses, and pushes nothing.
+      if (next === current) return current
       commitHistory(next)
       return next
     })
@@ -2829,7 +2867,8 @@ export function Canvas({
     onCanvasMouseDownCapture, onMouseDown, onMouseDownCapture, onMouseMove
   } = useCanvasPointer({
     hostRef, viewport, viewportRef, panelsRef, marqueeFromRef, marqueeEndRef,
-    navGridIsOpenRef, hitOrder, palette, linkMode, merged, spaceHeld,
+    // M395. pickOrder, not hitOrder: a frame's middle is ground to a press.
+    navGridIsOpenRef, hitOrder: pickOrder, palette, linkMode, merged, spaceHeld,
     beginPanDrag, commitHistory, selectAndRaise, selectOnly, onSelectPanel,
     setPanels, setSelectedIds, setFocusedId, setMarquee, setCursor,
     annotate: (world) => placeAnnotationRef.current(world),
@@ -5424,7 +5463,10 @@ export function Canvas({
     const ordered = [...panelsRef.current].sort((a, b) => a.z - b.z)
     const anchor = resolveAnchor(world, ordered)
     const id = `a${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`
-    setAnnotations((current) => [...current, { id, text: '', anchor }].slice(-ANNOTATIONS_MAX))
+    // M395. No empty label outlives its editor. The one still open is left to
+    // its editor, which commits what was typed as it unmounts here (an empty
+    // one removes itself); any other empty label is dropped (dropEmptyLabels).
+    setAnnotations((current) => [...dropEmptyLabels(current, editingAnnotationRef.current), { id, text: '', anchor }].slice(-ANNOTATIONS_MAX))
     setSelectedAnnotation(id)
     setEditingAnnotation(id)
     return true
@@ -5451,7 +5493,18 @@ export function Canvas({
     setAnnotating(true)
     return { kind: 'entered' }
   }, [])
-  const endAnnotate = useCallback(() => { setAnnotating(false); setInkDraft(null) }, [])
+  // M395. Done closes the open label too: its editor commits what was typed
+  // as it unmounts (AnnotationLayer's NoteEditor), and a label left with
+  // nothing in it is removed rather than kept as "…".
+  const endAnnotate = useCallback(() => {
+    setAnnotating(false)
+    setInkDraft(null)
+    setEditingAnnotation(null)
+    setAnnotations((current) => {
+      const next = dropEmptyLabels(current, editingAnnotationRef.current)
+      return next.length === current.length ? current : next
+    })
+  }, [])
   placeAnnotationRef.current = placeAnnotation
   // M155. A finished stroke: anchored by its FIRST point (a stroke that starts
   // on a panel belongs to it — the label's own rule), its points stored
@@ -9233,8 +9286,11 @@ export function Canvas({
           </div>
         )}
         {/* M93. The annotate strip: LOUD, with its exit on it (M40's rule). */}
+        {/* M395. The strip TAKES the pointer (styles.css) and keeps its presses:
+            a press on it is a press on a tool, never a label dropped on the
+            ground beneath it — the canvas's own mousedown places labels. */}
         {annotating && (
-          <div className="link-banner link-banner--annotate" role="status" data-annotate-strip>
+          <div className="link-banner link-banner--annotate" role="status" data-annotate-strip onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}>
             <strong>Annotating</strong> — {annotateTool === 'draw' ? 'drag to draw, on a panel or the canvas' : 'click to place a note, on a panel or the canvas'}; Escape to stop
             {/* M155. The cap, said before it bites: ink reaches it in ordinary use where labels never did. */}
             {annotations.length >= ANNOTATIONS_MAX && <span className="link-banner__note" data-annotate-cap> · at the cap of {ANNOTATIONS_MAX} — the oldest goes next</span>}

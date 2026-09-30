@@ -7,7 +7,8 @@ export function useGroupDrag({
 }: {
   hostRef: RefObject<HTMLElement | null>
   viewportRef: RefObject<Viewport>
-  onDrag(state: GroupDragState, world: { x: number; y: number }): void
+  /** M395. `free` is ⌘ held on this frame of the drag: the group does not snap. */
+  onDrag(state: GroupDragState, world: { x: number; y: number }, free: boolean): void
   onCommit(state: GroupDragState): void
 }): (state: GroupDragState) => void {
   const dragRef = useRef<GroupDragState | null>(null)
@@ -32,7 +33,7 @@ export function useGroupDrag({
         { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
         depsRef.current.viewportRef.current
       )
-      depsRef.current.onDrag(state, world)
+      depsRef.current.onDrag(state, world, event.metaKey)
     }
     document.addEventListener('mousemove', move)
     document.addEventListener('mouseup', finish)

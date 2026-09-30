@@ -246,5 +246,18 @@ const group = { id: 'g1', label: 'auth refactor', colour: 'blue', panelIds: ['n1
     JSON.stringify({ plan, noOrigin }))
 }
 
+// M395 — revamp.frame.4. A group drag raises its members (raiseGroup), and a
+// FRAME in the group stays where it is: a region lifted over what it encloses
+// is the trap the live audit measured for a selection (raisePanel's rule).
+{
+  const frame = { kind: 'note', rect: { id: 'fr', x: 0, y: 0, w: 720, h: 480 }, z: -1, note: { form: 'frame', text: 'release' } }
+  const sticky = { kind: 'note', rect: { id: 'st', x: 40, y: 60, w: 200, h: 160 }, z: 2, note: { form: 'sticky', text: 'a' } }
+  const other = G.makePanel('o1', { x: 2000, y: 0 }, 5)
+  const raised = G.raiseGroup([frame, sticky, other], { id: 'g9', label: 'g', colour: 'blue', panelIds: ['fr', 'st'] })
+  const z = Object.fromEntries(raised.map((p) => [p.rect.id, p.z]))
+  ok('revamp.frame.4 raiseGroup lifts a group\'s members over everything but leaves a FRAME member behind, and changes no array order',
+    z.fr === -1 && z.st > 5 && z.o1 === 5 && raised.map((p) => p.rect.id).join(',') === 'fr,st,o1', JSON.stringify(z))
+}
+
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
 if (results.some((r) => !r.pass)) process.exit(1)

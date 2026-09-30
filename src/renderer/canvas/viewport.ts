@@ -341,6 +341,36 @@ export function simplifyStroke(points: ReadonlyArray<readonly [number, number]>,
 }
 
 /**
+ * M395. INK, DRAWN AS A CURVE. A stroke is stored as the points `simplifyStroke`
+ * kept, and painted as the uniform Catmull–Rom spline THROUGH them, each span
+ * written as the cubic Bézier it equals: from p[i] to p[i+1] with controls
+ * p[i] + (p[i+1] − p[i−1]) / 6 and p[i+1] − (p[i+2] − p[i]) / 6, the ends
+ * repeated. The curve passes through every stored point and turns there with
+ * ONE tangent (C1), so a scribble reads as a hand and not as the visible
+ * corners a polyline of simplified points had (the M155 critic's "minor").
+ *
+ * RENDER ONLY: the points, their count and the layout record are unchanged —
+ * this answers an SVG `d` and nothing else, and the hit path is drawn from the
+ * same `d`, so a click lands on the curve a person sees. One point is a bare
+ * move; two are a line. Two decimals, `pathOf`'s precision before it.
+ */
+export function smoothStrokePath(points: ReadonlyArray<readonly [number, number]>): string {
+  const n = points.length
+  if (n === 0) return ''
+  const f = (v: number): string => v.toFixed(2)
+  const at = (i: number): readonly [number, number] => points[Math.max(0, Math.min(n - 1, i))]!
+  let d = `M${f(points[0]![0])} ${f(points[0]![1])}`
+  if (n === 2) return `${d} L${f(points[1]![0])} ${f(points[1]![1])}`
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2)
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6
+    d += ` C${f(c1x)} ${f(c1y)} ${f(c2x)} ${f(c2y)} ${f(p2[0])} ${f(p2[1])}`
+  }
+  return d
+}
+
+/**
  * M256. The reading surface a document-focused file is shown at: at least
  * DOC_FOCUS_MIN, never smaller than the panel already is, and grown about the
  * panel's own CENTRE so the file widens in place rather than sliding right.

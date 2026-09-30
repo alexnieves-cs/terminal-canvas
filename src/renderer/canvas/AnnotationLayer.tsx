@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeybo
 import type { Annotation } from '@shared/annotations'
 import { annotationPoint } from '@shared/annotations'
 import type { Panel } from '@renderer/panels/panels'
+import { smoothStrokePath } from './viewport'
+import { fieldKeepsKey } from './draft-focus'
 
 /**
  * M93. THE ANNOTATION LAYER — labels in the margins, as SVG inside `.world`
@@ -40,7 +42,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null
   return (
     <>
       <svg className="annotation-layer" aria-hidden="true">
-        {draft && draft.length > 1 && <path className="annotation__ink annotation__ink--draft" d={pathOf(draft)} />}
+        {draft && draft.length > 1 && <path className="annotation__ink annotation__ink--draft" d={smoothStrokePath(draft)} />}
         {annotations.map((a) => {
           const p = annotationPoint(a, panels)
           if (p === null) return null
@@ -48,9 +50,12 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null
           // M155. INK: the stroke's points are relative to the anchor point;
           // an SVG path with round caps and joins in the label's own colour, a
           // wider transparent HIT path beneath for selection (a 3px line is
-          // not a target), the label's leader and editor never.
+          // not a target), the label's leader and editor never. M395: the
+          // path is the smooth curve THROUGH the stored points (viewport.ts's
+          // `smoothStrokePath`) — one `d` for the ink and its hit path, so a
+          // click lands on what is painted; the points are not touched.
           if (a.ink !== undefined) {
-            const d = pathOf(a.ink.points.map(([x, y]) => [p.x + x, p.y + y] as [number, number]))
+            const d = smoothStrokePath(a.ink.points.map(([x, y]) => [p.x + x, p.y + y] as [number, number]))
             return (
               <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind} data-annotation-ink="true">
                 <path className={`annotation__hit${merged ? ' annotation__hit--inert' : ''}`} data-annotation-hit d={d}
@@ -96,14 +101,38 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null
   )
 }
 
+/**
+ * M395. The editor SETTLES exactly once — Enter, Escape, a blur, or (new) its
+ * own unmount. A press that opens the next label, or Done on the strip, runs
+ * a discrete-event render that unmounts this editor BEFORE the browser moves
+ * focus, so no blur ever fires: the first cut left each such label empty and
+ * printed it as "…" (the live audit counted seven after Done). Unmounting now
+ * commits what was typed, and an empty commit removes the label (Canvas's
+ * commitAnnotation). `settled` keeps a commit or a cancel from being followed
+ * by a second one on the way out.
+ */
 function NoteEditor({ initial, onCommit, onCancel }: { initial: string; onCommit: (text: string) => void; onCancel: () => void }): JSX.Element {
   const [text, setText] = useState(initial)
   const ref = useRef<HTMLInputElement>(null)
+  const settled = useRef(false)
+  const live = useRef({ text, onCommit })
+  live.current = { text, onCommit }
   useEffect(() => { ref.current?.focus(); ref.current?.select() }, [])
+  useEffect(() => () => {
+    if (settled.current) return
+    settled.current = true
+    live.current.onCommit(live.current.text.trim())
+  }, [])
+  const commit = (): void => {
+    if (settled.current) return
+    settled.current = true
+    onCommit(text.trim())
+  }
   const onKey = (e: ReactKeyboardEvent<HTMLInputElement>): void => {
-    e.stopPropagation()
-    if (e.key === 'Enter') { e.preventDefault(); onCommit(text.trim()) }
-    if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+    // M395. Bare keys stop here; a ⌘ chord that is not a text edit reaches the canvas.
+    if (fieldKeepsKey(e)) e.stopPropagation()
+    if (e.key === 'Enter') { e.preventDefault(); commit() }
+    if (e.key === 'Escape') { e.preventDefault(); settled.current = true; onCancel() }
   }
   return (
     <input
@@ -114,13 +143,8 @@ function NoteEditor({ initial, onCommit, onCancel }: { initial: string; onCommit
       placeholder="a note…"
       onChange={(e) => setText(e.target.value)}
       onKeyDown={onKey}
-      onBlur={() => onCommit(text.trim())}
+      onBlur={commit}
       onMouseDown={(e) => e.stopPropagation()}
     />
   )
-}
-
-/** M155. M–L segments; two decimals keep the attribute short without moving a point a person could see. */
-function pathOf(points: ReadonlyArray<readonly [number, number]>): string {
-  return points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
 }
