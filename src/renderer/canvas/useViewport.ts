@@ -21,6 +21,7 @@ import {
   type WorldRect
 } from './viewport'
 import { minimapNeeded } from './minimap'
+import { LIVE_MIN_SCALE } from './lod'
 import { chromeObstacles, hostSize } from './safe-area'
 import { easeInOut, flightDuration, interpolateViewport } from './flight'
 import { canRedo, canUndo, createHistory, pushHistory, redoHistory, undoHistory, type History } from '@renderer/panels/history'
@@ -134,7 +135,7 @@ export interface ViewportControls {
    * up behind them. STATE, like `flying`, so an effect can key on it.
    */
   landing: { seq: number; landed: boolean }
-  /** M402 (B4). Fly to a new object unless it is already in view at a readable scale; whether the camera moves. */
+  /** M402 (B4). Show a new object with the least camera move (none when it is in view and clear); whether the camera moves. */
   reveal: (rect: WorldRect) => boolean
   /**
    * Arms a camera drag-pan from a mousedown's screen coordinates — backlog
@@ -668,30 +669,35 @@ export function useViewport(
   }, [hostRef, jump, safely])
 
   /**
-   * M402 (B4). SHOW WHAT A CREATE DOOR MADE: nothing when it is already in
-   * view at a readable scale, a flight to it at one otherwise
-   * (`revealTarget`), cleared of the chrome at that scale. Every create door
-   * ends here, which is what lets the one placement rule step a new object
-   * away from the view's centre — or out of a full view — and still be seen.
-   * Returns whether the camera moves.
+   * M402 (B4), reworked by its critic. SHOW WHAT A CREATE DOOR MADE, moving
+   * the camera as little as it can (`revealTarget`): nothing when the object
+   * is in view and clear of the chrome at any scale from the near tier's
+   * floor, the smallest pan at the SAME scale when it is not, and a flight to
+   * a readable scale only from the card tier. Every create door ends here,
+   * which is what lets the one placement rule step a new object away from
+   * the view's centre — or out of a full view — and still be seen. Returns
+   * whether the camera moves.
    */
   const reveal = useCallback((rect: WorldRect): boolean => {
     const host = hostRef.current
     if (!host) return false
     const size = hostSize(host)
     const vp = viewportRef.current
-    // In view at a readable scale is not enough when the floating chrome lies
-    // over it: an ANCHORED object (a review beside its agent) is placed
-    // without the chrome, and one that landed under the minimap is not shown.
-    const box = framedBox([rect], vp)
-    const covered = chromeObstacles(host, { minimap: 'shown' }).some((o) => overlaps(box, o))
-    const target = revealTarget(vp, rect, size) ?? (covered ? vp : null)
+    // `covered`: the chrome as it shows now (an ANCHORED object — a review
+    // beside its agent — is placed without it, and one under the minimap is
+    // not shown). `keepClear`: the minimap reserved even while hidden, since
+    // a pan that leaves some object out of view brings it back.
+    const target = revealTarget(vp, rect, size, {
+      floor: LIVE_MIN_SCALE,
+      covered: chromeObstacles(host, { minimap: 'shown' }),
+      keepClear: chromeObstacles(host, { minimap: 'always' })
+    })
     if (target === null) return false
-    // Centred in the largest part of the canvas the chrome leaves that holds
-    // it, not in the host: the minimap reserved even while hidden (a canvas
-    // with an object out of view brings it back). `safely` moves a target
-    // only up or left (clearOfOverlays), so a task review centred under a
-    // top-right minimap stayed under it, its header controls covered (B3).
+    if (target.scale === vp.scale) { jump(target); return true }
+    // From the card tier: centred in the largest part of the canvas the
+    // chrome leaves that holds it, not in the host (`safely` moves a target
+    // only up or left, so a review centred under a top-right minimap stayed
+    // under it — B3).
     jump(inFreeFrame(host, rect, target.scale, size, 'always', { shrink: true }) ?? safely(host, target, [rect], size, true))
     return true
   }, [hostRef, jump, safely])

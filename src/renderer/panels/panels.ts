@@ -751,10 +751,34 @@ export const TERMINAL_RIM = 16
  * zoom-time fact (a far card has its header inside the rect), while a
  * placement or a group's frame must hold at every zoom — the room the name
  * needs near must stay reserved when the camera is far.
+ *
+ * `rimAbove` defaults to the rim at 100% (`terminalRimAt` for another zoom).
+ * NEVER pass this bare to `.map` — the index would arrive as the rim. A
+ * group's frame keeps the default and holds at every zoom anyway: its top is
+ * 16 + 28 + 34 = 78 world units above the frame and its header's foot 44,
+ * while the strip at the counter-scale's ceiling reaches 40.
  */
-export function occupiedRect(panel: Panel): WorldRect {
-  const rim = isTerminalPanel(panel) ? TERMINAL_RIM : 0
+export function occupiedRect(panel: Panel, rimAbove: number = TERMINAL_RIM): WorldRect {
+  const rim = isTerminalPanel(panel) ? rimAbove : 0
   return rim === 0 ? panel.rect : { ...panel.rect, y: panel.rect.y - rim, h: panel.rect.h + rim }
+}
+
+/** M402 follow-up. `--chrome-scale`'s ceiling (Canvas.tsx stamps min(2.5, max(1, 1/scale)) on .world). */
+export const CHROME_SCALE_MAX = 2.5
+
+/**
+ * M402 follow-up (the critic). THE RIM AT A ZOOM, in world units. The strip
+ * is 16 SCREEN px at every zoom below 100% — M144's counter-scale grows it
+ * upward by `--chrome-scale` — so in the world it is TERMINAL_RIM × that
+ * scale: 32 at 50%. A fixed 16 let a stack snapped at 50–99% put the lower
+ * name back over the upper terminal's bottom row, which is the defect the rim
+ * exists for. A reader that acts at the CURRENT zoom (the drag snap, the
+ * marquee) passes it; a placement, which must hold at every zoom it will be
+ * seen at, reserves the largest (place-new.ts's PLACE_RIM).
+ */
+export function terminalRimAt(scale: number): number {
+  const chrome = scale > 0 ? Math.min(CHROME_SCALE_MAX, Math.max(1, 1 / scale)) : 1
+  return TERMINAL_RIM * chrome
 }
 
 /** One above the highest current z, so a raised or new panel is on top. */

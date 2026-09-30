@@ -10,7 +10,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 
 const WATCHDOG_MS = 68000 // measured 2026-09-30 (M402) after place.snap.rim.1 and the create doors' reveal flights, two green runs: 53.1s, 53.8s (the second in `npm run affected`); 1.25x the slower, to the next second. Was 60000 (M149: 47.1s, 47.4s), which headroom.1 read at 89.7%
 
-const { occupiedWorld, overlapsRect, cameraStill } = require('./lib/place-probe.cjs')
+const { occupiedWorld, overlapsRect, cameraStill, zoomInto } = require('./lib/place-probe.cjs')
 runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
@@ -651,6 +651,86 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       }
       ok('place.snap.rim.1 a snapped stack of live terminals leaves the lower one\'s rim name clear of the upper one\'s bottom row — elementFromPoint there answers the upper panel',
         pass, JSON.stringify(detail))
+
+      // place.snap.rim.2 — the M402 critic. Below 100% the strip is 16 SCREEN
+      // px (M144's counter-scale grows it upward), so it is TALLER in the
+      // world — 32 at 50% — and a snap that reserved a fixed 16 put the lower
+      // name back over the upper terminal's bottom row there. A pair at a
+      // zoom just above the near tier's floor (both still live), the
+      // lower one dragged by its name to a few world px short of the 50% rim
+      // line, by way of a point well below it (a drag of a few px alone may
+      // not start). Measured: the gap is the strip's measured world height,
+      // the name's box starts at or below the upper frame's bottom, and
+      // elementFromPoint on the upper one's bottom row under the name answers
+      // the UPPER panel.
+      // Its own pair, spawned in EMPTY world space (a wheel pan far from
+      // everything): zoomed out over the fixture, the live budget carded the
+      // lower terminal of rim.1's pair (measured), and a card has no rim.
+      let detail2 = { skipped: 'no live pair at 50%' }
+      let pass2 = false
+      {
+        await zoomTo(wc, '0')
+        await cameraStill(wc)
+        await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 700, clientY: 450, deltaX: 250000, deltaY: 250000, deltaMode: 0 })); true`)
+        await cameraStill(wc)
+        const before2 = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        for (let i = 0; i < 2; i++) {
+          wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), command: '/bin/sh', args: [], w: 320, h: 200 })
+          await sleep(400)
+        }
+        await settle()
+        const pair = (await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)).filter((id) => !before2.includes(id))
+        const [upperId, lowerId] = pair
+        const scale = await zoomInto(wc, 0.5, 0.53)
+        const bothLive = upperId !== undefined && lowerId !== undefined && await waitUntil(async () => { const a = await box(upperId), b = await box(lowerId); return a && b && a.live && b.live ? true : false }, 4000)
+        detail2 = { pair, scale, bothLive }
+        if (bothLive) {
+        const up = await box(upperId), lo = await box(lowerId)
+        // The strip's world height, measured from the painted NAME (its screen
+        // height / scale — the name is end-aligned on the strip and trimmed to
+        // it), never copied from the source. Not the chrome's own box: with
+        // the panel selected its controls show and the box measured 37px.
+        const rimWorld = await wc.executeJavaScript(`(() => {
+          const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(lowerId))} + '] .pf__title')
+          return c ? c.getBoundingClientRect().height / window.__m4aScale() : null
+        })()`)
+        detail2 = { scale, up, lo, rimWorld }
+        if (up && lo && up.live && lo.live && rimWorld !== null) {
+          const grab = { x: Math.round(lo.t.left + Math.min(20, lo.t.width / 2)), y: Math.round(lo.t.top + lo.t.height / 2) }
+          const wantGap = rimWorld - 5
+          const dy = Math.round((up.y + up.h + wantGap - lo.y) * scale)
+          const dx = Math.round(up.p.left + 2 - lo.p.left)
+          wc.sendInputEvent({ type: 'mouseMove', x: grab.x, y: grab.y })
+          await sleep(150)
+          wc.sendInputEvent({ type: 'mouseDown', x: grab.x, y: grab.y, button: 'left', clickCount: 1 })
+          const via = { x: grab.x + dx, y: grab.y + dy + 80 }
+          for (let i = 1; i <= 4; i++) {
+            wc.sendInputEvent({ type: 'mouseMove', x: Math.round(grab.x + (via.x - grab.x) * i / 4), y: Math.round(grab.y + (via.y - grab.y) * i / 4), button: 'left', modifiers: ['leftButtonDown'] })
+            await sleep(30)
+          }
+          for (let i = 1; i <= 4; i++) {
+            wc.sendInputEvent({ type: 'mouseMove', x: via.x, y: Math.round(via.y + (grab.y + dy - via.y) * i / 4), button: 'left', modifiers: ['leftButtonDown'] })
+            await sleep(30)
+          }
+          wc.sendInputEvent({ type: 'mouseUp', x: grab.x + dx, y: grab.y + dy, button: 'left', clickCount: 1 })
+          await sleep(300)
+          const up2 = await box(upperId), lo2 = await box(lowerId)
+          const hit = await wc.executeJavaScript(`(() => {
+            const t = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(lowerId))} + '] .pf__title').getBoundingClientRect()
+            const u = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(upperId))} + ']').getBoundingClientRect()
+            const el = document.elementFromPoint(t.left + Math.min(10, t.width / 2), u.bottom - 2)
+            return { id: el ? (el.closest('.panel')?.getAttribute('data-panel-id') ?? '-') : null, nameTop: t.top, upperBottom: u.bottom }
+          })()`)
+          const gap = lo2.y - (up2.y + up2.h)
+          detail2 = { scale, rimWorld, wantGap, gap, hit }
+          pass2 = rimWorld > 16 + 4 && Math.abs(gap - rimWorld) < 1 && hit.id === upperId && hit.nameTop >= hit.upperBottom - 0.5
+        }
+        }
+        await zoomTo(wc, '0')
+        await cameraStill(wc)
+      }
+      ok('place.snap.rim.2 at 50% zoom a snapped stack of live terminals still leaves the upper one\'s bottom row uncovered — the gap is the rim\'s measured WORLD height there (taller than at 100%), and elementFromPoint on that row answers the upper panel',
+        pass2, JSON.stringify(detail2))
       } finally {
         layoutStore.setPreference('placement.snap', false)
         wc.send(IPC_EVENTS.SETTINGS_CHANGED, 'placement.snap')

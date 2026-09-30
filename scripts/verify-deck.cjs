@@ -176,7 +176,8 @@ const base = deckOf(five)
     .map((f) => readFileSync(join(paDir, f), 'utf8')).join('\n'))
   const node = existsSync(join(root, 'src/renderer/file/DeckNode.tsx')) ? strip(readFileSync(join(root, 'src/renderer/file/DeckNode.tsx'), 'utf8')) : ''
   ok('deck.origin.1 runAgentPlan runs steps as the door, the palette runPlan as a person, deck verbs pass origin, and a door keep and a door present are refused',
-    pa.includes("runAgentPlan(line, facts(), (step) => execute(step, caller, 'door'), caller)") && /runPlan\(built\.plan, execute, \{/.test(pa) &&
+    // M402 follow-up: the door's step runs under place-quiet.ts's `quietly` (no camera flight to what it makes) — the origin is unchanged.
+    pa.includes("runAgentPlan(line, facts(), (step) => quietly(() => execute(step, caller, 'door')), caller)") && /runPlan\(built\.plan, execute, \{/.test(pa) &&
       /case 'deck-edit': return self\.editDeck\([^\n]*origin\)/.test(pa) && /case 'deck-write': [^\n]*origin\)/.test(pa) && /case 'deck-review': [^\n]*origin\)/.test(pa) && /case 'deck-present': [^\n]*origin\)/.test(pa) &&
       /action === 'keep' && origin === 'door'\) return \{ kind: 'refused'/.test(node) && /if \(origin === 'door'\) return \{ kind: 'refused', reason: `presenting/.test(node))
 }

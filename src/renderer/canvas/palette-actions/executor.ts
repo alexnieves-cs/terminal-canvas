@@ -36,6 +36,7 @@ import type { HandoffTrigger } from '@shared/handoff'
 import { isBrowserPanel, isChatPanel, isFilePanel, isReviewPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
+import { quietly } from '../place-quiet'
 
 export type ExecutorActions = Pick<PaletteActions,
   | 'runAgentPlan'
@@ -377,7 +378,8 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
-    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, caller, 'door'), caller),
+    // M402 follow-up. A door's step places QUIETLY (place-quiet.ts): no flight to what it made.
+    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => quietly(() => execute(step, caller, 'door')), caller),
     beginRunVerb: () => {
       const open = (initial: string, refused?: string): void => {
         setInputMode({

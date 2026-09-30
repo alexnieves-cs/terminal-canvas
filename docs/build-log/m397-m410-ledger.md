@@ -791,6 +791,76 @@ shot time (sized to the canvas, the one-file diff full width, the rail's file co
 *Not done:* the lineup/swarm/template arrangements (above); a flight-time golden for the minimap. The A4 rim for an
 agent terminal (`claude` in a PTY) was not driven with a real agent (M397's note stands).
 
+#### M402 follow-up (critic)
+
+The critic's "M402 → material" items 1–5 and the cheap minors. Not re-driven in the app (both slots were taken); every
+item is pinned by a check instead, measured in Electron where the defect is a live one. (The stray `||||||| f5e642c9`
+merge marker that closed the M402 section above is removed.)
+
+1. **The rim is taller below 100%.** *Cause:* the strip is 16 SCREEN px at every zoom under 100% (M144's counter-scale
+   grows it upward by `--chrome-scale`, clamped 1–2.5), so in the world it is 16 × that — 32 at 50% — while
+   `occupiedRect` and the snap's `rimOf` used a fixed 16. *Fix:* `panels.ts`'s `terminalRimAt(scale)` and
+   `CHROME_SCALE_MAX`; `occupiedRect(panel, rimAbove = TERMINAL_RIM)`. The drag snap (`Canvas.tsx`'s `snapNow`) and the
+   marquee (`useCanvasPointer`) read the rim at the CURRENT zoom; a placement reserves the tallest live rim,
+   `place-new.ts`'s `PLACE_RIM` = `terminalRimAt(LIVE_MIN_SCALE)` = 32 (below the near tier a terminal is a card, no rim).
+   *Decision:* group frames keep the 100% rim and are documented as holding at every zoom: the frame's top is 78 world
+   units over the frame and its header's foot 44, the strip at the counter-scale's ceiling 40. Minor folded in: a
+   multi-move's `rimOf('selection')` read `p.rect.y === rect.y` against the MOVED bounds, which pre-drag rects never
+   match; it now takes the members' topmost pre-drag y.
+2. **Creating an object yanked the camera.** *Cause:* `revealTarget` moved the camera unless `scale >= min(0.8, fits)`,
+   so ⌘N at a 50% overview zoomed to 80% for a panel already on screen. *Fix — the least move:* `viewport.ts`'s
+   `revealTarget(vp, rect, size, { floor, covered, keepClear })`: at any scale from the near tier's floor (LIVE_MIN_SCALE,
+   passed in — lod.ts imports viewport.ts), NO move when the object is in view and clear of the chrome as it shows;
+   otherwise the smallest PAN at the same scale into the free frame (`freeFrames`, the minimap reserved) needing the
+   shortest move, or the view when none holds it (too big: its leading corner in). Only below the floor (it would be a
+   card) the old flight to READABLE_SCALE. `useViewport`'s `reveal` feeds it the chrome. *Quiet doors:* a new
+   `place-quiet.ts` (a depth, released in `finally`, so it spans a step's awaits): the executor's `runAgentPlan` (the
+   agent's line AND a workflow action node) runs each step under `quietly`, and `Canvas.tsx`'s `placer` treats that as
+   `quiet` — no reveal — and passes `preferView`, so an ANCHORED quiet object tries a spot in view first
+   (`placement.ts`'s `placeNew`). *Accepted cost:* a person's press landing during an agent step's await is quiet too
+   (it still lands in view). The watcher doors needed nothing more: they place in view, which now moves no camera.
+   Minor folded in: `pendingRevealRef` is a LIST — N objects made in one tick are revealed together (their bounds).
+3. **A review's persisted size carried the press-time zoom.** *Fix:* `sizeToView(host, max, min)` takes no viewport;
+   its pure half `viewport.ts`'s `sizeForCanvas` reads the free canvas at 100%. *Decision:* fully independent rather than
+   the critic's `clamp(scale, 0.8, 1)`, because the size persists — any scale term makes two presses of the same
+   review at 80% and 100% mint different boxes for good.
+4. **A review of an agent inside a group was pushed out of the frame.** *Fix:* `PlaceHow.parentId`; `placePanel`
+   treats the parent's group's frame as no obstacle. Passed by every anchored door: `openReview`, the task review, the
+   across review, a capture, a dispatched lane's chat, a checks watcher.
+5. **Check 7's and 51's y pins.** Restored to 1px on BOTH axes against the spot computed in the harness —
+   `scripts/lib/place-probe.cjs`'s `measurePlacement` (before the press: the view, the chrome as the placer measures it,
+   every store rect) and `expectedSpot` (after: the pure `placeNew` and `PLACE_RIM`, bundled into `panels-entry.cjs`).
+   What this pins beyond verify:viewport is that the live door feeds the rule what the canvas shows.
+
+*Minors:* the minimap now freezes `needed` itself during a flight (the live value led `shownPresence`), done.
+`panels:product`'s hang lead was REAL: the D07 and M401 blocks' five reloads awaited `once('did-finish-load')` with no
+bound; `reloadWithin(wc, 20000)` resolves on load, on a failed main-frame load (not ERR_ABORTED) or at the bound, logging
+which, so the checks after it fail by name. *Not done:* `beginNewChat`'s `clearOfChrome` after placement (another builder
+is editing `beginNewChat`; left for them — the rule already clears the chrome, so the call is at worst a no-op or a
+small step); `fitAll`/`tidy`/`align` reading `occupiedRect` (a separate change to arrange.ts's tidy, out of this scope).
+
+*Checks (scoped ids):* `verify:viewport place.reveal.1` rewritten (no move in view at 1 AND at a 50% overview; the pan
+out of view is exactly the least distance, same scale, at 100% and 50%; from 0.3 a readable flight; too big, the leading
+corner at the margin), `place.reveal.2` (in view but under the chrome: panned clear, never rescaled), `place.rim.3`
+(the rim at 1/2/0.5/0.1, the 50% snap stops at 32, PLACE_RIM), `place.rule.4` (a review beside an agent inside a group
+stays inside its frame with `parentId`, pushed out without), `review.size.1` (the size is the free canvas at 100%, no
+scale input, capped and floored). `panels:core 7` and `51` pinned to 1px (above); `panels:core place.still.1` (⌘N at a
+0.50–0.53 overview in empty world space: the rule's spot in view, the camera EXACTLY unchanged past a flight's length,
+the panel on screen where the rule put it). `panels:kinds place.snap.rim.2` (its own live pair in empty world space at
+0.50–0.53, the lower dragged by its name to 5 world px short of the measured rim: the gap equals the strip's MEASURED
+world height, the name starts at or below the upper frame's bottom, and elementFromPoint on the upper one's bottom row
+answers the upper panel). First run measured two harness facts: zoomed out over the fixture the live budget CARDED the
+lower terminal (hence the pair in empty space), and the chrome's own box of a selected terminal is 37px (the controls),
+so the strip is measured from the name.
+
+*Suites (this follow-up's tree):* plain `verify:viewport` 197/197, `groups` 18/18, `flowchart` 169/169, `styles` 93/93,
+`meta` 51/51, `deck` 44/44 (`deck.origin.1`, a source-shape check, updated for the `quietly` wrapper), `verbs` 30/30,
+`onboarding` 21/21, `canvas-sync` 98/98, `jobs` 17/17, `first-run` 29/29, `workflow-schema` 17/17. Electron: NOT yet
+green. One `panels:kinds` run (load ~70) was 46/54: `place.snap.rim.2` red for the two harness facts above (both fixed
+since, not re-run), `link-draw.1–6` red (m24 fixture panels absent after its reload; unattributed, not re-run) and
+`headroom.1` 96%; a second run hit the watchdog at check 133 at load 71–83. `panels:core` (checks 7, 51,
+`place.still.1`), `panels:kinds`, `panels:product` and `panels:shell` are OWED on a quiet machine.
+
 ### M403 — the permission mode said where a task starts (B5), the guide inside its conversation (B6), Ask a question kept (B8)
 
 Built in the main checkout on `m397-daily-loop`, app slot 1. Two commits: the first carries the M399/M400 critic
@@ -1018,4 +1088,3 @@ Minor: ⌘K "Show Orchestrate" → **Open Orchestrate** (`dock.dup.1`'s search u
 `dock.dup.1` and `team.segment.1` are still unrun, and `dock.dup.1` now searches "Open Orchestrate". *Goldens expected to
 move:* every scene whose crumb shows a fresh layout's name. The harness starts fresh, so "Canvas ▾" becomes "Workspace ▾" wherever the
 crumb is in frame. Also the vault/notes scenes' empty or refusal sentences, and `account-menu`'s sign-in tooltip if it's captured.
-

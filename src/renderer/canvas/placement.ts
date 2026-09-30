@@ -323,10 +323,16 @@ export function placeNew(req: {
   size: { w: number; h: number }
   centre: Point
   anchored?: boolean
+  /** M402 follow-up. A quiet mint: no flight follows, so an anchored object tries the view first. */
+  preferView?: boolean
   obstacles: readonly Box[]
   chrome?: readonly Box[]
   within?: Box
 }): Point | null {
+  if (req.anchored === true && req.preferView === true && req.within !== undefined) {
+    const inView = freeSpot(req.centre, req.size, [...req.obstacles, ...(req.chrome ?? [])], { within: req.within })
+    if (inView !== null) return inView
+  }
   if (req.anchored === true) return freeSpot(req.centre, req.size, req.obstacles, { maxRings: ANCHOR_RINGS })
   if (req.within !== undefined) {
     const inView = freeSpot(req.centre, req.size, [...req.obstacles, ...(req.chrome ?? [])], { within: req.within })
