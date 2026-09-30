@@ -254,8 +254,10 @@ export function workspacesActions(ctx: ActionCtx): WorkspacesActions {
                     : new Set<string>()
                   let target = before.find((w) => w.id !== id)
                   if (doomed.active && !target) {
-                    const freshId = await window.canvas.workspace.create('Canvas')
-                    target = { id: freshId, name: 'Canvas', panelIds: [], active: false }
+                    // M404 (C1). "Workspace", not "Canvas": Canvas is the center
+                    // view's name, and a crumb reading it looked like the mode.
+                    const freshId = await window.canvas.workspace.create('Workspace')
+                    target = { id: freshId, name: 'Workspace', panelIds: [], active: false }
                   }
                   // AWAITED, and a refusal ABANDONS the delete. This is the
                   // one caller that cannot treat switchWorkspace as

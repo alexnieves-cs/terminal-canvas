@@ -334,7 +334,7 @@ export interface PaletteActions {
    * M268. Show the canvas or the Orchestration center page. The canvas host
    * stays mounted either way — this only chooses which sibling is visible.
    */
-  setCenterView(view: 'canvas' | 'orchestration'): void
+  setCenterView(view: 'canvas' | 'orchestration' | 'team'): void
   /**
    * Arm the one-shot link mode with this panel as the source. The NEXT click
    * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's
@@ -1293,7 +1293,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M268. Center-page doors — same verbs as the TopBar / dock toggles.
   out.push({
     id: 'canvas.orchestration',
-    title: 'Show Orchestration',
+    // M404 (C1). The place's one name — the segment's "Orchestrate".
+    title: 'Show Orchestrate',
     searchText: 'orchestration orchestrate dashboard overview ops agents activity',
     group: 'canvas',
     run: () => actions.setCenterView('orchestration')
@@ -1304,6 +1305,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'canvas center view panels world',
     group: 'canvas',
     run: () => actions.setCenterView('canvas')
+  })
+  // M404 (C3). People's palette door. The top-bar segment shows only when
+  // signed in or on a shared workspace; this row is always here, and the
+  // page it opens carries the sign-in button when that is what is missing.
+  out.push({
+    id: 'canvas.people',
+    title: 'Show People',
+    subtitle: 'who in your organization is working, and on what',
+    searchText: 'people team members organization presence who is working observe',
+    group: 'canvas',
+    run: () => actions.setCenterView('team')
   })
   out.push({
     id: 'canvas.reset',

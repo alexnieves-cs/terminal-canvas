@@ -1135,7 +1135,11 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M315: the header's creation button is `+ New task` — it opens the Task
   // sheet, the primary journey's front door (a raw panel is the sheet's switch).
   const topOk = /\+ New task/.test(top) && /Search panels, files, tasks, commands/.test(top) && /shell__workspace/.test(top) && /shell__view-menu/.test(top) && /onSetTheme/.test(top)
-  const dockOk = ['Work', 'Content', 'Connections', 'System', 'Canvas', 'Tasks', 'Notes', 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
+  // M404 (C1/C2): the groups are Work, Content, Setup and System, and the
+  // places carry their panes' names (Board, Notes, Connections). 'Canvas' and
+  // 'Tasks' left this list on purpose: they had matched only comments since
+  // the dock stopped naming them, which is a word check passing vacuously.
+  const dockOk = ["label: 'Work'", "label: 'Content'", "label: 'Setup'", "label: 'Board'", "label: 'Notes'", "label: 'Connections'", 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
   const state = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'panels', 'panel-state.ts'), 'utf8')
   const filters = ['All', 'Running', 'Needs you', 'Changed', 'Asleep'].every((word) => state.includes(word)) && /PANEL_FILTERS/.test(nav) && /data-rail-filter/.test(nav)
   const collapse = /shell\.collapsedRailGroups/.test(nav) && /aria-expanded/.test(nav) && /group\.label}\s*{group\.rows\.length}/.test(nav)

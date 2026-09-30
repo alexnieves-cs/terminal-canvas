@@ -423,3 +423,106 @@ task, the flowchart scenes with the pill or inspector open ("New task from this 
 `start.door.1/.2`, `start.answer.1`, `onboarding.intent.e2e.*`, `start.recovery.*`; `verify:panels:core` green with 48's
 new ORDER; `verify:panels:orchestrate` green with `orch-tasks.app.2`. Plain: `verify:palette` 169/169, `first-run` 29/29,
 `onboarding` 21/21, `swarm` 39/39, `rail` 258/258, `meta` 51/51 (the lb entries added in `docs/load-bearing.md`).
+
+### M404 — one name per place, no duplicate doors, People only when there are people (C1, C2, C3)
+
+Worktree `tc-m404-names`, branch `m404-names` off `843e02f3`. App driven on slot 2 (CDP 9220).
+
+**C1 · one name per place — reproduced, landed (copy only).** Reproduced by clicking each dock pane in the
+real app and reading the button's `aria-label`, its tooltip, the pane heading and the pane's Hide control from the
+DOM (`/tmp/tc-daily-loop-shots/C1-before.png`): Tasks → BOARD, Notes → VAULT, Services → CONNECTIONS inside a
+dock group also called Connections, every pane's collapse said "Hide the navigator", and two of those
+(Files, Connections) rendered `(⌘\\)` — a doubled backslash, because a JSX attribute string is not a JS string and
+does not unescape. Cause: each surface wrote its own literal, and nothing compared them.
+Names chosen, each with its reason:
+- **Board** (dock "Tasks" → "Board"). "Task" is the noun of New task and of Orchestrate's task list; this pane is
+  the GitHub/Jira board, which its heading, its empty sentence and ⌘K's "Open board" already said.
+- **Notes** (pane "Vault" → "Notes"). A `note` is a Markdown file and this pane lists exactly those. "Vault" stays
+  the code's word (`VaultPane`, `data-vault-pane`, `navigator: 'vault'`, `useVault`).
+- **Connections** (dock "Services" → "Connections"). The pane heading and ⌘K's "Manage connections…" already said
+  it. The dock GROUP around it is renamed **Setup** — what those two panes are for, set up once — so one word
+  names one place. (C4 may later move them into Settings; the name survives that.)
+- **Hide <Pane>** on every pane's collapse control (was "Hide the navigator"), with `(⌘\)` rendered once, correctly.
+- **People** (top segment "Team" → "People", and the page's heading). "Team" beside the dock's "Teammates" read as
+  one thing twice; Teammates are AGENT identities (the model's own word, used by the sheet, dispatch and routines —
+  renaming it would be a far larger copy change), so the PEOPLE view takes the plainer word. Code id `team` stays.
+- **Orchestrate** everywhere: ⌘K "Show Orchestration" → "Show Orchestrate", View menu "Orchestration view" →
+  "Orchestrate". The segment, which the prompt called the name, was already "Orchestrate".
+- **The crumb is a switcher**: a chevron (`ChevronDown`), a hairline at rest, `.shell__crumb--switcher`,
+  `data-crumb="workspace"`, tooltip "Switch workspace — or add, rename and see history in the Workspaces list". It
+  opens the Workspaces pane (the list IS the switcher); the name clips inside, never the chevron.
+- **Default workspace name — STOPPED, recorded for the lead.** The fresh default is `defaultWorkspace()` in
+  `src/shared/layout-schema/types.ts`, which is the persistence module AND is also the repair path `parseLayout` uses
+  for an EXISTING layout that has no usable workspace (`workspaces.ts` ~481); `parseWorkspace`'s fallback for an
+  absent name is `'Canvas'` too. Changing either changes what an existing file loads as, so per the brief it was not
+  done. What did change is the one renderer-side fresh name: deleting the last workspace mints a replacement, now
+  named **Workspace** (was `'Canvas'`, `palette-actions/workspaces.ts`). The suggested name for the lead's decision is
+  also "Workspace" (the crumb then reads "Workspace ▾", which says what it switches). No persisted name is rewritten.
+- Palette rows kept their titles where they already carried the name (Open board, Manage connections…, Manage
+  teammates…, Manage workspaces…): the agreement rule is "the row names the place", and renaming those would ripple
+  into search checks for nothing.
+
+**C2 · duplicate doors in prime chrome — reproduced, landed.** `npm run lb -- Dock` read first (one destination model
+at two densities; the dock's `overflow: visible` / `z-index: 910`; nothing there pins membership). Removed from the
+dock: **Orchestrate** (the top segment is its door; ⌘K "Show Orchestrate" stays) and **Workspaces** (the switcher
+crumb is its door; ⌘K "Manage workspaces…" stays). `.dock__*` classes and every other `data-dock` id are unchanged.
+**⌘\ conflict resolved:** ⌘\ shows or hides WHICHEVER pane the navigator holds (`useShellChrome` → `toggleNavigator`),
+so the dock's Panels claiming it was false whenever Files or Notes was showing. Panels no longer carries ⌘\; each
+pane's own Hide control carries it. The View menu's "Merged view" (a duplicate of the Workspaces pane row the
+finding names) and "Orchestrate" rows were LEFT: the direction is to take duplicates out of the dock, the View menu
+is not rest chrome, and `.shell__merge` is clicked from outside the menu by three harnesses.
+Harness updates (deliberate, recorded): every `[data-dock="orchestration"]` click in `verify-panels-orchestrate`,
+`verify-panels-shell` (`toggleOrch`; `orch-page.1`'s wording) and `shot.cjs` now presses the top segment —
+`[data-seg="orchestration"]:not([aria-pressed="true"])` to open, and
+`.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]` to leave (it
+matches exactly when the old pressed dock button did). `SegmentedControl` gained a `data-seg={id}` hook for this: an
+option can now come and go (C3), so pressing a place by position would be wrong. Every `[data-dock="workspaces"]`
+click (`verify-panels-agents`, `verify-panels-product`, `shot.cjs`) now clicks `[data-crumb="workspace"]`;
+`verify-panels-agents`' real-dock-click check presses Notes (`vault`) where it pressed Workspaces.
+`verify:styles shell.recommendations.1`'s dock word list had gone vacuous ('Canvas' and 'Tasks' matched only
+comments); it now pins `label: 'Setup'`, `'Board'`, `'Notes'`, `'Connections'` etc. `dock.1` needed no change — it pins
+the dock's styling, not its membership — so membership is pinned by the new `dock.dup.1`. The lb entry's group list
+(Work, Content, Connections, System) was corrected to Setup.
+
+**C3 · People (was Team) only when there are people — reproduced, landed.** Reproduced signed out: the Team segment
+opened a full page reading "not signed in — run `tc login` or sign in from the app first" with no button
+(`C3-before.png`). Now the segment shows only when an account is signed in (`accounts.sessions.length > 0`) or the
+active workspace is shared (`shared.view !== null`, passed from Canvas as `sharedWorkspace`), and stays while the page
+is showing so a pressed place never vanishes under the person. The new ⌘K row **Show People** (`canvas.people`; there
+was no palette row for this view before — the prompt assumed one) is always present. Signed out, the page's empty
+state is a sentence and a real **Sign in with GitHub** button that calls `accounts.signIn` — the same door as the top
+bar's account menu — disabled WITH its reason when accounts are unconfigured (never hidden), and the refusal line
+naming `tc login` is not shown beside it. The button was not pressed in the live app (it opens a real browser OAuth).
+
+**Four doors.** `verify:verbs` 30/30 (no verb's door was the dock). Every removed chrome door stays in ⌘K, and
+`dock.dup.1` finds both rows by search.
+
+**Checks added (scoped ids, all measured in the running shell, `verify:panels:product`, signed out, before M345's
+block turns the harness account on):**
+- `names.agree.1` — for each dock pane: button `aria-label` = visible label = `Hide X` tooltip = the pane's Hide
+  control's name = the pane heading (Files excepted: its heading is the folder, a fact), and where a ⌘K row opens it
+  (Board, Connections, Teammates) a row found by searching the name names it.
+- `dock.dup.1` — no `orchestration`/`workspaces` in the dock; the segment and the crumb are PAINTED
+  (`elementFromPoint`); the crumb has its chevron; "Show Orchestrate" and "Manage workspaces…" are found in ⌘K; no dock
+  control claims ⌘\.
+- `team.segment.1` — no People segment signed out; ⌘K "Show People" opens the page; its sign-in button is painted,
+  reads "Sign in with GitHub", is disabled with the harness's reason; the segment is pressed while shown and gone after
+  leaving; present once the harness signs in.
+
+Screenshots: `C1-before/after.png`, `C1-after-crumb.png` (crumb → Workspaces pane), `C2-before/after.png`,
+`C3-before.png`, `C3-after.png` (People page signed out), `C3-after-rest.png` (no People segment at rest).
+
+*Goldens expected to move:* effectively EVERY scene — the top bar loses its third segment for a signed-out harness
+and the crumb gains its switcher chrome, and the dock loses two buttons (so every button below Board moves up).
+Scenes that sign in (`account-menu`, `share-*`, `shared-*`, `team-ask`) keep a segment, now reading "People".
+Pane headings change in the Notes/Vault and Connections scenes (e.g. `integrations`), and `teammate` shows "Hide
+Teammates". Scene intents that name "Team" or the dock's Orchestrate were not rewritten here.
+
+*Suites:* plain tier green — `verify:verbs` 30/30, `palette` 169/169, `styles` 93/93, `meta` 51/51, `team` 30/30,
+`account` 61/61, `presence` 33/33, `onboarding` 21/21, `first-run` 29/29, `canvas-sync` 98/98; `tsc -p
+tsconfig.web.json` clean; build clean. **The Electron tier was NOT run.** `/tmp/tc-electron-lock` (another holder's,
+created 06:27) was never released in over two hours, and by 08:50 no Electron process was running under it — it looks
+stale, but it is not this builder's to remove. So `names.agree.1`, `dock.dup.1` and `team.segment.1`, and the
+harness selector rewrites in `verify:panels:{product,shell,agents,orchestrate}` and `shot.cjs`, are UNRUN: they were
+exercised only by hand against the live app (the same DOM reads, on slot 2). The lead owes a run of those four
+suites before merging, with `TC_VERIFY_SUFFIX` set.

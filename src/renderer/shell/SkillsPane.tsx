@@ -210,7 +210,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
             title="Scaffold a new skill's SKILL.md" {...shellControl(() => setDrafting((d) => !d))}>New skill</button>
           <button type="button" className="icon-button" data-skills-open-workspace title="Open the skills workspace - list, detail and details side by side"
             aria-label="Open the skills workspace" {...shellControl(() => setWorkspace(true))}><Maximize /></button>
-          <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
+          <button type="button" className="shell__rail-toggle icon-button" title="Hide Skills (⌘\)" aria-label="Hide Skills" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
 

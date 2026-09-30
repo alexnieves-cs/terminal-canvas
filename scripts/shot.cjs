@@ -403,7 +403,7 @@ const SCENES = [
     run: async (kit) => {
       await kit.goTo('claude — api (2)')
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
-      await kit.js(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await kit.js(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
       await kit.js(`(() => { const c = document.querySelector('.panel[data-panel-id="twin"] .pf__chrome'); if (c) c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); return !!c })()`)
       await sleep(300)
       await kit.js(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) } return !!t })()`)
@@ -738,7 +738,7 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       try {
         await k.loadMain()
-        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -784,7 +784,7 @@ const SCENES = [
         // "the arrangement is not on screen" — recorded in the M279 ledger as a
         // flake. The dock button is a toggle, so press it only while it is pressed,
         // and refuse to go on if the page is still there.
-        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { const b = document.querySelector('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
         if (await k.js(`!!document.querySelector('.orch__graph-wrap')`)) throw new Error('orchestration-dark: the Orchestrate page is still open, so every later scene would capture it')
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
@@ -801,7 +801,7 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       const seeded = []
       try {
-        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -850,7 +850,7 @@ const SCENES = [
         await k.theme('light')
         // Same close-and-assert the dark scene uses: leaving this page open made
         // every later scene a picture of the Orchestrate HUD once already.
-        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { const b = document.querySelector('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
         if (await k.js(`!!document.querySelector('.orch__graph-wrap')`)) throw new Error('orchestration-working: the Orchestrate page is still open, so every later scene would capture it')
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
@@ -869,7 +869,7 @@ const SCENES = [
         await k.loadMain()
         for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-panel-id="chat"], .chat')`)); i++) await sleep(100)
         await sleep(400)
-        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         opened = true
         for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-orch-lens="watch"]')`)); i++) await sleep(100)
         await k.theme('dark')
@@ -906,7 +906,7 @@ const SCENES = [
         await k.js(`(() => { const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await k.theme('light')
         if (opened) {
-          await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+          await k.js(`(() => { const b = document.querySelector('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
           for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
         }
       }

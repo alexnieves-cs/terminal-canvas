@@ -67,9 +67,9 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
   const tagList = useMemo(() => tagRows(props.tags), [props.tags])
 
   return (
-    <div className="shell__tree vault-pane" aria-label="Vault" data-vault-pane>
+    <div className="shell__tree vault-pane" aria-label="Notes" data-vault-pane>
       <div className="shell__region-title shell__region-title--action navigator__header">
-        <span className="shell__tree-root" title={props.root === '' ? undefined : props.root}>Vault</span>
+        <span className="shell__tree-root" title={props.root === '' ? undefined : props.root}>Notes</span>
         {props.root !== '' && (
           <span className="shell__tree-panel" data-vault-root title={props.root}>· {props.root.replace(/\/+$/, '').split('/').pop()}</span>
         )}
@@ -88,8 +88,8 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
           <button
             type="button"
             className="shell__rail-toggle icon-button"
-            title="Hide the navigator (⌘\)"
-            aria-label="Hide the navigator"
+            title="Hide Notes (⌘\)"
+            aria-label="Hide Notes"
             {...shellControl(props.onToggle)}
           >
             <ChevronLeft />

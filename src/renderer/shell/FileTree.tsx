@@ -144,8 +144,8 @@ function FileTreeImpl({
           <button
             type="button"
             className="shell__rail-toggle icon-button"
-            title="Hide the navigator (⌘\\)"
-            aria-label="Hide the navigator"
+            title="Hide Files (⌘\)"
+            aria-label="Hide Files"
             {...shellControl(onToggle)}
           >
             <ChevronLeft />

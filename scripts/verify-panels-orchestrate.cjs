@@ -108,7 +108,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const chatTitle = await wc.executeJavaScript(`document.querySelector('[data-rail-row="${chatId}"]')?.textContent ?? null`)
 
       // Onto the Orchestrate page, through the Dock.
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -217,7 +217,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       for (const id of IDS) ok(id, false, 'threw: ' + String(oErr && oErr.message || oErr) + ' | renderer: ' + (oLog.slice(-4).join(' || ') || '(none)'))
     } finally {
       wc.removeListener('console-message', onO)
-      if (await orchShown()) await click('[data-dock="orchestration"][aria-pressed="true"]')
+      if (await orchShown()) await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
     }
   }
 
@@ -286,7 +286,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const spawnsAfterDispatch = chatSpawns.length
       const lanesAfterDispatch = layoutStore.worktrees().length
 
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -365,13 +365,13 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       // orch-bench.4 — the second and third sentences. A watcher in the lane,
       // run by hand: its exit lands with the identity it tested.
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       await waitUntil(async () => !(await orchShown()), 3000)
       const watcherId = await wc.executeJavaScript(`window.__m287Watcher(${JSON.stringify(lane.path)}, '/bin/sh', ['-c', 'cat app.txt; exit $(cat code.txt)'])`)
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${watcherId}"] [data-watcher-run]') !== null`), 6000)
       await wc.executeJavaScript(`window.canvas.watcher.run(${JSON.stringify(watcherId)})`)
       const ranOnce = await waitUntil(async () => { const rows = await runLedger.list(watcherId, 5); return rows.length === 1 && rows[0].exitCode === 0 ? rows[0] : false }, 8000)
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -399,11 +399,11 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await demo('m287-7-check-failed-detail')
       // Unavailable data, said: a session in a plain folder.
       plain = mkdtempSync(join(tmpdir(), 'tc panels orch plain-'))
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       await waitUntil(async () => !(await orchShown()), 3000)
       await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(plain)})`)
       plainChatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p && p.getAttribute('data-panel-id') !== ${JSON.stringify(chatId)} ? p.getAttribute('data-panel-id') : false })()`), 8000)
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       // The task frame hides non-members from the scene and the List: show the whole ring first.
@@ -457,7 +457,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr) + ' | renderer: ' + (bLog.slice(-4).join(' || ') || '(none)'))
     } finally {
       wc.removeListener('console-message', onB)
-      if (await orchShown()) await click('[data-dock="orchestration"][aria-pressed="true"]')
+      if (await orchShown()) await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       if (plainChatId) { try { await clickPanelClose(wc, plainChatId) } catch { /* best effort */ } }
       if (chatId) { try { await wc.executeJavaScript(`window.__m113.close(${JSON.stringify(chatId)})`) } catch { /* best effort */ } }
       try { layoutStore.deleteTeammate('tm-bench') } catch { /* best effort */ }
@@ -500,7 +500,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const woke = await wc.executeJavaScript(`(() => { const b = document.querySelector('.rail-row[data-rail-row="dA"] .rail-row__start'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
       const live = await waitUntil(async () => (await sessionMap(wc)).has('dA'), 10000)
       if (live) ptyManager.write('dA', 'exit 1\r')
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -541,7 +541,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       ok(ID, false, 'threw: ' + String(dErr && dErr.message || dErr) + ' | renderer: ' + (dLog.slice(-4).join(' || ') || '(none)'))
     } finally {
       wc.removeListener('console-message', onD)
-      if (await orchShown()) await click('[data-dock="orchestration"][aria-pressed="true"]')
+      if (await orchShown()) await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
     }
   }
 
@@ -623,7 +623,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const keyB = `task:${itemB}:${B.lane.id}:${chatB}`
       const spawns0 = chatSpawns.length, lanes0 = layoutStore.worktrees().length, sends0 = sends(), ptys0 = (await sessionMap(wc)).size
 
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -693,7 +693,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const gs = (...args) => execFileSync('git', ['-C', shared, ...args], { encoding: 'utf8' })
       gs('init', '-q', '.'); gs('config', 'user.email', 'v@example.com'); gs('config', 'user.name', 'v')
       writeFileSync(join(shared, 's.txt'), 's\n'); gs('add', '-A'); gs('commit', '-qm', 'init')
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       await waitUntil(async () => !(await orchShown()), 3000)
       const mintChat = async (cwd) => {
         const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -711,7 +711,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       sharedIds = [s1, s2]
       await sendIn(s1, 'first writer'); await sendIn(s2, 'second writer')
       writeFileSync(join(shared, 's.txt'), 's changed by someone\n')
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -747,11 +747,11 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await click('[data-orch-islands] [data-orch-island-undo]')
       const undone = await waitUntil(async () => { const r = await islandsRead(); return r && r.order === before.order ? r : false }, 4000)
       // A new island appends; the others keep their place.
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       await waitUntil(async () => !(await orchShown()), 3000)
       const C = await dispatchLane('Edit c')
       itemC = C.id
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       const appended = await waitUntil(async () => { const r = await islandsRead(); return r && r.order.split(' ').includes(itemC) ? r : false }, 8000)
@@ -802,7 +802,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       // orch-limits.app.2 — limits and the three answers.
       plainId = await mintChat(repo) // never sent: spend Unknown with its reason
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await settle()
@@ -894,7 +894,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
     } finally {
       wc.removeListener('console-message', onC)
-      if (await orchShown()) await click('[data-dock="orchestration"][aria-pressed="true"]')
+      if (await orchShown()) await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       for (const id of [plainId, ...sharedIds]) { if (id) { try { await clickPanelClose(wc, id) } catch { /* best effort */ } } }
       for (const id of [chatA, chatB]) { if (id) { try { await wc.executeJavaScript(`window.__m113.close(${JSON.stringify(id)})`) } catch { /* best effort */ } } }
       try { layoutStore.deleteTeammate('tm-c') } catch { /* best effort */ }
@@ -943,7 +943,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
       wc.reload(); await re
       await settle()
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await click('[data-orch-lens="scene"]')
@@ -1018,7 +1018,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         minted && minted.kind === 'spawned' && after && kept && newOne && newOne.cell === `${nextIndex % 3},${Math.floor(nextIndex / 3)}` && (rectsKept || camMoved) &&
           orderAfter.startsWith(orderBefore) && orderAfter.length > orderBefore.length && orderAfter.includes(repo2.split('/').pop()),
         JSON.stringify({ minted, before, after, orderBefore, orderAfter, rectsKept, camMoved }))
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       try { rmSync(repo, { recursive: true, force: true }); rmSync(repo2, { recursive: true, force: true }) } catch { /* scratch */ }
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
@@ -1060,7 +1060,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await re
         await settle()
-        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
         await toVisual()
         await click('[data-orch-lens="scene"]')
@@ -1131,7 +1131,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
             await demo('m292-fixture-100-focused')
           }
         }
-        await click('[data-dock="orchestration"][aria-pressed="true"]')
+        await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
         for (let i = 0; i < n; i++) wc.send('agent:state', { panelId: `fx${i}`, state: 'idle' })
       }
       const okFacts = facts.every((f) => f.waiting.every((id) => f.waitingDrawn.includes(id)) && f.platforms >= f.groups && ['full', 'lean', 'flat'].includes(f.quality))
@@ -1176,7 +1176,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           fitted === true && far.plates >= 1 && viewAfterFit !== null && viewAfterSel !== null && Number(viewAfterSel) < Number(viewAfterFit) && viewAfterBack === viewAfterFit &&
           crumbsSel.some((c) => c.startsWith('all:All work')) && crumbsSel.some((c) => c.startsWith('platform:')) && crumbsObj.some((c) => /^object:.*station$/.test(c)),
         JSON.stringify({ far, mid: { levels: mid.levels, objects: mid.objects }, near: { levels: near.levels }, fitted, viewAfterFit, viewAfterSel, viewAfterBack, crumbsSel, crumbsObj }))
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       for (let i = 0; i < 6; i++) wc.send('agent:state', { panelId: `fx${i}`, state: 'idle' })
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
@@ -1226,7 +1226,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await re
         await settle()
-        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
         await toVisual()
         await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -1302,9 +1302,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ afterRight, walk, pos, enterScene, viewBefore, focusedPlate }))
 
       // orch-parity.app.3 — WebGL denied for real, then reduced motion.
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       await wc.executeJavaScript(`(() => { const orig = HTMLCanvasElement.prototype.getContext; window.__tcOrigGetContext = orig; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /webgl/i.test(String(kind)) ? null : orig.call(this, kind, ...rest) }; return true })()`)
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await click('[data-orch-lens="scene"]')
@@ -1322,7 +1322,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // Reduced motion: the emulated media, then every orch animation must be stood down and the actions stand.
       try { wc.debugger.attach('1.3') } catch { /* attached */ }
       await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await click('[data-orch-lens="scene"]')
@@ -1360,7 +1360,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       ok(IDS[3],
         narrow.w <= 990 && narrow.theme === 'dark' && narrow.lens === true && narrow.fit === true && narrow.attention === true && narrow.open === true && narrow.tabs === true && narrow.minimap === true,
         JSON.stringify(narrow))
-      await click('[data-dock="orchestration"][aria-pressed="true"]')
+      await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
     } catch (error) {
       for (const id of IDS) ok(id, false, `threw: ${error && error.stack ? error.stack : error}`)
     } finally {
@@ -1406,7 +1406,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await re
         await settle()
-        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
         await toVisual()
         await click('[data-orch-lens="scene"]')
@@ -1443,7 +1443,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           await demo(`m298-fit-${r.platforms}-${name}`)
         }
         win.setSize(w0, h0); await settle()
-        await click('[data-dock="orchestration"][aria-pressed="true"]')
+        await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       }
       const fitted = rows.filter((r) => !r.size.includes('first-paint'))
       const lone = rows.find((r) => r.n === 0 && r.size.includes('first-paint'))
@@ -1506,7 +1506,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 8000)
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-state]')?.textContent === 'idle' || false`), 8000)
 
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await click('[data-orch-lens="list"]')
@@ -1593,7 +1593,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       wc.reload(); await reloaded
       await settle()
       const runtimeHasIt = await wc.executeJavaScript(`Promise.all([window.canvas.agentSession.list(), window.canvas.pty.list()]).then(([a, p]) => a.some((x) => x.id === ${JSON.stringify(restoredId)}) || p.some((x) => x.panelId === ${JSON.stringify(restoredId)}))`)
-      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
       await toVisual()
       await click('[data-orch-lens="list"]')
@@ -1685,18 +1685,18 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
     wc.on('console-message', (_e, level, m) => { if (level >= 2) errs.push(String(m).slice(0, 300)) })
     ok(IDS[0], tasksSeen !== null && tasksSeen.board === true && tasksSeen.scene === false && typeof tasksSeen.headline === 'string' && tasksSeen.headline !== '', JSON.stringify(tasksSeen))
     try {
-      if (await wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)) await click('[data-dock="orchestration"][aria-pressed="true"]')
+      if (await wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)) await click('.shell__center-toggle:has([data-seg="orchestration"][aria-pressed="true"]) [data-seg="canvas"]')
       await settle()
       const itemId = await wc.executeJavaScript(`window.__m113.add({ source: 'typed', title: 'Board row task' })`)
       // The block before ends on a reload: press the Dock until the page is up.
       const opened = await waitUntil(async () => {
         if (await wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"] .orch') !== null`)) return true
-        await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+        await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         return false
       }, 6000)
       await click('[data-orch-view-tasks]')
       const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-board-row="${itemId}"]'); return r ? { group: r.getAttribute('data-board-row-group'), action: r.getAttribute('data-board-action'), primary: r.querySelector('[data-board-primary]')?.textContent ?? null, status: r.querySelector('[data-board-status]')?.textContent ?? null, checks: r.querySelector('[data-board-checks]')?.textContent ?? null } : false })()`), 4000)
-      const diag = row ? null : await wc.executeJavaScript(`({ opened: ${JSON.stringify(opened)}, dock: !!document.querySelector('[data-dock="orchestration"]'), center: document.querySelector('[data-center-view]')?.getAttribute('data-center-view') ?? null, itemId: ${JSON.stringify(itemId)}, view: document.querySelector('.orch')?.getAttribute('data-orch-view') ?? null, tasksBtn: !!document.querySelector('[data-orch-view-tasks]'), rows: [...document.querySelectorAll('[data-board-row]')].map((r) => r.getAttribute('data-board-row')), items: window.__m113.items().map((w) => w.id + ':' + w.state), body: document.body.innerText.slice(0, 200) })`)
+      const diag = row ? null : await wc.executeJavaScript(`({ opened: ${JSON.stringify(opened)}, dock: !!document.querySelector('[data-seg="orchestration"]'), center: document.querySelector('[data-center-view]')?.getAttribute('data-center-view') ?? null, itemId: ${JSON.stringify(itemId)}, view: document.querySelector('.orch')?.getAttribute('data-orch-view') ?? null, tasksBtn: !!document.querySelector('[data-orch-view-tasks]'), rows: [...document.querySelectorAll('[data-board-row]')].map((r) => r.getAttribute('data-board-row')), items: window.__m113.items().map((w) => w.id + ':' + w.state), body: document.body.innerText.slice(0, 200) })`)
       await click(`[data-board-row="${itemId}"] [data-board-open]`)
       const focus = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-center-view="focus"] [data-focus-task="${itemId}"]') !== null`), 4000)
       await click('[data-focus-side-button="plan"]')

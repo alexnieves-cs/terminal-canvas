@@ -25,6 +25,7 @@ import { allRosters, onRoster } from '../presence/presence-store'
 import { TONE } from '../presence/RosterStrip'
 import { observe, useObserved, type ObservedView } from './team-store'
 import { ChevronLeft } from '../icons'
+import type { Accounts } from '../account/useAccounts'
 
 const AGENT_WORD: Record<AgentPresenceStatus, string> = {
   none: 'no agents', idle: 'agents idle', working: 'agents working', 'needs-you': 'needs someone', error: 'agent stopped'
@@ -45,7 +46,11 @@ function typingTarget(t: EventTarget | null): boolean {
   return el.closest('input, textarea, select, [contenteditable="true"], .xterm') !== null
 }
 
-export function TeamView(): JSX.Element {
+/**
+ * M404 (C3). `accounts` is the top bar's own sign-in door (useAccounts), so
+ * the empty state's button is that door and not a second login flow.
+ */
+export function TeamView({ accounts }: { accounts?: Accounts }): JSX.Element {
   const [list, setList] = useState<TeamListResult | null>(null)
   const [orgId, setOrgId] = useState<string | undefined>(undefined)
   const [rosters, setRosters] = useState<readonly PresenceRoster[]>(() => allRosters())
@@ -92,10 +97,15 @@ export function TeamView(): JSX.Element {
   if (observing !== null) return <ObserverPane tile={observing} onLeave={leave} />
 
   const refusal = list !== null && list.kind !== 'ok' ? list.reason : null
+  // M404 (C3). Signed out, the page's one job is signing in: a real button
+  // through the existing door, in place of a sentence naming a CLI verb.
+  // Unconfigured, the button is disabled WITH its reason — never hidden.
+  const signedOut = accounts !== undefined && accounts.sessions.length === 0
+  const unconfigured = accounts?.status?.configured === false ? accounts.status.reason : null
   return (
     <section className="team" data-team-view aria-label="Team">
       <header className="team__head">
-        <h2 className="team__title">Team</h2>
+        <h2 className="team__title">People</h2>
         {ok !== null && ok.orgs.length > 1 ? (
           <select className="team__org" aria-label="Organization" value={ok.org.id} onChange={(e) => setOrgId(e.target.value)}>
             {ok.orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -103,9 +113,18 @@ export function TeamView(): JSX.Element {
         ) : ok !== null ? <span className="team__org-name">{ok.org.name}</span> : null}
         {/* Why the rows are missing, beside the tiles awareness still makes —
             presence works without the account server, and so does this view. */}
-        {refusal !== null && <span className="team__note" data-team-refusal>{refusal}</span>}
+        {refusal !== null && !signedOut && <span className="team__note" data-team-refusal>{refusal}</span>}
       </header>
-      {tiles.length === 0 ? (
+      {tiles.length === 0 && signedOut ? (
+        <div className="team__empty team__signin" data-team-empty data-team-signed-out>
+          <p>Sign in with GitHub to see who in your organization is working, and what on.</p>
+          <button type="button" className="share-dialog__btn share-dialog__btn--primary" data-team-sign-in
+            disabled={accounts?.pending === true || unconfigured !== null}
+            title={unconfigured ?? 'Opens GitHub in your browser — the same sign-in as the top bar’s account button'}
+            onClick={() => accounts?.signIn()}>{accounts?.pending === true ? 'Waiting for the browser…' : 'Sign in with GitHub'}</button>
+          {unconfigured !== null && <span className="team__note">{unconfigured}</span>}
+        </div>
+      ) : tiles.length === 0 ? (
         <p className="team__empty" data-team-empty>
           {list === null ? 'Reading your team…' : ok !== null ? 'Nobody else is in this organization yet. `tc invite` makes a code to share.' : 'No teammates are on a shared workspace right now.'}
         </p>

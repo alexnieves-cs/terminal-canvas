@@ -8421,6 +8421,7 @@ export function Canvas({
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
         accounts={accounts}
+        sharedWorkspace={shared.view !== null}
       />
       <ShareDialog accounts={accounts} workspaces={workspaceRows}
         onOpened={(id) => { void switchWorkspace(id) }} onWorkspacesChanged={reloadWorkspaces} />
@@ -8653,7 +8654,7 @@ export function Canvas({
           It reads nothing from the canvas — its tiles are people. */}
       {chrome.centerView === 'team' && (
         <div className="shell__orch shell__orch--on" data-center-view="team" role="presentation">
-          <TeamView />
+          <TeamView accounts={accounts} />
         </div>
       )}
       {/* M324. A task's focus view: the same overlay cell as Orchestrate, over

@@ -111,7 +111,7 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
       <div className="shell__region-title shell__region-title--action navigator__header">
         <span className="shell__tree-root">Board</span>
         <span className="navigator__header-actions">
-          <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
+          <button type="button" className="shell__rail-toggle icon-button" title="Hide Board (⌘\)" aria-label="Hide Board" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
       {moved !== null && moved.phase !== 'pending' && (
