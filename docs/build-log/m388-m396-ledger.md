@@ -22,7 +22,7 @@ this file, not memory.
 | M392 | Shared flowcharts: shapes and connectors through the Yjs shared canvas | built and MERGED into this branch: `shape`/`connectors` JSON fields (2 KB / 16 KB caps), `panel-content` op = the retitle rule, peer shapes drawn read-only in the ShapeLayer; audit counts it under `edited` (the action set is pinned by the migration's CHECK); a local panel cannot connect TO a teammate's shape (the layout's load prunes a target that is not in the file) |
 | M393 | The living flowchart: a shape connected to a live object shows its state | built (checkpoint); Electron check owed |
 | M394 | Sketch → plan: "Start work from this" | built (7c8f9dcb) |
-| M395 | The canvas revamp: the ranked surface changes (below) | planned |
+| M395 | The canvas revamp: the ranked surface changes (below) | part A (objects & input) MERGED; part B (chrome & reading) in flight |
 | M396 | Critique → one fix batch → gate | planned |
 
 ## Phase 0 — ground truth (2026-09-29)
@@ -230,6 +230,24 @@ reopen that decision and churn every canvas golden. Recorded, not built.
 A panel's existing port drag makes a LINK between two live objects (unchanged). If either end
 is a shape it makes a CONNECTOR, and released on empty ground it makes a connected PROCESS
 step there (quick-connect from any object; before, the release cancelled silently).
+
+### D12. A frame carries its contents — at the gesture, never in the record (M395)
+The live audit's P0: one click inside M187's frame raised it over what it enclosed, blurred and
+trapped it. Now a frame is never raised by selection, its middle passes every click to the
+ground (its label band and a thin ring take the pointer), it has no backdrop blur, and dragging
+it by its label or ring moves every object WHOLLY inside it at that moment (FigJam's section) —
+computed when the drag begins (`frameContents`), never stored. M187's "a frame owns nothing"
+stays true of the RECORD; the layout file is unchanged. A group drag does not carry a frame's
+contents; a locked object stays put.
+
+### The 200-shape measurement (verify:panels:flowchart flowchart.perf.*)
+200 shapes in a 20×10 grid, 260 connectors (right neighbours, every third column down, seven
+long hops), seeded through the real store; 90 frames each, real input, vsync ≈ 8.3ms:
+pan p95 **10.0ms** (mean 8.4), pinch-zoom p95 **16.7ms** (mean 9.9), drag one shape p95 **8.8ms**
+(its 4 lines re-route), drag a 40-shape selection p95 **9.9ms**; heap 69 MB. Asserted: structure
+and a 250ms hang bound only (the Orchestrate precedent — timings are recorded, not gated).
+Nothing in the camera path needed changing for this: the ShapeLayer's props do not change on a
+camera frame, and the connector cache reuses every route a drag does not touch.
 
 ## Checkpoint — 2026-09-29 evening
 Built and smoke-tested in the real renderer (`SHOT_ONLY=flowchart npm run shot`): a chart
