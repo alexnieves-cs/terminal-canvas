@@ -22,5 +22,8 @@ module.exports = {
   adapt: require('../src/renderer/panels/layout-adapt'),
   layoutSchema: require('../src/shared/layout-schema'),
   recover: require('../src/renderer/panels/recover'),
-  taskPlan: require('../src/shared/task-plan')
+  taskPlan: require('../src/shared/task-plan'),
+  // M392. A teammate's flowchart as the canvas draws it, and the router it feeds.
+  shared: require('../src/renderer/flowchart/shared-shapes'),
+  connectors: require('../src/renderer/flowchart/connector-model')
 }

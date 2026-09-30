@@ -1,11 +1,13 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, type JSX, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { normaliseShapeText, shapeFormWord, type Port } from '@shared/flowchart'
-import { portPoint, shapeDetail, shapeOutline } from '@shared/flowchart-geometry'
+import { ioSkew, portPoint, shapeDetail, shapeOutline } from '@shared/flowchart-geometry'
 import type { ShapePanel } from '@renderer/panels/panels'
 import type { ResizeEdge } from '@renderer/canvas/panel-interaction'
 import { setEditingShape, useEditingShape } from './shape-edit-store'
 import { useShownState } from '@renderer/panels/useShownState'
 import type { StateInput } from '@renderer/panels/panel-state'
+import type { PeerShapeMark } from './shared-shapes'
+import { Close } from '@renderer/icons'
 
 /**
  * M388. THE SHAPE LAYER — every flowchart shape on the canvas, in one memoised
@@ -31,6 +33,17 @@ import type { StateInput } from '@renderer/panels/panel-state'
  *
  * `data-panel-id` is kept on the box: the drag hook finds a gesture's element
  * by it, and the checks select on it as they do every other kind.
+ *
+ * M392. A TEAMMATE'S SHAPE on a shared canvas is drawn here too (`peerShapes`,
+ * made by shared-shapes.ts from its placeholder), so a diamond stays a
+ * diamond on everyone's canvas. It is READ-ONLY: no handles, no ports, no
+ * label editor — its words are its owner's, written by the machine that runs
+ * it (the role table's panel-content row). An editor MOVES it by pressing it,
+ * through the placeholder's own drag (`onPeerPress`); a viewer's press is the
+ * ground's. It carries `data-shared-placeholder`, never `data-panel-id`: it is
+ * not a panel here. Chromeless like every shape, so the frame rule's "whose is
+ * it" rides an absolutely positioned owner mark (their colour, their name on
+ * hover) that takes no layout.
  */
 
 export interface ShapeLayerProps {
@@ -50,6 +63,16 @@ export interface ShapeLayerProps {
   dropTargetId?: string | null
   /** M393. Each bound shape's live object: its id, its state input as the rail builds it, and its name. */
   live?: ReadonlyMap<string, LiveBinding>
+  /** M392. Teammates' shapes on a shared canvas (shared-shapes.ts), drawn read-only. */
+  peerShapes?: readonly ShapePanel[]
+  /** M392. Each peer shape's owner — their colour and name — by placeholder id. */
+  peerMarks?: ReadonlyMap<string, PeerShapeMark>
+  /** M392. The peer shapes this person may take off the shared canvas (the role table's delete row). */
+  peerRemovable?: ReadonlySet<string>
+  /** M392. A press on a teammate's shape: an editor moves it. Absent (a viewer, the merged view): the press is the ground's. */
+  onPeerPress?: (id: string, event: ReactMouseEvent) => void
+  /** M392. Take a teammate's shape off the shared canvas — the placeholder's ×. */
+  onPeerRemove?: (id: string) => void
 }
 
 /**
@@ -66,7 +89,7 @@ export type LiveBinding =
 const HANDLES: readonly ResizeEdge[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
 
 export const ShapeLayer = memo(function ShapeLayer(props: ShapeLayerProps): JSX.Element {
-  const { shapes, selectedIds, readOnly, onPress, onResize, onPort, onCommitText, dropTargetId, live } = props
+  const { shapes, selectedIds, readOnly, onPress, onResize, onPort, onCommitText, dropTargetId, live, peerShapes, peerMarks, peerRemovable, onPeerPress, onPeerRemove } = props
   const editing = useEditingShape()
   // Handles only when exactly one shape is the selection: two or more resize
   // nothing (a resize is a one-member gesture — Canvas's onBeginDrag).
@@ -89,6 +112,31 @@ export const ShapeLayer = memo(function ShapeLayer(props: ShapeLayerProps): JSX.
           onCommitText={onCommitText}
         />
       ))}
+      {peerShapes?.map((panel) => {
+        const mark = peerMarks?.get(panel.rect.id)
+        return (
+          // Keyed apart from ours: a doc key and a local id are two namespaces.
+          <ShapeNode
+            key={`peer:${panel.rect.id}`}
+            panel={panel}
+            selected={false}
+            handles={false}
+            editing={false}
+            readOnly
+            dropTarget={false}
+            live={undefined}
+            onPress={onPress}
+            onResize={onResize}
+            onPort={undefined}
+            onCommitText={onCommitText}
+            peerColour={mark?.colour ?? ''}
+            peerWho={mark?.who ?? 'a teammate'}
+            peerRemovable={peerRemovable?.has(panel.rect.id) === true}
+            onPeerPress={onPeerPress}
+            onPeerRemove={onPeerRemove}
+          />
+        )
+      })}
     </>
   )
 })
@@ -105,20 +153,40 @@ interface ShapeNodeProps {
   onResize: ShapeLayerProps['onResize']
   onPort: ShapeLayerProps['onPort']
   onCommitText: ShapeLayerProps['onCommitText']
+  /** M392. Set on a TEAMMATE'S shape only: their colour (colorOf). Primitives, so the memo holds. */
+  peerColour?: string
+  peerWho?: string
+  peerRemovable?: boolean
+  onPeerPress?: ShapeLayerProps['onPeerPress']
+  onPeerRemove?: ShapeLayerProps['onPeerRemove']
 }
 
 const ShapeNode = memo(function ShapeNode(props: ShapeNodeProps): JSX.Element {
-  const { panel, selected, handles, editing, readOnly, dropTarget, live, onPress, onResize, onPort, onCommitText } = props
+  const { panel, selected, handles, editing, readOnly, dropTarget, live, onPress, onResize, onPort, onCommitText, peerColour, peerWho, peerRemovable, onPeerPress, onPeerRemove } = props
   const { rect, shape } = panel
   const id = rect.id
+  const peer = peerColour !== undefined
   const outline = useMemo(() => shapeOutline(shape.form, rect.w, rect.h), [shape.form, rect.w, rect.h])
   const detail = useMemo(() => shapeDetail(shape.form, rect.w, rect.h), [shape.form, rect.w, rect.h])
   // A form with no outline (free text) still needs something to press: the
   // box itself, painted nothing, hit as a fill.
   const hit = outline === '' ? `M0 0H${rect.w}V${rect.h}H0Z` : outline
-  const style = { left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: panel.z, ...labelInset(shape.form, rect.w, rect.h) } as CSSProperties
+  const style = {
+    left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: panel.z, ...labelInset(shape.form, rect.w, rect.h),
+    ...(peer && peerColour !== '' ? { '--owner': peerColour } : {})
+  } as CSSProperties
   const press = (event: ReactMouseEvent): void => {
     if (event.button !== 0) return
+    // M392. A teammate's shape: an editor's press moves it (the placeholder
+    // drag); with no mover — a viewer — the press is left to the ground, as
+    // a press on a viewer's placeholder card is.
+    if (peer) {
+      if (onPeerPress === undefined) return
+      event.stopPropagation()
+      event.preventDefault()
+      onPeerPress(id, event)
+      return
+    }
     // The canvas must not read this as a background press (a deselect, or a
     // marquee), and the label must not start a native text drag.
     event.stopPropagation()
@@ -126,21 +194,23 @@ const ShapeNode = memo(function ShapeNode(props: ShapeNodeProps): JSX.Element {
     onPress(id, event)
   }
   const edit = (event: ReactMouseEvent): void => {
-    if (readOnly) return
+    if (readOnly || peer) return
     event.stopPropagation()
     setEditingShape(id)
   }
   return (
     <div
-      className={`shape${selected ? ' shape--selected' : ''}${dropTarget ? ' shape--target' : ''}${editing ? ' shape--editing' : ''}`}
-      data-panel-id={id}
+      className={`shape${selected ? ' shape--selected' : ''}${dropTarget ? ' shape--target' : ''}${editing ? ' shape--editing' : ''}${peer ? ' shape--peer' : ''}`}
+      data-panel-id={peer ? undefined : id}
+      data-shared-placeholder={peer ? id : undefined}
+      data-arrange={peer && onPeerPress !== undefined ? '' : undefined}
       data-shape-form={shape.form}
       data-fill={shape.fill ?? 'plain'}
       data-stroke={shape.stroke ?? (shape.form === 'text' ? 'none' : 'line')}
       data-ink={shape.ink ?? 'fg'}
       style={style}
       role="group"
-      aria-label={`${shapeFormWord(shape.form)}: ${shape.text === '' ? 'empty' : shape.text}`}
+      aria-label={`${peer ? `${peerWho ?? 'a teammate'}’s ` : ''}${shapeFormWord(shape.form)}: ${shape.text === '' ? 'empty' : shape.text}`}
     >
       <svg className="shape__svg" width={rect.w} height={rect.h} viewBox={`0 0 ${rect.w} ${rect.h}`} aria-hidden="true">
         <path className="shape__outline" d={hit} data-empty-outline={outline === '' ? '' : undefined} onMouseDown={press} onDoubleClick={edit} />
@@ -149,6 +219,17 @@ const ShapeNode = memo(function ShapeNode(props: ShapeNodeProps): JSX.Element {
       {live !== undefined && outline !== '' && (live.kind === 'panel'
         ? <PanelLive binding={live} outline={outline} w={rect.w} h={rect.h} />
         : <LiveMark word={live.word} tone={live.tone} title={`${live.name} — ${live.word}`} outline={outline} w={rect.w} h={rect.h} mark="step" />)}
+      {peer && (
+        // Whose it is, in their colour — the one fact a placeholder's header
+        // carried, kept without a header (the frame rule's test: removing it
+        // would hide information). Absolutely positioned, so it takes no layout.
+        <span className="shape__owner" data-shape-owner={id} style={outlineCorner(shape.form, rect.w, rect.h, 'left')} title={`${peerWho ?? 'a teammate'}’s — only they change its words`} aria-hidden="true" />
+      )}
+      {peer && peerRemovable === true && onPeerRemove !== undefined && (
+        <button type="button" className="shape__remove" data-shape-remove={id} tabIndex={-1} style={outlineCorner(shape.form, rect.w, rect.h, 'right')}
+          aria-label={`Remove ${peerWho ?? 'a teammate'}’s ${shapeFormWord(shape.form)} from the shared canvas`}
+          onMouseDown={(event) => { event.stopPropagation() }} onClick={() => { onPeerRemove(id) }}><Close /></button>
+      )}
       {editing
         ? <ShapeEditor id={id} text={shape.text} onCommitText={onCommitText} />
         : shape.text !== '' && <div className="shape__label">{shape.text}</div>}
@@ -277,6 +358,26 @@ function ShapeEditor({ id, text, onCommitText }: { id: string; text: string; onC
       />
     </div>
   )
+}
+
+/**
+ * M392. Where a teammate's shape wears its two marks — the owner's on the
+ * upper-LEFT, the × on the upper-RIGHT: ON the outline, never on a port (an
+ * arrow lands there) and never in an empty corner of the box. A diamond's box
+ * corner is ground, and a mark there read as belonging to nothing (seen in the
+ * real renderer, not guessed).
+ */
+function outlineCorner(form: ShapePanel['shape']['form'], w: number, h: number, side: 'left' | 'right'): { left: number; top: number } {
+  const diag = 1 - Math.SQRT1_2
+  const mirror = (p: { left: number; top: number }): { left: number; top: number } => (side === 'left' ? p : { left: w - p.left, top: p.top })
+  switch (form) {
+    case 'decision': return mirror({ left: w / 4, top: h / 4 })
+    // The slant leans right: its top-left vertex is inset, its top-right is the box's corner.
+    case 'io': return side === 'left' ? { left: ioSkew(w, h), top: 0 } : { left: w, top: 0 }
+    case 'terminator': { const r = Math.min(w, h) / 2; return mirror({ left: r * diag, top: r * diag }) }
+    case 'junction': { const m = Math.min(w, h) / 2; return mirror({ left: w / 2 - m * Math.SQRT1_2, top: h / 2 - m * Math.SQRT1_2 }) }
+    default: return mirror({ left: 0, top: 0 })
+  }
 }
 
 /**

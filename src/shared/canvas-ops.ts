@@ -12,6 +12,8 @@
  * never does.
  */
 
+import type { Connector, ShapeRecord } from './flowchart'
+
 /**
  * A person's role in ONE shared workspace (supabase workspace_members), not
  * their org role: an org admin may be a viewer of someone's canvas.
@@ -51,7 +53,33 @@ export interface SharedPanel {
    * checked on its own side against the person's token.
    */
   relay?: SharedRelay
+  /**
+   * M392. A flowchart shape's record (form, words, style), on a `shape` panel
+   * only. Its `text` was scrubbed on the owner's machine before it was
+   * written, like `title` — and `title` is the label's first line
+   * (`shapeSummary`), so a client that does not draw shapes still names it.
+   */
+  shape?: ShapeRecord
+  /**
+   * M392. The panel's outgoing diagram arrows (any kind may hold them). Each
+   * `to` is a DOC KEY in the doc; main's view hands the renderer its own
+   * panels' keys back as local ids (`panelToLocal`), like a group's members.
+   * A connector whose target is not a live panel in the doc is dropped on read.
+   */
+  connectors?: Connector[]
 }
+
+/**
+ * M392. The two content fields' caps, in UTF-16 code units of their JSON
+ * (the unit SHARED_TEXT_MAX counts in). Far above anything the app writes —
+ * a label is at most SHAPE_MAX_CHARS and a panel holds at most CONNECTORS_MAX
+ * arrows — so a value past them is a hostile or broken writer: main does not
+ * write it (and says so in its log), the server refuses it, a reader drops it.
+ */
+export const SHARED_SHAPE_MAX = 2 * 1024
+export const SHARED_CONNECTORS_MAX = 16 * 1024
+/** M392. The panel fields a `panel-content` op writes. */
+export type PanelContentField = 'shape' | 'connectors'
 
 /** M343. A relay session as the shared doc carries it (`relaySession` / `relayProgram` fields). */
 export interface SharedRelay { session: string; program: string }
@@ -117,6 +145,12 @@ export type CanvasOp =
   /** M343. A relay panel's session bound (or unbound, null) after the panel was created: the relay minted it later. */
   | { kind: 'relay-bind'; panelId: string; relay: SharedRelay | null }
   /**
+   * M392. A panel's diagram content rewritten after it was created: a shape's
+   * record, or the arrows it holds. `value` is the field's JSON as the doc
+   * stores it, or null when the field is removed (a panel with no arrows left).
+   */
+  | { kind: 'panel-content'; panelId: string; field: PanelContentField; value: string | null }
+  /**
    * A shared file's text appearing in `canvas:files` (canvas-doc.ts), keyed by
    * its file panel's doc key. Written only by the machine that runs the panel
    * — it seeds the text from its own draft — so only the panel's owner.
@@ -166,11 +200,11 @@ const OK: Verdict = { ok: true }
  *   viewer      -     -       -        -             -       -
  *   (no share)  -     -       -        -             -       yes
  *
- *              file-create   text-edit   relay-bind
- *   owner       own panel     yes         own panel
- *   editor      own panel     yes         own panel
- *   viewer      -             -           -
- *   (no share)  -             -           -
+ *              file-create   text-edit   relay-bind   panel-content (M392)
+ *   owner       own panel     yes         own panel    own panel
+ *   editor      own panel     yes         own panel    own panel
+ *   viewer      -             -           -            -
+ *   (no share)  -             -           -            -
  *
  *              ask-open      ask-answer        ask-close (M375)
  *   owner       own agent     own name, open    own ask, once
@@ -182,7 +216,10 @@ const OK: Verdict = { ok: true }
  * canvas IS the point of editing it. Deleting it is not — a tombstone is
  * permanent for everyone — and retitling it is not, because the title is
  * written by the machine that runs the panel and a second author would fight
- * it on every save.
+ * it on every save. A shape's record and a panel's arrows (panel-content)
+ * are the same rule for the same reason: the owner's layout is their source,
+ * diffLocal rewrites them from it on every save, and a teammate's edit would
+ * be undone a frame later — so a teammate may move a shape, never reword it.
  */
 export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx: OpContext): Verdict {
   if (op.kind === 'unknown') return refuse(`unrecognised change: ${op.detail}`)
@@ -229,6 +266,11 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
     case 'relay-bind':
       if (ctx.panelOwner === null) return refuse(`panel ${op.panelId} is not on the shared canvas`)
       return ctx.panelOwner === ctx.userId ? OK : refuse('a relay session is bound by the person whose panel it is')
+    // M392. The retitle rule (the header above): the machine that runs a
+    // panel writes its content, and nobody else does.
+    case 'panel-content':
+      if (ctx.panelOwner === null) return refuse(`panel ${op.panelId} is not on the shared canvas`)
+      return ctx.panelOwner === ctx.userId ? OK : refuse(`only the person whose panel it is changes its ${op.field === 'shape' ? 'shape' : 'arrows'}`)
     // M375. The team queue. Opened for your OWN agent only, answered in your
     // OWN name only, closed by the person whose agent asked — the server's
     // copy of these three is what a modified client cannot get around.

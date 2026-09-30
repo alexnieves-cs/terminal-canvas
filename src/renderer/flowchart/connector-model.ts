@@ -1,6 +1,6 @@
 import type { Connector, Port, ShapeForm } from '@shared/flowchart'
 import { pickPorts, routeConnector, type ConnectorPath } from '@shared/flowchart-geometry'
-import { isShapePanel, type Panel } from '@renderer/panels/panels'
+import type { WorldRect } from '@renderer/canvas/viewport'
 
 /**
  * M389. From panels to drawable connectors — pure, so the cache discipline
@@ -26,12 +26,31 @@ export interface ConnectorView {
   path: ConnectorPath
   /** The route's inputs, serialised — the cache key. */
   key: string
+  /** M392. Held by a teammate's placeholder: drawn, never selected or relabelled here. */
+  peer?: true
+}
+
+/**
+ * What routing needs of an object — a `Panel` is one, and so (M392) is a
+ * teammate's placeholder on a shared canvas (shared-shapes.ts), which is why
+ * this is structural rather than `Panel`: a placeholder is not a panel and
+ * must not be dressed as one to be an arrow's end.
+ */
+export interface RoutablePanel {
+  kind: string
+  rect: WorldRect
+  connectors?: readonly Connector[]
+  shape?: { form: ShapeForm }
+  /** M392. A teammate's: its arrows draw read-only. */
+  peer?: true
 }
 
 interface Box { x: number; y: number; w: number; h: number }
 
-const boxOf = (p: Panel): Box => ({ x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h })
-const formOf = (p: Panel): ShapeForm | null => (isShapePanel(p) ? p.shape.form : null)
+const boxOf = (p: RoutablePanel): Box => ({ x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h })
+// By kind, not isShapePanel: a Panel's guard, and this module takes placeholders too.
+const isShape = (p: RoutablePanel): boolean => p.kind === 'shape' && p.shape !== undefined
+const formOf = (p: RoutablePanel): ShapeForm | null => (isShape(p) ? p.shape!.form : null)
 const k = (b: Box): string => `${Math.round(b.x * 10)},${Math.round(b.y * 10)},${Math.round(b.w * 10)},${Math.round(b.h * 10)}`
 
 /** Whether two boxes overlap, inflated by `m`. */
@@ -39,14 +58,14 @@ function near(a: Box, b: Box, m: number): boolean {
   return a.x - m < b.x + b.w && b.x - m < a.x + a.w && a.y - m < b.y + b.h && b.y - m < a.y + a.h
 }
 
-export function buildConnectorViews(panels: readonly Panel[], previous: ReadonlyMap<string, ConnectorView>): Map<string, ConnectorView> {
-  const byId = new Map<string, Panel>()
+export function buildConnectorViews(panels: readonly RoutablePanel[], previous: ReadonlyMap<string, ConnectorView>): Map<string, ConnectorView> {
+  const byId = new Map<string, RoutablePanel>()
   for (const p of panels) byId.set(p.rect.id, p)
   // Obstacles are SHAPES only: a connector to a terminal routes around the
   // diagram's boxes, never around every panel on the canvas (a terminal is
   // an endpoint or it is somewhere else entirely).
   const obstacles: { id: string; box: Box }[] = []
-  for (const p of panels) if (isShapePanel(p) && p.shape.form !== 'text') obstacles.push({ id: p.rect.id, box: boxOf(p) })
+  for (const p of panels) if (isShape(p) && p.shape!.form !== 'text') obstacles.push({ id: p.rect.id, box: boxOf(p) })
   const out = new Map<string, ConnectorView>()
   for (const holder of panels) {
     const list = holder.connectors
@@ -69,7 +88,7 @@ export function buildConnectorViews(panels: readonly Panel[], previous: Readonly
       const ends = c.ends ?? 'end'
       const key = `${route}|${ends}|${ports.from}${ports.to}|${fromForm}|${toForm}|${k(fromBox)}|${k(toBox)}|${local.map((o) => `${o.id}:${k(o.box)}`).join(';')}`
       const prior = previous.get(c.id)
-      if (prior !== undefined && prior.key === key) {
+      if (prior !== undefined && prior.key === key && (prior.peer === true) === (holder.peer === true)) {
         out.set(c.id, prior.connector === c ? prior : { ...prior, connector: c })
         continue
       }
@@ -82,7 +101,7 @@ export function buildConnectorViews(panels: readonly Panel[], previous: Readonly
         // so the line never pokes through the head's tip.
         ends
       })
-      out.set(c.id, { id: c.id, from: holder.rect.id, to: c.to, connector: c, fromPort: ports.from, toPort: ports.to, path, key })
+      out.set(c.id, { id: c.id, from: holder.rect.id, to: c.to, connector: c, fromPort: ports.from, toPort: ports.to, path, key, ...(holder.peer === true ? { peer: true as const } : {}) })
     }
   }
   return out

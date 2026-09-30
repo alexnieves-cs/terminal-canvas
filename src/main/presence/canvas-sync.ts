@@ -47,7 +47,7 @@
 import * as Y from 'yjs'
 import { redactSecrets } from '../../shared/redact'
 import {
-  applyCanvasOp, diffLocal, docKey, groupToLocal, inspectUpdate, localIdOf, opContext, readSharedAsks, readSharedGroups, readSharedPanels,
+  applyCanvasOp, diffLocal, docKey, groupToLocal, inspectUpdate, localIdOf, opContext, panelToLocal, readSharedAsks, readSharedGroups, readSharedPanels,
   CANVAS_FILES, CANVAS_GROUPS, CANVAS_PANELS, type LocalGroupLike, type LocalPanelLike
 } from '../../shared/canvas-doc'
 import {
@@ -80,6 +80,8 @@ export interface CanvasSyncDeps {
   emitText?: (push: SharedTextPush) => void
   /** M376. A workspace's team asks changed by anything but this machine's own write (a peer's answer, the doc loaded). */
   onAsks?: (workspaceId: string) => void
+  /** M392. Main's log, for a content field left unwritten (past its cap). Default console.warn. */
+  log?: (message: string) => void
 }
 
 export interface CanvasSync {
@@ -140,17 +142,29 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
   const textOpen = new Set<string>()
 
   // A title leaves this machine here, so it is scrubbed here (the outward
-  // gate's scrubber, verify:verbs gate.2). Memoised: saved() runs on every
-  // layout:save — sixty a second during a drag — and diffs every panel's
-  // title each time, while the titles themselves almost never change.
+  // gate's scrubber, verify:verbs gate.2) — and so, since M392, do a shape's
+  // label and an arrow's, through this same one door (diffLocal caps the
+  // title itself). Memoised: saved() runs on every layout:save — sixty a
+  // second during a drag — and diffs every panel's words each time, while
+  // the words themselves almost never change.
   const scrubbed = new Map<string, string>()
-  const scrub = (title: string): string => {
-    const hit = scrubbed.get(title)
+  const scrub = (text: string): string => {
+    const hit = scrubbed.get(text)
     if (hit !== undefined) return hit
     if (scrubbed.size >= 2000) scrubbed.clear()
-    const out = redactSecrets(title).text.slice(0, 120)
-    scrubbed.set(title, out)
+    const out = redactSecrets(text).text
+    scrubbed.set(text, out)
     return out
+  }
+  // M392. A content field past its cap is not written, and said once in
+  // main's log — not sixty times a second while a drag re-diffs the panel.
+  const warned = new Set<string>()
+  const warn = (message: string): void => {
+    if (warned.has(message)) return
+    if (warned.size >= 200) warned.clear()
+    warned.add(message)
+    if (deps.log !== undefined) deps.log(`[canvas-sync] ${message}`)
+    else console.warn(`[canvas-sync] ${message}`)
   }
 
   const viewOf = (b: Binding): CanvasSharedView | null => {
@@ -171,7 +185,8 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
       role: share.role,
       seq: b.seq,
       rects,
-      placeholders: live.filter((p) => p.host !== host),
+      // M392. With each placeholder's arrows aimed at the renderer's own ids.
+      placeholders: live.filter((p) => p.host !== host).map((p) => panelToLocal(host, p)),
       files: [...b.doc.getMap(CANVAS_FILES).keys()].filter((k) => localIdOf(host, k) === null && byKey.has(k)),
       ...(b.groupsSeq > b.ack ? { groups: readSharedGroups(b.doc).map((g) => groupToLocal(host, g)) } : {})
     }
@@ -228,7 +243,7 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
     const userId = deps.userId()
     const local = deps.local(b.workspaceId)
     if (userId === null || local === null || deps.share(b.workspaceId) === undefined) return
-    for (const op of diffLocal(b.doc, local, { userId, host: deps.host() }, stale, scrub)) write(b, op)
+    for (const op of diffLocal(b.doc, local, { userId, host: deps.host() }, stale, scrub, warn)) write(b, op)
   }
 
   const onRemote = (b: Binding, events: Array<Y.YEvent<Y.AbstractType<unknown>>>, tr: Y.Transaction): void => {
@@ -244,7 +259,7 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
         // A panel appeared (or a root key changed): placeholders re-read on emit.
         for (const key of e.keys.keys()) {
           const s = ++b.seq
-          for (const f of [...RECT_FIELDS, 'z', 'title']) b.remoteSeq.set(`p:${key}:${f}`, s)
+          for (const f of [...RECT_FIELDS, 'z', 'title', 'shape', 'connectors']) b.remoteSeq.set(`p:${key}:${f}`, s)
           if (localIdOf(host, key) !== null) { b.pendingRects.set(key, s); moved.add(key) }
         }
       } else if (target.parent === panels && target._item !== null && typeof target._item.parentSub === 'string') {

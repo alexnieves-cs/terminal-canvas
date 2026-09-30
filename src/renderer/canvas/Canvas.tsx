@@ -24,6 +24,7 @@ import { useConnectors, type Connectors } from './useConnectors'
 import { useShapeKeys } from './useShapeKeys'
 import { useFlowchartIO } from './useFlowchartIO'
 import { ConnectorLayer } from '@renderer/flowchart/ConnectorLayer'
+import { buildPeerFlow, type PeerFlow } from '@renderer/flowchart/shared-shapes'
 import { AgentLinkLayer } from './AgentLinkLayer'
 import { forgetAgentLinksFor, forgetAllAgentLinks, publishAgentLinks } from './agent-links-store'
 import { agentLinks } from '@shared/agent-links'
@@ -2435,7 +2436,7 @@ export function Canvas({
 
   // A teammate's placeholder, moved by its header through the SAME gesture a
   // panel uses — so the same write-through, snap and role gate apply.
-  const onBeginPlaceholderDrag = useCallback((p: SharedPanel, event: MouseEvent<HTMLElement>) => {
+  const onBeginPlaceholderDrag = useCallback((p: SharedPanel, event: { clientX: number; clientY: number }) => {
     if (mergedRef.current) return
     const host = hostRef.current
     if (!host) return
@@ -6474,15 +6475,43 @@ export function Canvas({
   }, [])
   const shapeStepRef = useRef<{ nextStep: (id: string) => void; previousStep: (id: string) => void } | null>(null)
   const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef })
+  // M344. The relay strip names people from this workspace's presence roster
+  // ("sam is in control"), not by the first eight characters of a uuid.
+  // M392. So does a teammate's shape's owner mark (below).
+  const rosterNames = useRosterNames(activeWorkspaceId)
   // The shapes, in their own array for the ShapeLayer: a new array only when
   // `displayPanels` is (a panel changed) — never on a camera frame.
   const shapePanels = useMemo(() => displayPanels.filter(isShapePanel), [displayPanels])
+  // M392. A shared canvas's placeholders as the flowchart layers draw them
+  // (shared-shapes.ts): a teammate's shape as the real shape, read-only; every
+  // placeholder as an arrow's end; the rest still cards. None while merged —
+  // the placeholders are not drawn there either. `previous` keeps an unchanged
+  // shape the same object, so a view that moved one repaints one.
+  const peerFlowRef = useRef<PeerFlow | null>(null)
+  const peerFlow = useMemo(() => {
+    const next = buildPeerFlow(merged ? [] : shared.placeholders, (userId) => rosterNames.get(userId), peerFlowRef.current)
+    peerFlowRef.current = next
+    return next
+  }, [merged, shared.placeholders, rosterNames])
+  // The role table's delete row, per drawn shape: the placeholder's ×.
+  const peerRemovable = useMemo(() => {
+    const byId = new Map(shared.placeholders.map((p) => [p.id, p]))
+    return new Set(peerFlow.shapes.map((s) => s.rect.id).filter((id) => { const p = byId.get(id); return p !== undefined && shared.mayRemove(p) }))
+  }, [peerFlow, shared.placeholders, shared.mayRemove])
+  const onPeerShapePress = useCallback((id: string, event: { clientX: number; clientY: number }) => {
+    const p = sharedRef.current.placeholders.find((x) => x.id === id)
+    if (p !== undefined) onBeginPlaceholderDrag(p, event)
+  }, [onBeginPlaceholderDrag])
+  const onPeerShapeRemove = useCallback((id: string) => {
+    const p = sharedRef.current.placeholders.find((x) => x.id === id)
+    if (p !== undefined) onRemovePlaceholder(p)
+  }, [onRemovePlaceholder])
   // The minimap's set: its identity changes only when a shape is added or removed.
   const shapeIdKey = shapePanels.map((p) => p.rect.id).join(',')
   const shapeIdSet = useMemo(() => new Set(shapeIdKey === '' ? [] : shapeIdKey.split(',')), [shapeIdKey])
   // M389. Connectors: their views, the draw from a shape's port, their verbs.
   const connectors = useConnectors({
-    setPanels, commitHistory, panelsRef, displayPanels, hitOrderRef, nextIdRef, hostRef, viewportRef, mergedRef,
+    setPanels, commitHistory, panelsRef, displayPanels, peers: peerFlow.endpoints, hitOrderRef, nextIdRef, hostRef, viewportRef, mergedRef,
     selectedIds, selectOnly, selectedId: selectedConnectorId, setSelectedId: setSelectedConnectorId, shouldIgnoreKeys
   })
   connectorsRef.current = connectors
@@ -7033,9 +7062,6 @@ export function Canvas({
   // M338. The active workspace's share, for a relay session started in it.
   const creationShareRef = useRef<string | undefined>(undefined)
   creationShareRef.current = workspaceRows.find((w) => w.active)?.share?.id
-  // M344. The relay strip names people from this workspace's presence roster
-  // ("sam is in control"), not by the first eight characters of a uuid.
-  const rosterNames = useRosterNames(activeWorkspaceId)
   const relayNameFor = useCallback((userId: string): string => relayNameOf(rosterNames, userId), [rosterNames])
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
     const entry = CREATABLE_OBJECTS.find((item) => item.id === kind)
@@ -8713,7 +8739,8 @@ export function Canvas({
           <SnapGuides guides={snapGuides.guides} spacing={snapGuides.spacing} />
           {/* The shared canvas: teammates' panels, inert, at the doc's rects. */}
           {!merged && (
-            <SharedPlaceholderLayer placeholders={shared.placeholders} workspaceId={activeWorkspaceId}
+            // M392. A teammate's drawable shape is the ShapeLayer's (peerFlow); the rest stay cards.
+            <SharedPlaceholderLayer placeholders={peerFlow.cards} workspaceId={activeWorkspaceId}
               mayArrange={shared.mayArrange} mayRemove={shared.mayRemove} files={shared.view?.files ?? []}
               onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder}
               // M343. Beside the placeholder, never over it: both stay visible.
@@ -9163,6 +9190,11 @@ export function Canvas({
             onCommitText={flowchart.onShapeText}
             dropTargetId={connectors.dropTargetId ?? (linkDraw.state?.target ?? null)}
             live={shapeLive}
+            peerShapes={peerFlow.shapes}
+            peerMarks={peerFlow.marks}
+            peerRemovable={peerRemovable}
+            onPeerPress={shared.mayArrange && !merged ? onPeerShapePress : undefined}
+            onPeerRemove={onPeerShapeRemove}
           />
           {/* INSIDE .world, unlike the pips and the marquee below it: a lane
               header names a region of the WORLD, so it has to pan and scale

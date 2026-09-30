@@ -120,9 +120,13 @@ export function createCanvasSyncWiring(state: MainState, stores: Stores, account
       if (ws === undefined) return null
       return {
         // M343. A relay panel's minted session crosses (its id and program name only), so a teammate's placeholder can Attach.
+        // M392. A shape's record and any panel's arrows cross too — raw here;
+        // diffLocal scrubs their words and aims the arrows at doc keys where they leave.
         panels: ws.panels.map((p) => ({
           id: p.id, kind: p.kind ?? 'terminal', title: typeof p.title === 'string' ? p.title : '', x: p.x, y: p.y, w: p.w, h: p.h, z: p.z,
-          ...(p.kind === 'relay' && p.relay.sessionId !== undefined ? { relay: { session: p.relay.sessionId, program: p.relay.program } } : {})
+          ...(p.kind === 'relay' && p.relay.sessionId !== undefined ? { relay: { session: p.relay.sessionId, program: p.relay.program } } : {}),
+          ...(p.kind === 'shape' ? { shape: p.shape } : {}),
+          ...(p.connectors === undefined || p.connectors.length === 0 ? {} : { connectors: p.connectors })
         })),
         groups: (ws.groups ?? []).map((g) => ({ id: g.id, label: g.label, colour: g.colour, panelIds: [...g.panelIds], ...(g.collapsed === true ? { collapsed: true } : {}) }))
       }

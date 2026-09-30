@@ -132,7 +132,7 @@ there is no room: the share is still recorded, and the canvas stays local until
 presence starts.
 
 ```
-canvas:panels  Y.Map< <host>_<panel id>, Y.Map<field, value> >   kind title owner host x y w h z [deleted]
+canvas:panels  Y.Map< <host>_<panel id>, Y.Map<field, value> >   kind title owner host x y w h z [shape] [connectors] [deleted]
 canvas:groups  Y.Map< <host>_<group id>, Y.Map<field, value> >   label colour panelIds [collapsed] [deleted]
 ```
 
@@ -152,6 +152,17 @@ canvas:groups  Y.Map< <host>_<group id>, Y.Map<field, value> >   label colour pa
   The id grants nothing by itself: the relay admits an attach by the share's role,
   checked on its side against the person's token. Only the panel's owner may bind or
   re-point the id (`relay-bind` in the role table).
+- **Flowcharts cross as content (M392).** A shape panel's record (`shape`) and any
+  panel's arrows (`connectors`) are JSON strings in the panel's field map, capped at
+  2 KB and 16 KB. Past the cap a field is not written, and main's log says so. The
+  words are scrubbed where they leave, like a title. A shape's title is its label's
+  first line, so a client that does not draw shapes still names the placeholder. An
+  arrow's target is a doc key, and an arrow to a panel that is not in the doc is
+  dropped on read. A teammate's shape draws as the real shape, read-only: no handles,
+  no ports, no label editing. A small mark in the owner's colour shows whose it is.
+  An editor can move it. A shape record is a form, words and three style words, and
+  an arrow is a line with a label. Neither can carry anything that runs. Malformed
+  content costs that field and never the panel.
 - **A peer removing your panel** takes it off the *shared* canvas only. It keeps
   running here.
 
@@ -181,11 +192,15 @@ Roles are per share (`workspace_members`: `owner` | `editor` | `viewer`), not pe
 There is one table (`authorizeCanvasOp`), and three places enforce it: the renderer
 (the gesture does not start), main (every op before it is written), and the server.
 
-|  | move | create | rename | remove | groups |
-|---|---|---|---|---|---|
-| owner | any | own name | own | any | yes |
-| editor | any | own name | own | own | yes |
-| viewer | – | – | – | – | – |
+|  | move | create | rename | remove | groups | shape / arrows |
+|---|---|---|---|---|---|---|
+| owner | any | own name | own | any | yes | own |
+| editor | any | own name | own | own | yes | own |
+| viewer | – | – | – | – | – | – |
+
+A shape's words and a panel's arrows (`panel-content`, M392) follow the rename rule for
+the rename rule's reason. The machine that runs the panel rewrites them from its own
+layout on every save, so a second author's edit would be undone a moment later.
 
 ### The collab server (`npm run collab`)
 

@@ -68,7 +68,12 @@ export function createCollabServer(opts: CollabServerOptions): Server<CollabCont
   // M387. Moves and typing, counted per connection (its context object, one
   // per connection) and summarised as ONE 'edited' row when it closes: a
   // drag writes sixty times a second, and sixty rows would bury the trail.
-  const edits = new Map<CollabContext, { room: string; moves: number; typed: number }>()
+  // M392. A diagram's content (panel-content) is counted here too, as
+  // `diagram edits`: the trail's action set is pinned by the migration's
+  // CHECK (20260927120000_collab_audit.sql), a new word would need a new
+  // migration, and a relabelled step is an edit of the canvas's words like a
+  // keystroke — not a discrete act like a create or a delete.
+  const edits = new Map<CollabContext, { room: string; moves: number; typed: number; diagram: number }>()
   const auditRecord = (entries: AuditEntry[]): void => {
     if (opts.audit === undefined || entries.length === 0) return
     // Beside the room's work, never in front of it: a failed write is logged,
@@ -152,9 +157,9 @@ export function createCollabServer(opts: CollabServerOptions): Server<CollabCont
       if (opts.audit === undefined || !PERSISTED_ROOM.test(documentName)) return
       const entries: AuditEntry[] = []
       for (const op of accepted) {
-        if (op.kind === 'rect' || op.kind === 'text-edit') {
-          const tally = edits.get(ctx) ?? { room: documentName, moves: 0, typed: 0 }
-          if (op.kind === 'rect') tally.moves++; else tally.typed++
+        if (op.kind === 'rect' || op.kind === 'text-edit' || op.kind === 'panel-content') {
+          const tally = edits.get(ctx) ?? { room: documentName, moves: 0, typed: 0, diagram: 0 }
+          if (op.kind === 'rect') tally.moves++; else if (op.kind === 'text-edit') tally.typed++; else tally.diagram++
           edits.set(ctx, tally)
           continue
         }
@@ -167,16 +172,18 @@ export function createCollabServer(opts: CollabServerOptions): Server<CollabCont
       const tally = context === undefined ? undefined : edits.get(context as CollabContext)
       if (tally === undefined) return
       edits.delete(context as CollabContext)
-      auditRecord([{ room: tally.room, userId: (context as CollabContext).userId, action: 'edited', detail: `moves ${tally.moves} · text edits ${tally.typed}` }])
+      // The third count only when there is one, so a trail from before M392 reads the same.
+      auditRecord([{ room: tally.room, userId: (context as CollabContext).userId, action: 'edited', detail: `moves ${tally.moves} · text edits ${tally.typed}${tally.diagram > 0 ? ` · diagram edits ${tally.diagram}` : ''}` }])
     }
   })
 }
 
 /**
  * M387. One accepted op as a row of the trail: who, what kind, which object,
- * and a word — never content. A move, a keystroke and the Team view's own
- * snapshot are not rows (the first two are summarised per connection; the
- * last is presence, not an action on the workspace).
+ * and a word — never content. A move, a keystroke, a diagram's content
+ * (M392) and the Team view's own snapshot are not rows (the first three are
+ * summarised per connection; the last is presence, not an action on the
+ * workspace).
  */
 export function auditEntryOf(room: string, userId: string, op: CanvasOp): AuditEntry | null {
   const row = (action: AuditEntry['action'], target: string, detail?: string): AuditEntry =>

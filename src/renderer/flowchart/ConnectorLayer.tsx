@@ -17,6 +17,11 @@ import type { ConnectorView } from './connector-model'
  *   press on the ground (lb :1143);
  * - a connector is selected on CLICK, never mousedown — the background's
  *   mousedown clears the selection a moment later (lb :3453).
+ *
+ * M392. A TEAMMATE'S arrow (`view.peer`, held by a placeholder on a shared
+ * canvas — shared-shapes.ts) is drawn with no hit stroke and a label nobody
+ * here can press: it is a line, it is theirs, and only their machine rewrites
+ * it (the role table's panel-content row). A press on it is the ground's.
  */
 
 export interface ConnectorGhost {
@@ -54,16 +59,16 @@ export const ConnectorLayer = memo(function ConnectorLayer(props: ConnectorLayer
       </svg>
       <div className="connector-labels" aria-hidden={views.every((v) => v.connector.label === undefined) && editingId === null ? true : undefined}>
         {views.map((v) => (v.connector.label !== undefined || editingId === v.id) && (
-          editingId === v.id && !readOnly
+          editingId === v.id && !readOnly && v.peer !== true
             ? <LabelEditor key={v.id} view={v} onCommit={onCommitLabel} />
             : (
               <div
                 key={v.id}
-                className={`connector-label${selectedId === v.id ? ' connector-label--selected' : ''}`}
+                className={`connector-label${selectedId === v.id ? ' connector-label--selected' : ''}${v.peer === true ? ' connector-label--peer' : ''}`}
                 data-connector-label={v.id}
                 style={{ left: v.path.labelAt.x, top: v.path.labelAt.y }}
-                onClick={(event) => { onSelect(v.id, event) }}
-                onDoubleClick={(event) => { if (!readOnly) { event.stopPropagation(); onEditLabel(v.id) } }}
+                onClick={v.peer === true ? undefined : (event) => { onSelect(v.id, event) }}
+                onDoubleClick={v.peer === true ? undefined : (event) => { if (!readOnly) { event.stopPropagation(); onEditLabel(v.id) } }}
               >
                 {v.connector.label}
               </div>
@@ -92,17 +97,20 @@ const ConnectorLine = memo(function ConnectorLine({ view, selected, readOnly, on
       data-connector-to={view.to}
       data-stroke={connector.stroke ?? 'line'}
       data-dashed={connector.dashed === true ? '' : undefined}
+      data-connector-peer={view.peer === true ? '' : undefined}
     >
       <path className="connector__line" d={path.d} />
       {(ends === 'end' || ends === 'both') && <path className="connector__head" d={arrowHead(pts[pts.length - 1], path.endAngle)} />}
       {(ends === 'start' || ends === 'both') && <path className="connector__head" d={arrowHead(pts[0], path.startAngle)} />}
-      <path
-        className="connector__hit"
-        d={path.d}
-        data-connector-hit={view.id}
-        onClick={(event) => { onSelect(view.id, event) }}
-        onDoubleClick={(event) => { if (!readOnly) { event.stopPropagation(); onEditLabel(view.id) } }}
-      />
+      {view.peer !== true && (
+        <path
+          className="connector__hit"
+          d={path.d}
+          data-connector-hit={view.id}
+          onClick={(event) => { onSelect(view.id, event) }}
+          onDoubleClick={(event) => { if (!readOnly) { event.stopPropagation(); onEditLabel(view.id) } }}
+        />
+      )}
     </g>
   )
 })

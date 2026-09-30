@@ -10204,6 +10204,8 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .connector-label__input { border: 0; outline: none; background: transparent; font: inherit; color: var(--fg); text-align: center; padding: 0; }
 .connector-label--editing { box-shadow: inset 0 0 0 1px var(--iris); background: var(--s-1); }
 .world[data-detail="block"] .connector-label, .world[data-detail="cluster"] .connector-label { visibility: hidden; }
+/* M392. A teammate's arrow's label: read, never pressed — a press there is the ground's. */
+.connector-label--peer { pointer-events: none; }
 .connector-inspector { padding-top: 0; }
 .connector-inspector__ends { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); overflow-wrap: anywhere; }
 .connector-inspector__label { min-width: 0; height: 26px; padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
@@ -10242,3 +10244,47 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* M388. A diagram on the overview: its shapes as quiet outlines, under the status blocks. */
 .minimap__shapes { position: absolute; inset: 0; pointer-events: none; }
 .minimap__shapes path { fill: var(--s-4); stroke: var(--line-strong); stroke-width: 0.75; }
+
+/* ------------------------------------------------------------------ M392 --
+   A TEAMMATE'S SHAPE on a shared canvas (ShapeLayer's peer shapes): drawn as
+   the shape it is, read-only — no handles, ports or label editor. The one fact
+   the placeholder card's header carried, whose it is, rides a small mark in
+   their colour (`--owner`, set inline from colorOf like the card's; this is
+   the fallback) on the top-left corner: absolutely positioned, so it takes no
+   layout, and counter-scaled like the ports, so it stays a mark zoomed out.
+   The outline presses to move only when this person may arrange
+   (`data-arrange`); the × that takes it off the shared canvas is the
+   contextual layer — opacity on hover, never display (the rest rule). */
+.shape--peer { --owner: var(--fg-4); }
+.shape--peer[data-arrange] .shape__outline { cursor: grab; }
+.shape__owner {
+  position: absolute;
+  /* On the outline's upper-left, set inline per form (ShapeLayer's outlineCorner). */
+  top: 0; left: 0;
+  box-sizing: border-box;
+  width: 10px; height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 1.5px solid var(--s-0);
+  border-radius: var(--r-full);
+  background: var(--owner);
+  transform: scale(var(--chrome-scale, 1));
+  pointer-events: auto;
+}
+.shape__remove {
+  position: absolute;
+  /* On the outline's upper-right, set inline per form (outlineCorner), centred on it. */
+  top: 0; left: 100%;
+  display: inline-flex;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  color: var(--fg-2);
+  transform: translate(-50%, -50%) scale(var(--chrome-scale, 1));
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.shape--peer:hover .shape__remove, .shape__remove:focus-visible { opacity: 1; }
+.shape__remove:hover { color: var(--fg); }

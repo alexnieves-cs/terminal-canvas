@@ -38,6 +38,15 @@
  * the host prefix (a random install id, never a person) keeps them apart and
  * still matches ID_PATTERN, so a remote group persists through parseGroups.
  *
+ * M392. A flowchart's content rides two more fields of the panel's map,
+ * `shape` (a shape panel's record) and `connectors` (the arrows any panel
+ * holds), each a JSON STRING rather than a nested Y type: both are written by
+ * ONE author, the machine that runs the panel (the role table's
+ * panel-content row), so there is nothing to merge and a string is one
+ * last-writer-wins register like `title` — and a nested type would be a new
+ * shape of change for inspectUpdate to judge, where a string is a value it
+ * can cap. See `contentOf` for what a reader keeps of them.
+ *
  * Imported by main and the collab server; NEVER by the renderer (its one yjs
  * door is renderer/shared-text/, a replica main gates with inspectUpdate —
  * src/renderer/CLAUDE.md). The renderer speaks canvas-ops.ts.
@@ -45,9 +54,10 @@
 import * as Y from 'yjs'
 import { TEAM_DOC_MAP } from './team'
 import {
-  ASK_OUTCOMES, CANVAS_ASKS, CANVAS_FILES, RECT_FIELDS, SHARED_TEXT_MAX,
-  type AskAnswer, type AskOutcome, type CanvasOp, type OpContext, type SharedAsk, type SharedGroup, type SharedPanel, type SharedRelay
+  ASK_OUTCOMES, CANVAS_ASKS, CANVAS_FILES, RECT_FIELDS, SHARED_CONNECTORS_MAX, SHARED_SHAPE_MAX, SHARED_TEXT_MAX,
+  type AskAnswer, type AskOutcome, type CanvasOp, type OpContext, type PanelContentField, type SharedAsk, type SharedGroup, type SharedPanel, type SharedRelay
 } from './canvas-ops'
+import { parseConnectors, parseShapeRecord, shapeSummary, type Connector, type ShapeRecord } from './flowchart'
 import { RELAY_PROGRAM, RELAY_SESSION_ID } from './relay-protocol'
 
 export const CANVAS_PANELS = 'canvas:panels'
@@ -120,6 +130,46 @@ function relayOf(fm: Y.Map<unknown>, kind: string): SharedRelay | null | undefin
   return RELAY_SESSION_ID.test(session) && RELAY_PROGRAM.test(program) ? { session, program } : undefined
 }
 
+/** A content field's JSON, or undefined when it is absent, not text, past its cap, or not JSON. */
+function jsonField(v: unknown, cap: number): unknown {
+  if (typeof v !== 'string' || v.length > cap) return undefined
+  try { return JSON.parse(v) } catch { return undefined }
+}
+
+/**
+ * M392. A panel's diagram content off the doc — the reading half of the wire.
+ *
+ * INERT BY CONSTRUCTION. What a peer wrote here is read through the same
+ * per-field readers the layout file uses (parseShapeRecord, parseConnectors),
+ * and they keep ONLY the named fields: a shape is a form, words and three
+ * style words; a connector is a line between two panels with a label. No field
+ * either can carry names a command, a path, a URL or anything that runs, so a
+ * teammate's diagram can draw here and do nothing else (CLAUDE.md: what
+ * arrives from outside is inert until a person looks — and looking at a line
+ * starts nothing).
+ *
+ * Absent is not malformed (every panel before M392 has neither field). A value
+ * that is not text, is past its cap, is not JSON or parses to nothing drawable
+ * costs THAT FIELD, never the panel: the placeholder still stands, named by
+ * its title. A shape record on a panel that is not a shape means nothing and
+ * is dropped the same way. Targets are pruned by readSharedPanels, which knows
+ * every live key.
+ */
+function contentOf(fm: Y.Map<unknown>, kind: string, key: string): Pick<SharedPanel, 'shape' | 'connectors'> {
+  const out: Pick<SharedPanel, 'shape' | 'connectors'> = {}
+  const rawShape = kind === 'shape' ? jsonField(fm.get('shape'), SHARED_SHAPE_MAX) : undefined
+  if (rawShape !== undefined) {
+    const shape = parseShapeRecord(rawShape, [], key)
+    if (shape !== null) out.shape = shape
+  }
+  const rawConnectors = jsonField(fm.get('connectors'), SHARED_CONNECTORS_MAX)
+  if (rawConnectors !== undefined) {
+    const list = parseConnectors(rawConnectors, [], key)
+    if (list !== undefined && list.length > 0) out.connectors = list
+  }
+  return out
+}
+
 /** A field map as a SharedPanel, or undefined when it is malformed. Tombstones are read by `isTombstone`. */
 function panelOf(key: string, fm: unknown): SharedPanel | undefined {
   if (!(fm instanceof Y.Map)) return undefined
@@ -129,7 +179,44 @@ function panelOf(key: string, fm: unknown): SharedPanel | undefined {
       x === undefined || y === undefined || w === undefined || h === undefined || z === undefined) return undefined
   const relay = relayOf(fm, kind)
   if (relay === undefined) return undefined
-  return { id: key, kind, title, owner, host, x, y, w, h, z, ...(relay === null ? {} : { relay }) }
+  return { id: key, kind, title, owner, host, x, y, w, h, z, ...(relay === null ? {} : { relay }), ...contentOf(fm, kind, key) }
+}
+
+/** M392. A shape record as the doc stores it: fields in one fixed order, so an unchanged record is the same string and writes nothing. */
+export function shapeJson(s: ShapeRecord): string {
+  return JSON.stringify({
+    form: s.form, text: s.text,
+    ...(s.fill === undefined ? {} : { fill: s.fill }), ...(s.stroke === undefined ? {} : { stroke: s.stroke }), ...(s.ink === undefined ? {} : { ink: s.ink })
+  })
+}
+
+/** M392. A panel's arrows as the doc stores them — the named fields only, in one fixed order (shapeJson's reason). */
+export function connectorsJson(list: readonly Connector[]): string {
+  return JSON.stringify(list.map((c) => ({
+    id: c.id, to: c.to,
+    ...(c.from === undefined ? {} : { from: c.from }), ...(c.toPort === undefined ? {} : { toPort: c.toPort }),
+    ...(c.route === undefined ? {} : { route: c.route }), ...(c.ends === undefined ? {} : { ends: c.ends }),
+    ...(c.label === undefined ? {} : { label: c.label }), ...(c.stroke === undefined ? {} : { stroke: c.stroke }),
+    ...(c.dashed === true ? { dashed: true } : {})
+  })))
+}
+
+const CONTENT_CAP: Record<PanelContentField, number> = { shape: SHARED_SHAPE_MAX, connectors: SHARED_CONNECTORS_MAX }
+
+/**
+ * M392. Why a content field's new value is refused at the gate, or null when
+ * it may be written. The gate judges the ENVELOPE — text, within its cap, a
+ * shape record only on a shape — and never the JSON inside: a newer client's
+ * new form or port would otherwise close an older server's connections, where
+ * the reader simply drops a field it cannot draw (contentOf). Removing the
+ * field (undefined) is allowed: a panel whose last arrow went.
+ */
+function contentProblem(field: PanelContentField, v: unknown, kind: string): string | null {
+  if (v === undefined) return null
+  if (typeof v !== 'string') return 'is not text'
+  if (v.length > CONTENT_CAP[field]) return 'is past its shared cap'
+  if (field === 'shape' && kind !== 'shape') return 'is a shape record on a panel that is not a shape'
+  return null
 }
 
 const isTombstone = (fm: unknown): boolean => fm instanceof Y.Map && fm.get('deleted') === true
@@ -149,6 +236,16 @@ export function readSharedPanels(doc: Y.Doc): { live: SharedPanel[]; tombstones:
     const p = panelOf(key, fm)
     if (p !== undefined) live.push(p)
   })
+  // M392. An arrow names a live panel IN THIS DOC or it is not drawn — pruned
+  // here, where every live key is known (the layout file's own second pass,
+  // layout-schema/workspaces.ts). A tombstoned target is no target.
+  const keys = new Set(live.map((p) => p.id))
+  for (const p of live) {
+    if (p.connectors === undefined) continue
+    const kept = p.connectors.filter((c) => keys.has(c.to))
+    if (kept.length === 0) delete p.connectors
+    else if (kept.length !== p.connectors.length) p.connectors = kept
+  }
   return { live, tombstones }
 }
 
@@ -203,11 +300,24 @@ export function applyCanvasOp(doc: Y.Doc, op: CanvasOp, origin: unknown): void {
       case 'create': {
         if (panels.has(op.panel.id)) return
         const fm = new Y.Map<unknown>()
-        const { id: _id, relay, ...fields } = op.panel
+        const { id: _id, relay, shape, connectors, ...fields } = op.panel
         for (const [k, v] of Object.entries(fields)) fm.set(k, v)
         // M343. Flat fields, so each is its own last-writer-wins register.
         if (relay !== undefined) { fm.set('relaySession', relay.session); fm.set('relayProgram', relay.program) }
+        // M392. As the doc's JSON strings (the header). diffLocal leaves a
+        // value past its cap out of the op, and says so; this never writes one.
+        const sj = shape === undefined ? undefined : shapeJson(shape)
+        if (sj !== undefined && sj.length <= SHARED_SHAPE_MAX) fm.set('shape', sj)
+        const cj = connectors === undefined || connectors.length === 0 ? undefined : connectorsJson(connectors)
+        if (cj !== undefined && cj.length <= SHARED_CONNECTORS_MAX) fm.set('connectors', cj)
         panels.set(op.panel.id, fm)
+        return
+      }
+      case 'panel-content': {
+        const fm = panels.get(op.panelId)
+        if (fm === undefined || isTombstone(fm)) return
+        if (op.value === null) { if (fm.has(op.field)) fm.delete(op.field); return }
+        if (op.value.length <= CONTENT_CAP[op.field]) setIf(fm, op.field, op.value)
         return
       }
       case 'relay-bind': {
@@ -273,7 +383,9 @@ export function applyCanvasOp(doc: Y.Doc, op: CanvasOp, origin: unknown): void {
   }, origin)
 }
 
-const PANEL_FIELDS = new Set(['kind', 'title', 'owner', 'host', 'x', 'y', 'w', 'h', 'z', 'relaySession', 'relayProgram'])
+// M392 adds `shape` and `connectors` — judged by contentProblem, so every
+// OTHER field a panel's map gains is still refused by name.
+const PANEL_FIELDS = new Set(['kind', 'title', 'owner', 'host', 'x', 'y', 'w', 'h', 'z', 'relaySession', 'relayProgram', 'shape', 'connectors'])
 const GROUP_FIELDS = new Set(['label', 'colour', 'panelIds', 'collapsed', 'deleted'])
 
 /**
@@ -327,6 +439,10 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
           const fm = panels.get(key)
           const p = panelOf(key, fm)
           if (p === undefined || isTombstone(fm) || [...(fm?.keys() ?? [])].some((k) => !PANEL_FIELDS.has(k))) { unknown(`panel ${key} created malformed`); continue }
+          // M392. A panel created WITH its content is judged as its create
+          // (the creator is its owner); the content's envelope still is.
+          const bad = (['shape', 'connectors'] as const).find((f) => contentProblem(f, fm?.get(f), p.kind) !== null)
+          if (bad !== undefined) { unknown(`panel ${key}.${bad} ${contentProblem(bad, fm?.get(bad), p.kind) ?? ''}`); continue }
           out.push({ op: { kind: 'create', panel: p }, ctx: { panelOwner: null } })
         }
       } else if (parent === panels && item !== null && typeof item.parentSub === 'string') {
@@ -349,6 +465,11 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
           } else if (k === 'deleted') {
             if (v === true) out.push({ op: { kind: 'delete', panelId: key }, ctx: ctxOf(key) })
             else unknown(`panel ${key} un-deleted`)
+          } else if (k === 'shape' || k === 'connectors') {
+            // M392. The owner's content; contentProblem says what the gate judges and why not more.
+            const why = contentProblem(k, v, str(fm.get('kind')) ?? '')
+            if (why !== null) unknown(`panel ${key}.${k} ${why}`)
+            else out.push({ op: { kind: 'panel-content', panelId: key, field: k, value: typeof v === 'string' ? v : null }, ctx: ctxOf(key) })
           } else unknown(`panel ${key}.${k} rewritten`)
         }
         if (Object.keys(fields).length > 0) out.push({ op: { kind: 'rect', panelId: key, fields }, ctx: ctxOf(key) })
@@ -439,7 +560,63 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
 }
 
 /** A local panel as main's layout store holds it — just what the doc needs. */
-export interface LocalPanelLike { id: string; kind?: string; title?: string; x: number; y: number; w: number; h: number; z: number; relay?: SharedRelay }
+export interface LocalPanelLike {
+  id: string; kind?: string; title?: string; x: number; y: number; w: number; h: number; z: number; relay?: SharedRelay
+  /** M392. A shape panel's record, as the layout holds it (unscrubbed). */
+  shape?: ShapeRecord
+  /** M392. The panel's arrows, targets as LOCAL ids (the layout's own). */
+  connectors?: readonly Connector[]
+}
+
+/** A title as the doc holds it: the scrubbed title, capped. */
+const TITLE_MAX = 120
+
+/** M392. A local panel's diagram content, ready for the doc (wireContent). */
+interface WireContent {
+  /** A shape's shared title: its label's summary. Absent for any other kind. */
+  title?: string
+  shape?: ShapeRecord
+  shapeJson?: string
+  connectors?: Connector[]
+  connectorsJson?: string
+  /** A field left out because it is past its cap — not written, so the doc keeps the last value that fit. */
+  over: PanelContentField[]
+}
+
+/**
+ * M392. A local panel's diagram content as it LEAVES this machine: a shape's
+ * words and every arrow's label passed through `scrub` here (the title's
+ * rule — what a teammate's machine receives is already scrubbed), each
+ * arrow's target turned into its doc key, and each field as the doc's JSON.
+ * An arrow to anything that is not one of this machine's panels is left out:
+ * the layout never holds one (its load prunes dangling targets), and the doc
+ * would drop it on read anyway.
+ */
+function wireContent(p: LocalPanelLike, host: string, isLocal: (id: string) => boolean, scrub: (text: string) => string): WireContent {
+  const out: WireContent = { over: [] }
+  if (p.kind === 'shape' && p.shape !== undefined) {
+    const s = p.shape
+    const shape: ShapeRecord = {
+      form: s.form, text: scrub(s.text),
+      ...(s.fill === undefined ? {} : { fill: s.fill }), ...(s.stroke === undefined ? {} : { stroke: s.stroke }), ...(s.ink === undefined ? {} : { ink: s.ink })
+    }
+    // Summarised AFTER the scrub: a secret cut short by the summary's length
+    // would no longer match its own pattern, and would leave whole.
+    out.title = shapeSummary(shape.text, shape.form).slice(0, TITLE_MAX)
+    const json = shapeJson(shape)
+    if (json.length <= SHARED_SHAPE_MAX) { out.shape = shape; out.shapeJson = json } else out.over.push('shape')
+  }
+  const list: Connector[] = []
+  for (const c of p.connectors ?? []) {
+    if (!isLocal(c.to)) continue
+    list.push({ ...c, to: docKey(host, c.to), ...(c.label === undefined ? {} : { label: scrub(c.label) }) })
+  }
+  if (list.length > 0) {
+    const json = connectorsJson(list)
+    if (json.length <= SHARED_CONNECTORS_MAX) { out.connectors = list; out.connectorsJson = json } else out.over.push('connectors')
+  }
+  return out
+}
 export interface LocalGroupLike { id: string; label: string; colour: string; panelIds: string[]; collapsed?: boolean }
 
 /**
@@ -454,26 +631,41 @@ export interface LocalGroupLike { id: string; label: string; colour: string; pan
  * peer's edit — the classic write-back of a CRDT bound to a UI that lags it.
  * Keys: `p:<docKey>:<field>`, `g:<docKey>`.
  *
- * `title` is passed through `scrub` here, where it leaves this machine.
+ * Every word that leaves this machine — `title`, and (M392) a shape's label
+ * and an arrow's — is passed through `scrub` here, where it leaves. `warn`
+ * hears about a content field left out for being past its cap (main logs it).
  */
 export function diffLocal(
   doc: Y.Doc,
   local: { panels: LocalPanelLike[]; groups: LocalGroupLike[] },
   me: { userId: string; host: string },
   stale: (key: string) => boolean,
-  scrub: (title: string) => string
+  scrub: (text: string) => string,
+  warn?: (message: string) => void
 ): CanvasOp[] {
   const ops: CanvasOp[] = []
   const panels = panelsOf(doc)
   const groups = groupsOf(doc)
   const localKeys = new Set<string>()
+  // Translated by what is KNOWN, never by the shape of the id: ID_PATTERN
+  // allows `_`, so an imported local id could look like a doc key.
+  const localPanelIds = new Set(local.panels.map((p) => p.id))
   for (const p of local.panels) {
     const key = docKey(me.host, p.id)
     localKeys.add(key)
     const fm = panels.get(key)
-    const title = scrub(p.title ?? '')
+    const content = wireContent(p, me.host, (id) => localPanelIds.has(id), scrub)
+    for (const f of content.over) {
+      warn?.(`panel ${key}: its ${f === 'shape' ? 'shape record is' : 'arrows are'} past the shared cap of ${f === 'shape' ? SHARED_SHAPE_MAX : SHARED_CONNECTORS_MAX} characters — not written; teammates keep the last version that fit`)
+    }
+    const title = content.title ?? scrub(p.title ?? '').slice(0, TITLE_MAX)
     if (fm === undefined) {
-      ops.push({ kind: 'create', panel: { id: key, kind: p.kind ?? 'terminal', title, owner: me.userId, host: me.host, x: p.x, y: p.y, w: p.w, h: p.h, z: p.z, ...(p.relay === undefined ? {} : { relay: p.relay }) } })
+      ops.push({ kind: 'create', panel: {
+        id: key, kind: p.kind ?? 'terminal', title, owner: me.userId, host: me.host, x: p.x, y: p.y, w: p.w, h: p.h, z: p.z,
+        ...(p.relay === undefined ? {} : { relay: p.relay }),
+        ...(content.shape === undefined ? {} : { shape: content.shape }),
+        ...(content.connectors === undefined ? {} : { connectors: content.connectors })
+      } })
       continue
     }
     // A tombstone stays one: a peer removed this panel from the SHARED
@@ -489,6 +681,14 @@ export function diffLocal(
     if (p.kind === 'relay' && (fm.get('relaySession') !== p.relay?.session || fm.get('relayProgram') !== p.relay?.program)) {
       ops.push({ kind: 'relay-bind', panelId: key, relay: p.relay ?? null })
     }
+    // M392. The diagram's content, the title's way: only what differs, never
+    // a field a peer changed that the renderer has not acked, and never a
+    // value past its cap (left out above, so the doc keeps the last that fit).
+    const want: Record<PanelContentField, string | null> = { shape: content.shapeJson ?? null, connectors: content.connectorsJson ?? null }
+    for (const f of ['shape', 'connectors'] as const) {
+      if (content.over.includes(f) || (fm.get(f) ?? null) === want[f] || stale(`p:${key}:${f}`)) continue
+      ops.push({ kind: 'panel-content', panelId: key, field: f, value: want[f] })
+    }
   }
   // Ours in the doc, gone from the layout: closed here.
   panels.forEach((fm, key) => {
@@ -496,9 +696,6 @@ export function diffLocal(
     ops.push({ kind: 'delete', panelId: key })
   })
 
-  // Translated by what is KNOWN, never by the shape of the id: ID_PATTERN
-  // allows `_`, so an imported local id could look like a doc key.
-  const localPanelIds = new Set(local.panels.map((p) => p.id))
   const panelToDoc = (id: string): string => (localPanelIds.has(id) ? docKey(me.host, id) : id)
   const groupToDoc = (id: string): string => {
     const fm = groups.get(id)
@@ -520,6 +717,17 @@ export function diffLocal(
     ops.push({ kind: 'group-delete', groupId: key })
   })
   return ops
+}
+
+/**
+ * M392. Doc panel → the renderer's placeholder: an arrow's target that is one
+ * of OUR panels loses its prefix (the renderer knows it by its local id), and
+ * everyone else's keeps it — which is that placeholder's id there — the rule
+ * groupToLocal applies to a group's members.
+ */
+export function panelToLocal(host: string, p: SharedPanel): SharedPanel {
+  if (p.connectors === undefined) return p
+  return { ...p, connectors: p.connectors.map((c) => ({ ...c, to: localIdOf(host, c.to) ?? c.to })) }
 }
 
 /** Doc group → the renderer's group: our own ids lose their prefix, everyone else's keep theirs. */
