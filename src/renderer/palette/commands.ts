@@ -383,8 +383,11 @@ export interface PaletteActions {
   /**
    * M37. Confirm-gated, like deletePreset and beginDeleteCredential: the row
    * is destructive and a destructive row still runs on one Enter.
+   * M401. `after` runs once git has really removed it (never on a refusal) —
+   * the review's Remove lane re-reads its task with it; every palette row
+   * passes the id alone.
    */
-  beginRemoveWorktree(id: string): void
+  beginRemoveWorktree(id: string, after?: () => void): void
   /** M37. Open the worktree's directory in Finder. */
   revealWorktree(id: string): void
   /** M39. Confirm-gated, like every destructive verb here: removes every panel's durable log. */

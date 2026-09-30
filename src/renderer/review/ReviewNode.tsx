@@ -23,6 +23,7 @@ import { TaskReviewPanel, TaskVerdict } from './TaskReviewPanel'
 import type { LaneMergeResult } from '@shared/lane-merge'
 import { useLaneAccept, type AcceptUi } from './useLaneAccept'
 import type { PrEvidence } from '@shared/task-flow'
+import { REASON_WORKTREE_ATTACHED } from '@renderer/palette/commands/reasons'
 
 const NO_WATCHERS: readonly LaneWatcher[] = []
 
@@ -100,6 +101,19 @@ export interface ReviewTaskContext {
   onSaveRecipe?: (itemId: string, name: string, passedChecks: string[]) => Promise<string | null>
   /** M315. The lane was merged — the board records the outcome. Absent: no Accept control. */
   onAccepted?: (itemId: string, merged: Extract<LaneMergeResult, { kind: 'merged' }>) => void
+  /**
+   * M401 (B2). An ACCEPTED task's two next verbs. `onCloseTask` closes the
+   * lane's conversation (the same close its own × runs); `onRemoveLane` opens
+   * the palette's remove-worktree confirm for the lane. `laneHeld` is true
+   * while a panel on this canvas still owns the lane — the palette row's own
+   * refusal (`REASON_WORKTREE_ATTACHED`), said here by the same sentence.
+   * Optional so an older caller renders the accepted row without them.
+   */
+  onCloseTask?: (itemId: string) => void
+  onRemoveLane?: (itemId: string) => void
+  laneHeld?: boolean
+  /** M401 (B2). The lane's record is gone — removed — so Remove lane has nothing left to do. */
+  laneGone?: boolean
 }
 
 /**
@@ -347,7 +361,9 @@ function renderTask(
   readOnly: boolean,
   press: (run: () => void) => (e: ReactMouseEvent) => void,
   laneChecks: readonly CheckRecord[] | null = null,
-  accept: AcceptUi | null = null
+  accept: AcceptUi | null = null,
+  /** M401 (B2). Close task's two-press arm — the node's state, since this is not a component. */
+  closeArm: { armed: boolean; set: (armed: boolean) => void } | null = null
 ): { head: JSX.Element; decision: JSX.Element; details: JSX.Element } {
   const h = task.handoff
   // `shared` is markable too: a person CAN read a shared diff, and the
@@ -367,13 +383,16 @@ function renderTask(
         <span className="review-node__section-label">{task.title}</span>
         <span className="review-node__section-count" data-review-task-word={h.state} data-review-task-standing={h.standing} data-tone={h.tone}>{h.word}</span>
       </h4>
-      <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>
+      {/* M401 follow-up (critic). An accepted task says its detail ONCE, in the
+          verdict below, which carries the same attribute — the note here was
+          the merge sentence a second time, a line above itself. */}
+      {h.state !== 'accepted' && <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>}
       {h.state === 'accepted' ? (
         // M315. Accepted is the task's LAST word: the review conditions below it
         // described a lane that has since landed, and read as a warning.
         <div className="task-review__verdict" data-task-verification="accepted" data-tone="green">
           <span className="task-review__word">{h.word}</span>
-          <ul className="task-review__conditions"><li className="task-review__holds" data-task-holds>{h.detail}</li></ul>
+          <ul className="task-review__conditions"><li className="task-review__holds" data-task-holds data-review-task-detail>{h.detail}</li></ul>
         </div>
       ) : task.onComments !== undefined && (
         <TaskVerdict
@@ -424,6 +443,53 @@ function renderTask(
               disabled={accept.busy} onMouseDown={press(accept.onCancel)}>Cancel</button>
           </div>
         </div>
+      ) : accepted ? (
+        // M401 (B2). ACCEPTED IS TERMINAL. The M315 rule below — every verb
+        // "present at rest and disabled by name, never absent" — is about a
+        // task that can still be decided: a disabled Accept tells a person
+        // what to do before it lights. After the merge nothing will light it,
+        // so Mark reviewed again and Accept… are retired here (FocusTask's
+        // accepted arm already did) and the row offers what is actually next:
+        // close the task's conversation, then remove its lane. Remove lane
+        // stays a door while it cannot run, and says why by the palette's
+        // own sentence.
+        closeArm?.armed === true && task.chatPanelId !== undefined ? (
+          <div className="review-node__accept-armed" data-review-close-armed role="alertdialog" aria-label="Confirm close conversation">
+            <p className="review-node__accept-sentence">Close this task&#39;s conversation? Its agent stops and its panel closes; the branch, the lane and this review stay.</p>
+            <div className="review-node__task-verbs">
+              {/* M401 follow-up (critic). Closing stops an agent: the armed verb
+                  is the discard confirm's red outline, never the surface's
+                  filled primary, which reads as "the thing to do next". */}
+              <button type="button" className="review-node__discard-confirm" data-review-close-confirm
+                onMouseDown={press(() => { closeArm.set(false); task.onCloseTask?.(task.itemId) })}>Close</button>
+              <button type="button" className="pf__verb pf__verb--word" data-review-close-cancel
+                onMouseDown={press(() => closeArm.set(false))}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="review-node__task-verbs" data-review-task-next="accepted">
+            {task.onCloseTask !== undefined && (
+              // M401 follow-up (critic). A plain word verb at rest: it ends a
+              // conversation, so it is never the surface's filled primary. It
+              // says "conversation" because that is all it closes — the task,
+              // its lane and this review stay.
+              <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="close-task"
+                disabled={readOnly || task.chatPanelId === undefined}
+                title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the task\'s conversation is already closed' : 'close the task\'s conversation — you confirm first'}
+                onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => closeArm?.set(true))}>
+                Close conversation…
+              </button>
+            )}
+            {task.onRemoveLane !== undefined && (
+              <button type="button" className={`pf__verb pf__verb--word${task.chatPanelId === undefined && task.laneHeld !== true && task.laneGone !== true ? ' review-node__primary' : ''}`} data-review-task-verb="remove-lane"
+                disabled={readOnly || task.laneHeld === true || task.laneGone === true}
+                title={readOnly ? 'leave merged view to act on this review' : task.laneGone === true ? 'the lane was removed — its branch stays in the repository' : task.laneHeld === true ? REASON_WORKTREE_ATTACHED : 'remove this task\'s worktree — its branch stays; you confirm first'}
+                onMouseDown={readOnly || task.laneHeld === true || task.laneGone === true ? undefined : press(() => task.onRemoveLane?.(task.itemId))}>
+                Remove lane…
+              </button>
+            )}
+          </div>
+        )
       ) : (
       <div className="review-node__task-verbs">
         {/* Marking a review done is a PERSON's act and has no verb, no palette
@@ -874,7 +940,11 @@ function ReviewNodeImpl({
 
   // M315. ACCEPT: plan (a dry run that refuses by name), confirm, merge — `useLaneAccept`, shared with the focus view.
   const accept = useLaneAccept(task, readOnly, () => setRefreshToken((n) => n + 1))
-  const taskParts = task === undefined ? undefined : renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks, accept)
+  // M401 (B2). Close task's arm, dropped whenever the conversation it would close goes.
+  const [closeArmed, setCloseArmed] = useState(false)
+  useEffect(() => { if (task?.chatPanelId === undefined) setCloseArmed(false) }, [task?.chatPanelId])
+  const taskParts = task === undefined ? undefined : renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press, laneChecks, accept,
+    { armed: closeArmed, set: setCloseArmed })
 
   // M260. Prune `locallyReviewed` to whatever the current result still
   // lists: a discarded or reverted file must not keep inflating "N of M
@@ -886,6 +956,15 @@ function ReviewNodeImpl({
       return next.size === prev.size ? prev : next
     })
   }, [model.files])
+
+  // M401 (B9). The files the task's CURRENT mark covers. Only `current`: a
+  // stale or unknown mark says nothing about these bytes, and an accepted
+  // task's lane is measured against a main that already holds it.
+  const recordedPaths = useMemo<ReadonlySet<string>>(
+    () => (task !== undefined && task.handoff.standing === 'current' && task.handoff.state !== 'accepted' ? new Set(task.paths) : new Set()),
+    [task?.handoff.standing, task?.handoff.state, task?.paths] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const seenCount = model.files.filter((f) => recordedPaths.has(f.path) || locallyReviewed.has(f.path)).length
 
   // M260. Two groups, not a filter control: "touched by this agent" (this
   // chat's own tool calls named the path) and "also changed" (everything
@@ -1087,7 +1166,13 @@ function ReviewNodeImpl({
    */
   const renderFileRow = (f: ReviewNodeRow): JSX.Element => {
     const removing = removingPaths.has(f.path)
-    const reviewedHere = locallyReviewed.has(f.path)
+    // M401 (B9). ONE state per file: a file the task's current mark covers is
+    // RECORDED, and outranks the session's own mark — which is then no longer
+    // offered, because the recorded fact already says more. Both are SEEN in
+    // the words (the tally's word too, M401 follow-up): "reviewed" stays the
+    // one persisted act, Mark reviewed, so a session toggle never reads as it.
+    const recorded = recordedPaths.has(f.path)
+    const reviewedHere = recorded || locallyReviewed.has(f.path)
     return (
       <li key={f.path} className="review-node__file" data-review-node-file={f.path} data-review-node-removing={removing ? '' : undefined}>
         <button
@@ -1111,9 +1196,9 @@ function ReviewNodeImpl({
               visible (never hover-gated) — the row's own "seen" state, as
               opposed to the toggle that sets it (below), which follows the
               same hover-reveal the discard verb does. */}
-          {reviewedHere && <span className="review-node__reviewed-mark" title="marked reviewed this session" aria-label="reviewed this session"><Check /></span>}
+          {reviewedHere && <span className="review-node__reviewed-mark" data-review-node-file-state={recorded ? 'reviewed' : 'seen'} title={recorded ? 'seen — recorded by Mark reviewed, and the lane has not moved since' : 'seen this session — Mark reviewed records it'} aria-label={recorded ? 'seen, recorded' : 'seen this session'}><Check /></span>}
         </button>
-        {!readOnly && (
+        {!readOnly && !recorded && (
           <button
             type="button"
             className="review-node__mark-reviewed"
@@ -1397,8 +1482,11 @@ function ReviewNodeImpl({
         {(model.commit.kind !== 'none' || (model.discard.kind !== 'none' && !readOnly) || subject.across === true) && (
           <div className="review-node__footer" data-review-node-footer>
             {!readOnly && model.files.length > 0 && (
-              <span className="review-node__footer-progress" data-review-node-progress={locallyReviewed.size}>
-                {locallyReviewed.size} of {model.files.length} marked seen this session
+              // M401 (B9). The tally counts the SAME per-file state the rows
+              // show — recorded or this session's — so it can never read "0 of 1" beside
+              // "you reviewed 1 file here" for the file that mark covers.
+              <span className="review-node__footer-progress" data-review-node-progress={seenCount}>
+                {seenCount} of {model.files.length} seen
               </span>
             )}
             {model.discard.kind !== 'none' && !readOnly && model.files.length > 1 && (

@@ -57,6 +57,16 @@ import { sameReviewIdentity, type ReviewIdentity } from './review-identity'
  * nothing. `verify:review readiness.1–.5`.
  */
 
+/**
+ * M401 (B2). The merge record in the words every surface that names a merged
+ * task uses — the review's detail, the navigator row, the return notice — so
+ * "merged into main as abc1234" is one sentence with one author, never three
+ * spellings of the sha.
+ */
+export function mergedLine(merged: { into: string; sha: string }): string {
+  return `merged into ${merged.into} as ${merged.sha.slice(0, 7)}`
+}
+
 /** What is true of the task now, in the priority order `reviewHandoff` applies. */
 export type ReviewHandoffState =
   | 'no-lane' | 'lane-missing' | 'unreadable' | 'blocked' | 'working' | 'empty' | 'shared' | 'ready'
@@ -251,12 +261,15 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
     return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start task…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' }
   }
 
+  // M401 (B2). An accepted task's `section` is undefined exactly when its
+  // lane's record is gone (the caller reads nothing for a lane it has no
+  // record of), so the sentence stops promising a lane the person removed.
   // M315. ACCEPTED outranks what the lane's diff now says. After a merge the
   // lane is measured against a main tree that already holds its commits, so
   // its section reads "no changes" and the mark reads "changed since" — the
   // moment of success reported as a warning. The merge record is the fact.
   if (item.merged !== undefined) {
-    return carry({ state: 'accepted', word: `merged into ${item.merged.into}`, tone: 'idle', action: 'review', actionLabel: 'Review', detail: `you accepted it — merged into ${item.merged.into} as ${item.merged.sha.slice(0, 7)}; the lane stays until you remove it` })
+    return carry({ state: 'accepted', word: `merged into ${item.merged.into}`, tone: 'idle', action: 'review', actionLabel: 'Review', detail: `you accepted it — ${mergedLine(item.merged)}; ${section === undefined ? 'its lane has been removed' : 'the lane stays until you remove it'}` })
   }
 
   // The lane is gone, or was never readable. Never review a DIFFERENT
@@ -315,7 +328,7 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   // "changed since", and the action is to look again.
   const word = standing === 'current' ? 'reviewed' : standing === 'stale' ? 'changed since you reviewed' : standing === 'unknown' ? 'reviewed once, freshness unknown' : 'ready to review'
   const detail = standing === 'current'
-    ? `you reviewed these ${count === 1 ? 'change' : 'changes'} and the lane has not moved since`
+    ? `you reviewed ${count === 1 ? 'this change' : 'these changes'} and the lane has not moved since`
     : standing === 'stale'
       ? `the lane has changed since you reviewed it — ${count} ${count === 1 ? 'file' : 'files'} stand now`
       : standing === 'unknown'

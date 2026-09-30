@@ -58,7 +58,12 @@ export function pickResumeSubject(
   if (working !== undefined) return { itemId: working.id, via: 'working' }
   const review = items.find((i) => i.state === 'review')
   if (review !== undefined) return { itemId: review.id, via: 'review' }
-  const newest = [...retained].sort((a, b) => b.capturedAt - a.capturedAt)[0]
+  // M401 (B2). A DONE task is not a resume, whatever it retained: closing a
+  // merged task's conversation (its review's Close task) retains an outcome,
+  // and the next launch offered "Resume work … open blocker — lane closed"
+  // for work that had already landed.
+  const done = new Set(items.filter((i) => i.state === 'done').map((i) => i.id))
+  const newest = [...retained].filter((r) => !done.has(r.itemId)).sort((a, b) => b.capturedAt - a.capturedAt)[0]
   if (newest !== undefined) return { itemId: newest.itemId, via: 'retained' }
   const todo = items.find((i) => i.state === 'todo')
   if (todo !== undefined) return { itemId: todo.id, via: 'working' }

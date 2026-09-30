@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import {
-  lifecycleFacts, reopenLines, reopenSummary,
-  type LastExit, type LifecycleFacts, type ReopenLine, type ReopenPanel
+  lifecycleFacts, reopenLines, reopenSummary, reopenTaskLines, reopenTaskNews,
+  type LastExit, type LifecycleFacts, type ReopenLine, type ReopenPanel, type ReopenTask
 } from '@shared/persistence'
 import { bootIssues } from '@renderer/session/boot-issues'
 import { shellControl } from './shell-control'
@@ -39,6 +39,16 @@ export interface ReopenDeps {
   /** Panels still waiting to be started — a started panel resolves its line. */
   dormant: ReadonlySet<string>
   backend: 'tmux' | 'direct' | null
+  /**
+   * M401 (B7). The tasks that existed before this launch, each with the panel
+   * "Show" goes to and its outcome. LIVE, not fixed at mount: a task's
+   * outcome needs its lane read, which lands after boot, so the line appears
+   * (or changes) when that read does. Optional so an older caller keeps the
+   * terminal-only notice.
+   */
+  tasks?: readonly ReopenTask[]
+  /** M401 follow-up. When this launch began — a task fact newer than it is not a return. */
+  openedAt?: number
 }
 
 export interface ReopenModel {
@@ -52,7 +62,7 @@ export interface ReopenModel {
 }
 
 export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
-  const { restored, liveAtBoot, present, dormant, backend } = deps
+  const { restored, liveAtBoot, present, dormant, backend, tasks, openedAt } = deps
   // `undefined` while main is being asked; `null` is main's answer "no record".
   const [lastExit, setLastExit] = useState<LastExit | null | undefined>(undefined)
   useEffect(() => {
@@ -92,6 +102,11 @@ export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
       issues: summary.issues,
       lastExit: summary.lastExit
     })
+    // M401 (B7). Task lines follow the terminal ones, and only for a task
+    // whose panel is still here — "Show" must land on something — and only
+    // for what moved since the last exit (`reopenTaskNews`), or every launch
+    // re-announces every old task and "Got it" never sticks.
+    all.push(...reopenTaskLines(reopenTaskNews((tasks ?? []).filter((t) => present.has(t.id)), summary.lastExit?.at, openedAt)))
     const lines = acknowledged ? all.filter((l) => l.group === 'ended') : all
     if (lines.length === 0) return null
     return {
@@ -101,7 +116,7 @@ export function useReopenNotice(deps: ReopenDeps): ReopenModel | null {
       acknowledge: () => setAcknowledged(true),
       leave: (ids) => setLeft((cur) => { const next = new Set(cur); for (const id of ids) next.add(id); return next })
     }
-  }, [summary, present, dormant, left, acknowledged, backend, keepOnQuit])
+  }, [summary, present, dormant, left, acknowledged, backend, keepOnQuit, tasks, openedAt])
 }
 
 /** Past this many panels a line offers one "Start all" instead of a button each. */
@@ -119,7 +134,7 @@ export function ReopenNotice({ model, onStart, onGo }: {
       <span className="reopen-notice__kicker">Reopened</span>
       <ul className="reopen-notice__lines">
         {lines.map((l) => (
-          <li key={l.group + l.text} className="reopen-notice__line" data-reopen-group={l.group} data-reopen-problem={l.tone === 'problem' ? 'true' : undefined}>
+          <li key={l.group + l.text} className="reopen-notice__line" data-reopen-group={l.group} data-reopen-task={l.outcome} data-reopen-problem={l.tone === 'problem' ? 'true' : undefined}>
             <span className="reopen-notice__text">{l.text}</span>
             {l.group === 'ended' && (
               <span className="reopen-notice__verbs">
@@ -137,6 +152,15 @@ export function ReopenNotice({ model, onStart, onGo }: {
                 <button type="button" className="rail-row__verb" data-reopen-leave title="Leave these stopped — this line goes away" {...shellControl(() => model.leave(l.panels.map((p) => p.id)))}>
                   leave stopped
                 </button>
+              </span>
+            )}
+            {l.group === 'task' && l.panels.length <= START_EACH_MAX && (
+              <span className="reopen-notice__verbs">
+                {l.panels.map((p) => (
+                  <button key={p.id} type="button" className="rail-row__verb" data-reopen-show={p.id} title={`Show “${p.label}”`} {...shellControl(() => onGo(p.id))}>
+                    {l.panels.length === 1 ? 'show' : `show ${p.label}`}
+                  </button>
+                ))}
               </span>
             )}
             {l.group === 'reconnected' && l.panels.length === 1 && (

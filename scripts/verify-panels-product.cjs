@@ -4385,6 +4385,105 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+    /* ========== M401 (B2): a merged task looks done ==================== */
+    // After Merge the review offered a live-looking Accept… and Mark reviewed
+    // again, the navigator row kept the agent's "it hasn't been merged", and
+    // nothing named the next step. Seeded as the merge leaves it: a REAL lane
+    // whose branch is merged into main, the conversation still open in it.
+    {
+      const IDS = [
+        'review.accepted.1 a merged task\'s review retires Mark reviewed and Accept and offers exactly Close conversation (a plain verb at rest, its armed Close the discard confirm\'s outline) and Remove lane; Remove lane is PRESENT and disabled with the palette\'s own reason while the conversation holds the lane; the conversation\'s navigator row reads "merged into main as <sha7>"; the merge sentence is said once; Close, confirmed, closes the conversation and lights Remove lane; and Remove lane, confirmed in the palette, removes the worktree and the review then says the lane was removed with Remove lane disabled by that fact'
+      ]
+      const repoM = mkdtempSync(join(tmpdir(), 'tc panels m401 repo '))
+      const laneM = mkdtempSync(join(tmpdir(), 'tc panels m401 lane '))
+      try {
+        const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+        g(repoM, 'init', '-q', '-b', 'main', '.'); g(repoM, 'config', 'user.email', 'v@e.com'); g(repoM, 'config', 'user.name', 'v')
+        writeFileSync(join(repoM, 'a.txt'), 'a\n'); g(repoM, 'add', '-A'); g(repoM, 'commit', '-qm', 'init')
+        const lanePath = join(laneM, 'work')
+        g(repoM, 'worktree', 'add', '-q', '-b', 'tc/m401', lanePath)
+        writeFileSync(join(lanePath, 'b.txt'), 'b\n'); g(lanePath, 'add', '-A'); g(lanePath, 'commit', '-qm', 'b')
+        g(repoM, 'merge', '-q', '--no-ff', '-m', 'merge', 'tc/m401')
+        const sha = g(repoM, 'rev-parse', 'HEAD').trim()
+        layoutStore.addWorktree({ id: 'wt-m401', root: realpathSync(repoM), path: realpathSync(lanePath), branch: 'tc/m401', createdAt: 1, panelId: 'm401C' })
+        layoutStore.save({
+          panels: [
+            { id: 'm401C', kind: 'chat', x: 100, y: 100, w: 420, h: 300, z: 1, title: 'm401 lane', chat: { cwd: realpathSync(lanePath), sessionId: '00000000-0000-4000-8000-000000000401' } },
+            { id: 'm401A', kind: 'work', x: 900, y: 100, w: 640, h: 220, z: 2, title: 'Merged task', work: { itemId: 'wi-m401' } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+          workItems: [{ id: 'wi-m401', source: 'typed', title: 'Merged task', state: 'done', teammateId: 'nobody', panelId: 'm401C', worktreeId: 'wt-m401',
+            merged: { into: 'main', sha, at: 2 }, reviewed: { at: 1, signature: 'deadbeef', files: 1 }, createdAt: 10, updatedAt: 20 }]
+        })
+        flushLayoutStore()
+        const reM = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reM
+        await settle()
+        // The card's Review, mousedown and click in separate tasks (M195).
+        for (const type of ['mousedown', 'click']) {
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="m401A"] [data-work-verb="review"]'); if (!b) return false
+            b.dispatchEvent(new MouseEvent('${type}', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+          await settle()
+        }
+        const row = () => wc.executeJavaScript(`(() => {
+          const t = document.querySelector('[data-review-task="wi-m401"]'); if (!t) return false
+          const verbs = [...t.querySelectorAll('[data-review-task-verb]')].map((b) => ({ verb: b.getAttribute('data-review-task-verb'), disabled: b.disabled, title: b.getAttribute('title') || '' }))
+          const last = document.querySelector('[data-rail-row="m401C"] [data-rail-last]')
+          const details = [...t.querySelectorAll('[data-review-task-detail]')].map((d) => d.textContent)
+          const closeVerb = t.querySelector('[data-review-task-verb="close-task"]')
+          const confirm = t.querySelector('[data-review-close-confirm]')
+          return { state: (t.querySelector('[data-review-task-word]') || {}).getAttribute ? t.querySelector('[data-review-task-word]').getAttribute('data-review-task-word') : null,
+            verbs, rail: last ? last.textContent : null, outcome: last ? last.hasAttribute('data-rail-outcome') : false, details,
+            mergedSaid: (t.textContent.match(/merged into main as [0-9a-f]{7}/g) || []).length,
+            closeLabel: closeVerb ? closeVerb.textContent.trim() : null, closePrimary: closeVerb ? closeVerb.classList.contains('review-node__primary') : null,
+            confirmClass: confirm ? confirm.className : null,
+            chat: !!document.querySelector('.panel[data-panel-id="m401C"]') }
+        })()`)
+        // The navigator's Panels pane holds the row; open it the way the board check opens its pane.
+        await wc.executeJavaScript(`(() => { if (document.querySelector('[data-rail-row="m401C"]')) return true; const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const before = await waitUntil(async () => { const r = await row(); return r && r.state === 'accepted' && r.verbs.length > 0 && r.rail !== null ? r : false }, 15000)
+        const press = (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector('${sel}'); if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const armed = await press('[data-review-task-verb="close-task"]')
+        await settle()
+        const armedRow = await row()
+        const confirmed = await press('[data-review-close-confirm]')
+        const after = await waitUntil(async () => { const r = await row(); return r && r.chat === false && r.verbs.some((v) => v.verb === 'remove-lane' && v.disabled === false) ? r : false }, 8000)
+        // Remove lane: the palette's own confirm, answered with Enter as a
+        // person would, then the review re-reads its task (PaletteActions'
+        // declared `after`) and says the lane is gone.
+        const removePressed = await press('[data-review-task-verb="remove-lane"]')
+        const asked = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('.palette__confirm'); return c ? c.textContent : false })()`), 6000)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
+          i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true })()`)
+        const removed = await waitUntil(async () => { const r = await row(); const rm = r && r.verbs.find((v) => v.verb === 'remove-lane')
+          return rm && rm.disabled === true && /lane was removed/.test(rm.title) ? r : false }, 10000)
+        const laneOnDisk = existsSync(lanePath)
+        const verbsOf = (r) => (r ? r.verbs.map((v) => v.verb).join(',') : '')
+        const remove = (r) => (r ? r.verbs.find((v) => v.verb === 'remove-lane') : undefined)
+        ok(IDS[0],
+          before !== false && verbsOf(before) === 'close-task,remove-lane' &&
+            remove(before).disabled === true && remove(before).title === 'a panel is still running in it — close that panel first' &&
+            before.verbs[0].disabled === false &&
+            before.rail === 'merged into main as ' + sha.slice(0, 7) && before.outcome === true &&
+            before.closeLabel === 'Close conversation…' && before.closePrimary === false &&
+            before.details.length === 1 && before.mergedSaid === 1 &&
+            armed === true && armedRow && armedRow.confirmClass === 'review-node__discard-confirm' &&
+            confirmed === true && after !== false && verbsOf(after) === 'close-task,remove-lane' &&
+            after.verbs[0].disabled === true &&
+            removePressed === true && typeof asked === 'string' && asked.includes('tc/m401') &&
+            removed !== false && removed.details.length === 1 && /its lane has been removed/.test(removed.details[0]) && laneOnDisk === false,
+          JSON.stringify({ before, armed, armedRow, confirmed, after, removePressed, asked, removed, laneOnDisk }))
+      } catch (mErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(mErr && mErr.message || mErr))
+      } finally {
+        try { layoutStore.dropWorktree('wt-m401') } catch { /* nothing recorded */ }
+        try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
+        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        for (const d of [repoM, laneM]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
+      }
+    }
+
     /* ========== M203 (D08): Show this task ============================== */
     // A task is FRAMED from facts, never from position: the card, the
     // terminal the item names as its conversation, and a terminal working

@@ -78,6 +78,17 @@ function recordProposalAnswer(itemId: string, c: ReviewComment, keep: boolean): 
   })
 }
 
+/**
+ * M401 (B9). Why a verdict is not `verified` yet, in one short line. The
+ * critique's reader saw "not verified" after the agent had run the tests and
+ * took the banner for a stale one: the agent's own runs are its ACCOUNT
+ * (readiness.4 keeps the two sources apart), and only a check this canvas
+ * watched exit counts. Saying so is the fix; loosening the rule would be the
+ * false claim it exists to refuse. The one door that produces such a check is
+ * the Run checks form below (M401 follow-up: a second door here duplicated it).
+ */
+export const VERIFIED_MEANS = 'Only a check this canvas runs counts — the agent\'s own runs don\'t.'
+
 export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'standing' | 'checks' | 'comments' | 'criteria' | 'criteriaMet'>): JSX.Element {
   const verification = verificationOf({
     agentWorking: p.agentWorking,
@@ -95,6 +106,11 @@ export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'stan
           {verification.holds.map((h) => <li key={`h:${h}`} className="task-review__holds" data-task-holds>{h}</li>)}
           {verification.missing.map((m) => <li key={`m:${m}`} className="task-review__missing" data-task-missing>{m}</li>)}
         </ul>
+      )}
+      {(verification.stage === 'agent-finished' || verification.stage === 'stale') && (
+        <p className="task-review__means" data-task-verified-means>
+          {VERIFIED_MEANS}
+        </p>
       )}
     </div>
   )

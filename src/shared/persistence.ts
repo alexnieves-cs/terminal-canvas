@@ -27,6 +27,8 @@
  * Pure: no DOM, no electron. `verify:layout persist.*`.
  */
 
+import { mergedLine } from './review-readiness'
+
 /** How the window last went away. A quit and a closed window stop different things. */
 export type ExitHow = 'quit' | 'window'
 
@@ -98,7 +100,7 @@ export function reopenSummary(input: ReopenInput): ReopenSummary {
   return out
 }
 
-export type ReopenGroup = 'reconnected' | 'ended' | 'stopped' | 'issue'
+export type ReopenGroup = 'reconnected' | 'ended' | 'stopped' | 'issue' | 'task'
 
 export interface ReopenLine {
   group: ReopenGroup
@@ -107,6 +109,8 @@ export interface ReopenLine {
   text: string
   /** The panels the line names, so each can be gone to or started. */
   panels: ReopenPanel[]
+  /** M401 (B7). A `task` line's outcome; absent on every terminal line. */
+  outcome?: ReopenTaskOutcome
 }
 
 function names(list: readonly ReopenPanel[]): string {
@@ -149,6 +153,94 @@ export function reopenLines(s: Pick<ReopenSummary, 'reconnected' | 'ended' | 'st
       panels: [...s.stopped]
     })
   }
+  return lines
+}
+
+/**
+ * M401 (B7). THE RETURN, FOR TASK-SHAPED WORK. The lines above speak about
+ * terminal PTYs only — main's record lists pty ids — so a person whose work
+ * was a chat and a review came back to nothing. A task needs no new record:
+ * its work item, its handoff and whether its conversation is on the canvas
+ * already say which of three things it is.
+ *
+ * - `finished` — accepted (merged). Nothing to do but look.
+ * - `needs-you` — its lane is ready to review, or it is blocked on an answer.
+ * - `asleep` — its conversation is on the canvas with no process (a chat's
+ *   process always ends with the app); it picks up on the next message.
+ *
+ * The panel named is the one "Show" goes to. Each line is `info`: this is
+ * news, and "Got it" clears it; the task keeps its own state on its card.
+ */
+export type ReopenTaskOutcome = 'finished' | 'needs-you' | 'asleep'
+
+export interface ReopenTask extends ReopenPanel {
+  outcome: ReopenTaskOutcome
+  /** What a lone line adds after the outcome — "merged into main as abc1234", "ready to review". */
+  detail?: string
+  /**
+   * When the fact the line reports last moved: the merge's `at` for
+   * `finished`, the work item's `updatedAt` otherwise. `reopenTaskNews`
+   * compares it with the last exit. Absent = unknown.
+   */
+  changedAt?: number
+}
+
+/**
+ * M401 follow-up (critic). ONLY NEWS COMES BACK. Without this every launch
+ * re-announced every old task — "finished" for a merge from last week, "asleep"
+ * for every chat (a chat's process always ends with the app) — and "Got it"
+ * holds only for the session, so the nag was permanent. The last exit's `at`
+ * is the one "since you were here" this app already records, so no new key:
+ * a line survives only if its fact moved after that exit. With no exit time,
+ * or no time on the task, `finished` and `asleep` say nothing (they are never
+ * a thing to do) and only `needs-you` stays, because that one IS a thing to do.
+ * `openedAt` closes the window at the other end: the notice is live, and a
+ * fact that moved during THIS launch (Mark reviewed, a merge) is the person's
+ * own act, not something that happened while they were away.
+ * The limit: `updatedAt` moves on the work item's own patches, so a lane that
+ * changed while the app was closed (a tmux agent committing) is not seen as
+ * news until something patches its item.
+ */
+export function reopenTaskNews(tasks: readonly ReopenTask[], exitAt: number | undefined, openedAt = Infinity): ReopenTask[] {
+  const known = exitAt !== undefined && Number.isFinite(exitAt)
+  return tasks.filter((t) => (known && t.changedAt !== undefined ? t.changedAt > exitAt && t.changedAt < openedAt : t.outcome === 'needs-you'))
+}
+
+/**
+ * The handoff state a task came back in, as one of the three outcomes; null
+ * says nothing (never started, lane gone). `asleep` needs the conversation on
+ * the canvas — without it there is nothing to wake, and the task's card
+ * already says what it is.
+ */
+export function reopenTaskOutcome(state: string | undefined, merged: boolean, conversationOpen = true): ReopenTaskOutcome | null {
+  if (merged || state === 'accepted') return 'finished'
+  if (state === 'ready' || state === 'shared' || state === 'blocked') return 'needs-you'
+  if ((state === 'working' || state === 'empty') && conversationOpen) return 'asleep'
+  return null
+}
+
+/** The line's added words for a lone task: where a finished one went, or why one needs you. */
+export function reopenTaskDetail(outcome: ReopenTaskOutcome, facts: { merged?: { into: string; sha: string }; state?: string; word?: string }): string | undefined {
+  if (outcome === 'finished') return facts.merged === undefined ? undefined : mergedLine(facts.merged)
+  if (outcome === 'needs-you') return facts.state === 'blocked' ? 'it is waiting on an answer' : facts.word
+  return undefined
+}
+
+function taskNames(list: readonly ReopenPanel[]): string {
+  if (list.length === 1) return `“${list[0]!.label}”`
+  if (list.length === 2) return `“${list[0]!.label}” and “${list[1]!.label}”`
+  return `${list.length} tasks`
+}
+
+/** One line per outcome, the terminal lines' grouping: needs you first, then finished, then asleep. */
+export function reopenTaskLines(tasks: readonly ReopenTask[]): ReopenLine[] {
+  const lines: ReopenLine[] = []
+  const of = (o: ReopenTaskOutcome): ReopenTask[] => tasks.filter((t) => t.outcome === o)
+  const one = (list: readonly ReopenTask[]): string => (list.length === 1 && list[0]!.detail !== undefined && list[0]!.detail !== '' ? ` — ${list[0]!.detail}` : '')
+  const needs = of('needs-you'), done = of('finished'), asleep = of('asleep')
+  if (needs.length > 0) lines.push({ group: 'task', outcome: 'needs-you', tone: 'info', text: `${taskNames(needs)} ${needs.length === 1 ? 'needs' : 'need'} you${one(needs)}`, panels: needs.map(({ id, label }) => ({ id, label })) })
+  if (done.length > 0) lines.push({ group: 'task', outcome: 'finished', tone: 'info', text: `${taskNames(done)} finished${one(done)}`, panels: done.map(({ id, label }) => ({ id, label })) })
+  if (asleep.length > 0) lines.push({ group: 'task', outcome: 'asleep', tone: 'info', text: `${taskNames(asleep)} ${asleep.length === 1 ? 'is' : 'are'} asleep — ${asleep.length === 1 ? 'it picks' : 'each picks'} up on your next message`, panels: asleep.map(({ id, label }) => ({ id, label })) })
   return lines
 }
 

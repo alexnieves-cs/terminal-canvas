@@ -107,7 +107,12 @@ function RailPanelRowImpl({
       </button>
       {/* M105. The agent's last line said — a second line on a chat's row, from
           the transcript's last complete text block, cut from the right. */}
-      {last.line !== '' && <span className="rail-row__last" data-rail-last title={last.line}>{last.line}</span>}
+      {/* M401 (B2). A settled task's outcome outranks the last line: after a
+          merge the agent's own last words ("it hasn't been merged") are
+          history, and the row is the place a person reads the task's state. */}
+      {row.outcome !== undefined
+        ? <span className="rail-row__last" data-rail-last data-rail-outcome title={row.outcome}>{row.outcome}</span>
+        : last.line !== '' && <span className="rail-row__last" data-rail-last title={last.line}>{last.line}</span>}
       {/* M66. The wake control is a WORD, and every terminal row keeps its
           slot so the state column lines up whether or not the row can be
           started: ▶ was the rail's only unlabelled control (M61's critic,

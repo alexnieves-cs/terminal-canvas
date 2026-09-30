@@ -1977,6 +1977,40 @@ if (GIT) {
       JSON.stringify({ merged, unmerged }))
   }
 
+  // M401 (B2). accepted.lane.1 — the accepted sentence promises a lane only
+  // while there is one: after the review's own Remove lane, the section is
+  // gone and the detail says the lane was removed. mergedLine is the one
+  // spelling of "merged into main as <sha7>" the navigator and the return
+  // notice share with it.
+  {
+    const mark = { at: 1, signature: 'deadbeef', files: 2 }
+    const kept = R.reviewHandoff({ item: laned({ reviewed: mark, merged: { into: 'main', sha: 'ef90985abcdef' } }), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+    const removed = R.reviewHandoff({ item: laned({ reviewed: mark, merged: { into: 'main', sha: 'ef90985abcdef' } }), section: undefined, supervision: ended })
+    const line = R.mergedLine({ into: 'main', sha: 'ef90985abcdef' })
+    ok('accepted.lane.1 an accepted task says its lane stays while the lane is listed and says it was removed once it is not — never `lane missing`, which offers Start work again for work that landed; mergedLine is the shared "merged into main as <sha7>"',
+      kept.state === 'accepted' && /the lane stays until you remove it/.test(kept.detail) &&
+        removed.state === 'accepted' && /its lane has been removed/.test(removed.detail) && !/stays/.test(removed.detail) &&
+        line === 'merged into main as ef90985' && kept.detail.includes(line) && removed.detail.includes(line),
+      JSON.stringify({ kept, removed, line }))
+  }
+
+  // M401 (B9). reviewed.copy.1 — "you reviewed these change" was the typo.
+  {
+    const ID = { base: 'b1', content: 'a'.repeat(32) }
+    const current = (files) => R.reviewHandoff({
+      item: laned({ reviewed: { at: 5, signature: R.reviewSignature(files), files: files.length, identity: ID } }),
+      section: section({ ...changes(files), identity: ID }), supervision: ended
+    })
+    const one = current([file('a.ts', 1, 0)])
+    const two = current([file('a.ts', 1, 0), file('b.ts', 2, 0)])
+    ok('reviewed.copy.1 the current-review sentence agrees in number — "this change" for one file, "these changes" for more — and never says "these change"',
+      one.standing === 'current' && two.standing === 'current' &&
+        /you reviewed this change and/.test(one.detail) && /you reviewed these changes and/.test(two.detail) &&
+        !/these change\b/.test(one.detail + two.detail),
+      JSON.stringify({ one: one.detail, two: two.detail }))
+  }
+
+
   {
     const NAME = 'readiness.1 the eight handoff states each come from their own input and the priority holds — no lane outranks everything, execution outranks the diff, a clean lane is `empty` rather than a green completion, a SHARED repository is its own state and is never called `ready to review`, and no arm names a door that does not exist'
     try {

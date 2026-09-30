@@ -5279,6 +5279,62 @@ try {
       f(null, true).quit === '' && f(null, true).closeWindow === '' && f('tmux', true).closePanel === P.CLOSE_PANEL_FACT,
       JSON.stringify([f('tmux', true), f('direct', false)]))
   } catch (e) { ok('persist.4 (threw)', false, String(e)) }
+  // M401 (B7). reopen.task.1 — the return covers TASK-shaped work: a merged
+  // task is finished, a lane ready to review or blocked needs you, a stopped
+  // conversation is asleep, and a task with no lane says nothing. One line
+  // per outcome, needs-you first, each naming the panels "show" goes to, and
+  // every task line is news ("Got it" clears it), never a problem.
+  try {
+    const o = P.reopenTaskOutcome
+    const outcomes = [o('ready', false), o('blocked', false), o('shared', false), o('accepted', true), o(undefined, true), o('working', false), o('empty', false), o('no-lane', false), o('lane-missing', false), o(undefined, false)]
+    const one = P.reopenTaskLines([{ id: 'c1', label: 'Add a greeting', outcome: 'finished', detail: 'merged into main as ef90985' }])
+    const mixed = P.reopenTaskLines([
+      { id: 'c1', label: 'A', outcome: 'asleep' }, { id: 'c2', label: 'B', outcome: 'finished' },
+      { id: 'c3', label: 'C', outcome: 'needs-you', detail: 'ready to review' }, { id: 'c4', label: 'D', outcome: 'needs-you' }
+    ])
+    ok('reopen.task.1 a task comes back finished, needing you or asleep from its own handoff, one line per outcome with needs-you first, every line info with the panels to show',
+      outcomes.join() === 'needs-you,needs-you,needs-you,finished,finished,asleep,asleep,,,' &&
+        one.length === 1 && one[0].group === 'task' && one[0].tone === 'info' && one[0].outcome === 'finished' &&
+        one[0].text === '“Add a greeting” finished — merged into main as ef90985' && one[0].panels[0].id === 'c1' &&
+        mixed.map((l) => l.outcome).join() === 'needs-you,finished,asleep' &&
+        mixed[0].text === '“C” and “D” need you' && mixed[0].panels.map((p) => p.id).join() === 'c3,c4' &&
+        /“A” is asleep/.test(mixed[2].text) && mixed.every((l) => l.tone === 'info') &&
+        P.reopenTaskLines([]).length === 0 &&
+        // Asleep needs the conversation on the canvas; the detail is the shared merge sentence.
+        P.reopenTaskOutcome('working', false, false) === null && P.reopenTaskOutcome('ready', false, false) === 'needs-you' &&
+        P.reopenTaskDetail('finished', { merged: { into: 'main', sha: 'ef90985abc' } }) === 'merged into main as ef90985' &&
+        P.reopenTaskDetail('needs-you', { state: 'blocked', word: 'needs you' }) === 'it is waiting on an answer' &&
+        P.reopenTaskDetail('needs-you', { state: 'ready', word: 'ready to review' }) === 'ready to review',
+      JSON.stringify({ outcomes, one, mixed }))
+  } catch (e) { ok('reopen.task.1 (threw)', false, String(e)) }
+  // M401 follow-up (critic). reopen.task.2 — the task lines are NEWS, not a
+  // standing list. Two launches over the same four tasks, through the real
+  // filter and the real line builder: launch 1 (last exit at 100, opened at
+  // 400) reports only what moved in between; launch 2 (exit at 500, nothing
+  // moved since) reports nothing — before this, both launches said the same
+  // four things forever. With no exit time, only a real needs-you survives,
+  // and a fact from THIS launch (after openedAt) is the person's own act.
+  try {
+    const tasks = [
+      { id: 'a', label: 'Merged away', outcome: 'finished', detail: 'merged into main as ef90985', changedAt: 150 },
+      { id: 'b', label: 'Ready', outcome: 'needs-you', detail: 'ready to review', changedAt: 160 },
+      { id: 'c', label: 'Old ready', outcome: 'needs-you', changedAt: 50 },
+      { id: 'd', label: 'Old chat', outcome: 'asleep', changedAt: 40 },
+      { id: 'e', label: 'Merged last week', outcome: 'finished', changedAt: 20 }
+    ]
+    const launch = (exitAt, openedAt) => P.reopenTaskLines(P.reopenTaskNews(tasks, exitAt, openedAt))
+    const first = launch(100, 400)
+    const second = launch(500, 900)
+    const noExit = launch(undefined, 400)
+    const untimed = P.reopenTaskNews([{ id: 'f', label: 'F', outcome: 'finished' }, { id: 'g', label: 'G', outcome: 'needs-you' }, { id: 'h', label: 'H', outcome: 'asleep' }], 100, 400)
+    const thisLaunch = P.reopenTaskNews([{ id: 'i', label: 'I', outcome: 'needs-you', changedAt: 450 }], 100, 400)
+    ok('reopen.task.2 across two launches the task lines report only what moved between the last exit and this launch, the second launch over unchanged state says nothing, and with no time only a real needs-you stays',
+      first.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b,finished:a' &&
+        second.length === 0 &&
+        noExit.map((l) => l.outcome + ':' + l.panels.map((p) => p.id).join('+')).join() === 'needs-you:b+c' &&
+        untimed.map((t) => t.id).join() === 'g' && thisLaunch.length === 0,
+      JSON.stringify({ first, second, noExit, untimed, thisLaunch }))
+  } catch (e) { ok('reopen.task.2 (threw)', false, String(e)) }
   try {
     const { mkdtempSync, existsSync } = require('node:fs')
     const { tmpdir } = require('node:os')

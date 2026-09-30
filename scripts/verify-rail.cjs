@@ -145,6 +145,21 @@ ok('9 starting says so', R.railTail({ kind: 'starting' }, false) === 'starting')
     R.railSignature(R.buildRailRows([panel('n1')], map, new Set(['n1']))) !== base)
 }
 
+// M401 (B2). rail.outcome.1 — a merged task's conversation carries its
+// outcome on its row (in place of the agent's stale last line), the outcome
+// moves the signature so the frozen array cannot keep the old text, and a row
+// with no outcome is byte-identical to one built without the argument.
+{
+  const map = statuses({ n1: running(1, '/bin/zsh') })
+  const plain = R.buildRailRows([panel('n1'), panel('n2')], map, NONE)
+  const none = R.buildRailRows([panel('n1'), panel('n2')], map, NONE, undefined, undefined, undefined, () => undefined)
+  const merged = R.buildRailRows([panel('n1'), panel('n2')], map, NONE, undefined, undefined, undefined, (id) => (id === 'n2' ? 'merged into main as ef90985' : undefined))
+  ok('rail.outcome.1 the outcome rides only the row it names, moves the signature, and is absent (same signature) when there is none',
+    merged[1].outcome === 'merged into main as ef90985' && !('outcome' in merged[0]) &&
+      R.railSignature(merged) !== R.railSignature(plain) && R.railSignature(none) === R.railSignature(plain),
+    JSON.stringify(merged.map((r) => r.outcome)))
+}
+
 // 14. FIELD SEPARATION. A label is USER TEXT, and `railTail`'s 'error' case
 //     returns `status.message` VERBATIM — the one tail value a fixture can
 //     set to arbitrary text, which is what lets the separator itself move
@@ -3805,6 +3820,15 @@ console.log('\n' + '='.repeat(60))
     reopened?.lastOutcome === 'ready to review' && reopened?.nextAction === 'Review' && reopened?.action === 'review' &&
       running?.lastOutcome === 'working' && running?.action === 'resume' && summary?.action === undefined,
     JSON.stringify({ reopened, running }))
+  // M401 (B2). resume.done.1 — closing a merged task's conversation retains
+  // an outcome; a DONE task is never offered as "Resume work" for it.
+  {
+    const doneOnly = pick([{ id: 'm', title: 'M', state: 'done' }], [{ itemId: 'm', capturedAt: 9 }])
+    const doneAndLive = pick([{ id: 'm', title: 'M', state: 'done' }, { id: 'r', title: 'R', state: 'todo' }], [{ itemId: 'm', capturedAt: 9 }, { itemId: 'r', capturedAt: 1 }])
+    ok('resume.done.1 a retained outcome of a DONE task is not a resume subject — the next retained or open task is, and a board of only done work offers none',
+      doneOnly === null && doneAndLive?.itemId === 'r',
+      JSON.stringify({ doneOnly, doneAndLive }))
+  }
   const ctx = typeof R.buildInspectorContext === 'function' ? R.buildInspectorContext({ panel: { kind: 'chat', rect: { id: 'c', x: 0, y: 0, w: 1, h: 1 } }, agentState: 'wants-you' }) : null
   const applies = typeof R.inspectorPrimaryApplies === 'function' ? R.inspectorPrimaryApplies({ kind: 'file' }) : null
   ok('m270.inspector.1 context band names the next action from facts; Restart does not apply to a file',
