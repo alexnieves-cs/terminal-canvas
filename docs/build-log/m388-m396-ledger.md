@@ -365,10 +365,18 @@ paints at the true camera. The critic was told that alone is not a verdict.
 - workflow-edit — BETTER — the node library whole instead of cut at the left.
 - zoomed-out / zoomed-out-dark — critic BETTER with half-sliced last lines on small cards → partly FIXED after: the far body is the size container (the first cut named a class no element carries and did nothing), and a short card's name takes one line with an ellipsis while its kicker and state give way; the lead looked — "toolbox ·…", "Jira…", "Watchdog fire…" whole. OWED: two medium cards with three-line names ("codex api thread", "plan the milestone") still lose their last line at the card's edge.
 
-**Not written, on purpose:** 19 scenes differed from their goldens in the update run but render
-identically on main and on this branch (across, browser, chat, composer, edge-waiting, github,
-inspector-caps, integrations, plan-approval, queue-hold, relay, routine, runs, shared-canvas,
-shared-offline, team-ask, teammate, trail, watcher). That is golden debt from earlier runs, not
-this one's change; re-baselining it here would be the blind re-baseline the rule forbids. Those
-goldens were restored, and those scenes stay red in `verify:visual` as they are on main.
+**A third, narrow critic pass — 19 more scenes.** The lead first misfiled 19 scenes as older
+golden debt: they render the same as main by a whole-image pixel fraction. By the suite's own
+metric (32px tiles, the 0.35 budget), main's renders PASS their goldens and this branch's do
+not. In every one of them, the only tile past the budget is the bottom-right HUD row, which is
+"+ Create" joining the HUD. A fresh critic judged them with that brief ("nothing blocks"):
+- across — BETTER — "+ Create" is off the top-left panel's edge; the wider HUD covers empty canvas.
+- browser / edge-waiting / github / routine / teammate / trail — SAME — the corner Create is gone from empty canvas; the HUD grew over empty canvas.
+- chat / integrations — BETTER — Create no longer sits on the file panel's code line.
+- composer / inspector-caps / team-ask — BETTER — Create is off the panel; the pill stepped 23px left and is clear.
+- plan-approval / queue-hold — SAME (net) — Create is off the panel. The wider needs-you pill stepped left and now overlaps 31px of a terminal's blank right edge, part of its resize strip; no text is covered. Watch item.
+- relay / shared-canvas / shared-offline — BETTER — the minimap is gone, on purpose: every object is in view (`minimapNeeded`, M395). The HUD stands alone over empty canvas.
+- runs — SAME — the HUD's new strip covers the blank middle of a row whose badge was already under it. (Its `pid` is a live value and differs on every capture; that is older than this run.)
+- watcher — BETTER (net) — the corner Create no longer covers "project". The HUD now overlaps the blank top-right corner of the `worker b` tile, and its chip keeps 33px of clearance. Watch item.
+These 19 goldens were written in a second update after the gate.
 `starter` is the known baseline red (the harness cannot paint it).
