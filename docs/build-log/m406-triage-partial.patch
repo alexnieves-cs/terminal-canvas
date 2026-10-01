@@ -1,0 +1,85 @@
+diff --git a/scripts/lib/place-probe.cjs b/scripts/lib/place-probe.cjs
+index 54c544a8..e52095d6 100644
+--- a/scripts/lib/place-probe.cjs
++++ b/scripts/lib/place-probe.cjs
+@@ -86,7 +86,7 @@ async function zoomInto(wc, lo, hi) {
+  * the canvas host inset PLACE_EDGE_PX (16) as the world in view; the floating
+  * chrome — the minimap while it shows, the HUD, the pill's rest row, a rail or
+  * inspector over the host — as world rects; every panel's store rect plus the
+- * placement's reserved rim over a terminal; the window's centre in the world
++ * placement's reserved rim over a terminal; the canvas host's centre in the world
+  * (onSpawn's point). Then the pure rule itself (placement.ts's placeNew,
+  * bundled into the entry) — the rule is pinned by verify:viewport, and what
+  * THIS pins is that the live door feeds it what the canvas shows.
+@@ -113,7 +113,12 @@ async function measurePlacement(wc) {
+     }
+     const seen = new Set()
+     const panels = [...document.querySelectorAll('.world .panel[data-panel-id]')].filter((p) => { const id = p.getAttribute('data-panel-id'); if (seen.has(id)) return false; seen.add(id); return true }).map((p) => ({ x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: parseFloat(p.style.width), h: parseFloat(p.style.height), terminal: p.classList.contains('pf--kind-terminal') })).filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite))
+-    return { vp, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (window.innerWidth / 2 - vp.x) / vp.scale, y: (window.innerHeight / 2 - vp.y) / vp.scale } }
++    // The HOST's centre, host-local: ⌘N (useViewport's case 'n') asks for
++    // screenToWorld(bounds / 2) of the canvas host, and vp is host-local too.
++    // M406: this read the WINDOW's centre, which is the host's only while no
++    // pane or bar insets the canvas — 174 screen px off in the harness, the
++    // whole of core 7, 51 and place.still.1's miss.
++    return { vp, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (hb.width / 2 - vp.x) / vp.scale, y: (hb.height / 2 - vp.y) / vp.scale } }
+   })()`)
+ }
+ 
+diff --git a/scripts/verify-panels-core.cjs b/scripts/verify-panels-core.cjs
+index bff14fd4..51a33278 100644
+--- a/scripts/verify-panels-core.cjs
++++ b/scripts/verify-panels-core.cjs
+@@ -8,7 +8,7 @@
+ let runPanelsSuite
+ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
+ 
+-const WATCHDOG_MS = 75000 // measured 2026-09-10 in the Electron tier after M234–M237 (the chromeless checks), two green-but-for-headroom runs: 58.4s chained, 59.6s alone; 1.25x the slower, to the next second. Was 63000, which headroom.1 flagged at 93–95% before any watchdog fired
++const WATCHDOG_MS = 88000 // measured 2026-09-30 (M406) after M402/M405 added place.free.1, place.still.1, title.default.2, title.rename.1 and the placement probe's pins, three runs at load 3–5: 68.8s (in the gate), 69.4s, 70.1s alone; 1.25x the slowest, to the next second. Was 75000 (M234–M237: 58.4s, 59.6s), which headroom.1 read at 92–94%
+ 
+ const { occupiedWorld, overlapsRect, onScreen, cameraStill, zoomInto, measurePlacement, expectedSpot, storeRect } = require('./lib/place-probe.cjs')
+ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
+diff --git a/scripts/verify-panels-product.cjs b/scripts/verify-panels-product.cjs
+index 605ded48..4ceb8f2b 100644
+--- a/scripts/verify-panels-product.cjs
++++ b/scripts/verify-panels-product.cjs
+@@ -6566,7 +6566,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
+       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+       await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(r.name)}); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+       await settle()
+-      palette[r.id] = await wc.executeJavaScript(`[...document.querySelectorAll('.palette__row .palette__title')].map((t) => t.textContent.trim()).slice(0, 12)`)
++      // M406: the WHOLE rendered list, not its first twelve. The palette sorts
++      // section-first, so a panel-group row whose haystack fuzzily holds the
++      // word ("clipboard" for Board) outranks the canvas-group "Open Board";
++      // the first cut's slice read that as the row naming another word. This
++      // check is about the row's NAME, not its rank.
++      palette[r.id] = await wc.executeJavaScript(`[...document.querySelectorAll('.palette__row .palette__title')].map((t) => t.textContent.trim())`)
+       await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })()`)
+       await settle()
+     }
+@@ -6576,7 +6581,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
+       (r.id === 'files' || r.heading === r.name) &&
+       (palette[r.id] === undefined || palette[r.id].some((t) => word(r.name).test(t)))))
+     ok('names.agree.1 every dock pane has one name: its button, tooltip, pane heading, Hide control and palette row agree, measured in the running shell',
+-      rows.length >= 6 && disagree.length === 0, JSON.stringify({ disagree, palette }))
++      rows.length >= 6 && disagree.length === 0,
++      JSON.stringify({ disagree, palette: Object.fromEntries(Object.entries(palette).map(([id, titles]) => { const name = rows.find((r) => r.id === id)?.name ?? ''; const at = titles.findIndex((t) => word(name).test(t)); return [id, { rows: titles.length, at, row: at < 0 ? null : titles[at] }] })) }))
+ 
+     // dock.dup.1. The dock holds no door the top bar already holds: no
+     // Orchestrate (the center segment's), no Workspaces (the crumb's). Both
+diff --git a/scripts/verify-panels-shell.cjs b/scripts/verify-panels-shell.cjs
+index f3ab0bf3..609ba1a8 100644
+--- a/scripts/verify-panels-shell.cjs
++++ b/scripts/verify-panels-shell.cjs
+@@ -2241,7 +2241,11 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
+     // M46: the navigator shows ONE pane, and these four checks read the
+     // Workspaces list — so show it, the way a user would, and put Panels back
+     // after 96 for everything below.
+-    await dockTo('workspaces'); await settle()
++    // M406: through the top bar's workspace crumb. M404 (C2) removed the dock's
++    // Workspaces button as a duplicate door and repointed every other
++    // `[data-dock="workspaces"]` click; this `dockTo` was missed, returned
++    // false, and 95–96 then read a list that was never shown.
++    await wc.executeJavaScript(`document.querySelector('[data-crumb="workspace"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
+ 
+     // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
+     //     Check 64 makes this claim for the palette's switcher and explains

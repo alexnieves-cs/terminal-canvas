@@ -1838,3 +1838,95 @@ same dead door this milestone fixed in the shot harness. It's pre-existing and n
 update): 19/81. These scenes now match their goldens again: relay, flowchart-dark, trail, github, across, browser, the
 shared-*/share-* scenes, inspector-caps, queue-hold, plan-approval, team-ask, replay and flowchart. All 62 others
 still differ, mostly from this run's intended chrome changes.
+
+## Where the run stopped (2026-09-30, on the user's call)
+
+The user asked to stop at a good stopping point. State at `572ae56c` on `m397-daily-loop`:
+**not merged to main, not pushed, goldens NOT written.**
+
+**Landed:**
+- A1–A11 and B1–B9.
+- C1, C2, C3 and C5.
+- D1, D2 and D3.
+- Every milestone got a fresh critic, and the critics' material findings were fixed in follow-up commits (M397–M410).
+
+**Not done:** C4, C6–C9 and D4–D10. They were never started: per the prompt, three things that land completely beat eight half-built.
+
+**Owed, in order:**
+1. **Goldens.** The golden critics' first-pass sentences are below. M410 then fixed what they flagged:
+   - the auto scene left its chat maximised, which moved later scenes;
+   - create doors centred on the window, not the canvas;
+   - the real prompt was visible in captures;
+   - a terminal's name strip hid under a panel above it;
+   - long state words overflowed;
+   - the review rail was too narrow;
+   - four scenes were dead or off target.
+
+   So every scene M410 touched needs a fresh critic look before `UPDATE_GOLDENS=1`. The `starter` scene paints again (`603bd037`).
+2. **The gate.** `npm run verify` was never run whole on this branch. M406's triage was stopped at the user's call; its partial harness fix is `docs/build-log/m406-triage-partial.patch`, and later commits may have superseded it. Reds that need attributing against 6362a94e:
+   - panels:shell 95–96, which click the removed dock Workspaces button (C2). The checks need updating.
+   - first-run `revamp.create.1`: M408's attribute.
+   - Earlier unattributed: core 7, 51, `place.still.1` (M410 reports core 105/105 green); product `codex.1`, `editor.1d`, `workflow.run.1`; agents `attention.1`. Check these with a single quiet run.
+3. **Then merge to local main** if the reds left are baseline only. **The A2 history decision is the user's:** the pushed `starter.png` showed the author's ~/.claude.
+4. **Hand-checks on a real Mac:**
+   - Choose…'s native dialog in the start sheet;
+   - GitHub sign-in from People;
+   - two-finger right-click and ⌃-click;
+   - a menu Paste vs ⌘V into a login shell (the `[200~` report did not reproduce).
+
+### Golden critics' first pass (sentences, before M410's fixes)
+#### Batch 4 (header flip spawn-sheet start-work search search-empty inspector-*) — all INTENDED
+- header — INTENDED — the narrow terminal's name, state and ⋯/⛶/× sit whole on the rim strip above the frame; rows 0–1 visible; the ⋯ menu reads whole with more rows.
+- flip — INTENDED — the flipped summaries are unchanged; only the top bar, dock and placement differ.
+- spawn-sheet — INTENDED — the fields are unchanged; "Create panel" is filled; the header gains "Ask a question" (B8).
+- start-work — INTENDED — "New task": Task → Repository with Choose… → a collapsed who line → the permission-mode line; "Start task" is filled.
+- search / search-empty — INTENDED — the palette is identical; only the background canvas changed (the new top bar and dock, no subagent cards).
+- inspector-detail / -work / -tools / -activity — INTENDED — the panes are identical; only the canvas behind changed.
+Notes, not regressions:
+- A connector arrowhead touches the "claude — api (2)" rim strip at ~(769,320).
+- A dark bar at x≈840 inside a selected terminal (an xterm scrollbar?).
+- The inspector-tools skill names are still large (A11 didn't reach this pane).
+#### Batch 1 (launcher kinds kinds-dark skills chat integrations github vault watcher teammate): all INTENDED
+- launcher — INTENDED — the tip's button reads "Open the starter canvas" with shorter tip copy; the dock lost two icons; the new top bar.
+- kinds — INTENDED — the terminal name/state is on the rim strip and rows 0–2 are visible; the review reads "0 of 2 seen"; "Start task…" on the work card.
+- kinds-dark — INTENDED — the same, correctly themed.
+- skills — INTENDED — the skill names are on the type scale, there's no SUBAGENTS card on the plain shell, and the terminal has its strip and grips. The intent sentence ("a card that wraps its name") is now false, so reword it.
+- chat — INTENDED — "Auto run…", grips on the selected chat, and a rim legend above the minimap edge with nothing clipped. Stale intent words predate the run.
+- integrations — INTENDED — the CONNECTIONS pane, "Auto run…", grips. The intent's "fifth pane" ordinal is stale.
+- github — INTENDED — the background terminal's strip, a body row visible, grips.
+- vault — INTENDED — "NOTES · notes" heading and grips. The intent still says "vault" and "fourth pane".
+- watcher — INTENDED — grips; the group frame moved up ~17px (the zoom-scaled rim / placement); no overlap.
+- teammate — INTENDED — the name input and routine rows are on the type scale; some rows (services lines, checkboxes, "every … minutes") are still 16px: incomplete A11, not broken.
+Note: "Start work…" → "Start task…" on cards and the resume strip (M400 copy).
+#### Batch 6 (compact workflow workflow-edit wide reduced-motion ink file-missing flowchart-dark)
+- compact — UNCLEAR → lead: INTENDED-consequence. The chrome changes are as planned. The canvas behind the drawer is framed at 117% (was 82%) on the memory panel, because the camera is inherited from earlier scenes and, since M402, creating an object no longer moves it. Re-judge after the fixes.
+- workflow — INTENDED — the top bar and dock; edges shift 1–3px. The intent sentence was already stale (Triggers/Stop/Save/Definition).
+- workflow-edit — INTENDED — the dock is regrouped (Setup); grips; ports moved off the midpoints; the minimap follows placement.
+- wide — INTENDED — the top bar and dock; ports off the edges; the "⌘\" dock hint is gone (C2).
+- reduced-motion — INTENDED — the terminal's row 0 is visible; the group frame is 16px taller (the rim); grips.
+- ink — INTENDED — the name/state on the rim, rows visible, frame +16px. Nit: the × box overhangs the corner.
+- file-missing — REGRESSION — on the terminal rim strip, a long ERROR state word ("Error invoking remote method 'pty:create'…") runs ~160px past the panel's right edge and truncates the name to "claude …". FIX: the state word must be capped and ellipsised, and the name must keep priority (D5 rule).
+- flowchart-dark — UNCLEAR → REGRESSION (privacy). Row 0 now shows the developer's REAL prompt "alexnieves@Alexs-MacBook-Pro ~ %" (the old scrim hid it). FIX: the shot harness must give its shells a neutral prompt (fenced PS1/ZDOTDIR), and every scene with a live shell must be re-checked for the real username or hostname. The "New task from this chart…" copy is M400, intended.
+#### Batch 7 (orchestration*, relay, shared-*, share-members)
+- orchestration / -dark / -working / -watch — INTENDED — the top bar, dock and "Start task…" only; the diorama is unchanged (the watch shows disclosed mid-flight motion pixels).
+- relay — UNCLEAR → FIX: the relay panel lands at the far right (x≈705–1424) of an EMPTY visible canvas instead of the centre. Investigate placeNew (what occupies the centre?).
+- shared-canvas / shared-offline / share-members — UNCLEAR, knock-on of relay: sam's placeholder butts against the HUD; the minimap's absence follows. The share dialog itself is identical.
+#### Batch 2 (routine board chat-copilot memory supervisor templates runs graph edge-firing edge-waiting)
+- routine — INTENDED — the pane type scale; "add a place…" row; grips.
+- board — INTENDED — "0 of 2 seen"; the empty-column type scale; grips.
+- chat-copilot / supervisor / templates — INTENDED — "Ask a question" in the sheet head; the filled Create.
+- runs — INTENDED — the rim strip, rows 0–1 visible; the pid is live.
+- edge-firing / edge-waiting — INTENDED — the WORKERS frame is ~10px taller (the rim); grips.
+- memory — UNCLEAR → FIX: the `claude — api (2)` rim strip is half-hidden under the memory panel above it (seeded panels stacked tighter than 16px). The name is rest-layer content and must stay visible.
+- graph — REGRESSION → FIX: the same cause hides the edge-arrival arrowhead into the terminal's top edge.
+#### Batch 5 (navigator-*, attention, overview, group*, merged, zoomed-out*)
+- navigator-panels / navigator-files / attention / overview / merged — INTENDED (with the chat-move caveat below).
+- navigator-workspaces — DEAD SCENE → FIX: k.dock('workspaces') clicks the removed [data-dock="workspaces"], so the capture equals navigator-panels. Re-point it at the crumb's workspace switcher (C2 moved the door), and make its intent true.
+- group / group-collapsed — UNCLEAR → FIX: the "WORKERS 2" label is ~16px higher (the frame grew for the rim) and half-hidden under the top bar. Either the scene's camera or the frame's label placement must keep it readable.
+- zoomed-out / -dark — UNCLEAR → FIX: the HUD reads 26% vs 18% for the same zoom(0.22). The pinch didn't reach the target (perhaps the wheel lands on a relocated card). The "about a fifth" intent is false.
+- CROSS-SCENE, UNEXPLAINED: the SEEDED "claude — api (chat)" panel and the "Watchdog fires…" work card moved to the top of the task frame. A seeded panel must not move, unless it's created at shot time. Investigate whether the placer or reveal touches restored/seeded panels. That would be a real bug: a layout load must never re-place saved panels.
+#### Batch 3 (composer tool-objects approval verbs auto subagents palette palette-query palette-dark lineup)
+- composer / verbs / auto / palette-query / lineup — INTENDED ("Auto run…", grips, ranked results; "Ask a question" and the filled Create in the sheet).
+- tool-objects / approval — REGRESSION → FIX: the review node's narrowed file column clips the card to "src/s… · 2 tool c" with no ellipsis, and "ALSO CHANGED IN THIS REPOSITORY" wraps. B3 promised full width only for ONE file. The two-file column is now too narrow. In approval the chat card behind the review is gone (placement).
+- subagents — UNCLEAR → FIX: the scene's subject (the SUBAGENTS card) is no longer visible (GitHub work covers its spot; the card draws below panels now). Re-aim the scene at a real agent session with subagents, in clear space.
+- palette / palette-dark — UNCLEAR: the seeded chat "claude — api (chat)" and its review left the PANELS rows (on-screen first), the same SEEDED-CHAT MOVE as batch 5. The tile in subagents's top-left is near blank ("turn").
