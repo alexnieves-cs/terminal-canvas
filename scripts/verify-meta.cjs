@@ -1244,6 +1244,18 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ viewport: vp, lib: lib.length, users, unmapped: none.unmapped }))
 }
 
+// affected.glb.1. A model under src/renderer/public is bytes, not a text read, so
+// a changed .glb must not ride in on a suite that walks the whole directory — and
+// is reported UNMAPPED rather than silently covered.
+{
+  const affected = require('./affected.cjs')
+  const glb = affected.select(['src/renderer/public/models/some-model.glb'])
+  const css = affected.select(['src/renderer/styles.css'])
+  ok('affected.glb.1 a changed .glb selects no suite and is UNMAPPED, while a changed stylesheet in the same tree still selects the suites that walk it',
+    glb.picked.length === 0 && glb.unmapped.length === 1 && css.picked.some((p) => p.suite.name === 'verify:styles'),
+    JSON.stringify({ glb: glb.picked.map((p) => p.suite.name), unmapped: glb.unmapped }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

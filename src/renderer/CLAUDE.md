@@ -16,15 +16,17 @@ never imported ambiently. That is the rule; the modules are where to look:
 | `@radix-ui/*` | `renderer/primitives/` | Adopters take the primitive, never the Radix package. |
 | `@xyflow/react` + `zustand` | `renderer/workflow/` | The store is the flow editor's own; it is not an app-wide state layer and should not become one. |
 | `three` + `@react-three/fiber` | `orchestration/OrchestrationCubes.tsx` and (M304) `orchestration/OrchestrationLive.tsx`, each lazily `import()`ed by `OrchestrationView` | The diorama and the Watch lens only. Measured at **+2.2MB in the FIRST chunk** when that import was static — the same trap as Monaco's row, and nothing pins it. |
+| `three` + `@react-three/fiber` + `@react-three/drei` (M412) | `world/WorldView.tsx`, `WorldOffice.tsx`, `WorldRobot.tsx`, `WorldCard.tsx` — `three`/fiber from the first three, drei from `WorldView`, `WorldOffice` and `WorldCard`; `three/examples/jsm/utils/SkeletonUtils.js` from `WorldRobot` | The 3D world view, reached at the dev-only route `#/world` through ONE `/* @__PURE__ */ lazy()` in `world/WorldRoute.tsx`, which `App.tsx` mounts only under `import.meta.env.DEV`. Named imports from drei's barrel, never `<Environment>` (a CDN fetch the CSP refuses), and `useGLTF` always with both decoders off. `verify:world world.door.1`–`.8` pin the importer set (and that the pure modules — `world-scene`, `world-roster`, `world-palette`, the store — import none of it), the lazy, the decoders, the card layer and the clip/bone names in the vendored models. `orch-zoom.3` lists the same files for `three`/fiber. |
 | `motion` | `primitives/MotionSurface.tsx`, `workflow/` | Motion still answers to the token rules in `styles.css` (`verify:styles`). |
 | `postprocessing` | `orchestration/orchestration-bloom.tsx`, reached only from the lazily-`import()`ed `OrchestrationCubes` | The diorama's bloom. Rides three.js's deferred chunk, so the first chunk pays nothing — a second importer undoes that silently, which is why `verify:orchestration orch.bloom-door.1/.2` pin the importer set AND the `lazy()`. The raw library, NOT `@react-three/postprocessing`, whose peer range would have forced a `@react-three/fiber` bump under a working scene. |
 
-**Installed with no door yet (2026-09-30).** `@react-three/drei` and
-`@react-three/postprocessing` are in `dependencies` but **nothing imports them**, so neither
-has a row above and neither is reachable from a chunk. Whoever writes the first adopter adds
-the row in the same change — an ambient import of either is the drift this table exists to
-stop, and drei in particular re-exports enough that a careless `import { ... } from
-'@react-three/drei'` pulls far more than the helper asked for.
+**Installed with no door yet (2026-09-30), now only half true (M412).** `@react-three/drei` has
+its door (the row above); `@react-three/postprocessing` is still in `dependencies` with
+**nothing importing it**, so it has no row and is reachable from no chunk. Whoever writes its
+first adopter adds the row in the same change — an ambient import is the drift this table exists to
+stop. drei re-exports enough that a careless `import { ... } from '@react-three/drei'` can pull far more
+than the helper asked for: take named helpers (`Html`, `Grid`, `OrbitControls`, `ContactShadows`)
+and measure the chunk.
 
 Taking `@react-three/postprocessing` is what the `postprocessing` row warned about: its peer
 range forced `@react-three/fiber` **9.4.0 → 9.8.1** under the working diorama. `npm run build`

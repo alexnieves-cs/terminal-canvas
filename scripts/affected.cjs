@@ -181,6 +181,8 @@ const isConsumer = (suite, files) => suite.tier === 'electron' &&
 
 /* ---- selection ------------------------------------------------------------ */
 
+const BINARY_ASSET = /\.glb$/i
+
 const select = (changed, allSuites = runner.suites()) => {
   const app = closeOver(APP_ENTRIES)
   const chosen = new Map() // name -> { suite, why }
@@ -191,7 +193,10 @@ const select = (changed, allSuites = runner.suites()) => {
     const consumer = isConsumer(suite, files)
     if (consumer) consumers.push(suite.name)
     for (const c of changed) {
-      const direct = files.has(c) || [...dirs].some((d) => c.startsWith(d + '/'))
+      // A named DIRECTORY is a text read (verify:styles walks src/renderer), and a
+      // .glb inside it is bytes no suite reads as text — counting it selected ~25
+      // renderer suites for a model file. Named explicitly by a suite it still counts.
+      const direct = files.has(c) || (!BINARY_ASSET.test(c) && [...dirs].some((d) => c.startsWith(d + '/')))
       const viaBuild = consumer && (app.has(c) || BUILD_CONFIG.test(c))
       if (direct || viaBuild) {
         covered.add(c)

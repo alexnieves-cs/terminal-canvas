@@ -5417,3 +5417,49 @@ have shrunk the transcript and moved the composer under a live answer — the co
 failure the M236 frame rule names. `verify:panels:product first.strip.1` measures it: inside the
 body, absolute, no floating hint left, no overlap with any composer button (each hit-tested), and
 Got it moves neither the body nor the composer.
+
+**A drei `<Html>` card needs a `portal` of our own (`WorldCard.tsx`, the `world-view__cards` layer in `WorldView.tsx`, M412).**
+Left to itself `Html` mounts its card in the canvas's parent, then MOVES it to the
+event-connected element the moment R3F connects events — a new effect target, so the first
+card to mount unmounts its React root from inside a layout-effect cleanup. React 19 defers
+that unmount to the end of the render, and it then empties the root the re-run effect just
+built: the first agent's card is a blank wrapper for good, and the only trace is a console
+warning ("synchronously unmount a root while React was already rendering"). Measured: three
+cards for four agents, always the first. A card layer of our own is a target that never
+changes. `verify:world world.door.5`.
+
+**A bone overlay is undone before `mixer.update` and re-captured after it (`WorldRobot.tsx`, `Rig.base`, M412).**
+three's `PropertyMixer.apply` writes a bone back only when its sampled value CHANGED since the
+last frame, so a bone on a constant track (an idle arm) is never rewritten — and a per-frame
+`rotateX` then compounds until the robot is tumbling across its desk. The first version did
+exactly that. Each overlay bone's pre-overlay pose is kept, put back ahead of the mixer and
+taken again after it, so an overlay is always added to the CLIP's pose. Bones are found by
+`isBone`, not by name: the model has a mesh node called `Head` ahead of the `Head` bone in
+traversal order, and `getObjectByName('Head')` returns the mesh. `verify:world world.door.6`.
+
+**Both glTF decoders are off at every `useGLTF` (`WorldRobot.tsx`'s `PLAIN`, M412).**
+drei's defaults are `useDraco = true` (a decoder path on a CDN, which `default-src 'self'`
+refuses) and `useMeshopt = true`, which instantiates a WebAssembly module on first use — and
+`script-src 'self'` has no `'wasm-unsafe-eval'`, so it surfaces as an unhandled rejection at
+load, from the module-scope `preload` call, before any robot exists. The models are plain
+glTF; neither decoder has work to do. `<Environment>` is the same class of mistake (it fetches an
+HDR from a CDN) and is not used: the room is lit by two directional lights and a hemisphere.
+`verify:world world.door.4`.
+
+**The world route is a HASH, and a reload under it needs a restart (`WorldRoute.tsx`, `main/bootstrap/window.ts`, M412).**
+`index.html` loads `./main.tsx` RELATIVELY, so a served `/world` would ask for
+`/world/main.tsx` and get the page back as a module. `#/world` changes nothing the window's
+`will-navigate` guard sees. That guard refuses EVERY navigation (it is the second line behind
+the drop guard), including Vite's own full reload — so the first dev launch that discovers new
+dependencies ("new dependencies optimized … reloading", as drei and SkeletonUtils did) is left
+with a page that mixes two optimized-chunk versions: two copies of React, and "Invalid hook
+call" from inside R3F. Nothing is wrong with the code; quit and relaunch once, and the cache is
+warm for good. The route is an overlay over the canvas, never a replacement: `Canvas` owns every
+xterm and PTY, and unmounting it to show a scene would detach them all.
+
+**`gl.info` reports only the LAST render of a frame unless it is reset by hand (`WorldView.tsx`'s `StatsProbe`, M412).**
+The contact-shadow pass and the scene are two `render()` calls per frame and `info.autoReset`
+zeroes the counters on each, so the readout said "1 call, 0k tris" for a scene of ~200 calls.
+The probe turns `autoReset` off and resets once per frame at priority `-1` — NEGATIVE: any
+positive `useFrame` priority takes the render away from R3F (orchestration-bloom.tsx records
+the same trap).

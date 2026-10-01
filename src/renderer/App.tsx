@@ -4,6 +4,7 @@ import type { PresetTemplate } from '@shared/ipc-contract'
 import { Canvas } from './canvas/Canvas'
 import { CanvasToaster } from './shell/CanvasToaster'
 import type { StartupInput } from './canvas/splash'
+import { WorldRoute } from './world/WorldRoute'
 
 /**
  * M4b: the starting canvas arrives from main rather than from a constant.
@@ -54,6 +55,8 @@ export function App({
           portalled (sonner does not portal), so the Electron suites can still
           address it as a descendant of `.app`. */}
       <CanvasToaster />
+      {/* The dev-only 3D world view (#/world), over the canvas rather than in place of it. */}
+      {import.meta.env.DEV ? <WorldRoute /> : null}
     </div>
   )
 }

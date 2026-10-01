@@ -10878,3 +10878,67 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 .shape--peer:hover .shape__remove, .shape__remove:focus-visible { opacity: 1; }
 .shape__remove:hover { color: var(--fg); }
+
+/* M412. The dev-only 3D world view (renderer/world/, reached at #/world). An
+   overlay over the canvas, never a replacement for it: Canvas owns every
+   terminal's xterm and PTY. Its cards are drei <Html> DOM, so they take the
+   app's tokens like any other chrome. */
+.world-route { position: fixed; inset: 0; z-index: 1200; background: var(--s-0); color: var(--fg); }
+.world-view { position: absolute; inset: 0; }
+.world-view canvas { display: block; touch-action: none; }
+/* Where drei's <Html> cards mount (WorldCard's `portal`): the canvas's own box, so a card is clipped to the view and sits under the page's buttons. */
+.world-view__cards { position: absolute; inset: 0; overflow: hidden; pointer-events: none; isolation: isolate; }
+.world-view__stats {
+  position: absolute; left: var(--sp-6); bottom: var(--sp-6);
+  font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3);
+  pointer-events: none; user-select: none;
+}
+.world-route__close {
+  position: absolute; top: var(--sp-6); right: var(--sp-6);
+  min-height: 28px; padding: 0 var(--sp-5);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--glass-2); color: var(--fg);
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 500; cursor: pointer;
+}
+.world-route__close:hover { border-color: var(--fg-3); }
+.world-route__note {
+  position: absolute; top: var(--sp-6); left: 50%; transform: translateX(-50%);
+  margin: 0; padding: var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--glass-2); color: var(--fg-2);
+  font-family: var(--font-ui); font-size: var(--t-sm);
+  pointer-events: none;
+}
+.world-route__note code { font-family: var(--font-mono); font-size: var(--t-xs); }
+
+/* The status card floats over a robot's head: anchored by its bottom-centre,
+   so it grows upward from the robot, not down over it. */
+.world-card {
+  --world-card-tone: var(--fg-4);
+  box-sizing: border-box; width: 176px;
+  transform: translate(-50%, -100%);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line-strong); border-left: 3px solid var(--world-card-tone);
+  border-radius: var(--r-md);
+  background: var(--glass-1);
+  color: var(--fg); font-family: var(--font-ui);
+  user-select: none;
+}
+.world-card[data-status="working"] { --world-card-tone: var(--iris); }
+.world-card[data-status="thinking"] { --world-card-tone: var(--violet); }
+.world-card[data-status="waiting_approval"] { --world-card-tone: var(--amber); }
+.world-card[data-status="error"] { --world-card-tone: var(--red); }
+.world-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); }
+.world-card__name { font-size: var(--t-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-card__status { flex: none; font-size: var(--t-xs); color: var(--world-card-tone); }
+.world-card[data-status="idle"] .world-card__status { color: var(--fg-4); }
+.world-card__line {
+  margin: var(--sp-2) 0 0; font-size: var(--t-xs); line-height: 1.4; color: var(--fg-2);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.world-card__line--thought { font-style: italic; color: var(--fg-3); }
+.world-card__line--error { color: var(--red); }
+.world-card__tool { margin-right: var(--sp-3); font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.world-card__line--tool[data-state="running"] .world-card__tool { color: var(--iris); }
+.world-card__line--tool[data-state="failed"] .world-card__tool { color: var(--red); }
+.world-card__detail { display: block; margin-top: var(--sp-1); color: var(--fg-3); }
