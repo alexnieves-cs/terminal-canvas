@@ -79,6 +79,12 @@ const {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// M410. This Mac's user and host names, which no capture may show (kit.shot).
+const PRIVATE_WORDS = (() => {
+  const { userInfo, hostname } = require('node:os')
+  return [userInfo().username, hostname().split('.')[0]].filter((w) => typeof w === 'string' && w.length >= 3)
+})()
+
 // M363. A fixture time the page prints as a CLOCK ("missed at 06:16 AM") is
 // pinned to that clock, never `Date.now() - n`: the routine scene's golden read
 // the hour it was painted and failed whenever it was run at another one. The
@@ -252,7 +258,7 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of a selected agent panel, each card the skill\'s name and its phase as a sentence, the host\'s `hide 4 skills` capsule in its chrome; the dashed tether on the host\'s edge.',
     run: async (kit) => { await kit.goTo('claude — plan the milestone'); await sleep(1200); await kit.shot('trail') } },
-  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the Skills section with a column per shelf placement, each card the skill\'s name, a note and its facts, the column\'s count beside its `⋯`; the search field above; a card that wraps its name.',
+  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the Skills section with a column per shelf placement, each card the skill\'s name on the pane\'s type scale, a note and its facts, the column\'s count beside its `⋯`; the search field above.',
     run: async (k) => {
       await k.selectRail('live'); await k.dock('skills'); await sleep(1200)
       // The rack scrolls horizontally and the navigator is a fixed 300px, so
@@ -276,7 +282,7 @@ const SCENES = [
     } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored transcript with the user\'s turn as a soft bubble on the right, the assistant\'s answer as unboxed prose in the UI face at the measure, a collapsed tool row, the state pill reading asleep, a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled (M167).',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
-  { name: 'integrations', intent: 'The Integrations page: the navigator\'s fifth pane, every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
+  { name: 'integrations', intent: 'The Integrations page: the navigator\'s Connections pane (headed CONNECTIONS), every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
     run: async (kit) => {
       // Two of the three states on screen: GitHub connected as octocat, Jira
       // with a token the last verify rejected. Seeded through the harness's
@@ -313,7 +319,7 @@ const SCENES = [
       await kit.shot('across-context')
       await kit.js(`(() => { const b = document.querySelector('[aria-label="Hide the context pane"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
     } },
-  { name: 'vault', intent: 'The vault: the navigator\'s fourth pane lists a folder of markdown notes by title, newest first, and the open note paints its `[[links]]` as links — a resolved one in the accent, an unresolved one dashed and offering to be created — with a Backlinks section beneath naming the notes that point here and the line. A note is still a file panel; a vault is many of them plus an index.',
+  { name: 'vault', intent: 'The vault: the navigator\'s Notes pane (headed `NOTES · notes`, the vault folder\'s name) lists a folder of markdown notes by title, newest first, and the open note paints its `[[links]]` as links — a resolved one in the accent, an unresolved one dashed and offering to be created — with a Backlinks section beneath naming the notes that point here and the line. A note is still a file panel; a vault is many of them plus an index.',
     run: async (kit) => {
       await kit.js(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
       await sleep(600)
@@ -563,9 +569,69 @@ const SCENES = [
       await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
       await sleep(400)
       await k.shot('auto')
+      // M410. And Restore, the same door's other row. A maximised chat
+      // persists, so leaving it maximised moved the SEEDED chat (and the work
+      // card anchored to it) to wherever this scene's camera stood, for every
+      // scene after this one — the golden critics read it as a layout load
+      // re-placing a saved panel. It was this scene's verb, never the load.
+      await k.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(200)
+      await k.press('k', { metaKey: true }); await sleep(400)
+      await k.type('restore panel'); await sleep(300)
+      await k.enter(); await sleep(700)
+      const at = await k.js(`(() => { const e = document.querySelector('.panel[data-panel-id="chat"]'); return e ? e.style.left + ',' + e.style.top : null })()`)
+      if (at !== '770px,570px') throw new Error(`auto scene: Restore panel left the seeded chat at ${at}, not its saved 770,570`)
     } },
-  { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
-    run: async (k) => { await k.goTo('claude — api (2)'); await k.shot('subagents') } },
+  // M410. Re-aimed. Since M398 the card is for AGENT sessions only (a plain
+  // shell is never watched) and draws BELOW every panel, so the fixture's
+  // `sh -c 'echo claude'` terminals never raised it and the old camera showed
+  // GitHub work where it used to be. Two real agent sessions (`agent:
+  // claude-code`, the spec field the watcher keys on) are minted through
+  // main's own spawn push in EMPTY world space, shot, and closed again with
+  // the × a person presses (twice: a running process arms first), so no
+  // later scene sees them.
+  { name: 'subagents', intent: 'Two live agent sessions in one repository, made in open canvas: the app cannot tell their subagents apart, so beside them a SUBAGENTS card says `2 panels share this repository, so their subagents cannot be told apart` — a deliberate card on clear canvas, nothing over it, not a rendering error.',
+    run: async (k) => {
+      // The context pane (auto opened it) would sit over the cards' right
+      // half; closed for this scene and reopened after, for the palette's.
+      const inspector = await k.js(`(document.querySelector('.shell__inspector')?.getBoundingClientRect().width ?? 0) > 0`)
+      await k.context(false)
+      await k.goTo('the kinds')
+      await k.js(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 700, clientY: 450, deltaX: 9000, deltaY: -6000, deltaMode: 0 })); true`)
+      await sleep(600)
+      const before = await k.js(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      for (const title of ['claude — explore the flush gate', 'claude — test the flush gate']) {
+        k.wc.send('preset:spawn', { cwd: REPO, command: '/bin/sh', args: ['-c', 'echo "$ claude"; echo "Reading src/server.ts"; sleep 600'], agent: 'claude-code', title, w: 420, h: 240 })
+        await sleep(900)
+      }
+      const made = (await k.js(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)).filter((id) => !before.includes(id))
+      if (made.length !== 2) throw new Error(`subagents scene: expected two new agent panels, got ${JSON.stringify(made)}`)
+      // The card is visible when nothing is over its middle: the point is the
+      // card, or (it takes no pointer) the canvas itself — never a panel or
+      // the chrome.
+      const visible = `(() => [...document.querySelectorAll('[data-subagent-ambiguous]')].filter((c) => { const r = c.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); const host = document.querySelector('.canvas'); return el !== null && (c.contains(el) || ((el === host || host.contains(el)) && el.closest('.panel') === null)) }).map((c) => c.getAttribute('data-panel-id')))()`
+      // main's live tick is 2s (pty-manager.ts LIVE_TICK_MS) and the watch
+      // needs a tick after the spawn, so up to 10s.
+      let shown = []
+      for (let i = 0; i < 100 && shown.length === 0; i++) { await sleep(100); shown = await k.js(visible) }
+      try {
+        if (shown.length === 0) throw new Error(`subagents scene: no SUBAGENTS card is visible beside the two agent sessions — ${await k.js(`JSON.stringify([...document.querySelectorAll('[data-subagent-ambiguous]')].map((c) => { const r = c.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return [c.getAttribute('data-panel-id'), Math.round(r.left), Math.round(r.top), Math.round(r.width), el && el.className] }))`)}`)
+        await k.shot('subagents')
+      } finally {
+      for (const id of made) {
+        for (let i = 0; i < 2; i++) {
+          await k.js(`(() => { const b = document.querySelector('.panel[data-panel-id="${id}"] .pf__close'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await sleep(300)
+        }
+      }
+      }
+      const left = await k.js(`${JSON.stringify(made)}.filter((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`)
+      if (left.length > 0) throw new Error(`subagents scene: the two agent panels were not closed (${left.join(', ')})`)
+      if (inspector) await k.context(true)
+      // Back where this scene used to leave the camera (it was framed on the
+      // twin), so the palette and inspector scenes after it see the canvas they did.
+      await k.goTo('claude — api (2)')
+    } },
   { name: 'palette', intent: 'The command palette at rest (Cmd+K) over the canvas: sections, rows, disabled rows with their reasons, and the footer.',
     run: async (k) => { await k.press('k', { metaKey: true }); await sleep(600); await k.shot('palette') } },
   { name: 'palette-query', intent: 'The palette filtered by the word "group": matching rows with highlighted matches, and any disabled row naming why.',
@@ -614,8 +680,19 @@ const SCENES = [
     run: async (k) => { await k.tab('activity'); await sleep(600); console.log('[shot] activity rows:', await k.js(`document.querySelectorAll('[data-activity-feed] .activity-row').length`)); await k.shot('inspector-activity'); await k.tab('detail'); await k.context(false) } },
   { name: 'navigator-panels', intent: 'The dock\'s Panels pane: one row per panel with its state, the selected row marked.',
     run: async (k) => { await k.dock('panels'); await k.shot('navigator-panels') } },
-  { name: 'navigator-workspaces', intent: 'The dock\'s Workspaces pane: the two canvases, the active one marked.',
-    run: async (k) => { await k.dock('workspaces'); await k.shot('navigator-workspaces') } },
+  // M410. The dock's Workspaces button is gone (M404's C2): the crumb in the
+  // top bar is the door now, and `dock('workspaces')` clicked nothing, so
+  // this scene re-shot navigator-panels. A REAL press on the crumb.
+  { name: 'navigator-workspaces', intent: 'The Workspaces pane opened from the top bar\'s workspace switcher (the `api ⌄` crumb): the two canvases, api and docs, with their panel counts and the active one marked; the merged view row; the RUNS beneath.',
+    run: async (k) => {
+      const point = await k.js(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (point === null) throw new Error('navigator-workspaces scene: no workspace crumb in the top bar')
+      k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      await sleep(500)
+      if ((await k.js(`document.querySelector('.shell__rail')?.getAttribute('data-navigator') ?? null`)) !== 'workspaces') throw new Error('navigator-workspaces scene: the crumb did not open the Workspaces pane')
+      await k.shot('navigator-workspaces')
+      await k.dock('panels')
+    } },
   { name: 'navigator-files', intent: 'The dock\'s Files pane: a file tree rooted on the selected panel\'s directory.',
     run: async (k) => { await k.dock('files'); await sleep(500); await k.shot('navigator-files'); await k.dock('panels') } },
   { name: 'attention', intent: 'A panel rang its bell: the dock badge counts one, and the popover lists the waiting panel with a way to jump to it.',
@@ -1414,6 +1491,33 @@ app.whenReady().then(async () => {
   win.setContentSize(1440, 865)
   const wc = win.webContents
   const loginEnv = await resolveShellEnv()
+  // M410. The prompt fence, as TC_TOOLBOX_HOME fences the toolbox. A login
+  // shell the harness spawns (the flowchart's terminal, a ⌘N) read the
+  // RUNNING DEVELOPER'S own rc files, and its row 0 printed their
+  // `user@host ~ %` into a PNG that is committed and handed to critics —
+  // hidden until M397 lifted the terminal's scrim off row 0. ZDOTDIR points
+  // zsh at a fenced .zshrc that sets a neutral prompt (macOS's /etc/zshrc
+  // still runs first and sets `%n@%m`; ours runs after it), PS1 does the same
+  // for bash and sh. Mutated IN PLACE: this is the bundle's cached login
+  // environment, the very object PtyManager.create reads for every spawn.
+  const SHOT_ZDOTDIR = join(SHOT_HOME, 'zdotdir')
+  mkdirSync(SHOT_ZDOTDIR, { recursive: true })
+  writeFileSync(join(SHOT_ZDOTDIR, '.zshrc'), "PROMPT='$ '\nRPROMPT=''\nPS1='$ '\n")
+  loginEnv.ZDOTDIR = SHOT_ZDOTDIR
+  loginEnv.PS1 = '$ '
+  {
+    // Asserted, not assumed: the prompt a harness zsh would print, expanded,
+    // must name neither this Mac's user nor its host. A harness that cannot
+    // prove the fence refuses to paint rather than publish a name.
+    const { userInfo, hostname } = require('node:os')
+    const shell = loginEnv.SHELL || '/bin/zsh'
+    let shown = ''
+    try { shown = execFileSync(shell, ['-ic', shell.endsWith('zsh') ? 'print -rn -- "${(%)PROMPT}"' : 'printf %s "$PS1"'], { env: loginEnv, encoding: 'utf8', timeout: 10000 }) } catch (error) { shown = String((error && error.stdout) || '') }
+    const user = userInfo().username
+    const host = hostname().split('.')[0]
+    if (shown.includes(user) || (host.length > 0 && shown.includes(host))) throw new Error(`the shot harness's shell prompt names this Mac (${JSON.stringify(shown)}); the ZDOTDIR fence did not hold`)
+    console.log(`[shot] prompt fence: a harness shell prints ${JSON.stringify(shown)}`)
+  }
 
   // A real repository with one modified file, so the review node has a row.
   const gitPath = whichFromEnv('git', loginEnv)
@@ -1505,7 +1609,7 @@ app.whenReady().then(async () => {
       groups: [{ id: 'g1', label: 'workers', colour: 'violet', panelIds: ['groupA', 'groupB'] }],
       // M79. A run that already happened: the chat and worker a handed off into twin.
       runs: [{ id: 'run-1', name: 'run 1', panelIds: ['chat', 'groupA', 'twin'], edges: [{ from: 'chat', to: 'twin' }, { from: 'groupA', to: 'twin' }], startedAt: Date.now() - 3600000, endedAt: Date.now() - 3480000, entries: [{ panelId: 'chat', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3590000, outcome: 'a turn' }, { panelId: 'groupA', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3560000, outcome: 'exit 0' }, { panelId: 'twin', startedAt: Date.now() - 3560000, endedAt: Date.now() - 3480000, outcome: 'exit 0' }], costUsd: 0.2138 }],
-      bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }, { id: 'b3', name: 'the workflow', camera: { x: -2560, y: -860, scale: 1 } }],
+      bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1320, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }, { id: 'b3', name: 'the workflow', camera: { x: -2560, y: -860, scale: 1 } }],
       // M116. The board: one item dispatched to ada's chat (its card is
       // `card12` above), one still to do with no card, so the pane shows a
       // lane row and a `Show on canvas` row.
@@ -1946,6 +2050,13 @@ app.whenReady().then(async () => {
     wc,
     shot: async (name) => {
       await sleep(250)
+      // M410. No capture names this Mac. The PNGs are committed and handed to
+      // critics, and a live shell's row 0 once printed the developer's
+      // `user@host ~ %` (flowchart-dark). Every terminal's rows and the
+      // page's own text are read before the capture; a hit fails the scene
+      // by name instead of writing the picture.
+      const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const text = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); return words.filter((w) => text.includes(w)) })()`)
+      if (leaks.length > 0) throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name`)
       const img = await wc.capturePage()
       const path = join(OUT, `${name}.png`)
       writeFileSync(path, img.toPNG())
@@ -2028,15 +2139,35 @@ app.whenReady().then(async () => {
     zoom: async (target) => {
       // A pinch is a wheel with ctrlKey (canvas-input.ts); step until the
       // scale lands within a few percent of the target.
-      for (let i = 0; i < 80; i++) {
+      // M410. The pinch lands on OPEN canvas: at the host's centre it could
+      // land on a panel that keeps the wheel (a scroll host yields the
+      // gesture to the panel, canvas-input.ts), and the loop then ran out
+      // with the camera short of its target — zoomed-out read 26% for a
+      // 0.22 request. The first point of a grid over the host whose hit is
+      // no panel is used, re-found each step (the world moves under it).
+      const openPoint = `(() => { const host = document.querySelector('.canvas'); const r = host.getBoundingClientRect()
+        for (const fy of [0.5, 0.35, 0.65, 0.2, 0.8]) for (const fx of [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9]) {
+          const x = r.left + r.width * fx, y = r.top + r.height * fy
+          const el = document.elementFromPoint(x, y)
+          if (el && host.contains(el) && el.closest('.panel, .canvas-group, .shape') === null) return { x, y }
+        }
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`
+      for (let i = 0; i < 120; i++) {
         const scale = await js(`window.__m4aScale()`)
         if (Math.abs(scale - target) / target < 0.04) break
-        const deltaY = scale > target ? 60 : -60
-        await js(`(() => { const host = document.querySelector('.canvas'); const r = host.getBoundingClientRect()
-          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: ${deltaY}, deltaMode: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        // A pinch step is exp(-deltaY × 0.01) with deltaY clamped to ±25
+        // (canvas-input.ts): a fixed ±60 always moved a whole ×0.78 step,
+        // which can straddle the 4% window forever from some starting scales.
+        // The last step asks for exactly the remaining factor.
+        const deltaY = Math.max(-25, Math.min(25, Math.log(scale / target) / 0.01))
+        const at = await js(openPoint)
+        await js(`(() => { const host = document.querySelector('.canvas')
+          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: ${deltaY}, deltaMode: 0, clientX: ${at.x}, clientY: ${at.y} })); return true })()`)
         await sleep(40)
       }
       await sleep(600)
+      const landed = await js(`window.__m4aScale()`)
+      if (Math.abs(landed - target) / target >= 0.04) throw new Error(`zoom(${target}) stopped at ${landed.toFixed(3)}: the pinch never reached its target`)
     },
     selectRail: async (id) => { await kit.click(`.rail-row[data-rail-row="${id}"] .rail-row__main`); await sleep(300) },
     context: async (open) => {

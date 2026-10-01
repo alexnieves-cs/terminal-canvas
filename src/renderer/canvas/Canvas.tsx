@@ -75,7 +75,7 @@ import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
-import { chromeObstacles, placementRoom as readPlacementRoom, sizeToView } from './safe-area'
+import { chromeObstacles, placementRoom as readPlacementRoom, sizeToView, viewCentre } from './safe-area'
 import { placePanel, type PlaceFn, type PlaceHow } from './place-new'
 import { placementQuiet } from './place-quiet'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
@@ -145,7 +145,7 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, makeRelayPanel, isRelayPanel, RELAY_W, RELAY_H, makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, maximiseRect, nextZ, occupiedRect, terminalRimAt, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_GAP, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
+  makePanel, makeReviewPanel, maximiseRect, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_GAP, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
   addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, CHAT_W, CHAT_H, type ChatPanel,
   IMAGE_W, IMAGE_H } from '@renderer/panels/panels'
@@ -899,7 +899,7 @@ export function Canvas({
   const spawnWorkItem = useCallback((item: WorkItem, source: string) => {
     const id = `n${nextIdRef.current}`
     setOpeningContexts((current) => new Map(current).set(id, `${source} ${item.id}: ${item.title}\n\n${item.description}`))
-    onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
+    onSpawn(viewCentre(hostRef.current, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
   const spawnJiraTicket = useCallback((item: WorkItem) => spawnWorkItem(item, 'Jira ticket'), [spawnWorkItem])
   // M113. `Add to board` on a work panel's row. The key is the provider's own
@@ -916,7 +916,7 @@ export function Canvas({
   const openGithubPanel = useCallback(() => {
     const id = `g${nextIdRef.current++}`
     const place = placer()
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, place(current, makeGithubPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
+    setPanels((current) => { const centre = viewCentre(hostRef.current, viewportRef.current); const next = [...current, place(current, makeGithubPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
   }, [commitHistory, placer])
   // M116. A work card for an item, at the viewport's centre. The title is
   // the item's at mint (the rail's `work · <title>`); a card for an item the
@@ -927,12 +927,12 @@ export function Canvas({
     if (item === undefined) return
     const id = `k${nextIdRef.current++}`
     const place = placer()
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, place(current, makeWorkPanel(id, centre, nextZ(current), item.id, item.title))]; commitHistory(next); return next })
+    setPanels((current) => { const centre = viewCentre(hostRef.current, viewportRef.current); const next = [...current, place(current, makeWorkPanel(id, centre, nextZ(current), item.id, item.title))]; commitHistory(next); return next })
   }, [commitHistory, workItems, placer])
   const openJiraPanel = useCallback(() => {
     const id = `j${nextIdRef.current++}`
     const place = placer()
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, place(current, makeJiraPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
+    setPanels((current) => { const centre = viewCentre(hostRef.current, viewportRef.current); const next = [...current, place(current, makeJiraPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
   }, [commitHistory, placer])
   // The selection is a SET: M18's marquee and M26's additive click build a
   // multi-selection without renaming the older single-selection call sites.
@@ -1598,6 +1598,12 @@ export function Canvas({
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
   )
+  // M410. The terminals whose rim name a neighbour above would cover draw it
+  // inside their frame instead (panels.ts's `rimCoveredIds`). The rim's WORLD
+  // height follows the zoom (terminalRimAt); a boolean per panel, so a memo'd
+  // TerminalPanel re-renders only when its own answer flips.
+  const rimWorld = terminalRimAt(viewport.scale)
+  const rimCovered = useMemo(() => rimCoveredIds(displayPanels, rimWorld), [displayPanels, rimWorld])
   // M57. The RENDER tier every card draws at — one value for the canvas,
   // since the scale is global — advanced through nextCardDetail's hysteresis
   // so a pinch on a boundary cannot flip every card twice a frame. Below
@@ -1681,7 +1687,7 @@ export function Canvas({
     setPanels((current) => {
       const host = current.find((p) => isWorkflowPanel(p) && p.workflow.templateId === req.templateId)
       const made = { ...makeChatPanel(id, host === undefined
-        ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+        ? viewCentre(hostRef.current, viewportRef.current)
         : { x: host.rect.x + host.rect.w + 40 + 280, y: host.rect.y + 180 + req.index * 400 }, nextZ(current), { cwd: req.cwd, sessionId }), title: `${req.key} · ${req.item}` }
       let next: Panel[] = [...current, host === undefined ? place(current, made) : made]
       for (const edge of targets?.edges ?? []) {
@@ -4369,7 +4375,7 @@ export function Canvas({
       setPanels((current) => {
         const existing = subject.across === true ? current : current.filter((p) => !(isReviewPanel(p) && p.subject.workItemId === itemId))
         const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
-        const made = makeReviewPanel(id, anchorPanel === undefined ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current) : reviewCentre(anchorPanel.rect, size.w, size.h), nextZ(existing), subject, size)
+        const made = makeReviewPanel(id, anchorPanel === undefined ? viewCentre(hostRef.current, viewportRef.current) : reviewCentre(anchorPanel.rect, size.w, size.h), nextZ(existing), subject, size)
         const next = [...existing, place(existing, made, anchorPanel === undefined ? undefined : { anchored: true, parentId: anchorPanel.rect.id })]
         commitHistory(next)
         return next
@@ -4757,7 +4763,7 @@ export function Canvas({
     // an hour out — the check runs it by hand.
     w.__m287Watcher = (cwd: string, command: string, args: string[]): string => {
       const watcherId = `w${nextIdRef.current++}`
-      const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      const centre = viewCentre(hostRef.current, viewportRef.current)
       const place = placer()
       setPanels((current) => {
         const next = [...current, place(current, makeWatcherPanel(watcherId, centre, nextZ(current), { cwd, command, args, trigger: { kind: 'timer', everyMs: 3600000 } }))]
@@ -5265,7 +5271,7 @@ export function Canvas({
     const blocked = workflowBlockRefusal(template)
     if (blocked !== undefined) return { kind: 'refused', reason: blocked }
     const filled = fillTemplate(template, values)
-    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const centre = viewCentre(hostRef.current, viewportRef.current)
     const places = templatePanels(filled, centre)
     const minted = new Map<string, string>()
     const madePanels: Panel[] = []
@@ -5883,7 +5889,7 @@ export function Canvas({
       // a free spot, never inside a group the chat is not in (a chat landed in
       // the starter's) — then kept clear of the chrome floating over the
       // canvas, whose minimap may not have rendered yet (clearOfChrome).
-      const want = opts?.at ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      const want = opts?.at ?? viewCentre(hostRef.current, viewportRef.current)
       const placed = place === null ? null : place(current, makeChatPanel(id, want, 0, { cwd, sessionId })).rect
       const centre = placed === null ? want : clearOfChrome({ x: placed.x + placed.w / 2, y: placed.y + placed.h / 2 })
       // M121. A routine's chat is MARKED, the way a lane is: the record is what
@@ -5917,7 +5923,7 @@ export function Canvas({
     panels, setPanels, panelsRef, displayPanelsRef, groups, setWorkItems, workItemsRef,
     boardVerbsRef, mergedRef, nextIdRef, commitHistory,
     selectedIds, selectedIdsRef, selectOnly, focusedId, focusedIdRef, onFocusPanel,
-    viewportRef, placer, frameRects, palette, setInputMode,
+    viewportRef, hostRef, placer, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
     startWorkRef: paletteActionsRef, relatedItemId, setRelatedItemId, closePanel: onClosePanel
@@ -6107,7 +6113,7 @@ export function Canvas({
           }
           setInputMode(null)
           const parts = command.trim().split(/\s+/)
-          const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+          const centre = viewCentre(hostRef.current, viewportRef.current)
           const watcherId = `w${nextIdRef.current++}`
           const place = placer()
           setPanels((current) => {
@@ -6149,7 +6155,7 @@ export function Canvas({
   const openWorkflowPanel = useCallback((templateId: string, at?: Point) => {
     if (mergedRef.current) return
     const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
-    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const centre = viewCentre(hostRef.current, viewportRef.current)
     const id = `wf${nextIdRef.current++}`
     const place = placer({ exact: at !== undefined })
     setPanels((current) => {
@@ -6212,7 +6218,7 @@ export function Canvas({
           const trigger = parseTriggerWords(text, root, undefined)
           if (trigger === null) { ask(text, 'Try: a path, `every 10m`, or `branch`', true); return }
           setInputMode(null)
-          const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+          const centre = viewCentre(hostRef.current, viewportRef.current)
           const watcherId = `w${nextIdRef.current++}`
           const place = placer()
           setPanels((current) => {
@@ -6446,7 +6452,7 @@ export function Canvas({
     // tree of this one. Both are silent (M83's verifier).
     const root = noteRootRef.current
     if (root === null) return
-    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const centre = viewCentre(hostRef.current, viewportRef.current)
     const memoryId = `m${nextIdRef.current++}`
     const place = placer()
     setPanels((current) => {
@@ -6464,7 +6470,7 @@ export function Canvas({
    * through `onBrowserNavigated` so a relaunch returns to the last page.
    */
   const openBrowserPanel = useCallback((url: string, preview?: PreviewBinding, at?: Point): void => {
-    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const centre = viewCentre(hostRef.current, viewportRef.current)
     const browserId = `b${nextIdRef.current++}`
     const place = placer({ exact: at !== undefined })
     setPanels((current) => {
@@ -6476,7 +6482,7 @@ export function Canvas({
   }, [commitHistory, selectOnly])
   /** M338. A relay terminal at `at`: a fresh session of `program`, or an attach to a session the relay already has. */
   const openRelayPanel = useCallback((relay: { program: string; sessionId?: string; shareId?: string }, at?: Point): void => {
-    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const centre = viewCentre(hostRef.current, viewportRef.current)
     const relayId = `r${nextIdRef.current++}`
     const place = placer({ exact: at !== undefined })
     setPanels((current) => {
@@ -6719,7 +6725,7 @@ export function Canvas({
    */
   const addNote = useCallback((form: string, text?: string, world?: Point): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
     if (!isNoteForm(form)) return { kind: 'refused', reason: `${form} is not a note form — ${NOTE_FORMS.join(', ')}` }
-    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const at = world ?? viewCentre(hostRef.current, viewportRef.current)
     const noteId = `nt${nextIdRef.current++}`
     // M395. A sticky or a text with no place of its own lands in the FREE spot
     // nearest the view's centre (placement.ts's freeSpot), never on top of what
@@ -6892,7 +6898,7 @@ export function Canvas({
   const addImageFromPath = useCallback(async (path: string, world?: Point): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
     const stored = await window.canvas.asset.put({ path })
     if (stored.kind === 'refused') return { kind: 'refused', reason: stored.reason }
-    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const at = world ?? viewCentre(hostRef.current, viewportRef.current)
     const imageId = `img${nextIdRef.current++}`
     // M395. With no place of its own (the palette row, the agent's verb) a
     // picture lands in the free spot nearest the centre; a drop keeps its point.
@@ -6918,7 +6924,7 @@ export function Canvas({
     if (result.kind === 'cancelled') return { kind: 'refused', reason: 'no document chosen' }
     if (result.kind === 'exists') return { kind: 'refused', reason: `${displayPath(result.path).short} already exists — rename or move it, then import again` }
     if (result.kind === 'refused') return result
-    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const at = world ?? viewCentre(hostRef.current, viewportRef.current)
     openFilePanel(result.path, at, { prose: true, exact: true, imported: { from: result.source, dropped: result.dropped } })
     return { kind: 'ran', note: `${displayPath(result.path).short} — ${result.dropped || 'nothing was dropped'}` }
   }, [openFilePanel])
@@ -7604,7 +7610,7 @@ export function Canvas({
       const failedItem = workItemsRef.current.find((i) => i.id === itemId)
       if (failedItem !== undefined && !panelsRef.current.some((p) => workCardItemId(p) === itemId)) {
         const cardId = `k${nextIdRef.current++}`
-        const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+        const centre = viewCentre(hostRef.current, viewportRef.current)
         const place = placer()
         setPanels((current) => { const next = [...current, place(current, makeWorkPanel(cardId, centre, nextZ(current), failedItem.id, failedItem.title))]; commitHistory(next); return next })
       }
@@ -9618,6 +9624,7 @@ export function Canvas({
                 onBeginLink={onBeginLink}
                 linkTarget={linkDraw.state?.target === panel.rect.id}
                 onOpenAsChat={openAsChatVoid}
+                rimInset={rimCovered.has(panel.rect.id)}
               />
             )
           })}

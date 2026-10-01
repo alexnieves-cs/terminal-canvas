@@ -1666,7 +1666,8 @@ body {
 /* M76. The question at the summary tier, under the state word. */
 /* M77. A tool row's diff, under the row in the review node's own line idiom; a review row's touches. */
 .chat__tool-diff { grid-column: 1 / -1; min-width: 0; overflow-x: auto; }
-.review-node__touches { flex: none; font-size: var(--t-xs); color: var(--fg-3); }
+/* M410. It gives way before the counts and ends in an ellipsis, never a cut (`· 2 tool c`). */
+.review-node__touches { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); color: var(--fg-3); }
 .review-node__touch-list { flex: 1 1 100%; margin: 0 0 var(--sp-2); padding: 0 0 0 var(--sp-3); list-style: none; font-size: var(--t-xs); color: var(--fg-2); }
 /* M76. The questions, pinned between the well and the composer. */
 
@@ -4330,13 +4331,22 @@ body {
 .review-node__layout[data-review-layout="rail"] { display: flex; gap: var(--sp-3); min-height: 0; }
 /* M402 (B3). The DIFF gets the width: the file column is narrow — it lists
    names, and a long path ellipsises — so a review sized to a 1200px window
-   still gives the diff most of its box. */
+   still gives the diff most of its box.
+   M410 (the tool-objects/approval goldens). But not narrower than its row:
+   at 160px a two-file review clipped `src/server.ts +2 −2 · 2 tool calls`
+   to `src/s… · 2 tool c` and wrapped its ALSO CHANGED heading. 220px holds a
+   short name, both count pills and the tool-call count; a review is never
+   under REVIEW_MIN's 520, so the diff keeps at least 300. */
 .review-node__layout[data-review-layout="rail"] > .review-node__rail {
-  flex: 0 0 clamp(160px, 24%, 220px);
+  flex: 0 0 clamp(220px, 28%, 280px);
   overflow-y: auto;
   min-height: 0;
 }
 .review-node__group-head {
+  /* M410. One line in the file column; a heading that cannot fit ellipsises. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin: var(--sp-2) 0 var(--sp-1);
   padding: 0 var(--sp-1);
   font-family: var(--font-ui);
@@ -7094,6 +7104,17 @@ body {
      draws the specular edge (rim.paint.1). */
   box-shadow: none;
 }
+/* M410. THE RIM, INSET. Where a neighbour stacked closer above than the strip
+   would paint over it (panels.ts's `rimCoveredIds` decides from geometry), the
+   name came out half-hidden — the memory and graph goldens. The name is
+   rest-layer content, so for THAT terminal only the strip moves inside the
+   frame's top, its parts keeping their --well backing: it covers the start of
+   row 0, the trade M397 refused for every terminal and takes for the one that
+   would otherwise be nameless. Still absolute, still out of the flow, so
+   nothing refits (chromeless.resize.1). The counter-scale grows it down from
+   the frame's top. The tab rounds where it stands free: its foot. */
+.pf--kind-terminal.pf--rim-inset:has(.panel__slot) .pf__chrome { top: 0; bottom: auto; transform-origin: top left; align-items: flex-start; }
+.pf--kind-terminal.pf--rim-inset:has(.panel__slot) .pf__chrome .pf__title { border-radius: 0 0 var(--r-sm) var(--r-sm); }
 /* The frame clips its overflow for every other kind (a menu cut at the left
    edge is why the ⋯ menu hangs inside the chrome). A live terminal lets it
    out so the rim strip can sit above the frame; its screen keeps its own
@@ -7117,6 +7138,14 @@ body {
 /* The state pill, trimmed to the strip (the rim comment above): at rest
    nothing on the rim stands taller than --sp-6. */
 .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { padding-block: 0; line-height: calc(var(--sp-6) - 2px); }
+/* M410 (the file-missing golden). A state word can be a SENTENCE — a spawn
+   that failed says `Error invoking remote method 'pty:create'…` — and the
+   badge's `flex: none` let it run ~160px past the frame's right edge and
+   squeeze the name to `claude …`. The word is capped and ellipsised (the
+   whole sentence is its title), and it gives way long before the name does:
+   the title leads (D5's rule — the name is never truncated before a word). */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex: 0 100 auto; min-width: 4ch; max-width: 22ch; overflow: hidden; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__title {
   padding: 0 var(--sp-2);
   line-height: var(--sp-6);

@@ -781,6 +781,32 @@ export function terminalRimAt(scale: number): number {
   return TERMINAL_RIM * chrome
 }
 
+/**
+ * M410. THE TERMINALS WHOSE RIM STRIP A NEIGHBOUR COVERS. The name sits on
+ * the rim ABOVE the frame (M397's follow-up), and a panel stacked closer than
+ * the strip's height above it — and painted over it, a higher z — hid the
+ * name: the memory and graph goldens lost `claude — api (2)` half under the
+ * memory panel. The name is rest-layer content (product-rules: a panel at
+ * rest says its name), so such a terminal draws its strip INSIDE the frame's
+ * top instead (`.pf--rim-inset`), accepting that the strip covers the start
+ * of row 0 in that case only — the trade M397 refused for every terminal and
+ * takes here for the one that would otherwise be nameless. `rim` is the
+ * strip's WORLD height at the current zoom (terminalRimAt). A neighbour
+ * BELOW in z is painted under the strip, which stays outside and readable.
+ */
+export function rimCoveredIds(panels: readonly Panel[], rim: number): Set<string> {
+  const out = new Set<string>()
+  for (const t of panels) {
+    if (!isTerminalPanel(t)) continue
+    const top = t.rect.y - rim
+    const covered = panels.some((p) => p !== t && p.z > t.z &&
+      p.rect.x < t.rect.x + t.rect.w && p.rect.x + p.rect.w > t.rect.x &&
+      p.rect.y < t.rect.y && p.rect.y + p.rect.h > top)
+    if (covered) out.add(t.rect.id)
+  }
+  return out
+}
+
 /** One above the highest current z, so a raised or new panel is on top. */
 export function nextZ(panels: Panel[]): number {
   return panels.reduce((max, p) => Math.max(max, p.z), 0) + 1

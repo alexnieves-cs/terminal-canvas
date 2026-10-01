@@ -3157,6 +3157,35 @@ console.log('\n' + '='.repeat(60))
     settled === 'a1,k1,a3,a4' && none === 'a1,k1,a4', JSON.stringify({ settled, none }))
 }
 
+// M410. A create door mints at the CANVAS's centre, not the window's: with
+// the navigator open the window's centre is ~170px right of the canvas's, and
+// once M402's reveal stopped flying to an object already in view, the relay
+// panel made on an empty view landed visibly off-centre (the relay golden).
+{
+  const have = typeof V.viewCentre === 'function'
+  const vp = { x: -100, y: 50, scale: 0.5 }
+  const got = have ? V.viewCentre({ clientWidth: 1100, clientHeight: 800 }, vp) : null
+  const read = (rel) => require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', ...rel.split('/')), 'utf8')
+  const windowCentred = ['canvas/Canvas.tsx', 'canvas/useBoardVerbs.ts'].filter((f) => /screenToWorld\(\{\s*x:\s*window\.innerWidth\s*\/\s*2/.test(read(f)))
+  ok('place.centre.1 viewCentre is the world point under the HOST\'s centre (host-local, the camera applied), and no create door in Canvas.tsx or useBoardVerbs.ts mints at the WINDOW\'s centre',
+    have && got !== null && got.x === (550 + 100) / 0.5 && got.y === (400 - 50) / 0.5 && windowCentred.length === 0,
+    JSON.stringify({ got, windowCentred }))
+}
+
+// M410. rimCoveredIds: a terminal is covered only by a HIGHER panel reaching
+// into the band above its frame; a lower one, one clear of the band, or a
+// non-terminal under a neighbour are not.
+{
+  const have = typeof V.rimCoveredIds === 'function'
+  const T = (id, x, y, z) => ({ rect: { id, x, y, w: 300, h: 200 }, z, spec: { panelId: id, cwd: '~', args: [] } })
+  const F = (id, x, y, z) => ({ kind: 'memory', rect: { id, x, y, w: 300, h: 200 }, z, source: { root: '/' } })
+  const panels = [F('m', 0, 0, 5), T('a', 0, 208, 1), T('b', 400, 208, 9), F('n', 400, 0, 2), T('c', 800, 230, 1), F('o', 800, 0, 4), F('f', 1200, 208, 1), F('p', 1200, 0, 3)]
+  const got = have ? [...V.rimCoveredIds(panels, 16)].sort().join(',') : null
+  const at50 = have ? [...V.rimCoveredIds([F('o', 800, 0, 4), T('c', 800, 230, 1)], 32)].join(',') : null
+  ok('place.rim.inset.2 rimCoveredIds names a terminal whose rim band a HIGHER panel reaches into (a: memory 8px above at z 5), not one over its neighbour (b), not one clear of a 16px band (c, 30px), never a non-terminal (f) — and at 50% the 32-world-unit band does reach c',
+    have && got === 'a' && at50 === 'c', JSON.stringify({ got, at50 }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

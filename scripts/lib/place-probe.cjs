@@ -86,8 +86,9 @@ async function zoomInto(wc, lo, hi) {
  * the canvas host inset PLACE_EDGE_PX (16) as the world in view; the floating
  * chrome — the minimap while it shows, the HUD, the pill's rest row, a rail or
  * inspector over the host — as world rects; every panel's store rect plus the
- * placement's reserved rim over a terminal; the window's centre in the world
- * (onSpawn's point). Then the pure rule itself (placement.ts's placeNew,
+ * placement's reserved rim over a terminal; the CANVAS's centre in the world
+ * (onSpawn's point — M410: every door mints there, safe-area.ts's viewCentre;
+ * the window's centre, which this used to copy, sat right of it with a rail open). Then the pure rule itself (placement.ts's placeNew,
  * bundled into the entry) — the rule is pinned by verify:viewport, and what
  * THIS pins is that the live door feeds it what the canvas shows.
  * Groups and task regions are not read: callers use it where there are none.
@@ -113,7 +114,7 @@ async function measurePlacement(wc) {
     }
     const seen = new Set()
     const panels = [...document.querySelectorAll('.world .panel[data-panel-id]')].filter((p) => { const id = p.getAttribute('data-panel-id'); if (seen.has(id)) return false; seen.add(id); return true }).map((p) => ({ x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: parseFloat(p.style.width), h: parseFloat(p.style.height), terminal: p.classList.contains('pf--kind-terminal') })).filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite))
-    return { vp, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (window.innerWidth / 2 - vp.x) / vp.scale, y: (window.innerHeight / 2 - vp.y) / vp.scale } }
+    return { vp, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (host.clientWidth / 2 - vp.x) / vp.scale, y: (host.clientHeight / 2 - vp.y) / vp.scale } }
   })()`)
 }
 

@@ -23,6 +23,8 @@ module.exports = {
   ...require('../src/renderer/canvas/placement'),
   // M402. The one placement rule over panels and groups, and the snap it shares a rim with.
   ...require('../src/renderer/canvas/place-new'),
+  // M410. The canvas's centre a create door mints at (viewCentre), read off a host.
+  ...require('../src/renderer/canvas/safe-area'),
   ...require('../src/renderer/groups/groups'),
   ...require('../src/renderer/canvas/arrange'),
   ...require('../src/renderer/panels/recover'),

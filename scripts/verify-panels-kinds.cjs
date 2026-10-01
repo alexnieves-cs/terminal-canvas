@@ -8,7 +8,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 68000 // measured 2026-09-30 (M402) after place.snap.rim.1 and the create doors' reveal flights, two green runs: 53.1s, 53.8s (the second in `npm run affected`); 1.25x the slower, to the next second. Was 60000 (M149: 47.1s, 47.4s), which headroom.1 read at 89.7%
+const WATCHDOG_MS = 80000 // measured 2026-09-30 (M410) after place.rim.inset.1 (a live pair, two drags, two closes), two runs: 63.4s, 61.1s; 1.25x the slower, to the next second. Was 68000 (M402: 53.1s, 53.8s), which headroom.1 read at 93%
 
 const { occupiedWorld, overlapsRect, cameraStill, zoomInto } = require('./lib/place-probe.cjs')
 runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
@@ -736,6 +736,86 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         wc.send(IPC_EVENTS.SETTINGS_CHANGED, 'placement.snap')
         await sleep(200)
       }
+    }
+
+    // place.rim.inset.1 — M410 (the golden critics). A neighbour stacked
+    // closer above a live terminal than its rim strip, and painted over it,
+    // hid the terminal's NAME (the memory and graph goldens: `claude — api
+    // (2)` half under the memory panel). The name is rest-layer content, so
+    // that terminal draws its strip inside its frame (`.pf--rim-inset`,
+    // panels.ts's rimCoveredIds). A fresh live pair in empty world space at
+    // 100%, snapping off: the UPPER one dragged by its name (a drag raises
+    // it) to 8px above the lower one. Measured: the upper is painted above
+    // the lower and overlaps its rim band (the premise — else this check
+    // proves nothing), the lower wears the class, its name box lies inside
+    // its own frame, and elementFromPoint at the name's centre answers the
+    // LOWER panel. Then dragged clear again: the class goes and the name is
+    // back above the frame.
+    {
+      let detail = { skipped: 'no live pair' }
+      let pass = false
+      await zoomTo(wc, '0')
+      await cameraStill(wc)
+      await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 700, clientY: 450, deltaX: 250000, deltaY: 250000, deltaMode: 0 })); true`)
+      await cameraStill(wc)
+      const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      for (let i = 0; i < 2; i++) {
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), command: '/bin/sh', args: [], w: 320, h: 200 })
+        await sleep(400)
+      }
+      await settle()
+      const pair = (await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)).filter((id) => !before.includes(id))
+      const [upperId, lowerId] = pair
+      const look = (id) => wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']')
+        const t = p && p.querySelector('.pf__title')
+        if (!p || !t) return null
+        const r = p.getBoundingClientRect(), b = t.getBoundingClientRect()
+        const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+        return { p: r.toJSON(), t: b.toJSON(), live: !!p.querySelector('.panel__slot'), z: Number(getComputedStyle(p).zIndex), inset: p.classList.contains('pf--rim-inset'), hit: el ? (el.closest('.panel')?.getAttribute('data-panel-id') ?? '-') : null }
+      })()`)
+      const dragBy = async (from, dx, dy) => {
+        const grab = { x: Math.round(from.t.left + Math.min(20, from.t.width / 2)), y: Math.round(from.t.top + from.t.height / 2) }
+        wc.sendInputEvent({ type: 'mouseMove', x: grab.x, y: grab.y })
+        await sleep(150)
+        wc.sendInputEvent({ type: 'mouseDown', x: grab.x, y: grab.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 6; i++) {
+          wc.sendInputEvent({ type: 'mouseMove', x: Math.round(grab.x + dx * i / 6), y: Math.round(grab.y + dy * i / 6), button: 'left', modifiers: ['leftButtonDown'] })
+          await sleep(30)
+        }
+        wc.sendInputEvent({ type: 'mouseUp', x: grab.x + dx, y: grab.y + dy, button: 'left', clickCount: 1 })
+        await sleep(400)
+      }
+      if (upperId !== undefined && lowerId !== undefined) {
+        const up = await look(upperId), lo = await look(lowerId)
+        detail = { pair, up, lo }
+        if (up && lo && up.live && lo.live) {
+          await dragBy(up, Math.round(lo.p.left - up.p.left), Math.round(lo.p.top - 8 - up.p.bottom))
+          const up2 = await look(upperId), lo2 = await look(lowerId)
+          const premise = up2.z > lo2.z && up2.p.bottom > lo2.p.top - 16 && up2.p.bottom <= lo2.p.top && up2.p.left < lo2.p.right && up2.p.right > lo2.p.left
+          const named = lo2.inset && lo2.t.top >= lo2.p.top - 0.5 && lo2.t.bottom <= lo2.p.bottom && lo2.hit === lowerId
+          // And back: dragged clear, the strip returns to the rim.
+          await dragBy(up2, 0, -120)
+          const lo3 = await look(lowerId)
+          const back = lo3 !== null && !lo3.inset && lo3.t.bottom <= lo3.p.top + 1.5 && lo3.hit === lowerId
+          detail = { premise, named, back, up2, lo2, lo3 }
+          pass = premise && named && back
+        }
+        // Closed again with the × a person presses (twice: a running shell
+        // arms first), and the camera home, so the link-draw block below
+        // finds its fixture where it expects it (measured: left open over the
+        // origin, this pair took link-draw.2 and .5's hover points).
+        for (const id of [upperId, lowerId]) {
+          for (let i = 0; i < 2; i++) {
+            await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="${id}"] .pf__close'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+            await sleep(250)
+          }
+        }
+      }
+      await zoomTo(wc, '0')
+      await cameraStill(wc)
+      ok('place.rim.inset.1 a live terminal whose rim band a higher neighbour covers draws its name INSIDE its frame (pf--rim-inset) where elementFromPoint answers it, and back on the rim once the neighbour moves clear',
+        pass, JSON.stringify(detail))
     }
 
     // ---------------------------------------------------------------------

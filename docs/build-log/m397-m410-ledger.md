@@ -1786,3 +1786,55 @@ deck/sheet grammar rows keep `hiddenAtRest: true` — `PanelRow` has no deck/she
 and these verbs name their panel on the line, not the selection. The template seat: with a template the first
 runnable row at rest is `template.new.*`; the only other runnable panel-section row is "Which agents can…", a
 scope door and no better a seat, so the order is left.
+
+### M410 — what the golden critics found (partial)
+
+Seven fresh critics compared every changed golden. Every FIX/REGRESSION item is done. The one thing not done is the
+"load a layout, rects unchanged" check, and it isn't needed: the load was measured and doesn't move anything (item 1).
+Every capture below comes from `npm run shot` with `SHOT_DIR` in scratch. No golden was written.
+
+1. **The seeded chat "moved". The cause is the harness, not the load.** A probe logged every panel's `style.left/top`
+   after each scene. Through `kinds`, the load placed all 22 fixture panels exactly as saved, and nothing moved
+   through `approval`. In `auto`, the scene runs Maximise panel on the chat and never restores it. A maximised rect
+   persists, so the chat (and `card12`, whose work item is anchored to it) moved to (1290,−553) for every later scene.
+   It was already maximised in the old goldens, but at a different camera spot. *Fix:* `auto` presses Restore panel
+   after its shot and throws unless the chat is back at 770,570. **Relay off-centre (a real product bug):** 21 create
+   doors in `Canvas.tsx`/`useBoardVerbs.ts` minted at `screenToWorld(window centre)`, but `screenToWorld` reads a
+   HOST-local point. With the navigator open, that point sits ~170px right of the canvas centre. M402's old reveal flew
+   to the object and hid the offset; its follow-up stopped moving a camera that already shows the object, so the offset
+   became visible. *Fix:* `safe-area.ts`'s `viewCentre(host, vp)` at every door. `place-probe.cjs` copied the window
+   centre too, and now uses the canvas centre. *Checks:* `verify:viewport place.centre.1` (the math, and no door
+   reads the window centre). The relay golden passes again.
+2. **Privacy.** The shot harness mutates the bundle's cached login env in place (`ZDOTDIR` → a fenced `.zshrc` with
+   `PROMPT='$ '`, plus `PS1`). At start it expands the prompt a harness zsh would print and refuses to run if the prompt
+   names this Mac's user or host (it prints `"$ "`). `kit.shot` reads `body.innerText` and every `.xterm-rows`
+   before each capture and fails the scene if either name appears. The full run had 84 captures and 0 hits.
+   verify:panels harnesses publish no images.
+3. **A name strip covered by a neighbour above.** *Decision:* `panels.ts`'s `rimCoveredIds(panels, rim)`: a
+   terminal whose rim band a HIGHER-z panel reaches into gets `.pf--rim-inset`, which draws the strip inside its frame's
+   top (it covers the start of row 0 in that case only). The rim is at the current zoom (`terminalRimAt`). A lower
+   neighbour doesn't trigger it: the strip paints over that one. *Checks:* `verify:viewport place.rim.inset.2`
+   (pure), `verify:styles rim.inset.css.1`, and `verify:panels:kinds place.rim.inset.1`, which is measured: a live
+   pair 8px apart, the upper one painted above, elementFromPoint at the lower name hits the lower panel, and the strip
+   goes back to the rim once the upper one moves clear. Its first cut was left open over the origin and broke
+   link-draw.2/.5 (measured with the block skipped: 54/54). It now runs in fresh space and closes its pair. The
+   kinds watchdog was re-pinned from 68000 to 80000 (63.4s and 61.1s). In `graph`, the arrival arrowhead is still
+   partly under the memory panel. That's the neighbour's z, not the strip.
+4. **file-missing.** The word's text is in `.pf__word-text`, capped at 22ch with an ellipsis, with the full text in
+   `title`. It has `flex-shrink: 100`, so the name keeps priority (D5). `verify:styles word.cap.1`.
+5. **The review rail.** It is `clamp(220px, 28%, 280px)`. The tool-call count and the group heading ellipsise.
+   `verify:styles review.rail.1`.
+6. **Scenes.** `navigator-workspaces` is a real press on the `api ⌄` crumb, asserted by `data-navigator`.
+   `subagents` mints two `agent: claude-code` sessions in open canvas, asserts the card is uncovered, shoots, then
+   closes them with the × and puts the camera back on the twin. `group`: the bookmark is y −1320. `kit.zoom` pinches
+   on open canvas, sizes its last step to the exact remaining factor (a fixed ±60 always moved ×0.78), and throws if
+   it misses. zoomed-out lands at 22%. The intents for skills, integrations and vault are reworded.
+
+*Suites:* plain `viewport` 199/199, `styles` 97/97, `meta`, `groups`, `flowchart`, `verbs`, `jobs`, `canvas-sync`,
+`onboarding` green. `first-run` 28/29: `revamp.create.1` expects `<div class="canvas-hud">` with no attributes, but
+M408 added `data-screen-control` (not mine). Electron: `panels:core` 105/105, `panels:kinds` 55/55, `panels:product`
+152/152. `panels:shell` 101/105: 95/95b/95c/96 call `dockTo('workspaces')`, the dock button M404 removed. That's the
+same dead door this milestone fixed in the shot harness. It's pre-existing and not fixed here. `verify:visual` (no
+update): 19/81. These scenes now match their goldens again: relay, flowchart-dark, trail, github, across, browser, the
+shared-*/share-* scenes, inspector-caps, queue-hold, plan-approval, team-ask, replay and flowchart. All 62 others
+still differ, mostly from this run's intended chrome changes.

@@ -1,11 +1,12 @@
-import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react'
 import type { PlaceFn } from './place-new'
 import {
   addLink, isChatPanel, isTerminalPanel, isWatcherPanel, isWorkPanel, makeChatPanel, makePanel, makeWatcherPanel, WATCHER_H,
   nextZ, setLinkAutomation, setLinkLabel, workCardItemId, CHAT_W, type Panel
 } from '@renderer/panels/panels'
 import { seedAfter } from '@renderer/panels/recover'
-import { screenToWorld, type Viewport, type WorldRect } from './viewport'
+import { type Viewport, type WorldRect } from './viewport'
+import { viewCentre } from './safe-area'
 import { arrangePlan, fitTaskTarget, missingSentence, showTaskTarget, type TaskMembership } from './task-members'
 import { WORK_ITEM_STATES, carryWorkItem, prRefusal, repoOfKey, type PersistedWorkItem } from '@shared/work-items'
 import {
@@ -130,6 +131,8 @@ export interface BoardVerbsDeps {
   focusedIdRef: MutableRefObject<string | null>
   onFocusPanel: (id: string) => void
   viewportRef: MutableRefObject<Viewport>
+  /** M410. The canvas host, so a door with no anchor mints at the CANVAS's centre (safe-area.ts's `viewCentre`). */
+  hostRef: RefObject<HTMLDivElement | null>
   /** M402. The one placement rule (Canvas.tsx's `placer`). */
   placer: () => PlaceFn
   /** Through the camera TRAIL, so Cmd+[ goes back from every frame these verbs make. */
@@ -194,7 +197,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     panels, setPanels, panelsRef, displayPanelsRef, groups, setWorkItems, workItemsRef,
     boardVerbsRef, mergedRef, nextIdRef, commitHistory,
     selectedIds, selectedIdsRef, selectOnly, focusedId, focusedIdRef, onFocusPanel,
-    viewportRef, placer, frameRects, palette, setInputMode,
+    viewportRef, hostRef, placer, frameRects, palette, setInputMode,
     presetRowsRef, teammatesRef, credentialRows,
     taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, taskMemberships, reviewTaskLane,
     startWorkRef, relatedItemId, setRelatedItemId, closePanel
@@ -341,7 +344,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       const before = panelsRef.current
       const card = before.find((p) => workCardItemId(p) === itemId)
       const centre = card === undefined
-        ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+        ? viewCentre(hostRef.current, viewportRef.current)
         : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
       // M402. The one placement rule: beside its card when there is one (an
       // anchored free spot), where the person is looking otherwise — here over
@@ -818,7 +821,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         void window.canvas.watcher.run(watcherId)
         const chat = it.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === it.panelId)
         const centre = chat === undefined
-          ? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+          ? viewCentre(hostRef.current, viewportRef.current)
           : { x: chat.rect.x + chat.rect.w / 2, y: chat.rect.y + chat.rect.h + 40 + WATCHER_H / 2 }
         // M402. Under its conversation by the one rule (an anchored free spot).
         const place = placer()

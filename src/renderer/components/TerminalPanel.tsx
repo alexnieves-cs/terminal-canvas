@@ -110,6 +110,8 @@ export interface TerminalPanelProps {
    * the same reason `version` and `title` are props.
    */
   glow: boolean
+  /** M410. A neighbour above covers the rim: the name strip draws inside the frame's top (panels.ts's `rimCoveredIds`). */
+  rimInset?: boolean
   /**
    * Begins a link drag from one of this panel's four port handles (M35).
    * PORT_MIN_SCALE visibility is NOT gated here by a `scale` prop — see
@@ -148,7 +150,7 @@ const CONFIRM_CLOSE_MS = 3000
 function TerminalPanelImpl({
   session, rect, z, title, defaultTitle, onRename, cardDetail, flipped = false, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, demoting, waking, onEntryEnd, readOnly = false, openingContext, onContextPasted,
-  onBeginLink, linkTarget, onOpenAsChat
+  onBeginLink, linkTarget, onOpenAsChat, rimInset
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -252,7 +254,7 @@ function TerminalPanelImpl({
       selected={selected}
       linkTarget={linkTarget}
       readOnly={readOnly}
-      className={agentClass.trim()}
+      className={`${agentClass}${rimInset === true ? ' pf--rim-inset' : ''}`.trim()}
       // M44. A named group for a screen reader; the kind rides the label so
       // "claude — terminal" reads as one thing rather than an anonymous div.
       rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
@@ -305,7 +307,10 @@ function TerminalPanelImpl({
             {session.spec.agentOptions.sandbox}
           </span>
         )}
-        <span className="badge pf__word" data-tone={shown.tone} data-state-word>{shown.word}</span>
+        {/* M410. The word's TEXT in its own span, so a long one (an error
+            sentence) can ellipsise inside the badge — a flex container's bare
+            text node cannot — with the whole sentence in the title. */}
+        <span className="badge pf__word" data-tone={shown.tone} data-state-word title={shown.word}><span className="pf__word-text">{shown.word}</span></span>
         {/* M74. Never a control that cannot work: shown only for a claude
             session whose process is not live (one front-end at a time). A
             LABELLED word after the pill, the row's own control slot. */}

@@ -1705,5 +1705,30 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     pane.railNote && pane.skillName && pane.nameInput && inputLook, JSON.stringify({ ...pane, inputLook }))
 }
 
+// M410 — the golden critics' three CSS findings, pinned by the rule that
+// answers each. word.cap.1: a terminal's state word (an error SENTENCE ran
+// ~160px past the frame) is capped, ellipsised in its own text span, and
+// shrinks before the name does. review.rail.1: the review's file column is
+// never under 220px (a two-file review clipped `src/s… · 2 tool c`) and the
+// tool-call count ellipsises. rim.inset.css.1: a covered terminal's strip
+// draws inside its frame's top.
+{
+  const rule = (re) => all.find((r) => re.test(r.sel))
+  const word = rule(/^\.pf--kind-terminal:has\(\.panel__slot\) \.pf__chrome \.pf__word$/ ) && all.filter((r) => /^\.pf--kind-terminal:has\(\.panel__slot\) \.pf__chrome \.pf__word$/.test(r.sel)).map((r) => r.body).join(';')
+  const text = rule(/^\.pf--kind-terminal:has\(\.panel__slot\) \.pf__chrome \.pf__word-text$/)
+  const wordOk = typeof word === 'string' && /max-width:\s*\d+ch/.test(word) && /overflow:\s*hidden/.test(word) && /flex:\s*0 100 auto/.test(word) &&
+    text !== undefined && /text-overflow:\s*ellipsis/.test(text.body) && /white-space:\s*nowrap/.test(text.body)
+  ok('word.cap.1', 'a live terminal\'s state word is capped (max-width in ch), clipped, ellipsised in its text span and shrinks a hundredfold before the name', wordOk, JSON.stringify({ word, text: text && text.body }))
+  const rail = rule(/^\.review-node__layout\[data-review-layout="rail"\] > \.review-node__rail$/)
+  const min = rail && /flex:\s*0 0 clamp\((\d+)px/.exec(rail.body)
+  const touches = rule(/^\.review-node__touches$/)
+  ok('review.rail.1', 'the review\'s file column is at least 220px and its tool-call count ellipsises instead of being cut',
+    min !== null && min !== undefined && Number(min[1]) >= 220 && touches !== undefined && /text-overflow:\s*ellipsis/.test(touches.body) && /min-width:\s*0/.test(touches.body),
+    JSON.stringify({ rail: rail && rail.body, touches: touches && touches.body }))
+  const inset = rule(/^\.pf--kind-terminal\.pf--rim-inset:has\(\.panel__slot\) \.pf__chrome$/)
+  ok('rim.inset.css.1', 'a terminal whose rim a neighbour covers (.pf--rim-inset) draws its strip inside the frame\'s top: top 0, bottom auto',
+    inset !== undefined && /top:\s*0/.test(inset.body) && /bottom:\s*auto/.test(inset.body), JSON.stringify(inset && inset.body))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

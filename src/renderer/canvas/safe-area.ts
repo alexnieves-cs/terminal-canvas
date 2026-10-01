@@ -73,6 +73,23 @@ export function chromeWorldRects(host: HTMLElement | null, vp: Viewport, opts: {
   })
 }
 
+/**
+ * M410. The world point under the CANVAS's centre — where a create door mints
+ * the object the one placement rule (placement.ts's `placeNew`) then moves to
+ * the free spot nearest it. `screenToWorld` reads a HOST-local point, and the
+ * doors used to hand it the WINDOW's centre: with the navigator open that
+ * point sits ~170px right of the canvas's middle, so an object made on an
+ * empty view landed off-centre. M402's reveal used to fly the camera onto it
+ * and hid the offset; its follow-up stopped moving a camera that already
+ * shows the object, and the offset showed (the relay golden). The window
+ * stands in only with no host.
+ */
+export function viewCentre(host: HTMLElement | null, vp: Viewport): Point {
+  const w = host === null ? window.innerWidth : host.clientWidth
+  const h = host === null ? window.innerHeight : host.clientHeight
+  return screenToWorld({ x: w / 2, y: h / 2 }, vp)
+}
+
 /** Screen pixels a new object keeps from the host's edge when it is placed in view. */
 export const PLACE_EDGE_PX = 16
 
