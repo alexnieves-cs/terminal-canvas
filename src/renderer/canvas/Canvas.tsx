@@ -269,6 +269,8 @@ import type { FocusSide } from '../focus/focus-model'
 import { planFactsOf } from '../focus/plan-facts'
 import { planSummary, planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
+import { WorldStage, warmWorldView } from '../world/WorldStage'
+import { setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
@@ -3916,7 +3918,14 @@ export function Canvas({
   // the drawers, and every mousedown on Orchestrate would trip it. Read by
   // shouldIgnoreKeys, declared above, only from handlers long after this assignment.
   const canvasCoveredRef = useRef(false)
-  canvasCoveredRef.current = chrome.centerView !== 'canvas'
+  // M413. The 3D world view (dev only) covers the host the way Orchestrate does, and for the
+  // same reasons: its sessions keep running underneath and nothing typed over the world may
+  // reach them. The same bit the top bar's toggle, `#/world` and TC_WORLD=1 all write; gated
+  // on DEV HERE so a production build that was handed `#/world` cannot hide the canvas under
+  // a stage that was compiled out.
+  const worldOn = useWorldOn() && import.meta.env.DEV
+  const canvasCovered = chrome.centerView !== 'canvas' || worldOn
+  canvasCoveredRef.current = canvasCovered
   // M283. The element that last had focus INSIDE the canvas host, kept so a return from
   // Orchestrate hands the keyboard back — without it the user's next keystroke after the
   // round trip goes nowhere. Cleared when focus moves deliberately to something OUTSIDE
@@ -3956,11 +3965,12 @@ export function Canvas({
     for (const region of shellRef.current?.querySelectorAll<HTMLElement>('.shell__rail, .shell__tree, .shell__inspector') ?? []) {
       region.inert = chrome.centerView !== 'canvas'
     }
-    if (chrome.centerView !== 'canvas') {
+    if (canvasCovered) {
       // Blurred HERE, explicitly, rather than trusting `inert` to do it: Chromium's
       // focus fixup for an inert subtree runs lazily at a later style pass, and until it
       // does the terminal's textarea still takes a real keystroke (orch-page.3).
-      if (active instanceof HTMLElement && (host?.contains(active) === true || active.closest('.shell__rail, .shell__tree, .shell__inspector') !== null)) active.blur()
+      // The side regions only count under Orchestrate: under the world they stay usable.
+      if (active instanceof HTMLElement && (host?.contains(active) === true || (chrome.centerView !== 'canvas' && active.closest('.shell__rail, .shell__tree, .shell__inspector') !== null))) active.blur()
       return
     }
     // A task LATER, not here (a timeout, not a frame — a hidden window throttles frames): a Radix focus scope on the Orchestrate page hands focus
@@ -3978,7 +3988,7 @@ export function Canvas({
       el.focus({ preventScroll: true })
     }, 0)
     return () => window.clearTimeout(later)
-  }, [chrome.centerView])
+  }, [chrome.centerView, canvasCovered])
   // M283. The palette mounts INSIDE the canvas host, which is opacity 0 and inert while
   // covered — opened over Orchestrate (Cmd+K, the top bar's search) it was an invisible
   // text field eating keystrokes. Its verbs are the canvas's, so opening it is a return
@@ -4031,6 +4041,13 @@ export function Canvas({
   useEffect(() => {
     if (palette.open && chrome.centerView !== 'canvas') setCenterView('canvas')
   }, [palette.open, chrome.centerView, setCenterView])
+  // M413. The same two rules for the world: the palette mounts inside the host, which is
+  // invisible and inert under it, so opening the palette leaves the world; and the world is
+  // a view OF the canvas page, so leaving that page (Orchestrate, a task's focus view,
+  // People) turns it off rather than leaving a toggle pressed under another page.
+  useEffect(() => {
+    if (worldOn && (palette.open || chrome.centerView !== 'canvas')) setWorldOn(false)
+  }, [worldOn, palette.open, chrome.centerView])
   // M324. A TASK'S FOCUS VIEW — the third center page. It remembers the page it
   // was opened from (the canvas, or Orchestrate) so Back returns there; the
   // canvas's camera is never touched, so "there" is exactly where it was.
@@ -4251,7 +4268,7 @@ export function Canvas({
     // exists to prevent.
     // M283. And never over Orchestrate: the grid mounts inside the covered canvas host,
     // so it would be invisible, and its release commits a workspace switch.
-    enabled: !palette.open && chrome.centerView === 'canvas'
+    enabled: !palette.open && chrome.centerView === 'canvas' && !worldOn
   })
   // Publishes the predicate to the two consumers declared above it — see
   // navGridIsOpenRef's own comment. In an effect rather than a render-time
@@ -8752,6 +8769,7 @@ export function Canvas({
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}
         onSetCenterView={setCenterView}
+        worldView={import.meta.env.DEV ? { on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView } : undefined}
         running={inspectorSummary.running}
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
@@ -8835,6 +8853,8 @@ export function Canvas({
       {/* M268/M272. Orchestration shares the canvas grid cell; the canvas host
           stays mounted (visually behind, never unmounted) so PTYs and agents
           keep running. The overlay animates in; prefers-reduced-motion snaps. */}
+      {/* M413. The 3D world view's layer, over a host that stays mounted (dev only; see WorldStage). */}
+      {import.meta.env.DEV ? <WorldStage on={worldOn} hostRef={hostRef} /> : null}
       {chrome.centerView === 'orchestration' && (
         <div className="shell__orch shell__orch--on" data-center-view="orchestration" role="presentation">
           <OrchestrationView
@@ -9074,14 +9094,14 @@ export function Canvas({
         // never inferred from which panels happen to render summaries.
         data-flipped={flipped ? '' : undefined}
         data-cluster-arrival={clusterArrival ? '' : undefined}
-        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}${chrome.centerView !== 'canvas' ? ' canvas--behind-orch' : ''}`}
+        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}${chrome.centerView !== 'canvas' ? ' canvas--behind-orch' : ''}${worldOn ? ' canvas--behind-world' : ''}`}
         ref={hostRef}
-        aria-hidden={chrome.centerView !== 'canvas' ? true : undefined}
+        aria-hidden={canvasCovered ? true : undefined}
         // M283. Covered means out of the tab order and deaf to clicks and keys, not only
         // invisible: an opacity-0 host still takes Tab into a terminal's textarea, and
         // typing there reached the PTY. `inert`, not display:none — a collapsed host
         // refits every xterm and SIGWINCHes each running agent (orch-page.2).
-        inert={chrome.centerView !== 'canvas'}
+        inert={canvasCovered}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
         // own keyboard model (a screen reader must pass keys through, not

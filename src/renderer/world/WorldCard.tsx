@@ -1,7 +1,9 @@
-import { memo, type JSX, type RefObject } from 'react'
+import { memo, useRef, type JSX, type MutableRefObject, type RefObject } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import { useAgent } from './agent-world-store'
 import { cardLine, statusWord, type CardLine } from './world-scene'
+import { cardStand, cardTiltDeg } from './world-transition'
 
 /**
  * The floating status card over a robot: the agent's name and status word, and
@@ -25,6 +27,12 @@ import { cardLine, statusWord, type CardLine } from './world-scene'
  * with only a console warning ("synchronously unmount a root"). A card layer
  * of our own is a target that never changes. The layer also keeps the cards
  * clipped to the view and under the page's own buttons.
+ *
+ * It STANDS UP as its robot arrives: lying back (rotateX, hinged on its bottom
+ * edge) and faded at the start of the robot's pop, facing the camera at the
+ * end. `--world-tilt` is written straight onto the card from the frame loop —
+ * a React state here would re-render the card 60 times a second — and only
+ * while it is changing, so a card at rest costs nothing.
  *
  * What it paints is the feed's own text. Today that is simulated; the day a
  * real session feeds the store, the producer is where secrets get scrubbed
@@ -52,13 +60,24 @@ function Line({ line }: { line: CardLine }): JSX.Element | null {
   }
 }
 
-export const WorldCard = memo(function WorldCard({ agentId, y, layer }: { agentId: string; y: number; layer: RefObject<HTMLElement | null> }): JSX.Element | null {
+export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop }: { agentId: string; y: number; layer: RefObject<HTMLElement | null>; pop: MutableRefObject<number> }): JSX.Element | null {
   const record = useAgent(agentId)
+  const card = useRef<HTMLDivElement>(null)
+  const written = useRef(-1)
+  useFrame(() => {
+    const node = card.current
+    if (!node) return
+    const stand = cardStand(pop.current)
+    if (stand === written.current) return
+    written.current = stand
+    node.style.setProperty('--world-tilt', `${cardTiltDeg(stand).toFixed(2)}deg`)
+    node.style.opacity = String(Math.min(1, stand * 2))
+  })
   if (!record || !layer.current) return null
   const word = statusWord(record.status)
   return (
     <Html position={[0, y, 0]} zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
-      <div className="world-card" data-status={record.status} role="group" aria-label={`${record.name}: ${word}`}>
+      <div ref={card} className="world-card" style={{ opacity: 0 }} data-status={record.status} role="group" aria-label={`${record.name}: ${word}`}>
         <div className="world-card__head">
           <span className="world-card__name">{record.name}</span>
           <span className="world-card__status">{word}</span>

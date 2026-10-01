@@ -5,6 +5,7 @@ import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
 import { useWorldPalette } from './world-palette'
 import { useStationPlan } from './world-roster'
+import { dollyAt, popDelays, type Vec3, type WorldTransition } from './world-transition'
 
 /**
  * The 3D world view: every live agent in the event store as a robot at its own
@@ -13,7 +14,7 @@ import { useStationPlan } from './world-roster'
  * a socket — so a simulated agent, a real session and a teammate's all arrive
  * the same way.
  *
- * Reached only through `lazy()` in WorldRoute, and this is the root of the
+ * Reached only through `lazy()` in WorldStage, and this is the root of the
  * file set CLAUDE.md's library table names (`three`, fiber, drei, here and in
  * WorldOffice / WorldRobot / WorldCard). A static import from anything
  * Canvas.tsx reaches puts three.js in the first chunk — +2.2MB, no error, no
@@ -35,7 +36,26 @@ import { useStationPlan } from './world-roster'
  *     because it is a still image between events. Here the robots' idle clips
  *     are the point, so something moves every frame; the cost is held down by
  *     a capped pixel ratio, a handful of draw calls and no shadow maps.
+ * (5) **The orbit controls are OFF while the camera is travelling, and the
+ *     rest pose is whatever the orbit last held.** OrbitControls rebuilds the
+ *     camera from its own spherical state on every `update()`, so a dolly
+ *     written onto the camera while it is enabled is overwritten the same
+ *     frame and the opening shot never plays — no error, the room just
+ *     appears. `TransitionRig` therefore disables the controls for the move,
+ *     writes the camera itself, and on arrival re-enables them and calls
+ *     `update()` once so the orbit picks up from where the shot ended. While
+ *     at rest it copies the camera's position into `rest` every frame, so
+ *     leaving dollies back out from where a person left the view and not from
+ *     the opening pose (the camera would jump to it first).
+ * (6) **Nothing here disposes the renderer.** R3F's own unmount frees the
+ *     scene, the renderer and then loses its context (forceContextLoss) — and
+ *     it tracks each unmount with a token that StrictMode's simulated
+ *     unmount/remount does not trip. A cleanup of ours that also called
+ *     `gl.dispose()` would kill the live context of the remount.
  */
+
+/** The point the orbit looks at, in the middle of the room a little above the floor. */
+const ORBIT_TARGET: Vec3 = { x: 0, y: 0.9, z: 0.4 }
 
 function Lights({ dark }: { dark: boolean }): JSX.Element {
   return (
@@ -69,13 +89,12 @@ function useRoomClamp(controls: RefObject<OrbitControlsRef | null>, limit: numbe
   }, [camera, controls, limit])
 }
 
-function Controls({ limit, maxDistance }: { limit: number; maxDistance: number }): JSX.Element {
-  const ref = useRef<OrbitControlsRef>(null)
-  const clamp = useRoomClamp(ref, limit)
+function Controls({ controls, limit, maxDistance }: { controls: RefObject<OrbitControlsRef | null>; limit: number; maxDistance: number }): JSX.Element {
+  const clamp = useRoomClamp(controls, limit)
   return (
     <OrbitControls
-      ref={ref}
-      target={[0, 0.9, 0.4]}
+      ref={controls}
+      target={[ORBIT_TARGET.x, ORBIT_TARGET.y, ORBIT_TARGET.z]}
       enableDamping
       dampingFactor={0.08}
       minDistance={4}
@@ -86,6 +105,35 @@ function Controls({ limit, maxDistance }: { limit: number; maxDistance: number }
       onChange={clamp}
     />
   )
+}
+
+/**
+ * The opening and closing shot: the camera dollies between a high, wide pose
+ * and the resting orbit as the transition runs. See (5) in the header.
+ */
+function TransitionRig({ transition, start, controls }: { transition: WorldTransition; start: Vec3; controls: RefObject<OrbitControlsRef | null> }): null {
+  const camera = useThree((s) => s.camera)
+  const rest = useRef<Vec3>(start)
+  useFrame(() => {
+    const c = controls.current
+    const s = transition.sample(performance.now())
+    if (s.settled && s.target === 1) {
+      if (c && !c.enabled) {
+        // The shot just ended: stand on the rest pose and hand the camera back.
+        camera.position.set(rest.current.x, rest.current.y, rest.current.z)
+        camera.lookAt(ORBIT_TARGET.x, ORBIT_TARGET.y, ORBIT_TARGET.z)
+        c.enabled = true
+        c.update()
+      }
+      rest.current = { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+      return
+    }
+    if (c) c.enabled = false
+    const at = dollyAt(rest.current, ORBIT_TARGET, s.eased)
+    camera.position.set(at.x, at.y, at.z)
+    camera.lookAt(ORBIT_TARGET.x, ORBIT_TARGET.y, ORBIT_TARGET.z)
+  }, -2)
+  return null
 }
 
 /** Frames per second and draw load, written straight to a DOM node — a React state here would re-render the readout 60 times a second. */
@@ -123,16 +171,26 @@ function StatsProbe({ target }: { target: RefObject<HTMLDivElement | null> }): n
   return null
 }
 
-export function WorldView(): JSX.Element {
+export function WorldView({ transition }: { transition: WorldTransition }): JSX.Element {
   const palette = useWorldPalette()
   const { plan } = useStationPlan()
   const stations = useMemo(() => [...plan.stations.values()], [plan])
+  // Each robot's pop is delayed by how far it stands from the middle of the room.
+  const delays = useMemo(() => {
+    const list = stations.map((station) => {
+      const at = station.home ?? station.seat
+      return Math.hypot(at.x, at.z)
+    })
+    const pops = popDelays(list)
+    return new Map(stations.map((station, i) => [station.agentId, pops[i]!]))
+  }, [stations])
   const stats = useRef<HTMLDivElement>(null)
   const cards = useRef<HTMLDivElement>(null)
+  const controls = useRef<OrbitControlsRef>(null)
   // Framed for the room as it is when the view opens; a person zooms for a bigger one.
-  const start = useMemo((): [number, number, number] => {
+  const start = useMemo((): Vec3 => {
     const dist = Math.max(16, plan.arcRadius * 2.9)
-    return [0, dist * 0.53, dist * 0.82]
+    return { x: 0, y: dist * 0.53, z: dist * 0.82 }
   }, [])
   const limit = plan.arcRadius + 3
 
@@ -141,7 +199,7 @@ export function WorldView(): JSX.Element {
       <Canvas
         flat
         dpr={[1, 1.75]}
-        camera={{ position: start, fov: 40, near: 0.1, far: 140 }}
+        camera={{ position: [start.x, start.y, start.z], fov: 40, near: 0.1, far: 140 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
         <color attach="background" args={[palette.ground]} />
@@ -149,10 +207,11 @@ export function WorldView(): JSX.Element {
         <Lights dark={palette.dark} />
         <WorldOffice stations={stations} palette={palette} />
         {stations.map((station) => (
-          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} />
+          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} />
         ))}
         <ContactShadows position={[0, 0.004, 0]} opacity={palette.dark ? 0.7 : 0.4} scale={plan.arcRadius * 2 + 10} blur={2.2} far={2.4} resolution={512} />
-        <Controls limit={limit} maxDistance={Math.max(30, plan.arcRadius * 5)} />
+        <Controls controls={controls} limit={limit} maxDistance={Math.max(30, plan.arcRadius * 5)} />
+        <TransitionRig transition={transition} start={start} controls={controls} />
         <StatsProbe target={stats} />
       </Canvas>
       <div className="world-view__cards" ref={cards} />

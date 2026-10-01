@@ -142,7 +142,7 @@ export function createWindow(state: MainState, stores: Stores): void {
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
     // `TC_WORLD=1 npm run dev` opens straight onto the dev-only 3D world view
-    // (renderer/world/WorldRoute.tsx). A hash, so nothing reloads when it changes.
+    // (renderer/world/world-toggle.ts reads the hash). A hash, so nothing reloads when it changes.
     void window.loadURL(process.env['TC_WORLD'] === '1' ? `${devServerUrl}#/world` : devServerUrl)
   } else {
     void window.loadFile(join(__dirname, '../renderer/index.html'))

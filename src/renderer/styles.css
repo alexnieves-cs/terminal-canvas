@@ -4844,6 +4844,10 @@ body {
   color: var(--text);
 }
 
+/* M413. The World view toggle, held down while the world is up — the merged toggle's look. */
+.shell__top .shell__world-toggle { -webkit-app-region: no-drag; padding-inline: var(--sp-3); }
+.shell__world-toggle--on { background: var(--s-5); border-color: var(--line-strong); color: var(--text); }
+
 /* M14. The rubber band. A sibling of .world: the band must stay under the
    cursor at the cursor's own size, and inside the transform it would be
    scaled twice. Never a click target: a hit-testable band would swallow the
@@ -10879,11 +10883,25 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .shape--peer:hover .shape__remove, .shape__remove:focus-visible { opacity: 1; }
 .shape__remove:hover { color: var(--fg); }
 
-/* M412. The dev-only 3D world view (renderer/world/, reached at #/world). An
-   overlay over the canvas, never a replacement for it: Canvas owns every
-   terminal's xterm and PTY. Its cards are drei <Html> DOM, so they take the
-   app's tokens like any other chrome. */
-.world-route { position: fixed; inset: 0; z-index: 1200; background: var(--s-0); color: var(--fg); }
+/* M412/M413. The dev-only 3D world view (renderer/world/). A LAYER over the
+   canvas, in the canvas's own grid cell, never a replacement for it: Canvas
+   owns every terminal's xterm and PTY, so the host stays mounted, hidden and
+   inert while the world is up. WorldStage fades the layer and the host and
+   settles the host back as it goes, writing opacity and transform inline for
+   the move only; at rest `.canvas--behind-world` is the host's look. Its
+   cards are drei <Html> DOM, so they take the app's tokens like any other chrome. */
+.shell__world {
+  grid-area: canvas;
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--s-0);
+  color: var(--fg);
+}
+/* Hidden and deaf, not collapsed: a collapsed host refits every xterm and SIGWINCHes each running agent. */
+.canvas--behind-world { opacity: 0; pointer-events: none; }
 .world-view { position: absolute; inset: 0; }
 .world-view canvas { display: block; touch-action: none; }
 /* Where drei's <Html> cards mount (WorldCard's `portal`): the canvas's own box, so a card is clipped to the view and sits under the page's buttons. */
@@ -10893,14 +10911,6 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3);
   pointer-events: none; user-select: none;
 }
-.world-route__close {
-  position: absolute; top: var(--sp-6); right: var(--sp-6);
-  min-height: 28px; padding: 0 var(--sp-5);
-  border: 1px solid var(--line-strong); border-radius: var(--r-md);
-  background: var(--glass-2); color: var(--fg);
-  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 500; cursor: pointer;
-}
-.world-route__close:hover { border-color: var(--fg-3); }
 .world-route__note {
   position: absolute; top: var(--sp-6); left: 50%; transform: translateX(-50%);
   margin: 0; padding: var(--sp-3) var(--sp-5);
@@ -10915,8 +10925,12 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    so it grows upward from the robot, not down over it. */
 .world-card {
   --world-card-tone: var(--fg-4);
+  --world-tilt: 0deg;
   box-sizing: border-box; width: 176px;
-  transform: translate(-50%, -100%);
+  /* Anchored by its bottom-centre, which is also the hinge it stands up on
+     (WorldCard writes --world-tilt while its robot arrives; at rest it is 0). */
+  transform: translate(-50%, -100%) perspective(640px) rotateX(var(--world-tilt));
+  transform-origin: 50% 100%;
   padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line-strong); border-left: 3px solid var(--world-card-tone);
   border-radius: var(--r-md);

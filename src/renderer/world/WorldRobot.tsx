@@ -6,6 +6,7 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { getAgent, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { agentTint, effectOf, goalOf, isTyping, type Effect, type Station } from './world-scene'
+import { ARRIVE_MS, easeInOutCubic, popOf, type WorldTransition } from './world-transition'
 
 /**
  * One agent as a robot: a rigged Quaternius character walking between its desk
@@ -49,6 +50,13 @@ import { agentTint, effectOf, goalOf, isTyping, type Effect, type Station } from
  *     node called `Head` ahead of the `Head` bone in traversal order, and
  *     `getObjectByName('Head')` returns the mesh — tilting it moves nothing a
  *     person can see, with no error.
+ * (5) **The pop scales `bob`, never `placer`.** `placer` carries the walk and
+ *     the status card, and the card's DOM position is projected from it — a
+ *     robot scaled to 0 on `placer` drags its card's anchor down to its feet.
+ *     `bob` is the robot's body alone, and its origin is the floor, so a scale
+ *     there grows the robot from its feet. A scale of exactly 0 is a singular
+ *     matrix (three warns on the normal matrix), so the pop floors at 1e-4 and
+ *     the body is hidden below that instead.
  */
 
 const MODEL_BASE = `${import.meta.env.BASE_URL}models/quaternius-platformer/`
@@ -192,9 +200,13 @@ export interface WorldRobotProps {
   station: Station
   /** Where the status cards mount; see WorldCard. */
   cards: RefObject<HTMLElement | null>
+  /** The canvas↔world move, read for this robot's pop. */
+  transition: WorldTransition
+  /** How far into the move this robot starts (0 = with the first; see `popDelays`). */
+  delay: number
 }
 
-function RobotBody({ agentId, station, cards }: WorldRobotProps): JSX.Element {
+function RobotBody({ agentId, station, cards, transition, delay }: WorldRobotProps): JSX.Element {
   const gun = station.index % 2 === 1
   const gltf = useGLTF(gun ? CHARACTER_GUN_URL : CHARACTER_URL, ...PLAIN)
   const rig = useMemo(() => buildRig(gltf, ROBOT_HEIGHT), [gltf])
@@ -208,6 +220,14 @@ function RobotBody({ agentId, station, cards }: WorldRobotProps): JSX.Element {
 
   const placer = useRef<THREE.Group>(null)
   const bob = useRef<THREE.Group>(null)
+  // This robot's pop (0…1), written by the frame loop and read by its card.
+  const pop = useRef(0)
+  // The delay is read in the frame loop, which must not be rebuilt for it.
+  const delayRef = useRef(delay)
+  delayRef.current = delay
+  // When this robot first ran a frame — a robot that turns live mid-session, or
+  // whose model loaded late, arrives on its own clock instead of blinking in.
+  const bornAt = useRef<number | null>(null)
   const fadeToRef = useRef<(name: string, once: boolean) => void>(() => {})
   // The frame loop reads the latest station through a ref: the plan changes as
   // agents arrive, and the loop must not be rebuilt (or its state lost) for it.
@@ -261,6 +281,17 @@ function RobotBody({ agentId, station, cards }: WorldRobotProps): JSX.Element {
     const t = state.clock.elapsedTime
     const dt = Math.min(delta, 0.1)
     const rec = getAgent(agentId)
+
+    // ── the pop: the move between the canvas and the world, and arriving ──
+    const nowMs = performance.now()
+    bornAt.current ??= nowMs
+    const moved = popOf(transition.sample(nowMs).raw, delayRef.current)
+    const arrived = easeInOutCubic((nowMs - bornAt.current) / ARRIVE_MS)
+    pop.current = Math.min(moved, arrived)
+    if (bob.current) {
+      bob.current.visible = pop.current > 1e-3
+      bob.current.scale.setScalar(Math.max(pop.current, 1e-4))
+    }
 
     // ── events → one-shots ────────────────────────────────────────────────
     if (rec && rec !== st.rec) {
@@ -355,7 +386,7 @@ function RobotBody({ agentId, station, cards }: WorldRobotProps): JSX.Element {
         </group>
       </group>
       {status === 'error' ? <ErrorBug /> : null}
-      <WorldCard agentId={agentId} y={ROBOT_HEIGHT + 0.2} layer={cards} />
+      <WorldCard agentId={agentId} y={ROBOT_HEIGHT + 0.2} layer={cards} pop={pop} />
     </group>
   )
 }

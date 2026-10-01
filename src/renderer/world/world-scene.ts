@@ -149,6 +149,28 @@ export function stationPlan(roster: readonly RosterEntry[]): StationPlan {
   return { conductorId: conductor?.agentId ?? null, stations, arcRadius }
 }
 
+// ── who is in the room ──────────────────────────────────────────────────────
+
+/**
+ * A table for the reason `CAN_TYPE` below is one: `verify:rail state.2` keeps a
+ * state word from being spelled as a literal outside panel-state.ts.
+ */
+const LIVE: Readonly<Record<AgentStatus, boolean>> = {
+  working: true, thinking: true, waiting_approval: true, idle: false, error: false
+}
+
+/**
+ * Whether an agent gets a robot. The room is for work happening NOW — an agent
+ * that is working, thinking or waiting on a person. A dormant or finished one
+ * (idle), or one that stopped on an error, stays on the 2D canvas only: it has
+ * nothing to do at a desk, and a room of idle robots would bury the live ones.
+ * So an errored agent leaves the room too: the HitReact and the bee over it are seen
+ * only by someone watching when the error lands.
+ */
+export function isLiveStatus(status: AgentStatus): boolean {
+  return LIVE[status]
+}
+
 // ── what an agent does ──────────────────────────────────────────────────────
 
 export type Goal = 'home' | 'table'

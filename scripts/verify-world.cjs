@@ -9,6 +9,10 @@
    React hooks are useSyncExternalStore over the same reads, so they are not
    rendered here.
 
+   M413 adds the canvas<->world move (world-transition.ts, pure: one clock, the
+   easing, the stagger, the dolly, the card tilt), the toggle store, who gets a
+   robot (live statuses only), and the pins for the stage's mount discipline.
+
    M412 adds the 3D scene's decisions (renderer/world/world-scene.ts, pure) and
    pins its doors: three/fiber/drei stay in the lazily-loaded file set, and the
    pins for the traps that fail with no error (the glTF decoders the CSP
@@ -33,6 +37,8 @@ buildSync({
       "  sim: require('./src/main/world-sim.ts'),",
       "  store: require('./src/renderer/world/agent-world-store.ts'),",
       "  scene: require('./src/renderer/world/world-scene.ts'),",
+      "  trans: require('./src/renderer/world/world-transition.ts'),",
+      "  toggle: require('./src/renderer/world/world-toggle.ts'),",
       "  presence: require('./src/shared/presence.ts')",
       "}"
     ].join('\n'),
@@ -42,7 +48,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, presence: P } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, trans: T, toggle: G, presence: P } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -290,6 +296,69 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     tints.join())
 }
 
+// ── who gets a robot, and the move between canvas and world (M413) ───────────
+{
+  const statuses = ['working', 'thinking', 'idle', 'waiting_approval', 'error']
+  ok('world.live.1 only working, thinking and waiting_approval get a robot — idle and error stay on the 2D canvas',
+    statuses.filter(Z.isLiveStatus).join() === 'working,thinking,waiting_approval', statuses.filter(Z.isLiveStatus).join())
+  const roster = readFileSync(join(root, 'src/renderer/world/world-roster.ts'), 'utf8')
+  ok('world.live.2 the scene roster is filtered through isLiveStatus, so a dormant or finished agent has no desk and the plan re-flows without it',
+    /isLiveStatus\(record\.status\)/.test(roster) && /\.filter\(/.test(roster))
+
+  const near = (a, b) => Math.abs(a - b) < 1e-9
+  ok('world.trans.1 easeInOutCubic is 0 at 0, 1 at 1, 1/2 at 1/2, never leaves 0…1, and only rises',
+    T.easeInOutCubic(0) === 0 && T.easeInOutCubic(1) === 1 && near(T.easeInOutCubic(0.5), 0.5) && T.easeInOutCubic(-3) === 0 && T.easeInOutCubic(9) === 1 &&
+      Array.from({ length: 100 }, (_, i) => T.easeInOutCubic((i + 1) / 100) >= T.easeInOutCubic(i / 100)).every(Boolean))
+
+  const t = T.createWorldTransition(0)
+  ok('world.trans.2 the move takes WORLD_TRANSITION_MS, is linear in raw time, settles exactly on its target, and a repeat setTarget changes nothing',
+    T.WORLD_TRANSITION_MS === 1000 && (t.setTarget(1, 100), t.setTarget(1, 700), true) &&
+      near(t.sample(600).raw, 0.5) && !t.sample(600).settled && t.sample(1100).settled && t.sample(1100).raw === 1 && t.sample(5000).eased === 1,
+    JSON.stringify([t.sample(600), t.sample(1100)]))
+  const r = T.createWorldTransition(0)
+  r.setTarget(1, 0)
+  r.setTarget(0, 400)
+  ok('world.trans.3 a toggle mid-move reverses from where it is, at the same speed — no jump, and it takes only as long as the way back (0.4 of the move)',
+    near(r.sample(400).raw, 0.4) && near(r.sample(600).raw, 0.2) && r.sample(800).settled && r.sample(800).raw === 0 && r.sample(800).target === 0,
+    JSON.stringify([r.sample(400), r.sample(600), r.sample(800)]))
+  const snap = T.createWorldTransition(0, 0)
+  snap.setTarget(1, 5)
+  ok('world.trans.4 a zero duration snaps (prefers-reduced-motion) and starting on the world is settled on it',
+    snap.sample(5).settled && snap.sample(5).raw === 1 && T.createWorldTransition(1).sample(0).settled && T.createWorldTransition(1).sample(0).raw === 1)
+
+  const delays = T.popDelays([6.2, 5.6, 5.9, 5.6])
+  ok('world.trans.5 the nearest robot pops first (delay 0), the farthest last (the full stagger), in order of distance — even on a ring where every desk is within 10% of the same radius',
+    delays[1] === 0 && delays[3] === 0 && near(delays[0], T.POP_STAGGER) && delays[2] > 0 && delays[2] < delays[0] &&
+      T.popDelays([4]).join() === '0' && T.popDelays([3, 3, 3]).join() === '0,0,0' && T.popDelays([]).length === 0, delays.join())
+  ok('world.trans.6 a robot is gone at raw 0 and whole at raw 1 whatever its delay, and played backwards the farthest leaves first',
+    [0, T.POP_STAGGER / 2, T.POP_STAGGER].every((d) => T.popOf(0, d) === 0 && T.popOf(1, d) === 1) &&
+      T.popOf(0.7, 0) > T.popOf(0.7, T.POP_STAGGER) && T.popOf(0.4, T.POP_STAGGER) === 0)
+
+  const rest = { x: 0, y: 8.5, z: 13 }
+  const target = { x: 0, y: 0.9, z: 0.4 }
+  const far = T.dollyAt(rest, target, 0)
+  const end = T.dollyAt(rest, target, 1)
+  ok('world.trans.7 the camera opens HIGH and WIDE of its resting pose on the same bearing, and ends exactly on it',
+    far.y > rest.y && far.z > rest.z && near(far.x, rest.x) && end.x === 0 && end.y === rest.y && end.z === rest.z &&
+      near(far.z - target.z, (rest.z - target.z) * T.DOLLY.out) && near(far.y - target.y, (rest.y - target.y) * T.DOLLY.up))
+  ok('world.trans.8 the 2D canvas fades to nothing and settles back SLIGHTLY (never below 0.9), and the card lies back at the start of its robot\'s pop and faces the camera at the end',
+    T.hostLook(0).opacity === 1 && T.hostLook(0).scale === 1 && T.hostLook(1).opacity === 0 && T.hostLook(1).scale === T.HOST_SCALE_MIN && T.HOST_SCALE_MIN > 0.9 &&
+      T.cardStand(0) === 0 && T.cardStand(0.45) === 0 && T.cardStand(1) === 1 && T.cardTiltDeg(0) === T.CARD_TILT_DEG && T.cardTiltDeg(1) === 0)
+
+  // The toggle store, with no window: the bit, its idempotence, and that the setter is a pure flip.
+  let notified = 0
+  const unsub = (() => { const l = () => { notified++ }; return typeof G.subscribeForTest === 'function' ? G.subscribeForTest(l) : () => {} })()
+  G.setWorldOn(false)
+  G.toggleWorld()
+  const afterOn = G.isWorldOn()
+  G.setWorldOn(true)
+  G.toggleWorld()
+  ok('world.toggle.1 the toggle bit flips, setting it to what it already is changes nothing, and it starts off outside a #/world window',
+    afterOn === true && G.isWorldOn() === false && G.WORLD_HASH === '#/world')
+  unsub()
+  void notified
+}
+
 // ── the doors and the silent traps ───────────────────────────────────────────
 {
   const dir = join(root, 'src/renderer/world')
@@ -305,14 +374,15 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const grep = (args) => { try { return execFileSync('grep', args, { encoding: 'utf8' }).trim().split('\n').filter(Boolean) } catch { return [] } }
   const outside = grep(['-rnE', "from '(\\./|(@renderer/)?world/)?(\\./)?World(View|Office|Robot|Card)'", join(root, 'src')])
     .filter((l) => !/import type \{/.test(l))
-  const route = read('WorldRoute.tsx')
-  const app = readFileSync(join(root, 'src/renderer/App.tsx'), 'utf8')
-  ok('world.door.2 WorldView is reached only through a pure-annotated lazy() in WorldRoute, and App mounts the route only under import.meta.env.DEV — a static import, or a missing annotation, ships three.js (or a route nobody can reach) in production with no error',
-    /\/\* @__PURE__ \*\/ lazy\(async \(\) => \(\{ default: \(await import\('\.\/WorldView'\)\)\.WorldView \}\)\)/.test(route) &&
+  const stage = read('WorldStage.tsx')
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  ok('world.door.2 WorldView is reached only through a pure-annotated lazy() in WorldStage, and Canvas mounts the stage only under import.meta.env.DEV — a static import, or a missing annotation, ships three.js (or a view nobody can reach) in production with no error',
+    /\/\* @__PURE__ \*\/ lazy\(async \(\) => \(\{ default: \(await loadWorldView\(\)\)\.WorldView \}\)\)/.test(stage) &&
+      /import\('\.\/WorldView'\)/.test(stage) && !/from '\.\/WorldView'/.test(stage) &&
       outside.every((l) => /\/world\/World(Office|Robot|Card|View)\.tsx:\d+:/.test(l) && /from '\.\/World(Office|Robot|Card)'/.test(l)) &&
-      /import\.meta\.env\.DEV \? <WorldRoute \/> : null/.test(app) && !/from '\.\/WorldView'/.test(route))
+      /import\.meta\.env\.DEV \? <WorldStage on=\{worldOn\} hostRef=\{hostRef\} \/> : null/.test(canvasSrc))
 
-  const scenery = SCENE.concat('WorldRoute.tsx', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts')
+  const scenery = SCENE.concat('WorldStage.tsx', 'world-toggle.ts', 'world-transition.ts', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts')
   const leaks = scenery.filter((f) => /window\.canvas|WebSocket|ipcRenderer|\.onEvents\(/.test(read(f)))
   ok('world.door.3 the scene reads ONLY the event store — no bridge, no socket, no subscription of its own in any file under world/ but the store itself', leaks.length === 0, leaks.join())
 
@@ -333,13 +403,36 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.door.6 the bone overlay is undone before the mixer runs and re-captured after it, and bones are found by isBone — the mixer writes only CHANGED values, so a per-frame rotateX on a constant track compounds until the robot tumbles; "Head" is also a mesh',
     i1 > 0 && i1 < i2 && i2 < i3 && /isBone/.test(robot))
 
-  ok('world.door.7 the route is the hash #/world and main\'s TC_WORLD=1 opens that same hash, under the dev server only',
-    /const WORLD_HASH = '#\/world'/.test(route) &&
+  ok('world.door.7 the hash #/world turns the view on, and main\'s TC_WORLD=1 opens that same hash, under the dev server only',
+    /export const WORLD_HASH = '#\/world'/.test(read('world-toggle.ts')) &&
       /process\.env\['TC_WORLD'\] === '1' \? `\$\{devServerUrl\}#\/world` : devServerUrl/.test(readFileSync(join(root, 'src/main/bootstrap/window.ts'), 'utf8')))
 
   const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
   ok('world.door.8 the classes the scene paints with exist in the stylesheet',
-    ['world-route', 'world-view', 'world-view__cards', 'world-card', 'world-card__line', 'world-route__close'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
+    ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-card', 'world-card__line', 'world-route__note', 'shell__world-toggle'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
+
+  const topBar = readFileSync(join(root, 'src/renderer/shell/TopBar.tsx'), 'utf8')
+  ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and Canvas gates the toggle bit and the top bar\'s button on DEV (a hidden scene keeps a WebGL context drawing for nobody)',
+    /if \(!on && !present\) return null/.test(stage) && /if \(s\.target === 0\) setPresent\(false\)/.test(stage) &&
+      /const worldOn = useWorldOn\(\) && import\.meta\.env\.DEV/.test(canvasSrc) &&
+      /worldView=\{import\.meta\.env\.DEV \? \{/.test(canvasSrc) && /worldView !== undefined && centerView === 'canvas'/.test(topBar))
+
+  ok('world.door.10 the 2D canvas is hidden, never unmounted or collapsed — the host stays rendered, takes a class + inert + aria-hidden from the same bit, and the move writes only opacity/transform/will-change on it and removes each at rest (a layout change refits every xterm and SIGWINCHes each agent; a stray inline style outlives the class)',
+    /canvas--behind-world/.test(canvasSrc) && /inert=\{canvasCovered\}/.test(canvasSrc) && /canvasCoveredRef\.current = canvasCovered/.test(canvasSrc) &&
+      ['opacity', 'transform', 'will-change'].every((prop) => new RegExp(`host\\.style\\.removeProperty\\('${prop}'\\)`).test(stage)) &&
+      !/host\.style\.(width|height|display|visibility|top|left|position)\b/.test(stage) &&
+      /\.canvas--behind-world \{ opacity: 0; pointer-events: none; \}/.test(readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')))
+
+  const view = read('WorldView.tsx')
+  // Comments explain these very traps by name, so the negative checks read CODE only.
+  const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  ok('world.door.11 the orbit controls are off while the camera travels and the rig runs ahead of them (priority -2), and nothing in the scene disposes the renderer itself — R3F frees the context on unmount, and a second dispose kills the live context of a StrictMode remount',
+    /c\.enabled = false/.test(view) && /c\.enabled = true/.test(view) && /\}, -2\)/.test(view) &&
+      !files.some((f) => /\bgl\.(dispose|forceContextLoss)\(|\.forceContextLoss\(/.test(code(f))))
+
+  ok('world.door.12 the stage, the scene and the 2D host share ONE transition object — the scene takes it as a prop, robots sample it in their frame loop, and no file keeps a progress of its own',
+    /<WorldView transition=\{transition\} \/>/.test(stage) && /transition\.sample\(/.test(robot) && /transition\.sample\(/.test(view) &&
+      !files.some((f) => /\b(?:let|const)\s+progress\b|progress\s*\+=/.test(code(f))))
 
   // The model names are string literals in the scene; a re-download that renamed
   // a clip would leave a robot in its bind pose with nothing logged.

@@ -43,6 +43,12 @@ export interface TopBarProps {
   /** M268. Center page: canvas or orchestration. */
   centerView: CenterView
   onSetCenterView: (view: CenterView) => void
+  /**
+   * M413. The 3D world view's toggle, on the Canvas page only. Absent in a production build
+   * (the view is dev-only until a packaged build has been measured), so the bar shows nothing.
+   * `onWarm` fetches the scene's code and models ahead of the click.
+   */
+  worldView?: { on: boolean; onToggle: () => void; onWarm: () => void }
   /** M279. The live status cluster: agents working and waiting, from the inspector's summary. */
   running: number
   waiting: number
@@ -74,7 +80,7 @@ export interface TopBarProps {
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext, navigatorOpen, onToggleNavigator,
   workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
-  centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false
+  centerView, onSetCenterView, worldView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -176,6 +182,16 @@ export function TopBar({
           (the reference pass moved it from before the field): the one fact a
           person returning to the window wants first. Nothing at rest. */}
       <LiveStatus running={running} waiting={waiting} onJumpWaiting={onJumpWaiting} />
+      {/* M413. A lens on the Canvas page, not a page of its own: the canvas stays mounted
+          under it with its camera, selection and running sessions, which is why this is a
+          pressed toggle and not a fourth segment of the center control. Warmed on hover and
+          focus so the first move does not wait on the scene's code and models. */}
+      {worldView !== undefined && centerView === 'canvas' && (
+        <button type="button" className={`shell__world-toggle${worldView.on ? ' shell__world-toggle--on' : ''}`} aria-pressed={worldView.on}
+          title={worldView.on ? 'Back to the canvas (Esc)' : 'World view — the agents that are working, as robots in a 3D room'}
+          onPointerEnter={worldView.onWarm} onFocus={worldView.onWarm}
+          {...shellControl(worldView.onToggle)}>World view</button>
+      )}
       {/* M276. The menu's BEHAVIOUR is the Menu primitive's; its look is these
           same classes, unchanged. `.shell__view` stays the positioned host and
           `.shell__view-menu` keeps its own `position: absolute` rule — Radix's

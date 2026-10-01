@@ -539,13 +539,13 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
 // island; a third importer anywhere Canvas.tsx reaches puts the +2.2MB chunk
 // into startup with no error and every suite green. The check reads the source
 // AND the built chunks: the first chunk must not carry three's renderer.
-ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304), orchestration-bloom.tsx and the 3D world scene (M412: WorldOffice, WorldRobot, WorldView — verify:world world.door.1 pins the whole set, drei included), and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
+ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304), orchestration-bloom.tsx and the 3D world scene (M412: WorldOffice, WorldRobot, WorldView; M413: WorldCard useFrame — verify:world world.door.1 pins the whole set, drei included), and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
   (() => {
     const { execFileSync } = require('node:child_process')
     const hits = execFileSync('grep', ['-rlE', "from '(three|@react-three/fiber)'", join(root, 'src')], { encoding: 'utf8' })
       .trim().split('\n').filter(Boolean).map((x) => x.replace(join(root, 'src/'), '')).sort()
     const allowed = ['renderer/orchestration/OrchestrationCubes.tsx', 'renderer/orchestration/OrchestrationLive.tsx', 'renderer/orchestration/orchestration-bloom.tsx',
-      'renderer/world/WorldOffice.tsx', 'renderer/world/WorldRobot.tsx', 'renderer/world/WorldView.tsx']
+      'renderer/world/WorldCard.tsx', 'renderer/world/WorldOffice.tsx', 'renderer/world/WorldRobot.tsx', 'renderer/world/WorldView.tsx']
     if (hits.join() !== allowed.join()) return false
     const assets = join(root, 'out/renderer/assets')
     if (!existsSync(assets)) return true // no build yet: the source half stands alone (verify-all builds before the Electron tier, not before this suite)
@@ -809,10 +809,12 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   // as "not the canvas" rather than naming Orchestrate — every page that covers
   // the host makes it inert and gates the shortcuts, not only the first one.
   ok('orch-page.src.1 the canvas host is inert while any page covers it (Orchestrate, a task\'s focus view), and shouldIgnoreKeys reads the cover first',
-    /inert=\{chrome\.centerView !== 'canvas'\}/.test(canvasSrc) &&
-      /canvasCoveredRef\.current = chrome\.centerView !== 'canvas'/.test(canvasSrc) &&
+    // M413. The 3D world view is a third cover, so both read one `canvasCovered` (a page OR the world).
+    /const canvasCovered = chrome\.centerView !== 'canvas' \|\| worldOn/.test(canvasSrc) &&
+      /inert=\{canvasCovered\}/.test(canvasSrc) &&
+      /canvasCoveredRef\.current = canvasCovered/.test(canvasSrc) &&
       /\(\) => canvasCoveredRef\.current \|\| palette\.isOpen\(\)/.test(canvasSrc) &&
-      /enabled: !palette\.open && chrome\.centerView === 'canvas'/.test(canvasSrc))
+      /enabled: !palette\.open && chrome\.centerView === 'canvas' && !worldOn/.test(canvasSrc))
 }
 
 // M287 — workbench.1–.3. THE WORKBENCH, pinned as text where behaviour lives

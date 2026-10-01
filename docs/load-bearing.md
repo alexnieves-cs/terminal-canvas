@@ -5446,7 +5446,7 @@ glTF; neither decoder has work to do. `<Environment>` is the same class of mista
 HDR from a CDN) and is not used: the room is lit by two directional lights and a hemisphere.
 `verify:world world.door.4`.
 
-**The world route is a HASH, and a reload under it needs a restart (`WorldRoute.tsx`, `main/bootstrap/window.ts`, M412).**
+**The world view's hash is `#/world`, and a reload under it needs a restart (`world-toggle.ts`, `main/bootstrap/window.ts`, M412/M413).**
 `index.html` loads `./main.tsx` RELATIVELY, so a served `/world` would ask for
 `/world/main.tsx` and get the page back as a module. `#/world` changes nothing the window's
 `will-navigate` guard sees. That guard refuses EVERY navigation (it is the second line behind
@@ -5454,8 +5454,51 @@ the drop guard), including Vite's own full reload — so the first dev launch th
 dependencies ("new dependencies optimized … reloading", as drei and SkeletonUtils did) is left
 with a page that mixes two optimized-chunk versions: two copies of React, and "Invalid hook
 call" from inside R3F. Nothing is wrong with the code; quit and relaunch once, and the cache is
-warm for good. The route is an overlay over the canvas, never a replacement: `Canvas` owns every
-xterm and PTY, and unmounting it to show a scene would detach them all.
+warm for good. The view is a layer over the canvas, never a replacement: `Canvas` owns every
+xterm and PTY, and unmounting it to show a scene would detach them all (M413: the top bar's toggle
+and the hash write one bit, `world-toggle.ts`).
+
+**The canvas is HIDDEN under the world, never unmounted, collapsed or measured scaled (`WorldStage.tsx`, `Canvas.tsx`, M413).**
+Toggling the world view must lose nothing of the 2D canvas — camera, selection, every running
+xterm — so the host stays mounted and the same bit (`worldOn`) gives it `canvas--behind-world`
+(opacity 0), `inert`, `aria-hidden` and a stand-down of the canvas's shortcuts, exactly as
+Orchestrate covers it. Three ways to break it with no error: (1) unmount the host — every PTY
+detaches; (2) `display:none` or any size change — a collapsed host refits every xterm and
+SIGWINCHes each running agent (the same trap as the chromeless chrome); (3) leave an inline
+style behind — the move writes `opacity`, `transform` and `will-change` straight onto the host
+per frame (React state for it would re-render the whole canvas 60 times a second), and the stage
+must `removeProperty` each at rest, or the canvas stays scaled/transparent with its class long
+gone. The terminal's DOM focus is blurred while covered and restored on return by the existing
+`canvasCovered` layout effect — without that, a keystroke typed over the world reaches the PTY.
+`verify:world world.door.10`.
+
+**One WebGL context, only while the world is showing (`WorldStage.tsx`, M413).**
+The scene mounts under `on || present` and unmounts the frame the move back settles; R3F then
+loses the context itself. Left mounted but hidden, the scene keeps drawing at the display's rate
+for nobody and the page holds a second context beside the terminals' xterm-webgl ones. Do not
+add a `gl.dispose()` / `forceContextLoss()` of your own: R3F tracks each unmount with a token,
+and a cleanup that also disposes kills the live context of a StrictMode remount. Measured
+(real window, a `getContext` tracker): 1 live context while on, 0 after every toggle-off,
+including a rapid on/off/on. `verify:world world.door.9`, `.11`.
+
+**The camera shot needs the orbit controls OFF (`WorldView.tsx`'s `TransitionRig`, M413).**
+`OrbitControls.update()` rebuilds the camera from its own spherical state every frame, so a
+dolly written onto an enabled orbit is overwritten the same frame and the opening shot never
+plays — the room just appears. The rig (priority -2, ahead of the controls) disables them for
+the move, writes the camera, and on arrival re-enables them and calls `update()` once. At rest
+it copies the camera's position into `rest` every frame so the leaving shot starts from where a
+person left the view. `verify:world world.door.11`.
+
+**Escape cannot honour `defaultPrevented` (`WorldStage.tsx`, M413).**
+The canvas's own Escape handlers (`useConnectors` and others) `preventDefault` on every Escape
+whether or not they use it; a leave-the-world handler that bailed on `defaultPrevented` was dead
+in the real window (found by dispatching the key, not by reading the code). It ignores Escape in
+a field and while a menu/dialog/listbox is open instead.
+
+**The stagger is normalised between the NEAREST and the FARTHEST robot (`world-transition.ts`, M413).**
+Desks sit on one loose ring, so against the farthest alone every robot is within a few percent
+of it and a "stagger by distance" is one beat — the first screenshot showed it. `popDelays`
+spans nearest→farthest. `verify:world world.trans.5`.
 
 **`gl.info` reports only the LAST render of a frame unless it is reset by hand (`WorldView.tsx`'s `StatsProbe`, M412).**
 The contact-shadow pass and the scene are two `render()` calls per frame and `info.autoReset`

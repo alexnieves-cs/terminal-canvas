@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import { getAgent, getAgentIds, subscribeAgentWorld } from './agent-world-store'
-import { stationPlan, type RosterEntry, type StationPlan } from './world-scene'
+import { isLiveStatus, stationPlan, type RosterEntry, type StationPlan } from './world-scene'
 
 /**
  * The scene's roster: every agent id and the name it currently goes by, as ONE
@@ -12,12 +12,24 @@ import { stationPlan, type RosterEntry, type StationPlan } from './world-scene'
  * is renamed — which is exactly when the plan can change. (`useAgentIds` is
  * the roster alone; the plan also needs names, because a conductor is found by
  * name, and a name may first arrive on a later event than the first.)
+ *
+ * LIVE agents only (`isLiveStatus`): the room is for work happening now, so an
+ * agent that goes idle or errors leaves the roster — and the plan re-flows
+ * without it — and comes back, in its first-seen place, when it is live again.
+ * A status flip between two live statuses changes nothing here, so the string,
+ * and with it the render, stays put.
  */
 const SEP_FIELD = '\u0000'
 const SEP_ROW = '\u0001'
 
 function rosterKey(): string {
-  return getAgentIds().map((id) => `${id}${SEP_FIELD}${getAgent(id)?.name ?? id}`).join(SEP_ROW)
+  return getAgentIds()
+    .filter((id) => {
+      const record = getAgent(id)
+      return record !== undefined && isLiveStatus(record.status)
+    })
+    .map((id) => `${id}${SEP_FIELD}${getAgent(id)?.name ?? id}`)
+    .join(SEP_ROW)
 }
 
 export function useRoster(): readonly RosterEntry[] {
