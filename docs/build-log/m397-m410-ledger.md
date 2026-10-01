@@ -1357,6 +1357,60 @@ scene with two untitled shells whose folders share a basename would now read by 
 is known to have one, so no scene is expected to move. The label host change is invisible (the host box paints
 nothing).
 
+#### M407 follow-up (critic)
+
+Main checkout on `m397-daily-loop` at `ddb6593b`, slot 1. The material items from the fresh critic of M407, after D1.
+
+**1. The merged view renumbered a lone terminal for the session.** *Cause:* one module-level ordinal book. Visit A
+(`home`), then B (its own `home`, 1), then the merged view: A's lane keeps 1, so B's shell is given 2 there and the 2 is
+written into the book. Back in B, where nothing else is called `home`, it read `home 2` until relaunch. *Fix
+(`panel-name.ts`, Canvas):* `ordinalBook('workspace' | 'merged')`, and Canvas hands the merged view its own book.
+*Decision:* two books, not one per workspace id. Panel ids are global, so the session's book already keeps each
+workspace's numbers apart. Canvas also learns the active workspace id (`workspaceRows`, declared ~2,600 lines later)
+after the panels, so a per-id book would number a switch's first render in the wrong book. *Check:* `verify:rail
+names.scope.1` runs A, B, merged, B through the scoped books (B stays `home`). The control arm runs the same lists
+through ONE book and must reproduce `home 2`. It also pins Canvas's call.
+
+**2. Caption undo read a lagged `historyRef`.** *Cause:* the ref was assigned from the render's `history`, so a second
+⌘Z in the same tick saw the present before the first ⌘Z's undo. After a retirement and a later drag, it walked the panels
+back twice and never restored the caption. *Fix (Canvas.tsx):* every history write goes through one `setHistory`
+wrapper (the state setter is `setHistoryState`). An updater's result is recorded in `historyRef` inside the updater, and
+that covers commit, undo, redo and the test hook. A plain value is a reset (reset, switch, move, i.e.
+`useWorkspaceVerbs.ts` ~350/~633 and `resetCanvas`), and it clears `captionUndoRef`/`captionRedoRef`. After a switch
+those entries would put one workspace's captions on another's canvas. Updaters alone did not settle it: React runs an
+updater eagerly only when the queue is empty, so the second press could still read the ref first. **So the caption
+decision itself moved inside the undo/redo updater:** `stepCaptionHistory(direction, h.present)`, against the history
+that press is handed. `historyRef` is now read only by `__m408HistoryDepth`. *The lead's M409 merge
+(`undoCanvas`/`redoCanvas` step the caption first, so ⌘K's rows and edit:undo are one step) is right* and is kept. One gap
+was found and fixed: ⌘K's `canUndo`/`canRedo` read the panel history alone. After a press that retired a caption and
+raised nothing, Undo said "nothing to undo" while ⌘Z would bring the caption back. Both now count the caption step.
+*Check:* `verify:panels:product starter.caption.undo.1`. A real drag on cr2 (its press retires crB), then
+`__m407Undo()` twice in ONE `executeJavaScript`, which is the edit:undo step itself (a new test hook). The drag is
+walked back and crB returns. **Measured red against the old logic** (rebuilt with the render-assigned ref and the
+outside-the-updater decision): `twiceIds: ["crN"]`.
+
+**Minors.**
+- *Publishing in render:* `publishTerminalNames` now runs in a `useLayoutEffect`. The cost is recorded in the comment:
+  a single-panel caller rendered in the same pass reads the previous map, one render late.
+- *`~/x/api` vs `/Users/<me>/x/api`:* `terminalNames(panels, book, home)` folds the home prefix to `~` before naming,
+  so the two are one place (`api`, `api 2`) and `<home>` itself is `home`. The renderer had no home, so the preload
+  exposes `canvas.home` (`os.homedir()`, a FIELD like `platform`; no channel). *Check:* `verify:rail names.home.1`
+  (folded, unfolded without a home, `/` still `/`).
+- *Click-through:* `verify:panels:product annotation.through.1`: inside the host, beside the label, the point hit-tests
+  `canvas` and a real click selects no annotation. `annotation.click.2` does the same at the SUMMARY tier (1120×80
+  host): the label hits and selects, and beside it passes through.
+- *Product watchdog re-measured:* 224.7 s of 285 s (79%) at load avg 8–12, with this follow-up's checks in. That is
+  inside headroom.1's 90% line, so it was **not re-pinned**.
+
+**Suites.** Plain: `rail` 266/266, `meta` 51/51, `ipc` 1/1, `styles` 94/94, `palette` 182/182, `layout` 286/286,
+`verbs` 30/30. Electron, each alone under the lock: `panels:product` 152/152 after two of my own check fixes (first run
+150/152: the drag's press retires crB, and the summary arm needed an Escape before "beside"). `panels:core` 98/101: `7`,
+`51` and `place.still.1` are the M406 placement-probe reds recorded above as baseline, not on this path.
+`paste.bracket.1` is green. `panels:shell` 101/105: `95`/`95b`/`95c`/`96` are the baseline reds recorded above.
+`panels:kinds` 54/54.
+*Goldens expected to move:* none. Names change only for a shell whose cwd spells out the home folder (now `home` or
+`api` rather than `<me>`/a lengthened path). No fixture scene is known to have one.
+
 ### M408 — grab and resize, and one right-click menu from the shared verb lists (D1)
 
 Main checkout on `m397-daily-loop` off `268c877c`, slot 1 (CDP 9210, window 1200×800). Planner map:
@@ -1497,6 +1551,24 @@ inward). No scene opens the context menu.
 and the menu Paste vs ⌘V on the same shell; the load-bearing entry on middle-drag still says "no panel chrome
 handler checks `event.button`" — true of the other kinds' handlers, no longer of PanelFrame's; left for the lead to
 reword or not.
+
+#### M408 paste check
+
+**Not reproduced: the menu Paste is clean.** On the real app (slot 1), I started a fresh login shell (`home`,
+`/bin/zsh`) and right-clicked → Paste with `echo menupaste` on the clipboard. It landed as zsh's highlighted paste with
+no `[200~` (`/tmp/tc-daily-loop-shots/M408paste-menu.png`). ⌘V could not be driven live: the window cannot be made
+frontmost from here (System Events and `NSRunningApplication.activate` both left Chrome in front), and main's
+`edit:paste` sends to `getFocusedWindow()`, which is null. A menu-bar Edit ▸ Paste click through accessibility landed
+nothing for the same reason. The comparison was made in the harness instead.
+*Route:* both doors call the same `editRef.current.paste(text)` → `handle.paste` → xterm's `paste()`. xterm
+(`@xterm/xterm` `Clipboard`'s `paste`) brackets only when `decPrivateModes.bracketedPasteMode` is on and
+`ignoreBracketedPasteMode` is off. So it does respect mode 2004, and no fix is needed. M408's `[200~` most likely
+landed while the shell was not at a ZLE prompt but xterm still held 2004 on. zsh turns it on at the prompt and off
+before running a command, so a program started from that prompt that did not read the bracket would print it. That was
+not reproduced and is recorded as unconfirmed.
+*Check:* `verify:panels:core paste.bracket.1`. With 2004 off in the terminal, ⌘V's route (`edit:paste` as main sends
+it) and the context menu's real Paste each write exactly the text to the PTY (spied at `ptyManager.write`), with no
+`ESC[200~`. With 2004 on, the same route writes `ESC[200~…ESC[201~` (the control arm). Green.
 
 ### M409 — ⌘K rests on what can run, ranks what the words name, and has Undo (C5)
 

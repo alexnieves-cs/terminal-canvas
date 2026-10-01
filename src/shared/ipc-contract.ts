@@ -2447,6 +2447,8 @@ export interface CanvasBridge {
   telemetry: { enabled: boolean }
   /** A FIELD like `telemetry`: main's app.getVersion(), stamped as argv; '' if absent. */
   appVersion: string
+  /** M407 follow-up. A FIELD: the preload's `os.homedir()`, the folder `~` expands to (terminal names fold it). */
+  home: string
 }
 
 // ---- the pty relay (main/relay/relay-client.ts) --------------------------------

@@ -803,6 +803,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // nothing (M405 retired both); a real press on one retires that one; ⌘Z
     // (edit:undo) brings it back and ⌘⇧Z retires it again.
     const idClick = 'annotation.click.1 a real click at an annotation label\'s centre hits the label and selects it (a caption and a person\'s note alike), and a real double-click opens its editor'
+    const idUndo = 'starter.caption.undo.1 after a caption retirement and a later real drag, two undos in ONE tick walk the drag back and then bring the caption back — never the panels twice'
     const idRetire = 'starter.caption.retire.2 a marquee over two captioned examples retires nothing; a real press on one retires its caption only; edit:undo brings it back and edit:redo retires it again'
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
@@ -847,6 +848,16 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ok(idClick, note !== null && note.hit === 'label' && cap !== null && cap.hit === 'label' &&
         JSON.stringify(noteSel) === '["crN"]' && JSON.stringify(capSel) === '["crB"]' && editor === true,
       JSON.stringify({ note, cap, noteSel, capSel, editor }))
+      // annotation.through.1 (M407 follow-up): the host's box is wider than
+      // its label and takes nothing. A point inside the host, beside the label,
+      // hit-tests as what is under it (not the annotation), and a real click
+      // there selects no annotation.
+      const beside = (aid) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation="${aid}"]'); const l = g && g.querySelector('[data-annotation-label]'); const h = g && g.querySelector('.annotation__host'); if (!l || !h) return null; const lr = l.getBoundingClientRect(), hr = h.getBoundingClientRect(); const x = Math.round(Math.min(lr.right + 12, hr.right - 4)), y = Math.round(lr.top + lr.height / 2); const e = document.elementFromPoint(x, y); return { x, y, inHost: x > lr.right && x < hr.right && y > hr.top && y < hr.bottom, annotation: !!(e && e.closest('[data-annotation]')), hit: e ? String(e.className.baseVal ?? e.className).split(' ')[0] : null } })()`)
+      const through = await beside('crN')
+      const throughSel = through ? await selectedAfter(through) : null
+      ok('annotation.through.1 a point inside an annotation host but beside its label hit-tests as what is under it, never the annotation, and a real click there selects no annotation',
+        through !== null && through.inHost === true && through.annotation === false && JSON.stringify(throughSel) === '[]',
+        JSON.stringify({ through, throughSel }))
 
       // starter.caption.retire.2 — a marquee from empty ground around both examples.
       const box = await wc.executeJavaScript(`(() => { const r = [...document.querySelectorAll('.panel[data-panel-id="cr1"], .panel[data-panel-id="cr2"]')].map((p) => p.getBoundingClientRect()); return r.length === 2 ? { l: Math.min(r[0].left, r[1].left), t: Math.min(r[0].top, r[1].top), r: Math.max(r[0].right, r[1].right), b: Math.max(r[0].bottom, r[1].bottom) } : null })()`)
@@ -873,12 +884,56 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const undone = await ids()
       wc.send('edit:redo'); await settle()
       const redone = await ids()
+      // starter.caption.undo.1 (M407 follow-up): a real drag on cr2's header —
+      // its press is a direct selection, so it retires crB, and the drag is
+      // one panel step newer than that retirement. Then TWO undos in ONE task:
+      // the first walks the drag back, the second must bring crB back. The
+      // caption step read a ref the render assigned, so the second press still
+      // saw the drag's present and walked the panels back again instead.
+      const leftOf = (pid) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${pid}"]'); return p ? Math.round(p.getBoundingClientRect().left) : null })()`)
+      const head2 = await wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="cr2"] .panel__chrome'); if (!h) return null; const r = h.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
+      const x0 = await leftOf('cr2')
+      if (head2) {
+        wc.sendInputEvent({ type: 'mouseDown', x: head2.x, y: head2.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 4; i++) wc.sendInputEvent({ type: 'mouseMove', x: head2.x + 15 * i, y: head2.y + 10 * i, button: 'left', modifiers: ['leftButtonDown'] })
+        wc.sendInputEvent({ type: 'mouseUp', x: head2.x + 60, y: head2.y + 40, button: 'left', clickCount: 1 }); await settle()
+      }
+      const x1 = await leftOf('cr2')
+      const draggedIds = await ids()
+      await wc.executeJavaScript(`window.__m407Undo(); window.__m407Undo()`); await settle()
+      const x2 = await leftOf('cr2')
+      const twiceIds = await ids()
+      ok(idUndo,
+        head2 !== null && x0 !== null && x1 !== null && Math.abs(x1 - x0) >= 30 && JSON.stringify(draggedIds) === '["crN"]' &&
+          x2 === x0 && JSON.stringify(twiceIds) === '["crB","crN"]',
+        JSON.stringify({ head2, x0, x1, x2, draggedIds, twiceIds }))
+      // annotation.click.2 (M407 follow-up): the SUMMARY tier's host box is
+      // its own size (1120×80 world px); a real click on a label there still
+      // hits the label and selects it, and beside it still passes through.
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle()
+      let detail = null
+      for (const scale of [0.5, 0.4, 0.32, 0.25, 0.2]) {
+        await zoomToScale(wc, scale); await settle()
+        detail = await wc.executeJavaScript(`document.querySelector('.world')?.getAttribute('data-detail') ?? null`)
+        if (detail === 'summary') break
+      }
+      const farLabel = detail === 'summary' ? await centre('crN') : null
+      const farSel = farLabel ? await selectedAfter(farLabel) : null
+      // Escape first (the label click selected crN): beside it must select none.
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle()
+      const farBeside = detail === 'summary' ? await beside('crN') : null
+      const farBesideSel = farBeside ? await selectedAfter(farBeside) : null
+      ok('annotation.click.2 at the summary tier a real click on an annotation label hits the label and selects it, and a click beside it inside the host passes through and selects none',
+        detail === 'summary' && farLabel !== null && farLabel.hit === 'label' && JSON.stringify(farSel) === '["crN"]' &&
+          farBeside !== null && farBeside.inHost === true && farBeside.annotation === false && JSON.stringify(farBesideSel) === '[]',
+        JSON.stringify({ detail, farLabel, farSel, farBeside, farBesideSel }))
       ok(idRetire, JSON.stringify(swept) === '["cr1","cr2"]' && JSON.stringify(marqueeIds) === '["crA","crB","crN"]' && cleared === 0 &&
         JSON.stringify(pressed) === '["crB","crN"]' && JSON.stringify(undone) === '["crA","crB","crN"]' && JSON.stringify(redone) === '["crB","crN"]',
       JSON.stringify({ box, swept, marqueeIds, cleared, head, pressed, undone, redone }))
     } catch (error) {
       ok(idClick, false, String(error && error.message || error))
       ok(idRetire, false, String(error && error.message || error))
+      ok(idUndo, false, String(error && error.message || error))
     } finally {
       layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
     }

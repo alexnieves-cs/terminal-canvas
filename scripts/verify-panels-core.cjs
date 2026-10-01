@@ -2840,6 +2840,39 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         pasteBtn !== null && landed !== false, JSON.stringify({ pasteBtn, landed, readable }))
       wc.sendInputEvent({ type: 'keyDown', keyCode: 'U', modifiers: ['control'] }); wc.sendInputEvent({ type: 'char', keyCode: '\u0015' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'U', modifiers: ['control'] })
 
+      // paste.bracket.1 (M407 follow-up, M408's report). A paste into a shell
+      // that has NOT asked for bracketed paste (mode 2004 off) writes no
+      // `ESC[200~` — by ⌘V's route (edit:paste, as main's menu sends it) and by
+      // the context menu's Paste alike; with 2004 on, the same route brackets
+      // (the control arm: the spy sees a bracket when there is one). The bytes
+      // are read where they leave for the shell, at ptyManager.write.
+      {
+        const sent = []
+        const origWrite = ptyManager.write.bind(ptyManager)
+        ptyManager.write = (id, data) => { if (id === gid) sent.push(String(data)); return origWrite(id, data) }
+        const wrote = (mark) => sent.filter((d) => d.includes(mark)).join('')
+        try {
+          await wc.executeJavaScript(`window.__m4aWrite('\x1b[?2004l')`); await sleep(100)
+          wc.send('edit:paste', 'm407offcmdv'); await sleep(300)
+          clipboard.writeText('m407offmenu')
+          win.focus(); wc.focus()
+          if (body !== null) await click(body.x, body.y, 'right')
+          await sleep(200)
+          const pasteAgain = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-context-item="edit.paste"]')?.getBoundingClientRect(); return b ? { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } : null })()`)
+          if (pasteAgain !== null) await click(pasteAgain.x, pasteAgain.y)
+          await waitUntil(() => wrote('m407offmenu') !== '', 3000)
+          await wc.executeJavaScript(`window.__m4aWrite('\x1b[?2004h')`); await sleep(100)
+          wc.send('edit:paste', 'm407oncmdv'); await waitUntil(() => wrote('m407oncmdv') !== '', 3000)
+          const off = { cmdv: wrote('m407offcmdv'), menu: wrote('m407offmenu') }, on = wrote('m407oncmdv')
+          ok('paste.bracket.1 a paste into a shell with bracketed paste OFF writes no ESC[200~ (⌘V\'s edit:paste route and the context menu\'s Paste alike), and with it on the same route brackets',
+            off.cmdv === 'm407offcmdv' && off.menu === 'm407offmenu' && on === '\x1b[200~m407oncmdv\x1b[201~',
+            JSON.stringify({ off, on, pasteAgain }))
+        } finally {
+          ptyManager.write = origWrite
+          wc.sendInputEvent({ type: 'keyDown', keyCode: 'U', modifiers: ['control'] }); wc.sendInputEvent({ type: 'char', keyCode: '\u0015' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'U', modifiers: ['control'] })
+        }
+      }
+
       // ctx.term.1 — a program that asked for the mouse keeps the plain
       // right-click; ⌥-right-click still opens the menu.
       await wc.executeJavaScript(`window.__m4aWrite('\x1b[?1000h')`)

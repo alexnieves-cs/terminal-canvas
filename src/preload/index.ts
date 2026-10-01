@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import { homedir } from 'os'
 import { hookupIpc } from '@sentry/electron/preload-namespaced'
 import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
@@ -529,7 +530,10 @@ const bridge: CanvasBridge = {
   telemetry: { enabled: telemetryEnabled },
   // The startup splash needs the version BEFORE first paint; the update
   // check's answer is async and belongs to the update notice.
-  appVersion: (process.argv.find((a) => a.startsWith('--tc-version=')) ?? '').slice('--tc-version='.length)
+  appVersion: (process.argv.find((a) => a.startsWith('--tc-version=')) ?? '').slice('--tc-version='.length),
+  // M407 follow-up. A FIELD like `platform`: the folder main's expandTilde
+  // reads, so a terminal's name can fold `/Users/<me>/x` and `~/x` into one place.
+  home: homedir()
 }
 
 contextBridge.exposeInMainWorld('canvas', bridge)

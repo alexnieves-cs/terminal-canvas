@@ -81,9 +81,8 @@ export function terminalBaseName(spec: { command?: string; cwd: string }): strin
 
 /**
  * M407. One ordinal as a panel holds it: the NAME it numbers (`api`, or
- * `a/api` once the parent is added) and its number. Keyed by the name AND the
- * id, so a panel read in two lists (a workspace's, the merged view's) keeps
- * each list's number instead of the two flipping each other's.
+ * `a/api` once the parent is added) and its number, keyed by the name AND the
+ * id. One book per SCOPE (`ordinalBook`), never one for every list.
  */
 export type TerminalOrdinals = Map<string, number>
 
@@ -95,6 +94,39 @@ export type TerminalOrdinals = Map<string, number>
  * layout format does not move, and a relaunch numbers afresh, in array order).
  */
 const SESSION_ORDINALS: TerminalOrdinals = new Map()
+/**
+ * M407 follow-up. THE MERGED VIEW KEEPS ITS OWN BOOK. With one book, a lone
+ * `home` in workspace B met workspace A's `home` in the merged view, was
+ * given 2 there, and kept that 2 back in B where nothing else is called
+ * `home` — the merged view renumbered it for the session. A workspace needs
+ * no book of its own: panel ids are global (a panel is in one workspace), so
+ * the session's book already holds each workspace's numbers apart, and a
+ * book per workspace id would be read a render early or late across a switch
+ * (Canvas learns the active id after the panels). The merged view's numbers
+ * stay in its book and never reach a workspace's.
+ */
+const MERGED_ORDINALS: TerminalOrdinals = new Map()
+export function ordinalBook(scope: 'workspace' | 'merged'): TerminalOrdinals {
+  return scope === 'merged' ? MERGED_ORDINALS : SESSION_ORDINALS
+}
+
+/**
+ * M407 follow-up. `~/x/api` and `/Users/<me>/x/api` are ONE place: a spec's
+ * cwd is what the person or preset typed, and main expands the tilde at
+ * spawn, so the two spellings were two folders here, lengthened apart into
+ * `~/x/api` and `<me>/x/api` where they should have been `api` and `api 2`.
+ * The home prefix is written back as `~` (the spelling
+ * `terminalBaseName` already reads as `home`). No home, nothing changes.
+ */
+function homeFolded(cwd: string, home: string | undefined): string {
+  // `/` keeps its slash: stripped, the root would be no place at all.
+  const c = cwd.trim().replace(/\/+$/, '') || cwd.trim()
+  if (home === undefined || home === '') return c
+  const h = home.replace(/\/+$/, '')
+  if (h === '') return c
+  if (c === h) return '~'
+  return c.startsWith(h + '/') ? `~/${c.slice(h.length + 1)}` : c
+}
 
 /** `/a/b/api/` → `['a', 'b', 'api']`; `~/x` keeps its `~` (it reads as home, not a typo, INSIDE a path). */
 function segments(cwd: string): string[] {
@@ -116,14 +148,15 @@ function segments(cwd: string): string[] {
  * computes this ONCE per list (Canvas does, over the list the rim shows) so
  * the rim, the navigator and the palette's Go-to rows read one name.
  */
-export function terminalNames(panels: readonly Panel[], ordinals: TerminalOrdinals = SESSION_ORDINALS): ReadonlyMap<string, string> {
+export function terminalNames(panels: readonly Panel[], ordinals: TerminalOrdinals = SESSION_ORDINALS, home?: string): ReadonlyMap<string, string> {
   type Row = { id: string; cwd: string; base: string; name: string }
   const rows: Row[] = []
   for (const p of panels) {
     if (!isTerminalPanel(p) || p.title !== undefined) continue
-    const base = terminalBaseName(p.spec)
+    const cwd = homeFolded(p.spec.cwd, home)
+    const base = terminalBaseName({ ...p.spec, cwd })
     if (base === undefined) continue
-    rows.push({ id: p.rect.id, cwd: p.spec.cwd.trim().replace(/\/+$/, ''), base, name: base })
+    rows.push({ id: p.rect.id, cwd, base, name: base })
   }
   // Same base, different folders: lengthen the PLACE (never the command in
   // front of it) by parent segments until the folders read apart.

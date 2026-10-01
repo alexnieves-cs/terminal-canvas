@@ -146,6 +146,36 @@ ok('4 nothing at all: "login shell"',
     JSON.stringify({ parents, deeper, kicker, first, closed, reopened }))
 }
 
+// M407 follow-up. ONE BOOK PER SCOPE. With one book across a workspace's
+// list and the merged view's, a lone `home` in workspace B met A's `home` in
+// the merged view, took 2 there, and kept `home 2` back in B for the session.
+// The merged view numbers in its own book (`ordinalBook('merged')`), which
+// Canvas hands it; the control arm runs the same three lists through ONE book
+// and must reproduce the bug, or this check proves nothing. And `~/x/api` is
+// `<home>/x/api`: one place, an ordinal, never two lengthened paths.
+{
+  const at = (id, cwd) => panel(id, { kind: 'terminal', spec: { cwd, args: [] } })
+  const names = (list, book, home) => { const m = R.terminalNames(list, book, home); return list.map((p) => m.get(p.rect.id)) }
+  const wsA = [at('sa1', '~')], wsB = [at('sb1', '~')], both = [...wsA, ...wsB]
+  const ws = R.ordinalBook('workspace'), mv = R.ordinalBook('merged')
+  // A visited, then B, then the merged view (A's lane first), then B again.
+  const scoped = [names(wsA, ws), names(wsB, ws), names(both, mv), names(wsB, ws)]
+  const one = new Map()
+  const shared = [names(wsA, one), names(wsB, one), names(both, one), names(wsB, one)]
+  const canvasText = require('node:fs').readFileSync(join(__dirname, '../src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const handed = /terminalNames\(displayPanels, ordinalBook\(inMergedView \? 'merged' : 'workspace'\)/.test(canvasText)
+  ok('names.scope.1 one ordinal book per scope: a lone shell reads `home` in its workspace before AND after the merged view numbered it `home 2` (one shared book across the lists reproduces the renumbering), and Canvas hands the merged view its own book',
+    ws !== mv && JSON.stringify(scoped) === JSON.stringify([['home'], ['home'], ['home', 'home 2'], ['home']]) &&
+      JSON.stringify(shared[3]) === JSON.stringify(['home 2']) && handed,
+    JSON.stringify({ scoped, shared, handed }))
+  const folded = names([at('hf1', '~/x/api'), at('hf2', '/Users/ada/x/api'), at('hf3', '/Users/ada')], new Map(), '/Users/ada/')
+  const unfolded = names([at('hu1', '~/x/api'), at('hu2', '/Users/ada/x/api')], new Map())
+  const root = names([at('hr1', '/')], new Map(), '/Users/ada')
+  ok('names.home.1 `~/x/api` and `<home>/x/api` are one place (api, api 2) and `<home>` itself is `home`, once the home is known; without it they read apart; `/` still names itself',
+    JSON.stringify(folded) === JSON.stringify(['api', 'api 2', 'home']) && new Set(unfolded).size === 2 && JSON.stringify(root) === JSON.stringify(['/']),
+    JSON.stringify({ folded, unfolded, root }))
+}
+
 // M407. ONE NAME ON EVERY SURFACE. About twenty labels hold one panel and no
 // list — `railLabel(p, undefined)` in the hand-off header, the activity feed,
 // Orchestrate, the link banner, the runs' skip notes — and said `home` where

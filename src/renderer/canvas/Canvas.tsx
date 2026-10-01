@@ -1,6 +1,6 @@
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
-  type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
+  type Dispatch, type SetStateAction, type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
@@ -46,7 +46,7 @@ import { useCanvasTestHooks } from './useCanvasTestHooks'
 import { usePaletteActions } from './usePaletteActions'
 import { useWorkspaceVerbs } from './useWorkspaceVerbs'
 import { useCanvasPointer } from './useCanvasPointer'
-import { panelName, publishTerminalNames, terminalNames } from '@renderer/palette/panel-name'
+import { ordinalBook, panelName, publishTerminalNames, terminalNames } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { inspectionDirectory } from './inspection-directory'
@@ -566,8 +566,17 @@ export function Canvas({
   // M407: computed ONCE here and handed to the rail and the Go-to rows, and
   // published for every label that holds one panel and no list (railLabel's
   // ~20 single-panel callers), so the rim's `home 2` is `home 2` everywhere.
-  const terminalNameOf = useMemo(() => terminalNames(displayPanels), [displayPanels])
-  publishTerminalNames(terminalNameOf)
+  // M407 follow-up: the merged view numbers in its own book (`ordinalBook`'s
+  // reason), and `~/x` is the same place as `<home>/x`.
+  const inMergedView = merged && mergedView !== null
+  const terminalNameOf = useMemo(
+    () => terminalNames(displayPanels, ordinalBook(inMergedView ? 'merged' : 'workspace'), window.canvas?.home),
+    [displayPanels, inMergedView])
+  // Published in a LAYOUT effect, not during render: a render React throws
+  // away would otherwise leave its names behind. The cost is the one M407
+  // recorded, one render later: a single-panel caller rendered in this pass
+  // reads the previous map (a new terminal's place without its ordinal).
+  useLayoutEffect(() => { publishTerminalNames(terminalNameOf) }, [terminalNameOf])
   // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
   // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
   // after a pan would turn ordinary navigation into motion. The id is removed
@@ -691,11 +700,12 @@ export function Canvas({
   // honest instead of manufacturing a read nothing else needs.
   // M409: `history` is also read for whether ⌘K's Undo/Redo rows can run
   // (two booleans, below). Never undo against it, for the reason above.
-  const [history, setHistory] = useState<History<Panel[]>>(() => createHistory(panels))
-  // M407. Read by the caption retirement's undo (below), which needs to know
-  // whether anything moved on the canvas since the retirement.
+  const [history, setHistoryState] = useState<History<Panel[]>>(() => createHistory(panels))
+  // M407. The history as the LAST updater left it — read by the test hook's
+  // depth and nothing that decides an undo (those decide inside the updater).
+  // M407 follow-up: assigned inside the updater, never from the render's
+  // `history` (which lags every update still queued in this tick).
   const historyRef = useRef(history)
-  historyRef.current = history
   /**
    * M407. A RETIRED CAPTION COMES BACK ON ⌘Z. The panel history holds panels,
    * not annotations, so a retirement is its own entry here, pinned to the
@@ -708,6 +718,22 @@ export function Canvas({
    */
   const captionUndoRef = useRef<Array<{ present: Panel[] | null; captions: Annotation[] }>>([])
   const captionRedoRef = useRef<Array<{ present: Panel[]; captions: Annotation[] }>>([])
+  /**
+   * M407 follow-up. Every history write goes through here. An UPDATER (commit,
+   * undo, redo) records what it returns in `historyRef`; a plain VALUE is a
+   * reset (`createHistory` — reset, a workspace switch, a move out), and a
+   * reset drops the caption entries with the panels' past: they were pinned
+   * to a `present` that no longer exists, and after a switch they would put
+   * one workspace's captions back on another's canvas.
+   */
+  const setHistory = useCallback<Dispatch<SetStateAction<History<Panel[]>>>>((update) => {
+    if (typeof update !== 'function') { captionUndoRef.current = []; captionRedoRef.current = [] }
+    setHistoryState((h) => {
+      const next = typeof update === 'function' ? update(h) : update
+      historyRef.current = next
+      return next
+    })
+  }, [])
 
   // Declared before onSpawn (which uses it) rather than grouped with the
   // other undo plumbing below applyHistory needs: applyHistory itself needs
@@ -949,9 +975,14 @@ export function Canvas({
   useEffect(() => {
     for (const entry of captionUndoRef.current) if (entry.present === null) entry.present = history.present
   }, [annotations, history])
-  /** M407. ⌘Z / ⌘⇧Z for a retirement; true when the press was spent on one. */
-  const stepCaptionHistory = useCallback((direction: 'undo' | 'redo'): boolean => {
-    const present = historyRef.current.present
+  /**
+   * M407. ⌘Z / ⌘⇧Z for a retirement; true when the press was spent on one.
+   * M407 follow-up: `present` is the history the press's own updater was
+   * handed. Read from a ref, two presses in one tick both saw the history
+   * before the first one's undo, so the second walked the panels back again
+   * instead of bringing the caption back.
+   */
+  const stepCaptionHistory = useCallback((direction: 'undo' | 'redo', present: Panel[]): boolean => {
     if (direction === 'undo') {
       const top = captionUndoRef.current[captionUndoRef.current.length - 1]
       if (top === undefined || top.present !== present) return false
@@ -2046,15 +2077,23 @@ export function Canvas({
   // exactly what edit:undo runs. The guards stay on the IPC path below: they
   // are about a chord pressed behind an overlay, and a palette row runs as
   // the palette closes.
-  // M407's caption retirement is its own history entry, so it steps first.
+  // M407's caption retirement is its own history entry, so it steps first —
+  // decided INSIDE the updater, against the history this press is handed
+  // (the follow-up: a ref read outside it lagged a second press in the tick).
   const undoCanvas = useCallback(() => {
-    if (stepCaptionHistory('undo')) return
-    setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
-  }, [applyHistory, stepCaptionHistory])
+    setHistory((h) => {
+      if (stepCaptionHistory('undo', h.present)) return h
+      const next = undoHistory(h); applyHistory(h.present, next); return next
+    })
+  }, [applyHistory, stepCaptionHistory, setHistory])
   const redoCanvas = useCallback(() => {
-    if (stepCaptionHistory('redo')) return
-    setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
-  }, [applyHistory, stepCaptionHistory])
+    setHistory((h) => {
+      if (stepCaptionHistory('redo', h.present)) return h
+      const next = redoHistory(h); applyHistory(h.present, next); return next
+    })
+  }, [applyHistory, stepCaptionHistory, setHistory])
+  const undoCanvasRef = useRef(undoCanvas)
+  undoCanvasRef.current = undoCanvas
   useEffect(() => {
     // Rule 3 again, and this is the sharpest edge of it: Cmd+Z is a menu
     // accelerator on exactly the same footing as Cmd+V, so with the palette
@@ -4616,6 +4655,9 @@ export function Canvas({
     // M408 (D1). How many undo steps the panel history holds — read-only, so
     // grab.slop.1 can say a click and a rename double-click wrote none.
     w.__m408HistoryDepth = (): number => historyRef.current.past.length
+    // M407 follow-up. The edit:undo step itself, so starter.caption.undo.1 can
+    // press it twice inside ONE task (two IPC messages may each get a render).
+    w.__m407Undo = (): void => undoCanvasRef.current()
     // M283. What a return from Orchestrate would hand the keyboard back to (orch-page.4).
     w.__m283HostFocus = (): string | null => { const el = lastHostFocusRef.current; return el === null ? null : `${el.tagName}.${String(el.className).split(' ')[0]}${el.isConnected ? '' : ' (gone)'}` }
     // M113/M114. The board's doors for verify:panels — the SAME verbs the
@@ -9875,8 +9917,11 @@ export function Canvas({
             workflowTemplateOf={(panelId) => { const p = panelsRef.current.find((x) => x.rect.id === panelId); return p !== undefined && isWorkflowPanel(p) ? p.workflow.templateId : undefined }}
             bookmarks={bookmarkRows}
             cameraTrail={trail}
-            canUndo={history.past.length > 0}
-            canRedo={history.future.length > 0}
+            // M407 follow-up: a retired caption is an undo step too, so ⌘K's
+            // rows agree with what ⌘Z will do (`present: null` is pinned to
+            // this very present when the press's render commits).
+            canUndo={history.past.length > 0 || (captionUndoRef.current.at(-1) !== undefined && (captionUndoRef.current.at(-1)?.present ?? history.present) === history.present)}
+            canRedo={history.future.length > 0 || captionRedoRef.current.at(-1)?.present === history.present}
             canvasCovered={canvasCoveredRef.current}
             globalFontSize={globalFontSize}
             // The renderer's own attention set (agent-state-store.ts), not a
