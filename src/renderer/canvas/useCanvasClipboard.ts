@@ -39,14 +39,24 @@ export interface CanvasClipboardDeps {
  * same reason: resubscribing on every focus change would create listener
  * churn around main-side menu accelerators.
  */
-export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(sentence: string) => void> {
+/**
+ * M408 (D1). The two routes as functions, for a door that is not the menu
+ * accelerator — the context menu's Copy and Paste. They ARE the accelerator's
+ * handlers (the subscriptions below call these same functions), so a menu
+ * Paste into a terminal is `handle.paste()` through every gate above, never a
+ * raw `write()`.
+ */
+export interface CanvasEditRoutes { copy: () => void; paste: (text: string) => void }
+
+export function useCanvasClipboard(deps: CanvasClipboardDeps): { sayRef: RefObject<(sentence: string) => void>; editRef: RefObject<CanvasEditRoutes> } {
   const { registry, focusedIdRef, panelsRef, shouldIgnoreKeys, getAddImage, getObjects } = deps
   // M149. The palette action object is assigned after this hook's call, so a
   // refusal on paste is said rather than swallowed.
   const sayRef = useRef<(sentence: string) => void>(() => {})
+  const editRef = useRef<CanvasEditRoutes>({ copy: () => {}, paste: () => {} })
 
   useEffect(() => {
-    const offCopy = window.canvas.edit.onCopy(() => {
+    const copy = (): void => {
       // With the palette open the user is looking at a text field, not a
       // terminal, and focusedId still names that terminal (rule 2 keeps it).
       // Copying its selection here would put text the user cannot see on the
@@ -68,8 +78,8 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
       if (selection) void navigator.clipboard.writeText(selection)
-    })
-    const offPaste = window.canvas.edit.onPaste((text) => {
+    }
+    const paste = (text: string): void => {
       // Rule 3. Without this the text lands in a running agent, invisibly,
       // while the user watches an empty text field (palette, verify:panels
       // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
@@ -122,7 +132,10 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
         if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
         registry.get(id)?.handle.paste(shellQuote(file.path))
       })
-    })
+    }
+    editRef.current = { copy, paste }
+    const offCopy = window.canvas.edit.onCopy(copy)
+    const offPaste = window.canvas.edit.onPaste(paste)
     return () => {
       offCopy()
       offPaste()
@@ -133,5 +146,5 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(senten
     // including Canvas's fresh closure would reinstall both subscriptions.
   }, [shouldIgnoreKeys])
 
-  return sayRef
+  return { sayRef, editRef }
 }

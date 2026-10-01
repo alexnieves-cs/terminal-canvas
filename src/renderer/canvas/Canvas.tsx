@@ -71,6 +71,7 @@ import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, t
 import { taskClusters, type TaskCluster } from './task-clusters'
 import { TaskClusterLayer } from './TaskClusterLayer'
 import { useCanvasClipboard } from './useCanvasClipboard'
+import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
@@ -1766,7 +1767,7 @@ export function Canvas({
   // Mermaid, reached lazily for the same reason as getAddImage (the verbs are
   // defined far below this hook).
   const objectClipboardRef = useRef<{ copy: () => boolean; paste: (text: string) => boolean } | null>(null)
-  const sayRef = useCanvasClipboard({
+  const { sayRef, editRef: canvasEditRef } = useCanvasClipboard({
     registry, focusedIdRef, panelsRef, shouldIgnoreKeys,
     getAddImage: () => addImageRef.current,
     getObjects: () => objectClipboardRef.current
@@ -4597,6 +4598,9 @@ export function Canvas({
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
+    // M408 (D1). How many undo steps the panel history holds — read-only, so
+    // grab.slop.1 can say a click and a rename double-click wrote none.
+    w.__m408HistoryDepth = (): number => historyRef.current.past.length
     // M283. What a return from Orchestrate would hand the keyboard back to (orch-page.4).
     w.__m283HostFocus = (): string | null => { const el = lastHostFocusRef.current; return el === null ? null : `${el.tagName}.${String(el.className).split(' ')[0]}${el.isConnected ? '' : ' (gone)'}` }
     // M113/M114. The board's doors for verify:panels — the SAME verbs the
@@ -7649,6 +7653,20 @@ export function Canvas({
   // own memo comment names as one it stops. Read through a ref so the wrapper
   // never goes stale and never changes. verify:panels memo-stable.1.
   paletteActionsRef.current = paletteActions
+  // M408 (D1). The right-click menu. Every input is a ref or a stable
+  // callback, so its listener is one identity for the life of the canvas.
+  const panelMarksRef = useRef(panelMarks)
+  panelMarksRef.current = panelMarks
+  const contextMenu = useCanvasContextMenu({
+    hostRef, panelsRef, selectedIdsRef, marksRef: panelMarksRef, paletteActionsRef, editRef: canvasEditRef, registry, mergedRef,
+    selectPanel: onSelectPanel,
+    focusPanel: useCallback((id: string | null) => {
+      if (id === null) { setFocusedId(null); focusedIdRef.current = null; return }
+      onFocusPanel(id)
+      // Set now as well: the Copy or Paste this precedes reads the ref in the same task.
+      focusedIdRef.current = id
+    }, [onFocusPanel])
+  })
   const removeLinkStable = useCallback((from: string, to: string) => {
     paletteActionsRef.current?.removeLink(from, to)
   }, [])
@@ -9003,6 +9021,7 @@ export function Canvas({
         aria-roledescription="infinite canvas of terminal panels"
         onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
+        onContextMenu={contextMenu.onContextMenu}
         onMouseMove={onMouseMove}
         onDoubleClick={onCanvasDoubleClick}
         onDragOver={onDragOver}
@@ -9027,6 +9046,8 @@ export function Canvas({
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
           engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
           onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
+        {/* M408 (D1). The right-click menu, in screen space beside the pill. */}
+        {contextMenu.element}
         {/* M69. The far-view tier, provided once for every kind's frame. */}
         <CardDetailContext.Provider value={cardDetail}>
         {/* M92. The marks every frame paints, keyed by id, provided ONCE like the tier. */}

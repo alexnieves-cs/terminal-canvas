@@ -17,6 +17,7 @@ import { useTrailFor } from '@renderer/skills/skill-trail-store'
 import { useEdgeArriving } from '@renderer/canvas/useEdgeActivity'
 import { useLastLine } from '@renderer/session/last-line-store'
 import type { AdvancedDoor, AdvancedDoorId } from '@renderer/canvas/advanced-doors'
+import { panelVerbs, runPanelVerb, type PanelVerb, type TaskMenuFact } from '@renderer/canvas/object-verbs'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -82,8 +83,8 @@ export interface PanelMarks {
   /** Brief #19. The advanced features relevant to THIS panel, asked when the menu opens, and the verb each runs. Absent in a fixture. */
   advanced?: { of: (id: string) => AdvancedDoor[]; run: (id: string, door: AdvancedDoorId) => void }
 }
-/** M204 (D08). What the ⋯ menu knows about a panel's task, asked when it opens. */
-export type TaskMenuFact = { kind: 'none' } | { kind: 'one'; title: string; related: boolean } | { kind: 'many'; titles: string[] }
+/** M204 (D08). What the ⋯ menu knows about a panel's task — declared beside the verb list it feeds (M408). */
+export type { TaskMenuFact } from '@renderer/canvas/object-verbs'
 export const PanelMarksContext = createContext<PanelMarks>({ marks: new Map(), maximise: () => {}, restore: () => {}, readOnly: true })
 
 export interface PanelFrameProps {
@@ -278,6 +279,25 @@ export function PanelFrame({
   // M106. The canvas provides the door once; a kind may still hand its own.
   const more = onMore ?? marks.more
   const mark = marks.marks.get(id)
+  // M408 (D1). The ⋯ menu's rows, asked when it opens (the task and the
+  // advanced doors are live facts), from the one list the context menu reads.
+  const menuTask = menuOpen ? marks.task?.of(id) : undefined
+  const menuVerbs: PanelVerb[] = !menuOpen ? [] : panelVerbs({
+    ...(menuTask !== undefined ? { task: menuTask } : {}),
+    taskFocus: marks.task?.focus !== undefined,
+    ...(marks.advanced !== undefined && !marks.readOnly ? { advanced: marks.advanced.of(id) } : {}),
+    readOnly: marks.readOnly,
+    framed: close !== null,
+    maximised: mark?.maximised === true,
+    palette: more !== undefined
+  })
+  const menuRow = (v: PanelVerb): JSX.Element => (
+    <button key={v.id} type="button" role="menuitem" className={`pf__verb pf__verb--word${v.benefit !== undefined ? ' pf__menu-door' : ''}`}
+      {...{ [v.attr[0]]: v.attr[1] }} disabled={v.disabled !== undefined} title={v.title}
+      {...shellControl(() => { if (v.disabled !== undefined) return; setMenuOpen(false); runPanelVerb(v.id, id, { ...marks, more: more ?? marks.more }) })}>
+      {v.benefit !== undefined ? <><span>{v.label}</span><span className="pf__menu-benefit">{v.benefit}</span></> : v.label}
+    </button>
+  )
   /**
    * M130. THE TRAIL'S CAPSULE — how many skills this panel's agent used, and
    * the control that folds the lane away.
@@ -348,7 +368,15 @@ export function PanelFrame({
     // preventDefault suppresses the native text-drag of the title.
     event.stopPropagation()
     event.preventDefault()
+    // M408 (D1). ONLY A PRIMARY PRESS ON THE BARE CHROME MOVES. A control's
+    // own handler (`shellControl`) only prevents default, so a press on ⋯,
+    // fill or the trail used to bubble here and lift the panel under the
+    // click; and nothing read `button`, so a right-press (or ⌃-press, the
+    // Mac's right-click) dragged too. Both still select — a context menu is
+    // about the object pressed, as in Finder — but neither begins a gesture.
+    const control = event.target instanceof Element && event.target.closest('button, input, a, [role=menu]') !== null
     onSelect(id, event.shiftKey)
+    if (control || event.button !== 0 || event.ctrlKey) return
     onBeginDrag({ panelId: id, mode: { kind: 'move' }, originRect: rect, originWorld: { x: event.clientX, y: event.clientY } })
   }
   const inner = (
@@ -414,52 +442,26 @@ export function PanelFrame({
                   member and not only the card. A panel in two tasks says so
                   and names both rather than choosing; a panel in none shows
                   no section — there is no task to act on, and an empty
-                  heading on every menu of the canvas would be noise. */}
-              {marks.task !== undefined && (() => {
-                const t = marks.task.of(id)
-                if (t.kind === 'many') return <p className="pf__note" data-panel-menu-task="many">part of {t.titles.length} tasks — {t.titles.join(' and ')}; act from a card</p>
-                if (t.kind === 'none') return null
-                const task = marks.task
-                return (
-                  <div className="pf__menu-task" data-panel-menu-task="one">
-                    <div className="pf__note">task · {t.title}</div>
-                    {task.focus !== undefined && <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="focus" title="Open this task beside its conversation — changes, checks, review and preview in one place" {...shellControl(() => { setMenuOpen(false); task.focus?.(id) })}>Focus this task</button>}
-                    <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
-                    <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
-                    <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>
-                  </div>
-                )
-              })()}
-              {/* Brief #19. Where the advanced features become relevant: at most
-                  three, chosen from what is true of this panel, each said as what
-                  it gives. No section when none applies — an empty heading on
-                  every menu would be noise, the task section's rule. */}
-              {marks.advanced !== undefined && !marks.readOnly && (() => {
-                const doors = marks.advanced.of(id)
-                if (doors.length === 0) return null
-                const adv = marks.advanced
-                return (
-                  <div className="pf__menu-advanced" data-panel-menu-advanced={doors.length}>
-                    <div className="pf__note">do more with this</div>
-                    {doors.map((d) => (
-                      <button key={d.id} type="button" role="menuitem" className="pf__verb pf__verb--word pf__menu-door" data-panel-menu-door={d.id} title={d.benefit}
-                        {...shellControl(() => { setMenuOpen(false); adv.run(id, d.id) })}>
-                        <span>{d.label}</span>
-                        <span className="pf__menu-benefit">{d.benefit}</span>
-                      </button>
-                    ))}
-                  </div>
-                )
-              })()}
-              {/* M258. The frame's common actions, in the one menu: Fill view /
-                  Restore size beside the palette's door. The header's icon
-                  control stays as the contextual shortcut. */}
-              {close !== null && (
-                <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-panel-menu-maximise={mark?.maximised ? 'restore' : 'maximise'} disabled={marks.readOnly}
-                  title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore this panel to where it was' : 'Fill the view with this panel'}
-                  {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); (mark?.maximised ? marks.restore : marks.maximise)(id) })}>{mark?.maximised ? 'Restore size' : 'Fill view'}</button>
+                  heading on every menu of the canvas would be noise.
+                  Brief #19: the advanced doors, at most three, chosen from what
+                  is true of this panel, each said as what it gives. M258: Fill
+                  view / Restore size beside the palette's door.
+                  M408 (D1): every row below is `panelVerbs` — the ONE list the
+                  panel's context menu renders too — run through `runPanelVerb`. */}
+              {menuTask?.kind === 'many' && <p className="pf__note" data-panel-menu-task="many">part of {menuTask.titles.length} tasks — {menuTask.titles.join(' and ')}; act from a card</p>}
+              {menuTask?.kind === 'one' && (
+                <div className="pf__menu-task" data-panel-menu-task="one">
+                  <div className="pf__note">task · {menuTask.title}</div>
+                  {menuVerbs.filter((v) => v.section === 'task').map(menuRow)}
+                </div>
               )}
-              {more !== undefined && <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); more(id) })}>Verbs in ⌘K…</button>}
+              {menuVerbs.some((v) => v.section === 'advanced') && (
+                <div className="pf__menu-advanced" data-panel-menu-advanced={menuVerbs.filter((v) => v.section === 'advanced').length}>
+                  <div className="pf__note">do more with this</div>
+                  {menuVerbs.filter((v) => v.section === 'advanced').map(menuRow)}
+                </div>
+              )}
+              {menuVerbs.filter((v) => v.section === 'frame').map(menuRow)}
               <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-panel-menu-close title="Close this menu" {...shellControl(() => setMenuOpen(false))}>close menu</button>
             </div>
           )}
@@ -518,6 +520,8 @@ export function PanelFrame({
             event.stopPropagation()
             event.preventDefault()
             onSelect(id)
+            // M408 (D1). A right- or ⌃-press on a grip selects; only the primary button resizes.
+            if (event.button !== 0 || event.ctrlKey) return
             onBeginDrag({ panelId: id, mode: { kind: 'resize', edge }, originRect: rect, originWorld: { x: event.clientX, y: event.clientY } })
           }}
         />

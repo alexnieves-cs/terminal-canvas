@@ -69,10 +69,20 @@ export interface MenuProps {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly children: ReactNode
+  /**
+   * M408 (D1). A pointer opened this menu somewhere OTHER than its trigger —
+   * a context menu, opened by a right-click on the canvas while the trigger
+   * is a zero-size anchor nobody pressed. The trigger's pointerdown is what
+   * normally records that; without it the menu reads as keyboard-opened, takes
+   * focus out of xterm's textarea on open and hands it to the invisible anchor
+   * on close, where every key then goes nowhere.
+   */
+  readonly pointerOpen?: boolean
 }
 
-export function Menu({ open, onOpenChange, children }: MenuProps): JSX.Element {
+export function Menu({ open, onOpenChange, children, pointerOpen }: MenuProps): JSX.Element {
   const intent = useOpenIntent()
+  if (pointerOpen === true && open) intent.byPointer.current = true
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   // Keep Radix mounted for Motion's exit, then let it remove ordinary menus.
   // Force-mounted adopters retain their existing hidden-addressability after

@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX, type MutableRefObject } from 'react'
-import { REASON_GROUP_NEEDS_TWO, type PaletteActions } from '@renderer/palette/commands'
+import type { PaletteActions } from '@renderer/palette/commands'
 import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
 import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
 import { pillRestState, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
+import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type SelectionVerbKey } from './object-verbs'
 
 /**
  * M249. The bottom command pill: act on THIS canvas NOW. The palette is
@@ -61,6 +62,11 @@ export function orchestratorCandidates(panels: readonly Panel[]): OrchestratorCa
     : { id: p.rect.id, kind: p.kind }))
 }
 
+/** The pill's own face for each shared selection verb (object-verbs.ts holds the list). */
+const PILL_ICON: Record<SelectionVerbKey, JSX.Element> = {
+  fit: <Maximize />, plan: <Lanes />, layout: <Lanes />, tidy: <Grid />, align: <Grid />, space: <Grid />,
+  arrange: <Lanes />, related: <Link />, group: <Layers />, close: <Close />
+}
 const NO_ORCHESTRATOR = 'no orchestrator yet — first send creates a supervisor chat'
 const HISTORY_CAP = 50
 const NOTE_MS = 8000
@@ -239,11 +245,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   // M390. What the arranging actions read off the selection: whether it holds
   // a flowchart shape, and which way it is long.
   const chosen = panels.filter((p) => selectedIds.includes(p.rect.id))
-  const selectedShape = chosen.some((p) => p.kind === 'shape')
-  const longAxis: 'x' | 'y' = chosen.length === 0 ? 'x' : (Math.max(...chosen.map((p) => p.rect.x + p.rect.w)) - Math.min(...chosen.map((p) => p.rect.x))) >= (Math.max(...chosen.map((p) => p.rect.y + p.rect.h)) - Math.min(...chosen.map((p) => p.rect.y))) ? 'x' : 'y'
-  const refusedSaid = (r: { kind: 'ran' } | { kind: 'refused'; reason: string } | { kind: 'ran'; note?: string }): void => {
-    if (r.kind === 'refused') actions.say(r.reason)
-  }
+  const selection: SelectionFacts = { selectedIds, shape: chosen.some((p) => p.kind === 'shape'), longAxis: longAxisOf(chosen.map((p) => p.rect)) }
   const titleOf = (id: string): string => {
     const p = panels.find((x) => x.rect.id === id)
     return p === undefined ? id : (p.title ?? (isChatPanel(p) ? 'chat' : p.kind))
@@ -260,29 +262,10 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   // Every action, in the one priority order — Fit first (it never depends on
   // a selection), the selection-scoped ones after. Sliced below rather than
   // rendered inline: the cap has to see the WHOLE list to know what overflows.
-  const allActions: Array<{ key: string; label: string; icon: JSX.Element; run: () => void; reason?: string }> = [
-    { key: 'fit', label: 'Fit', icon: <Maximize />, run: () => actions.zoomToFit() },
-    ...(selectedIds.length > 0
-      ? [
-          // M390/M391. A diagram's selection leads with Lay out; any selection
-          // of two or more can be lined up and, from three, spaced evenly —
-          // each along the selection's own long axis (a row lines up its
-          // middles; a column its centres), the same verbs the palette runs.
-          ...(selectedShape ? [
-            // M394. Sketch → plan, where the chart is: the Start work sheet opens with its steps.
-            { key: 'plan', label: 'New task', icon: <Lanes />, run: () => { refusedSaid(actions.planFromChart()) } },
-            { key: 'layout', label: 'Lay out', icon: <Lanes />, run: () => { refusedSaid(actions.layoutFlowchart('down')) } }
-          ] : []),
-          { key: 'tidy', label: 'Tidy', icon: <Grid />, run: () => actions.tidyPanels([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : 'select at least two panels to tidy' },
-          { key: 'align', label: 'Line up', icon: <Grid />, run: () => { refusedSaid(actions.alignObjects(longAxis === 'x' ? 'vcentre' : 'hcentre')) }, reason: selectedIds.length >= 2 ? undefined : 'select two or more objects to line up' },
-          { key: 'space', label: 'Space evenly', icon: <Grid />, run: () => { refusedSaid(actions.distributeObjects(longAxis === 'x' ? 'across' : 'down')) }, reason: selectedIds.length >= 3 ? undefined : 'select three or more objects to space evenly' },
-          { key: 'arrange', label: 'Arrange task', icon: <Lanes />, run: () => { if (single !== undefined) refusedSaid(actions.arrangeTask(single)) }, reason: single !== undefined ? undefined : 'select one panel of a task' },
-          { key: 'related', label: 'Related', icon: <Link />, run: () => { if (single !== undefined) refusedSaid(actions.showRelated(single)) }, reason: single !== undefined ? undefined : 'select one panel of a task' },
-          { key: 'group', label: 'Group', icon: <Layers />, run: () => actions.beginCreateGroup([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : REASON_GROUP_NEEDS_TWO },
-          { key: 'close', label: 'Close', icon: <Close />, run: () => { if (single !== undefined) actions.closePanel(single) }, reason: single !== undefined ? undefined : 'select one panel to close — the pill never closes several at once' }
-        ]
-      : [])
-  ]
+  // M408 (D1). The list is `selectionVerbs` (object-verbs.ts), the one a
+  // context menu on a selection renders too; only the icons are the pill's.
+  const allActions: Array<{ key: string; label: string; icon: JSX.Element; run: () => void; reason?: string }> = selectionVerbs(selection)
+    .map((v) => ({ key: v.key, label: v.label, icon: PILL_ICON[v.key], run: () => runSelectionVerb(v.key, selection, actions), ...(v.reason !== undefined ? { reason: v.reason } : {}) }))
   const visibleActions = allActions.slice(0, MAX_VISIBLE_ACTIONS)
   const overflowActions = allActions.slice(MAX_VISIBLE_ACTIONS)
 

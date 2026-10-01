@@ -3841,7 +3841,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const sA = await pos('rvS')
         await drag(V2(20 + 60, 470 + 14), V2(20 + 60 + 473, 470 + 14), { mods: ['meta'] })
         const sB = await pos('rvS')
-        await drag(V2(493 + 60, 470 + 14), V2(493 + 60 + 1, 470 + 14), { steps: 2 })
+        // M408 (D1): a 1px nudge is now a CLICK (under DRAG_SLOP_PX, 3 screen
+        // px), so the snapping frame is provoked by a 4px drag — still inside
+        // the 8px threshold, so it lands on the neighbour's edge at 500.
+        await drag(V2(493 + 60, 470 + 14), V2(493 + 60 + 4, 470 + 14), { steps: 2 })
         const sC = await pos('rvS')
         rvOk('snap2', sA && sB && sC && sB.x === 493 && sC.x === 500, JSON.stringify({ sA, sB, sC }))
       } catch (rErr) {
@@ -4566,6 +4569,21 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // A row from OUTSIDE the lane, which must not appear.
         await runLedger.append({ panelId: 'd07T', command: 'ls /elsewhere', cwd: realpathSync(repoD), startedAt: 5, endedAt: 6, exitCode: 0 })
 
+        // M408. board.1 ends on a row click that FLIES the camera; reloaded
+        // mid-flight, this reload's did-finish-load went missing in 2 of 4 runs
+        // on the M408 build (reloadWithin's 20 s, then the part's watchdog).
+        // agents' keyboard.1 rule: seed and reload once the old page's camera is
+        // still (a frame saved after the seed would overwrite it).
+        {
+          let last = null
+          await waitUntil(async () => {
+            const now = JSON.stringify(await wc.executeJavaScript(`window.__m4aViewport()`))
+            const still = now === last
+            last = now
+            return still
+          }, 4000, 150)
+          await settle()
+        }
         layoutStore.addWorktree({ id: 'wt-d07', root: realpathSync(repoD), path: realpathSync(lanePath), branch: 'tc/d07', createdAt: 1, panelId: 'd07T' })
         layoutStore.save({
           panels: [

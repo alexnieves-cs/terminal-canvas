@@ -4225,6 +4225,29 @@ body {
   z-index: 3;
 }
 
+/* M408 (D1). THE GRIPS. The bands were transparent, found only by the cursor
+   changing. A selected panel shows where it can be taken: a short bar at the
+   middle of the east and south bands and an L in the corner, each a mark
+   INSIDE its handle (so it rides the handle's counter-scale and is exactly
+   where the press lands). Opacity 0 and 1, never a fraction (styles 3): at
+   rest nothing; on selection, or while the handle itself is pointed at. */
+.panel__resize::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: var(--r-full);
+  background: var(--line-strong);
+  transition: opacity var(--dur-1) var(--ease);
+}
+.panel--selected > .panel__resize::after,
+.panel--selected > .pf__motion > .panel__resize::after,
+.panel__resize:hover::after { opacity: 1; }
+.panel__resize--e::after { top: 50%; right: var(--sp-1); width: var(--sp-1); height: var(--sp-7); margin-top: calc(-1 * var(--sp-7) / 2); }
+.panel__resize--s::after { left: 50%; bottom: var(--sp-1); height: var(--sp-1); width: var(--sp-7); margin-left: calc(-1 * var(--sp-7) / 2); }
+.panel__resize--se::after { right: var(--sp-2); bottom: var(--sp-2); width: var(--sp-4); height: var(--sp-4); background: none; border-radius: 0 0 var(--r-sm) 0; border-right: var(--sp-1) solid var(--line-strong); border-bottom: var(--sp-1) solid var(--line-strong); }
+@media (prefers-reduced-motion: reduce) { .panel__resize::after { transition: none; } }
+
 /* M260. A TOOL, not another document: a quiet tint on the review kind's own
    chrome (`--glass-2`, already declared both themes and used for shell
    chrome elsewhere — no new hue), and a touch less body padding/line-height
@@ -5483,9 +5506,18 @@ body {
    own 14px), not spacing literals; verify:styles 6 (`/^\d+px$/`) structurally
    cannot see them and that is not a gap worth closing. */
 .panel__port--n { top: 0; left: 50%; margin-left: -7px; }
-.panel__port--s { bottom: 0; left: 50%; margin-left: -7px; }
+.panel__port--s { bottom: var(--port-inset); left: 50%; margin-left: -7px; }
 .panel__port--w { left: 0; top: 50%; margin-top: -7px; }
-.panel__port--e { right: 0; top: 50%; margin-top: -7px; }
+.panel__port--e { right: var(--port-inset); top: 50%; margin-top: -7px; }
+/* M408 (D1). OFF THE RESIZE BAND. The east and south ports sat centred ON
+   the 8px bands, so the one visible dot on an edge was a link port in the
+   middle of the resize target (z 4 over the band's 2): pressing where the
+   edge looked grabbable drew a link. They stand just inside the band now —
+   the band's width times the same counter-scale the band wears (M144), plus
+   a hairline — so at every zoom the band is the edge and the dot is past it.
+   North and west have no band and stay flush. Still inside the frame (the
+   overflow clip above), still hover- or linking-only. */
+.panel__port { --port-inset: calc(var(--sp-4) * var(--chrome-scale, 1) + var(--sp-1)); }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M65. THE SPAWN SHEET, inside the palette's overlay: a short form. Labels
@@ -7087,6 +7119,16 @@ body {
    have DESELECTED it — fit.1's real click on the chrome measured exactly
    that. The controls stay inert until they are shown. */
 .pf--kind-terminal:has(.panel__slot) .pf__chrome > :is(.pf__title, .pf__word) { pointer-events: auto; }
+/* M408 (D1). AND THE WHOLE STRIP IS THE HANDLE. The name alone was a 66px
+   target on a 407px rim; a press anywhere else on it fell through to the
+   canvas and started a marquee. The strip is above the frame (the rim rule
+   above), so it covers no cell and the reason the chrome was inert is not
+   true of it. Its children keep their own rule — the controls stay inert
+   until shown, so a press where a hidden ⋯ sits lands on the strip and
+   drags. The cost, recorded: a press in this 16px band no longer starts a
+   marquee, and where a neighbour sits closer above than the band, the band
+   takes the press over the neighbour's foot. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome { pointer-events: auto; cursor: grab; }
 /* The name at REST: quieter than a header's, but it must still LEAD. A gate
    critic measured the first cut at --fg-3 and found the ghosted terminal row
    beneath it reading BRIGHTER (176) than the title (160) in the dark theme —
@@ -7216,7 +7258,38 @@ body {
 /* M396. The HUD yields to a menu the same way (the critic's header scene: an
    open ⋯ menu's right edge, "…run again, or", sat under "+ Create"). */
 .canvas:has(> .world [role="menu"]:not([hidden])) > .canvas-hud { opacity: 0; visibility: hidden; pointer-events: none; }
+/* M408 (D1). And to the right-click menu, which is a sibling of .world (not
+   in it), so the rules above cannot see it. */
+.canvas:has(> .canvas-context) > .command-pill,
+.canvas:has(> .canvas-context) > .canvas-hud { opacity: 0; visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .command-pill { transition: none; } }
+/* M408 (D1). THE RIGHT-CLICK MENU, in SCREEN space at the press point: a
+   zero-size box there (the anchor), the menu hung from it — to the press's
+   other side when it would leave the canvas (data-flip-*, measured by the
+   component). The View menu's surface: glass, the menu lift, one hairline
+   between sections. Above the pill and the HUD (930), which step out while it
+   is open anyway. */
+.canvas-context { position: absolute; width: 0; height: 0; z-index: 950; }
+.canvas-context__anchor { position: absolute; inset: 0; width: 0; height: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.canvas-context__menu {
+  position: absolute; top: 0; left: 0;
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  min-width: 14rem; max-width: 22rem;
+  padding: var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  /* Opaque, the ⋯ menu's --s-3: it opens over live work, and the View
+     menu's glass let a panel's text read through its rows. */
+  background: var(--s-3);
+  box-shadow: var(--e-3);
+}
+.canvas-context__menu[data-flip-x] { left: auto; right: 0; }
+.canvas-context__menu[data-flip-y] { top: auto; bottom: 0; }
+.canvas-context__heading { padding: var(--sp-2) var(--sp-4) var(--sp-1); color: var(--fg-3); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-context__item { width: 100%; justify-content: flex-start; text-align: left; }
+.canvas-context__item { position: relative; }
+.canvas-context__item--section { margin-top: var(--sp-2); }
+.canvas-context__item--section::before { content: ''; position: absolute; left: 0; right: 0; top: calc(-1 * var(--sp-2) + var(--sp-1)); height: 1px; background: var(--line); pointer-events: none; }
 /* The rest pill IS the "shared container": it never unmounts, so it reads as
    the one object the panel above grows out of rather than a button that
    summons a second, disconnected surface. */

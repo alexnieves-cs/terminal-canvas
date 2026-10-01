@@ -8,7 +8,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 75000 // measured 2026-09-10 in the Electron tier after M234–M237 (the chromeless checks), two green-but-for-headroom runs: 58.4s chained, 59.6s alone; 1.25x the slower, to the next second. Was 63000, which headroom.1 flagged at 93–95% before any watchdog fired
+const WATCHDOG_MS = 105000 // measured 2026-09-30 (M408 re-pin): the D1 real-input checks (grab.*, grip.1, hud.pass.1, ctx.*) add ~10s; three runs alone under the lock measured 83.7s, 82.1s and 79.8s — 1.25x the slowest, to the next second. The baseline at 268c877c already ran 70.5s of the old 75000 (94%, headroom.1 red). Before that: 75000, measured 2026-09-10 after M234–M237 (58.4s chained, 59.6s alone)
 
 const { occupiedWorld, overlapsRect, onScreen, cameraStill, zoomInto, measurePlacement, expectedSpot, storeRect } = require('./lib/place-probe.cjs')
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
@@ -2648,10 +2648,35 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           facts.every((f, i) => f.rim === base(dirs[i]) && f.row === f.rim && !f.rim.includes('/') && typeof f.hint === 'string' && f.hint.endsWith(dirs[i].replace(/\/+$/, ''))),
         JSON.stringify({ dirs, facts }))
       const target = ids[1]
+      // M408 (D1, the M405 critic's item 4). THE DOUBLE-CLICK IS A REAL ONE.
+      // The name does not stop mousedown, so both presses of a double-click
+      // also reach the header's move gesture; a dispatched `dblclick` never
+      // exercised that. Brought into view by its navigator row, pressed once
+      // (the press that selects may RAISE, which is its own undo entry), then
+      // double-clicked by sendInputEvent: the rect must not move and the panel
+      // history must gain nothing — a click is not a gesture.
+      const titleSel = `.panel[data-panel-id=${JSON.stringify(target ?? '')}] .panel__title`
+      if (typeof target === 'string') {
+        await wc.executeJavaScript(`document.querySelector('.rail-list--panels .rail-row[data-rail-row=' + ${JSON.stringify(JSON.stringify(target))} + '] .rail-row__main')?.click()`)
+        await sleep(900)
+      }
+      const rimAt = () => wc.executeJavaScript(`(() => { const t = document.querySelector(${JSON.stringify(titleSel)}); const p = t?.closest('.panel'); if (!t || !p) return null
+        const r = t.getBoundingClientRect(), q = p.getBoundingClientRect(); const x = Math.round(r.left + Math.min(r.width / 2, 12)), y = Math.round(r.top + r.height / 2)
+        return { x, y, hit: document.elementFromPoint(x, y) === t, rect: [q.left, q.top, q.width, q.height].map((n) => Math.round(n)).join(','), depth: window.__m408HistoryDepth() } })()`)
+      const press = async (pt, count) => {
+        wc.sendInputEvent({ type: 'mouseMove', x: pt.x, y: pt.y })
+        wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: count })
+        wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: count })
+        await sleep(60)
+      }
+      const rim0 = typeof target === 'string' ? await rimAt() : null
+      if (rim0 !== null) { await press(rim0, 1); await sleep(400) }
+      const rim1 = rim0 === null ? null : await rimAt()
+      if (rim1 !== null) { await press(rim1, 1); await press(rim1, 2); await sleep(150) }
+      // Read off the PANEL: while the field is open it stands where the title was.
+      const rim2 = rim1 === null ? null : await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(target ?? ''))} + ']'); if (!p) return null
+        const q = p.getBoundingClientRect(); return { rect: [q.left, q.top, q.width, q.height].map((n) => Math.round(n)).join(','), depth: window.__m408HistoryDepth() } })()`)
       const renamed = typeof target === 'string' ? await wc.executeJavaScript(`(async () => {
-        const t = document.querySelector('.panel[data-panel-id=${JSON.stringify(target ?? '')}] .panel__title')
-        if (!t) return 'no title'
-        t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2 }))
         await new Promise((r) => setTimeout(r, 100))
         const field = document.querySelector('.panel[data-panel-id=${JSON.stringify(target ?? '')}] [data-panel-title-input]')
         if (!field) return 'no field'
@@ -2664,10 +2689,185 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         return 'ok:' + was
       })()`) : 'no panel'
       const after = await waitUntil(async () => { const f = await read(); const x = f.find((y) => y.id === target); return x && x.rim === 'api server' && x.row === 'api server' ? f : false }, 3000)
-      ok('title.rename.1 a double-click on a terminal\'s rim name opens a focused field holding the name; Enter renames the panel, and the navigator row follows',
-        typeof renamed === 'string' && renamed === `ok:${facts[1] ? facts[1].rim : ''}` && after !== false,
-        JSON.stringify({ renamed, after: after || await read() }))
+      ok('title.rename.1 a REAL double-click on a terminal\'s rim name opens a focused field holding the name without moving the panel or writing history; Enter renames the panel, and the navigator row follows',
+        typeof renamed === 'string' && renamed === `ok:${facts[1] ? facts[1].rim : ''}` && after !== false &&
+          rim1 !== null && rim1.hit && rim2 !== null && rim2.rect === rim1.rect && rim2.depth === rim1.depth,
+        JSON.stringify({ renamed, rim1, rim2, after: after || await read() }))
       for (const id of ids) await clickPanelClose(wc, id)
+    }
+
+    // M408 (D1). GRAB AND RESIZE, AND THE RIGHT-CLICK — all by REAL input
+    // (sendInputEvent), because every defect here lived in the routing of a
+    // real press: the strip's empty area fell through to the canvas, a press
+    // on ⋯ bubbled into the move, a HUD button's press hit-tested the world
+    // under it, and the ports sat on the resize band. One live terminal at
+    // 100%, brought into view by its own spawn.
+    {
+      await zoomToScale(wc, 1)
+      const before = new Set(await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: tmpdir(), args: ['-l'], w: 520, h: 300 })
+      const gid = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].filter((p) => p.querySelector('.panel__slot')).map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((x) => !before.has(x)) ?? false
+      }, 5000)
+      await sleep(900)
+      const P = `.panel[data-panel-id=${JSON.stringify(String(gid))}]`
+      const box = () => wc.executeJavaScript(`(() => { const p = document.querySelector(${JSON.stringify(P)}); if (!p) return null
+        const r = p.getBoundingClientRect(), c = p.querySelector('.pf__chrome').getBoundingClientRect()
+        return { x: r.left, y: r.top, w: r.width, h: r.height, right: r.right, bottom: r.bottom, cx: c.left, cy: c.top, cw: c.width, ch: c.height,
+          sel: p.classList.contains('panel--selected'), depth: window.__m408HistoryDepth(), selected: [...document.querySelectorAll('.panel--selected')].map((q) => q.getAttribute('data-panel-id')) } })()`)
+      const hitAt = (x, y, sel) => wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${x}, ${y}); return el ? el.closest(${JSON.stringify(sel)}) !== null : false })()`)
+      const down = (x, y, button = 'left', modifiers = []) => { wc.sendInputEvent({ type: 'mouseMove', x, y, modifiers }); wc.sendInputEvent({ type: 'mouseDown', x, y, button, clickCount: 1, modifiers }) }
+      const dragTo = async (x0, y0, x1, y1, button = 'left', modifiers = []) => {
+        const held = button === 'left' ? 'leftButtonDown' : 'rightButtonDown'
+        for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(x0 + (x1 - x0) * i / 5), y: Math.round(y0 + (y1 - y0) * i / 5), modifiers: [...modifiers, held] }); await sleep(16) }
+        wc.sendInputEvent({ type: 'mouseUp', x: x1, y: y1, button, clickCount: 1, modifiers })
+        await sleep(120)
+      }
+      const click = async (x, y, button = 'left', modifiers = []) => { down(x, y, button, modifiers); wc.sendInputEvent({ type: 'mouseUp', x, y, button, clickCount: 1, modifiers }); await sleep(120) }
+      const key = (keyCode, modifiers = []) => { wc.sendInputEvent({ type: 'keyDown', keyCode, modifiers }); wc.sendInputEvent({ type: 'keyUp', keyCode, modifiers }) }
+      const ground = () => wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
+        for (let dy = 40; dy < b.height - 120; dy += 20) for (let dx = 40; dx < b.width - 40; dx += 20) {
+          const x = Math.round(b.left + dx), y = Math.round(b.top + dy), el = document.elementFromPoint(x, y)
+          if (el && (el === host || el.classList.contains('world')) ) return { x, y } }
+        return null })()`)
+      const b0 = gid ? await box() : null
+
+      // grab.strip.1 — a press on the strip's EMPTY part (60% along, well past
+      // the name) lands on the chrome and moves the panel 1:1 with the cursor.
+      const sp = b0 === null ? null : { x: Math.round(b0.cx + b0.cw * 0.6), y: Math.round(b0.cy + b0.ch / 2) }
+      const stripHit = sp === null ? false : await hitAt(sp.x, sp.y, `${P} .pf__chrome`)
+      if (sp !== null) { down(sp.x, sp.y); await dragTo(sp.x, sp.y, sp.x + 40, sp.y + 30) }
+      const b1 = b0 === null ? null : await box()
+      ok('grab.strip.1 a real press on the empty part of a live terminal\'s name strip lands on the chrome (not the canvas) and drags the panel 1:1 with the cursor',
+        stripHit && b1 !== null && Math.abs(b1.x - b0.x - 40) <= 1.5 && Math.abs(b1.y - b0.y - 30) <= 1.5 && b1.sel,
+        JSON.stringify({ gid, sp, stripHit, b0, b1 }))
+
+      // grab.slop.1 — a 2px wobble is a click: nothing moves, no history.
+      const sp2 = b1 === null ? null : { x: Math.round(b1.cx + b1.cw * 0.6), y: Math.round(b1.cy + b1.ch / 2) }
+      if (sp2 !== null) { down(sp2.x, sp2.y); await dragTo(sp2.x, sp2.y, sp2.x + 2, sp2.y + 1) }
+      const b2 = b1 === null ? null : await box()
+      ok('grab.slop.1 a press that wobbles 2px on the strip is a click: the panel does not move and the panel history gains no entry',
+        b1 !== null && b2 !== null && b2.x === b1.x && b2.y === b1.y && b2.depth === b1.depth,
+        JSON.stringify({ b1, b2 }))
+
+      // grab.button.1 — a press on ⋯ and a right-press on the name never move it.
+      const more = gid ? await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(P + ' [data-panel-more]')}).getBoundingClientRect(); return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } })()`) : null
+      if (more !== null) { down(more.x, more.y); await dragTo(more.x, more.y, more.x + 40, more.y + 30) }
+      const b3 = await box()
+      const name = gid ? await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(P + ' .panel__title')}).getBoundingClientRect(); return { x: Math.round(b.left + Math.min(12, b.width / 2)), y: Math.round(b.top + b.height / 2) } })()`) : null
+      if (name !== null) { down(name.x, name.y, 'right'); await dragTo(name.x, name.y, name.x + 40, name.y + 30, 'right') }
+      const b4 = await box()
+      key('Escape'); await sleep(150)
+      ok('grab.button.1 a press dragged from the ⋯ control, and a right-press dragged from the name, leave the panel where it was',
+        b2 !== null && b3 !== null && b4 !== null && b3.x === b2.x && b3.y === b2.y && b4.x === b2.x && b4.y === b2.y,
+        JSON.stringify({ b2, b3, b4 }))
+
+      // grip.1 — the grips: nothing at rest, visible on selection; the edge's
+      // middle is the resize band, and the east port stands off it.
+      const g = await ground()
+      if (g !== null) await click(g.x, g.y)
+      const gripOpacity = () => wc.executeJavaScript(`['e', 's', 'se'].map((e) => getComputedStyle(document.querySelector(${JSON.stringify(P)} + ' .panel__resize--' + e), '::after').opacity).join(',')`)
+      const atRest = await gripOpacity()
+      if (name !== null) await click(name.x, name.y)
+      await sleep(300)
+      const onSelect = await gripOpacity()
+      const b5 = await box()
+      const edges = b5 === null ? null : await wc.executeJavaScript(`(() => { const p = document.querySelector(${JSON.stringify(P)}); const r = p.getBoundingClientRect()
+        const at = (x, y) => { const el = document.elementFromPoint(x, y); return el ? String(el.className) : null }
+        const port = p.querySelector('.panel__port--e').getBoundingClientRect(), band = p.querySelector('.panel__resize--e').getBoundingClientRect()
+        return { e: at(r.right - 2, r.top + r.height / 2), s: at(r.left + r.width / 2, r.bottom - 2), portRight: port.right, bandLeft: band.left } })()`)
+      ok('grip.1 the resize grips paint nothing at rest and show on selection; the east and south edges\' middles are the resize bands, and the east link port stands clear of its band',
+        atRest === '0,0,0' && onSelect === '1,1,1' && edges !== null && /panel__resize--e/.test(edges.e) && /panel__resize--s/.test(edges.s) && edges.portRight <= edges.bandLeft,
+        JSON.stringify({ atRest, onSelect, edges }))
+
+      // hud.pass.1 — a real click on the HUD's Zoom in leaves the selection
+      // exactly as it was (it used to hit-test the world under the button).
+      const zoomIn = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-hud-zoom-in]')?.getBoundingClientRect(); return b ? { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } : null })()`)
+      const zoomOut = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-hud-zoom-out]')?.getBoundingClientRect(); return b ? { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } : null })()`)
+      const selBefore = (await box())?.selected
+      if (zoomIn !== null) { await click(zoomIn.x, zoomIn.y); await sleep(250) }
+      const selIn = (await box())?.selected
+      if (zoomOut !== null) { await click(zoomOut.x, zoomOut.y); await sleep(250) }
+      const selOut = (await box())?.selected
+      ok('hud.pass.1 a real click on the HUD\'s Zoom in and Zoom out changes the zoom but never the selection',
+        zoomIn !== null && JSON.stringify(selBefore) === JSON.stringify([gid]) && JSON.stringify(selIn) === JSON.stringify([gid]) && JSON.stringify(selOut) === JSON.stringify([gid]),
+        JSON.stringify({ zoomIn, selBefore, selIn, selOut }))
+      await zoomToScale(wc, 1)
+
+      // ctx.panel.1 — the panel's right-click menu carries the ⋯ menu's own
+      // rows (one list), led by the terminal's Copy/Paste, and leaves the
+      // keyboard in the terminal.
+      const b6 = await box()
+      const body = b6 === null ? null : { x: Math.round(b6.x + b6.w / 2), y: Math.round(b6.y + b6.h / 2) }
+      const moreNow = gid ? await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(P + ' [data-panel-more]')}).getBoundingClientRect(); return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } })()`) : null
+      if (body !== null) await click(body.x, body.y)
+      if (moreNow !== null) await click(moreNow.x, moreNow.y)
+      const dots = await wc.executeJavaScript(`[...document.querySelectorAll(${JSON.stringify(P + ' [data-panel-menu] button[role=menuitem]:not([data-panel-menu-close])')})].map((b) => b.textContent.trim())`)
+      if (moreNow !== null) await click(moreNow.x, moreNow.y)
+      if (body !== null) await click(body.x, body.y, 'right')
+      await sleep(200)
+      const ctxRead = () => wc.executeJavaScript(`(() => { const m = document.querySelector('[data-context-for] [data-context-menu]'); if (!m) return null
+        return { for: m.closest('[data-context-for]').getAttribute('data-context-for'), ids: [...m.querySelectorAll('[data-context-item]')].map((b) => b.getAttribute('data-context-item')),
+          labels: [...m.querySelectorAll('[data-context-item]')].map((b) => ({ id: b.getAttribute('data-context-item'), text: b.textContent.trim(), off: b.disabled })),
+          focusInMenu: m.contains(document.activeElement), xterm: document.activeElement?.classList.contains('xterm-helper-textarea') ?? false,
+          pill: getComputedStyle(document.querySelector('.command-pill')).visibility } })()`)
+      const ctxP = await ctxRead()
+      key('Escape'); await sleep(200)
+      const ctxGone = await ctxRead()
+      const shared = ctxP === null ? [] : ctxP.labels.filter((l) => !/^edit\./.test(l.id) && l.id !== 'sel.close').map((l) => l.text)
+      ok('ctx.panel.1 a real right-click on a terminal opens its context menu: Copy and Paste first, then exactly the ⋯ menu\'s rows (one list), then Close; the keyboard stays in the terminal and Escape closes it',
+        ctxP !== null && ctxP.for === gid && ctxP.ids[0] === 'edit.copy' && ctxP.ids[1] === 'edit.paste' && ctxP.ids[ctxP.ids.length - 1] === 'sel.close' &&
+          dots.length > 0 && JSON.stringify(shared) === JSON.stringify(dots) && !ctxP.focusInMenu && ctxGone === null,
+        JSON.stringify({ dots, ctxP, ctxGone }))
+
+      // ctx.paste.1 — its Paste is the ⌘V route (xterm's paste, bracketed),
+      // never a raw write: the text reaches the shell's line.
+      const { clipboard } = require('electron')
+      const MARK = 'm408ctxpaste'
+      clipboard.writeText(MARK)
+      // A renderer reads the clipboard only while its document has focus — as
+      // it does whenever a person right-clicks it; the harness window has to
+      // be given it.
+      win.focus(); wc.focus()
+      const readable = await wc.executeJavaScript(`navigator.clipboard.readText().then((t) => t, (e) => 'ERR ' + e.message)`)
+      if (body !== null) await click(body.x, body.y, 'right')
+      await sleep(200)
+      const pasteBtn = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-context-item="edit.paste"]')?.getBoundingClientRect(); return b ? { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } : null })()`)
+      if (pasteBtn !== null) await click(pasteBtn.x, pasteBtn.y)
+      const landed = await waitUntil(() => wc.executeJavaScript(`window.__m4aFocusedId() === ${JSON.stringify(gid)} && window.__m4aCellToScreen(${JSON.stringify(MARK)}) !== null`), 3000)
+      ok('ctx.paste.1 the context menu\'s Paste puts the clipboard\'s text into that terminal through the ⌘V route',
+        pasteBtn !== null && landed !== false, JSON.stringify({ pasteBtn, landed, readable }))
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'U', modifiers: ['control'] }); wc.sendInputEvent({ type: 'char', keyCode: '\u0015' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'U', modifiers: ['control'] })
+
+      // ctx.term.1 — a program that asked for the mouse keeps the plain
+      // right-click; ⌥-right-click still opens the menu.
+      await wc.executeJavaScript(`window.__m4aWrite('\x1b[?1000h')`)
+      const mouseMode = await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(P + ' .xterm')})?.classList.contains('enable-mouse-events') === true`), 2000)
+      if (body !== null) await click(body.x, body.y, 'right')
+      await sleep(200)
+      const plain = await ctxRead()
+      if (body !== null) await click(body.x, body.y, 'right', ['alt'])
+      await sleep(200)
+      const withAlt = await ctxRead()
+      key('Escape'); await sleep(150)
+      await wc.executeJavaScript(`window.__m4aWrite('\x1b[?1000l')`)
+      ok('ctx.term.1 in a terminal whose program has mouse reporting on, a plain right-click opens no menu (the program has it) and ⌥-right-click opens the menu',
+        mouseMode !== false && plain === null && withAlt !== null && withAlt.for === gid, JSON.stringify({ mouseMode, plain, withAlt }))
+
+      // ctx.canvas.1 — the ground's menu: Paste, New object…, Fit; the pill and
+      // the HUD step out while it is open, and a click on it is not the world's.
+      const g2 = await ground()
+      if (g2 !== null) await click(g2.x, g2.y, 'right')
+      await sleep(200)
+      const ctxC = await ctxRead()
+      const hud = await wc.executeJavaScript(`getComputedStyle(document.querySelector('.canvas-hud')).visibility`)
+      key('Escape'); await sleep(150)
+      ok('ctx.canvas.1 a real right-click on the ground opens the canvas menu (Paste, New object…, Fit), and the pill and HUD step out while it is open',
+        ctxC !== null && ctxC.for === 'canvas' && JSON.stringify(ctxC.ids) === JSON.stringify(['edit.paste', 'canvas.create', 'sel.fit']) && ctxC.pill === 'hidden' && hud === 'hidden',
+        JSON.stringify({ g2, ctxC, hud }))
+
+      if (gid) await clickPanelClose(wc, gid)
     }
 
     // ---------------------------------------------------------------------
@@ -4597,6 +4797,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // rest arm's contract is unchanged — an unseen control eats nothing —
       // so it asserts that the point does not land in the chrome, and the
       // hitsBody reading stays in the evidence rather than the verdict.
+      // M408 (D1): and the whole strip is now the MOVE handle at rest (the
+      // name alone was a 66px target), so the point under a hidden ⋯ lands in
+      // the chrome — on the strip, which drags — but never on the ⋯ BUTTON.
+      // The contract is unchanged: an unseen control eats nothing. The rest
+      // arm asserts exactly that (onButton false); onTop stays in the evidence.
       // ONE probe, read twice, so the two states are compared like for like:
       // the same button, the same point, the same query.
       const probeMore = () => wc.executeJavaScript(`(() => {
@@ -4608,6 +4813,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         return { opacity: getComputedStyle(b).opacity, w: Math.round(r.width), h: Math.round(r.height),
                  named: (b.getAttribute('aria-label') ?? b.getAttribute('title') ?? '').length > 0,
                  onTop: el !== null && el.closest('.pf__chrome') !== null,
+                 onButton: el !== null && el.closest('[data-panel-more]') !== null,
                  hitsBody: el !== null && el.closest('.panel__slot') !== null } })()`)
       const chromeRest = geom === null ? null : await probeMore()
       let chromeHover = null
@@ -4618,11 +4824,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
         await settle(); await sleep(150)
       }
-      ok('chromeless.paint.1 the lifted chrome PAINTS above the body ON HOVER (elementFromPoint at the ⋯ lands inside it) and is not there for the pointer AT REST (the same point does not land in the chrome, so an unseen control never eats a click), while the button keeps a real box and an accessible name at rest so a script and a keyboard reach it without hovering',
+      ok('chromeless.paint.1 the lifted chrome PAINTS above the body ON HOVER (elementFromPoint at the ⋯ lands on it) and the unseen ⋯ is not there for the pointer AT REST (the same point lands on the strip\'s move handle, never the button, so an unseen control never eats a click), while the button keeps a real box and an accessible name at rest so a script and a keyboard reach it without hovering',
         chromeRest !== null && chromeRest.opacity === '0' &&
-          chromeRest.onTop === false &&
+          chromeRest.onButton === false &&
           chromeRest.w >= 20 && chromeRest.h >= 20 && chromeRest.named === true &&
-          chromeHover !== null && chromeHover.opacity === '1' && chromeHover.onTop === true,
+          chromeHover !== null && chromeHover.opacity === '1' && chromeHover.onTop === true && chromeHover.onButton === true,
         JSON.stringify({ chromeRest, chromeHover }))
 
       // M397 (A4) — chromeless.row0.1, REWRITTEN by the A4 follow-up. ROW 0

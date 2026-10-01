@@ -9,6 +9,13 @@ import type { LinkMode } from './useLinkMode'
 import { hitTest, screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect } from './viewport'
 import { INK_POINTS_MAX } from '@shared/annotations'
 
+/**
+ * The screen-space controls that sit INSIDE `.canvas`, over the world: a press
+ * on one is never a press on what lies beneath it (M249, M395, M408). One list
+ * for the capture slot and the background handler, so they cannot disagree.
+ */
+const SCREEN_CONTROLS = '.command-pill, .new-object-row, .canvas-hud, .minimap, [data-annotate-strip], [data-context-for]'
+
 export interface CanvasPointerDeps {
   hostRef: RefObject<HTMLDivElement | null>
   viewport: Viewport
@@ -265,7 +272,7 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     const target = event.target as HTMLElement | null
     // M395. The annotate strip is the same kind of control (it takes the
     // pointer now, and keeps its presses from the ground beneath it).
-    if (target?.closest?.('.command-pill, .new-object-row, .canvas-hud, .minimap, [data-annotate-strip]')) return
+    if (target?.closest?.(SCREEN_CONTROLS)) return
     if (onLinkModeMouseDownCapture(event)) return
     if (event.button !== 1) return
     if (palette.isOpen() || navGridIsOpenRef.current()) return
@@ -275,8 +282,24 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
   }
 
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
+    // M408 (D1). A press on a screen-space control is not a press on the
+    // world beneath it. `shellControl` prevents default and deliberately does
+    // not stop propagation (the palette's outside-click), so a click on the
+    // HUD's Zoom in bubbled here and hit-tested the WORLD point under the
+    // button: it selected whatever panel lay under the HUD (the critique's
+    // `im5`, `wf4`) or, over the ground, deselected and began a marquee. The
+    // capture slot above already stands down for these; this is its bubble half.
+    if ((event.target as HTMLElement | null)?.closest?.(SCREEN_CONTROLS)) return
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
+    // M408 (D1). A secondary press (right, or ⌃-left — the Mac's right-click)
+    // is the context menu's, never a gesture: it selects the card it lands on,
+    // as a panel's chrome does, and starts no marquee, stroke or label.
+    if (event.button !== 0 || event.ctrlKey) {
+      const hitCard = world ? hitTest(hitOrder, world) : null
+      if (hitCard && (event.button === 2 || event.ctrlKey)) onSelectPanel(hitCard)
+      return
+    }
     // M93. In annotate mode the click is the note's position, over a panel or
     // the ground alike: it neither selects nor starts a marquee.
     // M155. With the DRAW tool on, a drag on the sheet is a stroke: every move

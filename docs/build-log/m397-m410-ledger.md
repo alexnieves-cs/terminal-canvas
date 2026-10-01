@@ -1356,3 +1356,144 @@ the lock, at load avg 20–340:
 scene with two untitled shells whose folders share a basename would now read by parent. None of the fixture scenes
 is known to have one, so no scene is expected to move. The label host change is invisible (the host box paints
 nothing).
+
+### M408 — grab and resize, and one right-click menu from the shared verb lists (D1)
+
+Main checkout on `m397-daily-loop` off `268c877c`, slot 1 (CDP 9210, window 1200×800). Planner map:
+`scratchpad/plans/D1.md` (line numbers re-checked after M407). Screenshots in `/tmp/tc-daily-loop-shots/`:
+`D1-start`, `D1-before`, `D1-before-strip-drag`, `D1-after-strip-drag`, `D1-after-grips`, `D1-after-ctx-terminal`,
+`D1-after-ctx-canvas`. One commit (the drag handle, slop and grips did not need landing apart from the menu: the
+menu's checks share the core block).
+
+**D1 (P1), grab and resize.** *Reproduced:* a live terminal `home` at 59%. `elementFromPoint` at the strip's empty
+part (right of the name) answered `canvas`; a real drag from there moved nothing and swept a marquee that selected
+the panel (`D1-before-strip-drag`). No grip painted on a selected panel; the east and south link ports sat centred ON
+the 8px resize bands (z 4 over 2). `grep onContextMenu src/renderer` found nothing.
+*Causes and fixes:*
+1. *The strip.* Since M397's follow-up the name strip is ABOVE the frame (`bottom: 100%`) and covers no cell, but it
+   kept the chromeless rule's `pointer-events: none`, so only the name and state word took a press. Now
+   `.pf--kind-terminal:has(.panel__slot) .pf__chrome { pointer-events: auto; cursor: grab }`; its children keep the
+   old rule, so a hidden control is still inert and a press where it sits lands on the strip and drags. *Cost,
+   recorded:* the 16px band no longer starts a marquee, and where a neighbour sits closer above than the band (the
+   M402 rim note: between the near floor and 67%), the band takes presses over that neighbour's foot.
+2. *Controls and buttons.* `beginMove` (PanelFrame) read no `button` and every control's `shellControl` only prevents
+   default, so a press on ⋯ / fill / the trail bubbled into a move, and a right- or ⌃-press dragged. Now a press
+   whose target is inside `button, input, a, [role=menu]`, or that is not a plain primary press, still SELECTS (the
+   context menu is about what was pressed, Finder's rule) but begins no gesture. The resize grips take the same
+   button rule. (The load-bearing entry "no panel chrome handler checks `event.button`" is now false of the chrome
+   and the grips; the capture-phase middle-drag claim it justifies is unchanged and still needed for every other
+   kind's own handlers.)
+3. *The slop.* `usePanelDrag` gains `DRAG_SLOP_PX = 3` (screen px, measured as world distance × scale from the
+   press's world origin). It only DELAYS the first frame: `originWorld` and `originRect` are never rebased, so the
+   frame that crosses computes from the origin (`applyDrag`'s rule) and the panel jumps to the cursor instead of
+   lagging it. And a gesture that never crossed commits NOTHING: `onCommit` used to push a history entry for every
+   click on a chrome (⌘Z spent undoing a click), two per rename double-click. The raise a press makes still commits
+   itself in `selectAndRaise`.
+4. *The grips.* A `::after` mark inside each `.panel__resize` (a 2×24 bar mid-east and mid-south, an L in the
+   corner, `--line-strong`), so it rides the handle's counter-scale and sits exactly where the press lands. Opacity 0
+   at rest, 1 on `.panel--selected` or the handle's own `:hover` (no fraction, styles 3). A terminal still has no n
+   grip (the strip is its move handle); no w/sw grips were added (ResizeEdge supports them, the frame never rendered
+   them — not this finding).
+5. *The ports.* East and south now stand `calc(var(--sp-4) * var(--chrome-scale, 1) + var(--sp-1))` inside the edge:
+   the band's width times the same counter-scale the band wears, plus a hairline, so at every zoom the band is the
+   edge and the dot is past it. North and west have no band and stay flush. Still inside the frame (the overflow
+   clip), still hover/linking-only. **`link-draw.1–6` read the live port box and stayed green unchanged** (kinds
+   54/54).
+*Measured after:* a real drag from the strip's empty part moved the panel exactly (+40, +30)
+(`D1-after-strip-drag`); the grips show on selection (`D1-after-grips`); at the east edge's middle
+`elementFromPoint` answers `.panel__resize--e` and the port's right edge (619) is left of the band's left (628).
+
+**Carried: rename double-click vs drag (the M405 critic's item 4).** The name span does not stop mousedown, so both
+presses of a double-click reach `beginMove`. The slop makes each a click (no move, and now no history).
+`title.rename.1` now brings its panel into view by its navigator row, presses once (the selecting press may RAISE,
+which is its own entry), then double-clicks by `sendInputEvent` (clickCount 1, then 2): the field opens, and the
+panel's rect and the history depth (a new read-only `window.__m408HistoryDepth`) are unchanged.
+
+**Carried: HUD Zoom in selects a panel (`im5`, `wf4`).** *Reproduced:* nothing selected, one real click on Zoom in
+→ `c1` (the chat under the HUD) selected; over the ground it deselected instead. *Cause:* `shellControl` deliberately
+does not stop propagation (the palette's outside-click), so the HUD button's mousedown bubbled to the canvas host's
+`onMouseDown`, which hit-tests the WORLD point under the button and selects whatever lies there (or deselects and
+starts a marquee). The capture slot already stood down for the screen controls; its bubble half never did. *Fix
+(useCanvasPointer):* one `SCREEN_CONTROLS` list (`.command-pill, .new-object-row, .canvas-hud, .minimap,
+[data-annotate-strip], [data-context-for]`) read by both handlers. A secondary press on the ground now starts no
+marquee/stroke/label either (it selects the card it lands on). This was also the mechanism behind M407's "two
+captions vanished while driving". *Measured after:* six real Zoom in/out clicks, selection `none` throughout.
+
+**The context menu.** *Decision — one list per family, not one list for everything:* the ⋯ menu and the pill offer
+different things (one object's frame verbs; a selection's arranging verbs), so `canvas/object-verbs.ts` (pure)
+holds `panelVerbs(facts)` — the ⋯ menu's task section, advanced doors, Fill view / Restore size and the palette's
+door, each carrying the DOM attribute the suites already select on — and `selectionVerbs(facts)`, the pill's
+priority-ordered action row moved verbatim out of `CommandPill`. The ⋯ menu (PanelFrame) and the pill now RENDER
+from them (markup, attributes and copy unchanged), and the right-click menu renders the same lists, so none of the
+three can drift. Panel rows run through `runPanelVerb` against the one `PanelMarks` (whose task verbs are the
+palette's actions); selection rows through `runSelectionVerb` against `PaletteActions`, the executor.
+*Surface:* `CanvasContextMenu` through the Menu primitive (Radix; `modal={false}`, no Portal, `INERT_PLACEMENT`),
+in SCREEN space as a sibling of `.world`, a zero-size trigger at the press point, `data-context-for` (a panel id or
+`canvas`), flipped to the press's other side at the canvas's right/bottom edge, the ⋯ menu's opaque `--s-3` ground
+(the View menu's glass let the panel's text read through its rows — looked at), `--e-3` (`verify:styles shadow.1`'s
+overlay list gained it). The primitive gained `pointerOpen`: a right-click is a pointer open that never touched the
+trigger, so without it the menu took focus out of xterm on open and handed it to the invisible anchor on close. The
+pill and the HUD step out while it is open (the M395 yield rule, extended — the menu is not inside `.world`).
+*Rows:* a panel → select it, then for a terminal Copy (disabled with its reason when nothing is selected) and Paste
+(Terminal.app/iTerm2/Ghostty lead with these), then exactly `panelVerbs`, then the pill's Close as "Close panel"; a
+panel inside a multi-selection → the pill's selection verbs (less Fit) for all; the ground → Paste, New object…
+(the HUD Create's sheet), Fit. One `contextmenu` listener on the host, BUBBLE phase, so xterm's right-click word
+selection has run and Copy can see it; editables, Monaco and `[data-edit-owner]` keep their own right-click (xterm's
+helper textarea excepted — xterm parks it under the pointer, so the next right-click targets it). A program with
+mouse reporting on (`.xterm.enable-mouse-events`: tmux, vim) keeps the plain right-click; ⌥-right-click opens the
+menu (iTerm2's rule). *Paste is `paste()`, never `write()`:* `useCanvasClipboard`'s two handlers were lifted into
+named `copy`/`paste` functions that the accelerator subscriptions AND the menu call (`editRef`); the menu reads the
+clipboard's text with `navigator.clipboard.readText()` (main hands the accelerator its text; nothing else read it in
+the renderer), and an empty read falls into the same no-text arm (a picture on the clipboard still lands).
+*Skipped, with reasons:* "New ▸ <kind> here" at the press point — every create door's placement is B4's one rule,
+and an `at` needs `createObject`'s signature in `palette/commands.ts`, which the parallel M409 builder owns; the
+ground menu offers New object… (the Create sheet) instead. No `@radix-ui/react-context-menu` was added (only the
+dropdown is installed; the primitive door covers it). Groups, annotations and flowchart shapes get the ground's or
+the panel's menu by whatever `[data-panel-id]` they sit in; no per-kind menus.
+*Observed, not this milestone's:* a menu Paste into the live login shell showed a literal `[200~…~` — xterm's
+`paste()` brackets when the shell asked for bracketed paste. It is the ⌘V route (`handle.paste`) exactly; a real-Mac
+comparison with ⌘V on the same shell is owed.
+
+**Checks added** (all `verify:panels:core`, real `sendInputEvent` input, one live terminal at 100%):
+`grab.strip.1` (the strip's empty part hit-tests as the chrome and a drag moves the panel 1:1 — red before: the
+point answered `canvas`), `grab.slop.1` (a 2px wobble moves nothing and adds no history), `grab.button.1` (a drag
+from ⋯ and a right-press drag from the name leave the panel), `grip.1` (grip opacity 0/0/0 at rest, 1/1/1 selected;
+east/south edge middles answer the resize bands; the east port clear of its band), `hud.pass.1` (Zoom in / Zoom out
+by real click never change the selection), `ctx.panel.1` (Copy, Paste, then exactly the ⋯ menu's row labels, then
+Close; the keyboard stays in xterm; Escape closes), `ctx.paste.1` (the menu's Paste lands the clipboard's text in
+that terminal), `ctx.term.1` (mouse mode: plain right-click opens nothing, ⌥-right-click opens it), `ctx.canvas.1`
+(Paste, New object…, Fit; pill and HUD hidden while open).
+*Checks changed deliberately:* `title.rename.1` (real double-click, rect and history asserted — above);
+`chromeless.paint.1` (the rest arm asserted the point under a hidden ⋯ is not in the CHROME; the strip is now the
+move handle, so it asserts the point is not the ⋯ BUTTON — the contract, "an unseen control eats nothing", is
+unchanged); `verify:panels:product revamp.snap.2` (its 1px nudge is now a click under the slop; a 4px drag, still
+inside the 8px threshold, provokes the same snap to 500); `verify:styles shadow.1` (the overlay list).
+*Fixtures settled deliberately:* `panels:agents attention.1` and `panels:product`'s `work.action.1` seed now wait for
+the camera to stop before seeding and reloading — keyboard.1's existing rule. Both follow a check that ends on a
+camera flight (search.1's Enter, board.1's row click), and on this build the reload's `did-finish-load` went missing
+mid-flight (agents: 3 of 4 runs, always at attention.1; product: 2 of 4, always at that reload; the baseline build
+hung once in 4 agents runs, elsewhere). The cause is not established beyond that timing; with the settle, agents
+2/2 and product 3/3 ran through.
+*Watchdog:* `panels:core` re-pinned 75000 → 105000 (alone under the lock: 83.7, 82.1, 79.8 s; the baseline at
+`268c877c` already ran 70.5 s of 75 s, `headroom.1` red).
+
+**Suites** (Electron each alone under the lock; baseline = `268c877c` built in a scratch worktree, since removed):
+- `panels:core` 96/99: `7`, `51`, `place.still.1` — **red identically on the baseline** (the M406 placement-probe
+  reds); every M408 check green, `headroom.1` 73–75%.
+- `panels:product` 148/149: `names.agree.1` — **red identically on the baseline** (M406's). 207.8 s of 285 s.
+- `panels:agents` 85/86: `template.1` — the recorded baseline red.
+- `panels:shell` 101/105: `95`, `95b`, `95c`, `96` — **red identically on the baseline**.
+- `panels:kinds` 54/54, `panels:flowchart` 16/16, `panels:orchestrate` 37/37, `canvas` 7/7, `xterm` 11/11.
+- Plain: `styles` (after shadow.1's list), `primitives`, `pill`, `verbs`, `meta` (after the watchdog comment kept its
+  `// measured` form), `palette`, `viewport`, `rail` — all green. `npm run affected` lists the whole branch against
+  main (every suite); the suites above are the ones this change reaches.
+- Process note: my first `npm run build` (for reproduction) ran while `/tmp/tc-electron-lock` was held by the M409
+  builder's suite in `/tmp/tc-m409-base` — a different checkout and `out/`, so nothing of theirs was rebuilt; every
+  later build and Electron run here took the lock first.
+*Goldens expected to move:* any scene with a SELECTED panel (grips now paint: `header`, `kinds*` if a selection is
+shot, `focus*`, `trail`, `attention`, `group*`) and any scene that shows link ports on hover (east/south dots moved
+inward). No scene opens the context menu.
+*Owed / for the lead:* a real-Mac pass of the trackpad right-click (two-finger) and ⌃-click, ⌥-right-click in tmux,
+and the menu Paste vs ⌘V on the same shell; the load-bearing entry on middle-drag still says "no panel chrome
+handler checks `event.button`" — true of the other kinds' handlers, no longer of PanelFrame's; left for the lead to
+reword or not.

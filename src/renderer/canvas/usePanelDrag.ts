@@ -3,6 +3,9 @@ import { arrangeable, changedFields, dragFrame, type CanvasWriteThrough, type Dr
 import { screenToWorld, type Viewport, type WorldRect } from './viewport'
 import { MOTION_SURFACE_MS } from '@renderer/motion'
 
+/** M408 (D1). How far (screen px) a press travels before it is a drag; under it, a click. */
+export const DRAG_SLOP_PX = 3
+
 export interface PanelDragDeps {
   hostRef: RefObject<HTMLElement | null>
   /** Read through a ref: viewport changes on every wheel event. */
@@ -26,7 +29,8 @@ export interface PanelDragDeps {
    */
   snapMany?(rects: readonly WorldRect[], ids: ReadonlySet<string>): { dx: number; dy: number }
   /**
-   * Called once on release for the whole gesture. A group move carries one
+   * Called once on release for the whole gesture — only for a gesture that
+   * MOVED past the slop (M408); a click commits nothing. A group move carries one
    * immutable state per member, so this is the one place its history entry
    * can be committed exactly once.
    */
@@ -110,9 +114,14 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       dragRef.current = null
       // A gesture begins on mousedown, so a click-to-select is a drag with no
       // move; settling it would bounce every panel a person merely selects.
-      if (movedRef.current) settle(state)
+      const moved = movedRef.current
+      if (moved) settle(state)
       movedRef.current = false
-      depsRef.current.onCommit(state)
+      // M408 (D1). A press that never crossed the slop changed nothing, so it
+      // commits nothing: a click to select, or the two presses of the rim
+      // name's rename double-click, used to push a history entry each — ⌘Z
+      // spent on a click. The raise a press makes commits itself (selectAndRaise).
+      if (moved) depsRef.current.onCommit(state)
     }
 
     const onMove = (event: MouseEvent): void => {
@@ -132,6 +141,19 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       }
       const world = toWorld(event)
       if (!world) return
+      // M408 (D1). THE SLOP. A press is a click until the pointer has left
+      // it by DRAG_SLOP_PX on SCREEN — a hand's wobble on a trackpad click, or
+      // between the two presses of a double-click, lifted the panel by a
+      // pixel and wrote it. Measured in world units times the scale (the
+      // origin is already a world point), and it only DELAYS the first frame:
+      // the origin is never rebased, so the frame that crosses computes from
+      // the press's origin rect like every frame after it (applyDrag's rule),
+      // and the panel jumps to the cursor rather than lagging it by the slop.
+      if (!movedRef.current) {
+        const origin = state[0]!.originWorld
+        const scale = depsRef.current.viewportRef.current?.scale ?? 1
+        if (Math.hypot(world.x - origin.x, world.y - origin.y) * scale < DRAG_SLOP_PX) return
+      }
       // The lift arrives with the first real move, not the press, for the
       // same reason the settle waits for one: a click is not a gesture.
       if (!movedRef.current) {

@@ -370,6 +370,22 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onJ = (_e, level, message) => { if (level >= 2) jLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onJ)
       try {
+        // M408. search.1 ends on Enter's goToPanel, a camera FLIGHT, and the
+        // page saves its layout on every frame of it — keyboard.1's own race
+        // (below), one check earlier. Reloaded mid-flight, the reload's
+        // did-finish-load went missing in 3 of 4 runs on the M408 build (the
+        // part then sat on `await reJ` until its watchdog). Seed and reload
+        // once the old page's camera has stopped moving, keyboard.1's rule.
+        {
+          let last = null
+          await waitUntil(async () => {
+            const now = JSON.stringify(await wc.executeJavaScript(`window.__m4aViewport()`))
+            const still = now === last
+            last = now
+            return still
+          }, 4000, 150)
+          await settle()
+        }
         state.backend = createDirectBackend('verify: direct (m43 attention)')
         const home = require('node:os').homedir()
         const jP = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 320, h: 220 }, z: 1,
