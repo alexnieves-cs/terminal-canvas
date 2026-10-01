@@ -69,3 +69,41 @@ export function fuzzyMatch(query: string, target: string): FuzzyMatch | null {
   score += Math.max(0, EARLINESS_MAX - positions[0])
   return { score, positions }
 }
+
+/**
+ * M409 (C5). The words of a target, for the word-start tiers below: split on
+ * whitespace and on the punctuation this app's titles use between words.
+ */
+const WORD_SPLIT = /[\s\-_/.:,;()[\]…·—'"|<>=+]+/
+
+/**
+ * M409 (C5). Does every term of `query`, IN ORDER, begin a word of `target`?
+ * "add a" → "Add a sticky note" yes; → "Deck: keep or discard proposed
+ * slides" no, though "adda" is a subsequence of it. fuzzyMatch skips spaces,
+ * so "add a" WAS "adda" there, and 174 of 184 rows answered it.
+ */
+export function wordStarts(query: string, target: string): boolean {
+  const terms = query.toLowerCase().split(/\s+/).filter((t) => t !== '')
+  if (terms.length === 0) return false
+  const words = target.toLowerCase().split(WORD_SPLIT).filter((w) => w !== '')
+  let w = 0
+  for (const term of terms) {
+    while (w < words.length && !words[w].startsWith(term)) w += 1
+    if (w === words.length) return false
+    w += 1
+  }
+  return true
+}
+
+/**
+ * M409 (C5). Is the query (spaces ignored, two letters or more) the start of
+ * the target's initials — "np" for "New panel", "rew" for "Review every
+ * worktree"? The most common way people type into a palette, and a tier of
+ * its own so it is never mistaken for a weak scatter.
+ */
+export function initialsStart(query: string, target: string): boolean {
+  const q = query.toLowerCase().replace(/\s+/g, '')
+  if (q.length < 2) return false
+  const initials = target.toLowerCase().split(WORD_SPLIT).filter((w) => w !== '').map((w) => w[0]).join('')
+  return initials.startsWith(q)
+}

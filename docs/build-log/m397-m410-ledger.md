@@ -1497,3 +1497,129 @@ inward). No scene opens the context menu.
 and the menu Paste vs ⌘V on the same shell; the load-bearing entry on middle-drag still says "no panel chrome
 handler checks `event.button`" — true of the other kinds' handlers, no longer of PanelFrame's; left for the lead to
 reword or not.
+
+### M409 — ⌘K rests on what can run, ranks what the words name, and has Undo (C5)
+
+**C5 (P1), ⌘K is the real map, and it was bloated.** *Reproduced* on the real app, slot 2, a fresh profile
+(`rm -rf /tmp/tcc-2`), ⌘K from the top bar, counted in the DOM (`.palette__row`): **184 rows at rest, 83 refused**; the
+seat on row 19 (`workflow.open.builtin-review-repo`) with the list at `scrollTop` 223.5 and its first visible row cut in
+half under the sticky PANELS header (`C5-rest-before`). "add a" → **174 rows** (52 refused), selecting "Add a sticky
+note" 28th (`C5-adda-before`); "undo" → **123 rows** and no Undo row, selecting `setting.agents.budgetWindowPercent`
+("Stop at this % of the usage window") 79th (`C5-undo-before`). *After*, same fresh profile and build: **98 rows at
+rest, 7 refused**, the seat 3rd, `scrollTop` 0 (`C5-rest-after`); "add a" → **28 rows**, "Add a sticky note" selected,
+`scrollTop` 0 (`C5-adda-after`); "undo" → **12 rows**, and after one ⌘N the Undo row is selected — Enter removed the
+shell, "redo" + Enter put it back (`C5-undo-after`; with nothing to undo it reads "nothing to undo", `C5-undo-after-nothing`).
+"deck edit" + Enter opens the verb line prefilled `deck-edit ` with its grammar under the field (`C5-verbline-after`).
+
+*Causes, and fixes, by the finding's five parts.*
+1. **Dead rows at rest.** Every refused row was shown at rest by design (M74/M92/M185: "a row that disappears is
+   indistinguishable from a feature that was never built"). *Fix:* `commands/with-reason.ts`'s `hiddenAtRestIf(missing)`,
+   spread into each row literal **row by row**, the argument naming the missing SUBJECT: no captured panel
+   (open-as-chat, replay, open-in-terminal, the lock/pin/maximise pairs, link, toolbox, both reviews, export-text,
+   prompt rows, auto ×5), no selection of the right kind (workflow ×10 + node.test, align ×6, distribute ×2, layout ×2,
+   duplicate, shape ×2, flowchart.plan, note.tint, publish ×3, deck.export-pptx, agent.cap, review.comment, work.review,
+   task ×4, image.replace, group-selection, broadcast), no group, no folder (memory, watcher, the folder-bound
+   `object.create.*`), no CLI (chat.sandbox rows, a preset not on the PATH — an UNREAD pack preset stays, its fix is
+   beside it), nothing to act on (tidy under two panels, camera back/forward, the active workspace's switch row,
+   Undo/Redo with an empty stack). `filterCommands` is untouched. *Decision:* the rule is "no subject", never "any
+   reason" — a row refused for a STATE of a subject that exists stays at rest with its reason ("already locked",
+   "not started"), which is M92's teaching and what `verify:panels:product` lock.1 reads (`rowState('panel.unlock')`
+   at rest with focus). *Kept visible, refused, on purpose:* Rename (check 31) and Restart beside it, New note… (85/86),
+   New chat… (the :2182 check), GitHub/Jira (M88/M89), Manage prompts/worktrees (49), Environment….
+2. **CLI grammar as copy.** Nine rows' subtitles WERE the grammar (`deck-edit <panel> <slide> <markdown>`), and
+   seven more said "type cap-agent <panel> …". *Fix:* the nine grammar rows are `hiddenAtRest: true` with plain
+   subtitles; every verb-line row now calls `beginRunVerb('<verb>')`, which opens the line PREFILLED with the verb and
+   shows `<verb> <args> — <hint>` from `VERBS` on a new standing line under the field (`InputMode.hint`,
+   `.palette__line-hint`; not the placeholder — the field starts non-empty). The workflow rows' `<key> <dx> <dy>`
+   subtitles became words. Every literal `id: '…'` is kept (`closure.v9.1` reads the file as text); `Run a verb…`
+   stays at rest (verbs.1).
+3. **Near-duplicates.** `New Note` (instant, named by the time) vs `New note…` (asks the name): `object.create.note`
+   rests in search, both carry a subtitle saying how they differ. `New Terminal` vs `Login shell` (⌘N) vs `New
+   panel…`: three different verbs, so nothing is merged — `object.create.terminal` rests in search with "a shell in the
+   selected panel's folder, else home". `Zoom to fit` vs `Fit task` vs the HUD's `Fit all`: `canvas.zoom-fit` is now
+   titled for what it frames in the HUD's words — **Fit all**, or **Fit selection** with one — "zoom to fit" still
+   finds it (searchText). `Fit task` is a different verb (the task, and it lights the lens) and keeps its name.
+   *Doors:* `verify:verbs` 30/30, `closure.v9.1` green — every verb keeps its palette row.
+4. **Undo/Redo rows.** `Canvas.tsx`'s edit:undo/redo step is lifted into `undoCanvas`/`redoCanvas` (`useCallback`s
+   over `applyHistory`); the IPC path keeps `shouldIgnoreKeys` and `serveDraftEdit` in front of it (panels 37/123),
+   the palette rows call it bare (the palette is closing). `canvas.undo`/`canvas.redo` carry ⌘Z/⌘⇧Z chips, refuse
+   "nothing to undo/redo" from two booleans Canvas passes (`canUndo`/`canRedo`, read off the history state for that
+   only — the history comment says why nothing may undo against a render's snapshot). Both actions join
+   `EXCLUDED_ACTIONS` with a reason (a plan never rewinds a person's history) — `closure.1` green.
+5. **Ranking.** `fuzzyMatch` skips spaces, so "add a" was "adda", a subsequence of nearly every long searchText.
+   *Fix:* `fuzzy.ts`'s `wordStarts` (each term, in order, starts a word) and `initialsStart` ("np" → New panel);
+   `matchCommand` adds a tier — title word-starts +150, title initials +100, haystack word-starts +80 — and a row with
+   no tier and no lead is WEAK; `filterCommands` keeps at most `WEAK_CAP` = 5 weak rows (the best-scoring), at the top
+   level only (inside a scope the query is a term). Section-first sorting is unchanged (load-bearing-recovered 404).
+   `LEAD_BONUS` 200 → 400 so the tier cannot let a rival catch a lead ("Preview: start the dev server" for "start").
+6. **The half-clipped top row.** `Palette.tsx`'s scroll effect ran `scrollIntoView({ block: 'nearest' })` on the
+   seat too, parking a seat below the first screen at the bottom edge. *Fix:* a RE-SEAT (open, query, scope) leaves the
+   list at 0 when the seat is on the first screen, else brings the row to the top (`block: 'start'`, under its header
+   by the existing scroll-margin); arrow steps keep 'nearest'.
+
+*Checks added:* `verify:palette` `palette.rest.1` (fresh profile ≤100 rows, ≤12 refused and each one a kept decision,
+first runnable ≤ 8th; with focus and a selection the rows come back), `palette.rest.2` (all 99 rows hidden at rest are
+found by their own title with the same reason), `palette.verbs.2` (no `<arg>` in any subtitle with every subject
+present; the nine rest in search; deck.edit → `beginRunVerb('deck-edit')`), `palette.dup.1`, `palette.undo.1`,
+`palette.rank.1` ("add a" ≤ 40, selects "Add a…"), `palette.rank.2` (the cap on 20 synthetic scatter rows; none in a
+scope). `verify:panels:core` `palette.scroll.1` MEASURES: at rest the seat is fully visible and a first-screen seat
+leaves `scrollTop` 0; for the first query whose seat is past the first screen, no row straddles the sticky header's
+lower edge. *Checks changed deliberately:* `verify:palette` 48 (the two new chips), `zoom.fit.1` (Fit all / Fit
+selection, found by "zoom to fit"); `verify:panels:core` fit.1 runs the row by its new title "Fit selection".
+`task.rank.1` green unchanged. **`palette.scroll.1` discriminates:** run on 72ab3ebc's build (a scratch worktree, the
+check copied in) it is RED — the "manage" seat sat 334 px down, at the bottom edge — and green here (the "credential"
+seat is in the list's last screen, which the check allows: a row there cannot rise past the end).
+
+*Suites.* Plain: all 44 on the branch's list green (`palette` 179/179, `verbs` 30/30, `styles` 94/94, `meta` 51/51);
+`verify:relay` went red 3 times once under a 6-wide parallel run and was 56/56 alone — untouched by M409. Electron, each
+alone under the lock (`TC_VERIFY_SUFFIX=m409`), each red compared against the SAME part on 72ab3ebc's build run the same
+way: `panels:core` 88/91 — `7`, `51`, `place.still.1` (⌘N placement), all three **red on the baseline too**; headroom
+went to 94% once with `palette.scroll.1` added under another builder's load, so `WATCHDOG_MS` is re-pinned 75 → 85 s
+(green after). `panels:product` 143/147 — `codex.1`, `editor.1d`, `workflow.run.1`, headroom 97% — **all red on the
+baseline** (which also had `names.agree.1`); lockpin.1 (the at-rest `rowState('panel.unlock')` read) and annot.1 green.
+A first product run also had `review.fit.1`, `work.action.1`, `review.task.2` red with the D07 cards absent from the DOM
+after the reload (`final d07A="no-panel"`) and then the watchdog; all three were green on the re-run and on the
+baseline — the seeding miss the M405 section records for `panels:kinds`, not the palette. `panels:agents` 83/86 —
+`attention.1` (`seededJ:false`), `template.1`, headroom 100% — **all red on the baseline** (which also hit its
+watchdog). `panels:shell` 99/105 — `95`, `95b`, `95c`, `96` (rail workspace rows), `106`, headroom 95% — **identical
+on the baseline**.
+*Goldens expected to move:* `palette`, `palette-dark`, `palette-query` (fewer rows at rest, a different seat, `Fit
+all` for `Zoom to fit`, the Undo/Redo rows); nothing else renders the palette.
+*For the lead:* whether `New Terminal` should rest in search (it did not merge — three verbs, three rows); the swarm
+rows' "a Explore" copy.
+
+*Not done, and why:* `New task as a Explore swarm…` ("a Explore") and the four swarm/four recipe/five preview rows at
+rest are grammar and density outside C5's list; left. `panel.goto.*` rows are untouched.
+
+#### M409 follow-up (critic)
+
+1. **No focus is not no subject.** The lock/pin/maximise pairs, Link, Toolbox, Open review, Review every
+   worktree and Export panel output hid at rest on `capturedId === null` — with panels on the canvas and none
+   clicked into, the verb vanished though its subject was one click away. *Fix:* `hiddenAtRestIf(ctx.panels.length
+   === 0)`; the reasons are unchanged ("click into a panel first"). `with-reason.ts`'s comment records the rule.
+   *Check:* `palette.rest.3` (two panels, no focus: the six rows rest, Open review with `REASON_NO_FOCUS`; an empty
+   canvas drops them). Open-as-chat, Replay and Open in terminal keep the capturedId gate: their subject is a KIND
+   (a claude terminal, a chat) that `PanelRow` cannot promise from "some panel exists".
+2. **Undo vs the draft owner.** Titles are "Undo canvas change" / "Redo canvas change" (ids kept). The rows call
+   `undoCanvas` bare, while the menu's ⌘Z goes to a focused draft first (`serveDraftEdit`) and stands down behind
+   a covering view (`shouldIgnoreKeys`). *Fix:* `usePalette` captures `capturedDraft` at OPEN from a `draftHeld`
+   callback Canvas passes (`focusedDraft() !== null` — the same DOM rule `serveDraftEdit` uses, so Monaco, the rich
+   note, checklist/sheet editors and every plain field count); Canvas passes `canvasCovered` from
+   `canvasCoveredRef`. Either refuses both rows by name ("the editor has its own ⌘Z — this would rewind the canvas
+   behind it" / "the canvas is covered — go back to it to undo there"). *Check:* `palette.undo.2`.
+3. **The weak cap.** `isWeakMatch` now exempts any row whose TITLE holds the query as a subsequence — the letters
+   light in the row, so it is an abbreviation typed on purpose; only scatter across hidden searchText/subtitle is
+   capped. "add a" 28 → 33 rows, "undo" still ≤ 15. *Check:* `palette.rank.3` ("rnme" finds Rename, "gh" finds Open
+   GitHub work, twenty title-scatter rows all stay; RED with the exemption removed — kept 5). `palette.rank.2`'s
+   synthetic rows moved their scatter into searchText (they had it in the title, which is now exempt).
+
+*Minor.* **Install hint:** one Ask-a-question row per missing ENGINE (by binary; acp rides copilot) stays at rest
+refused with its `noCli` install sentence; `palette.rest.1` allows those and requires one per binary (fresh
+profile: 12 refused, at the bound). **Fit all:** the title says Fit selection only when the selection holds a panel
+(`zoomTarget`'s arm), and the row rests in search on an empty canvas, where it resets and Reset zoom is the row
+(`zoom.fit.1` adds the stale-selection case). **closure.v9.1:** its comment says why reading ids as text stays
+honest with rows hidden at rest — `palette.rest.2` proves every hidden row is found by its title. *Skipped:*
+deck/sheet grammar rows keep `hiddenAtRest: true` — `PanelRow` has no deck/sheet/checklist fact (all are `file`),
+and these verbs name their panel on the line, not the selection. The template seat: with a template the first
+runnable row at rest is `template.new.*`; the only other runnable panel-section row is "Which agents can…", a
+scope door and no better a seat, so the order is left.

@@ -132,6 +132,9 @@ export interface PaletteActionsDeps {
   goToViewport: (vp: Viewport) => void
   cameraBack: () => void
   cameraForward: () => void
+  /** M409. Canvas's one undo/redo step, lifted so the palette rows and edit:undo share it. */
+  undoCanvas: () => void
+  redoCanvas: () => void
   bookmarksRef: RefObject<PersistedBookmark[]>
   setBookmarks: Dispatch<SetStateAction<PersistedBookmark[]>>
   viewportRef: RefObject<Viewport>

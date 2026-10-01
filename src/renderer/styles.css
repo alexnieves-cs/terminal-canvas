@@ -5061,6 +5061,16 @@ body {
   font-size: var(--t-md);
 }
 
+/* M409 (C5). The grammar of the verb a row opened the verb line on — the
+   syntax rows used to carry as their subtitle, said where it is typed. The
+   UI face: mono in the palette is for path rows only (verify:styles
+   material.1). */
+.palette__line-hint {
+  padding: var(--sp-4) var(--sp-6) var(--sp-6);
+  color: var(--fg-3);
+  font-size: var(--t-sm);
+}
+
 .palette__list {
   list-style: none;
   margin: 0;

@@ -506,6 +506,12 @@ const FACTS = {
     // closure.v9.1 — the doors as FACTS, not declarations (the critic): the
     // palette id must be a row `commands.ts` builds, the agent string must
     // bind through buildPlan, and the workflow omission must carry its owner.
+    // M409 (the critic asked why this stays honest when ⌘K hides rows): a
+    // row HIDDEN AT REST is still a door, because hiddenAtRest drops a row
+    // from the empty-query list and never from search — `verify:palette`
+    // palette.rest.2 runs every hidden row's own title through filterCommands
+    // and requires it found with the same reason. Reading the id as text here
+    // proves the row is built; rest.2 proves a person can reach it.
     const doors = V.V9_DOORS
     const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
     const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))

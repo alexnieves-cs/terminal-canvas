@@ -25,6 +25,14 @@ export interface PaletteController {
   open: boolean
   /** focusedId as it was when the palette opened. */
   capturedId: string | null
+  /**
+   * M409 (the critic). Whether a text draft held the keyboard when the palette
+   * opened — a Monaco, note, checklist or sheet editor, any field
+   * `draft-focus.ts` calls a draft. Captured beside capturedId because DOM
+   * focus is the palette's input by the time a row is built, and the Undo
+   * row must know whose ⌘Z the person was in.
+   */
+  capturedDraft: boolean
   /** `initialScope` opens straight into a drill-in; omitted means top level. */
   openPalette(initialScope?: PaletteScope): void
   closePalette(): void
@@ -83,9 +91,12 @@ export interface PaletteController {
 export function usePalette(deps: {
   focusedIdRef: RefObject<string | null>
   restoreFocus: (id: string) => void
+  /** Read at open time; absent reads as no draft. */
+  draftHeld?: () => boolean
 }): PaletteController {
   const [open, setOpen] = useState(false)
   const [capturedId, setCapturedId] = useState<string | null>(null)
+  const [capturedDraft, setCapturedDraft] = useState(false)
   const [scope, setScopeState] = useState<PaletteScope | null>(null)
   const [entryScope, setEntryScope] = useState<PaletteScope | null>(null)
   // Any scope move made INSIDE the palette (a door, a pop) spends the entry:
@@ -134,6 +145,7 @@ export function usePalette(deps: {
    */
   const openPalette = useCallback((initialScope?: PaletteScope) => {
     setCapturedId(depsRef.current.focusedIdRef.current)
+    setCapturedDraft(depsRef.current.draftHeld?.() === true)
     setScopeState(initialScope ?? null)
     setEntryScope(initialScope ?? null)
     const active = document.activeElement
@@ -213,5 +225,5 @@ export function usePalette(deps: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPalette, closePalette])
 
-  return { open, capturedId, openPalette, closePalette, dismissPalette, isOpen, scope, setScope, entryScope }
+  return { open, capturedId, capturedDraft, openPalette, closePalette, dismissPalette, isOpen, scope, setScope, entryScope }
 }

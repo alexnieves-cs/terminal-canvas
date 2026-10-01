@@ -14,7 +14,7 @@
  */
 
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
-import { CREATABLE_OBJECTS } from '@shared/verb-table'
+import { CREATABLE_OBJECTS, verbById } from '@shared/verb-table'
 import { getDraft } from '@renderer/workflow/template-draft-store'
 import { LIBRARY, defaultNodeOf, placementFor } from '@shared/template-library'
 import { HANDOFF_TRIGGERS } from '@shared/handoff'
@@ -380,13 +380,20 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
     // M402 follow-up. A door's step places QUIETLY (place-quiet.ts): no flight to what it made.
     runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => quietly(() => execute(step, caller, 'door')), caller),
-    beginRunVerb: () => {
+    beginRunVerb: (verb) => {
+      // M409 (C5). A row that names its verb opens the line on it, and the
+      // grammar the row's subtitle used to carry is said HERE, where it is
+      // typed: `deck-edit <panel> <slide> <value> — replace one slide…`.
+      const def = verb === undefined ? undefined : verbById(verb)
+      const grammar = def === undefined ? undefined
+        : `${def.id} ${def.args.map((a) => (a.optional ? `[${a.name}]` : `<${a.name}>`)).join(' ')} — ${def.hint}`
       const open = (initial: string, refused?: string): void => {
         setInputMode({
           kind: 'text',
           // The mode names itself on the line (the critic could not tell it from
           // Rename), and Enter is `run`, not `save`.
           label: refused ? `Run a verb — ${refused}` : 'Run a verb — e.g. focus n3 · type n3 hello · close n3; several with ;',
+          ...(grammar !== undefined ? { hint: grammar } : {}),
           verb: 'run',
           initial,
           ...(refused ? { feedback: true as const } : {}),
@@ -417,7 +424,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
           }
         })
       }
-      open('')
+      open(def === undefined ? '' : `${def.id} `)
       palette.openPalette()
     }
   })
