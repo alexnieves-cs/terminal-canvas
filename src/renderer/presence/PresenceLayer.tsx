@@ -92,5 +92,5 @@ export function PresenceLayer({ workspaceId, viewport, rects }: PresenceLayerPro
     }
   }, [])
 
-  return <canvas ref={canvasRef} className="presence-layer" aria-hidden="true" data-presence-layer />
+  return <canvas ref={canvasRef} className="presence-layer" data-screen-control="" aria-hidden="true" data-presence-layer />
 }

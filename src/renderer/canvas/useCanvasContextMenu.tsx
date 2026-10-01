@@ -7,6 +7,8 @@ import type { Registry } from '@renderer/session/session-registry'
 import { CanvasContextMenu, type ContextRow } from './CanvasContextMenu'
 import { longAxisOf, panelVerbs, runPanelVerb, runSelectionVerb, selectionVerbs, type SelectionFacts } from './object-verbs'
 import type { CanvasEditRoutes } from './useCanvasClipboard'
+// The screen-space controls over the world, the menu itself among them (one selector, screen-controls.ts).
+import { SCREEN_CONTROLS } from './screen-controls'
 
 export interface CanvasContextMenuDeps {
   hostRef: RefObject<HTMLElement | null>
@@ -18,7 +20,7 @@ export interface CanvasContextMenuDeps {
   editRef: RefObject<CanvasEditRoutes>
   registry: Registry
   mergedRef: RefObject<boolean>
-  /** Select and raise, as a press on the chrome does. */
+  /** Select and raise WITHOUT waking (selectAndRaise): inspecting a dormant panel must not start it. */
   selectPanel: (id: string) => void
   /** Give a panel the keyboard (Copy/Paste act on the focused panel), or take it from every panel (null). */
   focusPanel: (id: string | null) => void
@@ -28,8 +30,6 @@ type Target = { forId: string; at: { x: number; y: number }; heading?: string; r
 
 /** Where a right-click is somebody else's: an editable field, Monaco, a surface serving its own edits. */
 const EDIT_OWNERS = 'input, textarea, select, [contenteditable="true"], .monaco-editor, [data-edit-owner]'
-/** The screen-space controls over the world (useCanvasPointer's list) and the menu itself. */
-const SCREEN_CONTROLS = '.command-pill, .new-object-row, .canvas-hud, .minimap, [data-annotate-strip], [data-context-for]'
 
 /**
  * M408 (D1). The canvas's right-click: ONE `contextmenu` listener on the host,

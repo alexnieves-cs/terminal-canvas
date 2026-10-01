@@ -51,6 +51,7 @@ export function Marquee({ rect }: MarqueeProps): JSX.Element | null {
   return (
     <div
       className="canvas-marquee"
+      data-screen-control=""
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     />
   )

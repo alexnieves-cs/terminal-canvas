@@ -2776,9 +2776,12 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const edges = b5 === null ? null : await wc.executeJavaScript(`(() => { const p = document.querySelector(${JSON.stringify(P)}); const r = p.getBoundingClientRect()
         const at = (x, y) => { const el = document.elementFromPoint(x, y); return el ? String(el.className) : null }
         const port = p.querySelector('.panel__port--e').getBoundingClientRect(), band = p.querySelector('.panel__resize--e').getBoundingClientRect()
-        return { e: at(r.right - 2, r.top + r.height / 2), s: at(r.left + r.width / 2, r.bottom - 2), portRight: port.right, bandLeft: band.left } })()`)
-      ok('grip.1 the resize grips paint nothing at rest and show on selection; the east and south edges\' middles are the resize bands, and the east link port stands clear of its band',
-        atRest === '0,0,0' && onSelect === '1,1,1' && edges !== null && /panel__resize--e/.test(edges.e) && /panel__resize--s/.test(edges.s) && edges.portRight <= edges.bandLeft,
+        return { e: at(r.right - 2, r.top + r.height / 2), s: at(r.left + r.width / 2, r.bottom - 2), portTop: port.top, portBottom: port.bottom, mid: r.top + r.height / 2 } })()`)
+      // M408 follow-up: the east port moved to the band's TOP END (off the
+      // body, styles.css), so "clear of the band" became "clear of the band's
+      // middle" — the grip's place, which must still resize.
+      ok('grip.1 the resize grips paint nothing at rest and show on selection; the east and south edges\' middles are the resize bands, and the east link port stands clear of its band\'s middle',
+        atRest === '0,0,0' && onSelect === '1,1,1' && edges !== null && /panel__resize--e/.test(edges.e) && /panel__resize--s/.test(edges.s) && (edges.portBottom < edges.mid - 12 || edges.portTop > edges.mid + 12),
         JSON.stringify({ atRest, onSelect, edges }))
 
       // hud.pass.1 — a real click on the HUD's Zoom in leaves the selection
@@ -2899,6 +2902,99 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('ctx.canvas.1 a real right-click on the ground opens the canvas menu (Paste, New object…, Fit), and the pill and HUD step out while it is open',
         ctxC !== null && ctxC.for === 'canvas' && JSON.stringify(ctxC.ids) === JSON.stringify(['edit.paste', 'canvas.create', 'sel.fit']) && ctxC.pill === 'hidden' && hud === 'hidden',
         JSON.stringify({ g2, ctxC, hud }))
+
+      // M408 follow-up (the critic). Each item MEASURED by real input.
+      // ctx.keys.1 (item 2) — with the menu open over a terminal, keys are
+      // the MENU's: Escape closes it and writes no ESC into the PTY (ESC
+      // interrupts a running Claude), and a typeahead letter and an arrow
+      // write nothing either. Spied where bytes leave for the shell.
+      {
+        const sent = []
+        const origWrite = ptyManager.write.bind(ptyManager)
+        ptyManager.write = (id, data) => { if (id === gid) sent.push(String(data)); return origWrite(id, data) }
+        try {
+          if (body !== null) await click(body.x, body.y)
+          await sleep(150)
+          if (body !== null) await click(body.x, body.y, 'right')
+          await sleep(200)
+          const openA = await ctxRead()
+          key('Escape'); await sleep(250)
+          const goneA = await ctxRead()
+          if (body !== null) await click(body.x, body.y, 'right')
+          await sleep(200)
+          wc.sendInputEvent({ type: 'keyDown', keyCode: 'Q' }); wc.sendInputEvent({ type: 'char', keyCode: 'q' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Q' })
+          key('Up'); await sleep(150)
+          const roved = await wc.executeJavaScript(`document.activeElement?.getAttribute('data-context-item') ?? null`)
+          key('Escape'); await sleep(250)
+          const goneB = await ctxRead()
+          await sleep(200)
+          const back = await wc.executeJavaScript(`(() => { const a = document.activeElement; return a !== null && a.classList.contains('xterm-helper-textarea') && a.closest(${JSON.stringify(P)}) !== null })()`)
+          ok('ctx.keys.1 with the context menu open over a terminal, Escape closes it and writes NO ESC byte to the PTY; a typeahead letter and an arrow write nothing (the arrow roves onto a row), and focus comes back to the terminal',
+            openA !== null && goneA === null && goneB === null && roved !== null && back === true && !sent.some((d) => d.includes('\x1b') || d.includes('q')),
+            JSON.stringify({ openA: openA?.for, goneA, roved, goneB, back, sent }))
+        } finally { ptyManager.write = origWrite }
+      }
+
+      // ctx.focus.1 (item 3) — a HOVER over the rows (Radix focuses the
+      // content when the pointer leaves a row) and then Escape: the keyboard
+      // is back in the terminal, never on <body>.
+      {
+        if (body !== null) await click(body.x, body.y)
+        await sleep(150)
+        if (body !== null) await click(body.x, body.y, 'right')
+        await sleep(200)
+        const rowsAt = await wc.executeJavaScript(`[...document.querySelectorAll('[data-context-item]')].slice(0, 3).map((b) => { const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })`)
+        for (const r of rowsAt) { wc.sendInputEvent({ type: 'mouseMove', x: r.x, y: r.y }); await sleep(60) }
+        const head = await wc.executeJavaScript(`(() => { const h = document.querySelector('[data-context-heading]')?.getBoundingClientRect(); return h ? { x: Math.round(h.left + 8), y: Math.round(h.top + h.height / 2) } : null })()`)
+        if (head !== null) { wc.sendInputEvent({ type: 'mouseMove', x: head.x, y: head.y }); await sleep(80) }
+        const during = await wc.executeJavaScript(`document.activeElement?.className ?? null`)
+        key('Escape'); await sleep(300)
+        const after = await wc.executeJavaScript(`(() => { const a = document.activeElement; return { cls: a?.className ?? null, inP: a !== null && a.closest(${JSON.stringify(P)}) !== null } })()`)
+        ok('ctx.focus.1 after a hover across the context menu\'s rows, Escape hands the keyboard back to the terminal\'s textarea (not <body>)',
+          rowsAt.length > 0 && await ctxRead() === null && /xterm-helper-textarea/.test(String(after.cls)) && after.inP,
+          JSON.stringify({ rowsAt, during, after }))
+      }
+
+      // ports.body.1 (item 4) — with the panel hovered, the terminal's last
+      // column at mid-height AND beside the east port, and its last row beside
+      // the south port, hit-test inside .xterm; the ports' own hit boxes lie on
+      // their bands (nothing of the body under them), and each is reachable
+      // by a pointer moved straight onto it from inside the panel.
+      {
+        const b7 = await box()
+        const centre = b7 === null ? null : { x: Math.round(b7.x + b7.w / 2), y: Math.round(b7.y + b7.h / 2) }
+        if (centre !== null) { wc.sendInputEvent({ type: 'mouseMove', x: centre.x, y: centre.y }); await sleep(250) }
+        const geo = await wc.executeJavaScript(`(() => { const p = document.querySelector(${JSON.stringify(P)}); const rr = (q) => p.querySelector(q).getBoundingClientRect()
+          const pe = rr('.panel__port--e'), ps = rr('.panel__port--s'), be = rr('.panel__resize--e'), bs = rr('.panel__resize--s'), r = p.getBoundingClientRect()
+          const at = (x, y) => { const el = document.elementFromPoint(x, y); return { cls: el ? String(el.className).slice(0, 40) : null, xterm: el !== null && el.closest('.xterm') !== null, port: el !== null && el.closest('.panel__port') !== null } }
+          return { lastColMid: at(be.left - 3, r.top + r.height / 2), besideE: at(be.left - 3, pe.top + pe.height / 2), besideS: at(ps.left + ps.width / 2, bs.top - 3),
+            eOnBand: pe.left >= be.left - 0.5 && pe.right <= be.right + 0.5, sOnBand: ps.top >= bs.top - 0.5 && ps.bottom <= bs.bottom + 0.5,
+            e: { x: Math.round(pe.left + pe.width / 2), y: Math.round(pe.top + pe.height / 2) }, s: { x: Math.round(ps.left + ps.width / 2), y: Math.round(ps.top + ps.height / 2) },
+            painted: getComputedStyle(p.querySelector('.panel__port--e'), '::before').opacity === '1' || getComputedStyle(p.querySelector('.panel__port--e')).opacity === '1' } })()`)
+        const reach = {}
+        if (geo !== null && centre !== null) for (const side of ['e', 's']) {
+          wc.sendInputEvent({ type: 'mouseMove', x: geo[side].x, y: geo[side].y }); await sleep(80)
+          reach[side] = await wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${geo[side].x}, ${geo[side].y}); return el !== null && el.matches('.panel__port--${side}') })()`)
+          wc.sendInputEvent({ type: 'mouseMove', x: centre.x, y: centre.y }); await sleep(80)
+        }
+        ok('ports.body.1 on a hovered terminal the last column (at mid-height and beside the east port) and the last row beside the south port hit-test inside .xterm, the east/south port hit boxes lie on their resize bands, and each port is reachable straight from the body',
+          geo !== null && geo.painted && geo.lastColMid.xterm && geo.besideE.xterm && !geo.besideE.port && geo.besideS.xterm && !geo.besideS.port && geo.eOnBand && geo.sOnBand && reach.e === true && reach.s === true,
+          JSON.stringify({ geo, reach }))
+      }
+
+      // screen.attr.1 (item 5) — every screen-space root inside .canvas
+      // carries data-screen-control, walked with the context menu, the palette
+      // scrim's peers and the HUD all mounted.
+      {
+        if (body !== null) await click(body.x, body.y, 'right')
+        await sleep(200)
+        const roots = await wc.executeJavaScript(`[...document.querySelectorAll('.canvas > :not(.world)')].map((el) => ({ el: el.tagName.toLowerCase() + '.' + String(el.className).split(' ')[0], attr: el.hasAttribute('data-screen-control') }))`)
+        key('Escape'); await sleep(200)
+        const missing = roots.filter((r) => !r.attr).map((r) => r.el)
+        ok('screen.attr.1 every child of .canvas that is not .world (the pill, the HUD, the right-click menu, the minimap, the notices…) carries data-screen-control, the one selector the pointer and the right-click stand down for',
+          roots.length >= 5 && roots.some((r) => r.el.startsWith('div.canvas-context')) && missing.length === 0,
+          JSON.stringify({ missing, roots: roots.map((r) => r.el) }))
+      }
 
       if (gid) await clickPanelClose(wc, gid)
     }

@@ -125,7 +125,7 @@ export function ReturnBriefingCard({ briefing, onGoToPanel, onReview, onDecision
     </section>
   )
   return (
-    <aside className="briefing" data-return-briefing role="status" aria-label="Since you left">
+    <aside className="briefing" data-screen-control="" data-return-briefing role="status" aria-label="Since you left">
       <div className="briefing__head">
         <div className="resume-banner__kicker">Since you left · {sinceWords(briefing.since, now)}</div>
         <p className="briefing__headline" data-briefing-headline>{briefing.headline}</p>

@@ -8,7 +8,7 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 116000 // measured 2026-09-19 after M288 moved the Orchestrate blocks (orch-task.*, orch-bench.*) into verify:panels:orchestrate: 92.6 s green-but-for-detail.1 at load 7–9, against 101.6 s for the last run that still carried those blocks (M287); 1.25x the 92.6 s, to the next second. Was 168000.
+const WATCHDOG_MS = 132000 // measured 2026-09-30 (M408 follow-up re-pin): ctx.dormant.1, group.slop.1 and reload.flight.1 (a reload and a re-seed) took the part to 104.5–105.5 s over five runs alone under the lock, 90–91% of the old 116000 (headroom.1 red) — 1.25x the slowest, to the next second. Before that: 116000, measured 2026-09-19 after M288 moved the Orchestrate blocks (orch-task.*, orch-bench.*) into verify:panels:orchestrate: 92.6 s green-but-for-detail.1 at load 7–9, against 101.6 s for the last run that still carried those blocks (M287); 1.25x the 92.6 s, to the next second. Was 168000.
 
 runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -370,6 +370,40 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onJ = (_e, level, message) => { if (level >= 2) jLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onJ)
       try {
+        // reload.flight.1 (M408 follow-up, the critic's minor). The settle
+        // below hides a race rather than naming it, so the race is ALSO a
+        // check: a reload issued in the same breath as a camera move (two
+        // real Zoom in clicks, then a real Fit all — the layout save every
+        // camera change schedules is in flight) must still deliver
+        // did-finish-load within 5 s. MEASURED: in this harness a Fit lands in
+        // one step (no frames are animated), so "mid-flight" cannot be staged
+        // more finely than this; it is the condition M408 saw (search.1's
+        // Enter, then the seed's reload). Red here is that hang; a recovery
+        // reload keeps the rest of the part alive.
+        {
+          const hudAt = (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)})?.getBoundingClientRect(); return b ? { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } : null })()`)
+          const press = (p) => { wc.sendInputEvent({ type: 'mouseMove', x: p.x, y: p.y }); wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'left', clickCount: 1 }) }
+          const vp = () => wc.executeJavaScript(`window.__m4aViewport()`)
+          const zin = await hudAt('[data-hud-zoom-in]'), fitP = await hudAt('[data-hud-fit]')
+          let moved = false
+          if (zin !== null && fitP !== null) {
+            press(zin); await sleep(150); press(zin); await sleep(300)
+            const v1 = JSON.stringify(await vp())
+            press(fitP)
+            // The press is delivered asynchronously: reload on the FIRST read
+            // that shows the camera moved (polled, at most 300 ms).
+            for (let i = 0; i < 20 && !moved; i++) { moved = JSON.stringify(await vp()) !== v1; if (!moved) await sleep(15) }
+          }
+          const t0 = Date.now()
+          const loadedP = new Promise((resolve) => wc.once('did-finish-load', () => resolve(true)))
+          wc.reload()
+          const loaded = await Promise.race([loadedP, sleep(5000).then(() => false)])
+          const ms = Date.now() - t0
+          ok('reload.flight.1 a reload issued in the same breath as a camera move (real Zoom in, then Fit all) delivers did-finish-load within 5 s',
+            moved && loaded === true, JSON.stringify({ zin, fitP, moved, loaded, ms }))
+          if (loaded !== true) { const again = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await Promise.race([again, sleep(20000)]) }
+          await settle()
+        }
         // M408. search.1 ends on Enter's goToPanel, a camera FLIGHT, and the
         // page saves its layout on every frame of it — keyboard.1's own race
         // (below), one check earlier. Reloaded mid-flight, the reload's
@@ -2980,6 +3014,47 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reG
         await settle()
+        // M408 follow-up (the critic's item 1 and its minor). Real input on
+        // the seeded pair while both are still DORMANT (from disk).
+        {
+          const at = (sel) => wc.executeJavaScript(`(() => { const n = document.querySelector(${JSON.stringify(sel)}); if (!n) return null; const r = n.getBoundingClientRect(); return { x: Math.round(r.left + Math.min(r.width / 2, 40)), y: Math.round(r.top + r.height / 2) } })()`)
+          const rclick = async (p) => { if (p === null) return; wc.sendInputEvent({ type: 'mouseMove', x: p.x, y: p.y }); wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'right', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'right', clickCount: 1 }); await sleep(250) }
+          const esc = async () => { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await sleep(200) }
+          const sessionOf = (id) => wc.executeJavaScript(`(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(id)}) || null)`)
+          // ctx.dormant.1 — a right-click on a dormant card (its body, then
+          // its name strip) opens the menu and selects it, and WAKES NOTHING.
+          const cardPt = await at('.panel[data-panel-id="gB"] .panel__card')
+          await rclick(cardPt)
+          const menuCard = await wc.executeJavaScript(`document.querySelector('[data-context-for="gB"]') !== null`)
+          await esc()
+          const namePt = await at('.panel[data-panel-id="gB"] .panel__title')
+          await rclick(namePt)
+          const menuName = await wc.executeJavaScript(`document.querySelector('[data-context-for="gB"]') !== null`)
+          const selected = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="gB"]')?.classList.contains('panel--selected') ?? false`)
+          await esc()
+          await sleep(300)
+          const sB = await sessionOf('gB')
+          ok('ctx.dormant.1 a real right-click on a dormant terminal\'s card and on its name opens its context menu and selects it, and the panel is STILL dormant and unspawned (inspecting is inert)',
+            cardPt !== null && menuCard && menuName && selected && sB !== null && sB.dormant === true && sB.spawned === false && !ptyManager.list().some((p) => p.id === 'gB'),
+            JSON.stringify({ cardPt, namePt, menuCard, menuName, selected, sB }))
+          // group.slop.1 — the group header's press is a click under the slop
+          // (nothing moves, no history), and a real drag past it moves both.
+          const rects = () => wc.executeJavaScript(`['gA', 'gB'].map((id) => { const r = document.querySelector('.panel[data-panel-id="' + id + '"]').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)] })`)
+          const hp = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas-group[data-group-id="g1"] .canvas-group__label')?.getBoundingClientRect(); return h ? { x: Math.round(h.left + h.width / 2), y: Math.round(h.top + h.height / 2) } : null })()`)
+          const drag = async (dx, dy) => {
+            wc.sendInputEvent({ type: 'mouseMove', x: hp.x, y: hp.y }); wc.sendInputEvent({ type: 'mouseDown', x: hp.x, y: hp.y, button: 'left', clickCount: 1 })
+            for (let i = 1; i <= 4; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(hp.x + dx * i / 4), y: Math.round(hp.y + dy * i / 4), modifiers: ['leftButtonDown'] }); await sleep(20) }
+            wc.sendInputEvent({ type: 'mouseUp', x: hp.x + dx, y: hp.y + dy, button: 'left', clickCount: 1 }); await sleep(250)
+          }
+          const r0 = await rects(), d0 = await wc.executeJavaScript(`window.__m408HistoryDepth()`)
+          if (hp !== null) await drag(2, 1)
+          const r1 = await rects(), d1 = await wc.executeJavaScript(`window.__m408HistoryDepth()`)
+          if (hp !== null) await drag(30, 20)
+          const r2 = await rects()
+          ok('group.slop.1 a 2px wobble on a group\'s header is a click — no member moves and the history gains no move — and a real 30px drag moves both members by it',
+            hp !== null && JSON.stringify(r1) === JSON.stringify(r0) && d1 - d0 <= 1 && r2.every((p, i) => Math.abs(p[0] - r0[i][0] - 30) <= 2 && Math.abs(p[1] - r0[i][1] - 20) <= 2),
+            JSON.stringify({ hp, r0, r1, r2, d0, d1 }))
+        }
         const framed = await wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]') !== null`)
         await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="gA"] .panel__card'); if (!card) return false
           const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)

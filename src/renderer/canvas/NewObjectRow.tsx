@@ -25,7 +25,7 @@ export function NewObjectRow(props: {
 }): JSX.Element {
   const disabled = props.disabledReason !== undefined
   return (
-    <nav className="new-object-row" aria-label="Create" data-create-face="plus"
+    <nav className="new-object-row" data-screen-control="" aria-label="Create" data-create-face="plus"
       onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       <button type="button" className="new-object-row__plus" data-create-open
         disabled={disabled} title={props.disabledReason ?? 'Create…'}

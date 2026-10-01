@@ -372,11 +372,16 @@ export function PanelFrame({
     // own handler (`shellControl`) only prevents default, so a press on ⋯,
     // fill or the trail used to bubble here and lift the panel under the
     // click; and nothing read `button`, so a right-press (or ⌃-press, the
-    // Mac's right-click) dragged too. Both still select — a context menu is
-    // about the object pressed, as in Finder — but neither begins a gesture.
+    // Mac's right-click) dragged too. Neither begins a gesture; a control
+    // press still selects, and a secondary press is selected by its menu.
+    // M408 follow-up. A SECONDARY press selects nothing HERE: a terminal's
+    // `onSelect` is onSelectPanel, whose registry.wake spawns a dormant
+    // panel, and inspecting must be inert. The `contextmenu` that always
+    // follows selects it through selectAndRaise (useCanvasContextMenu).
+    if (event.button !== 0 || event.ctrlKey) return
     const control = event.target instanceof Element && event.target.closest('button, input, a, [role=menu]') !== null
     onSelect(id, event.shiftKey)
-    if (control || event.button !== 0 || event.ctrlKey) return
+    if (control) return
     onBeginDrag({ panelId: id, mode: { kind: 'move' }, originRect: rect, originWorld: { x: event.clientX, y: event.clientY } })
   }
   const inner = (
@@ -519,9 +524,10 @@ export function PanelFrame({
           onMouseDown={(event) => {
             event.stopPropagation()
             event.preventDefault()
-            onSelect(id)
-            // M408 (D1). A right- or ⌃-press on a grip selects; only the primary button resizes.
+            // M408 (D1). Only the primary button resizes; a right- or ⌃-press
+            // is the context menu's, which selects without waking (above).
             if (event.button !== 0 || event.ctrlKey) return
+            onSelect(id)
             onBeginDrag({ panelId: id, mode: { kind: 'resize', edge }, originRect: rect, originWorld: { x: event.clientX, y: event.clientY } })
           }}
         />

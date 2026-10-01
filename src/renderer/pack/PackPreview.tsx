@@ -49,7 +49,7 @@ export function PackPreview({ preview, onAdd, onClose }: { preview: PackPreviewS
   }
 
   return (
-    <div className="palette pack-preview" role="dialog" aria-label={`Pack ${manifest.name}`} data-pack-preview>
+    <div className="palette pack-preview" data-screen-control="" role="dialog" aria-label={`Pack ${manifest.name}`} data-pack-preview>
       <div className="sheet">
         <div className="sheet__title">{manifest.name} <span className="pack-preview__version">{manifest.version}</span></div>
         {manifest.description !== undefined && <p className="pack-preview__line">{manifest.description}</p>}

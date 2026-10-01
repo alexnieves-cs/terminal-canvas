@@ -18,6 +18,7 @@ function NavGridImpl({ controller }: { controller: NavGridController }): JSX.Ele
   return (
     <div
       className="navgrid"
+      data-screen-control=""
       role="presentation"
       // The same guard Palette.tsx carries, for the same reason and in the
       // same parent. This mounts INSIDE .canvas, whose onMouseDown is the

@@ -60,7 +60,7 @@ export function DiagnosticsOverlay({ open, onClose, getRendererInput }: Diagnost
   }
 
   return (
-    <div className="diagnostics-overlay" data-diagnostics-overlay>
+    <div className="diagnostics-overlay" data-screen-control="" data-diagnostics-overlay>
       <div className="diagnostics-overlay__header">
         <span>Diagnostics</span>
         <button type="button" className="diagnostics-overlay__close icon-button" onClick={onClose} aria-label="Close">

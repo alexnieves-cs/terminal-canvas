@@ -202,6 +202,7 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
     <div
       ref={hostRef}
       className="minimap"
+      data-screen-control=""
       data-minimap
       data-cover={cover > 0.9 ? 'full' : 'part'}
       data-presence={shownPresence}

@@ -112,7 +112,7 @@ export function StartupSplash({ mode, rects, viewport, onDone }: {
   // host it covered only the canvas region, so the title bar and rails were
   // on screen before the splash and APEX centred on the canvas, not the window.
   return createPortal(
-    <canvas ref={ref} className="startup-splash" aria-hidden="true"
+    <canvas ref={ref} className="startup-splash" data-screen-control="" aria-hidden="true"
       // An opaque ground until the first rAF draw: a transparent canvas would
       // show the very canvas it covers for a frame — possibly the ready-to-show one.
       style={{ pointerEvents: mode === 'field' ? 'auto' : 'none', background: 'var(--s-0)' }} />,

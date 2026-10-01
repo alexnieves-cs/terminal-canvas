@@ -402,7 +402,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   }, [])
 
   return (
-    <div ref={rootRef} className="command-pill" data-command-pill="" data-pill-expanded={expanded ? '' : undefined}
+    <div ref={rootRef} className="command-pill" data-screen-control="" data-command-pill="" data-pill-expanded={expanded ? '' : undefined}
       onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       {expanded && (
         <div className="command-pill__panel" role="group" aria-label="Act on this canvas">

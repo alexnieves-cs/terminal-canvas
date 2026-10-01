@@ -5516,18 +5516,50 @@ body {
    own 14px), not spacing literals; verify:styles 6 (`/^\d+px$/`) structurally
    cannot see them and that is not a gap worth closing. */
 .panel__port--n { top: 0; left: 50%; margin-left: -7px; }
-.panel__port--s { bottom: var(--port-inset); left: 50%; margin-left: -7px; }
 .panel__port--w { left: 0; top: 50%; margin-top: -7px; }
-.panel__port--e { right: var(--port-inset); top: 50%; margin-top: -7px; }
-/* M408 (D1). OFF THE RESIZE BAND. The east and south ports sat centred ON
-   the 8px bands, so the one visible dot on an edge was a link port in the
-   middle of the resize target (z 4 over the band's 2): pressing where the
-   edge looked grabbable drew a link. They stand just inside the band now —
-   the band's width times the same counter-scale the band wears (M144), plus
-   a hairline — so at every zoom the band is the edge and the dot is past it.
-   North and west have no band and stay flush. Still inside the frame (the
-   overflow clip above), still hover- or linking-only. */
-.panel__port { --port-inset: calc(var(--sp-4) * var(--chrome-scale, 1) + var(--sp-1)); }
+/* M408 (D1). OFF THE RESIZE BAND'S MIDDLE. The east and south ports sat
+   centred ON the 8px bands, so the one visible dot on an edge was a link port
+   in the middle of the resize target (z 4 over the band's 2): pressing where
+   the edge looked grabbable drew a link. `--port-inset` is the band's width
+   times the same counter-scale the band wears (M144), at every zoom. Still
+   inside the frame (the overflow clip above), still hover- or linking-only. */
+.panel__port { --port-inset: calc(var(--sp-4) * var(--chrome-scale, 1)); }
+/* M408 follow-up (the critic's item 4). OFF THE BODY, TOO — AT THE BAND'S
+   END. Past the band, the east dot sat over a terminal's last two or three
+   columns and its scrollbar, and the south dot over the last row or a
+   composer, hit-testable on any hover of the panel at z 4: a press to select
+   text there drew a link. So the east and south ports now stand ON their
+   band, at its far end from the grip (the band's top for east, its left end
+   for south), and their HIT BOX is exactly the band's width (the inset
+   above, the counter-scale the band wears): nothing the body shows is under
+   it, and the band's middle — where the grip paints — still resizes. The dot
+   is a `::before` the size it always was, centred on the band, with
+   `pointer-events: none`, so the part of it that overhangs the body paints
+   and takes no press. North and west have no band and keep the old rule. */
+.panel__port--e,
+.panel__port--s {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+.panel__port--e { top: var(--sp-6); right: 0; width: var(--port-inset); }
+.panel__port--s { left: var(--sp-6); bottom: 0; height: var(--port-inset); }
+.panel__port--e::before,
+.panel__port--s::before {
+  content: '';
+  position: absolute;
+  width: calc(var(--sp-6) - var(--sp-1));
+  height: calc(var(--sp-6) - var(--sp-1));
+  border-radius: var(--r-full);
+  border: var(--sp-1) solid var(--s-1);
+  background: var(--iris);
+  pointer-events: none;
+}
+.panel__port--e::before { top: 0; left: 50%; margin-left: calc((var(--sp-6) - var(--sp-1)) / -2); }
+.panel__port--s::before { left: 0; top: 50%; margin-top: calc((var(--sp-6) - var(--sp-1)) / -2); }
+.panel__port--e:hover::before,
+.panel__port--s:hover::before { border-color: var(--fg); }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M65. THE SPAWN SHEET, inside the palette's overlay: a short form. Labels

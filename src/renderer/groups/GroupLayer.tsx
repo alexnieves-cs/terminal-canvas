@@ -46,6 +46,9 @@ export function GroupLayer({
             if (readOnly) return
             event.preventDefault()
             event.stopPropagation()
+            // M408 follow-up. Only the primary button drags a group; a right-
+            // or ⌃-press is the context menu's (PanelFrame's rule).
+            if (event.button !== 0 || event.ctrlKey) return
             onBeginDrag(group, event)
           }}
         >

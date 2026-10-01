@@ -660,6 +660,7 @@ export function Palette(props: PaletteProps): JSX.Element {
   return (
     <div
       className="palette"
+      data-screen-control=""
       role="dialog"
       aria-label="Command palette"
       // The palette mounts INSIDE .canvas, whose onMouseDown is the background

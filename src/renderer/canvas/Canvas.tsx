@@ -2642,9 +2642,15 @@ export function Canvas({
     )
     // Raising is part of the one group gesture and only rewrites Panel.z;
     // member array order remains untouched, so live terminal hosts stay put.
-    setPanels((current) => raiseGroup(current, group))
+    // M408 follow-up: the raise COMMITS ITSELF (selectAndRaise's rule), because
+    // a click under the slop no longer reaches the drag's onCommit.
+    setPanels((current) => {
+      const next = raiseGroup(current, group)
+      if (next.some((p, i) => p.z !== current[i]!.z)) commitHistory(next)
+      return next
+    })
     beginGroupDrag(groupDragState(group, panelsRef.current, origin))
-  }, [beginGroupDrag])
+  }, [beginGroupDrag, commitHistory])
 
   // A teammate's placeholder, moved by its header through the SAME gesture a
   // panel uses — so the same write-through, snap and role gate apply.
@@ -7716,7 +7722,9 @@ export function Canvas({
   panelMarksRef.current = panelMarks
   const contextMenu = useCanvasContextMenu({
     hostRef, panelsRef, selectedIdsRef, marksRef: panelMarksRef, paletteActionsRef, editRef: canvasEditRef, registry, mergedRef,
-    selectPanel: onSelectPanel,
+    // selectAndRaise, never onSelectPanel (M408 follow-up): a right-click is
+    // inspecting, and onSelectPanel's registry.wake would spawn a dormant panel.
+    selectPanel: selectAndRaise,
     focusPanel: useCallback((id: string | null) => {
       if (id === null) { setFocusedId(null); focusedIdRef.current = null; return }
       onFocusPanel(id)
@@ -9117,7 +9125,7 @@ export function Canvas({
             gradient already painting on it. No second layer, no per-panel
             element, no layout read per frame — a light that cost frames
             during a drag would be a net loss whatever it looked like. */}
-        <div className="canvas__aura" aria-hidden="true" data-activity={canvasActivity} style={{ transform: `translate(${viewport.x * 0.09}px, ${viewport.y * 0.09}px)` }} />
+        <div className="canvas__aura" data-screen-control="" aria-hidden="true" data-activity={canvasActivity} style={{ transform: `translate(${viewport.x * 0.09}px, ${viewport.y * 0.09}px)` }} />
         <div
           className="world"
           data-detail={cardDetail}
@@ -9698,7 +9706,7 @@ export function Canvas({
           // anchor above ~36px puts it outside the host: clamp, so a lane
           // whose top is at the viewport's top still shows its name.
           return (
-            <div key={lane.workspaceId} className={`lane-header${lane.active ? ' lane-header--active' : ''}`} data-lane-header={lane.workspaceId} style={{ left: Math.max(at.x, 8), top: Math.max(at.y, 36) }}>
+            <div key={lane.workspaceId} className={`lane-header${lane.active ? ' lane-header--active' : ''}`} data-screen-control="" data-lane-header={lane.workspaceId} style={{ left: Math.max(at.x, 8), top: Math.max(at.y, 36) }}>
               <span className="lane-header__name">{lane.name}</span>
               {lane.active && <span className="lane-header__note">this workspace</span>}
             </div>
@@ -9714,7 +9722,7 @@ export function Canvas({
         <PresenceLayer workspaceId={activeWorkspaceId} viewport={viewport} rects={rects} />
         {/* M348. One top-centre column: who is here, then — on a shared
             workspace that is offline or catching up — what its sync is doing. */}
-        <div className="presence-top">
+        <div className="presence-top" data-screen-control="">
           <RosterStrip workspaceId={activeWorkspaceId} />
           <SyncChip workspaceId={activeWorkspaceId} shared={shared.view !== null} />
         </div>
@@ -9726,7 +9734,7 @@ export function Canvas({
             chrome rather than something that pans away from the user while
             the mode it describes is still armed. */}
         {linkMode.from !== null && (
-          <div className="link-banner" role="status">
+          <div className="link-banner" role="status" data-screen-control="">
             Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
           </div>
         )}
@@ -9735,7 +9743,7 @@ export function Canvas({
             a press on it is a press on a tool, never a label dropped on the
             ground beneath it — the canvas's own mousedown places labels. */}
         {annotating && (
-          <div className="link-banner link-banner--annotate" role="status" data-annotate-strip onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}>
+          <div className="link-banner link-banner--annotate" role="status" data-screen-control="" data-annotate-strip onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}>
             <strong>Annotating</strong> — {annotateTool === 'draw' ? 'drag to draw, on a panel or the canvas' : 'click to place a note, on a panel or the canvas'}; Escape to stop
             {/* M155. The cap, said before it bites: ink reaches it in ordinary use where labels never did. */}
             {annotations.length >= ANNOTATIONS_MAX && <span className="link-banner__note" data-annotate-cap> · at the cap of {ANNOTATIONS_MAX} — the oldest goes next</span>}
@@ -9748,7 +9756,7 @@ export function Canvas({
           </div>
         )}
         {broadcastInput && (
-          <div className="link-banner" role="status">
+          <div className="link-banner" role="status" data-screen-control="">
             Broadcasting keyboard input to <strong>{broadcastTargetIds.length} terminals</strong>
             {/* M40. The exit lives on the banner: a mode whose only way out is
                 a palette search is a dead end for whoever arrived by the
@@ -9831,7 +9839,7 @@ export function Canvas({
             never floats here any more — it is the strip (see resumeStrip). */}
         {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
         {(reopen !== null || jobRecovery !== null) && (
-          <div className="reopen-stack">
+          <div className="reopen-stack" data-screen-control="">
             {reopen !== null && (
               <ReopenNotice
                 model={reopen}
@@ -9843,7 +9851,7 @@ export function Canvas({
           </div>
         )}
         {envReport !== null && !envReport.shell.ok && (
-          <div className="env-banner" data-env-banner role="status">
+          <div className="env-banner" data-env-banner data-screen-control="" role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
             through your shell's rc files may not be found. Environment… in ⌘K says what was.
           </div>
@@ -9860,7 +9868,7 @@ export function Canvas({
           // nothing on the canvas says so) rather than greying out silently.
           const act = (r: { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }): void => { if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }
           return (
-            <div className="task-lens" data-task-lens-bar={lens.itemId} role="status">
+            <div className="task-lens" data-screen-control="" data-task-lens-bar={lens.itemId} role="status">
               <span className="task-lens__title">{title}</span>
               <span className="task-lens__count" data-task-lens-count>{lens.members.length} related</span>
               {gone !== '' && <span className="task-lens__missing" data-task-lens-missing>{gone}</span>}
@@ -9899,7 +9907,7 @@ export function Canvas({
             comment already declines to pay) and no pointer-events, so the
             outside-click exit stays exactly where it was — .shell's capture
             handler, never here. */}
-        {palette.open && <div className="palette__scrim" aria-hidden="true" />}
+        {palette.open && <div className="palette__scrim" data-screen-control="" aria-hidden="true" />}
         {palette.open && (
           <Palette
             controller={palette}

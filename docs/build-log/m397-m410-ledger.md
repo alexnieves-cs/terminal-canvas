@@ -1570,6 +1570,97 @@ not reproduced and is recorded as unconfirmed.
 it) and the context menu's real Paste each write exactly the text to the PTY (spied at `ptyManager.write`), with no
 `ESC[200~`. With 2004 on, the same route writes `ESC[200~…ESC[201~` (the control arm). Green.
 
+#### M408 follow-up (critic)
+
+Main checkout, slot 1, on `b8e1a892`. The M408 (D1) critic's items 1–5 and both minors. Every check is real input
+(`sendInputEvent`) and measures something.
+
+**1. A right-click woke a dormant terminal.** *Reproduced* on the real app: a reopened `home` (n2, `dormant: true,
+spawned: false`), one right-click on its card, and n2 read `dormant: false, spawned: true`
+(`M408f-1-before.png`). *Cause:* three secondary-press paths reached `onSelectPanel`, whose `registry.wake` is the
+spawn gesture. They were the ground's secondary branch (`useCanvasPointer`; a card has no handler, so its press lands
+there), the menu's `selectPanel`, and PanelFrame's `beginMove` and grips (a terminal's `onSelect` IS
+`onSelectPanel`). *Fix:* the ground branch and the menu use `selectAndRaise`. PanelFrame's chrome and grips now
+return BEFORE `onSelect` on a secondary press, because the `contextmenu` that follows selects it inertly. After: the
+same right-click leaves n2 `dormant: true, spawned: false` (`M408f-1-after.png`). *Check:* `panels:agents
+ctx.dormant.1` right-clicks the seeded dormant gB's card and then its name. The menu opens and gB is selected, but
+gB is still dormant, unspawned, and has no PTY.
+
+**2. Esc into the PTY.** *Cause:* `pointerOpen` leaves focus in xterm's helper textarea. Radix's Escape listener
+closes the menu, but the key goes on to the textarea, and xterm ignores `defaultPrevented`. Arrows and typeahead
+letters typed into the shell the same way. *Fix (CanvasContextMenu):* one WINDOW-capture key listener while the menu
+is open claims every key whose target is outside the menu. Escape closes. The arrows and Home/End move focus onto a
+row, and Radix roves from there. A letter jumps to the first row it starts. Anything else is swallowed. ⌘ chords pass
+(the edit ones are IPC). Keys inside the menu are Radix's. *Decision:* I dropped the critic's
+`onEscapeKeyDown` because `MenuContentProps` is typed as div props. The window listener runs first, so Escape never
+reaches the document. *Check:* `panels:core ctx.keys.1` spies `ptyManager.write` for the terminal. It presses Escape
+with the menu open, then `q` (keyDown+char), Up and Escape. Zero bytes are written, Up roves to a row, and focus ends
+in that terminal's textarea. The control is M408's own `ctx.panel.1` Escape, which reached the textarea.
+
+**3. Focus lost after a hover.** *Cause:* Radix focuses the CONTENT when the pointer leaves a row (`onItemLeave`).
+`holdFocus` only prevents the pointermove half. Closing the menu then dropped focus on `<body>`. *Fix:* the menu
+records `document.activeElement` on mount. On unmount it gives focus back, after a timeout (a hidden window runs no
+frames), but only when focus is lost or still in the menu. A row's verb (Copy, Rename) or a person's own move keeps
+where it went. This is Menu.tsx's force-mount condition. *Check:* `panels:core ctx.focus.1` hovers three rows and
+then the heading, which measures focus on `canvas-context__menu` mid-way. After Escape the active element is the
+terminal's `xterm-helper-textarea`.
+
+**4. Ports over body text.** *Decision:* the critic's first suggestion was `pointer-events: none` unless the edge
+band is hovered. I built it first, and it broke `link-draw.1–6` and `flowchart.app.9/13` (kinds 48/54, flowchart
+13/16): a port could no longer be reached straight from the body, which is how a person and those checks reach it.
+So it is the critic's second suggestion, the band's END. The east and south ports' HIT BOXES now sit ON their bands,
+exactly the band's width (`--port-inset`, counter-scaled), the east one at the band's top end and the south one at
+its left end, away from the mid-band grip. The dot is a `::before` of the old size with `pointer-events: none`, so
+the part that overhangs the body paints but takes no press. North and west are unchanged; they have no band and the
+critic did not name them. *Check:* `panels:core ports.body.1`, on a hovered terminal at 100%. `elementFromPoint` at
+the last column's mid-height and beside the east port, and at the last row beside the south port, are all inside
+`.xterm` (before, the point beside the east port was the port). Both port boxes lie within their bands, and each is
+the hit at its centre when moved to straight from the body. `grip.1`'s port arm now reads "clear of the band's
+MIDDLE": the port is on the band now, so that arm changed on purpose.
+
+**5. One structural screen-control guard.** *Fix:* `canvas/screen-controls.ts` exports `SCREEN_CONTROLS =
+'[data-screen-control]'`, read by useCanvasPointer's capture and bubble halves and by the right-click. The attribute
+is on every root the canvas host renders beside `.world`: the pill, context menu, aura, edge pips, minimap, lane
+headers, marquee, presence canvas, presence column, the three link banners (incl. the broadcast Stop and the
+annotate strip), nav grid, diagnostics, splash, launcher, return briefing, reopen stack, env banner, task lens, HUD,
+new-object row, pack preview, palette scrim and palette. Pointer-events:none layers carry it too: never a target, so
+it costs nothing and the walk has no exceptions. *Check:* `panels:core screen.attr.1` walks `.canvas >
+:not(.world)` with the context menu open and requires the attribute on every root (8 mounted there, none missing).
+
+**Minor: group drag slop.** `useGroupDrag` now takes `DRAG_SLOP_PX` as usePanelDrag does. That only delays the first
+frame, and a click commits no move. The group's raise commits itself when it changed a z (selectAndRaise's rule).
+GroupLayer's header gained PanelFrame's button rule, so a right- or ⌃-press no longer lifts a group. *Check:*
+`panels:agents group.slop.1`: a 2px wobble on g1's header moves neither member and adds at most the raise to history
+(measured: 1); a real 30px×20px drag moves both by exactly that.
+
+**Minor: reload mid-flight.** *Measured:* in the harness a Fit lands in ONE step, with no animated frames, so a
+reload strictly mid-flight cannot be staged; a Zoom-in → Fit-all → reload was not in flight in three tries. The
+check is honest about that. `panels:agents reload.flight.1` takes two real Zoom in clicks and a real Fit all. It
+reloads on the first read showing the camera moved (the layout save the move schedules is pending), and requires
+did-finish-load within 5 s. Measured 58 ms, green. A recovery reload keeps the part alive if it goes red. M408's
+settle before the M43 seed stays.
+
+**Watchdog:** `panels:agents` re-pinned 116000 → 132000. With the three checks it ran 104.5–105.5 s over five runs
+alone under the lock (90–91%, `headroom.1` red); 1.25x the slowest. `panels:core` 84–85 s of 105 s (80–81%).
+
+**Suites** (Electron each alone under `/tmp/tc-electron-lock`; reds checked against the recorded baselines):
+- `panels:core` 102/105: `7`, `51`, `place.still.1`, the M406 baseline reds M408 recorded. All new checks green.
+- `panels:agents` 88/89 after the re-pin: `template.1`, the baseline red.
+- `panels:shell` 101/105: `95`, `95b`, `95c`, `96`, the baseline reds.
+- `panels:product` 152/152 alone (a first run had `browser.1` red, `live:false`, green alone; the known flake).
+- `panels:orchestrate` 37/37 alone (a first run had `orch-bench.4` red, green alone).
+- `panels:kinds` 54/54, `panels:flowchart` 16/16 (81%), `canvas` 7/7, `xterm` 11/11.
+- Plain: `styles` 94/94, `groups`, `viewport`, `primitives`, `pill`, `verbs`, `palette`, `rail`, `merged`, `meta`
+  51/51. `npm run affected --list` selects every suite (the whole branch against main); the suites above are the ones
+  this change reaches.
+
+*Goldens expected to move:* any scene that shows a panel's link ports on hover, because the east and south dots moved
+to their bands' ends. No other paint changed (the attribute is not styled; the menu's focus and key handling are not
+visible).
+*Owed:* the A7 hover-focus rule is fixed for this menu only. Every other pointer-opened Menu still lets Radix focus
+its content on a row's pointerleave (`holdFocus` covers pointermove only). That is a primitive-wide change for the
+lead to decide. The north and west ports still sit flush over a body's first row and first column.
+
 ### M409 — ⌘K rests on what can run, ranks what the words name, and has Undo (C5)
 
 **C5 (P1), ⌘K is the real map, and it was bloated.** *Reproduced* on the real app, slot 2, a fresh profile

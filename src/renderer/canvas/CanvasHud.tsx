@@ -74,7 +74,7 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
   }, [viewport.scale])
   const readoutShown = zoomReadoutShown(viewport.scale, zooming)
   return (
-    <div className="canvas-hud">
+    <div className="canvas-hud" data-screen-control="">
       {/* M395 (the critic's P1 #2). CREATE LIVES HERE, on the HUD's own
           opaque ground behind its moat — the one surface over the canvas that
           panels already pass under without reading as part of it, and the one

@@ -76,7 +76,7 @@ export function EdgeIndicators({ rects, viewport, ids, labelOf }: EdgeIndicators
   // measures, and unmounting it on an empty queue would mean the first pip of
   // the run renders one frame late, with no size yet.
   return (
-    <div className="edge-indicators" ref={hostRef}>
+    <div className="edge-indicators" data-screen-control="" ref={hostRef}>
       {pips.map((pip) => (
         <Fragment key={pip.id}>
           <div

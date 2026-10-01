@@ -9,12 +9,11 @@ import type { LinkMode } from './useLinkMode'
 import { hitTest, screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect } from './viewport'
 import { INK_POINTS_MAX } from '@shared/annotations'
 
-/**
- * The screen-space controls that sit INSIDE `.canvas`, over the world: a press
- * on one is never a press on what lies beneath it (M249, M395, M408). One list
- * for the capture slot and the background handler, so they cannot disagree.
- */
-const SCREEN_CONTROLS = '.command-pill, .new-object-row, .canvas-hud, .minimap, [data-annotate-strip], [data-context-for]'
+// The screen-space controls that sit INSIDE `.canvas`, over the world: a press
+// on one is never a press on what lies beneath it (M249, M395, M408). ONE
+// selector, an attribute on each root, read by both halves below and by the
+// right-click (screen-controls.ts says why it is no longer a class list).
+import { SCREEN_CONTROLS } from './screen-controls'
 
 export interface CanvasPointerDeps {
   hostRef: RefObject<HTMLDivElement | null>
@@ -293,11 +292,14 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
     // M408 (D1). A secondary press (right, or ⌃-left — the Mac's right-click)
-    // is the context menu's, never a gesture: it selects the card it lands on,
-    // as a panel's chrome does, and starts no marquee, stroke or label.
+    // is the context menu's, never a gesture: it selects the card it lands on
+    // and starts no marquee, stroke or label. selectAndRaise, NEVER
+    // onSelectPanel (M408 follow-up): a dormant card has no handler of its
+    // own, so its press lands here, and onSelectPanel's registry.wake is the
+    // SPAWN gesture — a right-click to inspect a reopened terminal started it.
     if (event.button !== 0 || event.ctrlKey) {
       const hitCard = world ? hitTest(hitOrder, world) : null
-      if (hitCard && (event.button === 2 || event.ctrlKey)) onSelectPanel(hitCard)
+      if (hitCard && (event.button === 2 || event.ctrlKey)) selectAndRaise(hitCard)
       return
     }
     // M93. In annotate mode the click is the note's position, over a panel or

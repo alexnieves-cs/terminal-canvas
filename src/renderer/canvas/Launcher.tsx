@@ -297,7 +297,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family. M262: not a settings form either — a SEQUENCE, each
     // question numbered and answered in order, the action filled.
-    <div className="launcher pf" data-launcher data-tone="none" data-launcher-dropping={dropping ? '' : undefined} role="region" aria-label="Get started" {...dropHandlers}>
+    <div className="launcher pf" data-launcher data-screen-control="" data-tone="none" data-launcher-dropping={dropping ? '' : undefined} role="region" aria-label="Get started" {...dropHandlers}>
       <div className="launcher__well">
       <div className="launcher__hero" aria-hidden="true">
         <span className="launcher__wordmark">terminal canvas</span>
