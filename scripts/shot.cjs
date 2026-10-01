@@ -918,7 +918,7 @@ const SCENES = [
       await k.goTo('server.ts'); await sleep(1500)
       await k.shot('file-missing')
     } },
-  { name: 'starter', intent: 'M181/M205. The starter canvas the OPTIONAL `Starter canvas…` line (inside the launcher\'s `More ways to start`) lays out: the agent (an asleep chat, its composer the first thing to type into) at working size in the middle, and to its right and below a captioned example of each kind — a dormant terminal card, a note over a real Markdown file, a workflow projecting the built-in template, an image showing real pixels — in a group named Examples; every caption a sentence under its object; nothing running, no process spawned; the launcher gone.',
+  { name: 'starter', intent: 'M181/M205. The starter canvas the OPTIONAL `Starter canvas…` line (inside the launcher\'s `More ways to start`, reached by wheeling the card until the line is on screen) lays out: the agent (an asleep chat, its composer the first thing to type into) at working size in the middle, and to its right and below a captioned example of each kind — a dormant terminal card, a note over a real Markdown file, open in its editor, the editor filling the body below its strip (never 0px, A1), its path the starter folder and never ~/.claude (A2), a workflow projecting the built-in template, an image showing real pixels — in a group named Examples; every caption a sentence under its object; nothing running, no process spawned; the launcher gone.',
     run: async (k) => {
       // LAST, on an EMPTIED canvas: the chat this scene mints leaves main-side
       // state (the recent folders the sheet's WHERE reads) that shifted four
@@ -953,7 +953,18 @@ const SCENES = [
         for (; attempts < 3 && said.length === 0; attempts++) {
           // The disclosure by its STATE, not a blind toggle: a second press on an open one closes it.
           if (!(await k.js(`document.querySelector('[data-launcher-more]')?.open === true`))) await press('[data-launcher-more-toggle]')
-          for (let i = 0; i < 20 && !(await press('[data-launcher-starter]')); i++) await sleep(100)
+          // M410. Since M399 (A5) the open card is taller than the window and
+          // the line sits below the fold, where a press at its centre lands
+          // off-screen. Reach it as a person does and as `starter.1` does:
+          // REAL wheel notches over the card (A5 gave the card the wheel)
+          // until the line is hit-testable, and press only then.
+          const lineHit = `(() => { const b = document.querySelector('[data-launcher-starter]'); if (!b || b.disabled) return false; const r = b.getBoundingClientRect(); return r.width > 0 && b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) })()`
+          for (let i = 0; i < 20 && !(await k.js(lineHit)); i++) {
+            const over = await k.js(`(() => { const l = document.querySelector('.launcher'); if (!l) return null; const r = l.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+            if (over) { k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseWheel', ...over, deltaX: 0, deltaY: -120, canScroll: true }) }
+            await sleep(120)
+          }
+          if (await k.js(lineHit)) await press('[data-launcher-starter]')
           for (let i = 0; i < 20 && said.length === 0; i++) await sleep(100)
         }
       } finally {
