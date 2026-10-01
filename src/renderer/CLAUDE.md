@@ -19,4 +19,17 @@ never imported ambiently. That is the rule; the modules are where to look:
 | `motion` | `primitives/MotionSurface.tsx`, `workflow/` | Motion still answers to the token rules in `styles.css` (`verify:styles`). |
 | `postprocessing` | `orchestration/orchestration-bloom.tsx`, reached only from the lazily-`import()`ed `OrchestrationCubes` | The diorama's bloom. Rides three.js's deferred chunk, so the first chunk pays nothing — a second importer undoes that silently, which is why `verify:orchestration orch.bloom-door.1/.2` pin the importer set AND the `lazy()`. The raw library, NOT `@react-three/postprocessing`, whose peer range would have forced a `@react-three/fiber` bump under a working scene. |
 
+**Installed with no door yet (2026-09-30).** `@react-three/drei` and
+`@react-three/postprocessing` are in `dependencies` but **nothing imports them**, so neither
+has a row above and neither is reachable from a chunk. Whoever writes the first adopter adds
+the row in the same change — an ambient import of either is the drift this table exists to
+stop, and drei in particular re-exports enough that a careless `import { ... } from
+'@react-three/drei'` pulls far more than the helper asked for.
+
+Taking `@react-three/postprocessing` is what the `postprocessing` row warned about: its peer
+range forced `@react-three/fiber` **9.4.0 → 9.8.1** under the working diorama. `npm run build`
+and `verify:orchestration` (145/145) are green on the bump, but neither of those LOOKS at the
+scene — the bloom and the Watch lens are judged by `verify:visual`, which is hand-run and has
+not been run against it. Do that before trusting the diorama's pixels.
+
 Renderer libraries are vite-bundled, so nothing here ships `node_modules` and the
