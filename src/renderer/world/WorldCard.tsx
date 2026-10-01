@@ -2,7 +2,7 @@ import { memo, useRef, type JSX, type MutableRefObject, type RefObject } from 'r
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import { useAgent } from './agent-world-store'
-import { cardLine, statusWord, type CardLine } from './world-scene'
+import { cardLine, statusTone, statusWord, type CardLine } from './world-scene'
 import { cardStand, cardTiltDeg } from './world-transition'
 
 /**
@@ -34,6 +34,14 @@ import { cardStand, cardTiltDeg } from './world-transition'
  * a React state here would re-render the card 60 times a second — and only
  * while it is changing, so a card at rest costs nothing.
  *
+ * **Only the nearest few agents get the full card** (`cardTiers`, world-perf.ts);
+ * the rest wear a status DOT — the same element, the same tone, no text. A card
+ * is a live React tree that follows a 3D point every frame, so a room of forty
+ * agents would be forty of them, and the ones too far to read were never
+ * legible anyway. The dot keeps the one thing a far agent can still say, its
+ * state, in the colour the 2D canvas uses for it (`data-tone`, the shared
+ * `[data-tone]` rule block — nothing here chooses a hue).
+ *
  * What it paints is the feed's own text. Today that is simulated; the day a
  * real session feeds the store, the producer is where secrets get scrubbed
  * (the renderer has no second gate to put here), so a feed that cannot
@@ -60,7 +68,7 @@ function Line({ line }: { line: CardLine }): JSX.Element | null {
   }
 }
 
-export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop }: { agentId: string; y: number; layer: RefObject<HTMLElement | null>; pop: MutableRefObject<number> }): JSX.Element | null {
+export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compact }: { agentId: string; y: number; layer: RefObject<HTMLElement | null>; pop: MutableRefObject<number>; compact: boolean }): JSX.Element | null {
   const record = useAgent(agentId)
   const card = useRef<HTMLDivElement>(null)
   const written = useRef(-1)
@@ -75,15 +83,20 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop }: { a
   })
   if (!record || !layer.current) return null
   const word = statusWord(record.status)
+  const tone = statusTone(record.status)
   return (
     <Html position={[0, y, 0]} zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
-      <div ref={card} className="world-card" style={{ opacity: 0 }} data-status={record.status} role="group" aria-label={`${record.name}: ${word}`}>
-        <div className="world-card__head">
-          <span className="world-card__name">{record.name}</span>
-          <span className="world-card__status">{word}</span>
+      {compact ? (
+        <div ref={card} className="world-dot" style={{ opacity: 0 }} data-status={record.status} data-tone={tone} role="img" aria-label={`${record.name}: ${word}`} />
+      ) : (
+        <div ref={card} className="world-card" style={{ opacity: 0 }} data-status={record.status} data-tone={tone} role="group" aria-label={`${record.name}: ${word}`}>
+          <div className="world-card__head">
+            <span className="world-card__name">{record.name}</span>
+            <span className="world-card__status">{word}</span>
+          </div>
+          <Line line={cardLine(record)} />
         </div>
-        <Line line={cardLine(record)} />
-      </div>
+      )}
     </Html>
   )
 })

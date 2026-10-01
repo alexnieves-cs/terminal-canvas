@@ -204,9 +204,13 @@ export interface WorldRobotProps {
   transition: WorldTransition
   /** How far into the move this robot starts (0 = with the first; see `popDelays`). */
   delay: number
+  /** A status dot instead of the full card (it is outside the nearest few; see `cardTiers`). */
+  compact: boolean
+  /** prefers-reduced-motion: a robot that turns live appears at once instead of growing in. */
+  reduced: boolean
 }
 
-function RobotBody({ agentId, station, cards, transition, delay }: WorldRobotProps): JSX.Element {
+function RobotBody({ agentId, station, cards, transition, delay, compact, reduced }: WorldRobotProps): JSX.Element {
   const gun = station.index % 2 === 1
   const gltf = useGLTF(gun ? CHARACTER_GUN_URL : CHARACTER_URL, ...PLAIN)
   const rig = useMemo(() => buildRig(gltf, ROBOT_HEIGHT), [gltf])
@@ -225,6 +229,8 @@ function RobotBody({ agentId, station, cards, transition, delay }: WorldRobotPro
   // The delay is read in the frame loop, which must not be rebuilt for it.
   const delayRef = useRef(delay)
   delayRef.current = delay
+  const reducedRef = useRef(reduced)
+  reducedRef.current = reduced
   // When this robot first ran a frame — a robot that turns live mid-session, or
   // whose model loaded late, arrives on its own clock instead of blinking in.
   const bornAt = useRef<number | null>(null)
@@ -286,7 +292,7 @@ function RobotBody({ agentId, station, cards, transition, delay }: WorldRobotPro
     const nowMs = performance.now()
     bornAt.current ??= nowMs
     const moved = popOf(transition.sample(nowMs).raw, delayRef.current)
-    const arrived = easeInOutCubic((nowMs - bornAt.current) / ARRIVE_MS)
+    const arrived = reducedRef.current ? 1 : easeInOutCubic((nowMs - bornAt.current) / ARRIVE_MS)
     pop.current = Math.min(moved, arrived)
     if (bob.current) {
       bob.current.visible = pop.current > 1e-3
@@ -386,7 +392,7 @@ function RobotBody({ agentId, station, cards, transition, delay }: WorldRobotPro
         </group>
       </group>
       {status === 'error' ? <ErrorBug /> : null}
-      <WorldCard agentId={agentId} y={ROBOT_HEIGHT + 0.2} layer={cards} pop={pop} />
+      <WorldCard agentId={agentId} y={ROBOT_HEIGHT + 0.2} layer={cards} pop={pop} compact={compact} />
     </group>
   )
 }

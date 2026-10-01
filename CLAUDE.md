@@ -142,7 +142,7 @@ team:list team:observe team:observed team:asks team:ask-answer team:asks-changed
 workspace:share workspace:shares workspace:open-share workspace:share-member workspace:share-members
 text:open text:close text:update text:remote
 relay:spawn relay:attach relay:detach relay:input relay:resize relay:control relay:kill
-relay:list relay:view relay:data relay:state world:events
+relay:list relay:view relay:data relay:state world:events world:connection world:status world:retry
 ```
 
 Direction is meaning, not convention. `preset:*` are main → renderer because the *menu* is

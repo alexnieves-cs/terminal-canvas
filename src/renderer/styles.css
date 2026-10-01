@@ -10924,7 +10924,8 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* The status card floats over a robot's head: anchored by its bottom-centre,
    so it grows upward from the robot, not down over it. */
 .world-card {
-  --world-card-tone: var(--fg-4);
+  /* The tone is the 2D canvas's own (the [data-tone] block near the top of this file): blue working, amber needs-you, green idle, red stopped. */
+  --world-card-tone: var(--tone, var(--fg-4));
   --world-tilt: 0deg;
   box-sizing: border-box; width: 176px;
   /* Anchored by its bottom-centre, which is also the hinge it stands up on
@@ -10938,14 +10939,9 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   color: var(--fg); font-family: var(--font-ui);
   user-select: none;
 }
-.world-card[data-status="working"] { --world-card-tone: var(--iris); }
-.world-card[data-status="thinking"] { --world-card-tone: var(--violet); }
-.world-card[data-status="waiting_approval"] { --world-card-tone: var(--amber); }
-.world-card[data-status="error"] { --world-card-tone: var(--red); }
 .world-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); }
 .world-card__name { font-size: var(--t-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .world-card__status { flex: none; font-size: var(--t-xs); color: var(--world-card-tone); }
-.world-card[data-status="idle"] .world-card__status { color: var(--fg-4); }
 .world-card__line {
   margin: var(--sp-2) 0 0; font-size: var(--t-xs); line-height: 1.4; color: var(--fg-2);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
@@ -10953,6 +10949,31 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-card__line--thought { font-style: italic; color: var(--fg-3); }
 .world-card__line--error { color: var(--red); }
 .world-card__tool { margin-right: var(--sp-3); font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
-.world-card__line--tool[data-state="running"] .world-card__tool { color: var(--iris); }
+.world-card__line--tool[data-state="running"] .world-card__tool { color: var(--blue); }
 .world-card__line--tool[data-state="failed"] .world-card__tool { color: var(--red); }
 .world-card__detail { display: block; margin-top: var(--sp-1); color: var(--fg-3); }
+/* Beyond the nearest few agents (cardTiers): the state and nothing else, in the same tone. */
+.world-dot {
+  width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--tone, var(--fg-4));
+  border: 2px solid var(--glass-1);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+/* The view's own messages — empty, disconnected, too small — sit in the room's middle, not over the toggle. */
+.world-route__note--stage {
+  top: 50%; transform: translate(-50%, -50%);
+  text-align: center; max-width: min(420px, calc(100% - var(--sp-8)));
+}
+/* The empty room's line sits below the table, not over it. */
+.world-route__note--stage[data-world-empty] { top: auto; bottom: 16%; transform: translateX(-50%); }
+.world-route__note--action { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: var(--sp-4); }
+.world-route__note--action p { margin: 0; }
+.world-route__note--action button {
+  font: inherit; font-size: var(--t-sm); color: var(--fg); cursor: pointer;
+  padding: var(--sp-2) var(--sp-5); border-radius: var(--r-md);
+  border: 1px solid var(--line-strong); background: var(--s-5);
+}
+.world-route__note--action button:hover { border-color: var(--fg-3); }
+.world-route__note--action button:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.world-route__note--action button:disabled { color: var(--fg-3); cursor: default; }

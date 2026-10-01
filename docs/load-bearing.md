@@ -5506,3 +5506,29 @@ zeroes the counters on each, so the readout said "1 call, 0k tris" for a scene o
 The probe turns `autoReset` off and resets once per frame at priority `-1` — NEGATIVE: any
 positive `useFrame` priority takes the render away from R3F (orchestration-bloom.tsx records
 the same trap).
+
+**The world feed's counters never go backwards — a retry starts them ABOVE the old feed's (`world-feed-link.ts`'s `epoch`, `world-feed.ts`'s `seqStart`, M414).**
+The renderer store drops any event at or below the last `seq` it holds for an agent. A feed
+rebuilt by "Retry" that counted from 0 would be `live` and heard by nobody: the room frozen
+under a green connection, no error anywhere. Each rebuild starts its counters at
+`max(Date.now(), epoch + 1e6)`. A disposed agent likewise keeps its counter. Watched in the
+real window (a retry, then a turn: seq 19 → 1790838739554, status followed).
+`verify:world world.feed.7`, `world.feed.14`, `world.link.6`.
+
+**Text on a world card is scrubbed in the PRODUCER, BEFORE it is clipped (`world-feed.ts`'s `worldText`, M414).**
+The card paints the feed's words as they come and the renderer has no gate to put in front of
+it. A token cut in half by the clip no longer matches its pattern, so the clip must come after
+the scrub. `gate.2` names `shared/world-feed.ts` as a `redactSecrets` caller. A user's own
+words and a successful tool result's body never ride the feed. `verify:world world.feed.8–.10`.
+
+**The feed is a SECOND READER placed AFTER the send it observes (`agent-runtime.ts`, `pty-manager.ts`, M414).**
+Instrumentation must not change what an agent does: the runtime hands each event to
+`state.worldFeed?.session` after its own sends, and the PTY manager calls `onAgentState` after
+`target.send`, inside a try/catch that swallows a throw. A failure becomes a `lost`
+connection the world view shows with a Retry, never an exception in the agent path.
+`verify:world world.wire.1–.2`.
+
+**A `turn` event is the WHOLE turn, again, on every added block (`world-feed.ts`, M414).**
+The CLI streams one record per content block and the manager re-emits `{...last, blocks}`;
+a translator that spoke every block each time would repeat each thought once per later block.
+The feed remembers how many blocks of each turn it has said. `verify:world world.feed.1`.

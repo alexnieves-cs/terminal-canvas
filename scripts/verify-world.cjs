@@ -39,16 +39,21 @@ buildSync({
       "  scene: require('./src/renderer/world/world-scene.ts'),",
       "  trans: require('./src/renderer/world/world-transition.ts'),",
       "  toggle: require('./src/renderer/world/world-toggle.ts'),",
-      "  presence: require('./src/shared/presence.ts')",
+      "  presence: require('./src/shared/presence.ts'),",
+      "  feed: require('./src/shared/world-feed.ts'),",
+      "  perf: require('./src/renderer/world/world-perf.ts'),",
+      "  wiring: require('./src/main/world-feed-link.ts'),",
+      "  ipc: require('./src/shared/ipc-contract.ts'),",
+      "  panelState: require('./src/renderer/panels/panel-state.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
   },
   outfile: join(root, 'out/verify/world.cjs'),
-  bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react'],
+  bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, trans: T, toggle: G, presence: P } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, trans: T, toggle: G, presence: P, feed: F, perf: PF, wiring: WW, ipc: IPCC, panelState: PS } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -84,7 +89,16 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 {
   let pushed = null
   let subscribes = 0
-  const bridge = { world: { onEvents: (l) => { subscribes++; pushed = l; return () => { pushed = null } } } }
+  let connectionPush = null
+  let statusAnswer = { state: 'live' }
+  const bridge = {
+    world: {
+      onEvents: (l) => { subscribes++; pushed = l; return () => { pushed = null } },
+      onConnection: (l) => { connectionPush = l; return () => { connectionPush = null } },
+      status: async () => statusAnswer,
+      retry: async () => ({ state: 'live' })
+    }
+  }
   W.connectAgentWorld(bridge)
   W.connectAgentWorld(bridge)
   ok('world.store.1 connectAgentWorld subscribes once however often it is called', subscribes === 1)
@@ -382,7 +396,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       outside.every((l) => /\/world\/World(Office|Robot|Card|View)\.tsx:\d+:/.test(l) && /from '\.\/World(Office|Robot|Card)'/.test(l)) &&
       /import\.meta\.env\.DEV \? <WorldStage on=\{worldOn\} hostRef=\{hostRef\} \/> : null/.test(canvasSrc))
 
-  const scenery = SCENE.concat('WorldStage.tsx', 'world-toggle.ts', 'world-transition.ts', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts')
+  const scenery = SCENE.concat('WorldStage.tsx', 'world-toggle.ts', 'world-transition.ts', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts', 'world-perf.ts')
   const leaks = scenery.filter((f) => /window\.canvas|WebSocket|ipcRenderer|\.onEvents\(/.test(read(f)))
   ok('world.door.3 the scene reads ONLY the event store — no bridge, no socket, no subscription of its own in any file under world/ but the store itself', leaks.length === 0, leaks.join())
 
@@ -431,7 +445,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       !files.some((f) => /\bgl\.(dispose|forceContextLoss)\(|\.forceContextLoss\(/.test(code(f))))
 
   ok('world.door.12 the stage, the scene and the 2D host share ONE transition object — the scene takes it as a prop, robots sample it in their frame loop, and no file keeps a progress of its own',
-    /<WorldView transition=\{transition\} \/>/.test(stage) && /transition\.sample\(/.test(robot) && /transition\.sample\(/.test(view) &&
+    /<WorldView transition=\{transition\} reduced=\{reduced\} \/>/.test(stage) && /transition\.sample\(/.test(robot) && /transition\.sample\(/.test(view) &&
       !files.some((f) => /\b(?:let|const)\s+progress\b|progress\s*\+=/.test(code(f))))
 
   // The model names are string literals in the scene; a re-download that renamed
@@ -459,6 +473,278 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const literals = ['Idle', 'Idle_Gun', 'Walk_Gun', 'HitReact', 'Wave', 'Flying', 'Main', 'Main2', 'Main_Light', 'Head', 'Torso', 'UpperArm.L', 'LowerArm.R']
   const unnamed = literals.filter((n) => !robot.includes(`'${n}'`))
   ok('world.assets.1 every clip, bone and material the robot code names by string exists in the vendored models, and the code still names them', missing.length === 0 && unnamed.length === 0, JSON.stringify({ missing, unnamed }))
+}
+
+// ── the REAL feed (M414): the agent runtime's own events, folded into the contract ──
+{
+  const mk = () => {
+    const out = []
+    let now = 5000
+    const feed = F.createWorldFeed({
+      emit: (events) => out.push(...events),
+      now: () => { now += 10; return now },
+      label: (id, hint) => hint === undefined ? `chat-${id}` : `${hint}!`
+    })
+    return { out, feed }
+  }
+  const sess = (id, body) => ({ id, ...body })
+  const words = (out, agent) => out.filter((e) => e.agentId === agent).map((e) => e.type === 'status' ? `status:${e.payload}` : e.type)
+
+  {
+    const { out, feed } = mk()
+    feed.session(sess('a', { type: 'status', status: 'starting' }))
+    feed.session(sess('a', { type: 'status', status: 'streaming' }))
+    feed.session(sess('a', { type: 'block-start', index: 0, block: { type: 'thinking', text: '' } }))
+    feed.session(sess('a', { type: 'turn', turn: { id: 'm1', role: 'assistant', at: 1, blocks: [{ type: 'thinking', text: 'Read the session file first.' }] } }))
+    feed.session(sess('a', { type: 'block-start', index: 1, block: { type: 'tool_use', id: 't1', name: 'Edit', input: {} } }))
+    feed.session(sess('a', { type: 'turn', turn: { id: 'm1', role: 'assistant', at: 1, blocks: [
+      { type: 'thinking', text: 'Read the session file first.' },
+      { type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: '/Users/me/code/app/src/auth/session.ts' } }] } }))
+    feed.session(sess('a', { type: 'turn', turn: { id: 'u1', role: 'user', at: 2, blocks: [{ type: 'tool_result', toolUseId: 't1', content: 'ok', isError: false }] } }))
+    feed.session(sess('a', { type: 'turn', turn: { id: 'm2', role: 'assistant', at: 3, blocks: [{ type: 'text', text: 'Normalised expiry to ms.' }] } }))
+    feed.session(sess('a', { type: 'status', status: 'ready' }))
+    ok('world.feed.1 a chat\'s session is told as the contract tells it: working, thinking, a thought, a tool call and its result, a message, then idle — and a turn re-sent with more blocks speaks only the NEW block (the thought is not said twice)',
+      words(out, 'a').join() === 'status:working,status:thinking,thought,status:working,tool_call,tool_result,message,status:idle',
+      words(out, 'a').join())
+    const call = out.find((e) => e.type === 'tool_call'), res = out.find((e) => e.type === 'tool_result')
+    ok('world.feed.2 a tool call is one readable line (…/auth/session.ts, not the arguments) and its result is paired by the call\'s own id, with the time that really elapsed',
+      call.payload.summary === 'Edit …/auth/session.ts' && call.payload.callId === 't1' && res.payload.callId === 't1' && res.payload.status === 'done' && res.payload.durationMs > 0 && res.payload.summary === call.payload.summary,
+      JSON.stringify([call.payload, res.payload]))
+    ok('world.feed.3 everything the feed emits passes the store\'s own guard, and seq strictly increases per agent', out.every(C.isAgentEvent) && out.every((e, i) => i === 0 || e.seq === out[i - 1].seq + 1),
+      out.map((e) => e.seq).join())
+    ok('world.feed.4 a name is carried on every event (the label for the chat), so the card never reads as a bare id', out.every((e) => e.name === 'chat-a'))
+  }
+
+  {
+    const { out, feed } = mk()
+    feed.session(sess('p', { type: 'status', status: 'streaming' }))
+    feed.session(sess('p', { type: 'permission-request', requestId: 'r1', toolName: 'Bash', input: { command: 'rm -rf x' } }))
+    feed.session(sess('p', { type: 'status', status: 'streaming' }))
+    feed.session(sess('p', { type: 'block-start', index: 0, block: { type: 'text', text: '' } }))
+    const mid = words(out, 'p').join()
+    feed.session(sess('p', { type: 'permission-answered', requestId: 'r1', allow: true }))
+    ok('world.feed.5 a pending permission outranks everything: waiting_approval with a card line, and neither a streaming status nor a new block flips it back to working until it is ANSWERED',
+      mid === 'status:working,status:waiting_approval,message' && words(out, 'p').join() === `${mid},status:working`,
+      words(out, 'p').join())
+    ok('world.feed.6 the approval says WHAT it waits for (the tool) and nothing of the command, which could carry anything',
+      out.find((e) => e.type === 'message').payload.text === 'Needs your approval: Bash')
+  }
+
+  {
+    const { out, feed } = mk()
+    feed.session(sess('e', { type: 'status', status: 'streaming' }))
+    feed.session(sess('e', { type: 'result', ok: false, subtype: 'error_during_execution', error: 'API Error: 529 overloaded', interrupted: false }))
+    const failed = out.at(-1)
+    feed.session(sess('e', { type: 'result', ok: false, subtype: 'interrupted', interrupted: true }))
+    feed.session(sess('e', { type: 'status', status: 'exited', exitCode: 3 }))
+    feed.session(sess('e', { type: 'status', status: 'disposed' }))
+    feed.session(sess('e', { type: 'status', status: 'starting' }))
+    ok('world.feed.7 a failed turn is an error (with its reason), an interrupt is not, a non-zero exit is an error, a clean one is idle, and a disposed agent goes idle — and seq keeps climbing past the dispose, or the store would drop its next life',
+      failed.type === 'error' && failed.payload.message === 'API Error: 529 overloaded' &&
+        words(out, 'e').join() === 'status:working,error,error,status:idle,status:working' &&
+        out.every((x, i) => i === 0 || x.seq === out[i - 1].seq + 1),
+      words(out, 'e').join())
+  }
+
+  {
+    const { out, feed } = mk()
+    const token = 'ghp_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'
+    feed.session(sess('s', { type: 'turn', turn: { id: 'm', role: 'assistant', at: 1, blocks: [
+      { type: 'tool_use', id: 'c1', name: 'Bash', input: { command: `curl -H "Authorization: token ${token}" https://api.github.com/user` } },
+      { type: 'thinking', text: 'x'.repeat(262) + ' ' + token + ' tail' },
+      { type: 'text', text: `The key is ${token}` }] } }))
+    feed.session(sess('s', { type: 'turn', turn: { id: 'u', role: 'user', at: 2, blocks: [{ type: 'tool_result', toolUseId: 'c1', content: `401 bad credentials for ${token}\nsecond line`, isError: true }] } }))
+    const all = JSON.stringify(out)
+    ok('world.feed.8 a token never reaches a card: scrubbed in a summary, a thought, a message and a failure\'s detail — and BEFORE the clip, so one cut in half by the clip cannot slip the pattern',
+      !/ghp_/.test(all) && /redacted github token/.test(all), all.slice(0, 400))
+    const res = out.find((e) => e.type === 'tool_result')
+    ok('world.feed.9 a failure says why (its first line, clipped); a success says nothing of its content',
+      res.payload.status === 'failed' && res.payload.detail.startsWith('401 bad credentials') && !/second line/.test(res.payload.detail))
+    const { out: o2, feed: f2 } = mk()
+    f2.session(sess('q', { type: 'turn', turn: { id: 'm', role: 'assistant', at: 1, blocks: [{ type: 'tool_use', id: 'c', name: 'Read', input: { file_path: '/a/b' } }] } }))
+    f2.session(sess('q', { type: 'turn', turn: { id: 'u', role: 'user', at: 2, blocks: [{ type: 'tool_result', toolUseId: 'c', content: 'SECRET FILE BODY', isError: false }, { type: 'text', text: 'a person typed this' }] } }))
+    ok('world.feed.10 a user\'s own words and a successful result\'s body never ride the feed', !/SECRET|person typed/.test(JSON.stringify(o2)) && o2.at(-1).payload.detail === undefined)
+    const summaries = [
+      ['Bash', { command: 'npm test -- auth\nmore' }, 'npm test -- auth more'],
+      ['Grep', { pattern: 'refreshToken\\(' }, 'Search "refreshToken\\("'],
+      ['WebFetch', { url: 'https://datatracker.ietf.org/doc/rfc9700/?x=1' }, 'Fetch datatracker.ietf.org'],
+      ['Glob', { pattern: 'src/**/*.ts' }, 'Find src/**/*.ts'],
+      ['mcp__x__y', { anything: 1 }, 'mcp__x__y'],
+      ['Edit', {}, 'Edit']
+    ]
+    ok('world.feed.11 each tool is one line a person reads; a tool this does not know is its bare name, never a guess at its input',
+      summaries.every(([name, input, want]) => F.toolSummary(name, input) === want), summaries.map(([n, i]) => F.toolSummary(n, i)).join(' | '))
+  }
+
+  {
+    const { out, feed } = mk()
+    feed.terminal({ panelId: 'T', state: 'busy' }, undefined)
+    feed.terminal({ panelId: 'T', state: 'busy' }, 'claude-code')
+    feed.terminal({ panelId: 'T', state: 'busy' }, 'claude-code')
+    feed.terminal({ panelId: 'T', state: 'wants-you' }, 'claude-code')
+    feed.terminal({ panelId: 'T', state: 'starting' }, 'claude-code')
+    ok('world.feed.12 a terminal agent speaks status only — a plain shell (no agent kind) is not an agent and says nothing, a repeat changes nothing, needs-you is waiting_approval, and a CLI still booting is not live yet',
+      words(out, 'T').join() === 'status:working,status:waiting_approval,status:idle' && out.every((e) => e.name === 'claude-code!'), words(out, 'T').join())
+    const before = out.length
+    feed.resend()
+    ok('world.feed.13 resend() says every known agent\'s status again with a NEW seq (a view that just loaded is not an empty room)',
+      out.length === before + 1 && out.at(-1).payload === 'idle' && out.at(-1).seq === out[before - 1].seq + 1)
+    const store = [] ; const f3 = F.createWorldFeed({ emit: (e) => store.push(...e), now: () => 1, label: (id) => id, seqStart: 1_000_000 })
+    f3.terminal({ panelId: 'T', state: 'busy' }, 'codex')
+    ok('world.feed.14 a rebuilt feed can start its counters above the one it replaces (seqStart), the thing that lets the store hear a retry', store[0].seq === 1_000_000)
+  }
+
+  // End to end through the REAL store and the REAL liveness rule: what the room shows.
+  {
+    const { out, feed } = mk()
+    feed.session(sess('live1', { type: 'status', status: 'streaming' }))
+    feed.session(sess('live2', { type: 'status', status: 'streaming' }))
+    feed.session(sess('live2', { type: 'status', status: 'ready' }))
+    W.ingestAgentEvents(out)
+    const live = ['live1', 'live2'].filter((id) => Z.isLiveStatus(W.getAgent(id).status))
+    ok('world.feed.15 through the real store, one agent working and one idle is one robot in the room', live.join() === 'live1')
+  }
+}
+
+// ── the link: main's send, its failure, and the retry ─────────────────────────
+{
+  const sent = []
+  let loaded = true
+  let throwOnEvents = false
+  const reloadListeners = []
+  const wc = {
+    send: (channel, payload) => { if (channel === IPCC.IPC_EVENTS.WORLD_EVENTS && throwOnEvents) throw new Error('webContents destroyed'); sent.push({ channel, payload }) },
+    on: (event, l) => { reloadListeners.push(l) }
+  }
+  let sessions = [{ id: 'k', status: 'streaming' }]
+  let terminals = 0
+  const link = WW.createWorldFeedLink({
+    ready: () => loaded ? wc : null,
+    live: () => wc,
+    cwdOf: (id) => id === 'k' ? '/Users/me/work/api/' : undefined,
+    sessions: () => sessions
+  }, () => { terminals++ })
+  const events = () => sent.filter((s) => s.channel === IPCC.IPC_EVENTS.WORLD_EVENTS).flatMap((s) => s.payload)
+  link.session({ id: 'k', type: 'status', status: 'streaming' })
+  ok('world.link.1 an event reaches the renderer on WORLD_EVENTS under the chat\'s folder name', events().length === 1 && events()[0].name === 'api' && link.status().state === 'live', JSON.stringify(events()))
+  loaded = false
+  link.session({ id: 'k', type: 'status', status: 'ready' })
+  loaded = true
+  ok('world.link.2 a send while the page is still loading is dropped without failing the link (it is not an error; the resend on load is how a reload catches up)', events().length === 1 && link.status().state === 'live')
+  reloadListeners[0]()
+  ok('world.link.3 the page finishing a load re-announces every agent\'s status', events().length === 2 && events().at(-1).payload === 'idle')
+
+  const last = Math.max(...events().map((e) => e.seq))
+  W.ingestAgentEvents(events())
+  throwOnEvents = true
+  link.session({ id: 'k', type: 'status', status: 'streaming' })
+  const lost = link.status()
+  const pushed = sent.filter((s) => s.channel === IPCC.IPC_EVENTS.WORLD_CONNECTION)
+  ok('world.link.4 a feed that throws becomes a LOST connection with its reason, pushed once to the renderer — and never throws back at the agent runtime that called it',
+    lost.state === 'lost' && lost.reason === 'webContents destroyed' && pushed.length === 1 && pushed[0].payload.state === 'lost')
+  throwOnEvents = false
+  const n = events().length
+  link.session({ id: 'k', type: 'status', status: 'ready' })
+  ok('world.link.5 while lost, nothing more is translated (a half-updated tracker must not keep speaking)', events().length === n)
+
+  sessions = [{ id: 'k', status: 'streaming' }]
+  const answer = link.retry()
+  const after = events().slice(n)
+  W.ingestAgentEvents(after)
+  ok('world.link.6 retry rebuilds the feed, answers live, pushes live, asks the runtime and the PTY manager to say their agents again — and the new seqs start ABOVE the old, so the store hears them (the room is not frozen under a live banner)',
+    answer.state === 'live' && link.status().state === 'live' && sent.at(-1).channel !== undefined && terminals === 1 &&
+      after.length >= 1 && after.every((e) => e.seq > last) && W.getAgent('k').status === 'working',
+    JSON.stringify({ last, after: after.map((e) => e.seq), status: W.getAgent('k').status }))
+}
+
+// ── polish and performance (M414) ────────────────────────────────────────────
+{
+  ok('world.perf.1 the world opens only on a desktop-width window', PF.WORLD_MIN_WIDTH === 900 && PF.worldFits(900) && PF.worldFits(1440) && !PF.worldFits(899) && !PF.worldFits(390))
+  ok('world.perf.2 the pixel ratio is clamped into [1, 1.75] whatever the display reports, and a garbage ratio is 1',
+    PF.clampDpr(3) === 1.75 && PF.clampDpr(2) === 1.75 && PF.clampDpr(1.25) === 1.25 && PF.clampDpr(0.5) === 1 && PF.clampDpr(NaN) === 1 && PF.clampDpr(-2) === 1)
+  {
+    const g = PF.createDprGovernor(2)
+    const steps = []
+    const feed = (fps, n = 1) => { for (let i = 0; i < n; i++) { const r = g.observe(fps); if (r !== null) steps.push(r) } }
+    feed(120, 10); feed(30, 2); feed(120)           // two low windows, then a good one: a hitch, not a trend
+    ok('world.perf.3 the pixel ratio does not move for a hitch — only for a SUSTAINED low frame rate', steps.length === 0 && g.dpr === 1.75)
+    feed(30, 3)
+    ok('world.perf.4 three low windows in a row step it down one notch', steps.join() === '1.5' && g.dpr === 1.5)
+    feed(30, 30)
+    ok('world.perf.5 it only ever steps DOWN (a rule that also stepped up would oscillate) and stops at 1', steps.at(-1) === 1 && g.dpr === 1 && steps.every((x, i) => i === 0 || x < steps[i - 1]), steps.join())
+    const g2 = PF.createDprGovernor(1.75); g2.observe(10); g2.observe(10); g2.gap(); const r = g2.observe(10)
+    ok('world.perf.6 a stalled window (a hidden app) forgets the streak instead of counting as low', r === null && g2.dpr === 1.75)
+  }
+  {
+    const near = (id, d) => ({ agentId: id, distance: d })
+    const ids = Array.from({ length: 10 }, (_, i) => near(`a${i}`, 5 + i))
+    const first = PF.cardTiers(ids, new Set())
+    ok('world.perf.7 only the nearest CARD_BUDGET agents get a full card; the rest get a dot', PF.CARD_BUDGET === 6 && [...first].sort().join() === 'a0,a1,a2,a3,a4,a5', [...first].join())
+    const again = PF.cardTiers(ids, first)
+    const nudged = PF.cardTiers([...ids.slice(0, 5), near('a5', 10.5), near('a6', 10)], first, 6)
+    ok('world.perf.8 an unchanged ranking returns the SAME set (no re-render), and a challenger barely nearer than an incumbent does not displace it',
+      again === first && nudged === first || [...nudged].sort().join() === [...first].sort().join())
+    const clearly = PF.cardTiers([...ids.slice(0, 5), near('a5', 12), near('a6', 4)], first, 6)
+    ok('world.perf.9 a challenger CLEARLY nearer does take a card, and the displaced agent becomes a dot', clearly.has('a6') && !clearly.has('a5') && clearly.size === 6)
+    ok('world.perf.10 fewer agents than the budget all get a card', PF.cardTiers(ids.slice(0, 3), new Set()).size === 3 && PF.cardTiers([], new Set()).size === 0)
+  }
+
+  // The status colour language is the 2D canvas's own.
+  const { agentWord } = PS
+  const statuses = ['working', 'thinking', 'waiting_approval', 'idle', 'error']
+  const tones = Object.fromEntries(statuses.map((s) => [s, Z.statusTone(s)]))
+  ok('world.tone.1 a status wears the tone the canvas gives that state — working and thinking are the working tone, needs-you is waiting_approval, idle is idle, a stopped agent is the stopped tone',
+    tones.working === agentWord('busy').tone && tones.thinking === agentWord('busy').tone && tones.waiting_approval === agentWord('wants-you').tone &&
+      tones.idle === agentWord('idle').tone && tones.error === agentWord('exited').tone && new Set(Object.values(tones)).size === 4,
+    JSON.stringify(tones))
+  const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
+  const card = readFileSync(join(root, 'src/renderer/world/WorldCard.tsx'), 'utf8')
+  ok('world.tone.2 the card and the dot take their colour from the shared [data-tone] rules — they set data-tone, and the stylesheet names no hue for a world status of its own (the iris/violet pair it had before M414 was not the canvas\'s language)',
+    (card.match(/data-tone=\{tone\}/g) ?? []).length === 2 && /--world-card-tone: var\(--tone,/.test(styles) && /\.world-dot \{[^}]*var\(--tone/.test(styles) &&
+      !/\.world-card\[data-status=[^\]]*\]\s*\{\s*--world-card-tone/.test(styles) && /\[data-tone="working"\] \{ --tone: var\(--blue\)/.test(styles))
+
+  const dir = join(root, 'src/renderer/world')
+  const read = (f) => readFileSync(join(dir, f), 'utf8')
+  const stage = read('WorldStage.tsx'), view = read('WorldView.tsx'), robot = read('WorldRobot.tsx'), store = read('agent-world-store.ts')
+  ok('world.stage.1 the empty room says one thing: "No live agents. Start one from the canvas." (not a dev flag), whether nothing has ever run or everything is idle',
+    /No live agents\. Start one from the canvas\./.test(stage) && /agents === 0 \|\| live === 0/.test(stage) && !/SIMULATE_AGENTS/.test(stage))
+  ok('world.stage.2 a lost feed shows its reason and a Retry that goes through the store (no view holds the bridge), disabled while it runs',
+    /connection\.state === 'lost'/.test(stage) && /retryAgentWorld\(\)/.test(stage) && /disabled=\{retrying\}/.test(stage) && /role="alert"/.test(stage) &&
+      /export async function retryAgentWorld\(\)/.test(store) && /world\.retry\(\)/.test(store) && !/window\.canvas/.test(stage))
+  ok('world.stage.3 below the desktop width the stage mounts NO scene (no lazy load, no WebGL context), says why, and offers the way back — live through a resize',
+    /fits \? \(/.test(stage) && /worldFits\(window\.innerWidth\)/.test(stage) && /addEventListener\('resize'/.test(stage) && /The world view needs a wider window/.test(stage) &&
+      /onClick=\{\(\) => setWorldOn\(false\)\}>Back to canvas/.test(stage) && /<WorldView /.test(stage.slice(stage.indexOf('fits ? ('), stage.indexOf(') : (', stage.indexOf('fits ? (')))))
+  ok('world.stage.4 prefers-reduced-motion skips the choreography, live: the move is a 0ms snap, the stagger is dropped and a robot that turns live appears at once',
+    /createWorldTransition\(on \? 1 : 0, reduced \? 0 : WORLD_TRANSITION_MS\)/.test(stage) && /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/.test(stage) && /addEventListener\('change'/.test(stage) &&
+      /reduced \? 0 : pops\[i\]!/.test(view) && /reducedRef\.current \? 1 : easeInOutCubic/.test(robot))
+  ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — the dot is the same Html element in compact mode',
+    /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && /<QualityGovernor \/>/.test(view) && /<CardBudget /.test(view) && /t - last\.current < 0\.25/.test(view) &&
+      /compact=\{full !== null && !full\.has\(station\.agentId\)\}/.test(view) && /className="world-dot"/.test(card) && /compact \? \(/.test(card))
+}
+
+// ── wiring: every hook is a second reader, placed AFTER what it observes ─────
+{
+  const text = (f) => readFileSync(join(root, f), 'utf8')
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const rt = strip(text('src/main/bootstrap/agent-runtime.ts'))
+  const sendAt = rt.indexOf('webContents.send(IPC_EVENTS.AGENT_EVENT, event)'), hookAt = rt.indexOf('state.worldFeed?.session(event)')
+  const pty = strip(text('src/main/pty-manager.ts'))
+  const ptySend = pty.indexOf('target.send(channel, payload)'), ptyHook = pty.indexOf('this.onAgentState(update, this.sessions.get(update.panelId)?.agent)')
+  const idx = strip(text('src/main/index.ts'))
+  ok('world.wire.1 the agent runtime hands each event to the feed AFTER the sends it already made — the runtime\'s order and timing are not changed, and the feed is a second reader',
+    sendAt > 0 && hookAt > sendAt && /state\.presence\?\.agentEvent\(event\)/.test(rt.slice(0, sendAt)))
+  ok('world.wire.2 the PTY manager hands each agent:state to its observer AFTER the send, inside a try/catch that swallows a throw — an agent state is never delayed or lost to the feed',
+    ptySend > 0 && ptyHook > ptySend && /try \{ this\.onAgentState/.test(pty) && /catch \{/.test(pty.slice(ptyHook, ptyHook + 200)) &&
+      /if \(target && !target\.isDestroyed\(\)\) target\.send\(channel, payload\)/.test(pty))
+  ok('world.wire.3 main builds the feed through MainState (read at use), points the PTY observer at it, and registers the status and retry doors',
+    /state\.worldFeed = createWorldFeedWiring\(state, \(\) => stores\.ptyManager\.resendStates\(\)\)/.test(idx) &&
+      /stores\.ptyManager\.onAgentState = \(update, agent\) => state\.worldFeed\?\.terminal\(update, agent\)/.test(idx) &&
+      /status: \(\) => state\.worldFeed\?\.status\(\)/.test(idx) && /ipcMain\.handle\(IPC\.WORLD_RETRY/.test(text('src/main/ipc.ts')) && /ipcMain\.handle\(IPC\.WORLD_STATUS/.test(text('src/main/ipc.ts')))
+  ok('world.wire.4 SIMULATE_AGENTS still works beside the real feed — the simulator is untouched and still gated on its own flag in main\'s env',
+    /SIMULATE_AGENTS !== 'true'/.test(text('src/main/bootstrap/world-sim-wiring.ts')) && /worldSim = startWorldSimWiring\(state\)/.test(idx))
+  ok('world.wire.5 the channels are declared once and carried by the bridge: WORLD_CONNECTION as an event, WORLD_STATUS and WORLD_RETRY as invokes, and the project index lists them',
+    IPCC.IPC_EVENTS.WORLD_CONNECTION === 'world:connection' && IPCC.IPC.WORLD_STATUS === 'world:status' && IPCC.IPC.WORLD_RETRY === 'world:retry' &&
+      /world:events world:connection world:status world:retry/.test(text('CLAUDE.md')) && /IPC_EVENTS\.WORLD_CONNECTION/.test(text('src/preload/index.ts')) && /IPC\.WORLD_RETRY/.test(text('src/preload/index.ts')))
 }
 
 const failures = results.filter((r) => !r.pass)

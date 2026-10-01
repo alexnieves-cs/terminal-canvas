@@ -7,6 +7,7 @@ import type { PoolCaller } from '../pool-caller'
 import type { ControlServer } from '../control-server'
 import type { PresenceHub } from '../presence/presence-hub'
 import type { CanvasSync } from '../presence/canvas-sync'
+import type { WorldFeedLink } from '../world-feed-link'
 import type { TeamAskRouter } from '../team-ask-router'
 
 /**
@@ -86,6 +87,8 @@ export interface MainState {
   canvasSync: CanvasSync | null
   /** M376. The team queue's owner side. Read at use by the agent:event fan-out, agent:answer and canvas-sync's onAsks. */
   teamAsks: TeamAskRouter | null
+  /** The real world feed (bootstrap/world-feed-wiring.ts). Read at use by the agent:event fan-out and the PTY manager's agent:state send; never required — an absent feed leaves every agent doing exactly what it did. */
+  worldFeed: WorldFeedLink | null
   /** The signed-in person's user id, or null — what every agent event is stamped with. Replaced in index.ts once the account exists. */
   currentUserId: () => string | null
 }
@@ -109,6 +112,7 @@ export function createMainState(): MainState {
     presence: null,
     canvasSync: null,
     teamAsks: null,
+    worldFeed: null,
     currentUserId: () => null
   }
 }

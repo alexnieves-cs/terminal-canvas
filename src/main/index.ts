@@ -21,6 +21,7 @@ import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
 import { startWorldSimWiring } from './bootstrap/world-sim-wiring'
+import { createWorldFeedWiring } from './bootstrap/world-feed-wiring'
 import type { WorldSim } from './world-sim'
 import { createShareControl } from './share-control'
 import { confirm } from './bootstrap/dialogs'
@@ -113,6 +114,10 @@ const menu = createMenuActions(state, stores, which)
 const account = createAccountWiring(state, stores, app.getPath('userData'))
 state.currentUserId = () => account.currentUserId()
 stores.ptyManager.ownerOf = () => account.currentUserId()
+// The world view's real feed: observes the agent runtime's fan-out and every
+// agent:state, and changes neither. Read at use through `state` (rule 1).
+state.worldFeed = createWorldFeedWiring(state, () => stores.ptyManager.resendStates())
+stores.ptyManager.onAgentState = (update, agent) => state.worldFeed?.terminal(update, agent)
 // Presence rides the account's identity; built here, started after the env probe.
 state.presence = createPresenceWiring(state, stores, account)
 // The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
@@ -363,7 +368,12 @@ app.whenReady().then(async () => {
     // The pty relay: one socket per relay panel, held in main with the token.
     relay,
     // The flowchart's file doors: a diagram out through the outward gate, a Mermaid file in.
-    createFlowchartHandlers(state)
+    createFlowchartHandlers(state),
+    // The world feed's connection and its retry.
+    {
+      status: () => state.worldFeed?.status() ?? { state: 'live' },
+      retry: () => state.worldFeed?.retry() ?? { state: 'live' }
+    }
   )
   createWindow(state, stores)
   worldSim = startWorldSimWiring(state)

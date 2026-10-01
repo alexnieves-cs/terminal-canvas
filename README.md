@@ -436,7 +436,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:pool-start / agent:pool-stop
                        update:check
                        image:read / starter:prepare
-                       docx:import / flowchart:read
+                       docx:import / flowchart:read / world:status / world:retry
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
@@ -448,7 +448,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        auth:changed
                        text:remote
                        relay:data / relay:state
-                       world:events (SIMULATE_AGENTS only, for now)
+                       world:events / world:connection (the real agent feed, and SIMULATE_AGENTS)
                        routine:fire
                        canvas:tidy / canvas:flip
                        canvas:feedback
@@ -1202,6 +1202,7 @@ price of not killing something.
 | M396 | Critique, one fix batch, the gate: two boundary critics (the SVG and the Mermaid are built in main after every word crosses the gate whole, main never routes, the file read is one bounded descriptor) and two visual critics (the pill clear of the HUD, far names that clip only at their end, square handles and outset ports, a quieter live chip, a regridded shape inspector, iris retired as a line colour). [Log](docs/build-log/m396-critique-and-gate.md). |
 | M412 | The 3D world view's scene (dev-only, `#/world`): one rigged robot per agent in the event store at its own desk on a loose arc, a meeting table the conductor and anyone waiting on a person stand at, a drei status card per robot, orbit controls that cannot go under the floor. Clips from the real models (Idle, Walk, Wave, HitReact), forearm work while a tool call is open, a head tilt per thought, a bee over an agent in error — all read from the store in the frame loop. Five silent failures found by running it, each pinned in `verify:world`; `.glb` files no longer select ~25 suites in `npm run affected`. |
 | M413 | The World view toggle (dev-only): a pressed toggle in the Canvas page's top bar swaps the 2D canvas for the M412 scene in the same page. A ~1000ms easeInOutCubic move each way from ONE shared clock: the canvas fades and settles back slightly, the scene fades in while the camera dollies from high and wide to the default orbit, robots pop in staggered by distance from the centre, cards stand up from lying flat. The canvas stays mounted (hidden, inert, shortcuts stood down) so camera, selection and every xterm survive; the scene mounts only while showing and R3F loses its WebGL context on toggle-off. Only working / thinking / waiting_approval agents get robots. Pins in `verify:world` (37 -> 52). |
+| M414 | Real agents in the World view: the agent runtime's own events (and a terminal agent's state) are translated into the world contract by a pure feed that scrubs before it clips, observed AFTER the sends it watches; a lost feed shows its reason and a Retry. Pixel ratio clamped with a down-only governor, full cards for the nearest six agents and status dots for the rest, a desktop-width gate, reduced motion skips the move, card colours are the 2D canvas's tones, an honest empty state. Dev-only still; bloom not added. [log](docs/build-log/m414-world-live.md) |
 
 ### What's next — the v10 run (D01–D20)
 

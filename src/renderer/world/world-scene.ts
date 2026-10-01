@@ -1,4 +1,4 @@
-import { agentWord } from '@renderer/panels/panel-state'
+import { agentWord, type Tone } from '@renderer/panels/panel-state'
 import { colorOf } from '@shared/presence'
 import type { AgentState } from '@shared/types'
 import type { AgentEvent, AgentRecord, AgentStatus } from '@shared/world-events'
@@ -255,6 +255,23 @@ const PANEL_STATE: Readonly<Partial<Record<AgentStatus, AgentState>>> = {
 export function statusWord(status: AgentStatus): string {
   const panel = PANEL_STATE[status]
   return panel !== undefined ? agentWord(panel).word : status
+}
+
+/**
+ * The panel state whose COLOUR each feed status wears. Every status has one,
+ * unlike `PANEL_STATE` above: a thinking agent is `busy` to the canvas (a panel
+ * is working while it thinks) and an errored one is `exited`, so the world
+ * paints them in the hue the 2D canvas already paints those states — blue
+ * working, amber needs-you, green idle, red stopped — and no colour is chosen
+ * here. The stylesheet reads the tone off `[data-tone]`, the one rule block
+ * that names an agent hue.
+ */
+const TONE_STATE: Readonly<Record<AgentStatus, AgentState>> = {
+  working: 'busy', thinking: 'busy', waiting_approval: 'wants-you', idle: 'idle', error: 'exited'
+}
+
+export function statusTone(status: AgentStatus): Tone {
+  return agentWord(TONE_STATE[status]).tone
 }
 
 export type CardLine =

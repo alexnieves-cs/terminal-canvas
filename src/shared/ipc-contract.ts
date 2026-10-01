@@ -1008,7 +1008,11 @@ export const IPC = {
    * .mmd/.mermaid/.md/.txt; with one, an absolute path to such a file under a
    * size cap. Not an outward door — nothing leaves — so no gate. Never rejects.
    */
-  FLOWCHART_READ: 'flowchart:read'
+  FLOWCHART_READ: 'flowchart:read',
+  /** The world feed's connection, read once on load (the push is WORLD_CONNECTION). Never rejects. */
+  WORLD_STATUS: 'world:status',
+  /** Asks main to rebuild the world feed and say every agent's status again; answers the connection that results. Never rejects. */
+  WORLD_RETRY: 'world:retry'
 } as const
 
 /**
@@ -1189,10 +1193,13 @@ export const IPC_EVENTS = {
   RELAY_STATE: 'relay:state',
   /**
    * World view. A batch of AgentEvents (shared/world-events.ts), oldest first —
-   * an array so a future real feed can batch at 16ms as AGENT_EVENT does
-   * without changing the channel. Today only SIMULATE_AGENTS sends it.
+   * an array so a feed can batch without changing the channel. Two senders,
+   * one contract: the real feed (shared/world-feed.ts, folded from the agent
+   * runtime's own events and a terminal agent's state) and SIMULATE_AGENTS.
    */
   WORLD_EVENTS: 'world:events',
+  /** The feed's connection (shared/world-events.ts `WorldConnection`), pushed when it changes — the view shows "lost" and a retry. */
+  WORLD_CONNECTION: 'world:connection',
   /** M84. One watcher's state, sent as it changes (the tail is batched by the runner's own flush). */
   WATCHER_STATE: 'watcher:state',
   /** M85. Something under the vault root changed (debounced in main); the renderer re-reads. */
@@ -2278,11 +2285,17 @@ export interface CanvasBridge {
     onState(listener: (view: RelayView) => void): () => void
   }
   /**
-   * See WORLD_EVENTS. Subscribe-only: the renderer's agent-world store is the
-   * one subscriber, and every view reads the store, never this.
+   * See WORLD_EVENTS. The renderer's agent-world store is the one subscriber to
+   * both pushes, and every view reads the store, never this.
    */
   world: {
     onEvents(listener: (events: unknown[]) => void): () => void
+    /** See WORLD_CONNECTION. */
+    onConnection(listener: (connection: import('./world-events').WorldConnection) => void): () => void
+    /** See WORLD_STATUS. */
+    status(): Promise<import('./world-events').WorldConnection>
+    /** See WORLD_RETRY. */
+    retry(): Promise<import('./world-events').WorldConnection>
   }
   /** See TEAM_LIST / TEAM_OBSERVE / TEAM_OBSERVED. */
   team: {

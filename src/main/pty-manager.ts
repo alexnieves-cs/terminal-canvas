@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { ReviewIdentity } from '../shared/review-identity'
 import { createOutputCapture, mintCheckRunId, type CheckOutputRecord, type OutputCapture } from '../shared/check-output'
 import { agentArgs } from './agent-args'
-import { AGENT_CAPABILITIES } from '../shared/cost'
+import { AGENT_CAPABILITIES, type AgentKind } from '../shared/cost'
 import {
   closeSync,
   existsSync,
@@ -24,6 +24,7 @@ import type * as pty from 'node-pty'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import type {
   AgentState,
+  AgentStateUpdate,
   PanelId,
   PanelSpec,
   PtyCreateResult,
@@ -1631,6 +1632,15 @@ export class PtyManager {
    */
   ownerOf: () => string | null = () => null
 
+  /**
+   * A second reader of every `agent:state`, called AFTER the send with the CLI
+   * the panel was spawned for (undefined for a plain shell). The world view's
+   * feed is the one reader (main/bootstrap/world-feed-wiring.ts): observation
+   * only, so what this class sends, and when, is unchanged. Assigned beside
+   * `ownerOf`; the default sees nothing, which is every harness.
+   */
+  onAgentState: ((update: AgentStateUpdate, agent: AgentKind | undefined) => void) | null = null
+
   private send(channel: string, payload: unknown): void {
     if (channel === IPC_EVENTS.AGENT_STATE) {
       const owner = this.ownerOf()
@@ -1646,8 +1656,12 @@ export class PtyManager {
     while (start < this.ipcSendTimestamps.length && this.ipcSendTimestamps[start] < cutoff) start += 1
     if (start > 0) this.ipcSendTimestamps.splice(0, start)
     const target = this.getTarget()
-    if (!target || target.isDestroyed()) return
-    target.send(channel, payload)
+    if (target && !target.isDestroyed()) target.send(channel, payload)
+    if (channel === IPC_EVENTS.AGENT_STATE && this.onAgentState !== null) {
+      const update = payload as AgentStateUpdate
+      // A throw here must never reach the PTY path: the reader is instrumentation.
+      try { this.onAgentState(update, this.sessions.get(update.panelId)?.agent) } catch { /* the feed reports its own failures */ }
+    }
   }
 
   /**

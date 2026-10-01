@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, type ComponentRef, type JSX, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type JSX, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, OrbitControls } from '@react-three/drei'
 import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
 import { useWorldPalette } from './world-palette'
+import { cardTiers, clampDpr, createDprGovernor, DPR_MAX, DPR_MIN, type CardCandidate } from './world-perf'
 import { useStationPlan } from './world-roster'
+import type { Station } from './world-scene'
 import { dollyAt, popDelays, type Vec3, type WorldTransition } from './world-transition'
 
 /**
@@ -35,7 +37,9 @@ import { dollyAt, popDelays, type Vec3, type WorldTransition } from './world-tra
  * (4) **`frameloop="always"`, on purpose.** The Watch lens renders on demand
  *     because it is a still image between events. Here the robots' idle clips
  *     are the point, so something moves every frame; the cost is held down by
- *     a capped pixel ratio, a handful of draw calls and no shadow maps.
+ *     a capped pixel ratio (and `QualityGovernor`, which steps it down further
+ *     if the frame rate stays low), a handful of draw calls, no shadow maps, and
+ *     a budget of full cards (`CardBudget`) — the rest are dots.
  * (5) **The orbit controls are OFF while the camera is travelling, and the
  *     rest pose is whatever the orbit last held.** OrbitControls rebuilds the
  *     camera from its own spherical state on every `update()`, so a dolly
@@ -171,7 +175,65 @@ function StatsProbe({ target }: { target: RefObject<HTMLDivElement | null> }): n
   return null
 }
 
-export function WorldView({ transition }: { transition: WorldTransition }): JSX.Element {
+/**
+ * Steps the pixel ratio down when the frame rate stays low. Reads the same
+ * once-per-half-second window `StatsProbe` writes to the readout, but through
+ * its own frame hook so neither depends on the other being mounted.
+ */
+function QualityGovernor(): null {
+  const setDpr = useThree((s) => s.setDpr)
+  const governor = useRef(createDprGovernor(clampDpr(window.devicePixelRatio)))
+  const acc = useRef({ frames: 0, since: 0 })
+  useFrame((state) => {
+    const a = acc.current
+    const now = state.clock.elapsedTime
+    if (a.since === 0) a.since = now
+    a.frames++
+    const span = now - a.since
+    if (span < 0.5) return
+    // A window much longer than half a second means the loop stalled (a hidden
+    // window, a long model load): that is not a frame rate to act on.
+    if (span > 1.5) governor.current.gap()
+    else {
+      const next = governor.current.observe(a.frames / span)
+      if (next !== null) setDpr(next)
+    }
+    a.frames = 0
+    a.since = now
+  }, -1)
+  return null
+}
+
+/**
+ * Which agents get the FULL status card: the nearest few to the camera
+ * (`cardTiers`), re-ranked four times a second and only re-rendered when the
+ * set actually changes. A robot's station is its desk, not its live position —
+ * a walk to the table is a few metres and would only shuffle the ranking
+ * between agents that were close anyway.
+ */
+function CardBudget({ stations, onChange }: { stations: readonly Station[]; onChange: (full: ReadonlySet<string>) => void }): null {
+  const camera = useThree((s) => s.camera)
+  const current = useRef<ReadonlySet<string>>(new Set())
+  const last = useRef(-Infinity)
+  const stationsRef = useRef(stations)
+  stationsRef.current = stations
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    if (t - last.current < 0.25) return
+    last.current = t
+    const candidates: CardCandidate[] = stationsRef.current.map((station) => {
+      const at = station.home ?? station.seat
+      return { agentId: station.agentId, distance: Math.hypot(camera.position.x - at.x, camera.position.z - at.z) }
+    })
+    const next = cardTiers(candidates, current.current)
+    if (next === current.current) return
+    current.current = next
+    onChange(next)
+  })
+  return null
+}
+
+export function WorldView({ transition, reduced }: { transition: WorldTransition; reduced: boolean }): JSX.Element {
   const palette = useWorldPalette()
   const { plan } = useStationPlan()
   const stations = useMemo(() => [...plan.stations.values()], [plan])
@@ -182,8 +244,11 @@ export function WorldView({ transition }: { transition: WorldTransition }): JSX.
       return Math.hypot(at.x, at.z)
     })
     const pops = popDelays(list)
-    return new Map(stations.map((station, i) => [station.agentId, pops[i]!]))
-  }, [stations])
+    // prefers-reduced-motion: every robot appears with the first, not in a wave.
+    return new Map(stations.map((station, i) => [station.agentId, reduced ? 0 : pops[i]!]))
+  }, [stations, reduced])
+  // Until the first ranking (a quarter second) every card is full, so the room never opens bare.
+  const [full, setFull] = useState<ReadonlySet<string> | null>(null)
   const stats = useRef<HTMLDivElement>(null)
   const cards = useRef<HTMLDivElement>(null)
   const controls = useRef<OrbitControlsRef>(null)
@@ -198,7 +263,7 @@ export function WorldView({ transition }: { transition: WorldTransition }): JSX.
     <div className="world-view" data-world-view>
       <Canvas
         flat
-        dpr={[1, 1.75]}
+        dpr={[DPR_MIN, DPR_MAX]}
         camera={{ position: [start.x, start.y, start.z], fov: 40, near: 0.1, far: 140 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
@@ -207,12 +272,14 @@ export function WorldView({ transition }: { transition: WorldTransition }): JSX.
         <Lights dark={palette.dark} />
         <WorldOffice stations={stations} palette={palette} />
         {stations.map((station) => (
-          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} />
+          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={full !== null && !full.has(station.agentId)} reduced={reduced} />
         ))}
         <ContactShadows position={[0, 0.004, 0]} opacity={palette.dark ? 0.7 : 0.4} scale={plan.arcRadius * 2 + 10} blur={2.2} far={2.4} resolution={512} />
         <Controls controls={controls} limit={limit} maxDistance={Math.max(30, plan.arcRadius * 5)} />
         <TransitionRig transition={transition} start={start} controls={controls} />
         <StatsProbe target={stats} />
+        <QualityGovernor />
+        <CardBudget stations={stations} onChange={setFull} />
       </Canvas>
       <div className="world-view__cards" ref={cards} />
       <div className="world-view__stats" ref={stats} aria-hidden="true" />

@@ -140,3 +140,12 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
   if (e.type === 'status') return typeof e.payload === 'string' && STATUSES.has(e.payload)
   return typeof e.payload === 'object' && e.payload !== null
 }
+
+/**
+ * Whether the feed is delivering. The feed is main → renderer over IPC, so
+ * "disconnected" is not a socket dropping: it is main's feed failing (its
+ * translator or its send threw) or the bridge not being there at all. `lost`
+ * carries the reason a person can read, and the view offers a retry — which
+ * asks main to rebuild the feed and say every agent's status again.
+ */
+export type WorldConnection = { state: 'live' } | { state: 'lost'; reason: string }

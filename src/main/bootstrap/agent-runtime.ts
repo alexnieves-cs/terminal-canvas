@@ -176,6 +176,9 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     // M376. A permission request may also go to the team (off by default).
     state.teamAsks?.agentEvent(event)
     state.window?.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
+    // The world view's feed. AFTER every send above, so nothing the runtime
+    // does waits on it; it never throws (bootstrap/world-feed-wiring.ts).
+    state.worldFeed?.session(event)
   })
 }
 

@@ -329,6 +329,21 @@ const INERT_FLOWCHARTS: FlowchartHandlers = {
   read: async () => ({ kind: 'refused', reason: 'reading a flowchart file is not available here' })
 }
 
+/**
+ * The world feed's two doors: its connection as of now, and a retry that
+ * rebuilds it (main/bootstrap/world-feed-wiring.ts). Appended last; an unwired
+ * harness answers `live`, which is true of a feed that is not there to fail.
+ */
+export interface WorldHandlers {
+  status(): import('../shared/world-events').WorldConnection
+  retry(): import('../shared/world-events').WorldConnection
+}
+
+const INERT_WORLD: WorldHandlers = {
+  status: () => ({ state: 'live' }),
+  retry: () => ({ state: 'live' })
+}
+
 /** M188. The fetch node's one door; see main/node-run.ts. */
 export interface NodeHandlers {
   fetch(req: { url: string; method?: string }): Promise<NodeFetchResult>
@@ -794,7 +809,9 @@ export function registerIpcHandlers(
   /** The pty relay. Appended last, like every collaborator before it. */
   relay: RelayHandlers = INERT_RELAY,
   /** The flowchart's file doors. Appended last, like every collaborator before it — an unwired harness gets a named refusal, never a dialog. */
-  flowcharts: FlowchartHandlers = INERT_FLOWCHARTS
+  flowcharts: FlowchartHandlers = INERT_FLOWCHARTS,
+  /** The world feed's status and retry. Appended last, like every collaborator before it. */
+  world: WorldHandlers = INERT_WORLD
 ): void {
   registerRelayHandlers(relay)
   ipcMain.handle(IPC.PRESENCE_LOCAL, (_event, raw: unknown) => {
@@ -1136,6 +1153,8 @@ export function registerIpcHandlers(
   // Shape-checked in main/flowchart-files.ts, which answers a refusal by name for anything malformed — so what arrives here is passed on untouched.
   ipcMain.handle(IPC.EXPORT_FLOWCHART, (_event, req: unknown) => flowcharts.export(req))
   ipcMain.handle(IPC.FLOWCHART_READ, (_event, req: unknown) => flowcharts.read(req))
+  ipcMain.handle(IPC.WORLD_STATUS, () => world.status())
+  ipcMain.handle(IPC.WORLD_RETRY, () => world.retry())
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
   // M300. The same clamp the list read takes, for the same reason: a limit is

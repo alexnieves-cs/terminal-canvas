@@ -1,5 +1,6 @@
-import { Component, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type RefObject } from 'react'
-import { useAgentIds } from './agent-world-store'
+import { Component, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode, type RefObject } from 'react'
+import { retryAgentWorld, useAgentIds, useWorldConnection } from './agent-world-store'
+import { prefersReducedMotion, worldFits } from './world-perf'
 import { useRoster } from './world-roster'
 import { setWorldOn } from './world-toggle'
 import { createWorldTransition, hostLook, WORLD_TRANSITION_MS } from './world-transition'
@@ -67,17 +68,44 @@ class WorldBoundary extends Component<{ children: ReactNode }, { failed: string 
   }
 }
 
-function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+/** The reduced-motion setting, live: a person may flip it while the view is open. */
+function useReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+      query.addEventListener('change', listener)
+      return () => query.removeEventListener('change', listener)
+    },
+    prefersReducedMotion,
+    () => false
+  )
+}
+
+/** Whether the window is wide enough for the world (`worldFits`), live through a resize. */
+function useWorldFits(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      window.addEventListener('resize', listener)
+      return () => window.removeEventListener('resize', listener)
+    },
+    () => worldFits(window.innerWidth),
+    () => true
+  )
 }
 
 export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HTMLElement | null> }): JSX.Element | null {
   // Mounted from the first frame of the move to the last of the move back.
   const [present, setPresent] = useState(on)
   const layer = useRef<HTMLDivElement>(null)
-  const transition = useMemo(() => createWorldTransition(on ? 1 : 0, prefersReducedMotion() ? 0 : WORLD_TRANSITION_MS), [])
+  // prefers-reduced-motion skips the choreography: the move is a snap (0ms), and
+  // the scene drops its stagger and its arrival grow (the `reduced` prop).
+  const reduced = useReducedMotion()
+  const transition = useMemo(() => createWorldTransition(on ? 1 : 0, reduced ? 0 : WORLD_TRANSITION_MS), [reduced])
+  const fits = useWorldFits()
   const agents = useAgentIds().length
   const live = useRoster().length
+  const connection = useWorldConnection()
+  const [retrying, setRetrying] = useState(false)
 
   useLayoutEffect(() => {
     if (on) setPresent(true)
@@ -146,23 +174,41 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
     return () => window.removeEventListener('keydown', onKey)
   }, [on])
 
+  const retry = (): void => {
+    setRetrying(true)
+    void retryAgentWorld().finally(() => setRetrying(false))
+  }
+
   if (!on && !present) return null
   return (
     <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-on={on ? '' : undefined}>
-      <WorldBoundary>
-        <Suspense fallback={<p className="world-route__note">Loading the world…</p>}>
-          <WorldView transition={transition} />
-        </Suspense>
-      </WorldBoundary>
-      {agents === 0 ? (
-        <p className="world-route__note" data-world-empty>
-          No agents yet. Start the app with <code>SIMULATE_AGENTS=true</code> to feed the world a scripted session.
-        </p>
-      ) : live === 0 ? (
-        <p className="world-route__note" data-world-empty>
-          No agent is working right now. Idle and finished ones stay on the canvas.
-        </p>
-      ) : null}
+      {fits ? (
+        <>
+          <WorldBoundary>
+            <Suspense fallback={<p className="world-route__note">Loading the world…</p>}>
+              <WorldView transition={transition} reduced={reduced} />
+            </Suspense>
+          </WorldBoundary>
+          {connection.state === 'lost' ? (
+            // The feed's own failure, with the way out. The room stays up under it,
+            // showing the last thing it was told — a retry rebuilds the feed and says every agent again.
+            <div className="world-route__note world-route__note--stage world-route__note--action" role="alert" data-world-lost>
+              <p>The live agent feed disconnected: {connection.reason}</p>
+              <button type="button" onClick={retry} disabled={retrying}>{retrying ? 'Retrying…' : 'Retry'}</button>
+            </div>
+          ) : agents === 0 || live === 0 ? (
+            <p className="world-route__note world-route__note--stage" role="status" data-world-empty>
+              No live agents. Start one from the canvas.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        // No scene, no lazy load, no WebGL context: below the width the room is a postage stamp.
+        <div className="world-route__note world-route__note--stage world-route__note--action" role="status" data-world-narrow>
+          <p>The world view needs a wider window. Widen this one, or go back to the canvas.</p>
+          <button type="button" onClick={() => setWorldOn(false)}>Back to canvas</button>
+        </div>
+      )}
     </div>
   )
 }

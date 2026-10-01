@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { applyAgentEvent, emptyAgent, isAgentEvent, type AgentRecord, type AgentStatus } from '@shared/world-events'
+import { applyAgentEvent, emptyAgent, isAgentEvent, type AgentRecord, type AgentStatus, type WorldConnection } from '@shared/world-events'
 import type { CanvasBridge } from '@shared/ipc-contract'
 
 /**
@@ -59,20 +59,72 @@ export function ingestAgentEvents(batch: readonly unknown[]): void {
   notifyAll(worldListeners)
 }
 
+let connection: WorldConnection = { state: 'live' }
+const connectionListeners = new Set<() => void>()
+
+function setConnection(next: WorldConnection): void {
+  if (next.state === connection.state && (next.state === 'live' || (connection.state === 'lost' && connection.reason === next.reason))) return
+  connection = next
+  notifyAll(connectionListeners)
+}
+
 let disconnect: (() => void) | null = null
+/** The bridge `connectAgentWorld` was given, kept so a retry from a view goes through here and no view holds the bridge. */
+let world: CanvasBridge['world'] | null = null
 
 /**
  * Starts the feed. Idempotent, and called once at module scope in main.tsx —
  * ahead of the first render for the reason the default-template subscription
  * there is: a push that lands before a component's effect has subscribed is
  * lost, and nothing re-sends it.
+ *
+ * Also the one subscriber to the feed's CONNECTION: main reports `lost` when
+ * its translator or its send fails, and a bridge with no `world` door at all
+ * (an older preload) is `lost` from the start rather than an empty room that
+ * looks like "no agents".
  */
 export function connectAgentWorld(bridge: Pick<CanvasBridge, 'world'>): () => void {
-  if (!disconnect) disconnect = bridge.world.onEvents(ingestAgentEvents)
+  if (!disconnect) {
+    const door = bridge.world as CanvasBridge['world'] | undefined
+    if (door === undefined) {
+      setConnection({ state: 'lost', reason: 'This window has no world feed.' })
+    } else {
+      world = door
+      const offEvents = door.onEvents(ingestAgentEvents)
+      const offConnection = door.onConnection(setConnection)
+      // The push only fires on a CHANGE; a feed that failed before this window
+      // loaded would otherwise read as live.
+      void door.status().then(setConnection, () => undefined)
+      disconnect = () => { offEvents(); offConnection() }
+    }
+  }
   return () => {
     disconnect?.()
     disconnect = null
   }
+}
+
+/**
+ * Asks main to rebuild the feed and say every agent's status again. The
+ * answer is the connection that results; it is also pushed, so every view that
+ * shows `lost` clears at once. Never rejects: a retry that cannot even reach
+ * main leaves the connection `lost`, with the reason.
+ */
+export async function retryAgentWorld(): Promise<void> {
+  try {
+    if (world === null) throw new Error('This window has no world feed.')
+    setConnection(await world.retry())
+  } catch (error) {
+    setConnection({ state: 'lost', reason: error instanceof Error ? error.message : String(error) })
+  }
+}
+
+export function getWorldConnection(): WorldConnection {
+  return connection
+}
+
+export function useWorldConnection(): WorldConnection {
+  return useSyncExternalStore((l) => subscribeIn(connectionListeners, l), getWorldConnection, getWorldConnection)
 }
 
 export function getAgent(agentId: string): AgentRecord | undefined {

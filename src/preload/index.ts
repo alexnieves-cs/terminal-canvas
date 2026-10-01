@@ -4,6 +4,7 @@ import { hookupIpc } from '@sentry/electron/preload-namespaced'
 import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
+import type { WorldConnection } from '../shared/world-events'
 import type { TeamObserved } from '../shared/team'
 import type { TeamAskRow } from '../shared/team-asks'
 import type { AccountSessionMeta } from '../shared/account'
@@ -438,7 +439,10 @@ const bridge: CanvasBridge = {
     onState: (listener) => subscribe<RelayView>(IPC_EVENTS.RELAY_STATE, listener)
   },
   world: {
-    onEvents: (listener) => subscribe<unknown[]>(IPC_EVENTS.WORLD_EVENTS, listener)
+    onEvents: (listener) => subscribe<unknown[]>(IPC_EVENTS.WORLD_EVENTS, listener),
+    onConnection: (listener) => subscribe<WorldConnection>(IPC_EVENTS.WORLD_CONNECTION, listener),
+    status: () => ipcRenderer.invoke(IPC.WORLD_STATUS),
+    retry: () => ipcRenderer.invoke(IPC.WORLD_RETRY)
   },
   team: {
     list: (orgId) => ipcRenderer.invoke(IPC.TEAM_LIST, orgId),
