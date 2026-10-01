@@ -448,6 +448,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        auth:changed
                        text:remote
                        relay:data / relay:state
+                       world:events (SIMULATE_AGENTS only, for now)
                        routine:fire
                        canvas:tidy / canvas:flip
                        canvas:feedback

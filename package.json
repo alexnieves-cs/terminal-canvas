@@ -103,7 +103,8 @@
     "relay:deploy": "bash server/relay/deploy/deploy.sh",
     "collab:deploy": "bash server/collab/deploy/deploy.sh",
     "collab:backup": "node scripts/collab-server.cjs --build-only && node out/collab/backup.cjs",
-    "verify:relay": "node scripts/verify-relay.cjs"
+    "verify:relay": "node scripts/verify-relay.cjs",
+    "verify:world": "node scripts/verify-world.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

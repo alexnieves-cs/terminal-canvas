@@ -20,6 +20,8 @@ import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
+import { startWorldSimWiring } from './bootstrap/world-sim-wiring'
+import type { WorldSim } from './world-sim'
 import { createShareControl } from './share-control'
 import { confirm } from './bootstrap/dialogs'
 import { createWindow, sendToRenderer } from './bootstrap/window'
@@ -125,6 +127,9 @@ const teamReporter = createTeamReporterWiring(state.presence, account)
 // The pty relay: terminals whose process runs on the team's relay VM. Built
 // here; opens no socket until a relay panel asks, so nothing to start.
 const relay = createRelayWiring(state, account)
+// SIMULATE_AGENTS=true only: the scripted world-event feed, started once the
+// window exists and stopped at quit. A no-op in every other launch.
+let worldSim: WorldSim | null = null
 // M336–M337. `tc accounts|use|shares|share|open-share|share-role`: the same
 // account and share doors the app's menu and dialog use, each change behind a
 // Cancel-default dialog.
@@ -361,6 +366,7 @@ app.whenReady().then(async () => {
     createFlowchartHandlers(state)
   )
   createWindow(state, stores)
+  worldSim = startWorldSimWiring(state)
 
   // M55. The restore answer reaches the renderer once it can hold panels;
   // sendToRenderer waits for the load. The ids are the sessions' own.
@@ -422,6 +428,7 @@ app.on('before-quit', () => {
   // Relay sockets closed as detaches would be: a quit is not a network drop,
   // so a guest's control is handed back now rather than after the 60s grace.
   relay.dispose()
+  worldSim?.stop()
   // Offline in the org's rows too; not awaited — quit does not wait on a network.
   void teamReporter.stop()
 

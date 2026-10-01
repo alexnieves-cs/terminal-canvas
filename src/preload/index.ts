@@ -437,6 +437,9 @@ const bridge: CanvasBridge = {
     onData: (listener) => subscribe<RelayData>(IPC_EVENTS.RELAY_DATA, listener),
     onState: (listener) => subscribe<RelayView>(IPC_EVENTS.RELAY_STATE, listener)
   },
+  world: {
+    onEvents: (listener) => subscribe<unknown[]>(IPC_EVENTS.WORLD_EVENTS, listener)
+  },
   team: {
     list: (orgId) => ipcRenderer.invoke(IPC.TEAM_LIST, orgId),
     observe: (req) => ipcRenderer.invoke(IPC.TEAM_OBSERVE, req),

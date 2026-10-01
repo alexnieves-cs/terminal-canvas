@@ -10,6 +10,7 @@ import { installDropGuard } from './drop-guard'
 import { LAST_VERSION_KEY, type StartupInput } from './canvas/splash'
 import { stampBootTheme } from './canvas/useTheme'
 import { noteBootIssue } from './session/boot-issues'
+import { connectAgentWorld } from './world/agent-world-store'
 
 // Installed before React mounts, and never uninstalled: an unhandled file drop
 // navigates the renderer, which kills every PTY in the window. Nothing about
@@ -44,6 +45,10 @@ let defaultTemplate: PresetTemplate | undefined
 window.canvas.preset.onDefault((template) => {
   defaultTemplate = template
 })
+
+// The world feed, for the same race: subscribed before boot()'s first await so
+// a push that lands during load reaches the store. Never disconnected.
+connectAgentWorld(window.canvas)
 
 // The starting canvas is awaited BEFORE the first render rather than loaded in
 // an effect afterwards. useState is synchronous, so an async initial state

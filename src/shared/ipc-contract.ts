@@ -1187,6 +1187,12 @@ export const IPC_EVENTS = {
   RELAY_DATA: 'relay:data',
   /** A relay panel's view — connection, role, the control picture — on every change. */
   RELAY_STATE: 'relay:state',
+  /**
+   * World view. A batch of AgentEvents (shared/world-events.ts), oldest first —
+   * an array so a future real feed can batch at 16ms as AGENT_EVENT does
+   * without changing the channel. Today only SIMULATE_AGENTS sends it.
+   */
+  WORLD_EVENTS: 'world:events',
   /** M84. One watcher's state, sent as it changes (the tail is batched by the runner's own flush). */
   WATCHER_STATE: 'watcher:state',
   /** M85. Something under the vault root changed (debounced in main); the renderer re-reads. */
@@ -2270,6 +2276,13 @@ export interface CanvasBridge {
     view(panelId: string): Promise<RelayView | null>
     onData(listener: (data: RelayData) => void): () => void
     onState(listener: (view: RelayView) => void): () => void
+  }
+  /**
+   * See WORLD_EVENTS. Subscribe-only: the renderer's agent-world store is the
+   * one subscriber, and every view reads the store, never this.
+   */
+  world: {
+    onEvents(listener: (events: unknown[]) => void): () => void
   }
   /** See TEAM_LIST / TEAM_OBSERVE / TEAM_OBSERVED. */
   team: {
