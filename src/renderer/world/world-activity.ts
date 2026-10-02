@@ -141,3 +141,66 @@ export function isDelegateTool(tool: string): boolean {
 export function isEditTool(tool: string): boolean {
   return EDITS.has(tool)
 }
+
+// ── the pose (M422) ──────────────────────────────────────────────────────────
+
+/**
+ * What the body does for an activity, as TARGETS the robot's frame loop damps
+ * toward — so the motion is a function of the activity a test can read, and
+ * the loop stays a mixer of weights and sines. Radians unless named.
+ *
+ * The rule: a person at the far side of the room must tell the activities
+ * apart by silhouette alone. Reading is a still head bowed at the desk;
+ * searching is the same head sweeping side to side; editing is the fast typing
+ * beat; a shell line is a slower one; a test run is arms folded and a foot
+ * tapping while a ring turns over the head; the web is the head up; a
+ * delegation is an arm out toward the sub-agent; waiting is a hand held up at
+ * the table; quiet is a slump. No two share all of their big numbers.
+ */
+export interface Pose {
+  /** 0…1: how much of the typing beat. */
+  type: number
+  /** The beat's rate, rad/s. */
+  typeHz: number
+  /** Forward lean of the whole body (+ is forward). */
+  lean: number
+  /** Head pitch (+ is down). */
+  nod: number
+  /** Head sweep amplitude and rate. */
+  scan: number
+  scanHz: number
+  /** Arms forward (both), from rest: negative raises them toward the desk. */
+  reach: number
+  /** 0…1: arms folded across the chest. */
+  fold: number
+  /** 0…1: the right hand held up (a request). */
+  handUp: number
+  /** 0…1: the right arm out, pointing. */
+  point: number
+  /** 0…1: the slow tap of a waiting foot. */
+  tap: number
+  /** 0…1: the ring over the head (a test run, a delegation). */
+  ring: number
+}
+
+const REST: Pose = { type: 0, typeHz: 17, lean: 0, nod: 0, scan: 0.14, scanHz: 0.5, reach: 0, fold: 0, handUp: 0, point: 0, tap: 0, ring: 0 }
+
+export const POSES: Readonly<Record<Activity, Pose>> = {
+  read: { ...REST, lean: 0.1, nod: 0.26, scan: 0.05, scanHz: 0.7, reach: -0.55 },
+  search: { ...REST, type: 0.25, typeHz: 9, lean: 0.08, nod: 0.12, scan: 0.42, scanHz: 1.7, reach: -0.6 },
+  edit: { ...REST, type: 1, typeHz: 17, lean: 0.16, nod: 0.14, scan: 0, reach: -1.0 },
+  shell: { ...REST, type: 0.55, typeHz: 9, lean: 0.12, nod: 0.08, scan: 0.04, reach: -0.9 },
+  test: { ...REST, lean: -0.02, nod: -0.05, scan: 0.1, scanHz: 0.9, fold: 1, tap: 1, ring: 1 },
+  web: { ...REST, lean: 0.02, nod: -0.24, scan: 0.22, scanHz: 0.8, reach: -0.3 },
+  delegate: { ...REST, lean: 0.04, nod: 0, scan: 0.06, point: 1, ring: 0.6 },
+  think: { ...REST, lean: -0.06, nod: -0.16, scan: 0.1, scanHz: 0.4 },
+  talk: { ...REST, lean: 0.03, nod: -0.05, scan: 0.2, scanHz: 1.1, reach: -0.25 },
+  wait: { ...REST, lean: 0.08, nod: -0.1, scan: 0.12, scanHz: 0.6, handUp: 1, tap: 0.5 },
+  stuck: { ...REST, lean: -0.08, nod: 0.3, scan: 0.03, scanHz: 0.3 },
+  quiet: { ...REST, lean: -0.04, nod: 0.34, scan: 0.02, scanHz: 0.25 },
+  rest: REST
+}
+
+export function poseOf(activity: Activity): Pose {
+  return POSES[activity]
+}

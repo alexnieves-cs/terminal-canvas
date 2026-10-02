@@ -135,7 +135,7 @@ function Desk({ station, label, leftAt, reduced }: { station: Station; label: st
  * built in code, set on THIS material and never as `scene.environment` — and
  * without it a black clearcoat reflects nothing but the key light's one hot spot.
  */
-function MeetingTable(): JSX.Element {
+function MeetingTable({ waiting }: { waiting: boolean }): JSX.Element {
   const gl = useThree((s) => s.gl)
   const env = useMemo(() => studioEnv(gl), [gl])
   const plate = useMemo(() => {
@@ -160,7 +160,8 @@ function MeetingTable(): JSX.Element {
         <cylinderGeometry args={[0.24, 0.36, TABLE_PLATE.top - TABLE_PLATE.thickness, 28]} />
         <meshStandardMaterial color="#14171d" roughness={0.5} metalness={0.2} />
       </mesh>
-      <TrimLine path={line} y={TABLE_PLATE.top + 0.033} half={TABLE_PLATE.lineHalf} glowIn={TABLE_PLATE.glow} glowOut={TABLE_PLATE.glow} peak={0.38} />
+      {/* M422: the decision table — amber while anyone waits at it on a person, the room's cyan otherwise. */}
+      <TrimLine path={line} y={TABLE_PLATE.top + 0.033} half={TABLE_PLATE.lineHalf} glowIn={TABLE_PLATE.glow * (waiting ? 1.6 : 1)} glowOut={TABLE_PLATE.glow * (waiting ? 1.6 : 1)} peak={waiting ? 0.55 : 0.38} {...(waiting ? { hue: STUDIO.amber } : {})} />
     </group>
   )
 }
@@ -169,13 +170,16 @@ export const WorldOffice = memo(function WorldOffice({
   stations,
   leftAt,
   arcRadius,
-  reduced
+  reduced,
+  waiting
 }: {
   stations: readonly Station[]
   /** When each leaving agent left (see `useLeavers`, WorldView): its desk sinks with its robot. */
   leftAt: ReadonlyMap<string, number>
   arcRadius: number
   reduced: boolean
+  /** How many live agents wait on a person — the table is where they stand. */
+  waiting: number
 }): JSX.Element {
   const half = slabHalf(arcRadius)
   // "DESK 01" floats over the first desk in the room — the first station that has one (a conductor has none).
@@ -183,7 +187,7 @@ export const WorldOffice = memo(function WorldOffice({
   return (
     <group>
       <WorldPlatform arcRadius={arcRadius} />
-      <MeetingTable />
+      <MeetingTable waiting={waiting > 0} />
       <WorldProps half={half} reduced={reduced} />
       {stations.map((station) => (
         <Desk key={station.agentId} station={station} label={station.agentId === first ? 'DESK 01' : null} leftAt={leftAt.get(station.agentId) ?? null} reduced={reduced} />

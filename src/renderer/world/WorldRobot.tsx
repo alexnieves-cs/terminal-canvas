@@ -8,7 +8,9 @@ import { getAgent, getAgentIds, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { glowScale, useBloomOn } from './world-bloom'
 import { studioEnv } from './world-gloss'
-import { agentTint, effectOf, goalOf, hopsOn, isTyping, leanOf, type Station } from './world-scene'
+import { activityOf, poseOf, POSES, type Activity, type Pose } from './world-activity'
+import { agentTint, effectOf, goalOf, hopsOn, leanOf, type Station } from './world-scene'
+import { CLICK_SLOP_PX, selectAgent, useSelectedAgent } from './world-select'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
@@ -89,6 +91,9 @@ const SHAKE_S = 0.55
 const TILT_S = 1.3
 const BLINK_EVERY_S = 4.3
 
+/** Every number a pose has, damped one by one toward the activity's. */
+const POSE_KEYS = Object.keys(POSES.rest) as (keyof Pose)[]
+
 interface Kit {
   leg: THREE.BufferGeometry
   torso: THREE.BufferGeometry
@@ -97,9 +102,14 @@ interface Kit {
   visor: THREE.BufferGeometry
   eyes: THREE.BufferGeometry
   halo: THREE.BufferGeometry
+  /** The ring over the head while a test runs or a sub-agent is out (M422). */
+  ring: THREE.BufferGeometry
+  /** The floor ring under the robot a person picked. */
+  pick: THREE.BufferGeometry
   visorMaterial: THREE.MeshPhysicalMaterial
   eyeMaterial: THREE.MeshBasicMaterial
   haloMaterial: THREE.MeshBasicMaterial
+  ringMaterial: THREE.MeshBasicMaterial
 }
 
 /** A soft elliptical falloff, drawn in code (the CSP takes no image from elsewhere, and this needs none). */
@@ -191,10 +201,14 @@ function robotKit(): Kit {
   halo.translate(0, -EYE.y, 0)
   kit = {
     leg, torso, arm, head, visor, eyes, halo,
+    // A broken ring (three quarters of a torus), so its turning reads at any distance.
+    ring: new THREE.TorusGeometry(0.26, 0.022, 8, 40, Math.PI * 1.5).rotateX(Math.PI / 2),
+    pick: new THREE.RingGeometry(0.46, 0.53, 56).rotateX(-Math.PI / 2),
     visorMaterial: new THREE.MeshPhysicalMaterial({ color: '#07090d', roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.7 }),
     // Unlit and outside tone mapping: a glow that reads the same in a light or a dark room.
     eyeMaterial: new THREE.MeshBasicMaterial({ color: EYE_COLOR, toneMapped: false }),
-    haloMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', alphaMap: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
+    haloMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', alphaMap: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+    ringMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', transparent: true, opacity: 0.9, toneMapped: false })
   }
   return kit
 }
@@ -243,9 +257,11 @@ interface Motion {
   moving: boolean
   cursor: number
   rec: ReturnType<typeof getAgent>
-  typing: boolean
-  typingCheckedAt: number
-  typingW: number
+  /** What the hands are on (`activityOf`), re-read twice a second — an open call goes stale with the clock. */
+  activity: Activity
+  activityCheckedAt: number
+  /** The pose as it is NOW, damped toward `POSES[activity]` every frame. */
+  pose: Pose
   walkW: number
   lean: number
   nod: number
@@ -295,6 +311,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   // A string snapshot: re-renders on a status CHANGE only, which is when the
   // bug appears or goes. Everything finer-grained is read in the frame loop.
   const status = useAgentStatus(agentId)
+  const picked = useSelectedAgent() === agentId
 
   const placer = useRef<THREE.Group>(null)
   const bob = useRef<THREE.Group>(null)
@@ -307,6 +324,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   const legR = useRef<THREE.Group>(null)
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
+  const ring = useRef<THREE.Mesh>(null)
   // This robot's pop (0…1), written by the frame loop and read by its card.
   const pop = useRef(0)
   // The delay is read in the frame loop, which must not be rebuilt for it.
@@ -332,7 +350,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   const motion = useRef<Motion>({
     ready: false, left: false, yaw: 0, moving: false,
     cursor: getAgent(agentId)?.lastSeq ?? -Infinity, rec: undefined,
-    typing: false, typingCheckedAt: -Infinity, typingW: 0, walkW: 0, lean: 0, nod: 0,
+    activity: 'rest', activityCheckedAt: -Infinity, pose: { ...POSES.rest }, walkW: 0, lean: 0, nod: 0,
     tiltAt: -Infinity, waveAt: -Infinity, hitAt: -Infinity, hopAt: -Infinity
   })
 
@@ -376,12 +394,12 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
         else if (fx === 'hit') st.hitAt = t
       }
       st.cursor = Math.max(st.cursor, rec.lastSeq)
-      st.typingCheckedAt = -Infinity
+      st.activityCheckedAt = -Infinity
     }
     // An open call goes stale with the clock, not with an event, so look again.
-    if (rec && t - st.typingCheckedAt > 0.5) {
-      st.typing = isTyping(rec, Date.now())
-      st.typingCheckedAt = t
+    if (rec && t - st.activityCheckedAt > 0.5) {
+      st.activity = activityOf(rec, Date.now())
+      st.activityCheckedAt = t
     }
 
     // ── where to be, and getting there ───────────────────────────────────
@@ -413,15 +431,20 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     group.rotation.y = st.yaw
 
     // ── the body: every layer a damped weight times a sine ────────────────
-    const typing = st.typing && !st.moving
-    const thinking = rec?.status === 'thinking' && !st.moving
-    st.typingW = damp(st.typingW, typing ? 1 : 0, 9, dt)
+    // The activity's pose (world-activity.ts) is the target; walking overrides
+    // the upper body, because a robot crossing the room is walking, whatever
+    // its last call was.
+    const want = poseOf(st.moving ? 'rest' : st.activity)
+    const p = st.pose
+    for (const key of POSE_KEYS) p[key] = damp(p[key], want[key], key === 'typeHz' ? 4 : 6, dt)
     st.walkW = damp(st.walkW, st.moving ? 1 : 0, 10, dt)
-    st.lean = damp(st.lean, leanOf(rec?.status ?? 'idle', typing, st.moving), 6, dt)
-    st.nod = damp(st.nod, typing ? 0.14 : thinking ? -0.16 : 0, 5, dt)
+    st.lean = damp(st.lean, st.moving ? leanOf(rec?.status ?? 'idle', false, true) : p.lean, 6, dt)
+    st.nod = damp(st.nod, p.nod, 5, dt)
+    const thinking = st.activity === 'think' && !st.moving
     const step = Math.sin(t * STEP_HZ)
     const shakeU = (t - st.hitAt) / SHAKE_S
     const shake = shakeU >= 0 && shakeU < 1 ? Math.sin(shakeU * 26) * 0.12 * (1 - shakeU) : 0
+    const tap = p.tap * Math.max(0, Math.sin(t * 5.2 + phase))
 
     if (lean.current) {
       lean.current.rotation.x = st.lean
@@ -429,32 +452,45 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     }
     const hop = pulse(t, st.hopAt, HOP_S)
     if (hopper.current) {
-      hopper.current.position.y = hop * 0.16 + st.walkW * Math.abs(step) * 0.05
+      hopper.current.position.y = hop * 0.16 + st.walkW * Math.abs(step) * 0.05 + tap * 0.02
       // Stretch on the way up, settle back as it lands.
       hopper.current.scale.set(1 - hop * 0.05, 1 + hop * 0.09, 1 - hop * 0.05)
     }
+    const beatW = p.type * (1 - st.walkW)
     if (upper.current) {
-      upper.current.position.y = Math.sin(t * 2.1 + phase) * 0.022 * (1 - st.walkW) + st.typingW * Math.abs(Math.sin(t * 8.5)) * 0.012
+      upper.current.position.y = Math.sin(t * 2.1 + phase) * 0.022 * (1 - st.walkW) + beatW * Math.abs(Math.sin(t * p.typeHz * 0.5)) * 0.012
     }
     if (legL.current && legR.current) {
       legL.current.rotation.x = st.walkW * step * 0.55
-      legR.current.rotation.x = -st.walkW * step * 0.55
+      legR.current.rotation.x = -st.walkW * step * 0.55 - tap * 0.18
     }
-    const beat = Math.sin(t * 17)
+    const beat = Math.sin(t * p.typeHz)
     const wave = Math.min(1, (t - st.waveAt) / 0.25, (st.waveAt + WAVE_S - t) / 0.3)
     const waveW = wave > 0 ? wave : 0
+    const still = 1 - st.walkW
+    // Folded: both forearms forward and across. Hand up: the right arm high and
+    // steady. Pointing: the right arm straight out toward the sub-agent.
+    const fold = p.fold * still
+    const up = Math.max(p.handUp * still, waveW)
+    const point = p.point * still
     if (armL.current) {
-      armL.current.rotation.x = -st.walkW * step * 0.5 + st.typingW * (-1.0 + beat * 0.18)
-      armL.current.rotation.z = -ARM_REST + Math.sin(t * 1.7 + phase) * 0.03 * (1 - st.typingW)
+      armL.current.rotation.x = -st.walkW * step * 0.5 + (p.reach + beatW * beat * 0.18) * still - fold * 1.25
+      armL.current.rotation.z = -ARM_REST + Math.sin(t * 1.7 + phase) * 0.03 * (1 - beatW) + fold * 0.85
     }
     if (armR.current) {
-      armR.current.rotation.x = (st.walkW * step * 0.5 + st.typingW * (-1.0 - beat * 0.18)) * (1 - waveW)
-      armR.current.rotation.z = ARM_REST + Math.sin(t * 1.7 + phase + 1) * 0.03 * (1 - st.typingW) + waveW * (2.25 + Math.sin(t * 13) * 0.32)
+      armR.current.rotation.x = (st.walkW * step * 0.5 + (p.reach - beatW * beat * 0.18) * still - fold * 1.25 - point * 1.45) * (1 - up)
+      armR.current.rotation.z = ARM_REST + Math.sin(t * 1.7 + phase + 1) * 0.03 * (1 - beatW) - fold * 0.85 + point * 0.25 +
+        up * (2.5 + (waveW > p.handUp ? Math.sin(t * 13) * 0.32 : Math.sin(t * 2.4) * 0.05))
     }
     if (head.current) {
       head.current.rotation.x = st.nod
-      head.current.rotation.y = Math.sin(t * 0.5 + phase) * 0.14 * (1 - st.typingW) * (1 - st.walkW)
+      head.current.rotation.y = Math.sin(t * p.scanHz * 2 + phase) * p.scan * still
       head.current.rotation.z = (thinking ? Math.sin(t * 1.5) * 0.07 : 0) + 0.32 * pulse(t, st.tiltAt, TILT_S)
+    }
+    if (ring.current) {
+      ring.current.visible = p.ring > 0.02
+      ring.current.rotation.y = t * (st.activity === 'delegate' ? 1.6 : 3.2)
+      ring.current.scale.setScalar(0.6 + 0.4 * p.ring)
     }
     if (eyes.current) {
       const blink = ((t + phase * 3) % BLINK_EVERY_S) < 0.11
@@ -463,7 +499,19 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   })
 
   return (
-    <group ref={placer}>
+    <group
+      ref={placer}
+      // A click picks it (the card stays full, the ask goes to it); a drag that
+      // started on it was an orbit and picks nothing.
+      onClick={(event) => {
+        if (event.delta > CLICK_SLOP_PX || leftAtRef.current !== null) return
+        event.stopPropagation()
+        selectAgent(picked ? null : agentId)
+      }}
+      onPointerOver={(event) => { event.stopPropagation(); gl.domElement.style.cursor = 'pointer' }}
+      onPointerOut={() => { gl.domElement.style.cursor = '' }}
+    >
+      {picked ? <mesh geometry={k.pick} material={k.ringMaterial} position-y={0.02} /> : null}
       <group ref={bob}>
         <group ref={lean}>
           <group ref={hopper}>
@@ -491,6 +539,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
               </group>
             </group>
           </group>
+          <mesh ref={ring} geometry={k.ring} material={k.ringMaterial} position-y={ROBOT_TOP + 0.05} visible={false} />
         </group>
       </group>
       {status === 'error' ? <ErrorBug /> : null}

@@ -10975,7 +10975,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-tools button:focus-visible, .world-ask__send:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
 .world-ask {
   position: absolute; left: 50%; bottom: calc(30px + var(--sp-5)); transform: translateX(-50%);
-  box-sizing: border-box; width: min(460px, calc(100% - 380px));
+  box-sizing: border-box; width: min(520px, calc(100% - 380px));
   display: flex; align-items: center; gap: var(--sp-4); height: 44px; padding: 0 var(--sp-3) 0 var(--sp-6);
   border-radius: var(--r-full); background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
   pointer-events: auto;
@@ -10987,8 +10987,17 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   color: inherit; font: inherit; font-size: var(--t-sm); font-weight: 500;
 }
 .world-ask__field::placeholder { color: var(--world-holo-ink); font-weight: 600; opacity: 1; }
-/* What the field does, said beside it: it posts to the room's board and sends nothing to a running agent. */
-.world-ask__hint { flex: none; font-size: var(--t-xs); color: var(--world-holo-ink-2); white-space: nowrap; }
+/* M422. Who the field sends to: the addressee, always visible, and the picker that changes it. */
+.world-ask__to {
+  flex: none; max-width: 16ch; height: 28px; padding: 0 var(--sp-3);
+  border: 1px solid var(--world-holo-line); border-radius: var(--r-full);
+  background: transparent; color: var(--world-holo-ink-2); cursor: pointer;
+  font: inherit; font-size: var(--t-xs); font-weight: 600; text-overflow: ellipsis;
+}
+.world-ask__to:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.world-ask__to:disabled { cursor: default; opacity: .6; }
+.world-ask__field:disabled { cursor: default; }
+.world-ask__posted--refused { color: var(--world-stop); white-space: normal; width: max-content; max-width: 420px; text-align: center; }
 .world-ask__send {
   flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
   border: 0; border-radius: 50%; background: var(--world-holo-ink); color: var(--world-holo-solid); cursor: pointer;
@@ -11093,6 +11102,44 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-card__tool { margin-right: var(--sp-3); font-weight: 600; color: var(--world-holo-ink); }
 .world-card__tools li[data-state="running"] .world-card__tool { color: var(--world-go); }
 .world-card__tools li[data-state="failed"] .world-card__tool { color: var(--world-stop); }
+/* M422. What the hands are on, beside the name: a room verb, never a state word (the dot says that). */
+.world-pill { max-width: 236px; }
+.world-pill__act {
+  display: inline-flex; align-items: center; gap: 3px; flex: none;
+  padding-left: var(--sp-3); border-left: 1px solid var(--world-holo-rule);
+  color: var(--world-holo-ink-2); font-weight: 500;
+}
+.world-tag[data-picked] .world-pill { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--iris); }
+/* M422. A waiting agent's card is its request, and the three verbs are the only
+   things in the card layer that take the pointer — the layer itself is deaf, or
+   a card over a drag would eat the orbit. */
+.world-card__request { margin: var(--sp-3) 0 0; padding: var(--sp-3) 0 0; border-top: 1px solid var(--world-holo-rule); }
+.world-card__ask {
+  margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); line-height: 1.45; color: var(--world-holo-ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; word-break: break-all;
+}
+.world-card__ask--open { font-family: var(--font-ui); color: var(--world-holo-ink-2); word-break: normal; }
+.world-card__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); pointer-events: auto; }
+.world-card__act {
+  flex: 1; height: 26px; padding: 0 var(--sp-3);
+  border: 1px solid var(--world-holo-line); border-radius: var(--r-md);
+  background: var(--world-holo-solid); color: var(--world-holo-ink); cursor: pointer;
+  font: inherit; font-size: var(--t-xs); font-weight: 600;
+}
+.world-card__act:hover { background: var(--world-chrome-hover); }
+.world-card__act:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.world-card__act:disabled { color: var(--world-holo-ink-2); cursor: default; }
+.world-card__act--go { border-color: transparent; background: var(--world-wait); color: var(--world-holo-solid); }
+.world-card__act--go:hover { background: var(--world-wait); filter: brightness(1.06); }
+/* M422. The decision table's sign: the count, read from across the room, in the app's amber. */
+.world-table-sign {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: var(--sp-2) var(--sp-5); border-radius: var(--r-lg);
+  background: var(--world-holo-solid); box-shadow: var(--world-holo-shade), inset 0 0 0 1.5px var(--world-wait);
+  font-family: var(--font-ui); color: var(--world-holo-ink); white-space: nowrap; user-select: none;
+}
+.world-table-sign strong { font-size: var(--t-sm); font-weight: 700; color: var(--world-wait); }
+.world-table-sign span { font-size: var(--t-xs); color: var(--world-holo-ink-2); }
 /* The view's own messages — empty, disconnected, too small — sit in the room's middle, not over the toggle. */
 .world-route__note--stage {
   top: 50%; transform: translate(-50%, -50%);

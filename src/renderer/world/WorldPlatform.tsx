@@ -49,7 +49,7 @@ function bandGeometry(path: readonly Pt[], offsets: readonly number[], alphas: r
 }
 
 /** A lit strip along `path`: a bright core of half-width `half` over a halo reaching `glowIn` inward and `glowOut` outward, `peak` opaque at its centre. */
-export function TrimLine({ path, y, half, glowIn, glowOut, peak, overPale = false }: { path: readonly Pt[]; y: number; half: number; glowIn: number; glowOut: number; peak: number; overPale?: boolean }): JSX.Element {
+export function TrimLine({ path, y, half, glowIn, glowOut, peak, overPale = false, hue }: { path: readonly Pt[]; y: number; half: number; glowIn: number; glowOut: number; peak: number; overPale?: boolean; /** A colour other than the room's cyan (M422: the table while someone waits). One hex for core and halo. */ hue?: string }): JSX.Element {
   const core = useMemo(() => bandGeometry(path, [-half, half], [1, 1], y + 0.01), [path, half, y])
   const halo = useMemo(() => {
     const profile = glowProfile(glowIn, glowOut)
@@ -63,13 +63,13 @@ export function TrimLine({ path, y, half, glowIn, glowOut, peak, overPale = fals
   // (world-bloom.ts). Off, both are exactly M416's.
   const bloom = useBloomOn()
   const coreColor = useMemo(() => {
-    const hex = bloom ? STUDIO.cyan : STUDIO.cyanCore
+    const hex = hue ?? (bloom ? STUDIO.cyan : STUDIO.cyanCore)
     return new THREE.Color(hex).multiplyScalar(glowScale(hex, bloom))
-  }, [bloom])
+  }, [bloom, hue])
   return (
     <>
       <mesh geometry={halo} renderOrder={1}>
-        <meshBasicMaterial color={STUDIO.cyan} vertexColors transparent opacity={peak * (overPale ? haloShare(bloom) : 1)} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={hue ?? STUDIO.cyan} vertexColors transparent opacity={peak * (overPale ? haloShare(bloom) : 1)} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
       <mesh geometry={core} renderOrder={2}>
         <meshBasicMaterial color={coreColor} toneMapped={false} side={THREE.DoubleSide} />

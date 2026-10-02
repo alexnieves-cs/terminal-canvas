@@ -23,6 +23,8 @@ export interface WorldPalette {
   readonly cyan: string
   /** The line itself, a shade whiter than its halo: the bright core of a lit strip. */
   readonly cyanCore: string
+  /** The decision table's line while anyone waits on a person (M422), and a conflict line's (M423): the app's amber. */
+  readonly amber: string
   /** The meeting table's glossy top. */
   readonly tableTop: string
   /** The three floating-cube clusters, brown / teal / purple (muted, like the reference's). */
@@ -104,6 +106,7 @@ export const STUDIO: WorldPalette = {
   dark: '#2a2f3a',
   cyan: '#36e6ff',
   cyanCore: '#a6f6ff',
+  amber: '#ffb02e',
   tableTop: '#07080b',
   cubes: ['#8a5f48', '#3d8a90', '#6b5b9c'],
   ink: '#161a22',

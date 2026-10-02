@@ -32,6 +32,34 @@ function rosterKey(): string {
     .join(SEP_ROW)
 }
 
+/**
+ * The live agents waiting on a person (M422), oldest wait first — the
+ * decision table's sign and amber read this. A string snapshot for the
+ * roster's reason: a re-render only when someone starts or stops waiting.
+ */
+function waitingKey(): string {
+  return getAgentIds()
+    .map((id) => getAgent(id))
+    .filter((r): r is NonNullable<typeof r> => r !== undefined && r.status === 'waiting_approval')
+    .sort((a, b) => waitSince(a) - waitSince(b))
+    .map((r) => r.agentId)
+    .join(SEP_ROW)
+}
+
+/** When an agent's current wait began: its last status event, which is the one that said so. */
+function waitSince(record: NonNullable<ReturnType<typeof getAgent>>): number {
+  for (let i = record.events.length - 1; i >= 0; i--) {
+    const e = record.events[i]!
+    if (e.type === 'status') return e.ts
+  }
+  return record.lastTs
+}
+
+export function useWaiting(): readonly string[] {
+  const key = useSyncExternalStore(subscribeAgentWorld, waitingKey, waitingKey)
+  return useMemo(() => (key === '' ? [] : key.split(SEP_ROW)), [key])
+}
+
 export function useRoster(): readonly RosterEntry[] {
   const key = useSyncExternalStore(subscribeAgentWorld, rosterKey, rosterKey)
   return useMemo(

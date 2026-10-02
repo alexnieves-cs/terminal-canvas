@@ -2,8 +2,12 @@ import { memo, useReducer, useRef, type JSX, type MutableRefObject, type RefObje
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import type { Group } from 'three'
+import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
 import { getAgent, useAgent } from './agent-world-store'
+import { ACTIVITY_VERB, activityOf, type Activity } from './world-activity'
+import { useWorldActions, useWorldContext } from './world-context-store'
 import { cardBadge, cardTitle, recentTools, type BadgeKind } from './world-scene'
+import { useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
 
@@ -65,6 +69,42 @@ import { cardStand, cardTiltDeg } from './world-transition'
 const REACH_UNITS = 0.62
 const REACH_GAP_PX = 8
 
+/** The pill's glyph for what the hands are on (M422) — the reference's pill carries an icon; ours says the work. */
+const ACTIVITY_ICON: Partial<Record<Activity, (props: { size?: number }) => JSX.Element>> = {
+  read: ToolRead, search: ToolSearch, edit: ToolEdit, test: ToolRun, shell: ToolRun, web: KindBrowser, delegate: People
+}
+
+/**
+ * A waiting agent's card is the REQUEST (M422): what it wants to do, and the
+ * three verbs — the same answer door the chat card uses, and the jump to the
+ * panel for anything the room cannot answer (a terminal's prompt, a question
+ * with options). The only controls in the card layer, so the only things in
+ * it that take the pointer; everything else stays deaf to it, or a card over
+ * a drag would eat the orbit.
+ */
+function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
+  const ctx = useWorldContext()
+  const actions = useWorldActions()
+  const asked = ctx.approvals.find((a) => a.agentId === agentId)
+  return (
+    <div className="world-card__request" data-world-request>
+      {asked !== undefined ? (
+        <p className="world-card__ask"><span className="world-card__tool">{asked.toolName}</span>{asked.argument}</p>
+      ) : (
+        <p className="world-card__ask world-card__ask--open">Waiting on you in its panel</p>
+      )}
+      <div className="world-card__actions" role="group" aria-label="Answer the request">
+        {asked !== undefined && actions !== null ? (
+          <>
+            <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Approve</button>
+            <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
+          </>
+        ) : null}
+        <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>
+      </div>
+    </div>
+  )
+}
 export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compact }: { agentId: string; y: number; layer: RefObject<HTMLElement | null>; pop: MutableRefObject<number>; compact: boolean }): JSX.Element | null {
   const record = useAgent(agentId)
   const anchor = useRef<HTMLDivElement>(null)
@@ -75,6 +115,8 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const scaled = useRef(-1)
   const askedAt = useRef(-Infinity)
   const shown = useRef<BadgeKind | null>(null)
+  const doing = useRef<Activity | null>(null)
+  const picked = useSelectedAgent() === agentId
   // The last title the agent gave in its own words. The ring is fifty events,
   // and a long run of tool calls pushes the last thought out of it; the card
   // keeps saying what the agent is on rather than dropping back to its name.
@@ -113,30 +155,39 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
     if (t - askedAt.current >= 1) {
       askedAt.current = t
       const rec = getAgent(agentId)
-      if (rec && cardBadge(rec, Date.now()).kind !== shown.current) recheck()
+      if (rec && (cardBadge(rec, Date.now()).kind !== shown.current || activityOf(rec, Date.now()) !== doing.current)) recheck()
     }
   })
 
   if (!record || !layer.current) return null
   const badge = cardBadge(record, Date.now())
   shown.current = badge.kind
-  const tools = compact ? [] : recentTools(record)
+  const activity = activityOf(record, Date.now())
+  doing.current = activity
+  const verb = ACTIVITY_VERB[activity]
+  const Icon = ACTIVITY_ICON[activity]
+  // A request is never a dot: whoever is waiting on a person gets the whole card, and so does the robot a person picked.
+  const waiting = record.status === 'waiting_approval'
+  const full = !compact || waiting || picked
+  const tools = full && !waiting ? recentTools(record) : []
   const latest = cardTitle(record)
   if (latest !== record.name) said.current = latest
   const title = said.current ?? latest
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
-        <div ref={anchor} className="world-tag" style={{ opacity: 0 }} data-status={record.status} data-badge={badge.kind} role="group" aria-label={`${record.name}: ${badge.word}`}>
+        <div ref={anchor} className="world-tag" style={{ opacity: 0 }} data-status={record.status} data-badge={badge.kind} data-activity={activity} data-picked={picked ? '' : undefined} role="group" aria-label={`${record.name}: ${verb ?? badge.word}`}>
           <div className="world-pill" aria-hidden="true">
             <span className="world-dot" />
             <span className="world-pill__name">{record.name}</span>
+            {verb !== null ? <span className="world-pill__act">{Icon !== undefined ? <Icon size={11} /> : null}{verb}</span> : null}
           </div>
-          {compact ? null : (
+          {!full ? null : (
             <div className="world-card-frame">
               <div ref={card} className="world-card">
                 <p className="world-card__title">{title}</p>
                 <p className="world-card__badge">{badge.word}</p>
+                {waiting ? <RequestBlock agentId={agentId} /> : null}
                 {tools.length > 0 ? (
                   <ul className="world-card__tools">
                     {tools.map((line) => (

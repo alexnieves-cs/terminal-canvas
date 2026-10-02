@@ -50,7 +50,8 @@ buildSync({
       "  ipc: require('./src/shared/ipc-contract.ts'),",
       "  panelState: require('./src/renderer/panels/panel-state.ts'),",
       "  activity: require('./src/renderer/world/world-activity.ts'),",
-      "  ctx: require('./src/renderer/world/world-context-store.ts')",
+      "  ctx: require('./src/renderer/world/world-context-store.ts'),",
+      "  sel: require('./src/renderer/world/world-select.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -59,7 +60,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -785,9 +786,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.stage.4 prefers-reduced-motion skips the choreography, live: the move is a 0ms snap, the stagger is dropped and a robot that turns live appears at once',
     /createWorldTransition\(on \? 1 : 0, reduced \? 0 : WORLD_TRANSITION_MS\)/.test(stage) && /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/.test(stage) && /addEventListener\('change'/.test(stage) &&
       /reduced \? 0 : pops\[i\]!/.test(view) && /reducedRef\.current \? 1 : easeInOutCubic/.test(robot))
-  ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — a far agent wears the pill alone (its dot carries the state) in the same Html element',
+  ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — a far agent wears the pill alone (its dot carries the state) in the same Html element, except one waiting on a person or picked by one (M422), whose card is never a dot',
     /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && /<QualityGovernor \/>/.test(view) && /<CardBudget /.test(view) && /t - last\.current < 0\.25/.test(view) &&
-      /compact=\{leftAt\.has\(station\.agentId\) \|\| \(full !== null && !full\.has\(station\.agentId\)\)\}/.test(view) && /className="world-dot"/.test(card) && /compact \? null : \(/.test(card) && /const tools = compact \? \[\] : recentTools\(record\)/.test(card))
+      /compact=\{leftAt\.has\(station\.agentId\) \|\| \(full !== null && !full\.has\(station\.agentId\)\)\}/.test(view) && /className="world-dot"/.test(card) && /!full \? null : \(/.test(card) && /const full = !compact \|\| waiting \|\| picked/.test(card) && /const tools = full && !waiting \? recentTools\(record\) : \[\]/.test(card))
 }
 
 // ── wiring: every hook is a second reader, placed AFTER what it observes ─────
@@ -920,9 +921,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 
   // The chrome: DOM only, wired to the camera and the store, and honest about what the pill does.
   const chrome = code('WorldChrome.tsx'), chromeRaw = text('WorldChrome.tsx'), view = code('WorldView.tsx')
-  ok('world.chrome.1 the overlay is plain DOM (no three, fiber or drei — it is not in the scene\'s importer set), reads the LIVE roster for its legend, posts through the store, says where the post goes beside the field, and every control has a name',
-    !/from '(?:three|@react-three\/[^']*)/.test(chrome) && /useRoster\(\)/.test(chrome) && /legendEntries\(roster, order\)/.test(chrome) && /useAgentIds\(\)/.test(chrome) && /postTeamAsk\(draft\)/.test(chrome) &&
-      /Posts to the board/.test(chrome) && /aria-label="Ask your team"/.test(chrome) && /aria-label="Zoom in"/.test(chrome) && /aria-label="Zoom out"/.test(chrome) &&
+  ok('world.chrome.1 the overlay is plain DOM (no three, fiber or drei — it is not in the scene\'s importer set), reads the LIVE roster for its legend, SENDS through Canvas\'s door to a named addressee (M422: the picked robot, the only one that can take it, or the picker\'s), writes the board only after a send went, says what came back, and every control has a name',
+    !/from '(?:three|@react-three\/[^']*)/.test(chrome) && /useRoster\(\)/.test(chrome) && /legendEntries\(roster, order\)/.test(chrome) && /useAgentIds\(\)/.test(chrome) &&
+      /actions\.send\(target, text\)\.then\(\(refusal\) =>/.test(chrome) && /if \(refusal !== null\) \{ say\(\{ ok: false/.test(chrome) && /postTeamAsk\(`\$\{name\}: \$\{text\}`\)/.test(chrome) &&
+      chrome.indexOf('postTeamAsk(`') > chrome.indexOf('if (refusal !== null)') && /askTarget\(picked, /.test(chrome) && /aria-label="Send to"/.test(chrome) && /aria-label="Ask your team"/.test(chrome) && /aria-label="Zoom in"/.test(chrome) && /aria-label="Zoom out"/.test(chrome) &&
       /camera\.current\?\.fit\(\)/.test(chrome) && /camera\.current\?\.zoom\(1\)/.test(chrome) && /camera\.current\?\.zoom\(-1\)/.test(chrome) && />Fit room</.test(chrome) &&
       /role="status"/.test(chrome) && /event\.key !== 'Escape'/.test(chrome) && /event\.stopPropagation\(\)/.test(chrome) && !/window\.canvas/.test(chromeRaw))
   ok('world.chrome.2 the chrome sits over the card layer (later in the DOM), and the camera buttons reach the rig through ONE CameraApi ref the rig fills and clears',
@@ -1172,6 +1174,47 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.ctx.door.2 every verb the room has is an EXISTING door: answer is answerRequest, send is agentSession.send read through sendRefusalSentence, open is Canvas\'s attention jump after the room closes',
     /answerRequest\(agentId, getChat\(agentId\)\.snapshot/.test(pub) && /sendRefusalSentence\(await window\.canvas\.agentSession\.send\(agentId, text, \[\]\)\)/.test(pub) &&
       /closeWorld\(\)[\s\S]{0,120}jump\(agentId\)/.test(pub) && /jump: jumpAnywhere/.test(canvasSrc))
+}
+
+// ── M422: acting from the room ───────────────────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const src = (f) => readFileSync(join(dir, f), 'utf8')
+  // The poses: told apart by silhouette.
+  const P = AC.POSES
+  const big = (p) => [p.type > 0.5, p.nod > 0.2, p.scan > 0.3, p.fold > 0.5, p.handUp > 0.5, p.point > 0.5, p.nod < -0.2, p.ring > 0.5, p.tap > 0.5, p.reach < -0.4, p.lean < -0.03].map(Number).join('')
+  const kinds = ['read', 'search', 'edit', 'test', 'web', 'delegate', 'wait', 'quiet']
+  const sigs = kinds.map((k) => big(P[k]))
+  ok('world.pose.1 every activity a person must tell apart from across the room has its own silhouette — reading bows the head, searching sweeps it, editing types, a test run folds the arms under a turning ring, the web looks up, a delegation points, waiting holds a hand up, quiet slumps — no two share their big numbers',
+    new Set(sigs).size === kinds.length && P.edit.type === 1 && P.test.fold === 1 && P.test.ring === 1 && P.wait.handUp === 1 && P.delegate.point === 1 && P.read.nod > 0.2 && P.web.nod < -0.2 && P.quiet.nod > P.read.nod,
+    kinds.map((k, i) => `${k}=${sigs[i]}`).join(' '))
+  const robot = src('WorldRobot.tsx')
+  ok('world.pose.2 the robot damps toward its activity\'s pose every frame and walking overrides it — the body is a function of the store, re-read twice a second because an open call goes stale with the clock',
+    /st\.activity = activityOf\(rec, Date\.now\(\)\)/.test(robot) && /const want = poseOf\(st\.moving \? 'rest' : st\.activity\)/.test(robot) && /for \(const key of POSE_KEYS\) p\[key\] = damp\(/.test(robot) && /t - st\.activityCheckedAt > 0\.5/.test(robot) && /ring: new THREE\.TorusGeometry/.test(robot))
+
+  // The addressee.
+  const able = (id) => id !== 'term'
+  ok('world.ask.target.1 a message from the room goes to the picked robot when it can take one, else to the only live agent that can, else to nobody (the field asks for a pick) — a picked agent that has left the room, or a terminal, is never addressed',
+    SEL.askTarget('b', ['a', 'b'], able) === 'b' && SEL.askTarget(null, ['a', 'term'], able) === 'a' && SEL.askTarget(null, ['a', 'b'], able) === null &&
+      SEL.askTarget('gone', ['a'], able) === 'a' && SEL.askTarget('term', ['term', 'a', 'b'], able) === null && SEL.askTarget(null, [], able) === null)
+  SEL.selectAgent(null)
+  SEL.selectAgent('a')
+  ok('world.select.1 picking is a module store the scene, the chrome and the board share, never persisted, and letting go is null', SEL.selectedAgent() === 'a' && (SEL.selectAgent(null), SEL.selectedAgent() === null) && !/localStorage/.test(src('world-select.ts')))
+
+  // The request card and the decision table.
+  const card = src('WorldCard.tsx'), office = src('WorldOffice.tsx'), view = src('WorldView.tsx'), roster = src('world-roster.ts')
+  const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
+  ok('world.request.1 a waiting agent\'s card is its REQUEST — the tool and its argument from the context store, Approve and Deny through Canvas\'s answer door, Open for anything the room cannot answer — and those buttons are the only things in the card layer that take the pointer',
+    /\{waiting \? <RequestBlock agentId=\{agentId\} \/> : null\}/.test(card) && /actions\.answer\(agentId, asked\.requestId, true\)/.test(card) && /actions\.answer\(agentId, asked\.requestId, false\)/.test(card) && /actions\?\.open\(agentId\)/.test(card) &&
+      /ctx\.approvals\.find\(\(a\) => a\.agentId === agentId\)/.test(card) && /\.world-card__actions \{[^}]*pointer-events: auto/.test(styles) && /\.world-view__cards \{[^}]*pointer-events: none/.test(styles) && /pointerEvents="none" portal=\{layer/.test(card))
+  ok('world.request.2 the meeting table is the decision table: its line turns the app\'s amber while anyone waits at it, and a sign over it says how many and who has waited longest — and says nothing when nobody waits',
+    /<MeetingTable waiting=\{waiting > 0\} \/>/.test(office) && /hue: STUDIO\.amber/.test(office) && /waiting=\{waiting\.length\}/.test(view) && /if \(waiting\.length === 0 \|\| !layer\.current\) return null/.test(view) &&
+      /\.sort\(\(a, b\) => waitSince\(a\) - waitSince\(b\)\)/.test(roster) && /portal=\{layer as RefObject<HTMLElement>\}/.test(view) && PAL.STUDIO.amber === '#ffb02e')
+  ok('world.request.3 a click picks a robot and an orbit\'s release does not (fiber\'s drag delta against CLICK_SLOP_PX), a click on empty floor lets it go, and the picked robot wears a floor ring and a ringed pill',
+    /if \(event\.delta > CLICK_SLOP_PX \|\| leftAtRef\.current !== null\) return/.test(robot) && /selectAgent\(picked \? null : agentId\)/.test(robot) && /onPointerMissed=\{\(event\) => \{ if \(event\.type === 'click'\) selectAgent\(null\) \}\}/.test(view) &&
+      /\{picked \? <mesh geometry=\{k\.pick\}/.test(robot) && /\.world-tag\[data-picked\] \.world-pill/.test(styles))
+  ok('world.pill.act.1 the pill says what the hands are on — a room verb and its glyph beside the name — and the card re-reads it once a second with the badge, because a call goes stale with the clock',
+    /verb !== null \? <span className="world-pill__act">/.test(card) && /activityOf\(rec, Date\.now\(\)\) !== doing\.current/.test(card) && /data-activity=\{activity\}/.test(card))
 }
 
 const failures = results.filter((r) => !r.pass)

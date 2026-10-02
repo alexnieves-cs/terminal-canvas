@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type JSX, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { Html, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { WorldBloom } from './WorldBloom'
 import { acesPreimage, useBloomOn } from './world-bloom'
@@ -9,10 +9,11 @@ import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
 import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, createDprGovernor, DPR_MAX, DPR_MIN, type CardCandidate } from './world-perf'
-import { getAgentIds } from './agent-world-store'
-import { useRoster } from './world-roster'
+import { getAgent, getAgentIds } from './agent-world-store'
+import { selectAgent } from './world-select'
+import { useRoster, useWaiting } from './world-roster'
 import { stationPlan, type RosterEntry, type Station } from './world-scene'
-import { dollyBy, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
+import { dollyBy, glide, isoPose, ORBIT_TARGET, slabHalf, TABLE_PLATE, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
 import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
 
 /**
@@ -388,6 +389,29 @@ function useLeavers(roster: readonly RosterEntry[], reduced: boolean): ReadonlyM
   return leaving
 }
 
+/**
+ * The decision table's sign (M422): over the table, how many wait there on a
+ * person and who has waited longest. Each one's own card carries the request
+ * and its buttons; the sign is what is read from across the room. Absent when
+ * nobody waits — the rest layer never states a zero.
+ */
+function TableSign({ waiting, layer }: { waiting: readonly string[]; layer: RefObject<HTMLDivElement | null> }): JSX.Element | null {
+  if (waiting.length === 0 || !layer.current) return null
+  const first = getAgent(waiting[0]!)?.name ?? waiting[0]!
+  return (
+    // On the floor at the table's near edge: the waiting robots stand round the table with their
+    // cards beside them, and a sign over the table sat on the first of those cards.
+    <group position={[0, 0.12, TABLE_PLATE.hz + 0.75]}>
+      <Html center zIndexRange={[30, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
+        <div className="world-table-sign" role="status" data-world-table-sign>
+          <strong>{waiting.length === 1 ? '1 request' : `${waiting.length} requests`}</strong>
+          <span>{waiting.length === 1 ? `${first} is waiting on you` : `${first} has waited longest`}</span>
+        </div>
+      </Html>
+    </group>
+  )
+}
+
 /** The live roster with the leavers still in it, in the store's first-seen order — the room as it stands until each leave is over. */
 function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string, Leaver<RosterEntry>>): readonly RosterEntry[] {
   if (leaving.size === 0) return roster
@@ -398,6 +422,7 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
 
 export function WorldView({ transition, reduced }: { transition: WorldTransition; reduced: boolean }): JSX.Element {
   const roster = useRoster()
+  const waiting = useWaiting()
   const bloom = useBloomOn()
   const leavers = useLeavers(roster, reduced)
   const held = useMemo(() => heldRoster(roster, leavers), [roster, leavers])
@@ -441,11 +466,14 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
         shadows="percentage"
         dpr={[DPR_MIN, DPR_MAX]}
         camera={{ position: [start.x, start.y, start.z], fov: VIEW.fov, near: 0.1, far: 220 }}
+        // A click on empty floor lets the picked robot go (an orbit's release is not a click: fiber measures the drag).
+        onPointerMissed={(event) => { if (event.type === 'click') selectAgent(null) }}
         gl={{ antialias: true, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <color attach="background" args={[ground]} />
         <Lights extent={half + 3} />
-        <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} />
+        <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} waiting={waiting.length} />
+        <TableSign waiting={waiting} layer={cards} />
         {stations.map((station) => (
           <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
         ))}
