@@ -1409,6 +1409,21 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.tour.2 a focus glide stands FOCUS_DISTANCE from its agent along the line the camera already looks down', Math.abs(Math.hypot(fp.position.x - 4, fp.position.y - 0.9, fp.position.z) - SET.FOCUS_DISTANCE) < 1e-9 && fp.target.x === 4 && fp.position.y > fp.target.y)
 }
 
+// ── M426: the shared room ────────────────────────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const peersSrc = readFileSync(join(dir, 'WorldPeers.tsx'), 'utf8'), card = readFileSync(join(dir, 'WorldCard.tsx'), 'utf8'), pub = readFileSync(join(dir, 'useWorldContextPublisher.ts'), 'utf8')
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  ok('world.peers.1 a teammate is in the room\'s context from the presence roster (live peers only, main owns awareness), and following one points the camera at the agent they are on when it is in this room — nothing when it is not, or they are elsewhere or gone',
+    /return roster\.peers\.filter\(\(p\) => p\.live\)\.map/.test(pub) && /panelId: p\.presence\.currentPanelId \?\? null/.test(pub) && /mode: p\.presence\.mode/.test(pub) &&
+      SEL.peerFollowTarget({ panelId: 'a' }, ['a']) === 'a' && SEL.peerFollowTarget({ panelId: 'a' }, ['b']) === null && SEL.peerFollowTarget({ panelId: null }, ['a']) === null && SEL.peerFollowTarget(undefined, ['a']) === null)
+  ok('world.peers.2 the room tells teammates where you are and what you look at — mode \'world\' while it is up, and the robot you picked as your current panel — with no new presence field (the mode string already crosses, and verify:presence pins the payload\'s keys)',
+    /mode: annotating \? 'annotate' : merged \? 'merged' : worldOn \? 'world' : chrome\.centerView/.test(canvasSrc) && /focusedId: worldOn && worldPicked !== null \? worldPicked : focusedId/.test(canvasSrc))
+  ok('world.peers.3 the teammates looking at an agent wear their initials in its pill, in their own colour; the strip rings those in the room and follows on a press, glides on each move, and lets go when they leave the roster',
+    /const watchers = ctx\.peers\.filter\(\(p\) => p\.panelId === agentId\)/.test(card) && /className="world-pill__peers"/.test(card) &&
+      /if \(followed === undefined\) \{ setFollowing\(null\); return \}/.test(peersSrc) && /if \(target !== null\) camera\.current\?\.focus\(target\)/.test(peersSrc) && /data-in-room=\{p\.mode === 'world'/.test(peersSrc) && !THREE_DOOR_RE.test(peersSrc))
+}
+
 const failures = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
 process.exitCode = failures.length ? 1 : 0

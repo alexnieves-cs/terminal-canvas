@@ -272,6 +272,7 @@ import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { WorldStage, warmWorldView } from '../world/WorldStage'
 import { setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
+import { useSelectedAgent } from '../world/world-select'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
@@ -5547,8 +5548,10 @@ export function Canvas({
       ?? workItems.find((w) => w.state === WORK_ITEM_STATES[1])
     return item?.title ?? ''
   }, [focusedId, panels, workItems])
+  // M426: in the room, what a person is looking at is the robot they picked — teammates see that.
+  const worldPicked = useSelectedAgent()
   usePresenceReport({
-    hostRef, workspaceId: activeWorkspaceId, viewport, focusedId, selectedIds: selectedPanelIds,
+    hostRef, workspaceId: activeWorkspaceId, viewport, focusedId: worldOn && worldPicked !== null ? worldPicked : focusedId, selectedIds: selectedPanelIds,
     mode: annotating ? 'annotate' : merged ? 'merged' : worldOn ? 'world' : chrome.centerView,
     currentTask: presenceTask
   })

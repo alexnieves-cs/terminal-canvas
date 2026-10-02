@@ -47,3 +47,9 @@ export function askTarget(selectedId: string | null, live: readonly string[], ca
 
 /** A pointer that moved further than this between down and up was an orbit, not a click. */
 export const CLICK_SLOP_PX = 5
+
+/** M426: what following a teammate points the camera at — the agent they are on when it is in this room, else nothing (they are elsewhere, or gone). */
+export function peerFollowTarget(peer: { panelId: string | null } | undefined, inRoom: readonly string[]): string | null {
+  const id = peer?.panelId ?? null
+  return id !== null && inRoom.includes(id) ? id : null
+}

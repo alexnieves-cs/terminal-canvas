@@ -4,6 +4,7 @@ import { getAgent, postTeamAsk, useAgentIds, useReplayAt } from './agent-world-s
 import { useWorldActions } from './world-context-store'
 import { askTarget, selectAgent, useSelectedAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
+import { WorldPeers } from './WorldPeers'
 import { WorldTime } from './WorldTime'
 import { ASK_MAX, askText, legendEntries, type CameraApi } from './world-set'
 
@@ -91,6 +92,7 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
   return (
     <div className="world-chrome" data-world-chrome>
       <WorldTime camera={camera} />
+      <WorldPeers camera={camera} />
       <div className="world-tools" role="group" aria-label="Camera">
         <button type="button" className="world-tools__fit" onClick={() => camera.current?.fit()} data-world-fit>Fit room</button>
         <button type="button" className="world-tools__step" aria-label="Zoom out" title="Zoom out" onClick={() => camera.current?.zoom(-1)} data-world-zoom="out"><Minus size={14} /></button>

@@ -204,6 +204,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   if (latest !== record.name) said.current = latest
   const words = said.current ?? latest
   const approval = ctx.approvals.find((a) => a.agentId === agentId)
+  const watchers = ctx.peers.filter((p) => p.panelId === agentId)
   const headline = headlineOf(record, approval, words, worldNow())
   led.current = headlineOf(record, undefined, words, worldNow()).text
   return (
@@ -214,6 +215,12 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
             <span className="world-dot" />
             <span className="world-pill__name">{record.name}</span>
             {verb !== null ? <span className="world-pill__act">{Icon !== undefined ? <Icon size={11} /> : null}{verb}</span> : null}
+            {/* M426: the teammates looking at this agent right now, by their own colour and initials. */}
+            {watchers.length > 0 ? (
+              <span className="world-pill__peers">
+                {watchers.slice(0, 3).map((p) => <span key={p.userId} className="world-peer" style={{ background: p.color }} title={`${p.name} is looking at this agent`}>{p.initials}</span>)}
+              </span>
+            ) : null}
           </div>
           {/* The contextual layer (M424): one line, the fact a person would act on. CSS shows it only mid-distance. */}
           {!full ? <p className="world-chip" data-lead={headline.tone}>{headline.text}</p> : null}

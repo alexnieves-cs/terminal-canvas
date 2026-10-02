@@ -11157,6 +11157,22 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 /* M424. The frame readout is a developer's: hidden unless asked for (world-perf's statsOn). */
 .world-view__stats:not([data-on]) { display: none; }
+/* M426. Who else is here: initials in each teammate's own colour, top-right; those in the room ringed. */
+.world-peers { position: absolute; top: var(--sp-6); right: var(--sp-6); display: flex; align-items: center; gap: var(--sp-2); pointer-events: auto; }
+.world-peers__peer, .world-peer {
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 2px solid var(--world-holo-solid); border-radius: 50%;
+  color: #fff; font-family: var(--font-ui); font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: var(--world-holo-shade);
+}
+.world-peers__peer[data-in-room] { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--world-go); }
+.world-peers__peer[data-idle] { opacity: .55; }
+.world-peers__peer[aria-pressed="true"] { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--iris); }
+.world-peers__peer:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.world-peers__follow {
+  padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
+  font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; color: var(--iris); white-space: nowrap;
+}
+.world-pill__peers { display: inline-flex; flex: none; gap: 2px; margin-left: var(--sp-1); }
+.world-pill__peers .world-peer { width: 17px; height: 17px; border-width: 1.5px; font-size: 7.5px; letter-spacing: -.02em; cursor: default; box-shadow: none; }
 /* M425. Time in the room: the replay control top-left, and the away card under it. */
 .world-time-col { position: absolute; left: var(--sp-6); top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); align-items: flex-start; pointer-events: none; }
 .world-time-col > * { pointer-events: auto; }
