@@ -186,7 +186,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   // moment means. A behaviour no event in the script can set off is a behaviour
   // nobody has watched, so every one of them must be reachable from it.
   {
-    const seen = { effects: new Set(), typing: new Set(), goals: new Set(), lines: new Set(), tool: new Set() }
+    const seen = { effects: new Set(), typing: new Set(), goals: new Set(), titled: false, hops: false, tool: new Set(), badges: new Set() }
     const fold = new Map()
     for (const e of out) {
       const rec = C.applyAgentEvent(fold.get(e.agentId) ?? C.emptyAgent(e.agentId), e)
@@ -195,15 +195,16 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       if (fx) seen.effects.add(fx)
       if (e.agentId === 'sim-coder') seen.typing.add(Z.isTyping(rec, e.ts))
       seen.goals.add(Z.goalOf(rec.status, false))
-      const line = Z.cardLine(rec)
-      seen.lines.add(line.kind)
-      if (line.kind === 'tool') seen.tool.add(line.state)
+      if (Z.hopsOn(e)) seen.hops = true
+      if (Z.cardTitle(rec) !== rec.name) seen.titled = true
+      for (const l of Z.recentTools(rec)) seen.tool.add(l.state)
+      seen.badges.add(Z.cardBadge(rec, e.ts).kind)
     }
-    ok('world.scene.sim-fit.1 the scripted session sets off every behaviour the scene has: a tilt, a wave and a hit; typing and not typing; a walk to the table and back; and every card line, a tool running, done and failed',
-      ['tilt', 'wave', 'hit'].every((x) => seen.effects.has(x)) && seen.typing.has(true) && seen.typing.has(false) &&
-        seen.goals.has('table') && seen.goals.has('home') &&
-        ['thought', 'tool', 'message', 'error'].every((k) => seen.lines.has(k)) && ['running', 'done', 'failed'].every((k) => seen.tool.has(k)),
-      JSON.stringify({ effects: [...seen.effects], typing: [...seen.typing], goals: [...seen.goals], lines: [...seen.lines], tool: [...seen.tool] }))
+    ok('world.scene.sim-fit.1 the scripted session sets off every behaviour the scene has: a tilt, a wave, a hit and a hop; typing and not typing; a walk to the table and back; a card titled by the agent\'s own words; a tool line running, done and failed; and the working, needs-you and stopped badges',
+      ['tilt', 'wave', 'hit'].every((x) => seen.effects.has(x)) && seen.hops && seen.typing.has(true) && seen.typing.has(false) &&
+        seen.goals.has('table') && seen.goals.has('home') && seen.titled &&
+        ['running', 'done', 'failed'].every((k) => seen.tool.has(k)) && ['busy', 'wants-you', 'stopped'].every((k) => seen.badges.has(k)),
+      JSON.stringify({ effects: [...seen.effects], typing: [...seen.typing], goals: [...seen.goals], hops: seen.hops, titled: seen.titled, tool: [...seen.tool], badges: [...seen.badges] }))
   }
 
   sim.stop()
@@ -287,17 +288,49 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       Z.isTyping(rec('waiting_approval', [open]), 2000) === false && Z.isTyping(rec('thinking', [open]), 2000) === false &&
       Z.isTyping(rec('working', [open]), 1000 + Z.TYPING_STALE_MS + 1) === false && Z.isTyping(rec('working', []), 2000) === false)
 
-  const line = (events) => Z.cardLine({ events })
-  ok('world.scene.card.1 the card shows the LATEST of thought, tool, message and error, skips status, and marks a tool running, done or failed',
-    line([]).kind === 'none' && line([E('status', 'working')]).kind === 'none' &&
-      line([E('tool_call', tool('started')), E('thought', { text: 'hmm' }), E('status', 'idle')]).kind === 'thought' &&
-      line([E('thought', { text: 'hmm' }), E('tool_call', tool('started'))]).state === 'running' &&
-      line([E('tool_call', tool('started')), E('tool_result', tool('done', { detail: '42 passed' }))]).state === 'done' &&
-      line([E('tool_call', tool('started')), E('tool_result', tool('done', { detail: '42 passed' }))]).detail === '42 passed' &&
-      line([E('tool_result', tool('failed'))]).state === 'failed' &&
-      line([E('tool_call', tool('started', { detail: 'hidden while running' }))]).detail === undefined &&
-      line([E('thought', { text: 'x' }), E('message', { text: 'done' })]).kind === 'message' &&
-      line([E('message', { text: 'x' }), E('error', { message: 'boom' })]).text === 'boom')
+  // M415. The hologram card: a title in the agent's own words, a badge, its last few calls.
+  const named = (events) => ({ name: 'Coder', events })
+  ok('world.card.title.1 the card\'s title is the agent\'s latest thought or message (there is no task field), skipping tools, statuses and blank text, and its name before it has said anything',
+    Z.cardTitle(named([])) === 'Coder' && Z.cardTitle(named([E('status', 'working'), E('tool_call', tool('started'))])) === 'Coder' &&
+      Z.cardTitle(named([E('thought', { text: 'Reading the config' }), E('tool_call', tool('started'))])) === 'Reading the config' &&
+      Z.cardTitle(named([E('thought', { text: 'a' }), E('message', { text: 'Shipped the fix' })])) === 'Shipped the fix' &&
+      Z.cardTitle(named([E('message', { text: 'kept' }), E('thought', { text: '   ' })])) === 'kept')
+  const calls = [
+    E('tool_call', { tool: 'Read', summary: 'Read src/a.ts', status: 'started', callId: 'a' }, { seq: 1 }),
+    E('tool_result', { tool: 'Read', summary: 'Read src/a.ts', status: 'done', callId: 'a' }, { seq: 2 }),
+    E('tool_call', { tool: 'Bash', summary: 'npm test', status: 'started', callId: 'b' }, { seq: 3 }),
+    E('tool_result', { tool: 'Bash', summary: 'npm test', status: 'failed', callId: 'b' }, { seq: 4 }),
+    E('tool_call', { tool: 'Grep', summary: 'Grep TODO', status: 'started', callId: 'c' }, { seq: 5 }),
+    E('thought', { text: 'hm' }, { seq: 6 }),
+    E('tool_call', { tool: 'Glob', summary: 'Glob', status: 'started' }, { seq: 7 }),
+    E('tool_result', { tool: 'Glob', summary: 'Glob', status: 'done' }, { seq: 8 }),
+    E('tool_call', { tool: 'Edit', summary: 'Edit src/b.ts', status: 'started', callId: 'e' }, { seq: 9 })
+  ]
+  const tl = Z.recentTools({ events: calls })
+  ok('world.card.tools.1 the card lists the LAST four calls oldest first, one line per call — a result folds into its call (by id, or the latest open call without one), and the tool\'s own name is not repeated in its text',
+    tl.length === 4 && tl.map((l) => l.tool).join() === 'Bash,Grep,Glob,Edit' && tl.map((l) => l.state).join() === 'failed,running,done,running' &&
+      tl[0].text === 'npm test' && tl[3].text === 'src/b.ts' && tl[2].text === '' && new Set(tl.map((l) => l.key)).size === 4 &&
+      Z.recentTools({ events: calls.slice(0, 2) }).map((l) => `${l.tool}:${l.state}:${l.text}`).join() === 'Read:done:src/a.ts' &&
+      Z.recentTools({ events: [] }).length === 0, JSON.stringify(tl))
+  const badgeOf = (status, events, lastTs, now) => Z.cardBadge({ status, events, lastTs }, now)
+  const openCall = E('tool_call', tool('started', { callId: 'q' }), { ts: 1000 })
+  const AW = PS.agentWord
+  ok('world.card.badge.1 the badge says WORKING (the app\'s word) for a working or thinking agent heard from inside QUIET_MS, QUIET once it has been silent longer with no call open — a long tool run is not silence — and the app\'s own idle and needs-you words',
+    badgeOf('working', [], 1000, 1000 + Z.QUIET_MS).kind === 'busy' && badgeOf('working', [], 1000, 1000 + Z.QUIET_MS).word === AW('busy').word &&
+      badgeOf('thinking', [], 1000, 2000).kind === 'busy' &&
+      badgeOf('working', [], 1000, 1001 + Z.QUIET_MS).kind === 'quiet' && badgeOf('thinking', [], 1000, 1001 + Z.QUIET_MS).word === 'quiet' &&
+      badgeOf('working', [openCall], 1000, 1001 + Z.QUIET_MS).kind === 'busy' &&
+      badgeOf('working', [openCall], 1000, 1001 + Z.TYPING_STALE_MS).kind === 'quiet' &&
+      badgeOf('idle', [], 0, 1e9).kind === 'idle' && badgeOf('idle', [], 0, 1e9).word === AW('idle').word &&
+      badgeOf('waiting_approval', [], 0, 1e9).kind === 'wants-you' && badgeOf('waiting_approval', [], 0, 1e9).word === AW('wants-you').word &&
+      badgeOf('error', [], 0, 0).kind === 'stopped' && badgeOf('error', [], 0, 0).word === Z.statusWord('error'))
+  ok('world.robot.hop.1 a robot hops when a tool call STARTS — not on its result, a thought or a status',
+    Z.hopsOn(E('tool_call', tool('started'))) && !Z.hopsOn(E('tool_result', tool('done'))) && !Z.hopsOn(E('tool_result', tool('failed'))) &&
+      !Z.hopsOn(E('thought', { text: 't' })) && !Z.hopsOn(E('status', 'working')))
+  ok('world.robot.lean.1 a robot leans toward what it is busy with: into the desk while typing (the most), into the step while walking, toward the table while it waits there, back while it thinks, upright otherwise',
+    Z.leanOf('working', true, false) > Z.leanOf('working', false, true) && Z.leanOf('working', false, true) > Z.leanOf('waiting_approval', false, false) &&
+      Z.leanOf('waiting_approval', false, false) > 0 && Z.leanOf('thinking', false, false) < 0 && Z.leanOf('working', false, false) === 0 &&
+      Z.leanOf('idle', false, false) === 0 && Math.abs(Z.leanOf('working', true, false)) < 0.3)
 
   ok('world.scene.word.1 the card says the app\'s own word where the app has one — working, idle, needs you — read from panel-state, and its own thinking and error for the two it has not',
     Z.statusWord('working') === 'working' && Z.statusWord('idle') === 'idle' && Z.statusWord('waiting_approval') === 'needs you' &&
@@ -403,7 +436,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const robot = read('WorldRobot.tsx')
   const uses = [...robot.matchAll(/useGLTF(?:\.preload)?\(([^)]*)\)/g)].map((m) => m[1])
   ok('world.door.4 every useGLTF and preload turns BOTH decoders off — Draco\'s default path is a CDN the CSP refuses, Meshopt\'s default instantiates WebAssembly that script-src \'self\' refuses as an unhandled rejection at load',
-    uses.length >= 4 && uses.every((u) => /\.\.\.PLAIN/.test(u)) && /const PLAIN = \[false, false\] as const/.test(robot) &&
+    uses.length >= 1 && uses.every((u) => /\.\.\.PLAIN/.test(u)) && /const PLAIN = \[false, false\] as const/.test(robot) &&
       // drei's <Environment> fetches an HDR from a CDN by default, which the same CSP refuses.
       ![...files.flatMap((f) => [...read(f).matchAll(/import \{([^}]*)\} from '@react-three\/drei'/g)].map((m) => m[1]))].some((names) => /\bEnvironment\b/.test(names)),
     uses.join(' | '))
@@ -411,11 +444,15 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.door.5 every Html card mounts in a card layer of our own (portal=) — without it drei re-targets the card when R3F connects events and React 19 empties the first card\'s root',
     /<Html [^>]*portal=\{/.test(read('WorldCard.tsx')) && /className="world-view__cards" ref=\{cards\}/.test(read('WorldView.tsx')))
 
-  const i1 = robot.indexOf('quaternion.copy(rig.base[i]!)')
-  const i2 = robot.indexOf('rig.mixer.update(dt)')
-  const i3 = robot.indexOf('rig.base[i]!.copy(rig.overlay[i]!.quaternion)')
-  ok('world.door.6 the bone overlay is undone before the mixer runs and re-captured after it, and bones are found by isBone — the mixer writes only CHANGED values, so a per-frame rotateX on a constant track compounds until the robot tumbles; "Head" is also a mesh',
-    i1 > 0 && i1 < i2 && i2 < i3 && /isBone/.test(robot))
+  // M415. The robot is primitives now; its silent traps are the gloss and the shared kit.
+  const robotCode = robot.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const bodyFn = robotCode.slice(robotCode.indexOf('function RobotBody('), robotCode.indexOf('function ErrorBug('))
+  ok('world.door.6 the robots\' gloss is a RoomEnvironment built in code and prefiltered once per renderer, set on the robot materials and never as scene.environment (it would relight the office); the geometry is ONE shared kit, built outside the robot and never disposed by one, while each robot\'s own shell material is',
+    /new RoomEnvironment\(\)/.test(robotCode) && /pmrem\.fromScene\(room/.test(robotCode) && /envs = new WeakMap<THREE\.WebGLRenderer/.test(robotCode) &&
+      !files.some((f) => /\.environment\s*=/.test(read(f))) && /let kit: Kit \| null = null/.test(robotCode) &&
+      !/new THREE\.\w*Geometry\(/.test(bodyFn) && /conform\(visor, /.test(robotCode) && !/\b(?:kit|k)\.\w+\.dispose\(\)/.test(robotCode) &&
+      /useEffect\(\(\) => \(\) => shell\.dispose\(\), \[shell\]\)/.test(bodyFn) && /clearcoat: 1, clearcoatRoughness: 0\.15/.test(robotCode) &&
+      /hopsOn\(event\)/.test(bodyFn) && /leanOf\(/.test(bodyFn) && !/AnimationMixer/.test(bodyFn))
 
   ok('world.door.7 the hash #/world turns the view on, and main\'s TC_WORLD=1 opens that same hash, under the dev server only',
     /export const WORLD_HASH = '#\/world'/.test(read('world-toggle.ts')) &&
@@ -423,7 +460,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 
   const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
   ok('world.door.8 the classes the scene paints with exist in the stylesheet',
-    ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-card', 'world-card__line', 'world-route__note', 'shell__world-toggle'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
+    ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-tag', 'world-pill', 'world-dot', 'world-card', 'world-card__title', 'world-card__badge', 'world-card__tools', 'world-route__note', 'shell__world-toggle'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
 
   const topBar = readFileSync(join(root, 'src/renderer/shell/TopBar.tsx'), 'utf8')
   ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and Canvas gates the toggle bit and the top bar\'s button on DEV (a hidden scene keeps a WebGL context drawing for nobody)',
@@ -453,9 +490,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   // Each model is named by its exact path, as a literal: `npm run affected`
   // reads a literal as "this suite depends on that file", and a bare directory
   // would not count a changed .glb (a binary is not a text read).
+  // Since M415 the robots are primitives; Character.glb / Character_Gun.glb are
+  // still vendored but nothing loads them.
   const NEED = {
-    'src/renderer/public/models/quaternius-platformer/Character.glb': { clips: ['Idle', 'Walk', 'Wave', 'HitReact', 'Idle_Gun', 'Walk_Gun'], nodes: ['Head', 'Torso', 'UpperArm.L', 'UpperArm.R', 'LowerArm.L', 'LowerArm.R'], materials: ['Main', 'Main2', 'Main_Light'] },
-    'src/renderer/public/models/quaternius-platformer/Character_Gun.glb': { clips: ['Idle', 'Walk', 'Wave', 'HitReact', 'Idle_Gun', 'Walk_Gun'], nodes: ['Head', 'Torso', 'UpperArm.L', 'UpperArm.R', 'LowerArm.L', 'LowerArm.R'], materials: ['Main', 'Main2', 'Main_Light'] },
     'src/renderer/public/models/quaternius-platformer/Bee.glb': { clips: ['Flying'], nodes: [], materials: [] }
   }
   const glb = (path) => {
@@ -470,9 +507,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     const have = { clips: j.animations.map((x) => x.name), nodes: j.nodes.map((x) => x.name), materials: j.materials.map((x) => x.name) }
     for (const kind of ['clips', 'nodes', 'materials']) for (const n of want[kind]) if (!have[kind].includes(n)) missing.push(`${file} ${kind} ${n}`)
   }
-  const literals = ['Idle', 'Idle_Gun', 'Walk_Gun', 'HitReact', 'Wave', 'Flying', 'Main', 'Main2', 'Main_Light', 'Head', 'Torso', 'UpperArm.L', 'LowerArm.R']
+  const literals = ['Flying']
   const unnamed = literals.filter((n) => !robot.includes(`'${n}'`))
-  ok('world.assets.1 every clip, bone and material the robot code names by string exists in the vendored models, and the code still names them', missing.length === 0 && unnamed.length === 0, JSON.stringify({ missing, unnamed }))
+  ok('world.assets.1 every clip the robot code names by string (the error bee\'s) exists in the vendored model, and the code still names it', missing.length === 0 && unnamed.length === 0, JSON.stringify({ missing, unnamed }))
 }
 
 // ── the REAL feed (M414): the agent runtime's own events, folded into the contract ──
@@ -689,19 +726,22 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     ok('world.perf.10 fewer agents than the budget all get a card', PF.cardTiers(ids.slice(0, 3), new Set()).size === 3 && PF.cardTiers([], new Set()).size === 0)
   }
 
-  // The status colour language is the 2D canvas's own.
-  const { agentWord } = PS
-  const statuses = ['working', 'thinking', 'waiting_approval', 'idle', 'error']
-  const tones = Object.fromEntries(statuses.map((s) => [s, Z.statusTone(s)]))
-  ok('world.tone.1 a status wears the tone the canvas gives that state — working and thinking are the working tone, needs-you is waiting_approval, idle is idle, a stopped agent is the stopped tone',
-    tones.working === agentWord('busy').tone && tones.thinking === agentWord('busy').tone && tones.waiting_approval === agentWord('wants-you').tone &&
-      tones.idle === agentWord('idle').tone && tones.error === agentWord('exited').tone && new Set(Object.values(tones)).size === 4,
-    JSON.stringify(tones))
+  // M415. The card's badge speaks the reference's colours — WORKING green,
+  // QUIET red, IDLE grey — not the 2D canvas's tones (where green is IDLE):
+  // asked for by name, and a departure from world.tone.1/.2 as M414 had them.
   const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
   const card = readFileSync(join(root, 'src/renderer/world/WorldCard.tsx'), 'utf8')
-  ok('world.tone.2 the card and the dot take their colour from the shared [data-tone] rules — they set data-tone, and the stylesheet names no hue for a world status of its own (the iris/violet pair it had before M414 was not the canvas\'s language)',
-    (card.match(/data-tone=\{tone\}/g) ?? []).length === 2 && /--world-card-tone: var\(--tone,/.test(styles) && /\.world-dot \{[^}]*var\(--tone/.test(styles) &&
-      !/\.world-card\[data-status=[^\]]*\]\s*\{\s*--world-card-tone/.test(styles) && /\[data-tone="working"\] \{ --tone: var\(--blue\)/.test(styles))
+  ok('world.tone.2 the tag, its pill dot and its card badge take ONE hue from data-badge (cardBadge): busy is the world\'s green, quiet and stopped its red, needs-you amber, idle grey — and nothing in the world paints from data-tone any more',
+    /data-badge=\{badge\.kind\}/.test(card) && !/data-tone/.test(card) &&
+      /\.world-tag\[data-badge="busy"\] \{ --world-badge: var\(--world-go\); \}/.test(styles) &&
+      /\.world-tag\[data-badge="quiet"\],\s*\.world-tag\[data-badge="stopped"\] \{ --world-badge: var\(--world-stop\); \}/.test(styles) &&
+      /\.world-tag\[data-badge="wants-you"\] \{ --world-badge: var\(--world-wait\); \}/.test(styles) && /\.world-tag \{ --world-badge: var\(--world-rest\); \}/.test(styles) &&
+      /\.world-dot \{[^}]*background: var\(--world-badge\)/.test(styles) && /\.world-card__badge \{[^}]*color: var\(--world-badge\)/.test(styles))
+  ok('world.card.glass.1 the card is frosted glass: translucent white, a backdrop blur, rounded corners and a hairline; the pill is solid white with a drop shadow; both are DOM in the card layer, the card billboarded (no Html transform mode)',
+    /\.world-card \{[^}]*background: var\(--world-holo\)[^}]*\}/.test(styles) && /\.world-card \{[^}]*backdrop-filter: blur\(/.test(styles) &&
+      /\.world-card \{[^}]*border-radius: var\(--r-lg\)/.test(styles) && /\.world-card \{[^}]*border: 1px solid/.test(styles) &&
+      /\.world-pill \{[^}]*box-shadow: var\(--world-holo-shade\)/.test(styles) && /--world-holo:\s+rgba\(255, 255, 255, \.\d+\)/.test(styles) &&
+      !/<Html [^>]*\btransform\b/.test(card) && /className="world-card__title"/.test(card) && /className="world-card__badge"/.test(card) && /recentTools\(record\)/.test(card))
 
   const dir = join(root, 'src/renderer/world')
   const read = (f) => readFileSync(join(dir, f), 'utf8')
@@ -717,9 +757,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.stage.4 prefers-reduced-motion skips the choreography, live: the move is a 0ms snap, the stagger is dropped and a robot that turns live appears at once',
     /createWorldTransition\(on \? 1 : 0, reduced \? 0 : WORLD_TRANSITION_MS\)/.test(stage) && /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/.test(stage) && /addEventListener\('change'/.test(stage) &&
       /reduced \? 0 : pops\[i\]!/.test(view) && /reducedRef\.current \? 1 : easeInOutCubic/.test(robot))
-  ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — the dot is the same Html element in compact mode',
+  ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — a far agent wears the pill alone (its dot carries the state) in the same Html element',
     /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && /<QualityGovernor \/>/.test(view) && /<CardBudget /.test(view) && /t - last\.current < 0\.25/.test(view) &&
-      /compact=\{full !== null && !full\.has\(station\.agentId\)\}/.test(view) && /className="world-dot"/.test(card) && /compact \? \(/.test(card))
+      /compact=\{full !== null && !full\.has\(station\.agentId\)\}/.test(view) && /className="world-dot"/.test(card) && /compact \? null : \(/.test(card) && /const tools = compact \? \[\] : recentTools\(record\)/.test(card))
 }
 
 // ── wiring: every hook is a second reader, placed AFTER what it observes ─────

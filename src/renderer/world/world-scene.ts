@@ -1,4 +1,4 @@
-import { agentWord, type Tone } from '@renderer/panels/panel-state'
+import { agentWord } from '@renderer/panels/panel-state'
 import { colorOf } from '@shared/presence'
 import type { AgentState } from '@shared/types'
 import type { AgentEvent, AgentRecord, AgentStatus } from '@shared/world-events'
@@ -258,56 +258,6 @@ export function statusWord(status: AgentStatus): string {
 }
 
 /**
- * The panel state whose COLOUR each feed status wears. Every status has one,
- * unlike `PANEL_STATE` above: a thinking agent is `busy` to the canvas (a panel
- * is working while it thinks) and an errored one is `exited`, so the world
- * paints them in the hue the 2D canvas already paints those states — blue
- * working, amber needs-you, green idle, red stopped — and no colour is chosen
- * here. The stylesheet reads the tone off `[data-tone]`, the one rule block
- * that names an agent hue.
- */
-const TONE_STATE: Readonly<Record<AgentStatus, AgentState>> = {
-  working: 'busy', thinking: 'busy', waiting_approval: 'wants-you', idle: 'idle', error: 'exited'
-}
-
-export function statusTone(status: AgentStatus): Tone {
-  return agentWord(TONE_STATE[status]).tone
-}
-
-export type CardLine =
-  | { kind: 'thought'; text: string }
-  | { kind: 'tool'; tool: string; text: string; state: 'running' | 'done' | 'failed'; detail?: string }
-  | { kind: 'message'; text: string }
-  | { kind: 'error'; text: string }
-  | { kind: 'none' }
-
-/**
- * The agent's latest thing worth reading: a thought, a tool call (or its
- * result), a message or an error — whichever came last. Status events are
- * skipped; the card shows the status as its own word.
- */
-export function cardLine(record: Pick<AgentRecord, 'events'>): CardLine {
-  for (let i = record.events.length - 1; i >= 0; i--) {
-    const event = record.events[i]!
-    switch (event.type) {
-      case 'thought': return { kind: 'thought', text: event.payload.text }
-      case 'message': return { kind: 'message', text: event.payload.text }
-      case 'error': return { kind: 'error', text: event.payload.message }
-      case 'tool_call':
-      case 'tool_result': {
-        const p = event.payload
-        const state = event.type === 'tool_call' ? 'running' : p.status === 'failed' ? 'failed' : 'done'
-        return p.detail !== undefined && state !== 'running'
-          ? { kind: 'tool', tool: p.tool, text: p.summary, state, detail: p.detail }
-          : { kind: 'tool', tool: p.tool, text: p.summary, state }
-      }
-      default: break
-    }
-  }
-  return { kind: 'none' }
-}
-
-/**
  * The robot's colour: the same per-id hash the 2D canvas paints an owner with
  * (`colorOf`, shared/presence.ts), so an agent is one colour in both views.
  * An id with no 2D node yet — a simulated agent — still gets the colour its
@@ -315,4 +265,117 @@ export function cardLine(record: Pick<AgentRecord, 'events'>): CardLine {
  */
 export function agentTint(agentId: string): string {
   return colorOf(agentId)
+}
+
+// ── the hologram card and the procedural robot (M415) ───────────────────────
+
+/** A live agent that has said nothing for this long — no event, no open call — reads as quiet. */
+export const QUIET_MS = 45_000
+
+/**
+ * The card's status badge. Named for the panel states (never the words: `verify:rail
+ * state.2` forbids spelling `working` outside panel-state.ts), plus `quiet`, which no
+ * panel state has — it is the world's own reading of a live agent gone silent.
+ */
+export type BadgeKind = 'busy' | 'quiet' | 'idle' | 'wants-you' | 'stopped'
+
+export interface Badge {
+  kind: BadgeKind
+  word: string
+}
+
+const BADGE_OF: Readonly<Record<AgentStatus, BadgeKind>> = {
+  working: 'busy', thinking: 'busy', waiting_approval: 'wants-you', idle: 'idle', error: 'stopped'
+}
+
+/**
+ * What the badge says. A working or thinking agent is WORKING while anything is
+ * happening — an event inside `QUIET_MS`, or a tool call still open (a long test
+ * run is not silence) — and QUIET once neither is true. `now` is a parameter
+ * because quiet arrives with the clock, not with an event, and so the rule is
+ * testable. Words come from `agentWord` wherever the app already has one.
+ */
+export function cardBadge(record: Pick<AgentRecord, 'status' | 'events' | 'lastTs'>, now: number): Badge {
+  const kind = BADGE_OF[record.status]
+  if (kind === 'busy' && now - record.lastTs > QUIET_MS && !isTyping(record, now)) return { kind: 'quiet', word: 'quiet' }
+  switch (kind) {
+    case 'busy': return { kind, word: agentWord('busy').word }
+    case 'idle': return { kind, word: agentWord('idle').word }
+    case 'wants-you': return { kind, word: agentWord('wants-you').word }
+    default: return { kind, word: statusWord(record.status) }
+  }
+}
+
+/**
+ * The card's title. The contract has no task field, so the title is the
+ * agent's own latest words about what it is doing — its last thought or
+ * message — and its name when it has said nothing yet.
+ */
+export function cardTitle(record: Pick<AgentRecord, 'name' | 'events'>): string {
+  for (let i = record.events.length - 1; i >= 0; i--) {
+    const event = record.events[i]!
+    if (event.type === 'thought' || event.type === 'message') {
+      const text = event.payload.text.trim()
+      if (text !== '') return text
+    }
+  }
+  return record.name
+}
+
+export interface ToolLine {
+  /** callId, or the call's seq for a source that has none — a stable React key. */
+  key: string
+  tool: string
+  text: string
+  state: 'running' | 'done' | 'failed'
+}
+
+/**
+ * The agent's latest few tool calls, oldest first (a log reads down), one line
+ * per CALL: a result folds into the call it answers (by callId, or the latest
+ * open call for a source without ids — `isTyping`'s rule), so a finished call
+ * is one `done` line, not a `started` line and a `done` line.
+ */
+export function recentTools(record: Pick<AgentRecord, 'events'>, max = 4): ToolLine[] {
+  const lines: ToolLine[] = []
+  const byCall = new Map<string, ToolLine>()
+  for (const event of record.events) {
+    if (event.type === 'tool_call') {
+      const p = event.payload
+      const line: ToolLine = { key: p.callId ?? `seq:${event.seq}`, tool: p.tool, text: toolText(p.tool, p.summary), state: p.status === 'started' ? 'running' : p.status }
+      lines.push(line)
+      byCall.set(line.key, line)
+    } else if (event.type === 'tool_result') {
+      const p = event.payload
+      const open = p.callId !== undefined ? byCall.get(p.callId) : [...lines].reverse().find((l) => l.state === 'running')
+      const state = p.status === 'failed' ? 'failed' : 'done'
+      if (open) open.state = state
+      else lines.push({ key: p.callId ?? `seq:${event.seq}`, tool: p.tool, text: toolText(p.tool, p.summary), state })
+    }
+  }
+  return lines.slice(-max)
+}
+
+/** The real feed's summary starts with the tool's own name ("Read src/x.ts"); the line already shows it, in its own column. */
+function toolText(tool: string, summary: string): string {
+  return summary.startsWith(`${tool} `) ? summary.slice(tool.length + 1) : summary === tool ? '' : summary
+}
+
+/** A new tool call makes the robot hop. Only a START: its result is a state change, not a beat. */
+export function hopsOn(event: AgentEvent): boolean {
+  return event.type === 'tool_call' && event.payload.status === 'started'
+}
+
+/**
+ * The robot's lean, in radians about its own x axis (+ is forward): toward its
+ * desk while it types, a little back while it thinks, toward the table while it
+ * waits there for a person, into the step while it walks. The robot faces what
+ * it is busy with, so "toward its focus" is forward.
+ */
+export function leanOf(status: AgentStatus, typing: boolean, moving: boolean): number {
+  if (moving) return 0.1
+  if (typing) return 0.16
+  if (status === 'thinking') return -0.06
+  if (status === 'waiting_approval') return 0.08
+  return 0
 }

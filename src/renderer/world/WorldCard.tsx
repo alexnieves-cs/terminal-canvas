@@ -1,19 +1,24 @@
-import { memo, useRef, type JSX, type MutableRefObject, type RefObject } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { memo, useReducer, useRef, type JSX, type MutableRefObject, type RefObject } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import { useAgent } from './agent-world-store'
-import { cardLine, statusTone, statusWord, type CardLine } from './world-scene'
+import type { Group } from 'three'
+import { getAgent, useAgent } from './agent-world-store'
+import { cardBadge, cardTitle, recentTools, type BadgeKind } from './world-scene'
 import { cardStand, cardTiltDeg } from './world-transition'
 
 /**
- * The floating status card over a robot: the agent's name and status word, and
- * the latest thing it thought, called or said.
+ * What floats over a robot (M415): a white NAME PILL above its head, and —
+ * for the nearest few — a frosted-glass HOLOGRAM CARD beside it with what it
+ * is on (`cardTitle`), a status badge (`cardBadge`) and its latest tool calls
+ * (`recentTools`).
  *
- * A DOM card, not a texture, so it is crisp at any zoom, selectable, and read
- * by assistive tech (the canvas itself is opaque to it). It re-renders when
- * ITS agent's record changes and for no one else's — `useAgent` is a
+ * DOM, not textures, so both are crisp at any zoom, selectable, and read by
+ * assistive tech (the canvas itself is opaque to it). ONE `Html` per robot
+ * carries both, so a card costs no second projected element. It re-renders
+ * when ITS agent's record changes and for no one else's — `useAgent` is a
  * per-agent subscription — and it is a child of the robot's group, so it
- * follows the robot without a position of its own.
+ * follows the robot without a position of its own. Not `transform` mode: the
+ * card always faces the camera.
  *
  * `pointerEvents="none"`: a card over a drag must not eat the drag that orbits
  * the camera.
@@ -28,75 +33,109 @@ import { cardStand, cardTiltDeg } from './world-transition'
  * of our own is a target that never changes. The layer also keeps the cards
  * clipped to the view and under the page's own buttons.
  *
- * It STANDS UP as its robot arrives: lying back (rotateX, hinged on its bottom
- * edge) and faded at the start of the robot's pop, facing the camera at the
- * end. `--world-tilt` is written straight onto the card from the frame loop —
- * a React state here would re-render the card 60 times a second — and only
- * while it is changing, so a card at rest costs nothing.
+ * Written from the frame loop, never React state (a render 60 times a second):
  *
- * **Only the nearest few agents get the full card** (`cardTiers`, world-perf.ts);
- * the rest wear a status DOT — the same element, the same tone, no text. A card
- * is a live React tree that follows a 3D point every frame, so a room of forty
- * agents would be forty of them, and the ones too far to read were never
- * legible anyway. The dot keeps the one thing a far agent can still say, its
- * state, in the colour the 2D canvas uses for it (`data-tone`, the shared
- * `[data-tone]` rule block — nothing here chooses a hue).
+ *   - the STAND-UP as its robot arrives: the tag fades in and the card lies
+ *     back (rotateX, hinged on its bottom edge) at the start of the robot's
+ *     pop and faces the camera at the end — `--world-tilt` and opacity, only
+ *     while they change, so a tag at rest costs nothing;
+ *   - the REACH: how far right of the robot's axis the card starts, in pixels,
+ *     from the robot's distance — a fixed offset would bury the card in the
+ *     robot when zoomed in and leave it adrift when zoomed out. Written only
+ *     when it moves by a whole pixel;
+ *   - QUIET, which arrives with the clock and not with an event: the badge is
+ *     re-asked once a second, and the tag re-renders only when its kind flips.
  *
- * What it paints is the feed's own text. Today that is simulated; the day a
- * real session feeds the store, the producer is where secrets get scrubbed
- * (the renderer has no second gate to put here), so a feed that cannot
- * promise that should not be wired in unscrubbed.
+ * **Only the nearest few agents get the card** (`cardTiers`, world-perf.ts);
+ * the rest wear the pill alone, whose dot carries the state. A card is a live
+ * React tree over a 3D point, so a room of forty agents would be forty, and
+ * the ones too far to read were never legible anyway.
+ *
+ * What it paints is the feed's own text, which the producer scrubs
+ * (`shared/world-feed.ts`): the renderer has no second gate to put here.
  */
-function Line({ line }: { line: CardLine }): JSX.Element | null {
-  switch (line.kind) {
-    case 'none':
-      return null
-    case 'thought':
-      return <p className="world-card__line world-card__line--thought">{line.text}</p>
-    case 'message':
-      return <p className="world-card__line world-card__line--message">{line.text}</p>
-    case 'error':
-      return <p className="world-card__line world-card__line--error">{line.text}</p>
-    case 'tool':
-      return (
-        <p className="world-card__line world-card__line--tool" data-state={line.state}>
-          <span className="world-card__tool">{line.tool}</span>
-          {line.text}
-          {line.detail !== undefined ? <span className="world-card__detail">{line.detail}</span> : null}
-        </p>
-      )
-  }
-}
+
+/** World units from the robot's axis to the card's left edge: half a robot's width and a gap. */
+const REACH_UNITS = 0.62
+const REACH_GAP_PX = 8
 
 export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compact }: { agentId: string; y: number; layer: RefObject<HTMLElement | null>; pop: MutableRefObject<number>; compact: boolean }): JSX.Element | null {
   const record = useAgent(agentId)
+  const anchor = useRef<HTMLDivElement>(null)
   const card = useRef<HTMLDivElement>(null)
+  const point = useRef<Group>(null)
   const written = useRef(-1)
-  useFrame(() => {
-    const node = card.current
-    if (!node) return
+  const reach = useRef(-1)
+  const askedAt = useRef(-Infinity)
+  const shown = useRef<BadgeKind | null>(null)
+  // The last title the agent gave in its own words. The ring is fifty events,
+  // and a long run of tool calls pushes the last thought out of it; the card
+  // keeps saying what the agent is on rather than dropping back to its name.
+  const said = useRef<string | null>(null)
+  const [, recheck] = useReducer((n: number) => n + 1, 0)
+  const camera = useThree((s) => s.camera)
+  const height = useThree((s) => s.size.height)
+
+  useFrame((state) => {
+    const tag = anchor.current
+    if (!tag) return
     const stand = cardStand(pop.current)
-    if (stand === written.current) return
-    written.current = stand
-    node.style.setProperty('--world-tilt', `${cardTiltDeg(stand).toFixed(2)}deg`)
-    node.style.opacity = String(Math.min(1, stand * 2))
+    if (stand !== written.current) {
+      written.current = stand
+      tag.style.opacity = String(Math.min(1, stand * 2))
+      card.current?.style.setProperty('--world-tilt', `${cardTiltDeg(stand).toFixed(2)}deg`)
+    }
+    const at = point.current?.matrixWorld.elements
+    if (card.current && at) {
+      const dist = Math.hypot(camera.position.x - at[12]!, camera.position.y - at[13]!, camera.position.z - at[14]!)
+      const fov = 'fov' in camera ? (camera.fov as number) : 40
+      const px = Math.round((REACH_UNITS * height) / (2 * Math.tan((fov * Math.PI) / 360) * Math.max(dist, 0.1)) + REACH_GAP_PX)
+      if (px !== reach.current) {
+        reach.current = px
+        tag.style.setProperty('--world-reach', `${px}px`)
+      }
+    }
+    const t = state.clock.elapsedTime
+    if (t - askedAt.current >= 1) {
+      askedAt.current = t
+      const rec = getAgent(agentId)
+      if (rec && cardBadge(rec, Date.now()).kind !== shown.current) recheck()
+    }
   })
+
   if (!record || !layer.current) return null
-  const word = statusWord(record.status)
-  const tone = statusTone(record.status)
+  const badge = cardBadge(record, Date.now())
+  shown.current = badge.kind
+  const tools = compact ? [] : recentTools(record)
+  const latest = cardTitle(record)
+  if (latest !== record.name) said.current = latest
+  const title = said.current ?? latest
   return (
-    <Html position={[0, y, 0]} zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
-      {compact ? (
-        <div ref={card} className="world-dot" style={{ opacity: 0 }} data-status={record.status} data-tone={tone} role="img" aria-label={`${record.name}: ${word}`} />
-      ) : (
-        <div ref={card} className="world-card" style={{ opacity: 0 }} data-status={record.status} data-tone={tone} role="group" aria-label={`${record.name}: ${word}`}>
-          <div className="world-card__head">
-            <span className="world-card__name">{record.name}</span>
-            <span className="world-card__status">{word}</span>
+    <group ref={point} position={[0, y, 0]}>
+      <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
+        <div ref={anchor} className="world-tag" style={{ opacity: 0 }} data-status={record.status} data-badge={badge.kind} role="group" aria-label={`${record.name}: ${badge.word}`}>
+          <div className="world-pill" aria-hidden="true">
+            <span className="world-dot" />
+            <span className="world-pill__name">{record.name}</span>
           </div>
-          <Line line={cardLine(record)} />
+          {compact ? null : (
+            <div ref={card} className="world-card">
+              <p className="world-card__title">{title}</p>
+              <p className="world-card__badge">{badge.word}</p>
+              {tools.length > 0 ? (
+                <ul className="world-card__tools">
+                  {tools.map((line) => (
+                    <li key={line.key} data-state={line.state}>
+                      <span className="world-card__tool">{line.tool}</span>
+                      {line.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
         </div>
-      )}
-    </Html>
+      </Html>
+    </group>
   )
 })

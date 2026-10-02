@@ -1,182 +1,246 @@
 import { memo, Suspense, useEffect, useMemo, useRef, type JSX, type RefObject } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { getAgent, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
-import { agentTint, effectOf, goalOf, isTyping, type Effect, type Station } from './world-scene'
+import { agentTint, effectOf, goalOf, hopsOn, isTyping, leanOf, type Station } from './world-scene'
 import { ARRIVE_MS, easeInOutCubic, popOf, type WorldTransition } from './world-transition'
 
 /**
- * One agent as a robot: a rigged Quaternius character walking between its desk
- * and the meeting table, its pose a function of the event store.
+ * One agent as a robot: a glossy capsule body in the agent's colour, a dark
+ * visor with two lit eyes, walking between its desk and the meeting table, its
+ * pose a function of the event store.
  *
  * Reached only through the lazily-loaded WorldView (CLAUDE.md's library table
  * says why: three.js is +2.2MB in the first chunk if anything static reaches it).
  *
- * Three layers, in the order they land on the skeleton each frame:
+ * Built from primitives, not a rigged model (M415): every robot shares ONE set
+ * of geometries (`robotKit`) and differs only by its body material, so a robot
+ * is eight small draw calls and no skeleton, and every motion is a few sines
+ * on plain groups instead of a mixer blending clips:
  *
- *   1. CLIPS, from the model's own animation set — `Idle`, or `Walk` while the
- *      robot is travelling (to a new desk as the arc re-flows, or to the table
- *      to wait for a person), crossfaded; and one-shots over the idle — `Wave`
- *      for a message, `HitReact` for an error or a failed tool.
- *   2. STATES layered after the mixer by turning bones a little: forearms
- *      working and a bob while a tool call is open ("typing"), a slow sway
- *      while `thinking`.
- *   3. A PULSE: the head tilts once when a thought arrives.
+ *   - an idle BOB, phase-shifted per agent so a room never breathes in unison;
+ *   - a LEAN toward what it is busy with (`leanOf`): into the desk while a tool
+ *     call is open, back while it thinks, toward the table while it waits there;
+ *   - a HOP with a squash-and-stretch when a tool call starts (`hopsOn`);
+ *   - one-shots for the rest of the feed: a WAVE for a message, a SHAKE for an
+ *     error or a failed call, a head TILT for a thought — and a blink, and a
+ *     waddle while walking.
  *
  * Everything is read from `getAgent` inside the frame loop, never from React
- * state, so an event costs a ref read — not a render of a skinned mesh.
+ * state, so an event costs a ref read — not a render.
  *
  * Load-bearing, and each fails SILENTLY:
  *
- * (1) **Materials are cloned per robot.** SkeletonUtils.clone shares geometry
- *     AND materials, so tinting the shared `Main` material would repaint every
- *     robot the colour of whichever agent set it last.
+ * (1) **The gloss is a generated room, not an HDR.** A clearcoat with nothing
+ *     to reflect is a flat plastic; drei's `<Environment>` would fetch an HDR
+ *     from a CDN the CSP refuses. `RoomEnvironment` is built in code and
+ *     prefiltered once per renderer (`studioEnv`) — and it is set on the ROBOT
+ *     materials only, never `scene.environment`, which would relight the office.
  * (2) **History is not replayed.** The event cursor starts at the record's
- *     last seq, so opening the view mid-session does not make every robot wave
- *     and flinch through its ring of fifty events at once.
- * (3) **An overlay is undone before the mixer runs, and re-captured after.**
- *     The mixer writes a bone back only when its sampled value CHANGED since
- *     the last frame, so a bone on a constant track (an idle arm) is never
- *     rewritten — and an additive `rotateX` per frame then compounds until the
- *     robot is tumbling across its desk. Each overlay bone's pre-overlay pose is
- *     kept (`Rig.base`), put back ahead of `mixer.update`, and taken again after
- *     it, so what is added is always added to the CLIP's pose and never to
- *     last frame's. This is measured, not theory: the tumbling is what the
- *     first version did.
- * (4) **Bones are found by `isBone`, not by name alone.** The model has a mesh
- *     node called `Head` ahead of the `Head` bone in traversal order, and
- *     `getObjectByName('Head')` returns the mesh — tilting it moves nothing a
- *     person can see, with no error.
- * (5) **The pop scales `bob`, never `placer`.** `placer` carries the walk and
+ *     last seq, so opening the view mid-session does not make every robot hop,
+ *     wave and shake through its ring of fifty events at once.
+ * (3) **The pop scales `bob`, never `placer`.** `placer` carries the walk and
  *     the status card, and the card's DOM position is projected from it — a
  *     robot scaled to 0 on `placer` drags its card's anchor down to its feet.
  *     `bob` is the robot's body alone, and its origin is the floor, so a scale
  *     there grows the robot from its feet. A scale of exactly 0 is a singular
  *     matrix (three warns on the normal matrix), so the pop floors at 1e-4 and
  *     the body is hidden below that instead.
+ * (4) **The kit is shared and never disposed.** Geometry is uploaded per
+ *     renderer and dropped with its context, so one module-level set serves
+ *     every mount; disposing it from one robot's cleanup would blank the rest.
+ *     The body MATERIAL is per robot (it carries the colour) and is disposed.
  */
 
-const MODEL_BASE = `${import.meta.env.BASE_URL}models/quaternius-platformer/`
-const CHARACTER_URL = `${MODEL_BASE}Character.glb`
-const CHARACTER_GUN_URL = `${MODEL_BASE}Character_Gun.glb`
-const BEE_URL = `${MODEL_BASE}Bee.glb`
+/** Where the head's crown is — the name pill floats just above it. */
+export const ROBOT_TOP = 1.55
 
-export const ROBOT_HEIGHT = 1.8
-/** World units per second, and how much faster than authored the Walk clip plays to keep the feet from skating. */
+/** Body proportions: a big head on a short capsule, the reference's chubby figure. */
+const HIP_Y = 0.32
+const TORSO_Y = 0.6
+const SHOULDER = { x: 0.3, y: 0.8 } as const
+const HEAD_Y = 1.17
+const HEAD_R = 0.38
+/** The head is a sphere scaled to these, so its face is an ellipsoid with these semi-axes. */
+const HEAD_SCALE = [1.1, 0.94, 0.92] as const
+const HEAD_AXES = { x: HEAD_R * HEAD_SCALE[0], y: HEAD_R * HEAD_SCALE[1], z: HEAD_R * HEAD_SCALE[2] } as const
+/** The visor: a rounded rectangle on the face, centred a little below the head's middle. */
+const VISOR = { w: 0.6, h: 0.4, r: 0.12, y: -0.02 } as const
+const ARM_REST = 0.14
+
+/** World units per second while walking, and the step rate. */
 const WALK_SPEED = 2.4
-const WALK_CLIP_SCALE = 1.3
-const FADE_S = 0.25
-/** How long the head-tilt pulse lasts. */
+const STEP_HZ = 11
+const HOP_S = 0.36
+const WAVE_S = 1.5
+const SHAKE_S = 0.55
 const TILT_S = 1.3
-/** A queued one-shot older than this is for a moment that has passed. */
-const QUEUE_S = 1.0
+const BLINK_EVERY_S = 4.3
 
-// Preloaded when this chunk loads, so the first robot does not wait on the
-// network behind a Suspense fallback of nothing.
-//
-// BOTH decoders are off, here and at every useGLTF below, and each fails
-// differently when left on: Draco's default path is a CDN the CSP refuses, and
-// drei's Meshopt default instantiates a WebAssembly module on first use, which
-// `script-src 'self'` (no 'wasm-unsafe-eval') refuses as an unhandled rejection
-// at load. These files are plain glTF, so neither decoder has anything to do.
-const PLAIN = [false, false] as const
-useGLTF.preload(CHARACTER_URL, ...PLAIN)
-useGLTF.preload(CHARACTER_GUN_URL, ...PLAIN)
+interface Kit {
+  leg: THREE.BufferGeometry
+  torso: THREE.BufferGeometry
+  arm: THREE.BufferGeometry
+  head: THREE.BufferGeometry
+  visor: THREE.BufferGeometry
+  eyes: THREE.BufferGeometry
+  halo: THREE.BufferGeometry
+  visorMaterial: THREE.MeshPhysicalMaterial
+  eyeMaterial: THREE.MeshBasicMaterial
+  haloMaterial: THREE.MeshBasicMaterial
+}
 
-interface Rig {
-  root: THREE.Object3D
-  /** Uniform scale that makes the model ROBOT_HEIGHT tall, and the lift that stands it on y = 0. */
-  scale: number
-  lift: number
-  mixer: THREE.AnimationMixer
-  actions: Map<string, THREE.AnimationAction>
-  materials: THREE.Material[]
-  byName: Map<string, THREE.MeshStandardMaterial[]>
-  bones: { head?: THREE.Object3D; armL?: THREE.Object3D; armR?: THREE.Object3D; foreL?: THREE.Object3D; foreR?: THREE.Object3D; torso?: THREE.Object3D }
-  /** The overlay bones and each one's pose BEFORE the overlay — see (3) above. */
-  overlay: THREE.Object3D[]
-  base: THREE.Quaternion[]
+/** A soft elliptical falloff, drawn in code (the CSP takes no image from elsewhere, and this needs none). */
+function glowTexture(): THREE.Texture {
+  const c = document.createElement('canvas')
+  c.width = 64
+  c.height = 64
+  const g = c.getContext('2d')!
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  grad.addColorStop(0, '#ffffff')
+  grad.addColorStop(0.35, '#7a7a7a')
+  grad.addColorStop(1, '#000000')
+  g.fillStyle = grad
+  g.fillRect(0, 0, 64, 64)
+  const texture = new THREE.CanvasTexture(c)
+  texture.colorSpace = THREE.NoColorSpace
+  return texture
+}
+
+/** How far the head's surface stands in front of its centre at (x, y), in the head's own frame. */
+function faceZ(x: number, y: number): number {
+  const u = 1 - (x / HEAD_AXES.x) ** 2 - (y / HEAD_AXES.y) ** 2
+  return HEAD_AXES.z * Math.sqrt(Math.max(u, 0))
 }
 
 /**
- * A BONE by name. GLTFLoader strips `.` from node names ("LowerArm.L" →
- * "LowerArmL"), so either spelling matches, and only `isBone` nodes count.
+ * Lays a flat (x, y) geometry onto the face, `lift(x, y)` proud of it. A face
+ * plate must FOLLOW the head: a flat or merely bent box is a few big triangles
+ * whose chords sink inside the sphere at the middle, so only its sides show —
+ * which is what the first version (a RoundedBoxGeometry, bent) did.
  */
-function bone(root: THREE.Object3D, name: string): THREE.Object3D | undefined {
-  const bare = name.replace(/\./g, '')
-  let found: THREE.Object3D | undefined
-  root.traverse((o) => {
-    if (!found && (o as THREE.Bone).isBone && (o.name === name || o.name === bare)) found = o
-  })
-  return found
+function conform(geometry: THREE.BufferGeometry, lift: (x: number, y: number) => number): void {
+  const p = geometry.getAttribute('position') as THREE.BufferAttribute
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i)
+    const y = p.getY(i)
+    p.setZ(i, faceZ(x, y) + lift(x, y))
+  }
+  p.needsUpdate = true
+  geometry.computeVertexNormals()
 }
 
-function buildRig(gltf: { scene: THREE.Object3D; animations: THREE.AnimationClip[] }, height: number): Rig {
-  const root = cloneSkinned(gltf.scene)
-  const materials: THREE.Material[] = []
-  const byName = new Map<string, THREE.MeshStandardMaterial[]>()
-  const own = (material: THREE.Material): THREE.Material => {
-    const copy = material.clone()
-    materials.push(copy)
-    const list = byName.get(copy.name) ?? []
-    list.push(copy as THREE.MeshStandardMaterial)
-    byName.set(copy.name, list)
-    return copy
+/** A dense plane pulled into a rounded rectangle: every vertex in a corner square is drawn onto the corner's arc. */
+function roundedPlate(w: number, h: number, r: number, cy: number): THREE.BufferGeometry {
+  const g = new THREE.PlaneGeometry(w, h, 30, 20)
+  const p = g.getAttribute('position') as THREE.BufferAttribute
+  const ix = w / 2 - r, iy = h / 2 - r
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i)
+    const dx = Math.abs(x) - ix, dy = Math.abs(y) - iy
+    if (dx > 0 && dy > 0) {
+      // Square → disc on the corner: scale by the square's radius over the circle's along that ray.
+      const k = Math.max(dx, dy) / Math.hypot(dx, dy)
+      p.setXY(i, Math.sign(x) * (ix + dx * k), Math.sign(y) * (iy + dy * k))
+    }
   }
-  root.traverse((object) => {
-    const mesh = object as THREE.Mesh
-    if (!mesh.isMesh) return
-    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material)
-    // A skinned mesh's bounding sphere is the bind pose's; a swinging arm leaves it.
-    mesh.frustumCulled = false
-  })
-  root.updateWorldMatrix(true, true)
-  const box = new THREE.Box3().setFromObject(root, true)
-  const size = box.max.y - box.min.y
-  const scale = size > 0 ? height / size : 1
-  const mixer = new THREE.AnimationMixer(root)
-  const actions = new Map<string, THREE.AnimationAction>()
-  for (const clip of gltf.animations) actions.set(clip.name, mixer.clipAction(clip))
-  const bones = {
-    head: bone(root, 'Head'), torso: bone(root, 'Torso'),
-    armL: bone(root, 'UpperArm.L'), armR: bone(root, 'UpperArm.R'),
-    foreL: bone(root, 'LowerArm.L'), foreR: bone(root, 'LowerArm.R')
-  }
-  const overlay = Object.values(bones).filter((b): b is THREE.Object3D => b !== undefined)
-  return {
-    root, scale, lift: -box.min.y * scale, mixer, actions, materials, byName, bones,
-    overlay, base: overlay.map((b) => b.quaternion.clone())
-  }
+  return g.translate(0, cy, 0)
 }
 
-function disposeRig(rig: Rig): void {
-  rig.mixer.stopAllAction()
-  rig.mixer.uncacheRoot(rig.root)
-  for (const material of rig.materials) material.dispose()
+let kit: Kit | null = null
+function robotKit(): Kit {
+  if (kit) return kit
+  // A leg hangs from its hip pivot; an arm from its shoulder.
+  const leg = new THREE.CapsuleGeometry(0.1, 0.12, 6, 14).translate(0, -HIP_Y / 2, 0)
+  const arm = new THREE.CapsuleGeometry(0.075, 0.22, 6, 12).translate(0, -0.15, 0)
+  const torso = new THREE.CapsuleGeometry(0.27, 0.16, 8, 24)
+  const head = new THREE.SphereGeometry(HEAD_R, 40, 28)
+  // Flush with the head at its rim and a little proud at its middle, so it reads as a screen set INTO the helmet.
+  const visor = roundedPlate(VISOR.w, VISOR.h, VISOR.r, VISOR.y)
+  conform(visor, (x, y) => {
+    const rim = Math.min(1, (VISOR.w / 2 - Math.abs(x)) / 0.07, (VISOR.h / 2 - Math.abs(y - VISOR.y)) / 0.07)
+    return 0.004 + 0.022 * Math.max(rim, 0)
+  })
+  // Two pill-shaped eyes as ONE geometry (one draw call), on the visor, and a
+  // soft halo behind them (one more) — the glow a bloom pass would give, for
+  // the price of a quad instead of a full-screen pass.
+  const EYE = { w: 0.075, h: 0.15, x: 0.105, y: VISOR.y + 0.012 } as const
+  const pill = (cx: number): THREE.BufferGeometry => roundedPlate(EYE.w, EYE.h, EYE.w / 2, EYE.y).translate(cx, 0, 0)
+  const eyes = mergeGeometries([pill(-EYE.x), pill(EYE.x)])!
+  conform(eyes, () => 0.03)
+  const halo = mergeGeometries([-EYE.x, EYE.x].map((cx) => new THREE.PlaneGeometry(EYE.w * 2.6, EYE.h * 1.9, 8, 8).translate(cx, EYE.y, 0)))!
+  conform(halo, () => 0.027)
+  // Both re-centred on the eyes' own middle, so the blink (a y scale) closes them in place.
+  eyes.translate(0, -EYE.y, 0)
+  halo.translate(0, -EYE.y, 0)
+  kit = {
+    leg, torso, arm, head, visor, eyes, halo,
+    visorMaterial: new THREE.MeshPhysicalMaterial({ color: '#07090d', roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.7 }),
+    // Unlit and outside tone mapping: a glow that reads the same in a light or a dark room.
+    eyeMaterial: new THREE.MeshBasicMaterial({ color: '#7ff4ff', toneMapped: false }),
+    haloMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', alphaMap: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
+  }
+  return kit
+}
+
+const envs = new WeakMap<THREE.WebGLRenderer, THREE.Texture>()
+/** The reflections the clearcoat needs — see (1). Built once per renderer. */
+function studioEnv(gl: THREE.WebGLRenderer): THREE.Texture {
+  let texture = envs.get(gl)
+  if (!texture) {
+    const pmrem = new THREE.PMREMGenerator(gl)
+    const room = new RoomEnvironment()
+    texture = pmrem.fromScene(room, 0.04).texture
+    room.dispose()
+    pmrem.dispose()
+    envs.set(gl, texture)
+  }
+  return texture
 }
 
 /**
- * Paints the model's three body materials from one agent colour: `Main` is the
- * shell, `Main2` its shade, `Main_Light` the trim. Eyes, joints and the gun
- * keep the model's own black, white and grey, so it still reads as a robot.
+ * The shell: the agent's colour (`agentTint`, the 2D canvas's hash) pushed to
+ * full saturation, because the reference's toys are candy-bright and the 2D
+ * palette is tuned for a dot on a dark rail. The HUE is the agent's, so it is
+ * still one colour in both views.
  */
-function tintRig(rig: Rig, tint: string): void {
-  const base = new THREE.Color(tint)
-  const set = (name: string, color: THREE.Color): void => {
-    for (const material of rig.byName.get(name) ?? []) material.color.copy(color)
-  }
-  set('Main', base)
-  set('Main2', base.clone().multiplyScalar(0.55))
-  set('Main_Light', base.clone().lerp(new THREE.Color('#ffffff'), 0.55))
+function shellMaterial(tint: string, env: THREE.Texture): THREE.MeshPhysicalMaterial {
+  const color = new THREE.Color(tint)
+  const hsl = { h: 0, s: 0, l: 0 }
+  color.getHSL(hsl)
+  color.setHSL(hsl.h, Math.max(hsl.s, 0.82), Math.min(Math.max(hsl.l, 0.5), 0.6))
+  return new THREE.MeshPhysicalMaterial({
+    color, roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
+    envMap: env, envMapIntensity: 0.55
+  })
+}
+
+/** A stable 0…2π per agent, so idle bobs and blinks are out of step across the room. */
+function phaseOf(agentId: string): number {
+  let h = 0
+  for (let i = 0; i < agentId.length; i++) h = (h * 31 + agentId.charCodeAt(i)) >>> 0
+  return ((h % 1000) / 1000) * Math.PI * 2
 }
 
 /** Shortest-arc exponential approach — a yaw that never spins the long way round. */
 function dampAngle(current: number, target: number, rate: number, dt: number): number {
   const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current))
   return current + delta * (1 - Math.exp(-rate * dt))
+}
+
+function damp(current: number, target: number, rate: number, dt: number): number {
+  return current + (target - current) * (1 - Math.exp(-rate * dt))
+}
+
+/** 0 → 1 → 0 over `span` seconds since `at`; 0 outside it. */
+function pulse(t: number, at: number, span: number): number {
+  const u = (t - at) / span
+  return u >= 0 && u < 1 ? Math.sin(Math.PI * u) : 0
 }
 
 interface Motion {
@@ -188,11 +252,13 @@ interface Motion {
   typing: boolean
   typingCheckedAt: number
   typingW: number
+  walkW: number
+  lean: number
+  nod: number
   tiltAt: number
-  queued: Extract<Effect, 'wave' | 'hit'> | null
-  queuedAt: number
-  current: THREE.AnimationAction | null
-  once: boolean
+  waveAt: number
+  hitAt: number
+  hopAt: number
 }
 
 export interface WorldRobotProps {
@@ -204,19 +270,23 @@ export interface WorldRobotProps {
   transition: WorldTransition
   /** How far into the move this robot starts (0 = with the first; see `popDelays`). */
   delay: number
-  /** A status dot instead of the full card (it is outside the nearest few; see `cardTiers`). */
+  /** The name pill alone instead of the pill and the full card (it is outside the nearest few; see `cardTiers`). */
   compact: boolean
   /** prefers-reduced-motion: a robot that turns live appears at once instead of growing in. */
   reduced: boolean
 }
 
 function RobotBody({ agentId, station, cards, transition, delay, compact, reduced }: WorldRobotProps): JSX.Element {
-  const gun = station.index % 2 === 1
-  const gltf = useGLTF(gun ? CHARACTER_GUN_URL : CHARACTER_URL, ...PLAIN)
-  const rig = useMemo(() => buildRig(gltf, ROBOT_HEIGHT), [gltf])
-  useEffect(() => () => disposeRig(rig), [rig])
+  const k = robotKit()
+  const gl = useThree((s) => s.gl)
+  const env = useMemo(() => studioEnv(gl), [gl])
+  useEffect(() => {
+    k.visorMaterial.envMap = env
+    k.visorMaterial.needsUpdate = true
+  }, [k, env])
   const tint = agentTint(agentId)
-  useEffect(() => tintRig(rig, tint), [rig, tint])
+  const shell = useMemo(() => shellMaterial(tint, env), [tint, env])
+  useEffect(() => () => shell.dispose(), [shell])
 
   // A string snapshot: re-renders on a status CHANGE only, which is when the
   // bug appears or goes. Everything finer-grained is read in the frame loop.
@@ -224,6 +294,15 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
 
   const placer = useRef<THREE.Group>(null)
   const bob = useRef<THREE.Group>(null)
+  const lean = useRef<THREE.Group>(null)
+  const hopper = useRef<THREE.Group>(null)
+  const upper = useRef<THREE.Group>(null)
+  const head = useRef<THREE.Group>(null)
+  const eyes = useRef<THREE.Group>(null)
+  const legL = useRef<THREE.Group>(null)
+  const legR = useRef<THREE.Group>(null)
+  const armL = useRef<THREE.Group>(null)
+  const armR = useRef<THREE.Group>(null)
   // This robot's pop (0…1), written by the frame loop and read by its card.
   const pop = useRef(0)
   // The delay is read in the frame loop, which must not be rebuilt for it.
@@ -231,54 +310,20 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   delayRef.current = delay
   const reducedRef = useRef(reduced)
   reducedRef.current = reduced
-  // When this robot first ran a frame — a robot that turns live mid-session, or
-  // whose model loaded late, arrives on its own clock instead of blinking in.
+  // When this robot first ran a frame — a robot that turns live mid-session
+  // arrives on its own clock instead of blinking in.
   const bornAt = useRef<number | null>(null)
-  const fadeToRef = useRef<(name: string, once: boolean) => void>(() => {})
   // The frame loop reads the latest station through a ref: the plan changes as
   // agents arrive, and the loop must not be rebuilt (or its state lost) for it.
   const latest = useRef(station)
   latest.current = station
+  const phase = useMemo(() => phaseOf(agentId), [agentId])
   const motion = useRef<Motion>({
     ready: false, yaw: 0, moving: false,
     cursor: getAgent(agentId)?.lastSeq ?? -Infinity, rec: undefined,
-    typing: false, typingCheckedAt: -Infinity, typingW: 0,
-    tiltAt: -Infinity, queued: null, queuedAt: 0,
-    current: null, once: false
+    typing: false, typingCheckedAt: -Infinity, typingW: 0, walkW: 0, lean: 0, nod: 0,
+    tiltAt: -Infinity, waveAt: -Infinity, hitAt: -Infinity, hopAt: -Infinity
   })
-
-  const idleName = gun && rig.actions.has('Idle_Gun') ? 'Idle_Gun' : 'Idle'
-  const walkName = gun && rig.actions.has('Walk_Gun') ? 'Walk_Gun' : 'Walk'
-
-  useEffect(() => {
-    const st = motion.current
-    st.current = null
-    st.once = false
-    const onFinished = (event: { action: THREE.AnimationAction }): void => {
-      if (event.action !== st.current || !st.once) return
-      st.once = false
-      fadeTo(st.moving ? walkName : idleName, false)
-    }
-    // The one place a clip starts: crossfade from whatever is playing.
-    function fadeTo(name: string, once: boolean): void {
-      const next = rig.actions.get(name)
-      if (!next || (next === st.current && !once)) return
-      next.reset()
-      next.enabled = true
-      next.setEffectiveTimeScale(name === walkName ? WALK_CLIP_SCALE : 1)
-      next.setEffectiveWeight(1)
-      next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity)
-      next.clampWhenFinished = once
-      if (st.current && st.current !== next) st.current.crossFadeTo(next, FADE_S, false)
-      next.play()
-      st.current = next
-      st.once = once
-    }
-    rig.mixer.addEventListener('finished', onFinished)
-    fadeToRef.current = fadeTo
-    fadeTo(idleName, false)
-    return () => rig.mixer.removeEventListener('finished', onFinished)
-  }, [rig, idleName, walkName])
 
   useFrame((state, delta) => {
     const group = placer.current
@@ -304,9 +349,11 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       st.rec = rec
       for (const event of rec.events) {
         if (event.seq <= st.cursor) continue
+        if (hopsOn(event)) st.hopAt = t
         const fx = effectOf(event)
         if (fx === 'tilt') st.tiltAt = t
-        else if (fx === 'hit' || (fx === 'wave' && st.queued !== 'hit')) { st.queued = fx; st.queuedAt = t }
+        else if (fx === 'wave') st.waveAt = t
+        else if (fx === 'hit') st.hitAt = t
       }
       st.cursor = Math.max(st.cursor, rec.lastSeq)
       st.typingCheckedAt = -Infinity
@@ -345,54 +392,89 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     st.yaw = dampAngle(st.yaw, targetYaw, st.moving ? 14 : 8, dt)
     group.rotation.y = st.yaw
 
-    // ── clips ────────────────────────────────────────────────────────────
-    const fadeTo = fadeToRef.current
-    if (st.moving) {
-      if (st.once || st.current !== rig.actions.get(walkName)) fadeTo(walkName, false)
-      st.queued = null
-    } else if (st.once) {
-      // A one-shot plays out; its 'finished' event hands back to idle.
-    } else if (st.queued && t - st.queuedAt < QUEUE_S) {
-      fadeTo(st.queued === 'hit' ? 'HitReact' : 'Wave', true)
-      st.queued = null
-    } else {
-      st.queued = null
-      fadeTo(idleName, false)
-    }
-    for (let i = 0; i < rig.overlay.length; i++) rig.overlay[i]!.quaternion.copy(rig.base[i]!)
-    rig.mixer.update(dt)
-    for (let i = 0; i < rig.overlay.length; i++) rig.base[i]!.copy(rig.overlay[i]!.quaternion)
+    // ── the body: every layer a damped weight times a sine ────────────────
+    const typing = st.typing && !st.moving
+    const thinking = rec?.status === 'thinking' && !st.moving
+    st.typingW = damp(st.typingW, typing ? 1 : 0, 9, dt)
+    st.walkW = damp(st.walkW, st.moving ? 1 : 0, 10, dt)
+    st.lean = damp(st.lean, leanOf(rec?.status ?? 'idle', typing, st.moving), 6, dt)
+    st.nod = damp(st.nod, typing ? 0.14 : thinking ? -0.16 : 0, 5, dt)
+    const step = Math.sin(t * STEP_HZ)
+    const shakeU = (t - st.hitAt) / SHAKE_S
+    const shake = shakeU >= 0 && shakeU < 1 ? Math.sin(shakeU * 26) * 0.12 * (1 - shakeU) : 0
 
-    // ── states and the pulse, on top of the clip pose ────────────────────
-    st.typingW += ((st.typing && !st.moving ? 1 : 0) - st.typingW) * (1 - Math.exp(-9 * dt))
-    const b = rig.bones
-    if (st.typingW > 0.01) {
-      const w = st.typingW
-      const beat = Math.sin(t * 17)
-      b.armL?.rotateX(-0.75 * w)
-      b.armR?.rotateX(-0.75 * w)
-      b.foreL?.rotateX(-0.35 * w + beat * 0.16 * w)
-      b.foreR?.rotateX(-0.35 * w - beat * 0.16 * w)
-      b.torso?.rotateX(0.07 * w)
+    if (lean.current) {
+      lean.current.rotation.x = st.lean
+      lean.current.rotation.z = shake + st.walkW * step * 0.07
     }
-    if (bob.current) bob.current.position.y = st.typingW * Math.abs(Math.sin(t * 8.5)) * 0.03
-    if (rec?.status === 'thinking' && !st.moving) {
-      b.head?.rotateX(-0.12)
-      b.head?.rotateZ(Math.sin(t * 1.5) * 0.07)
+    const hop = pulse(t, st.hopAt, HOP_S)
+    if (hopper.current) {
+      hopper.current.position.y = hop * 0.16 + st.walkW * Math.abs(step) * 0.05
+      // Stretch on the way up, settle back as it lands.
+      hopper.current.scale.set(1 - hop * 0.05, 1 + hop * 0.09, 1 - hop * 0.05)
     }
-    const since = t - st.tiltAt
-    if (since >= 0 && since < TILT_S) b.head?.rotateZ(0.38 * Math.sin((Math.PI * since) / TILT_S))
+    if (upper.current) {
+      upper.current.position.y = Math.sin(t * 2.1 + phase) * 0.022 * (1 - st.walkW) + st.typingW * Math.abs(Math.sin(t * 8.5)) * 0.012
+    }
+    if (legL.current && legR.current) {
+      legL.current.rotation.x = st.walkW * step * 0.55
+      legR.current.rotation.x = -st.walkW * step * 0.55
+    }
+    const beat = Math.sin(t * 17)
+    const wave = Math.min(1, (t - st.waveAt) / 0.25, (st.waveAt + WAVE_S - t) / 0.3)
+    const waveW = wave > 0 ? wave : 0
+    if (armL.current) {
+      armL.current.rotation.x = -st.walkW * step * 0.5 + st.typingW * (-1.0 + beat * 0.18)
+      armL.current.rotation.z = -ARM_REST + Math.sin(t * 1.7 + phase) * 0.03 * (1 - st.typingW)
+    }
+    if (armR.current) {
+      armR.current.rotation.x = (st.walkW * step * 0.5 + st.typingW * (-1.0 - beat * 0.18)) * (1 - waveW)
+      armR.current.rotation.z = ARM_REST + Math.sin(t * 1.7 + phase + 1) * 0.03 * (1 - st.typingW) + waveW * (2.25 + Math.sin(t * 13) * 0.32)
+    }
+    if (head.current) {
+      head.current.rotation.x = st.nod
+      head.current.rotation.y = Math.sin(t * 0.5 + phase) * 0.14 * (1 - st.typingW) * (1 - st.walkW)
+      head.current.rotation.z = (thinking ? Math.sin(t * 1.5) * 0.07 : 0) + 0.32 * pulse(t, st.tiltAt, TILT_S)
+    }
+    if (eyes.current) {
+      const blink = ((t + phase * 3) % BLINK_EVERY_S) < 0.11
+      eyes.current.scale.y = blink ? 0.12 : 1
+    }
   })
 
   return (
     <group ref={placer}>
       <group ref={bob}>
-        <group scale={rig.scale} position-y={rig.lift}>
-          <primitive object={rig.root} />
+        <group ref={lean}>
+          <group ref={hopper}>
+            <group ref={legL} position={[-0.13, HIP_Y, 0]}>
+              <mesh geometry={k.leg} material={shell} />
+            </group>
+            <group ref={legR} position={[0.13, HIP_Y, 0]}>
+              <mesh geometry={k.leg} material={shell} />
+            </group>
+            <group ref={upper}>
+              <mesh geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} />
+              <group ref={armL} position={[-SHOULDER.x, SHOULDER.y, 0]}>
+                <mesh geometry={k.arm} material={shell} />
+              </group>
+              <group ref={armR} position={[SHOULDER.x, SHOULDER.y, 0]}>
+                <mesh geometry={k.arm} material={shell} />
+              </group>
+              <group ref={head} position-y={HEAD_Y}>
+                <mesh geometry={k.head} material={shell} scale={HEAD_SCALE} />
+                <mesh geometry={k.visor} material={k.visorMaterial} />
+                <group ref={eyes} position-y={VISOR.y + 0.012}>
+                  <mesh geometry={k.halo} material={k.haloMaterial} />
+                  <mesh geometry={k.eyes} material={k.eyeMaterial} />
+                </group>
+              </group>
+            </group>
+          </group>
         </group>
       </group>
       {status === 'error' ? <ErrorBug /> : null}
-      <WorldCard agentId={agentId} y={ROBOT_HEIGHT + 0.2} layer={cards} pop={pop} compact={compact} />
+      <WorldCard agentId={agentId} y={ROBOT_TOP} layer={cards} pop={pop} compact={compact} />
     </group>
   )
 }
@@ -409,12 +491,53 @@ function ErrorBug(): JSX.Element {
   )
 }
 
+const BEE_URL = `${import.meta.env.BASE_URL}models/quaternius-platformer/Bee.glb`
+const BEE_HEIGHT = 0.42
+
+// BOTH decoders are off, and each fails differently when left on: Draco's
+// default path is a CDN the CSP refuses, and drei's Meshopt default
+// instantiates a WebAssembly module on first use, which `script-src 'self'`
+// (no 'wasm-unsafe-eval') refuses as an unhandled rejection at load. The file
+// is plain glTF, so neither decoder has anything to do.
+const PLAIN = [false, false] as const
+
+interface BeeRig {
+  root: THREE.Object3D
+  scale: number
+  lift: number
+  mixer: THREE.AnimationMixer
+  materials: THREE.Material[]
+}
+
+function buildBee(gltf: { scene: THREE.Object3D; animations: THREE.AnimationClip[] }): BeeRig {
+  // SkeletonUtils.clone shares materials with the cached glTF; own them so a dispose here frees only this bee's.
+  const root = cloneSkinned(gltf.scene)
+  const materials: THREE.Material[] = []
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh
+    if (!mesh.isMesh) return
+    const own = (m: THREE.Material): THREE.Material => { const c = m.clone(); materials.push(c); return c }
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material)
+    // A skinned mesh's bounding sphere is the bind pose's; a flapping wing leaves it.
+    mesh.frustumCulled = false
+  })
+  root.updateWorldMatrix(true, true)
+  const box = new THREE.Box3().setFromObject(root, true)
+  const size = box.max.y - box.min.y
+  const scale = size > 0 ? BEE_HEIGHT / size : 1
+  const mixer = new THREE.AnimationMixer(root)
+  const flying = gltf.animations.find((clip) => clip.name === 'Flying')
+  if (flying) mixer.clipAction(flying).play()
+  return { root, scale, lift: -box.min.y * scale, mixer, materials }
+}
+
 function Bee(): JSX.Element {
   const gltf = useGLTF(BEE_URL, ...PLAIN)
-  const rig = useMemo(() => buildRig(gltf, 0.42), [gltf])
-  useEffect(() => {
-    rig.actions.get('Flying')?.play()
-    return () => disposeRig(rig)
+  const rig = useMemo(() => buildBee(gltf), [gltf])
+  useEffect(() => () => {
+    rig.mixer.stopAllAction()
+    rig.mixer.uncacheRoot(rig.root)
+    for (const material of rig.materials) material.dispose()
   }, [rig])
   const group = useRef<THREE.Group>(null)
   useFrame((state, delta) => {
@@ -436,9 +559,5 @@ function Bee(): JSX.Element {
 }
 
 export const WorldRobot = memo(function WorldRobot(props: WorldRobotProps): JSX.Element {
-  return (
-    <Suspense fallback={null}>
-      <RobotBody {...props} />
-    </Suspense>
-  )
+  return <RobotBody {...props} />
 })
