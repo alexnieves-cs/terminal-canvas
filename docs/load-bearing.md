@@ -5573,3 +5573,22 @@ connection the world view shows with a Retry, never an exception in the agent pa
 The CLI streams one record per content block and the manager re-emits `{...last, blocks}`;
 a translator that spoke every block each time would repeat each thought once per later block.
 The feed remembers how many blocks of each turn it has said. `verify:world world.feed.1`.
+
+**The room's journal is folded by ARRIVAL, never by the event's own `ts` (`agent-world-store.ts`'s `journal`, `world-replay.ts`'s `foldTo`, M425).**
+The fold reads the journal in order and stops at the first line past the moment, which is only
+right if the key only rises. Event stamps come from different clocks (main's feed, the board's own
+posts, a fake clock in a suite), so one early-stamped arrival held back every event after it and the
+past room came up empty. `JournalEntry.at` is the time the room got the event, kept monotonic in the
+store. `verify:world world.replay.1`, `.4`.
+
+**The first-chunk check reads the ENTRY, not every `index-*.js` (`verify:orchestration orch-zoom.3`, M427).**
+Once the world view ships, three.js has two lazy importers and rollup factors it into a shared chunk
+named after three's own `index` — a lazy chunk the old filename test called the first one. The check
+reads the script `index.html` loads and follows its static imports; a file named `index-*` proves
+nothing either way.
+
+**A world-scene clock is `worldNow()`, never `Date.now()` (`WorldCard`, `WorldRobot`, `WorldStructure`, M425).**
+While a person scrubs, every record is the past room's; a rule that reads the wall clock (quiet, a
+stale call, a fresh tile) would judge a past record against now and call every agent quiet. The
+handoff arcs are the one exception — `firedAt` is live context, not a past record.
+`verify:world world.replay.5`.
