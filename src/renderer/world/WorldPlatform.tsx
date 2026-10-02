@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, type JSX } from 'react'
 import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { STUDIO } from './world-palette'
+import { glowScale, haloShare, useBloomOn } from './world-bloom'
 import { bandBuffers, glowProfile, SLAB, slabHalf, TRIM, trimPath, type Pt } from './world-set'
 
 /**
@@ -13,9 +14,11 @@ import { bandBuffers, glowProfile, SLAB, slabHalf, TRIM, trimPath, type Pt } fro
  * The trim is two flat bands of geometry laid on the slab's top, following the
  * same outline (`world-set.trimPath`): a thin bright CORE and, under it, a wide
  * HALO whose vertex alpha falls off like a gaussian. The halo is what a bloom
- * pass would have drawn, as a mesh — a post-processing pass is a second
- * full-frame render at the frame budget's expense and a second importer of
- * `postprocessing`, which one door owns (src/renderer/CLAUDE.md).
+ * pass would have drawn, as a mesh, and it is the bloom-OFF look: since M420 a
+ * real bloom (`WorldBloom`) adds a glow around the core when it is on, and this
+ * band stays under it — more opaque, because the composer's ACES greys an
+ * unlit cyan (`haloShare`, world-bloom.ts) — so turning bloom off returns the
+ * M416 picture exactly.
  *
  * Load-bearing, and each fails SILENTLY:
  *
@@ -46,7 +49,7 @@ function bandGeometry(path: readonly Pt[], offsets: readonly number[], alphas: r
 }
 
 /** A lit strip along `path`: a bright core of half-width `half` over a halo reaching `glowIn` inward and `glowOut` outward, `peak` opaque at its centre. */
-export function TrimLine({ path, y, half, glowIn, glowOut, peak }: { path: readonly Pt[]; y: number; half: number; glowIn: number; glowOut: number; peak: number }): JSX.Element {
+export function TrimLine({ path, y, half, glowIn, glowOut, peak, overPale = false }: { path: readonly Pt[]; y: number; half: number; glowIn: number; glowOut: number; peak: number; overPale?: boolean }): JSX.Element {
   const core = useMemo(() => bandGeometry(path, [-half, half], [1, 1], y + 0.01), [path, half, y])
   const halo = useMemo(() => {
     const profile = glowProfile(glowIn, glowOut)
@@ -54,13 +57,22 @@ export function TrimLine({ path, y, half, glowIn, glowOut, peak }: { path: reado
   }, [path, glowIn, glowOut, y])
   useEffect(() => () => core.dispose(), [core])
   useEffect(() => () => halo.dispose(), [halo])
+  // With bloom on the core is the SATURATED cyan pushed past 1.0 (the pale
+  // core would be desaturated to white by the tone map) so the composer has
+  // something to bloom, and the halo band steps back to the share the bloom does not cover
+  // (world-bloom.ts). Off, both are exactly M416's.
+  const bloom = useBloomOn()
+  const coreColor = useMemo(() => {
+    const hex = bloom ? STUDIO.cyan : STUDIO.cyanCore
+    return new THREE.Color(hex).multiplyScalar(glowScale(hex, bloom))
+  }, [bloom])
   return (
     <>
       <mesh geometry={halo} renderOrder={1}>
-        <meshBasicMaterial color={STUDIO.cyan} vertexColors transparent opacity={peak} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={STUDIO.cyan} vertexColors transparent opacity={peak * (overPale ? haloShare(bloom) : 1)} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
       <mesh geometry={core} renderOrder={2}>
-        <meshBasicMaterial color={STUDIO.cyanCore} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={coreColor} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
     </>
   )
@@ -74,7 +86,7 @@ export const WorldPlatform = memo(function WorldPlatform({ arcRadius }: { arcRad
       <RoundedBox args={[half * 2, SLAB.thickness, half * 2]} radius={SLAB.radius} smoothness={4} position={[0, -SLAB.thickness / 2, 0]} castShadow receiveShadow>
         <meshStandardMaterial color={STUDIO.slab} roughness={0.82} metalness={0} />
       </RoundedBox>
-      <TrimLine path={path} y={0.012} half={TRIM.half} glowIn={TRIM.glowIn} glowOut={TRIM.glowOut} peak={TRIM.glowPeak} />
+      <TrimLine path={path} y={0.012} half={TRIM.half} glowIn={TRIM.glowIn} glowOut={TRIM.glowOut} peak={TRIM.glowPeak} overPale />
       {/* Catches only the slab's own shadow, so the platform sits ON the pale ground instead of floating in it. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -SLAB.thickness - 0.02, 0]} receiveShadow>
         <planeGeometry args={[half * 4, half * 4]} />

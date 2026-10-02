@@ -4,6 +4,7 @@ import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { useAgent } from './agent-world-store'
 import { STUDIO } from './world-palette'
+import { unlitInk, unlitScale, useBloomOn } from './world-bloom'
 import { ASK_AGENT_ID, boardCard, boardSpot, clusterCenter, CUBE_CLUSTERS, cubeField, stoolSpots, type BoardCard } from './world-set'
 
 /**
@@ -147,26 +148,28 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, maxLin
 }
 
 /** Paints the document card: a white sheet on the board with the latest request's words and a few grey rules below it. */
-function paintBoard(canvas: HTMLCanvasElement, card: BoardCard): void {
+function paintBoard(canvas: HTMLCanvasElement, card: BoardCard, bloom: boolean): void {
+  // With bloom on, every colour is its pre-image over the material's scale (world-bloom.ts, `unlitInk`).
+  const ink = (hex: string): string => unlitInk(hex, bloom)
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const { width: W, height: H } = canvas
   const font = uiFont()
   ctx.clearRect(0, 0, W, H)
-  ctx.fillStyle = '#f2f4f7'
+  ctx.fillStyle = ink('#f2f4f7')
   ctx.fillRect(0, 0, W, H)
   const m = 54
   ctx.save()
-  ctx.shadowColor = 'rgba(30, 36, 48, 0.18)'
+  ctx.shadowColor = bloom ? `${ink('#1e2430')}2e` : 'rgba(30, 36, 48, 0.18)'
   ctx.shadowBlur = 26
   ctx.shadowOffsetY = 8
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = ink('#ffffff')
   ctx.beginPath()
   ctx.roundRect(m, m, W - m * 2, H - m * 2, 22)
   ctx.fill()
   ctx.restore()
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = '#7b8494'
+  ctx.fillStyle = ink('#7b8494')
   ctx.font = `700 30px ${font}`
   ctx.letterSpacing = '4px'
   ctx.fillText(card.title.toUpperCase(), m + 44, m + 78)
@@ -178,12 +181,12 @@ function paintBoard(canvas: HTMLCanvasElement, card: BoardCard): void {
     ctx.textAlign = 'left'
   }
   const posted = card.stamp !== null
-  ctx.fillStyle = posted ? STUDIO.ink : '#8a93a3'
+  ctx.fillStyle = ink(posted ? STUDIO.ink : '#8a93a3')
   ctx.font = `${posted ? 600 : 500} ${posted ? 52 : 42}px ${font}`
   const lines = wrap(ctx, card.body, W - m * 2 - 88, posted ? 4 : 2)
   lines.forEach((line, i) => ctx.fillText(line, m + 44, m + 168 + i * (posted ? 66 : 56)))
   // Grey rules under the words: it reads as a document, not a sticker.
-  ctx.fillStyle = '#e3e7ed'
+  ctx.fillStyle = ink('#e3e7ed')
   const top = H - m - 138
   ;[0.92, 0.78, 0.6].forEach((frac, i) => {
     ctx.beginPath()
@@ -193,7 +196,7 @@ function paintBoard(canvas: HTMLCanvasElement, card: BoardCard): void {
 }
 
 /** A 1024×576 canvas texture painted from `card` whenever its words change (and again once the UI font has loaded). */
-function useBoardTexture(card: BoardCard): THREE.CanvasTexture {
+function useBoardTexture(card: BoardCard, bloom: boolean): THREE.CanvasTexture {
   const gl = useThree((s) => s.gl)
   const texture = useMemo(() => {
     const canvas = document.createElement('canvas')
@@ -209,13 +212,13 @@ function useBoardTexture(card: BoardCard): THREE.CanvasTexture {
     let live = true
     const paint = (): void => {
       if (!live) return
-      paintBoard(texture.image as HTMLCanvasElement, card)
+      paintBoard(texture.image as HTMLCanvasElement, card, bloom)
       texture.needsUpdate = true
     }
     paint()
     void document.fonts?.ready.then(paint)
     return () => { live = false }
-  }, [texture, card])
+  }, [texture, card, bloom])
   return texture
 }
 
@@ -224,7 +227,10 @@ function Whiteboard({ half }: { half: number }): JSX.Element {
   const record = useAgent(ASK_AGENT_ID)
   // The card is rebuilt only when the record is: the same object keeps the same texture.
   const card = useMemo(() => boardCard(record), [record])
-  const texture = useBoardTexture(card)
+  const bloom = useBloomOn()
+  const texture = useBoardTexture(card, bloom)
+  // Unlit, so the bloom's tone map would grey the sheet and crush its words (world-bloom.ts).
+  const scale = unlitScale(bloom)
   return (
     <group position={[spot.x, 0, spot.z]} rotation-y={spot.facing}>
       <RoundedBox args={[BOARD.w, BOARD.h, 0.07]} radius={0.03} smoothness={3} position-y={BOARD.y} castShadow>
@@ -232,7 +238,7 @@ function Whiteboard({ half }: { half: number }): JSX.Element {
       </RoundedBox>
       <mesh position={[0, BOARD.y, 0.037]}>
         <planeGeometry args={[BOARD.w - 0.12, BOARD.h - 0.12]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshBasicMaterial map={texture} color={[scale, scale, scale]} toneMapped={false} />
       </mesh>
       {([-1, 1] as const).map((s) => (
         <group key={s} position={[s * (BOARD.w / 2 - 0.34), 0, 0]}>

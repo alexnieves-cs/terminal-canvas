@@ -5507,6 +5507,47 @@ The probe turns `autoReset` off and resets once per frame at priority `-1` — N
 positive `useFrame` priority takes the render away from R3F (orchestration-bloom.tsx records
 the same trap).
 
+**With a composer in charge, `toneMapped={false}` means nothing — every unlit colour is tone-mapped by the composer's one pass (`WorldBloom.tsx`, M420).**
+three tone-maps only when a material draws to the SCREEN; into the composer's render target the whole
+scene lands as linear HDR and `ToneMappingEffect` maps it once, over the sum. So the unlit things the
+M416/M417 scene kept out of ACES — the page ground, the trim, the eyes, the board — are mapped after
+all: the ground (half the frame) read 239 -> ~226, the board 255 -> 226, the cyan trim a white line
+with no cyan. The fix is per thing, all from `world-bloom.ts`, all the identity with bloom off: the
+ground is painted as its `acesPreimage` (numeric — ACES mixes channels), the glowing materials are
+scaled past the threshold (`glowScale`), the cyan halo band is drawn 2.2x as opaque (`haloShare`; the
+most saturated cyan ACES can reproduce is (143, 219, 225)), and the board's TEXTURE is lifted 1.5x
+(`textureLift` — a pre-image would grey its words). The renderer's own `toneMapping` is untouched.
+`verify:world world.bloom.preimage.1`, `.glow.1`, `.order.1`.
+
+**The tone map must be ACES and must come BEFORE the bloom in the one effect pass (`WorldBloom.tsx`, M420).**
+The studio's light was tuned under ACES; the orchestration's NEUTRAL (bloom first, tone map last) was
+tried here and measured: it matched the ground within a level but flattened the brown, teal and
+purple cube clusters to dusty pastels. And bloom-then-ACES re-maps the glow into a white line. A
+`BloomEffect`'s luminance pass reads the pass's untouched HDR INPUT whatever the order the shader
+chain runs in, so `[ToneMappingEffect(ACES), BloomEffect]` selects the glow from the HDR scene and
+adds it over a picture that already has its look: the slab, desks and robots measure the same pixels
+bloom on or off. `world.bloom.order.1`.
+
+**The bloom threshold is derived from the GROUND, because the ground is brighter in the HDR buffer than any glow (`world-bloom.ts`, M420).**
+Painted as its ACES pre-image the ground sits at ~1.76 linear luminance — above a cyan trim at any
+sane boost. A hand-set threshold of 0.92 bloomed the whole frame to white (ground 239 -> 255), and
+one of 1.05 bloomed it too (the pre-image had moved above it). `bloomThreshold()` is the ground's
+pre-image luminance plus a margin, and `glowScale` puts each glow colour a fixed headroom above THAT.
+A changed ground colour moves both. `world.bloom.threshold.1`.
+
+**A composer's resolution follows the pixel ratio, which fiber's `size` does not carry (`WorldBloom.tsx`, M420).**
+The governor steps the ratio with `setDpr`; that changes the drawing buffer and not `size` (CSS px),
+so an effect keyed on `size` leaves the composer at the old buffer size — blurry or offset after the
+first step, nothing logged. `viewport.dpr` is in the resize effect's deps. The same fact is why the
+pixel budget (`bloomDprCap`, 8 MP) lowers the RATIO and is re-applied on every resize: a window under
+the budget keeps its retina sharpness, the 18 MP wide-retina one is brought under it. `world.bloom.resize.1`, `.budget.1`.
+
+**MSAA on a HalfFloat composer buffer is most of the bloom's cost; FXAA is not (`WorldBloom.tsx`, M420).**
+The canvas's `antialias: true` does not reach a render target. Measured uncapped on an M1 Pro at 5.3 MP:
+plain scene 2.9 ms, bloom with `multisampling: 4` +4.7 ms, with 2 +3.1 ms, with 0 +1.7 ms, with an
+FXAA pass +2.2 ms — the number of mip levels (7 -> 4) moved nothing. FXAA is its own later pass: it
+samples its neighbours and must see the tone-mapped picture.
+
 **The world feed's counters never go backwards — a retry starts them ABOVE the old feed's (`world-feed-link.ts`'s `epoch`, `world-feed.ts`'s `seqStart`, M414).**
 The renderer store drops any event at or below the last `seq` it holds for an agent. A feed
 rebuilt by "Retry" that counted from 0 would be `live` and heard by nobody: the room frozen

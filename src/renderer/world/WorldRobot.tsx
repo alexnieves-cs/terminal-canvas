@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { getAgent, getAgentIds, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
+import { glowScale, useBloomOn } from './world-bloom'
 import { studioEnv } from './world-gloss'
 import { agentTint, effectOf, goalOf, hopsOn, isTyping, leanOf, type Station } from './world-scene'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
@@ -102,6 +103,9 @@ interface Kit {
 }
 
 /** A soft elliptical falloff, drawn in code (the CSP takes no image from elsewhere, and this needs none). */
+/** The eyes' unlit colour, before any bloom boost. */
+const EYE_COLOR = '#7ff4ff'
+
 function glowTexture(): THREE.Texture {
   const c = document.createElement('canvas')
   c.width = 64
@@ -174,7 +178,8 @@ function robotKit(): Kit {
   })
   // Two pill-shaped eyes as ONE geometry (one draw call), on the visor, and a
   // soft halo behind them (one more) — the glow a bloom pass would give, for
-  // the price of a quad instead of a full-screen pass.
+  // the price of a quad instead of a full-screen pass. It is the bloom-off look;
+  // with `WorldBloom` on, the eyes are also pushed past 1.0 and bloom around it.
   const EYE = { w: 0.075, h: 0.15, x: 0.105, y: VISOR.y + 0.012 } as const
   const pill = (cx: number): THREE.BufferGeometry => roundedPlate(EYE.w, EYE.h, EYE.w / 2, EYE.y).translate(cx, 0, 0)
   const eyes = mergeGeometries([pill(-EYE.x), pill(EYE.x)])!
@@ -188,7 +193,7 @@ function robotKit(): Kit {
     leg, torso, arm, head, visor, eyes, halo,
     visorMaterial: new THREE.MeshPhysicalMaterial({ color: '#07090d', roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.7 }),
     // Unlit and outside tone mapping: a glow that reads the same in a light or a dark room.
-    eyeMaterial: new THREE.MeshBasicMaterial({ color: '#7ff4ff', toneMapped: false }),
+    eyeMaterial: new THREE.MeshBasicMaterial({ color: EYE_COLOR, toneMapped: false }),
     haloMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', alphaMap: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
   }
   return kit
@@ -275,6 +280,13 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     k.visorMaterial.envMap = env
     k.visorMaterial.needsUpdate = true
   }, [k, env])
+  // The eyes are unlit; with bloom on they are pushed past 1.0 so the composer
+  // has something to bloom, and off they are the plain colour (world-bloom.ts).
+  // The kit is shared by every robot, so each writes the same value.
+  const bloom = useBloomOn()
+  useEffect(() => {
+    k.eyeMaterial.color.set(EYE_COLOR).multiplyScalar(glowScale(EYE_COLOR, bloom))
+  }, [k, bloom])
   // The first-seen order is append-only, so an agent's place in it — and its tint — never moves.
   const tint = agentTint(agentId, getAgentIds())
   const shell = useMemo(() => shellMaterial(tint, env), [tint, env])

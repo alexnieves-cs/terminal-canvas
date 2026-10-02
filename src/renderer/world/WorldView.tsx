@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
+import { WorldBloom } from './WorldBloom'
+import { acesPreimage, useBloomOn } from './world-bloom'
 import { WorldChrome } from './WorldChrome'
 import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
@@ -38,7 +40,9 @@ import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, ty
  *     rolls highlights off and greys a saturated colour, so the unlit things
  *     (the trim, the eyes, the board) say `toneMapped={false}` and the lit ones
  *     are lit for it. Put `flat` back and the whole room re-lights brighter and
- *     flatter with no error.
+ *     flatter with no error. With bloom on (M420) the composer applies the SAME
+ *     ACES (WorldBloom's header, (2)) and `toneMapped={false}` stops meaning
+ *     anything, which is why the ground is painted as a pre-image below.
  * (3) **`shadows="percentage"`, not `true` or `"soft"`.** three r186 REMOVED
  *     `PCFSoftShadowMap`: asking for it (R3F's default for `true`) logs a
  *     warning and falls back to `PCFShadowMap` — which is now the soft one,
@@ -394,6 +398,7 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
 
 export function WorldView({ transition, reduced }: { transition: WorldTransition; reduced: boolean }): JSX.Element {
   const roster = useRoster()
+  const bloom = useBloomOn()
   const leavers = useLeavers(roster, reduced)
   const held = useMemo(() => heldRoster(roster, leavers), [roster, leavers])
   const plan = useMemo(() => stationPlan(held), [held])
@@ -422,6 +427,11 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
   const camera = useRef<CameraApi | null>(null)
   // Framed for the room as it is when the view opens; "Fit room" re-frames it for the room as it is then.
   const start = useMemo((): Vec3 => isoPose(plan.arcRadius), [])
+  // The ground is unlit, and the bloom's tone map would darken it; paint the value that comes out right.
+  const ground = useMemo(() => {
+    const c = new THREE.Color(STUDIO.ground)
+    return bloom ? c.setRGB(...acesPreimage([c.r, c.g, c.b])) : c
+  }, [bloom])
   const half = slabHalf(plan.arcRadius)
   const limit = half - 2
 
@@ -433,7 +443,7 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
         camera={{ position: [start.x, start.y, start.z], fov: VIEW.fov, near: 0.1, far: 220 }}
         gl={{ antialias: true, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
-        <color attach="background" args={[STUDIO.ground]} />
+        <color attach="background" args={[ground]} />
         <Lights extent={half + 3} />
         <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} />
         {stations.map((station) => (
@@ -441,6 +451,7 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
         ))}
         <Controls controls={controls} limit={limit} maxDistance={Math.max(40, half * 4)} />
         <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} />
+        {bloom && <WorldBloom />}
         <StatsProbe target={stats} />
         <QualityGovernor />
         <CardBudget stations={live} onChange={setFull} />

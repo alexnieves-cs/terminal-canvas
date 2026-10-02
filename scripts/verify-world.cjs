@@ -44,6 +44,7 @@ buildSync({
       "  presence: require('./src/shared/presence.ts'),",
       "  feed: require('./src/shared/world-feed.ts'),",
       "  perf: require('./src/renderer/world/world-perf.ts'),",
+      "  bloom: require('./src/renderer/world/world-bloom.ts'),",
       "  wiring: require('./src/main/world-feed-link.ts'),",
       "  ipc: require('./src/shared/ipc-contract.ts'),",
       "  panelState: require('./src/renderer/panels/panel-state.ts')",
@@ -55,7 +56,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, wiring: WW, ipc: IPCC, panelState: PS } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -433,8 +434,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const files = readdirSync(dir).filter((f) => /\.tsx?$/.test(f))
   const THREE_DOOR = /from '(?:three|@react-three\/fiber|@react-three\/drei)(?:\/[^']*)?'/
   const importers = files.filter((f) => THREE_DOOR.test(read(f))).sort()
-  const SCENE = ['WorldCard.tsx', 'WorldOffice.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx', 'WorldRobot.tsx', 'WorldView.tsx', 'world-gloss.ts']
-  ok('world.door.1 three, fiber and drei are imported by exactly the seven scene files (M416 added the platform, the props and the shared gloss) — never by the pure modules, the chrome, the roster hook, the palette, the store or the route (an eighth importer is how three.js reaches the first chunk)',
+  const SCENE = ['WorldBloom.tsx', 'WorldCard.tsx', 'WorldOffice.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx', 'WorldRobot.tsx', 'WorldView.tsx', 'world-gloss.ts']
+  ok('world.door.1 three, fiber and drei are imported by exactly the eight scene files (M416 added the platform, the props and the shared gloss; M420 the bloom composer) — never by the pure modules, the chrome, the roster hook, the palette, the store or the route (a ninth importer is how three.js reaches the first chunk)',
     importers.join() === SCENE.join(), importers.join())
 
   const { execFileSync } = require('node:child_process')
@@ -927,7 +928,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const stageLook = code('WorldPlatform.tsx')
   ok('world.studio.1 the canvas is a lit studio: ACES tone mapping and NOT `flat`, percentage-closer shadows (three r186 removed PCFSoft — `true` and "soft" log a warning and fall back), a key light that casts into a shadow camera sized to the room, the studio ground as the background, the capped pixel ratio and no contact-shadow pass',
     /toneMapping: THREE\.ACESFilmicToneMapping/.test(view) && !/<Canvas[^>]*\bflat\b/.test(view) && /shadows="percentage"/.test(view) && !/shadows=\{true\}|shadows="soft"|<Canvas[^>]*\bshadows\s/.test(view) &&
-      /<directionalLight\s[^>]*castShadow/.test(view.replace(/\s+/g, ' ')) && /cam\.updateProjectionMatrix\(\)/.test(view) && /<color attach="background" args=\{\[STUDIO\.ground\]\} \/>/.test(view) &&
+      /<directionalLight\s[^>]*castShadow/.test(view.replace(/\s+/g, ' ')) && /cam\.updateProjectionMatrix\(\)/.test(view) && /<color attach="background" args=\{\[ground\]\} \/>/.test(view) && /new THREE\.Color\(STUDIO\.ground\)/.test(view) &&
       PAL.STUDIO.ground === '#eef0f3' && /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && !/ContactShadows/.test(view) && /info\.autoReset = false/.test(view) &&
       /maxPolarAngle=\{VIEW\.maxPolar\}/.test(view) && /minPolarAngle=\{VIEW\.minPolar\}/.test(view))
   ok('world.studio.2 the platform is a drei RoundedBox, and its trim is two unlit bands on its top: a bright core and a NORMALLY-blended halo (additive over a pale slab clips to white and the glow vanishes), neither tone-mapped, laid above the slab\'s top (y = 0, the floor)',
@@ -1015,6 +1016,72 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   // The shell takes the palette's colour as it is: a saturation push turns the white and graphite robots into colours.
   ok('world.critic.shell.1 the robot\'s shell is its tint AS IS — no HSL push (which would make the white robot blue-grey and the graphite one mud) — and the robot, its desk screen and its legend dot all read the store\'s first-seen order',
     /color: new THREE\.Color\(tint\), roughness: 0\.34/.test(robot) && !/setHSL/.test(robot) && /agentTint\(agentId, getAgentIds\(\)\)/.test(robot) && /agentTint\(station\.agentId, getAgentIds\(\)\)/.test(office))
+}
+
+// ── M420: the bloom ──────────────────────────────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const text = (f) => readFileSync(join(dir, f), 'utf8')
+  const code = (f) => text(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const { execFileSync } = require('node:child_process')
+  const grep = (args) => { try { return execFileSync('grep', args, { encoding: 'utf8' }).trim().split('\n').filter(Boolean) } catch { return [] } }
+  const bloom = code('WorldBloom.tsx'), view = code('WorldView.tsx'), platform = code('WorldPlatform.tsx'), robot = code('WorldRobot.tsx'), props = code('WorldProps.tsx')
+
+  const importers = grep(['-rl', "from 'postprocessing'", join(root, 'src')]).map((x) => x.replace(join(root, 'src/'), '')).sort()
+  ok('world.bloom.door.1 `postprocessing` has exactly two importers — the diorama\'s door and the world\'s composer — both reached only through a lazy() chain, and the wrapper `@react-three/postprocessing` is imported by nobody (its peer range already cost a fiber bump once)',
+    importers.join() === ['renderer/orchestration/orchestration-bloom.tsx', 'renderer/world/WorldBloom.tsx'].join() &&
+      grep(['-rn', "@react-three/postprocessing", join(root, 'src')]).filter((l) => /from '@react-three\/postprocessing'/.test(l)).length === 0,
+    importers.join())
+  const bloomImports = grep(['-rnE', "from '(\\./|(@renderer/)?world/)?(\\./)?WorldBloom'", join(root, 'src')])
+  ok('world.bloom.door.2 WorldBloom is imported by WorldView alone — and WorldView is itself behind the stage\'s lazy() (world.door.2) — so the composer rides three.js\'s deferred chunk; the pure settings module imports neither three nor the library',
+    bloomImports.length === 1 && /world\/WorldView\.tsx/.test(bloomImports[0]) &&
+      !/from '(three|postprocessing|@react-three\/[^']+)/.test(code('world-bloom.ts')) &&
+      // Outside the agent store's import graph: an HMR edit of anything in that graph re-instantiates the STORE (M416), so tuning the bloom would empty the roster.
+      !/world-bloom/.test(text('agent-world-store.ts')) && !/world-bloom/.test(text('world-set.ts')) && !/world-bloom/.test(text('world-scene.ts')))
+
+  ok('world.bloom.frame.1 the composer takes the frame at priority 1 and gives it back on unmount (that handover IS the bloom-off fallback), never from a requestAnimationFrame of its own; HalfFloat, or an 8-bit buffer clamps at 1.0 and a threshold selects nothing',
+    /useFrame\(\(_, delta\) => composer\.render\(delta\), 1\)/.test(bloom) && !/requestAnimationFrame/.test(bloom) && /frameBufferType: THREE\.HalfFloatType/.test(bloom))
+  const tm = bloom.indexOf('new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC })'), bl = bloom.indexOf('new BloomEffect(')
+  ok('world.bloom.order.1 ACES comes BEFORE the bloom in the one pass (bloom reads the pass\'s HDR input whatever the order, and adds its glow over a picture that already has the studio\'s look — bloom first re-maps the glow to a white line), the edge filter is its own later pass, and the renderer\'s own tone mapping is untouched',
+    tm > 0 && bl > tm && /new EffectPass\(camera, new FXAAEffect\(\)\)/.test(bloom) && !/toneMapping\s*=/.test(bloom) && !/NoToneMapping/.test(bloom))
+  ok('world.bloom.resize.1 the composer resizes on a pixel-ratio change as well as a size change (the governor\'s setDpr moves the drawing buffer and NOT fiber\'s size, so a size-only effect leaves it stale and blurry), without touching the canvas style, and disposes itself and never the renderer',
+    /composer\.setSize\(size\.width, size\.height, false\)/.test(bloom) && /\[composer, size\.width, size\.height, dpr\]/.test(bloom) &&
+      /composer\.dispose\(\)/.test(bloom) && !/\bgl\.(dispose|forceContextLoss)\(/.test(bloom))
+  ok('world.bloom.mount.1 the view mounts the composer only while bloom is on, paints the unlit ground as its ACES pre-image while it is, and the canvas still tone-maps with ACES (the fallback render is the M417 picture)',
+    /const bloom = useBloomOn\(\)/.test(view) && /\{bloom && <WorldBloom \/>\}/.test(view) && /acesPreimage\(\[c\.r, c\.g, c\.b\]\)/.test(view) && /toneMapping: THREE\.ACESFilmicToneMapping/.test(view))
+  ok('world.bloom.glow.1 every unlit thing the composer would otherwise grey takes its bloom treatment from the same pure module — the trim\'s core and halo (the halo\'s extra opacity only over the pale slab, never on the black table), the eyes, the whiteboard — and each one is the identity with bloom off',
+    /glowScale\(hex, bloom\)/.test(platform) && /haloShare\(bloom\)/.test(platform) && /peak=\{TRIM\.glowPeak\} overPale \/>/.test(platform) && !/overPale/.test(code('WorldOffice.tsx')) && /glowScale\(EYE_COLOR, bloom\)/.test(robot) && /unlitScale\(bloom\)/.test(props) && /unlitInk\(hex, bloom\)/.test(props) &&
+      BL.glowScale('#36e6ff', false) === 1 && BL.haloShare(false) === 1 && BL.unlitScale(false) === 1 && BL.unlitInk('#7b8494', false) === '#7b8494')
+
+  // The pure half.
+  const near = (a, b, tol) => a.every((v, i) => Math.abs(v - b[i]) <= tol)
+  const ground = BL.hexLinear(PAL.STUDIO.ground)
+  const roundTrip = BL.acesToneMap(BL.acesPreimage(ground))
+  ok('world.bloom.preimage.1 the unlit ground painted as its ACES pre-image comes OUT as the ground (within a quarter of an 8-bit level) — painted raw it measured 239 -> ~226 with the composer on, which is half the frame visibly greyer',
+    near(roundTrip, ground, 0.25 / 255) && BL.acesToneMap(ground)[0] < ground[0] - 0.02, roundTrip.join())
+  // The whiteboard's colours: what the scaled material and ACES make of the ink is the colour asked for.
+  const boardColours = ['#f2f4f7', '#ffffff', '#7b8494', '#8a93a3', PAL.STUDIO.ink, '#e3e7ed']
+  const boardErr = boardColours.map((hex) => {
+    const out = BL.acesToneMap(BL.hexLinear(BL.unlitInk(hex, true)).map((v) => v * BL.unlitScale(true)))
+    const want = BL.hexLinear(hex).map((v) => Math.min(v, BL.unlitCeil()))
+    return Math.max(...out.map((v, i) => Math.abs(BL.linearToSrgbByte(v) - BL.linearToSrgbByte(want[i]))))
+  })
+  ok('world.bloom.ink.1 every colour the whiteboard paints comes out of the scaled material and the composer\'s ACES as the colour asked for, within 3 levels (a flat lift crushed the words into the white: the critic read them as gone) — the sheet\'s white stays under the bloom threshold (it bloomed out at its first scale) and still reads 236 or more of 255 — and every colour is its own value with bloom off',
+    boardErr.every((e) => e <= 3) && boardColours.every((hex) => BL.unlitInk(hex, false) === hex) && BL.unlitScale(true) < BL.bloomThreshold() && BL.unlitScale(true) * 1 > BL.bloomThreshold() - 0.25 && BL.linearToSrgbByte(BL.unlitCeil()) >= 236, boardErr.join() + ' ceil=' + BL.linearToSrgbByte(BL.unlitCeil()))
+  const th = BL.bloomThreshold()
+  const [gr, gg, gb] = BL.acesPreimage(ground)
+  ok('world.bloom.threshold.1 the threshold sits above the ground\'s HDR luminance (a threshold under it blooms the whole frame to white: ground 239 -> 255) and every glow colour is scaled past it by the smoothing and the headroom — the cyan trim, the eyes',
+    th > BL.linearLuma(gr, gg, gb) && ['#36e6ff', '#7ff4ff'].every((hex) => BL.hexLuma(hex, BL.glowScale(hex, true)) >= th + BL.BLOOM.smoothing + BL.BLOOM.glowOver - 1e-9) &&
+      BL.hexLuma(PAL.STUDIO.slab) < th && BL.hexLuma(PAL.STUDIO.desk) < th, `threshold=${th.toFixed(3)}`)
+  ok('world.bloom.state.1 bloom is on by default, flips live with no storage to hand (a private window, or node), and persists only a person\'s own choice — the governor\'s call is never stored',
+    BL.isBloomOn() === true && (BL.setBloomOn(false, false), BL.isBloomOn() === false) && (BL.setBloomOn(true, false), BL.isBloomOn() === true) &&
+      /try \{[\s\S]*?localStorage\.getItem[\s\S]*?\} catch/.test(text('world-bloom.ts')))
+  const big = BL.bloomDprCap(3200, 2000, 2), mid = BL.bloomDprCap(1800, 1100, 2)
+  ok('world.bloom.budget.1 the composer\'s pixel budget lowers the pixel ratio and does not drop the bloom: a typical retina window keeps the capped ratio it had, the 18 MP wide-retina one is brought under the budget, and the ratio is never below DPR_MIN or above what the display asks for — and the composer applies it on resize and puts the display\'s ratio back when it unmounts',
+    mid === PF.clampDpr(2) && big < mid && big >= PF.DPR_MIN && Math.round(3200 * 2000 * big * big) <= BL.BLOOM.maxPixels + 1 &&
+      BL.bloomDprCap(1000, 700, 1) === 1 && BL.bloomDprCap(4000, 2500, 1) === PF.DPR_MIN &&
+      /setDpr\(bloomDprCap\(size\.width, size\.height, window\.devicePixelRatio\)\)/.test(bloom) && /setDpr\(clampDpr\(window\.devicePixelRatio\)\)/.test(bloom),
+    `mid=${mid} big=${big.toFixed(3)}`)
 }
 
 const failures = results.filter((r) => !r.pass)
