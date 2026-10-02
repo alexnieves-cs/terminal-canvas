@@ -539,7 +539,7 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
 // island; a third importer anywhere Canvas.tsx reaches puts the +2.2MB chunk
 // into startup with no error and every suite green. The check reads the source
 // AND the built chunks: the first chunk must not carry three's renderer.
-ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304), orchestration-bloom.tsx and the 3D world scene (M412: WorldOffice, WorldRobot, WorldView; M413: WorldCard useFrame; M416: WorldPlatform, WorldProps, world-gloss; M420: WorldBloom; M423: WorldStructure — verify:world world.door.1 pins the whole set, drei included), and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
+ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304), orchestration-bloom.tsx and the 3D world scene (M412: WorldOffice, WorldRobot, WorldView; M413: WorldCard useFrame; M416: WorldPlatform, WorldProps, world-gloss; M420: WorldBloom; M423: WorldStructure — verify:world world.door.1 pins the whole set, drei included), and a real build keeps three.js out of the first chunk (no WebGLRenderer in the entry index.html loads, nor in anything it imports statically)',
   (() => {
     const { execFileSync } = require('node:child_process')
     const hits = execFileSync('grep', ['-rlE', "from '(three|@react-three/fiber)'", join(root, 'src')], { encoding: 'utf8' })
@@ -549,8 +549,22 @@ ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationC
     if (hits.join() !== allowed.join()) return false
     const assets = join(root, 'out/renderer/assets')
     if (!existsSync(assets)) return true // no build yet: the source half stands alone (verify-all builds before the Electron tier, not before this suite)
-    const first = readdirSync(assets).filter((f) => /^index-.*\.js$/.test(f))
-    return first.length > 0 && first.every((f) => !readFileSync(join(assets, f), 'utf8').includes('WebGLRenderer'))
+    // The FIRST chunk is the entry index.html loads plus everything it imports STATICALLY
+    // (\`import … from"./x.js"\` at the top of a chunk) — not every file named index-*: since
+    // M427 ships the world view, rollup factors three into a shared lazy chunk named after
+    // three's own index, reached only through the preload map of a dynamic import().
+    const html = existsSync(join(root, 'out/renderer/index.html')) ? readFileSync(join(root, 'out/renderer/index.html'), 'utf8') : ''
+    const entry = (/<script[^>]*src="\.\/assets\/([^"]+\.js)"/.exec(html) ?? [])[1]
+    if (entry === undefined) return false
+    const seen = new Set()
+    const walk = (f) => {
+      if (seen.has(f) || !existsSync(join(assets, f))) return
+      seen.add(f)
+      const src = readFileSync(join(assets, f), 'utf8')
+      for (const m of src.matchAll(/(?:^|[;}\n])\s*import\s*(?:[\w$*{},\s]+from\s*)?"\.\/([^"]+\.js)"/g)) walk(m[1])
+    }
+    walk(entry)
+    return seen.size > 0 && [...seen].every((f) => !readFileSync(join(assets, f), 'utf8').includes('WebGLRenderer'))
   })(),
   'three belongs behind the lazily-loaded island and its bloom door')
 

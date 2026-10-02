@@ -41,11 +41,12 @@ import { createWorldTransition, hostLook, WORLD_TRANSITION_MS } from './world-tr
  *     Leave one behind and the canvas stays scaled or transparent with the
  *     class long gone. They are only opacity and transform — a layout change
  *     here would refit every xterm and SIGWINCH each running agent.
- * (4) **The world is reached through ONE pure-annotated `lazy()`, and Canvas
- *     mounts this stage only under `import.meta.env.DEV`.** A static import of
- *     WorldView, or a missing annotation, ships three.js (+2.2MB, first chunk)
- *     in production with no error. The same reason the toggle is dev-only: the
- *     `.glb` fetch under `file://` has never been exercised in a packaged build.
+ * (4) **The world is reached through ONE pure-annotated `lazy()`.** A static
+ *     import of WorldView, or a missing annotation, ships three.js (+2.2MB) in
+ *     the FIRST chunk with no error (`verify:orchestration orch-zoom.3` reads
+ *     the built entry). Since M427 Canvas mounts the stage in production too:
+ *     the packaged renderer was measured loading the room and the bee's `.glb`
+ *     under `file://` (status 200), which is what kept it dev-only before.
  */
 const loadWorldView = (): Promise<typeof import('./WorldView')> => import('./WorldView')
 const WorldView = /* @__PURE__ */ lazy(async () => ({ default: (await loadWorldView()).WorldView }))

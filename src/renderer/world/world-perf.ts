@@ -46,6 +46,13 @@ export const DPR_STEP = 0.25
 export interface DprGovernor {
   /** One window's fps. The new pixel ratio when it should change, else null. */
   observe(fps: number): number | null
+  /**
+   * M427: the frame rate stayed low for `STARVED_WINDOWS` windows AFTER the
+   * ratio reached its floor — nothing left to step but the bloom, the one
+   * full-frame pass (a base-M1 or an integrated GPU on a big display). True
+   * once, then the streak starts over.
+   */
+  starved(): boolean
   /** The window was not a clean measurement (the page was hidden, the frame loop stalled): forget the streak. */
   gap(): void
   readonly dpr: number
@@ -57,19 +64,33 @@ export interface DprGovernor {
  * rate, so a rule that also stepped back up would oscillate between the two
  * and the picture would shimmer for as long as the view was open.
  */
+/** Low windows at the floor before the governor gives up the bloom — twice a step's, because this one is not undone for the session. */
+export const STARVED_WINDOWS = LOW_WINDOWS * 2
+
 export function createDprGovernor(start: number): DprGovernor {
   let dpr = clampDpr(start)
   let low = 0
+  let floorLow = 0
+  let starved = false
   return {
     observe(fps) {
-      if (fps >= LOW_FPS) { low = 0; return null }
+      if (fps >= LOW_FPS) { low = 0; floorLow = 0; return null }
       low += 1
+      if (dpr <= DPR_MIN) {
+        floorLow += 1
+        if (floorLow >= STARVED_WINDOWS) { floorLow = 0; starved = true }
+      }
       if (low < LOW_WINDOWS || dpr <= DPR_MIN) return null
       low = 0
       dpr = Math.max(DPR_MIN, dpr - DPR_STEP)
       return dpr
     },
-    gap() { low = 0 },
+    gap() { low = 0; floorLow = 0 },
+    starved() {
+      const was = starved
+      starved = false
+      return was
+    },
     get dpr() { return dpr }
   }
 }

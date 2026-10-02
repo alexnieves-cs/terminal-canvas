@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react'
+import type { PlanStepView } from '@shared/task-plan'
+import type { WorkItemState } from '@shared/work-items'
 
 /**
  * What the CANVAS knows about the work that the world feed does not (M421):
@@ -27,7 +29,7 @@ export interface WorldStep {
   title: string
   /** `PlanStepView.word` — the plan's own vocabulary. */
   word: string
-  tone: 'working' | 'needs-you' | 'idle' | 'exited' | 'done' | 'kind' | 'none'
+  tone: PlanStepView['tone']
   owner?: string
 }
 
@@ -35,7 +37,7 @@ export interface WorldTask {
   id: string
   title: string
   /** `WorkItemState`: the board's column. */
-  state: 'todo' | 'working' | 'review' | 'done'
+  state: WorkItemState
   /** Panel ids (= agent ids) on the task, the lane's chat first. */
   members: readonly string[]
   steps: readonly WorldStep[]

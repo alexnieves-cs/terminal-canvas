@@ -451,11 +451,11 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     .filter((l) => !/import type \{/.test(l))
   const stage = read('WorldStage.tsx')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
-  ok('world.door.2 WorldView is reached only through a pure-annotated lazy() in WorldStage, and Canvas mounts the stage only under import.meta.env.DEV — a static import, or a missing annotation, ships three.js (or a view nobody can reach) in production with no error',
+  ok('world.door.2 WorldView is reached only through a pure-annotated lazy() in WorldStage, and Canvas mounts the stage (M427: in production too — the packaged renderer was measured loading the room and its model under file://) — a static import, or a missing annotation, puts three.js in the first chunk with no error (orch-zoom.3 reads the built entry)',
     /\/\* @__PURE__ \*\/ lazy\(async \(\) => \(\{ default: \(await loadWorldView\(\)\)\.WorldView \}\)\)/.test(stage) &&
       /import\('\.\/WorldView'\)/.test(stage) && !/from '\.\/WorldView'/.test(stage) &&
       outside.every((l) => /\/world\/World(Office|Robot|Card|View)\.tsx:\d+:/.test(l) && /from '\.\/World(Office|Robot|Card)'/.test(l)) &&
-      /import\.meta\.env\.DEV \? <WorldStage on=\{worldOn\} hostRef=\{hostRef\} \/> : null/.test(canvasSrc))
+      /\n\s*<WorldStage on=\{worldOn\} hostRef=\{hostRef\} \/>\n/.test(canvasSrc) && !/import\.meta\.env\.DEV \? <WorldStage/.test(canvasSrc))
 
   const scenery = SCENE.concat('WorldStage.tsx', 'world-toggle.ts', 'world-transition.ts', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts', 'world-perf.ts', 'world-activity.ts', 'world-context-store.ts')
   const leaks = scenery.filter((f) => /window\.canvas|WebSocket|ipcRenderer|\.onEvents\(/.test(read(f)))
@@ -492,10 +492,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-tag', 'world-pill', 'world-dot', 'world-card', 'world-card__title', 'world-card__badge', 'world-card__tools', 'world-route__note', 'shell__world-toggle', 'world-chrome', 'world-tools', 'world-ask', 'world-ask__field', 'world-legend', 'world-legend__dot'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
 
   const topBar = readFileSync(join(root, 'src/renderer/shell/TopBar.tsx'), 'utf8')
-  ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and Canvas gates the toggle bit and the top bar\'s button on DEV (a hidden scene keeps a WebGL context drawing for nobody)',
+  ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and the top bar\'s button shows on the canvas view only (M427: no longer gated on DEV) — a hidden scene keeps a WebGL context drawing for nobody',
     /if \(!on && !present\) return null/.test(stage) && /if \(s\.target === 0\) setPresent\(false\)/.test(stage) &&
-      /const worldOn = useWorldOn\(\) && import\.meta\.env\.DEV/.test(canvasSrc) &&
-      /worldView=\{import\.meta\.env\.DEV \? \{/.test(canvasSrc) && /worldView !== undefined && centerView === 'canvas'/.test(topBar))
+      /const worldOn = useWorldOn\(\)\n/.test(canvasSrc) &&
+      /worldView=\{\{ on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView \}\}/.test(canvasSrc) && /worldView !== undefined && centerView === 'canvas'/.test(topBar))
 
   ok('world.door.10 the 2D canvas is hidden, never unmounted or collapsed — the host stays rendered, takes a class + inert + aria-hidden from the same bit, and the move writes only opacity/transform/will-change on it and removes each at rest (a layout change refits every xterm and SIGWINCHes each agent; a stray inline style outlives the class)',
     /canvas--behind-world/.test(canvasSrc) && /inert=\{canvasCovered\}/.test(canvasSrc) && /canvasCoveredRef\.current = canvasCovered/.test(canvasSrc) &&
@@ -1422,6 +1422,22 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.peers.3 the teammates looking at an agent wear their initials in its pill, in their own colour; the strip rings those in the room and follows on a press, glides on each move, and lets go when they leave the roster',
     /const watchers = ctx\.peers\.filter\(\(p\) => p\.panelId === agentId\)/.test(card) && /className="world-pill__peers"/.test(card) &&
       /if \(followed === undefined\) \{ setFollowing\(null\); return \}/.test(peersSrc) && /if \(target !== null\) camera\.current\?\.focus\(target\)/.test(peersSrc) && /data-in-room=\{p\.mode === 'world'/.test(peersSrc) && !THREE_DOOR_RE.test(peersSrc))
+}
+
+// ── M427: shipping it ───────────────────────────────────────────────────────
+{
+  const g = PF.createDprGovernor(PF.DPR_MIN)
+  let starvedAt = -1
+  for (let i = 0; i < PF.STARVED_WINDOWS * 2; i++) { g.observe(20); if (g.starved() && starvedAt < 0) starvedAt = i + 1 }
+  const g2 = PF.createDprGovernor(1.75)
+  const early = Array.from({ length: PF.STARVED_WINDOWS }, () => (g2.observe(20), g2.starved())).some(Boolean)
+  const g3 = PF.createDprGovernor(PF.DPR_MIN)
+  for (let i = 0; i < PF.STARVED_WINDOWS - 1; i++) g3.observe(20)
+  g3.observe(60)
+  for (let i = 0; i < PF.STARVED_WINDOWS - 1; i++) g3.observe(20)
+  ok('world.ship.1 a GPU still slow at the pixel ratio\'s floor gives up the bloom after STARVED_WINDOWS low windows — not before the ratio has stepped down, not on a streak a good window broke — and the scene turns it off for the session only (persist=false)',
+    starvedAt === PF.STARVED_WINDOWS && !early && !g3.starved() && /if \(governor\.current\.starved\(\) && isBloomOn\(\)\) setBloomOn\(false, false\)/.test(readFileSync(join(root, 'src/renderer/world/WorldView.tsx'), 'utf8')),
+    `starvedAt=${starvedAt}`)
 }
 
 const failures = results.filter((r) => !r.pass)

@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { WorldBloom } from './WorldBloom'
-import { acesPreimage, useBloomOn } from './world-bloom'
+import { acesPreimage, isBloomOn, setBloomOn, useBloomOn } from './world-bloom'
 import { WorldChrome } from './WorldChrome'
 import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
@@ -328,6 +328,9 @@ function QualityGovernor(): null {
     else {
       const next = governor.current.observe(a.frames / span)
       if (next !== null) setDpr(next)
+      // M427: at the floor and still slow, the bloom (the one full-frame pass) goes — for this
+      // session only; a person's own choice is the only one that is stored.
+      if (governor.current.starved() && isBloomOn()) setBloomOn(false, false)
     }
     a.frames = 0
     a.since = now

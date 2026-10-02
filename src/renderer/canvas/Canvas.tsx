@@ -3920,12 +3920,11 @@ export function Canvas({
   // the drawers, and every mousedown on Orchestrate would trip it. Read by
   // shouldIgnoreKeys, declared above, only from handlers long after this assignment.
   const canvasCoveredRef = useRef(false)
-  // M413. The 3D world view (dev only) covers the host the way Orchestrate does, and for the
-  // same reasons: its sessions keep running underneath and nothing typed over the world may
-  // reach them. The same bit the top bar's toggle, `#/world` and TC_WORLD=1 all write; gated
-  // on DEV HERE so a production build that was handed `#/world` cannot hide the canvas under
-  // a stage that was compiled out.
-  const worldOn = useWorldOn() && import.meta.env.DEV
+  // M413. The 3D world view covers the host the way Orchestrate does, and for the same
+  // reasons: its sessions keep running underneath and nothing typed over the world may reach
+  // them. The same bit the top bar's toggle, `#/world` and TC_WORLD=1 all write. M427: no
+  // longer dev-only — the packaged renderer was measured loading the room under file://.
+  const worldOn = useWorldOn()
   const closeWorldView = useCallback(() => setWorldOn(false), [])
   const canvasCovered = chrome.centerView !== 'canvas' || worldOn
   canvasCoveredRef.current = canvasCovered
@@ -8792,7 +8791,7 @@ export function Canvas({
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}
         onSetCenterView={setCenterView}
-        worldView={import.meta.env.DEV ? { on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView } : undefined}
+        worldView={{ on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView }}
         running={inspectorSummary.running}
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
@@ -8877,7 +8876,7 @@ export function Canvas({
           stays mounted (visually behind, never unmounted) so PTYs and agents
           keep running. The overlay animates in; prefers-reduced-motion snaps. */}
       {/* M413. The 3D world view's layer, over a host that stays mounted (dev only; see WorldStage). */}
-      {import.meta.env.DEV ? <WorldStage on={worldOn} hostRef={hostRef} /> : null}
+      <WorldStage on={worldOn} hostRef={hostRef} />
       {chrome.centerView === 'orchestration' && (
         <div className="shell__orch shell__orch--on" data-center-view="orchestration" role="presentation">
           <OrchestrationView
