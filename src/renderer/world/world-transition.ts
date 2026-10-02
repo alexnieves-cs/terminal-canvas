@@ -135,6 +135,87 @@ export function popOf(raw: number, delay: number): number {
 /** How long a robot takes to appear on its own — an agent that turns live mid-session, or a model that loaded late. */
 export const ARRIVE_MS = 380
 
+// ── leaving the room (M417) ──────────────────────────────────────────────────
+
+/**
+ * How long a robot takes to leave when its agent stops being live (goes idle,
+ * finishes or errors). Until M417 it was simply unmounted — the robot, its pill
+ * and its desk vanished between two frames, and a person who looked away for
+ * that frame could not tell whether an agent had left or had never been there.
+ */
+export const LEAVE_MS = 900
+/** Of the leave, the farewell hop before the sink. */
+const LEAVE_HOP = 0.2
+/** How high the farewell hop goes, world units. */
+const LEAVE_HOP_UP = 0.14
+/** The card's fade runs over this stretch of the leave. */
+const CARD_FADE_FROM = 0.1
+const CARD_FADE_TO = 0.65
+/** How far below the floor the robot ends — past its own height, so it has gone through the slab before the shrink ends. */
+export const LEAVE_SINK = 1.7
+
+export interface LeavePose {
+  /** Multiplies the robot's body scale: 1 standing, 0 gone. */
+  scale: number
+  /**
+   * Multiplies the pop its pill and card read (`cardStand`): a straight line from
+   * the hop to past the middle, so the card lies back and fades WHILE the robot
+   * sinks. Riding the body's cubic instead, it stayed full for most of the leave
+   * and dropped in the last few frames — the critic read that as a glitch.
+   */
+  card: number
+  /** World units the robot stands below (negative: above) where it stood. */
+  sink: number
+  done: boolean
+}
+
+/**
+ * The leave at `ms` into it: a small hop, then an accelerating sink through the
+ * floor as the figure shrinks. Through the floor rather than a fade because the
+ * slab is opaque and the robot's visor and eyes share one material across every
+ * robot (`robotKit`), so a per-robot opacity would mean a material per robot;
+ * the floor hides it for free. A `span` of 0 is prefers-reduced-motion: gone at once.
+ */
+export function leavePose(ms: number, span: number = LEAVE_MS): LeavePose {
+  if (span <= 0 || ms >= span) return { scale: 0, card: 0, sink: LEAVE_SINK, done: true }
+  const u = Math.max(0, ms / span)
+  // 0.45 is where `cardStand` reaches 0: the card is gone by u = 0.65, two thirds into the leave.
+  const card = 1 - 0.55 * Math.min(1, Math.max(0, (u - CARD_FADE_FROM) / (CARD_FADE_TO - CARD_FADE_FROM)))
+  if (u < LEAVE_HOP) return { scale: 1, card, sink: -Math.sin((Math.PI * u) / LEAVE_HOP) * LEAVE_HOP_UP, done: false }
+  const k = (u - LEAVE_HOP) / (1 - LEAVE_HOP)
+  const fall = k * k * k
+  return { scale: 1 - fall, card, sink: fall * LEAVE_SINK, done: false }
+}
+
+export interface Leaver<S> {
+  /** Where it stood when it left — the plan has already re-flowed without it. */
+  station: S
+  /** performance.now() when it left. */
+  at: number
+}
+
+/**
+ * Who is mid-leave after the roster moved from `before` to `after` at `now`:
+ * every id in `before` and not in `after` starts leaving, anyone back in `after`
+ * stops (it returned before it was gone), and a leave older than `span` is over.
+ * Returns `current` itself when nothing changed, so a caller can skip a render
+ * by identity — and so a render-time "derive from the previous roster" settles.
+ */
+export function settleLeavers<S extends { agentId: string }>(
+  current: ReadonlyMap<string, Leaver<S>>, before: readonly S[], after: readonly S[], now: number, span: number = LEAVE_MS
+): ReadonlyMap<string, Leaver<S>> {
+  const staying = new Set(after.map((s) => s.agentId))
+  let next: Map<string, Leaver<S>> | null = null
+  const edit = (): Map<string, Leaver<S>> => (next ??= new Map(current))
+  for (const s of before) {
+    if (!staying.has(s.agentId) && !current.has(s.agentId)) edit().set(s.agentId, { station: s, at: now })
+  }
+  for (const [id, leaver] of next ?? current) {
+    if (staying.has(id) || now - leaver.at >= span) edit().delete(id)
+  }
+  return next ?? current
+}
+
 // ── the cards ────────────────────────────────────────────────────────────────
 
 /** A card starts lying this far back from facing the camera, then stands up. */

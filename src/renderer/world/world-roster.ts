@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import { getAgent, getAgentIds, subscribeAgentWorld } from './agent-world-store'
-import { isLiveStatus, stationPlan, type RosterEntry, type StationPlan } from './world-scene'
+import { isLiveStatus, type RosterEntry } from './world-scene'
 
 /**
  * The scene's roster: every agent id and the name it currently goes by, as ONE
@@ -41,10 +41,4 @@ export function useRoster(): readonly RosterEntry[] {
     })),
     [key]
   )
-}
-
-export function useStationPlan(): { roster: readonly RosterEntry[]; plan: StationPlan } {
-  const roster = useRoster()
-  const plan = useMemo(() => stationPlan(roster), [roster])
-  return { roster, plan }
 }

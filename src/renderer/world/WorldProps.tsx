@@ -270,15 +270,19 @@ export function ZoneLabel({ text, y }: { text: string; y: number }): JSX.Element
       const ctx = canvas.getContext('2d')
       if (!live || !ctx) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.font = `700 118px ${uiFont()}`
+      // M417: a quiet room sign, as the reference's zone words are — small,
+      // letter-spaced, a mid grey. At 700/118px in the room's ink it was the
+      // loudest thing in the wide shot, louder than any agent.
+      ctx.font = `600 92px ${uiFont()}`
+      ctx.letterSpacing = '22px'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.lineJoin = 'round'
       // A pale outline so the word stays readable over a robot, a desk or the ground alike.
-      ctx.lineWidth = 16
-      ctx.strokeStyle = 'rgba(244, 246, 249, 0.9)'
+      ctx.lineWidth = 12
+      ctx.strokeStyle = 'rgba(244, 246, 249, 0.85)'
       ctx.strokeText(text, canvas.width / 2, canvas.height / 2 + 4)
-      ctx.fillStyle = STUDIO.ink
+      ctx.fillStyle = STUDIO.zoneInk
       ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4)
       texture.needsUpdate = true
     }
@@ -287,7 +291,7 @@ export function ZoneLabel({ text, y }: { text: string; y: number }): JSX.Element
     return () => { live = false }
   }, [texture, text])
   return (
-    <sprite position-y={y} scale={[2.4, 0.75, 1]}>
+    <sprite position-y={y} scale={[1.5, 0.47, 1]}>
       <spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
     </sprite>
   )

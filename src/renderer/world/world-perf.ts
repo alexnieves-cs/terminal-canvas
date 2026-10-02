@@ -74,8 +74,30 @@ export function createDprGovernor(start: number): DprGovernor {
   }
 }
 
-/** How many agents get a full status card; the rest get a status dot. */
-export const CARD_BUDGET = 6
+/**
+ * How many agents get a full status card; the rest get a status dot. Three
+ * since M417: at six, the opening wide shot was more card than room (the
+ * critic pass against cortxos-1, where ONE card hangs in a room of twelve).
+ * Three still gives a close-up of a cluster a card each.
+ */
+export const CARD_BUDGET = 3
+
+/** At this many screen pixels per world unit (a robot ~170px tall), a card is drawn at its full size. */
+export const CARD_FULL_PX_PER_UNIT = 110
+/** The smallest a far card is drawn: its 13px title at ~9px, the reference's wide-shot card size; below that it stops being text. */
+export const CARD_MIN_SCALE = 0.72
+
+/**
+ * How large a card is drawn, from how large its robot is on screen (pixels
+ * per world unit at the robot's distance). A card stays its full size up close
+ * and shrinks with its robot as the camera pulls back, so in the wide shot a
+ * card is the size of the figure it labels and not a fixed 204px slab over the
+ * room — but never below `CARD_MIN_SCALE`, where it would stop being read.
+ */
+export function cardScale(pxPerUnit: number): number {
+  if (!Number.isFinite(pxPerUnit) || pxPerUnit <= 0) return CARD_MIN_SCALE
+  return Math.min(1, Math.max(CARD_MIN_SCALE, pxPerUnit / CARD_FULL_PX_PER_UNIT))
+}
 /** How much closer an agent without a full card must be to take one from an agent that has it — so two at the same distance do not trade places every time the camera breathes. */
 export const CARD_HYSTERESIS = 0.85
 

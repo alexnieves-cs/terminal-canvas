@@ -7,10 +7,11 @@ import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
 import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, createDprGovernor, DPR_MAX, DPR_MIN, type CardCandidate } from './world-perf'
-import { useStationPlan } from './world-roster'
-import type { Station } from './world-scene'
+import { getAgentIds } from './agent-world-store'
+import { useRoster } from './world-roster'
+import { stationPlan, type RosterEntry, type Station } from './world-scene'
 import { dollyBy, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
-import { dollyAt, popDelays, type Vec3, type WorldTransition } from './world-transition'
+import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
 
 /**
  * The 3D world view: every live agent in the event store as a robot at its own
@@ -345,9 +346,63 @@ function CardBudget({ stations, onChange }: { stations: readonly Station[]; onCh
   return null
 }
 
+/**
+ * The agents that are mid-leave (M417): an agent that stops being live leaves
+ * the live roster at once, but keeps its place in the ROOM for `LEAVE_MS` so its
+ * robot and desk play the leave (`leavePose`) where they stood — and only then
+ * does the plan re-flow without it. Re-flowing at once (the first cut) slid
+ * every other desk, and resized the slab, under the robot that was sinking: the
+ * fresh-context critic read the leave as a glitch for exactly that.
+ *
+ * Derived DURING render from the previous roster, not in an effect: the render
+ * that drops an agent would otherwise commit first and unmount its robot, and
+ * the effect would mount a fresh one — on its own clock, growing IN where it
+ * should be leaving. Its key and its place in the one robot array are unchanged,
+ * so a robot that turns live again mid-leave is the same instance standing back up.
+ */
+function useLeavers(roster: readonly RosterEntry[], reduced: boolean): ReadonlyMap<string, Leaver<RosterEntry>> {
+  const span = reduced ? 0 : LEAVE_MS
+  const [track, setTrack] = useState(() => ({ roster, leaving: new Map() as ReadonlyMap<string, Leaver<RosterEntry>> }))
+  let current = track
+  if (track.roster !== roster) {
+    current = { roster, leaving: settleLeavers(track.leaving, track.roster, roster, performance.now(), span) }
+    setTrack(current)
+  }
+  const leaving = current.leaving
+  // One timer for the soonest to finish; the settle after it drops every one that has.
+  useEffect(() => {
+    if (leaving.size === 0) return
+    const soonest = Math.min(...[...leaving.values()].map((l) => l.at)) + span
+    const timer = window.setTimeout(() => {
+      setTrack((t) => {
+        const next = settleLeavers(t.leaving, t.roster, t.roster, performance.now(), span)
+        return next === t.leaving ? t : { roster: t.roster, leaving: next }
+      })
+    }, Math.max(0, soonest - performance.now()) + 16)
+    return () => window.clearTimeout(timer)
+  }, [leaving, span])
+  return leaving
+}
+
+/** The live roster with the leavers still in it, in the store's first-seen order — the room as it stands until each leave is over. */
+function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string, Leaver<RosterEntry>>): readonly RosterEntry[] {
+  if (leaving.size === 0) return roster
+  const byId = new Map<string, RosterEntry>(roster.map((a) => [a.agentId, a]))
+  for (const [id, leaver] of leaving) byId.set(id, leaver.station)
+  return getAgentIds().filter((id) => byId.has(id)).map((id) => byId.get(id)!)
+}
+
 export function WorldView({ transition, reduced }: { transition: WorldTransition; reduced: boolean }): JSX.Element {
-  const { plan } = useStationPlan()
+  const roster = useRoster()
+  const leavers = useLeavers(roster, reduced)
+  const held = useMemo(() => heldRoster(roster, leavers), [roster, leavers])
+  const plan = useMemo(() => stationPlan(held), [held])
+  // Every station in the room, the leaving included: ONE array, because React
+  // scopes keys to an array and a robot moved between two would be a remount.
   const stations = useMemo(() => [...plan.stations.values()], [plan])
+  const leftAt = useMemo(() => new Map([...leavers].map(([id, l]) => [id, l.at])), [leavers])
+  // The card ranking is for the live: a leaver keeps the card it had (WorldRobot) and takes no one's.
+  const live = useMemo(() => stations.filter((station) => !leftAt.has(station.agentId)), [stations, leftAt])
   // Each robot's pop is delayed by how far it stands from the middle of the room.
   const delays = useMemo(() => {
     const list = stations.map((station) => {
@@ -380,15 +435,15 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
       >
         <color attach="background" args={[STUDIO.ground]} />
         <Lights extent={half + 3} />
-        <WorldOffice stations={stations} arcRadius={plan.arcRadius} reduced={reduced} />
+        <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} />
         {stations.map((station) => (
-          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={full !== null && !full.has(station.agentId)} reduced={reduced} />
+          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
         ))}
         <Controls controls={controls} limit={limit} maxDistance={Math.max(40, half * 4)} />
         <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} />
         <StatsProbe target={stats} />
         <QualityGovernor />
-        <CardBudget stations={stations} onChange={setFull} />
+        <CardBudget stations={live} onChange={setFull} />
       </Canvas>
       <div className="world-view__cards" ref={cards} />
       <WorldChrome camera={camera} />

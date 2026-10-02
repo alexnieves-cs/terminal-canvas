@@ -4,6 +4,7 @@ import { Html } from '@react-three/drei'
 import type { Group } from 'three'
 import { getAgent, useAgent } from './agent-world-store'
 import { cardBadge, cardTitle, recentTools, type BadgeKind } from './world-scene'
+import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
 
 /**
@@ -43,6 +44,11 @@ import { cardStand, cardTiltDeg } from './world-transition'
  *     from the robot's distance — a fixed offset would bury the card in the
  *     robot when zoomed in and leave it adrift when zoomed out. Written only
  *     when it moves by a whole pixel;
+ *   - the SCALE (M417, `cardScale`): from the same pixels-per-unit, so a far
+ *     card shrinks with its robot instead of hanging over the room at full
+ *     size. On a frame around the card, scaled from its top-left corner — the
+ *     corner nearest the robot's crown — so the card's own hinge (its bottom
+ *     edge, for the stand-up) is untouched;
  *   - QUIET, which arrives with the clock and not with an event: the badge is
  *     re-asked once a second, and the tag re-renders only when its kind flips.
  *
@@ -66,6 +72,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const point = useRef<Group>(null)
   const written = useRef(-1)
   const reach = useRef(-1)
+  const scaled = useRef(-1)
   const askedAt = useRef(-Infinity)
   const shown = useRef<BadgeKind | null>(null)
   // The last title the agent gave in its own words. The ring is fifty events,
@@ -89,10 +96,17 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
     if (card.current && at) {
       const dist = Math.hypot(camera.position.x - at[12]!, camera.position.y - at[13]!, camera.position.z - at[14]!)
       const fov = 'fov' in camera ? (camera.fov as number) : 40
-      const px = Math.round((REACH_UNITS * height) / (2 * Math.tan((fov * Math.PI) / 360) * Math.max(dist, 0.1)) + REACH_GAP_PX)
+      const perUnit = height / (2 * Math.tan((fov * Math.PI) / 360) * Math.max(dist, 0.1))
+      const px = Math.round(REACH_UNITS * perUnit + REACH_GAP_PX)
       if (px !== reach.current) {
         reach.current = px
         tag.style.setProperty('--world-reach', `${px}px`)
+      }
+      // Hundredths: a finer step would restyle the card every frame of an orbit for no visible change.
+      const k = Math.round(cardScale(perUnit) * 100) / 100
+      if (k !== scaled.current) {
+        scaled.current = k
+        tag.style.setProperty('--world-scale', String(k))
       }
     }
     const t = state.clock.elapsedTime
@@ -119,19 +133,21 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
             <span className="world-pill__name">{record.name}</span>
           </div>
           {compact ? null : (
-            <div ref={card} className="world-card">
-              <p className="world-card__title">{title}</p>
-              <p className="world-card__badge">{badge.word}</p>
-              {tools.length > 0 ? (
-                <ul className="world-card__tools">
-                  {tools.map((line) => (
-                    <li key={line.key} data-state={line.state}>
-                      <span className="world-card__tool">{line.tool}</span>
-                      {line.text}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+            <div className="world-card-frame">
+              <div ref={card} className="world-card">
+                <p className="world-card__title">{title}</p>
+                <p className="world-card__badge">{badge.word}</p>
+                {tools.length > 0 ? (
+                  <ul className="world-card__tools">
+                    {tools.map((line) => (
+                      <li key={line.key} data-state={line.state}>
+                        <span className="world-card__tool">{line.tool}</span>
+                        {line.text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             </div>
           )}
         </div>

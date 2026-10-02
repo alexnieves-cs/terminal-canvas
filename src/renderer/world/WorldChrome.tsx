@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type JSX, type KeyboardEvent, type RefObject } from 'react'
 import { KindChat, Minus, Plus, Send } from '@renderer/icons'
-import { postTeamAsk } from './agent-world-store'
+import { postTeamAsk, useAgentIds } from './agent-world-store'
 import { useRoster } from './world-roster'
 import { ASK_MAX, legendEntries, type CameraApi } from './world-set'
 
@@ -33,7 +33,9 @@ const POSTED_MS = 2600
 
 export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> }): JSX.Element {
   const roster = useRoster()
-  const legend = useMemo(() => legendEntries(roster), [roster])
+  // The first-seen order the robots take their colours from, so a dot is its robot's shell.
+  const order = useAgentIds()
+  const legend = useMemo(() => legendEntries(roster, order), [roster, order])
   const [draft, setDraft] = useState('')
   const [posted, setPosted] = useState(false)
   const timer = useRef<number | null>(null)

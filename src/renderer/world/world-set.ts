@@ -364,33 +364,13 @@ export interface LegendEntry {
   color: string
 }
 
-const HEX6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
-
 /**
- * The agent's colour as its robot wears it: the same hue, pushed to the robot's
- * candy saturation and mid lightness. `colorOf` is tuned for a dot on a dark
- * rail, and a legend dot beside a bright toy should look like the toy.
+ * The agents the legend names, in roster order, and how many more there were
+ * than fit. Each dot is its robot's shell colour exactly (`agentTint` over the
+ * same first-seen `order` the robots read), so the dot beside a name is the toy
+ * it names.
  */
-export function candyHex(hex: string): string {
-  const m = HEX6.exec(hex)
-  if (m === null) return hex
-  const r = parseInt(m[1]!, 16) / 255, g = parseInt(m[2]!, 16) / 255, b = parseInt(m[3]!, 16) / 255
-  const max = Math.max(r, g, b), min = Math.min(r, g, b)
-  const d = max - min
-  let h = 0
-  if (d !== 0) h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4
-  h *= 60
-  const s = 0.82
-  const l = Math.min(0.58, Math.max(0.46, (max + min) / 2))
-  const a = s * Math.min(l, 1 - l)
-  const k = (n: number): number => (n + h / 30) % 12
-  const f = (n: number): number => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))
-  const out = (v: number): string => Math.round(v * 255).toString(16).padStart(2, '0')
-  return `#${out(f(0))}${out(f(8))}${out(f(4))}`
-}
-
-/** The agents the legend names, in roster order, and how many more there were than fit. */
-export function legendEntries(roster: readonly RosterEntry[], max: number = LEGEND_MAX): { shown: LegendEntry[]; more: number } {
-  const shown = roster.slice(0, max).map((a) => ({ agentId: a.agentId, name: a.name, color: candyHex(agentTint(a.agentId)) }))
+export function legendEntries(roster: readonly RosterEntry[], order: readonly string[], max: number = LEGEND_MAX): { shown: LegendEntry[]; more: number } {
+  const shown = roster.slice(0, max).map((a) => ({ agentId: a.agentId, name: a.name, color: agentTint(a.agentId, order) }))
   return { shown, more: Math.max(0, roster.length - max) }
 }

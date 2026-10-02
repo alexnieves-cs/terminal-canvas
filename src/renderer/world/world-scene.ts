@@ -1,7 +1,7 @@
 import { agentWord } from '@renderer/panels/panel-state'
-import { colorOf } from '@shared/presence'
 import type { AgentState } from '@shared/types'
 import type { AgentEvent, AgentRecord, AgentStatus } from '@shared/world-events'
+import { robotTint } from './world-palette'
 
 /**
  * What the 3D world view DECIDES, with no three.js and no React in it, so
@@ -258,13 +258,12 @@ export function statusWord(status: AgentStatus): string {
 }
 
 /**
- * The robot's colour: the same per-id hash the 2D canvas paints an owner with
- * (`colorOf`, shared/presence.ts), so an agent is one colour in both views.
- * An id with no 2D node yet — a simulated agent — still gets the colour its
- * node WOULD have.
+ * The robot's colour — its shell, its desk screen's glow and its legend dot.
+ * `order` is the store's first-seen agent ids (`getAgentIds`); see `robotTint`
+ * for why it is the arrival order and not a hash of the id (M417).
  */
-export function agentTint(agentId: string): string {
-  return colorOf(agentId)
+export function agentTint(agentId: string, order: readonly string[]): string {
+  return robotTint(agentId, order)
 }
 
 // ── the hologram card and the procedural robot (M415) ───────────────────────

@@ -29,6 +29,72 @@ export interface WorldPalette {
   readonly cubes: readonly [string, string, string]
   /** Ink for the labels painted onto a texture. */
   readonly ink: string
+  /** The zone sign's grey (M417): a room label, quieter than any agent. */
+  readonly zoneInk: string
+}
+
+/**
+ * The robots' shells (M417), after the reference's toys: eight candy hues plus
+ * a white and a graphite one, so a room reads as ten different figures, not as
+ * shades of one. ORDERED so that neighbours are far apart (an orange is never
+ * followed by a red or a yellow), because a robot takes the next one in the
+ * order agents arrived in (`robotTint`).
+ *
+ * Until M417 a robot was `colorOf(agentId)`, the presence hash, and ids that
+ * differ only in a trailing digit — every demo roster, `demo-0…8`, `agent-1…6` —
+ * landed on two or three hues (FNV-1a's last step is one multiply, so the last
+ * character moves the low bits in a fixed pattern, and `% 360` keeps exactly
+ * those). `colorOf` paints OWNERS on the 2D canvas, never agents, so nothing
+ * there had to keep matching.
+ *
+ * Pre-saturated, and dark enough to survive ACES (which greys a light candy to
+ * pastel): the shell takes the hex as it is, with no saturation push, which
+ * is also what keeps the white and the graphite white and graphite.
+ */
+export const ROBOT_TINTS: readonly string[] = [
+  '#ff6a14', // orange
+  '#2763ff', // blue
+  '#22c94a', // green
+  '#ee2b4a', // red
+  '#9a36f5', // purple
+  '#f2f3f5', // white
+  '#ffc614', // yellow
+  '#ff4fa8', // pink
+  '#11b9b2', // teal
+  '#2a2e37'  // graphite
+]
+
+/** Ids in the world's own namespace (the board's `world:you`) are not agents and take no tint. */
+const OWN_NAMESPACE = 'world:'
+
+/**
+ * An agent's shell colour: the tint at its place in the order the feed FIRST
+ * named agents (`getAgentIds`, append-only), counting only agents. That order
+ * never reshuffles — a newcomer is appended, a dormant agent keeps its place —
+ * so a robot keeps its colour for the session, and the first ten agents are ten
+ * different colours however alike their ids are. An id not in the order (a
+ * caller with no store) falls back to a well-mixed hash of the id itself.
+ */
+export function robotTint(agentId: string, order: readonly string[]): string {
+  let index = -1
+  let seen = 0
+  for (const id of order) {
+    if (id.startsWith(OWN_NAMESPACE)) continue
+    if (id === agentId) { index = seen; break }
+    seen++
+  }
+  if (index < 0) index = mixedHash(agentId)
+  return ROBOT_TINTS[index % ROBOT_TINTS.length]!
+}
+
+/** FNV-1a, then murmur3's finaliser: every input bit reaches every output bit, so `id-1` and `id-2` are not neighbours. */
+function mixedHash(text: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b)
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return h >>> 0
 }
 
 export const STUDIO: WorldPalette = {
@@ -40,5 +106,6 @@ export const STUDIO: WorldPalette = {
   cyanCore: '#a6f6ff',
   tableTop: '#07080b',
   cubes: ['#8a5f48', '#3d8a90', '#6b5b9c'],
-  ink: '#161a22'
+  ink: '#161a22',
+  zoneInk: '#868c97'
 }

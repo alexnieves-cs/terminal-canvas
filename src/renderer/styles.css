@@ -343,6 +343,7 @@
   --world-holo-line:   rgba(255, 255, 255, .9);
   --world-holo-gleam:  rgba(255, 255, 255, .7);
   --world-holo-rule:   rgba(20, 23, 29, .08);
+  --world-dot-ring:    rgba(20, 23, 29, .24);
   --world-holo-ink:    #14171d;
   --world-holo-ink-2:  #4b5261;
   --world-holo-shade:  0 1px 2px rgba(15, 18, 26, .16), 0 6px 16px rgba(15, 18, 26, .12);
@@ -480,6 +481,7 @@
   --world-holo-line:   rgba(255, 255, 255, .9);
   --world-holo-gleam:  rgba(255, 255, 255, .7);
   --world-holo-rule:   rgba(20, 23, 29, .08);
+  --world-dot-ring:    rgba(20, 23, 29, .24);
   --world-holo-ink:    #14171d;
   --world-holo-ink-2:  #4b5261;
   --world-holo-shade:  0 1px 2px rgba(15, 18, 26, .16), 0 6px 16px rgba(15, 18, 26, .12);
@@ -11007,7 +11009,8 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   pointer-events: none; user-select: none;
 }
 .world-legend__item { display: inline-flex; align-items: center; gap: var(--sp-3); min-width: 0; }
-.world-legend__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+/* A hairline ring (M417): the white robot's dot is white, on a white bar. */
+.world-legend__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--world-dot-ring); }
 .world-legend__name { overflow: hidden; text-overflow: ellipsis; max-width: 20ch; }
 .world-route__note {
   position: absolute; top: var(--sp-6); left: 50%; transform: translateX(-50%);
@@ -11047,9 +11050,17 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-pill__name { overflow: hidden; text-overflow: ellipsis; }
 /* The state, in the badge's hue — all a far agent's pill says beyond its name. */
 .world-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--world-badge); }
+/* M417: the card's place beside the robot and its size with distance (WorldCard writes
+   --world-scale from the robot's pixels per unit). Scaled from the top-left, the corner
+   by the robot's crown, on a frame of its own so the card's tilt keeps its bottom hinge. */
+.world-tag { --world-scale: 1; }
+.world-card-frame {
+  position: absolute; left: var(--world-reach); top: -4px;
+  transform: scale(var(--world-scale)); transform-origin: 0 0;
+}
 .world-card {
   --world-tilt: 0deg;
-  position: absolute; left: var(--world-reach); top: -4px;
+  position: relative;
   box-sizing: border-box; width: 204px;
   /* Hinged on its bottom edge to stand up as its robot arrives (WorldCard writes --world-tilt; at rest it is 0). */
   transform: perspective(640px) rotateX(var(--world-tilt));

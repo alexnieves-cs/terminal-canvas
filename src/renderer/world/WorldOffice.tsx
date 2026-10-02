@@ -1,11 +1,12 @@
 import { memo, useEffect, useMemo, useRef, type JSX } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { getAgent } from './agent-world-store'
+import { getAgent, getAgentIds } from './agent-world-store'
 import { STUDIO } from './world-palette'
 import { studioEnv } from './world-gloss'
 import { agentTint, type Slot, type Station } from './world-scene'
 import { roundedRectPath, slabHalf, TABLE_PLATE } from './world-set'
+import { leavePose } from './world-transition'
 import { TrimLine, WorldPlatform } from './WorldPlatform'
 import { WorldProps, ZoneLabel } from './WorldProps'
 import type { AgentStatus } from '@shared/world-events'
@@ -26,13 +27,35 @@ import type { AgentStatus } from '@shared/world-events'
 
 const DESK = { w: 1.7, d: 0.85, top: 0.78 } as const
 
-/** A desk glides to its slot when the arc re-flows, at about the pace a robot walks. */
-function useGlide(target: Slot | undefined) {
+/**
+ * A desk glides to its slot when the arc re-flows, at about the pace a robot
+ * walks — and when its agent has left (`leftAt`, M417), it stays where it stood
+ * and sinks through the floor on the robot's own curve (`leavePose`), so the
+ * two go together instead of the desk vanishing under a robot still standing.
+ */
+function useGlide(target: Slot | undefined, leftAt: number | null, reduced: boolean) {
   const group = useRef<THREE.Group>(null)
   const ready = useRef(false)
+  const leaving = useRef(leftAt)
+  leaving.current = leftAt
+  const snap = useRef(reduced)
+  snap.current = reduced
   useFrame((_, delta) => {
     const g = group.current
     if (!g || !target) return
+    if (leaving.current !== null) {
+      const pose = leavePose(performance.now() - leaving.current, snap.current ? 0 : undefined)
+      g.position.y = -pose.sink
+      g.scale.setScalar(Math.max(pose.scale, 1e-4))
+      g.visible = pose.scale > 1e-3
+      return
+    }
+    if (g.position.y !== 0 || g.scale.x !== 1) {
+      // Back before the leave was over: up again at once, which a desk can afford (it has no face to pop).
+      g.position.y = 0
+      g.scale.setScalar(1)
+      g.visible = true
+    }
     if (!ready.current) {
       g.position.set(target.x, 0, target.z)
       g.rotation.y = target.facing
@@ -55,11 +78,11 @@ const SCREEN_GLOW: Readonly<Record<AgentStatus, number>> = {
 /** Where the zone label floats: above the robot's head and its name pill, so the two never overlap. */
 const LABEL_Y = 2.55
 
-function Desk({ station, label }: { station: Station; label: string | null }): JSX.Element | null {
+function Desk({ station, label, leftAt, reduced }: { station: Station; label: string | null; leftAt: number | null; reduced: boolean }): JSX.Element | null {
   const slot = station.desk
-  const group = useGlide(slot)
+  const group = useGlide(slot, leftAt, reduced)
   const screen = useRef<THREE.MeshStandardMaterial>(null)
-  const tint = useMemo(() => new THREE.Color(agentTint(station.agentId)), [station.agentId])
+  const tint = useMemo(() => new THREE.Color(agentTint(station.agentId, getAgentIds())), [station.agentId])
   const body = useMemo(() => new THREE.Color(STUDIO.desk), [])
   const side = useMemo(() => new THREE.Color(STUDIO.desk).multiplyScalar(0.86), [])
   const dark = useMemo(() => new THREE.Color(STUDIO.dark), [])
@@ -144,10 +167,13 @@ function MeetingTable(): JSX.Element {
 
 export const WorldOffice = memo(function WorldOffice({
   stations,
+  leftAt,
   arcRadius,
   reduced
 }: {
   stations: readonly Station[]
+  /** When each leaving agent left (see `useLeavers`, WorldView): its desk sinks with its robot. */
+  leftAt: ReadonlyMap<string, number>
   arcRadius: number
   reduced: boolean
 }): JSX.Element {
@@ -160,7 +186,7 @@ export const WorldOffice = memo(function WorldOffice({
       <MeetingTable />
       <WorldProps half={half} reduced={reduced} />
       {stations.map((station) => (
-        <Desk key={station.agentId} station={station} label={station.agentId === first ? 'DESK 01' : null} />
+        <Desk key={station.agentId} station={station} label={station.agentId === first ? 'DESK 01' : null} leftAt={leftAt.get(station.agentId) ?? null} reduced={reduced} />
       ))}
     </group>
   )

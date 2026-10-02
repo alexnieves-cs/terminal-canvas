@@ -339,10 +339,28 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       Z.statusWord('thinking') === 'thinking' && Z.statusWord('error') === 'error',
     ['working', 'idle', 'waiting_approval', 'thinking', 'error'].map(Z.statusWord).join())
 
-  const tints = ['sim-coder', 'sim-researcher', 'sim-tester', 'sim-idle'].map(Z.agentTint)
-  ok('world.scene.tint.1 a robot is the colour the 2D canvas paints that id (colorOf), as a hex the model can take, and the simulated four are four different colours',
-    tints.every((t, i) => t === P.colorOf(['sim-coder', 'sim-researcher', 'sim-tester', 'sim-idle'][i]) && /^#[0-9a-f]{6}$/.test(t)) && new Set(tints).size === 4,
-    tints.join())
+  // world.scene.tint.1 (M412–M416: a robot is colorOf(id), the presence hash) is RETIRED by M417's
+  // critic pass: ids that differ by a trailing digit hash to two or three hues (FNV-1a's last multiply
+  // keeps the last character's pattern in the low bits that `% 360` reads), and colorOf paints owners
+  // on the 2D canvas, never agents, so there was no second view to keep matching. world.critic.hue.* below.
+  const demoIds = Array.from({ length: 9 }, (_, i) => `demo-${i}`)
+  const hueOf = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < 0.2) return null; const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return h * 60 }
+  const presenceHues = new Set(demoIds.map((id) => Math.round((hueOf(P.colorOf(id)) ?? 0) / 40)))
+  const tints = demoIds.map((id) => Z.agentTint(id, demoIds))
+  ok('world.critic.hue.1 the demo roster (demo-0…8, ids one digit apart) is nine DIFFERENT shells — where the presence hash it replaced gives it no more than three hue families — and each is a hex the model can take',
+    new Set(tints).size === 9 && tints.every((t) => /^#[0-9a-f]{6}$/.test(t)) && presenceHues.size <= 3, `tints=${tints.join()} presenceFamilies=${presenceHues.size}`)
+  const chroma = PAL.ROBOT_TINTS.map(hueOf).filter((h) => h !== null)
+  const gap = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d) }
+  const neighbours = PAL.ROBOT_TINTS.map((t, i) => [hueOf(t), hueOf(PAL.ROBOT_TINTS[(i + 1) % PAL.ROBOT_TINTS.length])]).filter(([a, b]) => a !== null && b !== null)
+  const minPair = Math.min(...chroma.flatMap((a, i) => chroma.slice(i + 1).map((b) => gap(a, b))))
+  ok('world.critic.hue.2 the shells are ten, with a white and a graphite among them; every two candy hues stand at least 18° apart and every two NEIGHBOURS in the order at least 60° apart, so consecutive arrivals never read as one colour',
+    PAL.ROBOT_TINTS.length === 10 && PAL.ROBOT_TINTS.length - chroma.length === 2 && minPair >= 18 && neighbours.every(([a, b]) => gap(a, b) >= 60),
+    `min=${minPair.toFixed(0)} neighbours=${neighbours.map(([a, b]) => gap(a, b).toFixed(0)).join()}`)
+  const grown = [...demoIds, 'late-1', 'late-2']
+  const withAsk = ['demo-0', 'world:you', 'demo-1']
+  ok('world.critic.hue.3 a tint is the agent\'s place in the FIRST-SEEN order, so newcomers never recolour anyone already in the room; the board\'s pseudo-agent takes no place; the eleventh arrival starts the palette again; and an id the order does not know still gets a palette colour, the same one every time',
+    demoIds.every((id) => Z.agentTint(id, grown) === Z.agentTint(id, demoIds)) && Z.agentTint('demo-1', withAsk) === Z.agentTint('demo-1', ['demo-0', 'demo-1']) &&
+      PAL.ROBOT_TINTS.includes(Z.agentTint('stranger', [])) && Z.agentTint('stranger', []) === Z.agentTint('stranger', ['x']) && Z.agentTint('late-2', grown) === Z.agentTint('demo-0', grown))
 }
 
 // ── who gets a robot, and the move between canvas and world (M413) ───────────
@@ -718,15 +736,18 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   {
     const near = (id, d) => ({ agentId: id, distance: d })
     const ids = Array.from({ length: 10 }, (_, i) => near(`a${i}`, 5 + i))
-    const first = PF.cardTiers(ids, new Set())
-    ok('world.perf.7 only the nearest CARD_BUDGET agents get a full card; the rest get a dot', PF.CARD_BUDGET === 6 && [...first].sort().join() === 'a0,a1,a2,a3,a4,a5', [...first].join())
-    const again = PF.cardTiers(ids, first)
+    // M417: the budget is three (the critic pass — at six the wide shot was more card than room); the
+    // hysteresis checks below still run at an explicit six, the shape they were written for.
+    const three = PF.cardTiers(ids, new Set())
+    ok('world.perf.7 only the nearest CARD_BUDGET (three since M417) agents get a full card; the rest get a dot', PF.CARD_BUDGET === 3 && [...three].sort().join() === 'a0,a1,a2', [...three].join())
+    const first = PF.cardTiers(ids, new Set(), 6)
+    const again = PF.cardTiers(ids, first, 6)
     const nudged = PF.cardTiers([...ids.slice(0, 5), near('a5', 10.5), near('a6', 10)], first, 6)
     ok('world.perf.8 an unchanged ranking returns the SAME set (no re-render), and a challenger barely nearer than an incumbent does not displace it',
       again === first && nudged === first || [...nudged].sort().join() === [...first].sort().join())
     const clearly = PF.cardTiers([...ids.slice(0, 5), near('a5', 12), near('a6', 4)], first, 6)
     ok('world.perf.9 a challenger CLEARLY nearer does take a card, and the displaced agent becomes a dot', clearly.has('a6') && !clearly.has('a5') && clearly.size === 6)
-    ok('world.perf.10 fewer agents than the budget all get a card', PF.cardTiers(ids.slice(0, 3), new Set()).size === 3 && PF.cardTiers([], new Set()).size === 0)
+    ok('world.perf.10 fewer agents than the budget all get a card', PF.cardTiers(ids.slice(0, 2), new Set()).size === 2 && PF.cardTiers([], new Set()).size === 0)
   }
 
   // M415. The card's badge speaks the reference's colours — WORKING green,
@@ -762,7 +783,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /reduced \? 0 : pops\[i\]!/.test(view) && /reducedRef\.current \? 1 : easeInOutCubic/.test(robot))
   ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — a far agent wears the pill alone (its dot carries the state) in the same Html element',
     /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && /<QualityGovernor \/>/.test(view) && /<CardBudget /.test(view) && /t - last\.current < 0\.25/.test(view) &&
-      /compact=\{full !== null && !full\.has\(station\.agentId\)\}/.test(view) && /className="world-dot"/.test(card) && /compact \? null : \(/.test(card) && /const tools = compact \? \[\] : recentTools\(record\)/.test(card))
+      /compact=\{leftAt\.has\(station\.agentId\) \|\| \(full !== null && !full\.has\(station\.agentId\)\)\}/.test(view) && /className="world-dot"/.test(card) && /compact \? null : \(/.test(card) && /const tools = compact \? \[\] : recentTools\(record\)/.test(card))
 }
 
 // ── wiring: every hook is a second reader, placed AFTER what it observes ─────
@@ -884,16 +905,19 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       SET.boardCard({ events: [{ agentId: 'a', seq: 1, ts: 1, type: 'thought', payload: { text: 'hm' } }] }).stamp === null)
 
   // The legend: the live agents, in roster order, in the colour their robot wears.
-  const legend = SET.legendEntries(rosterOf(11))
-  const hsl = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; return { l, s: mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)) } }
-  ok('world.legend.1 the legend names the first LEGEND_MAX live agents in roster order with a candy-saturated dot, says how many more there were, and an unreadable colour is left alone',
-    legend.shown.length === SET.LEGEND_MAX && legend.more === 3 && legend.shown[0].agentId === 's0' && legend.shown.every((e) => /^#[0-9a-f]{6}$/.test(e.color) && hsl(e.color).s > 0.7 && hsl(e.color).l >= 0.44 && hsl(e.color).l <= 0.6) &&
-      SET.legendEntries([]).shown.length === 0 && SET.legendEntries(rosterOf(3)).more === 0 && SET.candyHex('hsl(1,2%,3%)') === 'hsl(1,2%,3%)')
+  // M417: the dot is the robot's shell exactly (the palette is candy already; candyHex is gone with
+  // the presence hash it corrected), read over the same first-seen order the robots read.
+  const legendRoster = rosterOf(11)
+  const legendOrder = ['early', ...legendRoster.map((a) => a.agentId)]
+  const legend = SET.legendEntries(legendRoster, legendOrder)
+  ok('world.legend.1 the legend names the first LEGEND_MAX live agents in roster order, each dot the colour its robot wears (agentTint over the store\'s first-seen order, not the live roster\'s), and says how many more there were',
+    legend.shown.length === SET.LEGEND_MAX && legend.more === 3 && legend.shown[0].agentId === 's0' && legend.shown.every((e) => e.color === Z.agentTint(e.agentId, legendOrder)) &&
+      legend.shown[0].color === PAL.ROBOT_TINTS[1] && SET.legendEntries([], []).shown.length === 0 && SET.legendEntries(rosterOf(3), legendOrder).more === 0 && SET.candyHex === undefined)
 
   // The chrome: DOM only, wired to the camera and the store, and honest about what the pill does.
   const chrome = code('WorldChrome.tsx'), chromeRaw = text('WorldChrome.tsx'), view = code('WorldView.tsx')
   ok('world.chrome.1 the overlay is plain DOM (no three, fiber or drei — it is not in the scene\'s importer set), reads the LIVE roster for its legend, posts through the store, says where the post goes beside the field, and every control has a name',
-    !/from '(?:three|@react-three\/[^']*)/.test(chrome) && /useRoster\(\)/.test(chrome) && /legendEntries\(roster\)/.test(chrome) && /postTeamAsk\(draft\)/.test(chrome) &&
+    !/from '(?:three|@react-three\/[^']*)/.test(chrome) && /useRoster\(\)/.test(chrome) && /legendEntries\(roster, order\)/.test(chrome) && /useAgentIds\(\)/.test(chrome) && /postTeamAsk\(draft\)/.test(chrome) &&
       /Posts to the board/.test(chrome) && /aria-label="Ask your team"/.test(chrome) && /aria-label="Zoom in"/.test(chrome) && /aria-label="Zoom out"/.test(chrome) &&
       /camera\.current\?\.fit\(\)/.test(chrome) && /camera\.current\?\.zoom\(1\)/.test(chrome) && /camera\.current\?\.zoom\(-1\)/.test(chrome) && />Fit room</.test(chrome) &&
       /role="status"/.test(chrome) && /event\.key !== 'Escape'/.test(chrome) && /event\.stopPropagation\(\)/.test(chrome) && !/window\.canvas/.test(chromeRaw))
@@ -921,6 +945,76 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.rig.1 a Fit-room or zoom glide runs BEFORE the rig\'s hand-back at rest and disables the controls while it writes the camera — the hand-back snaps the camera to the rest pose whenever the controls are off, so a glide that ran after it would be undone on its first frame — and a move to or from the canvas ends the glide',
     rigAt > 0 && handBackAt > rigAt && /if \(!atRest\) gliding\.current = null/.test(view) && /c\.enabled = false\n\s*const at = mix/.test(view) && /gliding\.current = null\n\s*c\.enabled = true\n\s*c\.update\(\)/.test(view) &&
       /fit: \(\) => begin\(isoPose\(arc\.current\), ORBIT_TARGET, FIT_MS\)/.test(view))
+}
+
+// ── the critic pass against the cortxos references (M417) ────────────────────
+// What a fresh look at the wide shot (vs docs/reference/cortxos-1.png) and the
+// close-up (vs cortxos-5.png) found, each as the rule that fixes it. The scored
+// table is docs/build-log/m417-critic-pass.md.
+{
+  const text = (f) => readFileSync(join(root, f), 'utf8')
+  const code = (f) => text(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const { execFileSync } = require('node:child_process')
+  let tracked = null
+  try { tracked = execFileSync('git', ['ls-files', 'docs/reference/'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean) } catch { tracked = null }
+  const frames = [1, 2, 3, 4, 5].map((n) => `docs/reference/cortxos-${n}.png`)
+  const logPath = 'docs/build-log/m417-critic-pass.md'
+  const log = existsSync(join(root, logPath)) ? text(logPath) : ''
+  ok('world.critic.reference.1 the five cortxos look references exist AND are tracked (a reference only on the author\'s disk is one a fresh-context critic cannot have), and the M417 log scores the wide shot against cortxos-1 and the close-up against cortxos-5',
+    tracked !== null && frames.every((f) => existsSync(join(root, f)) && tracked.includes(f)) &&
+      /cortxos-1\.png/.test(log) && /cortxos-5\.png/.test(log) && /^\| *Gap *\|/m.test(log) && (log.match(/^\| [^|\n]+\| *[0-5] *→ *[0-5] *\|/gm) ?? []).length >= 10,
+    JSON.stringify({ tracked: tracked && tracked.length, log: log.length > 0 }))
+
+  // Cards dominated the wide shot: fewer of them (world.perf.7), and drawn at their robot's scale.
+  const scales = [0, 20, 60, 68.2, 90, 110, 400].map(PF.cardScale)
+  ok('world.critic.card.1 a card is full size while its robot is near (≥ CARD_FULL_PX_PER_UNIT on screen), shrinks with it as the camera pulls back, never below CARD_MIN_SCALE, and a garbage reading is the smallest card, not a NaN',
+    PF.CARD_FULL_PX_PER_UNIT === 110 && PF.CARD_MIN_SCALE === 0.72 && PF.cardScale(110) === 1 && PF.cardScale(400) === 1 && PF.cardScale(20) === 0.72 &&
+      Math.abs(PF.cardScale(88) - 0.8) < 1e-9 && scales.every((k, i) => i === 0 || k >= scales[i - 1]) && PF.cardScale(NaN) === 0.72 && PF.cardScale(-1) === 0.72,
+    scales.map((k) => k.toFixed(2)).join())
+  const card = code('src/renderer/world/WorldCard.tsx'), styles = text('src/renderer/styles.css')
+  ok('world.critic.card.2 WorldCard writes --world-scale from cardScale over the SAME pixels-per-unit as the reach, only when it moves by a hundredth, onto a frame that scales from the card\'s top-left — the card itself keeps its bottom hinge for the stand-up',
+    /cardScale\(perUnit\)/.test(card) && /const px = Math\.round\(REACH_UNITS \* perUnit \+ REACH_GAP_PX\)/.test(card) && /setProperty\('--world-scale'/.test(card) && /k !== scaled\.current/.test(card) &&
+      /className="world-card-frame">\s*<div ref=\{card\} className="world-card">/.test(card) &&
+      /\.world-card-frame \{[^}]*left: var\(--world-reach\)[^}]*transform: scale\(var\(--world-scale\)\); transform-origin: 0 0;/.test(styles) &&
+      /\.world-card \{[^}]*position: relative;[^}]*transform-origin: 50% 100%;/.test(styles) && !/\.world-card \{[^}]*left: var\(--world-reach\)/.test(styles))
+
+  // A robot leaving the desks vanished between two frames.
+  const T0 = T.leavePose(0), Tend = T.leavePose(T.LEAVE_MS), hop = T.leavePose(T.LEAVE_MS * 0.1)
+  const curve = Array.from({ length: 41 }, (_, i) => T.leavePose((T.LEAVE_MS * i) / 40))
+  ok('world.critic.leave.1 a leave is a small farewell hop (above the floor, full size) and then an accelerating sink through it as the figure shrinks — standing at 0, gone and past its own height below the floor at LEAVE_MS, never growing back on the way, and over at once under reduced motion; the card fades on a straighter, earlier line than the body so it never drops in the last frames',
+    T0.scale === 1 && T0.sink === 0 && !T0.done && hop.scale === 1 && hop.sink < 0 && Tend.done && Tend.scale === 0 && T.LEAVE_SINK > 1.55 &&
+      curve.every((p, i) => i === 0 || p.scale <= curve[i - 1].scale) && curve.slice(10).every((p, i, a) => i === 0 || p.sink >= a[i - 1].sink) &&
+      T.leavePose(10, 0).done && T.leavePose(10, 0).scale === 0 && T.LEAVE_MS >= 600 && T.LEAVE_MS <= 1200 &&
+      // The card fades on its own, earlier line — gone (pop 0.45 is cardStand's zero) by two thirds in, while the body still stands half-sunk.
+      T0.card === 1 && curve.every((p, i) => i === 0 || p.card <= curve[i - 1].card) && T.leavePose(T.LEAVE_MS * 0.65).card <= 0.45 + 1e-9 &&
+      T.leavePose(T.LEAVE_MS * 0.65).scale > 0.75 && T.leavePose(T.LEAVE_MS * 0.4).card < 0.9 && Tend.card === 0)
+  const st = (id) => ({ agentId: id })
+  const A = st('a'), B = st('b'), C2 = st('c')
+  const none = new Map()
+  const one = T.settleLeavers(none, [A, B, C2], [A, C2], 1000)
+  const same = T.settleLeavers(one, [A, C2], [A, C2], 1200)
+  const back = T.settleLeavers(one, [A, C2], [A, B, C2], 1300)
+  const over = T.settleLeavers(one, [A, C2], [A, C2], 1000 + T.LEAVE_MS)
+  ok('world.critic.leave.2 settleLeavers starts a leave for each agent that dropped out of the roster, keeps its last station and when it left, returns the SAME map when nothing moved (a render-time derive must settle), ends a leave when the agent is back or the leave is over, and holds nobody at a span of 0',
+    one.size === 1 && one.get('b').station === B && one.get('b').at === 1000 && T.settleLeavers(none, [A], [A], 5) === none && same === one &&
+      back.size === 0 && over.size === 0 && T.settleLeavers(none, [A, B], [A], 7, 0).size === 0 && T.settleLeavers(one, [A, C2], [C2], 1100).get('b').at === 1000 && T.settleLeavers(one, [A, C2], [C2], 1100).get('a').at === 1100)
+  const view = code('src/renderer/world/WorldView.tsx'), robot = code('src/renderer/world/WorldRobot.tsx'), office = code('src/renderer/world/WorldOffice.tsx')
+  ok('world.critic.leave.3 the leave is wired so it cannot remount and the room holds still: WorldView derives the leavers DURING render from the live roster (an effect would commit the unmount first), plans the room over the roster WITH the leavers so nothing re-flows until a leave is over, renders every robot and desk from ONE keyed array, ranks cards over the live alone, and the robot fades the card on the leave\'s card line while it shrinks and sinks `bob` (not `placer`, which carries the card), keeping the card it had',
+    /if \(track\.roster !== roster\) \{\s*current = \{ roster, leaving: settleLeavers\(/.test(view) && /setTrack\(current\)/.test(view) && /stationPlan\(held\)/.test(view) && /heldRoster\(roster, leavers\)/.test(view) &&
+      (view.match(/<WorldRobot /g) ?? []).length === 1 && /stations\.map\(\(station\) => \(\s*<WorldRobot /.test(view) && /<CardBudget stations=\{live\}/.test(view) && /leftAt=\{leftAt\.get\(station\.agentId\) \?\? null\}/.test(view) &&
+      /pop\.current = shown \* \(leave\?\.card \?\? 1\)/.test(robot) && /const body = shown \* \(leave\?\.scale \?\? 1\)/.test(robot) && /bob\.current\.position\.y = -\(leave\?\.sink \?\? 0\)/.test(robot) && /if \(leftAt === null\) cardless\.current = compact/.test(robot) &&
+      /compact=\{cardless\.current\}/.test(robot) && (office.match(/<Desk /g) ?? []).length === 1 && /leftAt=\{leftAt\.get\(station\.agentId\) \?\? null\}/.test(office) && /leavePose\(performance\.now\(\) - leaving\.current/.test(office))
+
+  // The zone sign was the loudest thing in the wide shot.
+  const props = code('src/renderer/world/WorldProps.tsx')
+  const lum = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).reduce((a, b) => a + b, 0) / 3
+  ok('world.critic.label.1 the zone sign is a quiet room label, as the reference\'s are: a semibold letter-spaced word in a mid grey (lighter than the room\'s ink), on a sprite well under the robot-width it had',
+    /ctx\.font = `600 92px \$\{uiFont\(\)\}`/.test(props) && /ctx\.letterSpacing = '22px'/.test(props) && /ctx\.fillStyle = STUDIO\.zoneInk/.test(props) &&
+      /<sprite position-y=\{y\} scale=\{\[1\.5, 0\.47, 1\]\}>/.test(props) && lum(PAL.STUDIO.zoneInk) > lum(PAL.STUDIO.ink) + 80 && lum(PAL.STUDIO.zoneInk) < 180)
+
+  // The shell takes the palette's colour as it is: a saturation push turns the white and graphite robots into colours.
+  ok('world.critic.shell.1 the robot\'s shell is its tint AS IS — no HSL push (which would make the white robot blue-grey and the graphite one mud) — and the robot, its desk screen and its legend dot all read the store\'s first-seen order',
+    /color: new THREE\.Color\(tint\), roughness: 0\.34/.test(robot) && !/setHSL/.test(robot) && /agentTint\(agentId, getAgentIds\(\)\)/.test(robot) && /agentTint\(station\.agentId, getAgentIds\(\)\)/.test(office))
 }
 
 const failures = results.filter((r) => !r.pass)

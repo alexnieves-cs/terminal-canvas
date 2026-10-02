@@ -4,11 +4,11 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { getAgent, useAgentStatus } from './agent-world-store'
+import { getAgent, getAgentIds, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { studioEnv } from './world-gloss'
 import { agentTint, effectOf, goalOf, hopsOn, isTyping, leanOf, type Station } from './world-scene'
-import { ARRIVE_MS, easeInOutCubic, popOf, type WorldTransition } from './world-transition'
+import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
  * One agent as a robot: a glossy capsule body in the agent's colour, a dark
@@ -52,6 +52,11 @@ import { ARRIVE_MS, easeInOutCubic, popOf, type WorldTransition } from './world-
  *     there grows the robot from its feet. A scale of exactly 0 is a singular
  *     matrix (three warns on the normal matrix), so the pop floors at 1e-4 and
  *     the body is hidden below that instead.
+ * (3b) **A leave sinks `bob` through the floor** (M417, `leavePose`): the same
+ *     node the pop scales, moved down, so the card on `placer` stays where the
+ *     robot stood and fades on its own, earlier curve (`LeavePose.card`). A robot
+ *     whose agent went idle keeps its place in the plan, and its key, until the
+ *     leave is over (`useLeavers`, WorldView); the room re-flows after.
  * (4) **The kit is shared and never disposed.** Geometry is uploaded per
  *     renderer and dropped with its context, so one module-level set serves
  *     every mount; disposing it from one robot's cleanup would blank the rest.
@@ -190,18 +195,14 @@ function robotKit(): Kit {
 }
 
 /**
- * The shell: the agent's colour (`agentTint`, the 2D canvas's hash) pushed to
- * full saturation, because the reference's toys are candy-bright and the 2D
- * palette is tuned for a dot on a dark rail. The HUE is the agent's, so it is
- * still one colour in both views.
+ * The shell, in the agent's tint as it is (`ROBOT_TINTS`, world-palette.ts):
+ * the palette is already candy-bright and pre-darkened for ACES, and a
+ * saturation push here — what M415 did to the presence hash — would turn the
+ * white robot grey-blue and the graphite one a muddy colour.
  */
 function shellMaterial(tint: string, env: THREE.Texture): THREE.MeshPhysicalMaterial {
-  const color = new THREE.Color(tint)
-  const hsl = { h: 0, s: 0, l: 0 }
-  color.getHSL(hsl)
-  color.setHSL(hsl.h, Math.max(hsl.s, 0.82), Math.min(Math.max(hsl.l, 0.5), 0.6))
   return new THREE.MeshPhysicalMaterial({
-    color, roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
+    color: new THREE.Color(tint), roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
     envMap: env, envMapIntensity: 0.4
   })
 }
@@ -231,6 +232,8 @@ function pulse(t: number, at: number, span: number): number {
 
 interface Motion {
   ready: boolean
+  /** It was mid-leave on the last frame. */
+  left: boolean
   yaw: number
   moving: boolean
   cursor: number
@@ -260,9 +263,11 @@ export interface WorldRobotProps {
   compact: boolean
   /** prefers-reduced-motion: a robot that turns live appears at once instead of growing in. */
   reduced: boolean
+  /** performance.now() when its agent stopped being live, or null while it is (see `leavePose`). */
+  leftAt: number | null
 }
 
-function RobotBody({ agentId, station, cards, transition, delay, compact, reduced }: WorldRobotProps): JSX.Element {
+function RobotBody({ agentId, station, cards, transition, delay, compact, reduced, leftAt }: WorldRobotProps): JSX.Element {
   const k = robotKit()
   const gl = useThree((s) => s.gl)
   const env = useMemo(() => studioEnv(gl), [gl])
@@ -270,7 +275,8 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     k.visorMaterial.envMap = env
     k.visorMaterial.needsUpdate = true
   }, [k, env])
-  const tint = agentTint(agentId)
+  // The first-seen order is append-only, so an agent's place in it — and its tint — never moves.
+  const tint = agentTint(agentId, getAgentIds())
   const shell = useMemo(() => shellMaterial(tint, env), [tint, env])
   useEffect(() => () => shell.dispose(), [shell])
 
@@ -296,6 +302,13 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   delayRef.current = delay
   const reducedRef = useRef(reduced)
   reducedRef.current = reduced
+  const leftAtRef = useRef(leftAt)
+  leftAtRef.current = leftAt
+  // A leaving robot keeps the card it had: it is out of the card ranking the
+  // moment it leaves, and a card that vanished on that frame would be the very
+  // pop the leave exists to remove. The card fades with the robot's pop instead.
+  const cardless = useRef(compact)
+  if (leftAt === null) cardless.current = compact
   // When this robot first ran a frame — a robot that turns live mid-session
   // arrives on its own clock instead of blinking in.
   const bornAt = useRef<number | null>(null)
@@ -305,7 +318,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   latest.current = station
   const phase = useMemo(() => phaseOf(agentId), [agentId])
   const motion = useRef<Motion>({
-    ready: false, yaw: 0, moving: false,
+    ready: false, left: false, yaw: 0, moving: false,
     cursor: getAgent(agentId)?.lastSeq ?? -Infinity, rec: undefined,
     typing: false, typingCheckedAt: -Infinity, typingW: 0, walkW: 0, lean: 0, nod: 0,
     tiltAt: -Infinity, waveAt: -Infinity, hitAt: -Infinity, hopAt: -Infinity
@@ -323,11 +336,20 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     const nowMs = performance.now()
     bornAt.current ??= nowMs
     const moved = popOf(transition.sample(nowMs).raw, delayRef.current)
+    // Live again before the leave finished: stand back up on the arrival clock, not with a snap.
+    if (leftAtRef.current === null && st.left) { st.left = false; bornAt.current = nowMs }
+    if (leftAtRef.current !== null) st.left = true
     const arrived = reducedRef.current ? 1 : easeInOutCubic((nowMs - bornAt.current) / ARRIVE_MS)
-    pop.current = Math.min(moved, arrived)
+    const leave = leftAtRef.current === null ? null : leavePose(nowMs - leftAtRef.current, reducedRef.current ? 0 : undefined)
+    const shown = Math.min(moved, arrived)
+    // The card reads `pop`; the body its own scale — a leave fades the card sooner than it shrinks the robot.
+    pop.current = shown * (leave?.card ?? 1)
+    const body = shown * (leave?.scale ?? 1)
     if (bob.current) {
-      bob.current.visible = pop.current > 1e-3
-      bob.current.scale.setScalar(Math.max(pop.current, 1e-4))
+      bob.current.visible = body > 1e-3
+      bob.current.scale.setScalar(Math.max(body, 1e-4))
+      // Through the floor: the slab is opaque, so what has sunk is hidden without a per-robot fade.
+      bob.current.position.y = -(leave?.sink ?? 0)
     }
 
     // ── events → one-shots ────────────────────────────────────────────────
@@ -460,7 +482,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
         </group>
       </group>
       {status === 'error' ? <ErrorBug /> : null}
-      <WorldCard agentId={agentId} y={ROBOT_TOP} layer={cards} pop={pop} compact={compact} />
+      <WorldCard agentId={agentId} y={ROBOT_TOP} layer={cards} pop={pop} compact={cardless.current} />
     </group>
   )
 }
