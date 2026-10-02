@@ -10995,7 +10995,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   font: inherit; font-size: var(--t-xs); font-weight: 600; text-overflow: ellipsis;
 }
 .world-ask__to:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
-.world-ask__to:disabled { cursor: default; opacity: .6; }
+.world-ask__to:disabled { cursor: default; color: var(--world-rest); border-color: var(--world-holo-rule); }
 .world-ask__field:disabled { cursor: default; }
 .world-ask__posted--refused { color: var(--world-stop); white-space: normal; width: max-content; max-width: 420px; text-align: center; }
 .world-ask__send {
@@ -11105,7 +11105,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* M422. What the hands are on, beside the name: a room verb, never a state word (the dot says that). */
 .world-pill { max-width: 236px; }
 .world-pill__act {
-  display: inline-flex; align-items: center; gap: 3px; flex: none;
+  display: inline-flex; align-items: center; gap: var(--sp-1); flex: none;
   padding-left: var(--sp-3); border-left: 1px solid var(--world-holo-rule);
   color: var(--world-holo-ink-2); font-weight: 500;
 }
@@ -11137,7 +11137,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    never rest: their card stands at any distance. */
 .world-chip {
   position: absolute; left: 0; bottom: 30px; transform: translateX(-50%);
-  max-width: 220px; margin: 0; padding: 2px var(--sp-4);
+  max-width: 220px; margin: 0; padding: var(--sp-1) var(--sp-4);
   border-radius: var(--r-md); background: var(--world-holo); box-shadow: var(--world-holo-shade);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   font-size: var(--t-xs); font-weight: 500; line-height: 16px; color: var(--world-holo-ink);
@@ -11161,18 +11161,19 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-peers { position: absolute; top: var(--sp-6); right: var(--sp-6); display: flex; align-items: center; gap: var(--sp-2); pointer-events: auto; }
 .world-peers__peer, .world-peer {
   display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 2px solid var(--world-holo-solid); border-radius: 50%;
-  color: #fff; font-family: var(--font-ui); font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: var(--world-holo-shade);
+  color: var(--world-holo-solid); font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 700; cursor: pointer; box-shadow: var(--world-holo-shade);
 }
 .world-peers__peer[data-in-room] { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--world-go); }
-.world-peers__peer[data-idle] { opacity: .55; }
+.world-peers__peer[data-idle] { filter: grayscale(.7); }
 .world-peers__peer[aria-pressed="true"] { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--iris); }
 .world-peers__peer:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
 .world-peers__follow {
   padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
   font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; color: var(--iris); white-space: nowrap;
 }
-.world-pill__peers { display: inline-flex; flex: none; gap: 2px; margin-left: var(--sp-1); }
-.world-pill__peers .world-peer { width: 17px; height: 17px; border-width: 1.5px; font-size: 7.5px; letter-spacing: -.02em; cursor: default; box-shadow: none; }
+.world-pill__peers { display: inline-flex; flex: none; gap: var(--sp-1); margin: calc(var(--sp-2) * -1) 0; }
+/* Drawn at the scale's smallest type and shrunk as a whole: 7px initials are not on the type scale. */
+.world-pill__peers .world-peer { width: 24px; height: 24px; cursor: default; box-shadow: none; transform: scale(.7); margin: 0 calc(var(--sp-2) * -1); }
 /* M425. Time in the room: the replay control top-left, and the away card under it. */
 .world-time-col { position: absolute; left: var(--sp-6); top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); align-items: flex-start; pointer-events: none; }
 .world-time-col > * { pointer-events: auto; }
@@ -11194,9 +11195,9 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-time__live { padding: 0 var(--sp-4); color: var(--iris); }
 .world-time__live:disabled { color: var(--world-holo-ink-2); cursor: default; }
 .world-time__track { position: relative; flex: 1; height: 22px; min-width: 80px; }
-.world-time__density { position: absolute; inset: 3px 0; display: flex; align-items: flex-end; gap: 1px; opacity: .5; }
-.world-time__density span { flex: 1; background: var(--world-holo-ink-2); border-radius: 1px; }
-.world-time__mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--world-rest); }
+.world-time__density { position: absolute; inset: var(--sp-1) 0; display: flex; align-items: flex-end; gap: var(--sp-1); }
+.world-time__density span { flex: 1; background: var(--world-holo-rule); border-radius: var(--r-sm); }
+.world-time__mark { position: absolute; top: 0; bottom: 0; width: var(--sp-1); margin-left: calc(var(--sp-1) / -2); border-radius: var(--r-sm); background: var(--world-rest); }
 .world-time__mark[data-kind="stop"], .world-time__mark[data-kind="fail"] { background: var(--world-stop); }
 .world-time__mark[data-kind="wait"] { background: var(--world-wait); }
 .world-time__range { position: absolute; inset: 0; width: 100%; margin: 0; background: transparent; cursor: pointer; accent-color: var(--iris); }
@@ -11205,7 +11206,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-away h3 { margin: 0 0 var(--sp-2); font-size: var(--t-sm); font-weight: 700; }
 .world-away h3 span { font-weight: 500; color: var(--world-holo-ink-2); margin-left: var(--sp-2); }
 .world-away ul { margin: 0; padding: 0; list-style: none; font-size: var(--t-xs); line-height: 1.45; }
-.world-away li { padding: 2px 0 2px var(--sp-4); position: relative; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.world-away li { padding: var(--sp-1) 0 var(--sp-1) var(--sp-4); position: relative; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .world-away li::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--world-rest); }
 .world-away li[data-kind="stopped"]::before, .world-away li[data-kind="failed"]::before { background: var(--world-stop); }
 .world-away li[data-kind="asked"]::before { background: var(--world-wait); }
@@ -11218,7 +11219,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   height: 26px; padding: 0 var(--sp-4); border: 1px solid var(--world-holo-line); border-radius: var(--r-md);
   background: var(--world-holo-solid); color: var(--world-holo-ink); cursor: pointer; font: inherit; font-weight: 600;
 }
-.world-away__acts .world-away__go { border-color: transparent; background: var(--iris); color: #fff; }
+.world-away__acts .world-away__go { border-color: transparent; background: var(--iris); color: var(--world-holo-solid); }
 .world-time__open:focus-visible, .world-time button:focus-visible, .world-away button:focus-visible, .world-time__range:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
 /* M422/M424. The decision table's count, top-centre over the room: read from anywhere, never over a card. */
 .world-requests {

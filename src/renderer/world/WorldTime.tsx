@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type RefObject } from 'react'
-import { History, Play, Stop } from '@renderer/icons'
+import { Close, History, Play, Stop } from '@renderer/icons'
 import { getAgent, getJournal, replayAt, setReplayAt, subscribeJournal, useReplayAt } from './agent-world-store'
 import { dismissAway, useAwaySince } from './world-away'
 import { awayBeats, JOURNAL_MAX_AGE_MS, timelineMarks, TOUR_BEAT_MS, type Beat } from './world-replay'
@@ -118,7 +118,7 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
           {/* Live says itself on its own button; the label is for the past moment only. */}
           {live ? null : <span className="world-time__when" aria-live="polite">{`${clock(at)} · ${ago(now - at)}`}</span>}
           <button type="button" className="world-time__live" disabled={live} onClick={() => { setPlaying(false); setTour(null); setReplayAt(null) }}>Live</button>
-          {live ? <button type="button" className="world-time__btn" aria-label="Close replay" title="Close" onClick={() => setOpen(false)}>×</button> : null}
+          {live ? <button type="button" className="world-time__btn" aria-label="Close replay" title="Close" onClick={() => setOpen(false)}><Close size={12} /></button> : null}
         </div>
       ) : (
         <button type="button" className="world-time__open" onClick={() => setOpen(true)} data-world-time-open><History size={14} /> Replay</button>
