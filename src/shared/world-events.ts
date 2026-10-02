@@ -30,6 +30,13 @@ export interface ToolCallPayload {
    * a view without it falls back to "the latest open call".
    */
   callId?: string
+  /**
+   * The file a file tool is on (M421), relative to the agent's folder when it
+   * is inside it — the key the room's file tiles and conflict lines group by.
+   * Absent for a tool that names no file. Scrubbed at the producer like every
+   * other word here, so a token in a path never reaches a tile.
+   */
+  path?: string
 }
 
 export interface TextPayload {

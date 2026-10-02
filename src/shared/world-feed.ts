@@ -52,6 +52,8 @@ export interface WorldFeedDeps {
   seqStart?: number
   /** What the agent is called on its card: a chat's folder, a terminal agent's CLI. `hint` is the CLI's own name, for a terminal. */
   label(agentId: string, hint?: string): string
+  /** The agent's working folder, so a file tool's `path` is relative to it (M421). Optional: a source without one sends the path as the tool gave it. */
+  cwdOf?(agentId: string): string | undefined
 }
 
 export interface WorldFeed {
@@ -68,6 +70,7 @@ type Body = { [T in AgentEventType]: { type: T; payload: AgentEventPayloads[T] }
 interface OpenCall {
   tool: string
   summary: string
+  path: string
   startedAt: number
 }
 
@@ -86,6 +89,8 @@ interface Tracked {
 export const WORLD_TEXT_MAX = 280
 export const WORLD_SUMMARY_MAX = 110
 export const WORLD_DETAIL_MAX = 120
+/** A file tile's key. Longer than a summary: two agents on `a/b/index.ts` and `c/b/index.ts` are not one file. */
+export const WORLD_PATH_MAX = 240
 /** Turns and open calls a tracker remembers; the oldest go first. */
 const REMEMBER = 64
 /** What is scrubbed is at most this long, so a pasted file in a result is not run through every pattern. */
@@ -112,6 +117,19 @@ function field(input: Record<string, unknown>, ...keys: string[]): string {
     if (typeof v === 'string' && v !== '') return v
   }
   return ''
+}
+
+/**
+ * The file a file tool is on, relative to `cwd` when it is inside it, scrubbed
+ * and clipped like any word on a card (M421). '' for a tool that names none.
+ */
+export function toolPath(name: string, input: Record<string, unknown>, cwd?: string): string {
+  if (!FILE_TOOLS.has(name)) return ''
+  let path = field(input, 'file_path', 'notebook_path', 'path')
+  if (path === '') return ''
+  const root = cwd?.replace(/\/+$/, '')
+  if (root !== undefined && root !== '' && path.startsWith(`${root}/`)) path = path.slice(root.length + 1)
+  return worldText(path, WORLD_PATH_MAX)
 }
 
 /**
@@ -190,8 +208,11 @@ export function createWorldFeed(deps: WorldFeedDeps): WorldFeed {
         if (text !== '') push(id, t, { type: 'message', payload: { text } })
       } else if (block.type === 'tool_use') {
         const summary = toolSummary(block.name, block.input)
-        remember(t.calls, block.id, { tool: block.name, summary, startedAt: deps.now() })
-        push(id, t, { type: 'tool_call', payload: { tool: block.name, summary, status: 'started', callId: block.id } })
+        const path = toolPath(block.name, block.input, deps.cwdOf?.(id))
+        remember(t.calls, block.id, { tool: block.name, summary, path, startedAt: deps.now() })
+        const payload: ToolCallPayload = { tool: block.name, summary, status: 'started', callId: block.id }
+        if (path !== '') payload.path = path
+        push(id, t, { type: 'tool_call', payload })
       }
       return
     }
@@ -207,6 +228,7 @@ export function createWorldFeed(deps: WorldFeedDeps): WorldFeed {
       durationMs: Math.max(0, deps.now() - call.startedAt),
       callId: block.toolUseId
     }
+    if (call.path !== '') payload.path = call.path
     // Only a FAILURE says why: a success's content is a file, a listing, a
     // diff — everything the card should not be carrying.
     if (block.isError) {

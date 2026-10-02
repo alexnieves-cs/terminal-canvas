@@ -26,6 +26,7 @@ const { buildSync } = require('esbuild')
 const { mkdirSync, readFileSync, readdirSync, existsSync } = require('node:fs')
 const { join } = require('node:path')
 const { ok, results } = require('./lib/checks.cjs').createChecks()
+const THREE_DOOR_RE = /from '(?:three|@react-three\/fiber|@react-three\/drei)(?:\/[^']*)?'/
 
 const root = join(__dirname, '..')
 mkdirSync(join(root, 'out/verify'), { recursive: true })
@@ -47,7 +48,9 @@ buildSync({
       "  bloom: require('./src/renderer/world/world-bloom.ts'),",
       "  wiring: require('./src/main/world-feed-link.ts'),",
       "  ipc: require('./src/shared/ipc-contract.ts'),",
-      "  panelState: require('./src/renderer/panels/panel-state.ts')",
+      "  panelState: require('./src/renderer/panels/panel-state.ts'),",
+      "  activity: require('./src/renderer/world/world-activity.ts'),",
+      "  ctx: require('./src/renderer/world/world-context-store.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -56,7 +59,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -450,7 +453,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       outside.every((l) => /\/world\/World(Office|Robot|Card|View)\.tsx:\d+:/.test(l) && /from '\.\/World(Office|Robot|Card)'/.test(l)) &&
       /import\.meta\.env\.DEV \? <WorldStage on=\{worldOn\} hostRef=\{hostRef\} \/> : null/.test(canvasSrc))
 
-  const scenery = SCENE.concat('WorldStage.tsx', 'world-toggle.ts', 'world-transition.ts', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts', 'world-perf.ts')
+  const scenery = SCENE.concat('WorldStage.tsx', 'world-toggle.ts', 'world-transition.ts', 'world-scene.ts', 'world-roster.ts', 'world-palette.ts', 'world-perf.ts', 'world-activity.ts', 'world-context-store.ts')
   const leaks = scenery.filter((f) => /window\.canvas|WebSocket|ipcRenderer|\.onEvents\(/.test(read(f)))
   ok('world.door.3 the scene reads ONLY the event store — no bridge, no socket, no subscription of its own in any file under world/ but the store itself', leaks.length === 0, leaks.join())
 
@@ -1082,6 +1085,93 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       BL.bloomDprCap(1000, 700, 1) === 1 && BL.bloomDprCap(4000, 2500, 1) === PF.DPR_MIN &&
       /setDpr\(bloomDprCap\(size\.width, size\.height, window\.devicePixelRatio\)\)/.test(bloom) && /setDpr\(clampDpr\(window\.devicePixelRatio\)\)/.test(bloom),
     `mid=${mid} big=${big.toFixed(3)}`)
+}
+
+// ── M421: what the work is, not only who is working ──────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const text2 = (f) => readFileSync(join(dir, f), 'utf8')
+  // The feed's path: relative to the agent's folder, scrubbed, absent for a tool that names no file.
+  const sent = []
+  const feed = F.createWorldFeed({ emit: (e) => sent.push(...e), now: () => 5000, label: () => 'A', cwdOf: () => '/repo/app/' })
+  feed.session({ id: 'p', type: 'turn', turn: { id: 't1', role: 'assistant', blocks: [
+    { type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: '/repo/app/src/auth/session.ts' } },
+    { type: 'tool_use', id: 'u2', name: 'Read', input: { file_path: '/elsewhere/ghp_' + 'a'.repeat(36) + '.txt' } },
+    { type: 'tool_use', id: 'u3', name: 'Bash', input: { command: 'npm test' } }
+  ] } })
+  feed.session({ id: 'p', type: 'turn', turn: { id: 't2', role: 'user', blocks: [{ type: 'tool_result', toolUseId: 'u1', content: 'ok' }] } })
+  const calls = sent.filter((e) => e.type === 'tool_call')
+  const res = sent.find((e) => e.type === 'tool_result')
+  ok('world.path.1 a file tool carries its path RELATIVE to the agent\'s folder, a path outside it stays whole, a token in a path is scrubbed before any tile sees it, a tool that names no file has no path — and the result carries its call\'s path',
+    calls[0]?.payload.path === 'src/auth/session.ts' && typeof calls[1]?.payload.path === 'string' && calls[1].payload.path.startsWith('/elsewhere/') && !calls[1].payload.path.includes('a'.repeat(36)) &&
+      calls[2] && !('path' in calls[2].payload) && res?.payload.path === 'src/auth/session.ts',
+    JSON.stringify(calls.map((c) => c.payload.path)))
+  ok('world.path.2 the link hands the feed the agent\'s folder at use', /cwdOf: \(id\) => host\.cwdOf\(id\)/.test(readFileSync(join(root, 'src/main/world-feed-link.ts'), 'utf8')))
+
+  // The simulator: a conflict and a delegation exist to be seen.
+  const simSent = []
+  let clock = 0
+  const timers = []
+  S.startWorldSimulation({ emit: (e) => simSent.push(...e), now: () => clock, setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length }, clearTimeout: () => {}, random: () => 0.5 })
+  for (let i = 0; i < 400 && timers.length; i++) { timers.sort((a, b) => a.at - b.at); const t = timers.shift(); clock = t.at; t.fn() }
+  const editors = new Set(simSent.filter((e) => e.type === 'tool_call' && e.payload.tool === 'Edit' && e.payload.path === 'src/auth/session.ts').map((e) => e.agentId))
+  ok('world.sim.path.1 the simulator gives its file tools paths, has two agents edit the same file (the room\'s conflict line) and one delegate a sub-task',
+    editors.size >= 2 && simSent.some((e) => e.type === 'tool_call' && e.payload.tool === 'Task'), [...editors].join())
+
+  // The activity: what the hands are on.
+  const A = AC.toolActivity
+  ok('world.activity.1 a tool is a kind of work: Read reads, Grep/Glob search, Edit/Write edit, a test command tests (npm test, verify:world, vitest, pytest, go test), any other shell line runs, the web browses, Task delegates — and an unknown tool is work, never a guess at its input',
+    A('Read', 'x') === 'read' && A('Grep', 'x') === 'search' && A('Glob', 'x') === 'search' && A('Edit', 'x') === 'edit' && A('Write', 'x') === 'edit' &&
+      ['npm test -- auth', 'npm run verify:world', 'npx vitest run', 'pytest -q', 'go test ./...', 'npm run test:e2e -- login.spec.ts'].every((c) => A('Bash', c) === 'test') &&
+      ['npm run db:migrate', 'ls -la', 'git status', './contest.sh'].every((c) => A('Bash', c) === 'shell') &&
+      A('WebFetch', 'x') === 'web' && A('Task', 'x') === 'delegate' && A('mcp__linear__create', 'x') === 'shell')
+  const at = (seq, type, payload, ts = 1000 + seq) => ({ agentId: 'a', seq, ts, type, payload })
+  const rec = (status, events) => ({ status, events, lastTs: events.length ? events[events.length - 1].ts : 0 })
+  const editing = [at(1, 'tool_call', { tool: 'Task', summary: 'Survey', status: 'started', callId: 'd' }), at(2, 'tool_call', { tool: 'Edit', summary: 'Edit x', status: 'started', callId: 'e' })]
+  ok('world.activity.2 the activity\'s order: a waiting request and an error outrank any open call, thinking is thinking, the NEWEST non-delegation call says what the hands are on, then a delegation, then a message just sent, then quiet',
+    AC.activityOf(rec('waiting_approval', editing), 1010) === 'wait' && AC.activityOf(rec('error', editing), 1010) === 'stuck' && AC.activityOf(rec('thinking', editing), 1010) === 'think' &&
+      AC.activityOf(rec('working', editing), 1010) === 'edit' &&
+      AC.activityOf(rec('working', [editing[0]]), 1010) === 'delegate' &&
+      AC.activityOf(rec('working', [at(3, 'message', { text: 'done' })]), 1003 + 100) === 'talk' &&
+      AC.activityOf(rec('working', [at(3, 'message', { text: 'done' })]), 1003 + Z.QUIET_MS + 1) === 'quiet' &&
+      AC.activityOf(rec('idle', []), 0) === 'rest')
+  const longTask = [at(1, 'tool_call', { tool: 'Task', summary: 'Survey', status: 'started', callId: 'd' }), at(2, 'tool_call', { tool: 'Read', summary: 'Read y', status: 'started', callId: 'r' })]
+  const later = 1002 + Z.TYPING_STALE_MS + 5
+  ok('world.activity.3 a delegation stays open until its result (a sub-agent\'s run outlives the typing cap), an ordinary call goes stale at the cap, and a result closes its own call by id',
+    AC.openDelegations(rec('working', longTask), later).length === 1 && AC.openCalls(longTask, later).length === 1 &&
+      AC.openCalls([...longTask, at(3, 'tool_result', { tool: 'Task', summary: 'Survey', status: 'done', callId: 'd' })], 1004).map((c) => c.key).join() === 'r')
+  const verbs = Object.values(AC.ACTIVITY_VERB).filter(Boolean)
+  ok('world.activity.4 the room\'s verbs are its own — none is a panel state word, so the rail\'s vocabulary has one home',
+    verbs.every((w) => !['working', 'idle', 'needs you', 'starting', 'asleep', 'exited'].includes(w.toLowerCase())) && AC.ACTIVITY_VERB.wait === null)
+
+  // The context store: by value, and the actions door.
+  let n = 0
+  const off = CTX.subscribeWorldContext(() => n++)
+  const snap = { tasks: [{ id: 't', title: 'Auth', state: 'working', members: ['a'], steps: [] }], approvals: [], handoffs: [], peers: [] }
+  CTX.publishWorldContext(snap)
+  CTX.publishWorldContext(JSON.parse(JSON.stringify(snap)))
+  const first = CTX.getWorldContext()
+  CTX.publishWorldContext({ ...snap, approvals: [{ agentId: 'a', requestId: 'r', toolName: 'Bash', argument: 'rm -rf build' }] })
+  off()
+  ok('world.ctx.1 the context is replaced only when it says something different — Canvas publishes on its own renders, and a drag must not re-render the room',
+    n === 2 && first === snap && CTX.getWorldContext().approvals.length === 1, `notified=${n}`)
+  let said = null
+  CTX.setWorldActions({ answer: () => {}, send: async (_a, t) => { said = t; return null }, open: () => {}, canSend: () => true })
+  const door = CTX.worldActions()
+  CTX.setWorldActions(null)
+  ok('world.ctx.2 the room\'s buttons reach a door Canvas registered, and none when Canvas is gone', door !== null && CTX.worldActions() === null && (door.send('a', 'hi'), said === 'hi'))
+
+  const worldFiles = readdirSync(dir).filter((f) => /\.tsx?$/.test(f))
+  const canvasReach = worldFiles.filter((f) => f !== 'useWorldContextPublisher.ts' && /from '@renderer\/(?:(?:chat|canvas|shell|presence)\/|panels\/(?!panel-state'))/.test(text2(f)))
+  const pubImporters = worldFiles.filter((f) => /useWorldContextPublisher'/.test(text2(f)))
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  ok('world.ctx.door.1 only the publisher reaches into the canvas\'s own modules (chat, canvas, panels but the shared panel-state vocabulary, shell, presence) — the scene knows the two stores and nothing else — and only Canvas calls it',
+    canvasReach.length === 0 && pubImporters.length === 0 && /useWorldContextPublisher\(\{/.test(canvasSrc) && !THREE_DOOR_RE.test(text2('useWorldContextPublisher.ts')) && !THREE_DOOR_RE.test(text2('world-context-store.ts')),
+    canvasReach.concat(pubImporters).join())
+  const pub = text2('useWorldContextPublisher.ts')
+  ok('world.ctx.door.2 every verb the room has is an EXISTING door: answer is answerRequest, send is agentSession.send read through sendRefusalSentence, open is Canvas\'s attention jump after the room closes',
+    /answerRequest\(agentId, getChat\(agentId\)\.snapshot/.test(pub) && /sendRefusalSentence\(await window\.canvas\.agentSession\.send\(agentId, text, \[\]\)\)/.test(pub) &&
+      /closeWorld\(\)[\s\S]{0,120}jump\(agentId\)/.test(pub) && /jump: jumpAnywhere/.test(canvasSrc))
 }
 
 const failures = results.filter((r) => !r.pass)

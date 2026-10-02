@@ -91,6 +91,7 @@ export function createWorldFeedLink(host: WorldFeedHost, resendTerminals: () => 
     },
     now: Date.now,
     seqStart: epoch,
+    cwdOf: (id) => host.cwdOf(id),
     // Read at use: an agent's folder is the name a person gave it by opening it there.
     label: (id, hint) => {
       if (hint !== undefined) return TERMINAL_NAMES[hint as AgentKind] ?? hint

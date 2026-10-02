@@ -271,6 +271,7 @@ import { planSummary, planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { WorldStage, warmWorldView } from '../world/WorldStage'
 import { setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
+import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ResumeBanner } from '../shell/ResumeBanner'
@@ -3924,6 +3925,7 @@ export function Canvas({
   // on DEV HERE so a production build that was handed `#/world` cannot hide the canvas under
   // a stage that was compiled out.
   const worldOn = useWorldOn() && import.meta.env.DEV
+  const closeWorldView = useCallback(() => setWorldOn(false), [])
   const canvasCovered = chrome.centerView !== 'canvas' || worldOn
   canvasCoveredRef.current = canvasCovered
   // M283. The element that last had focus INSIDE the canvas host, kept so a return from
@@ -5547,7 +5549,7 @@ export function Canvas({
   }, [focusedId, panels, workItems])
   usePresenceReport({
     hostRef, workspaceId: activeWorkspaceId, viewport, focusedId, selectedIds: selectedPanelIds,
-    mode: annotating ? 'annotate' : merged ? 'merged' : chrome.centerView,
+    mode: annotating ? 'annotate' : merged ? 'merged' : worldOn ? 'world' : chrome.centerView,
     currentTask: presenceTask
   })
   // M303 (Quiet instrument). The hulls are computed at EVERY tier now: far
@@ -8644,6 +8646,24 @@ export function Canvas({
     })()
     return <FirstTaskHint strip panelId={panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }} {...facts} />
   }
+
+  // M421. The world's half of the work — tasks and their plans, waiting
+  // requests, handoffs, who else is here — and the doors its buttons call.
+  // Derived only while the room is up (the hook's own `on`).
+  useWorldContextPublisher({
+    on: worldOn,
+    workspaceId: activeWorkspaceId,
+    panels: displayPanels,
+    approvals: pendingApprovals,
+    jump: jumpAnywhere,
+    closeWorld: closeWorldView,
+    tasks: () => workItems.filter((item) => item.state !== 'done').map((item) => {
+      const members = taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
+      const views = planViewsFor(item.id) ?? []
+      const steps = (item.plan?.steps ?? []).map((step) => ({ id: step.id, title: step.title, word: views.find((v) => v.id === step.id)?.word ?? '', tone: views.find((v) => v.id === step.id)?.tone ?? 'none', ...(step.owner === undefined ? {} : { owner: step.owner }) }))
+      return { id: item.id, title: item.title, state: item.state, members, steps }
+    })
+  })
 
   return (
     <div

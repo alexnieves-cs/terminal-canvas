@@ -78,6 +78,9 @@ export const SIM_AGENTS: readonly SimAgent[] = [
       status(500, 'working'),
       call(300, 'read', 'Read', 'Read src/auth/session.test.ts'),
       result(400, 'read'),
+      // M421: the same file the coder is editing — the room's conflict line.
+      call(500, 'seam', 'Edit', 'Edit src/auth/session.ts', '+2 −1: a clock seam for the test'),
+      result(1400, 'seam'),
       call(2500, 'rerun', 'Bash', 'npm test -- auth', 'vitest run src/auth'),
       result(3200, 'rerun', { detail: '42 passed' }),
       call(400, 'e2e', 'Bash', 'npm run test:e2e -- login.spec.ts'),
@@ -96,6 +99,9 @@ export const SIM_AGENTS: readonly SimAgent[] = [
       status(400, 'working'),
       call(300, 'search', 'WebSearch', 'Search "OAuth refresh token rotation best practice"'),
       result(1900, 'search', { detail: '10 results' }),
+      // M421: a delegated sub-task — a sub-agent in the room while it runs.
+      call(300, 'survey', 'Task', 'Survey token-rotation libraries'),
+      result(3600, 'survey'),
       call(500, 'rfc', 'WebFetch', 'Fetch datatracker.ietf.org — OAuth 2.0 Security BCP §4.14'),
       result(2300, 'rfc'),
       call(400, 'blog', 'WebFetch', 'Fetch auth0.com — Refresh Token Rotation'),
@@ -123,6 +129,12 @@ export const SIM_AGENTS: readonly SimAgent[] = [
     ]
   }
 ]
+
+/** A file tool's path, read back off its summary ("Edit src/x.ts") — the real feed has the tool's input; the script only has the line. */
+function simPath(tool: string, summary: string): string | undefined {
+  if (!['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(tool) || !summary.startsWith(`${tool} `)) return undefined
+  return summary.slice(tool.length + 1)
+}
 
 export interface WorldSimDeps {
   emit(events: AgentEvent[]): void
@@ -163,6 +175,8 @@ export function startWorldSimulation(deps: WorldSimDeps, agents: readonly SimAge
         open.set(step.call, { callId, tool: step.tool, summary: step.summary, detail: step.detail, startedAt: deps.now() })
         const payload: ToolCallPayload = { tool: step.tool, summary: step.summary, status: 'started', callId }
         if (step.detail !== undefined) payload.detail = step.detail
+        const path = simPath(step.tool, step.summary)
+        if (path !== undefined) payload.path = path
         return emit({ type: 'tool_call', payload })
       }
       const started = open.get(step.result)
@@ -177,6 +191,8 @@ export function startWorldSimulation(deps: WorldSimDeps, agents: readonly SimAge
         durationMs: deps.now() - started.startedAt,
         callId: started.callId
       }
+      const path = simPath(started.tool, started.summary)
+      if (path !== undefined) payload.path = path
       const detail = step.detail ?? started.detail
       if (detail !== undefined) payload.detail = detail
       emit({ type: 'tool_result', payload })
