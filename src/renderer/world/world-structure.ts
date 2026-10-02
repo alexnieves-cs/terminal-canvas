@@ -240,3 +240,105 @@ export function boardSteps(steps: readonly WorldStep[], max: number = BOARD_STEP
   const start = Math.max(0, Math.min(open === -1 ? steps.length - max : open - 1, steps.length - max))
   return steps.slice(start, start + max)
 }
+
+// ── the card's headline (M424) ──────────────────────────────────────────────
+
+/** Another live agent writing a file this one is writing — the conflict, from this agent's side. */
+export function conflictPartners(records: readonly Pick<AgentRecord, 'agentId' | 'events'>[], agentId: string, now: number): { file: string; others: string[] } | null {
+  for (const tile of fileTiles(records, now)) {
+    if (tile.conflict && tile.writers.includes(agentId)) return { file: tile.name, others: tile.writers.filter((w) => w !== agentId) }
+  }
+  return null
+}
+
+export type HeadlineTone = 'wait' | 'stop' | 'warn' | 'work' | 'quiet' | 'said'
+
+export interface Headline {
+  text: string
+  tone: HeadlineTone
+}
+
+/** A failed tool is the headline for this long, unless a later call of the same tool went through. */
+export const FAILED_MS = 60_000
+
+const VERB_OF: Readonly<Record<string, string>> = {
+  read: 'Reading', search: 'Searching', edit: 'Editing', test: 'Testing', shell: 'Running', web: 'Browsing', delegate: 'Delegating'
+}
+
+/**
+ * The ONE fact a card leads with (M424): the thing that would change what a
+ * person does next, not the agent's last sentence. In order — a request
+ * waiting on them, a stop, a failure just now, a file another agent is also
+ * writing, a long silence — and only when none of those is true, what the
+ * hands are on, and then the agent's own latest words. The card's second line
+ * keeps the words, so nothing the agent said is lost by leading with a fact.
+ */
+export function cardHeadline(
+  record: Pick<AgentRecord, 'status' | 'events' | 'lastTs' | 'name'>,
+  opts: { approval?: { toolName: string }; partners?: { file: string; others: string[] } | null; partnerName?: (id: string) => string; now: number; activity: string; words: string }
+): Headline {
+  const { now } = opts
+  if (record.status === 'waiting_approval') {
+    const tool = opts.approval?.toolName
+    return { text: tool === undefined ? 'Waiting on you' : `Asks to ${tool === 'Bash' ? 'run' : 'use'} ${tool}`, tone: 'wait' }
+  }
+  if (record.status === 'error') {
+    for (let i = record.events.length - 1; i >= 0; i--) {
+      const e = record.events[i]!
+      if (e.type === 'error') return { text: `Stopped: ${e.payload.message}`, tone: 'stop' }
+    }
+    return { text: 'Stopped', tone: 'stop' }
+  }
+  // A failure stands until a later call of the same tool goes through, or a minute passes.
+  for (let i = record.events.length - 1; i >= 0; i--) {
+    const e = record.events[i]!
+    if (e.type !== 'tool_result') continue
+    if (e.payload.status === 'failed' && now - e.ts < FAILED_MS) {
+      const later = record.events.slice(i + 1).some((x) => x.type === 'tool_result' && x.payload.tool === e.payload.tool && x.payload.status === 'done')
+      if (!later) return { text: `Failed: ${e.payload.detail ?? e.payload.summary}`, tone: 'stop' }
+    }
+    break
+  }
+  if (opts.partners) {
+    const names = opts.partners.others.map((id) => opts.partnerName?.(id) ?? id)
+    return { text: `${opts.partners.file} — also being written by ${names.join(', ')}`, tone: 'warn' }
+  }
+  if (opts.activity === 'quiet') {
+    const mins = Math.max(1, Math.round((now - record.lastTs) / 60_000))
+    return { text: `Quiet for ${mins} min`, tone: 'quiet' }
+  }
+  const verb = VERB_OF[opts.activity]
+  if (verb !== undefined) {
+    const open = openCalls(record.events, now)
+    const call = [...open].reverse().find((c) => (opts.activity === 'delegate') === /^(Task|Agent)$/.test(c.tool))
+    if (call !== undefined) {
+      // A file reads as an object ("Editing b.ts"); a command or a sub-task as what it is ("Testing: npm test").
+      if (call.path !== undefined && call.path !== '') return { text: `${verb} ${call.path.split('/').pop()!}`, tone: 'work' }
+      const target = call.summary.startsWith(`${call.tool} `) ? call.summary.slice(call.tool.length + 1) : call.summary
+      return { text: `${verb}: ${target}`, tone: 'work' }
+    }
+  }
+  return { text: opts.words, tone: 'said' }
+}
+
+// ── the density tiers (M424) ────────────────────────────────────────────────
+
+/**
+ * Which density layer a card shows, from how many screen pixels one world unit
+ * spans at its robot (product-rules' four layers, by distance): REST far off —
+ * the name and the state dot; CONTEXTUAL in the middle — the one-line
+ * headline; the INSPECTOR's full card up close. A waiting or picked agent's
+ * card is full at any distance (WorldCard), because a request is never rest.
+ */
+export type CardTier = 'rest' | 'context' | 'full'
+export const TIER_REST_PX = 34
+export const TIER_FULL_PX = 88
+
+export function cardTier(pxPerUnit: number, previous: CardTier | null): CardTier {
+  // A little hysteresis, so an orbit that sits on a threshold does not flicker the card.
+  const up = (px: number): number => (previous === null ? px : px * 1.06)
+  const down = (px: number): number => (previous === null ? px : px * 0.94)
+  if (previous === 'full') return pxPerUnit >= down(TIER_FULL_PX) ? 'full' : pxPerUnit >= TIER_REST_PX ? 'context' : 'rest'
+  if (previous === 'rest') return pxPerUnit < up(TIER_REST_PX) ? 'rest' : pxPerUnit >= TIER_FULL_PX ? 'full' : 'context'
+  return pxPerUnit >= up(TIER_FULL_PX) ? 'full' : pxPerUnit < down(TIER_REST_PX) ? 'rest' : 'context'
+}

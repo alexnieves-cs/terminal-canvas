@@ -3,10 +3,11 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import type { Group } from 'three'
 import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
-import { getAgent, useAgent } from './agent-world-store'
+import { getAgent, getAgentIds, useAgent } from './agent-world-store'
 import { ACTIVITY_VERB, activityOf, type Activity } from './world-activity'
 import { useWorldActions, useWorldContext } from './world-context-store'
-import { cardBadge, cardTitle, recentTools, type BadgeKind } from './world-scene'
+import { cardBadge, cardTitle, isLiveStatus, recentTools, type BadgeKind } from './world-scene'
+import { cardHeadline, cardTier, conflictPartners, type CardTier, type Headline } from './world-structure'
 import { useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
@@ -82,6 +83,23 @@ const ACTIVITY_ICON: Partial<Record<Activity, (props: { size?: number }) => JSX.
  * it that take the pointer; everything else stays deaf to it, or a card over
  * a drag would eat the orbit.
  */
+/** The live agents' records — what a card's conflict line is read against. */
+function liveRecords(): NonNullable<ReturnType<typeof getAgent>>[] {
+  return getAgentIds().map((id) => getAgent(id)).filter((r): r is NonNullable<typeof r> => r !== undefined && isLiveStatus(r.status))
+}
+
+/** The card's lead (M424): `cardHeadline` over this record, the context's request and the room's conflicts. */
+function headlineOf(record: NonNullable<ReturnType<typeof getAgent>>, approval: { toolName: string } | undefined, words: string, now: number): Headline {
+  return cardHeadline(record, {
+    ...(approval === undefined ? {} : { approval }),
+    partners: conflictPartners(liveRecords(), record.agentId, now),
+    partnerName: (id) => getAgent(id)?.name ?? id,
+    now,
+    activity: activityOf(record, now),
+    words
+  })
+}
+
 function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
   const ctx = useWorldContext()
   const actions = useWorldActions()
@@ -116,6 +134,9 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const askedAt = useRef(-Infinity)
   const shown = useRef<BadgeKind | null>(null)
   const doing = useRef<Activity | null>(null)
+  const led = useRef<string | null>(null)
+  const tier = useRef<CardTier | null>(null)
+  const ctx = useWorldContext()
   const picked = useSelectedAgent() === agentId
   // The last title the agent gave in its own words. The ring is fifty events,
   // and a long run of tool calls pushes the last thought out of it; the card
@@ -145,6 +166,12 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
         tag.style.setProperty('--world-reach', `${px}px`)
       }
       // Hundredths: a finer step would restyle the card every frame of an orbit for no visible change.
+      // M424: the density layer, written straight onto the tag — CSS shows what the layer holds.
+      const nextTier = cardTier(perUnit, tier.current)
+      if (nextTier !== tier.current) {
+        tier.current = nextTier
+        tag.dataset.tier = nextTier
+      }
       const k = Math.round(cardScale(perUnit) * 100) / 100
       if (k !== scaled.current) {
         scaled.current = k
@@ -155,7 +182,8 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
     if (t - askedAt.current >= 1) {
       askedAt.current = t
       const rec = getAgent(agentId)
-      if (rec && (cardBadge(rec, Date.now()).kind !== shown.current || activityOf(rec, Date.now()) !== doing.current)) recheck()
+      const n = Date.now()
+      if (rec && (cardBadge(rec, n).kind !== shown.current || activityOf(rec, n) !== doing.current || headlineOf(rec, undefined, said.current ?? rec.name, n).text !== led.current)) recheck()
     }
   })
 
@@ -172,7 +200,10 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const tools = full && !waiting ? recentTools(record) : []
   const latest = cardTitle(record)
   if (latest !== record.name) said.current = latest
-  const title = said.current ?? latest
+  const words = said.current ?? latest
+  const approval = ctx.approvals.find((a) => a.agentId === agentId)
+  const headline = headlineOf(record, approval, words, Date.now())
+  led.current = headlineOf(record, undefined, words, Date.now()).text
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
@@ -182,10 +213,13 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
             <span className="world-pill__name">{record.name}</span>
             {verb !== null ? <span className="world-pill__act">{Icon !== undefined ? <Icon size={11} /> : null}{verb}</span> : null}
           </div>
+          {/* The contextual layer (M424): one line, the fact a person would act on. CSS shows it only mid-distance. */}
+          {!full ? <p className="world-chip" data-lead={headline.tone}>{headline.text}</p> : null}
           {!full ? null : (
             <div className="world-card-frame">
               <div ref={card} className="world-card">
-                <p className="world-card__title">{title}</p>
+                <p className="world-card__title" data-lead={headline.tone}>{headline.text}</p>
+                {headline.tone !== 'said' && words !== record.name ? <p className="world-card__said">{words}</p> : null}
                 <p className="world-card__badge">{badge.word}</p>
                 {waiting ? <RequestBlock agentId={agentId} /> : null}
                 {tools.length > 0 ? (

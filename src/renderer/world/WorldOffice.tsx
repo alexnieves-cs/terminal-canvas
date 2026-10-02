@@ -25,7 +25,13 @@ import type { AgentStatus } from '@shared/world-events'
  * with nothing logged.
  */
 
-const DESK = { w: 1.7, d: 0.85, top: 0.78 } as const
+/**
+ * M424: a LOW desk (0.6, was 0.78) and a slim screen. The critic's first gap
+ * was "most robots stand half-hidden behind desks": from the opening camera a
+ * far-side robot stands behind its desk, and a 0.78 top with a 0.38 screen hid
+ * it to the shoulders. At 0.6 with a 0.26 screen the head and the arms read.
+ */
+const DESK = { w: 1.7, d: 0.85, top: 0.6 } as const
 
 /**
  * A desk glides to its slot when the arc re-flows, at about the pace a robot
@@ -107,11 +113,11 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
         </mesh>
       ))}
       <mesh position={[0, DESK.top + 0.17, 0.12]} castShadow>
-        <boxGeometry args={[0.62, 0.38, 0.04]} />
+        <boxGeometry args={[0.62, 0.26, 0.03]} />
         <meshStandardMaterial color={dark} roughness={0.5} />
       </mesh>
       <mesh position={[0, DESK.top + 0.17, 0.098]} rotation={[0, Math.PI, 0]}>
-        <planeGeometry args={[0.55, 0.31]} />
+        <planeGeometry args={[0.55, 0.2]} />
         <meshStandardMaterial ref={screen} color={dark} emissive={tint} emissiveIntensity={0.12} roughness={0.4} />
       </mesh>
       <mesh position={[0, DESK.top + 0.025, 0.12]}>

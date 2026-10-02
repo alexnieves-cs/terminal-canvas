@@ -1206,14 +1206,14 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.request.1 a waiting agent\'s card is its REQUEST — the tool and its argument from the context store, Approve and Deny through Canvas\'s answer door, Open for anything the room cannot answer — and those buttons are the only things in the card layer that take the pointer',
     /\{waiting \? <RequestBlock agentId=\{agentId\} \/> : null\}/.test(card) && /actions\.answer\(agentId, asked\.requestId, true\)/.test(card) && /actions\.answer\(agentId, asked\.requestId, false\)/.test(card) && /actions\?\.open\(agentId\)/.test(card) &&
       /ctx\.approvals\.find\(\(a\) => a\.agentId === agentId\)/.test(card) && /\.world-card__actions \{[^}]*pointer-events: auto/.test(styles) && /\.world-view__cards \{[^}]*pointer-events: none/.test(styles) && /pointerEvents="none" portal=\{layer/.test(card))
-  ok('world.request.2 the meeting table is the decision table: its line turns the app\'s amber while anyone waits at it, and a sign over it says how many and who has waited longest — and says nothing when nobody waits',
-    /<MeetingTable waiting=\{waiting > 0\} \/>/.test(office) && /hue: STUDIO\.amber/.test(office) && /waiting=\{waiting\.length\}/.test(view) && /if \(waiting\.length === 0 \|\| !layer\.current\) return null/.test(view) &&
-      /\.sort\(\(a, b\) => waitSince\(a\) - waitSince\(b\)\)/.test(roster) && /portal=\{layer as RefObject<HTMLElement>\}/.test(view) && PAL.STUDIO.amber === '#ffb02e')
+  ok('world.request.2 the meeting table is the decision table: its line turns the app\'s amber while anyone waits at it, and a count over the room says how many and who has waited longest — a press picks that agent so its request stands full (M424: a sign in the scene sat on the waiting robots\' cards) — and says nothing when nobody waits',
+    /<MeetingTable waiting=\{waiting > 0\} \/>/.test(office) && /hue: STUDIO\.amber/.test(office) && /waiting=\{waiting\.length\}/.test(view) && /\{waiting\.length > 0 \? \(\s*<button type="button" className="world-requests" onClick=\{\(\) => selectAgent\(waiting\[0\]!\)\}/.test(src('WorldChrome.tsx')) &&
+      /\.sort\(\(a, b\) => waitSince\(a\) - waitSince\(b\)\)/.test(roster) && !/TableSign/.test(view) && PAL.STUDIO.amber === '#ffb02e')
   ok('world.request.3 a click picks a robot and an orbit\'s release does not (fiber\'s drag delta against CLICK_SLOP_PX), a click on empty floor lets it go, and the picked robot wears a floor ring and a ringed pill',
     /if \(event\.delta > CLICK_SLOP_PX \|\| leftAtRef\.current !== null\) return/.test(robot) && /selectAgent\(picked \? null : agentId\)/.test(robot) && /onPointerMissed=\{\(event\) => \{ if \(event\.type === 'click'\) selectAgent\(null\) \}\}/.test(view) &&
       /\{picked \? <mesh geometry=\{k\.pick\}/.test(robot) && /\.world-tag\[data-picked\] \.world-pill/.test(styles))
   ok('world.pill.act.1 the pill says what the hands are on — a room verb and its glyph beside the name — and the card re-reads it once a second with the badge, because a call goes stale with the clock',
-    /verb !== null \? <span className="world-pill__act">/.test(card) && /activityOf\(rec, Date\.now\(\)\) !== doing\.current/.test(card) && /data-activity=\{activity\}/.test(card))
+    /verb !== null \? <span className="world-pill__act">/.test(card) && /activityOf\(rec, n\) !== doing\.current/.test(card) && /data-activity=\{activity\}/.test(card))
 }
 
 // ── M423: the room's structure ───────────────────────────────────────────────
@@ -1299,6 +1299,44 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     /openDelegations\(rec, Date\.now\(\)\)\.length/.test(robot) && /const SUB_MAX = 3/.test(robot) && robot.indexOf('{subs > 0 ? (') > robot.indexOf('<group ref={bob}>'))
   ok('world.structure.1 the structure re-renders only when a tile would look different (a string snapshot), paints a tile\'s texture only when its words change, and draws its lines as meshes (a THREE.Line is one pixel wide whatever it is told)',
     /useSyncExternalStore\(subscribeAgentWorld, tilesKey, tilesKey\)/.test(struct) && /\}, \[texture, tile\.name, tile\.dir, tile\.conflict, tile\.writers\.length, tint\]\)/.test(struct) && !/new THREE\.Line\b|<line\b/.test(struct) && /<cylinderGeometry args=\{\[1, 1, 1, 6, 1, true\]\} \/>/.test(struct))
+}
+
+// ── M424: what the card leads with, and the density layers ───────────────────
+{
+  const at = (seq, type, payload, ts = 1000 + seq) => ({ agentId: 'a', seq, ts, type, payload })
+  const rec = (status, events, lastTs) => ({ status, events, lastTs: lastTs ?? (events.length ? events[events.length - 1].ts : 0), name: 'A' })
+  const H = (r, o = {}) => ST.cardHeadline(r, { now: 2000, activity: AC.activityOf(r, 2000), words: 'my words', ...o })
+  const failed = [at(1, 'tool_call', { tool: 'Bash', summary: 'npm test', status: 'started', callId: 'x' }), at(2, 'tool_result', { tool: 'Bash', summary: 'npm test', status: 'failed', detail: '1 failed', callId: 'x' })]
+  const editing = [at(1, 'tool_call', { tool: 'Edit', summary: 'Edit src/a/b.ts', status: 'started', callId: 'e', path: 'src/a/b.ts' })]
+  ok('world.lead.1 a card leads with the fact a person would act on, in order: a request (naming its tool), a stop, a failure just now, a file another agent is also writing, a long silence — then what the hands are on, then the agent\'s own words',
+    H(rec('waiting_approval', editing), { approval: { toolName: 'Bash' } }).text === 'Asks to run Bash' && H(rec('waiting_approval', [])).text === 'Waiting on you' &&
+      H(rec('error', [at(1, 'error', { message: 'rate limited' })])).text === 'Stopped: rate limited' &&
+      H(rec('working', failed)).text === 'Failed: 1 failed' && H(rec('working', failed), { now: 1002 + ST.FAILED_MS + 1 }).tone !== 'stop' &&
+      H(rec('working', editing), { partners: { file: 'b.ts', others: ['z'] }, partnerName: () => 'Zed' }).text === 'b.ts — also being written by Zed' &&
+      H(rec('working', editing)).text === 'Editing b.ts' && H(rec('working', [], 0), { activity: 'quiet', now: 5 * 60_000 }).text === 'Quiet for 5 min' &&
+      H(rec('thinking', [])).text === 'my words' && H(rec('thinking', [])).tone === 'said')
+  const retried = [...failed, at(3, 'tool_call', { tool: 'Bash', summary: 'npm test', status: 'started', callId: 'y' }), at(4, 'tool_result', { tool: 'Bash', summary: 'npm test', status: 'done', callId: 'y' })]
+  ok('world.lead.2 a failure stops leading once a later call of the same tool went through — a red card for a test that has since passed is a false alarm', H(rec('working', retried)).tone !== 'stop')
+  const conflictRecs = [
+    { agentId: 'a', events: [at(1, 'tool_call', { tool: 'Edit', summary: 'x', status: 'started', path: 'p.ts', callId: '1' })] },
+    { agentId: 'b', events: [{ ...at(2, 'tool_call', { tool: 'Write', summary: 'x', status: 'started', path: 'p.ts', callId: '2' }), agentId: 'b' }] }
+  ]
+  ok('world.lead.3 an agent\'s conflict is read from the room\'s tiles, from its own side', JSON.stringify(ST.conflictPartners(conflictRecs, 'a', 1500)) === JSON.stringify({ file: 'p.ts', others: ['b'] }) && ST.conflictPartners(conflictRecs.slice(0, 1), 'a', 1500) === null)
+
+  const T = ST.cardTier
+  ok('world.tier.1 the card\'s layer follows distance — rest (name and dot) far off, the one-line headline mid-room, the full card up close — with hysteresis at both thresholds, so an orbit resting on one does not flicker',
+    T(20, null) === 'rest' && T(60, null) === 'context' && T(120, null) === 'full' &&
+      T(ST.TIER_FULL_PX * 0.97, 'full') === 'full' && T(ST.TIER_FULL_PX * 1.03, 'context') === 'context' && T(ST.TIER_REST_PX * 1.03, 'rest') === 'rest' && T(ST.TIER_REST_PX * 0.97, 'context') === 'context')
+  const dir = join(root, 'src/renderer/world')
+  const card = readFileSync(join(dir, 'WorldCard.tsx'), 'utf8'), view = readFileSync(join(dir, 'WorldView.tsx'), 'utf8'), office = readFileSync(join(dir, 'WorldOffice.tsx'), 'utf8')
+  const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
+  ok('world.tier.2 the tier is written straight onto the tag from the frame loop (no React render), CSS shows each layer\'s parts, and a request or a picked robot keeps its full card at any distance',
+    /tag\.dataset\.tier = nextTier/.test(card) && /\.world-tag:not\(\[data-tier="context"\]\) \.world-chip \{ display: none; \}/.test(styles) &&
+      /\.world-tag\[data-tier="rest"\]:not\(\[data-badge="wants-you"\]\):not\(\[data-picked\]\) \.world-card-frame \{ display: none; \}/.test(styles) &&
+      /<p className="world-card__title" data-lead=\{headline\.tone\}>\{headline\.text\}<\/p>/.test(card) && /className="world-card__said"/.test(card))
+  ok('world.clean.1 the frame readout is a developer\'s — hidden unless tc.world.stats is set (the probe still writes data-fps for the harness) — and the desks are low enough that a robot behind one shows its head and arms',
+    PF.statsOn() === false && /data-on=\{statsShown \? '' : undefined\}/.test(view) && /\.world-view__stats:not\(\[data-on\]\) \{ display: none; \}/.test(styles) &&
+      /const DESK = \{ w: 1\.7, d: 0\.85, top: 0\.6 \} as const/.test(office) && /el\.dataset\.fps = String\(fps\)/.test(view))
 }
 
 const failures = results.filter((r) => !r.pass)

@@ -11131,15 +11131,43 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-card__act:disabled { color: var(--world-holo-ink-2); cursor: default; }
 .world-card__act--go { border-color: transparent; background: var(--world-wait); color: var(--world-holo-solid); }
 .world-card__act--go:hover { background: var(--world-wait); filter: brightness(1.06); }
-/* M422. The decision table's sign: the count, read from across the room, in the app's amber. */
-.world-table-sign {
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: var(--sp-2) var(--sp-5); border-radius: var(--r-lg);
-  background: var(--world-holo-solid); box-shadow: var(--world-holo-shade), inset 0 0 0 1.5px var(--world-wait);
-  font-family: var(--font-ui); color: var(--world-holo-ink); white-space: nowrap; user-select: none;
+/* M424. The four density layers, by distance (WorldCard writes data-tier):
+   REST far off — the name and its dot; CONTEXTUAL mid-distance — the one-line
+   headline chip; the full card up close. A request and a picked robot are
+   never rest: their card stands at any distance. */
+.world-chip {
+  position: absolute; left: 0; bottom: 30px; transform: translateX(-50%);
+  max-width: 220px; margin: 0; padding: 2px var(--sp-4);
+  border-radius: var(--r-md); background: var(--world-holo); box-shadow: var(--world-holo-shade);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  font-size: var(--t-xs); font-weight: 500; line-height: 16px; color: var(--world-holo-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.world-table-sign strong { font-size: var(--t-sm); font-weight: 700; color: var(--world-wait); }
-.world-table-sign span { font-size: var(--t-xs); color: var(--world-holo-ink-2); }
+.world-tag:not([data-tier="context"]) .world-chip { display: none; }
+.world-tag[data-tier="rest"] .world-pill__act { display: none; }
+.world-tag[data-tier="rest"]:not([data-badge="wants-you"]):not([data-picked]) .world-card-frame { display: none; }
+.world-chip[data-lead="wait"], .world-card__title[data-lead="wait"] { color: var(--world-wait); }
+.world-chip[data-lead="stop"], .world-card__title[data-lead="stop"] { color: var(--world-stop); }
+.world-chip[data-lead="warn"], .world-card__title[data-lead="warn"] { color: var(--world-wait); }
+.world-chip[data-lead="quiet"] { color: var(--world-holo-ink-2); }
+/* The agent's own words, under the fact it leads with: nothing it said is lost. */
+.world-card__said {
+  margin: var(--sp-1) 0 0; font-size: var(--t-xs); line-height: 1.35; color: var(--world-holo-ink-2);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+/* M424. The frame readout is a developer's: hidden unless asked for (world-perf's statsOn). */
+.world-view__stats:not([data-on]) { display: none; }
+/* M422/M424. The decision table's count, top-centre over the room: read from anywhere, never over a card. */
+.world-requests {
+  position: absolute; top: var(--sp-6); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: baseline; gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-6); border: 0; border-radius: var(--r-full); cursor: pointer;
+  background: var(--world-holo-solid); box-shadow: var(--world-holo-shade), inset 0 0 0 1.5px var(--world-wait);
+  font-family: var(--font-ui); color: var(--world-holo-ink); white-space: nowrap; pointer-events: auto;
+}
+.world-requests strong { font-size: var(--t-sm); font-weight: 700; color: var(--world-wait); }
+.world-requests span { font-size: var(--t-xs); color: var(--world-holo-ink-2); }
+.world-requests:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
 /* The view's own messages — empty, disconnected, too small — sit in the room's middle, not over the toggle. */
 .world-route__note--stage {
   top: 50%; transform: translate(-50%, -50%);

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type JSX, type KeyboardEvent, type RefObject } from 'react'
 import { KindChat, Minus, Plus, Send } from '@renderer/icons'
-import { postTeamAsk, useAgentIds } from './agent-world-store'
+import { getAgent, postTeamAsk, useAgentIds } from './agent-world-store'
 import { useWorldActions } from './world-context-store'
 import { askTarget, selectAgent, useSelectedAgent } from './world-select'
-import { useRoster } from './world-roster'
+import { useRoster, useWaiting } from './world-roster'
 import { ASK_MAX, askText, legendEntries, type CameraApi } from './world-set'
 
 /**
@@ -79,6 +79,10 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
     setDraft('')
     field.current?.blur()
   }
+  // M422/M424: the decision table's count, over the room — a sign in the scene sat on the waiting
+  // robots' own cards. A press picks the agent that has waited longest, so its request card stands full.
+  const waiting = useWaiting()
+  const firstName = waiting.length > 0 ? (getAgent(waiting[0]!)?.name ?? waiting[0]!) : null
   const placeholder = sendable.length === 0 ? 'No agent here takes a message' : targetName !== null ? `Ask ${targetName}` : 'Ask your team'
 
   return (
@@ -120,6 +124,13 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
         <button type="submit" className="world-ask__send" aria-label={targetName !== null ? `Send to ${targetName}` : 'Send'} title={targetName !== null ? `Send to ${targetName}` : 'Pick who to ask'} disabled={draft.trim() === '' || target === null || sending}><Send size={14} /></button>
         <span className={`world-ask__posted${said !== null && !said.ok ? ' world-ask__posted--refused' : ''}`} role="status" aria-live="polite">{said?.text ?? ''}</span>
       </form>
+
+ {waiting.length > 0 ? (
+        <button type="button" className="world-requests" onClick={() => selectAgent(waiting[0]!)} data-world-requests>
+          <strong>{waiting.length === 1 ? '1 request' : `${waiting.length} requests`}</strong>
+          <span>{waiting.length === 1 ? `${firstName} is waiting on you` : `${firstName} has waited longest`}</span>
+        </button>
+      ) : null}
 
       <ul className="world-legend" aria-label="Live agents" data-world-legend>
         {legend.shown.length === 0 ? <li className="world-legend__none">No live agents</li> : null}

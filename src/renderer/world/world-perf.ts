@@ -127,3 +127,17 @@ export function cardTiers(candidates: readonly CardCandidate[], current: Readonl
 export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
+
+/**
+ * Whether the frame readout shows (M424): it is a developer's instrument, so
+ * off unless `localStorage['tc.world.stats'] === '1'`. The probe still runs
+ * and still writes `data-fps`, which the harness reads; only the text is
+ * hidden. A throwing storage (a private window) is off.
+ */
+export function statsOn(): boolean {
+  try {
+    return globalThis.localStorage?.getItem('tc.world.stats') === '1'
+  } catch {
+    return false
+  }
+}
