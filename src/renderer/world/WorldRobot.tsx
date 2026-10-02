@@ -4,7 +4,7 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { getAgent, getAgentIds, useAgentStatus } from './agent-world-store'
+import { getAgent, getAgentIds, useAgentStatus, worldNow } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { glowScale, useBloomOn } from './world-bloom'
 import { studioEnv } from './world-gloss'
@@ -408,9 +408,9 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     }
     // An open call goes stale with the clock, not with an event, so look again.
     if (rec && t - st.activityCheckedAt > 0.5) {
-      st.activity = activityOf(rec, Date.now())
+      st.activity = activityOf(rec, worldNow())
       st.activityCheckedAt = t
-      const out = Math.min(SUB_MAX, openDelegations(rec, Date.now()).length)
+      const out = Math.min(SUB_MAX, openDelegations(rec, worldNow()).length)
       if (out !== subsRef.current) { subsRef.current = out; setSubs(out) }
     }
 

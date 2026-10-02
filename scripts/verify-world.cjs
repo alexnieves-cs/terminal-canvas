@@ -52,7 +52,9 @@ buildSync({
       "  activity: require('./src/renderer/world/world-activity.ts'),",
       "  ctx: require('./src/renderer/world/world-context-store.ts'),",
       "  sel: require('./src/renderer/world/world-select.ts'),",
-      "  struct: require('./src/renderer/world/world-structure.ts')",
+      "  struct: require('./src/renderer/world/world-structure.ts'),",
+      "  replay: require('./src/renderer/world/world-replay.ts'),",
+      "  away: require('./src/renderer/world/world-away.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -61,7 +63,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -1189,7 +1191,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     kinds.map((k, i) => `${k}=${sigs[i]}`).join(' '))
   const robot = src('WorldRobot.tsx')
   ok('world.pose.2 the robot damps toward its activity\'s pose every frame and walking overrides it — the body is a function of the store, re-read twice a second because an open call goes stale with the clock',
-    /st\.activity = activityOf\(rec, Date\.now\(\)\)/.test(robot) && /const want = poseOf\(st\.moving \? 'rest' : st\.activity\)/.test(robot) && /for \(const key of POSE_KEYS\) p\[key\] = damp\(/.test(robot) && /t - st\.activityCheckedAt > 0\.5/.test(robot) && /ring: new THREE\.TorusGeometry/.test(robot))
+    /st\.activity = activityOf\(rec, worldNow\(\)\)/.test(robot) && /const want = poseOf\(st\.moving \? 'rest' : st\.activity\)/.test(robot) && /for \(const key of POSE_KEYS\) p\[key\] = damp\(/.test(robot) && /t - st\.activityCheckedAt > 0\.5/.test(robot) && /ring: new THREE\.TorusGeometry/.test(robot))
 
   // The addressee.
   const able = (id) => id !== 'term'
@@ -1296,7 +1298,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const robot = readFileSync(join(dir, 'WorldRobot.tsx'), 'utf8')
   const struct = readFileSync(join(dir, 'WorldStructure.tsx'), 'utf8')
   ok('world.subagent.1 a robot with a delegation open has a small robot orbiting it per sub-agent (at most SUB_MAX), inside the body\'s group so it leaves with it, read from the same open calls as the activity',
-    /openDelegations\(rec, Date\.now\(\)\)\.length/.test(robot) && /const SUB_MAX = 3/.test(robot) && robot.indexOf('{subs > 0 ? (') > robot.indexOf('<group ref={bob}>'))
+    /openDelegations\(rec, worldNow\(\)\)\.length/.test(robot) && /const SUB_MAX = 3/.test(robot) && robot.indexOf('{subs > 0 ? (') > robot.indexOf('<group ref={bob}>'))
   ok('world.structure.1 the structure re-renders only when a tile would look different (a string snapshot), paints a tile\'s texture only when its words change, and draws its lines as meshes (a THREE.Line is one pixel wide whatever it is told)',
     /useSyncExternalStore\(subscribeAgentWorld, tilesKey, tilesKey\)/.test(struct) && /\}, \[texture, tile\.name, tile\.dir, tile\.conflict, tile\.writers\.length, tint\]\)/.test(struct) && !/new THREE\.Line\b|<line\b/.test(struct) && /<cylinderGeometry args=\{\[1, 1, 1, 6, 1, true\]\} \/>/.test(struct))
 }
@@ -1337,6 +1339,74 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.clean.1 the frame readout is a developer\'s — hidden unless tc.world.stats is set (the probe still writes data-fps for the harness) — and the desks are low enough that a robot behind one shows its head and arms',
     PF.statsOn() === false && /data-on=\{statsShown \? '' : undefined\}/.test(view) && /\.world-view__stats:not\(\[data-on\]\) \{ display: none; \}/.test(styles) &&
       /const DESK = \{ w: 1\.7, d: 0\.85, top: 0\.6 \} as const/.test(office) && /el\.dataset\.fps = String\(fps\)/.test(view))
+}
+
+// ── M425: time in the room ───────────────────────────────────────────────────
+{
+  const e = (agentId, seq, ts, type, payload, name) => ({ agentId, seq, ts, type, payload, ...(name ? { name } : {}) })
+  const raw = [
+    e('a', 1, 100, 'status', 'working', 'Ana'), e('b', 1, 150, 'status', 'working', 'Ben'),
+    e('a', 2, 200, 'tool_call', { tool: 'Edit', summary: 'Edit x.ts', status: 'started', callId: 'c', path: 'src/x.ts' }),
+    e('b', 2, 250, 'tool_result', { tool: 'Bash', summary: 'npm test', status: 'failed', detail: '1 failed' }),
+    e('a', 3, 300, 'status', 'waiting_approval'), e('b', 3, 350, 'error', { message: 'rate limited' }),
+    e('a', 4, 400, 'status', 'working'), e('a', 5, 500, 'message', { text: 'Done: expiry in ms.' })
+  ]
+  // A journal line is the event and when the room GOT it (here: its own stamp).
+  const j = raw.map((event) => ({ at: event.ts, event }))
+  const at250 = RP.foldTo(j, 250)
+  const stepped = RP.foldTo(j, 400, RP.foldTo(j, 250))
+  const fresh = RP.foldTo(j, 400)
+  ok('world.replay.1 the room as of t is the live reducer folded over the journal up to t, by ARRIVAL (what the room showed when) — forward from the last fold when t moves on, from the start when it goes back — and both roads give the same room',
+    at250.records.get('a').status === 'working' && at250.records.get('b').events.length === 2 && at250.ids.join() === 'a,b' &&
+      JSON.stringify([...stepped.records]) === JSON.stringify([...fresh.records]) && RP.foldTo(j, 200, fresh).next === 3 && fresh.records.get('a').status === 'working' && fresh.records.get('b').status === 'error')
+  const big = Array.from({ length: 30 }, (_, i) => ({ at: i * 1000, event: e('a', i, i * 1000, 'thought', { text: `${i}` }) }))
+  ok('world.replay.2 the journal keeps the last hour and at most JOURNAL_MAX, dropping from the front, and is the same array when nothing goes',
+    RP.trimJournal(big, 29_000, 10).length === 10 && RP.trimJournal(big, 29_000, 10)[0].event.seq === 20 && RP.trimJournal(big, 29_500, 100, 10_000).length === 10 &&
+      RP.trimJournal(big, 29_000) === big)
+  const m = RP.timelineMarks(j, 100, 500, 4)
+  ok('world.replay.3 the scrubber shows how busy each stretch was and marks the moments worth finding — a stop, a request, a failed tool',
+    m.density.reduce((a, b) => a + b, 0) === j.length && m.points.map((p) => p.kind).sort().join() === 'fail,stop,wait')
+
+  // The store's past room.
+  // Real arrivals, a few ms apart: the journal's arrival clock only rises.
+  const spin = (ms) => { const until = Date.now() + ms; while (Date.now() < until) { /* wait */ } }
+  W.ingestAgentEvents([e('replay-x', 1, Date.now(), 'status', 'working', 'Rx')])
+  spin(15)
+  const t0 = Date.now()
+  spin(15)
+  W.ingestAgentEvents([e('replay-x', 2, Date.now(), 'thought', { text: 'later' })])
+  W.setReplayAt(t0)
+  const past = W.getAgent('replay-x')
+  W.ingestAgentEvents([e('replay-x', 3, Date.now(), 'status', 'thinking')])
+  const heldStill = W.getAgent('replay-x') === past
+  const nowInPast = W.worldNow()
+  W.setReplayAt(null)
+  ok('world.replay.4 while a person looks at the past, every read answers from the fold (the agent as it was), live events keep arriving but the past room holds still, the room\'s clock is the past moment, and Live shows everything that came meanwhile',
+    past !== undefined && past.events.length === 1 && heldStill && nowInPast === t0 && W.getAgent('replay-x').status === 'thinking' && W.replayAt() === null && W.getJournal().some((x) => x.event.agentId === 'replay-x' && x.event.seq === 3))
+
+  // While you were away.
+  const names = { a: 'Ana', b: 'Ben' }
+  const beats = RP.awayBeats(j, 0, 1000, (id) => names[id] ?? id)
+  ok('world.away.1 what happened meanwhile is a handful of beats, most important first — a stop, a request, a failure, a finished turn, files written — one per agent per kind, the latest of each',
+    beats.beats.map((b) => b.kind).join() === 'stopped,asked,failed,finished,wrote' && beats.beats[0].text === 'Ben stopped: rate limited' && beats.beats[4].text === 'Ana wrote x.ts' && beats.more === 0 &&
+      RP.awayBeats(j, 0, 1000, (id) => id, 2).more === 3)
+  ok('world.away.2 away is long enough hidden or unfocused (AWAY_MS), stamped from the moment they left — a glance away is not away',
+    AW.awayFrom(1000, 1000 + RP.AWAY_MS) === 1000 && AW.awayFrom(1000, 1000 + RP.AWAY_MS - 1) === null && AW.awayFrom(null, 5) === null &&
+      (AW.noteLeft(10), AW.noteBack(10 + RP.AWAY_MS), AW.awaySince() === 10) && (AW.dismissAway(), AW.awaySince() === null))
+
+  const dir = join(root, 'src/renderer/world')
+  const time = readFileSync(join(dir, 'WorldTime.tsx'), 'utf8'), card = readFileSync(join(dir, 'WorldCard.tsx'), 'utf8'), chrome = readFileSync(join(dir, 'WorldChrome.tsx'), 'utf8'), store = readFileSync(join(dir, 'agent-world-store.ts'), 'utf8')
+  const scene = ['WorldCard.tsx', 'WorldRobot.tsx', 'WorldStructure.tsx'].map((f) => readFileSync(join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''))
+  ok('world.replay.5 the room\'s parts read the room\'s clock (worldNow), never the wall clock, so the past room is quiet where it was quiet and a tile is fresh when it was',
+    scene.every((src) => !/Date\.now\(\)/.test(src.replace(/handoffArcs\(ctx\.handoffs, byId, Date\.now\(\)\)/, ''))) && scene.every((src) => /worldNow\(\)/.test(src)))
+  ok('world.replay.6 the past takes no actions: a past request has no Approve or Deny, the ask is off, the room goes back to live when it closes, and the away tracker is installed at startup (from the store), not when the room first opens',
+    /const asked = past \? undefined :/.test(card) && /\{past \? null : <button type="button" className="world-card__act"/.test(card) && /sending \|\| past\) return/.test(chrome) &&
+      /useEffect\(\(\) => \(\) => setReplayAt\(null\), \[\]\)/.test(time) && /installAwayTracker\(\)\n\s*if \(!disconnect\)/.test(store))
+  ok('world.tour.1 the tour shows each beat at its own moment with the camera on its agent — the moment BEFORE a stop, when the robot was still at its desk — falls back to the whole room when the agent is not in it, and ends live on the whole room',
+    /setReplayAt\(beat\.kind === 'stopped' \? beat\.at - 1 : beat\.at\)/.test(time) && /if \(camera\.current\?\.focus\(beat\.agentId\) !== true\) camera\.current\?\.fit\(\)/.test(time) &&
+      /setReplayAt\(null\)\n\s*camera\.current\?\.fit\(\)\n\s*dismissAway\(\)/.test(time))
+  const fp = SET.focusPose({ x: 4, z: 0 }, { x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 0 })
+  ok('world.tour.2 a focus glide stands FOCUS_DISTANCE from its agent along the line the camera already looks down', Math.abs(Math.hypot(fp.position.x - 4, fp.position.y - 0.9, fp.position.z) - SET.FOCUS_DISTANCE) < 1e-9 && fp.target.x === 4 && fp.position.y > fp.target.y)
 }
 
 const failures = results.filter((r) => !r.pass)

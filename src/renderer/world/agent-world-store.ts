@@ -2,6 +2,8 @@ import { useSyncExternalStore } from 'react'
 import { applyAgentEvent, emptyAgent, isAgentEvent, type AgentRecord, type AgentStatus, type WorldConnection } from '@shared/world-events'
 import type { CanvasBridge } from '@shared/ipc-contract'
 import { ASK_AGENT_ID, askEvent } from './world-set'
+import { foldTo, trimJournal, type Fold, type JournalEntry } from './world-replay'
+import { installAwayTracker } from './world-away'
 
 /**
  * Every agent the world feed has described: a ring of its last events and the
@@ -25,6 +27,23 @@ let agentIds: readonly string[] = []
 /** Bumped once per batch that changed anything — the cheap "did the world move" read for a frame loop. */
 let version = 0
 
+/**
+ * M425. Every accepted event, in arrival order — the room's memory for the
+ * scrubber and the away tour (world-replay.ts). Trimmed to the last hour.
+ */
+let journal: JournalEntry[] = []
+let lastArrival = -Infinity
+/**
+ * M425. The room as of a past moment, while a person scrubs or tours; null is
+ * live. While it is set, every READ below (getAgent, the ids, every hook)
+ * answers from this fold, and live events still land in `agents` and the
+ * journal but notify nobody but the scrubber — the past room holds still
+ * while the present keeps arriving.
+ */
+let replay: Fold | null = null
+let replayIds: readonly string[] = []
+const journalListeners = new Set<() => void>()
+
 const agentListeners = new Map<string, Set<() => void>>()
 const rosterListeners = new Set<() => void>()
 const worldListeners = new Set<() => void>()
@@ -40,7 +59,7 @@ function notifyAll(set: Iterable<() => void> | undefined): void {
  * one render, not forty. Anything `isAgentEvent` refuses is dropped silently:
  * the feed is instrumentation, and one bad event must not stop the rest.
  */
-export function ingestAgentEvents(batch: readonly unknown[]): void {
+export function ingestAgentEvents(batch: readonly unknown[], arrivedAt: number = Date.now()): void {
   const changed = new Set<string>()
   let rosterGrew = false
   for (const event of batch) {
@@ -51,10 +70,17 @@ export function ingestAgentEvents(batch: readonly unknown[]): void {
     if (next === prev) continue
     agents.set(event.agentId, next)
     changed.add(event.agentId)
+    // Arrival only rises (the fold stops at the first line past its moment); a clock step back is folded flat.
+    lastArrival = Math.max(lastArrival, arrivedAt)
+    journal.push({ at: lastArrival, event })
   }
   if (changed.size === 0) return
   if (rosterGrew) agentIds = [...agents.keys()]
   version++
+  notifyAll(journalListeners)
+  // The past room holds still: live events are kept, and shown when the person comes back to live.
+  if (replay !== null) return
+  if (journal.length > 256 && (journal.length & 255) === 0) journal = trimJournal(journal, Date.now())
   for (const id of changed) notifyAll(agentListeners.get(id))
   if (rosterGrew) notifyAll(rosterListeners)
   notifyAll(worldListeners)
@@ -104,6 +130,8 @@ let world: CanvasBridge['world'] | null = null
  * looks like "no agents".
  */
 export function connectAgentWorld(bridge: Pick<CanvasBridge, 'world'>): () => void {
+  // M425: the away stamp the room's catch-up reads — from startup, not from when the room first opened.
+  installAwayTracker()
   if (!disconnect) {
     const door = bridge.world as CanvasBridge['world'] | undefined
     if (door === undefined) {
@@ -148,11 +176,60 @@ export function useWorldConnection(): WorldConnection {
 }
 
 export function getAgent(agentId: string): AgentRecord | undefined {
-  return agents.get(agentId)
+  return replay !== null ? replay.records.get(agentId) : agents.get(agentId)
 }
 
 export function getAgentIds(): readonly string[] {
-  return agentIds
+  return replay !== null ? replayIds : agentIds
+}
+
+// ── the room's memory (M425) ────────────────────────────────────────────────
+
+/** The journal as it stands: every accepted event of the last hour, arrival order. */
+export function getJournal(): readonly JournalEntry[] {
+  return journal
+}
+
+export function subscribeJournal(listener: () => void): () => void {
+  return subscribeIn(journalListeners, listener)
+}
+
+/** The moment the room shows: the replay's, or now. Every clock-read rule in the scene (quiet, stale calls, a fresh tile) reads this, so the past room is quiet where it was quiet. */
+export function worldNow(): number {
+  return replay !== null ? replay.at : Date.now()
+}
+
+export function replayAt(): number | null {
+  return replay?.at ?? null
+}
+
+const replayListeners = new Set<() => void>()
+
+/**
+ * Shows the room as of `t` (null: live again). Folds forward from the last
+ * moment when `t` is later — a playing scrubber — and from the start when it
+ * is earlier. Notifies EVERY reader, because every record may have changed.
+ */
+export function setReplayAt(t: number | null): void {
+  if (t === null) {
+    if (replay === null) return
+    replay = null
+    journal = trimJournal(journal, Date.now())
+  } else {
+    const at = Math.min(t, Date.now())
+    if (replay !== null && replay.at === at) return
+    replay = foldTo(journal, at, replay ?? undefined)
+    if (replay.ids.length !== replayIds.length || replay.ids.some((id, i) => replayIds[i] !== id)) replayIds = replay.ids
+  }
+  version++
+  for (const set of agentListeners.values()) notifyAll(set)
+  notifyAll(rosterListeners)
+  notifyAll(worldListeners)
+  notifyAll(replayListeners)
+}
+
+export function useReplayAt(): number | null {
+  return useSyncExternalStore((l) => subscribeIn(replayListeners, l), replayAt, replayAt)
 }
 
 export function getAgentWorldVersion(): number {
@@ -198,8 +275,8 @@ export function useAgentIds(): readonly string[] {
 export function useAgent(agentId: string): AgentRecord | undefined {
   return useSyncExternalStore(
     (l) => subscribeAgent(agentId, l),
-    () => agents.get(agentId),
-    () => agents.get(agentId)
+    () => getAgent(agentId),
+    () => getAgent(agentId)
   )
 }
 
@@ -207,7 +284,7 @@ export function useAgent(agentId: string): AgentRecord | undefined {
 export function useAgentStatus(agentId: string): AgentStatus | undefined {
   return useSyncExternalStore(
     (l) => subscribeAgent(agentId, l),
-    () => agents.get(agentId)?.status,
-    () => agents.get(agentId)?.status
+    () => getAgent(agentId)?.status,
+    () => getAgent(agentId)?.status
   )
 }

@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { getAgent, getAgentIds, subscribeAgentWorld } from './agent-world-store'
+import { getAgent, getAgentIds, subscribeAgentWorld, worldNow } from './agent-world-store'
 import { useBloomOn, glowScale } from './world-bloom'
 import { useWorldContext, type WorldTask } from './world-context-store'
 import { STUDIO } from './world-palette'
@@ -38,7 +38,8 @@ import {
 
 // ── the snapshot ─────────────────────────────────────────────────────────────
 
-const now = (): number => Date.now()
+// M425: the room's clock — the replay's moment while scrubbing, else now.
+const now = (): number => worldNow()
 
 function liveRecords(): NonNullable<ReturnType<typeof getAgent>>[] {
   return getAgentIds().map((id) => getAgent(id)).filter((r): r is NonNullable<typeof r> => r !== undefined && isLiveStatus(r.status))
@@ -164,7 +165,7 @@ function Tile({ tile, spot, reduced }: { tile: FileTile; spot: TileSpot; reduced
     // Face the camera about y only, so the words read from any orbit and the tile stays upright.
     g.rotation.y = Math.atan2(camera.position.x - spot.x, camera.position.z - spot.z)
     // A file just written swells, then settles: the room's pulse.
-    const age = Date.now() - lastAt.current
+    const age = worldNow() - lastAt.current
     const fresh = writer && age >= 0 && age < TILE_FRESH_MS ? 1 - age / TILE_FRESH_MS : 0
     g.scale.setScalar(1 + (reduced ? 0 : fresh * 0.12))
   })

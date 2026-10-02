@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type JSX, type KeyboardEvent, type RefObject } from 'react'
 import { KindChat, Minus, Plus, Send } from '@renderer/icons'
-import { getAgent, postTeamAsk, useAgentIds } from './agent-world-store'
+import { getAgent, postTeamAsk, useAgentIds, useReplayAt } from './agent-world-store'
 import { useWorldActions } from './world-context-store'
 import { askTarget, selectAgent, useSelectedAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
+import { WorldTime } from './WorldTime'
 import { ASK_MAX, askText, legendEntries, type CameraApi } from './world-set'
 
 /**
@@ -62,7 +63,7 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
   const submit = (event: FormEvent): void => {
     event.preventDefault()
     const text = askText(draft)
-    if (text === null || target === null || actions === null || sending) return
+    if (text === null || target === null || actions === null || sending || past) return
     const name = targetName ?? target
     setSending(true)
     void actions.send(target, text).then((refusal) => {
@@ -83,10 +84,13 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
   // robots' own cards. A press picks the agent that has waited longest, so its request card stands full.
   const waiting = useWaiting()
   const firstName = waiting.length > 0 ? (getAgent(waiting[0]!)?.name ?? waiting[0]!) : null
-  const placeholder = sendable.length === 0 ? 'No agent here takes a message' : targetName !== null ? `Ask ${targetName}` : 'Ask your team'
+  // M425: the past room takes no messages — the agent it shows may be somewhere else by now.
+  const past = useReplayAt() !== null
+  const placeholder = past ? 'Back to Live to ask' : sendable.length === 0 ? 'No agent here takes a message' : targetName !== null ? `Ask ${targetName}` : 'Ask your team'
 
   return (
     <div className="world-chrome" data-world-chrome>
+      <WorldTime camera={camera} />
       <div className="world-tools" role="group" aria-label="Camera">
         <button type="button" className="world-tools__fit" onClick={() => camera.current?.fit()} data-world-fit>Fit room</button>
         <button type="button" className="world-tools__step" aria-label="Zoom out" title="Zoom out" onClick={() => camera.current?.zoom(-1)} data-world-zoom="out"><Minus size={14} /></button>
@@ -105,7 +109,7 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
           aria-label="Ask your team"
           autoComplete="off"
           spellCheck={false}
-          disabled={sendable.length === 0}
+          disabled={sendable.length === 0 || past}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onKey}
         />

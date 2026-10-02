@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import type { Group } from 'three'
 import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
-import { getAgent, getAgentIds, useAgent } from './agent-world-store'
+import { getAgent, getAgentIds, useAgent, useReplayAt, worldNow } from './agent-world-store'
 import { ACTIVITY_VERB, activityOf, type Activity } from './world-activity'
 import { useWorldActions, useWorldContext } from './world-context-store'
 import { cardBadge, cardTitle, isLiveStatus, recentTools, type BadgeKind } from './world-scene'
@@ -103,13 +103,15 @@ function headlineOf(record: NonNullable<ReturnType<typeof getAgent>>, approval: 
 function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
   const ctx = useWorldContext()
   const actions = useWorldActions()
-  const asked = ctx.approvals.find((a) => a.agentId === agentId)
+  // M425: a request in the PAST room is history — it may have been answered since — so it has no verbs.
+  const past = useReplayAt() !== null
+  const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
   return (
     <div className="world-card__request" data-world-request>
       {asked !== undefined ? (
         <p className="world-card__ask"><span className="world-card__tool">{asked.toolName}</span>{asked.argument}</p>
       ) : (
-        <p className="world-card__ask world-card__ask--open">Waiting on you in its panel</p>
+        <p className="world-card__ask world-card__ask--open">{past ? 'Was waiting on you here' : 'Waiting on you in its panel'}</p>
       )}
       <div className="world-card__actions" role="group" aria-label="Answer the request">
         {asked !== undefined && actions !== null ? (
@@ -118,7 +120,7 @@ function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
             <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
           </>
         ) : null}
-        <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>
+        {past ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
       </div>
     </div>
   )
@@ -182,15 +184,15 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
     if (t - askedAt.current >= 1) {
       askedAt.current = t
       const rec = getAgent(agentId)
-      const n = Date.now()
+      const n = worldNow()
       if (rec && (cardBadge(rec, n).kind !== shown.current || activityOf(rec, n) !== doing.current || headlineOf(rec, undefined, said.current ?? rec.name, n).text !== led.current)) recheck()
     }
   })
 
   if (!record || !layer.current) return null
-  const badge = cardBadge(record, Date.now())
+  const badge = cardBadge(record, worldNow())
   shown.current = badge.kind
-  const activity = activityOf(record, Date.now())
+  const activity = activityOf(record, worldNow())
   doing.current = activity
   const verb = ACTIVITY_VERB[activity]
   const Icon = ACTIVITY_ICON[activity]
@@ -202,8 +204,8 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   if (latest !== record.name) said.current = latest
   const words = said.current ?? latest
   const approval = ctx.approvals.find((a) => a.agentId === agentId)
-  const headline = headlineOf(record, approval, words, Date.now())
-  led.current = headlineOf(record, undefined, words, Date.now()).text
+  const headline = headlineOf(record, approval, words, worldNow())
+  led.current = headlineOf(record, undefined, words, worldNow()).text
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>

@@ -226,6 +226,19 @@ export interface CameraApi {
   fit(): void
   /** One step in (+1) or out (−1). */
   zoom(direction: 1 | -1): void
+  /** M425: glide to one agent — its desk, or the table when it waits there — from the side the camera is on. False when it is not in the room. */
+  focus(agentId: string): boolean
+}
+
+/** How far a focus glide stands from its agent. */
+export const FOCUS_DISTANCE = 11
+
+/** Where a focus glide puts the camera: `FOCUS_DISTANCE` from the agent along the line the camera already looks down. */
+export function focusPose(at: { x: number; z: number }, camera: Vec3, target: Vec3): { position: Vec3; target: Vec3 } {
+  const look = { x: at.x, y: 0.9, z: at.z }
+  const dx = camera.x - target.x, dy = camera.y - target.y, dz = camera.z - target.z
+  const d = Math.hypot(dx, dy, dz) || 1
+  return { position: { x: look.x + (dx / d) * FOCUS_DISTANCE, y: look.y + (dy / d) * FOCUS_DISTANCE, z: look.z + (dz / d) * FOCUS_DISTANCE }, target: look }
 }
 
 /** One zoom step: the distance to the target times this (in), or divided by it (out). */

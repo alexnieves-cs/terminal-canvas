@@ -12,11 +12,11 @@ import { useWorldContext } from './world-context-store'
 import { taskOfAgent } from './world-structure'
 import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, createDprGovernor, DPR_MAX, DPR_MIN, statsOn, type CardCandidate } from './world-perf'
-import { getAgentIds } from './agent-world-store'
+import { getAgent, getAgentIds } from './agent-world-store'
 import { selectAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
-import { stationPlan, type RosterEntry, type Station } from './world-scene'
-import { dollyBy, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
+import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
+import { dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
 import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
 
 /**
@@ -191,7 +191,7 @@ const mix = (a: Vec3, b: Vec3, k: number): Vec3 => ({ x: a.x + (b.x - a.x) * k, 
  * rig runs the overlay's camera buttons (`api`): a glide to the opening angle
  * for the room as it is now, or one step in or out along the line to the target.
  */
-function TransitionRig({ transition, start, controls, api, arcRadius, reduced }: { transition: WorldTransition; start: Vec3; controls: RefObject<OrbitControlsRef | null>; api: RefObject<CameraApi | null>; arcRadius: number; reduced: boolean }): null {
+function TransitionRig({ transition, start, controls, api, arcRadius, reduced, stations }: { transition: WorldTransition; start: Vec3; controls: RefObject<OrbitControlsRef | null>; api: RefObject<CameraApi | null>; arcRadius: number; reduced: boolean; stations: RefObject<ReadonlyMap<string, Station>> }): null {
   const camera = useThree((s) => s.camera)
   const rest = useRef<Vec3>(start)
   const gliding = useRef<Glide | null>(null)
@@ -214,10 +214,20 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced }:
         if (!c) return
         const factor = direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP
         begin(dollyBy(camera.position, c.target, factor, c.minDistance, c.maxDistance), copyOf(c.target), ZOOM_MS)
+      },
+      focus: (agentId) => {
+        const c = controls.current
+        const station = stations.current?.get(agentId)
+        if (!c || station === undefined) return false
+        // Where the robot IS: at the table while it waits on a person, else behind its desk.
+        const slot = goalOf(getAgent(agentId)?.status ?? 'idle', station.conductor) === 'table' ? station.seat : (station.home ?? station.seat)
+        const pose = focusPose(slot, copyOf(camera.position), copyOf(c.target))
+        begin(pose.position, pose.target, FIT_MS)
+        return true
       }
     }
     return () => { api.current = null }
-  }, [api, camera, controls])
+  }, [api, camera, controls, stations])
 
   useFrame(() => {
     const c = controls.current
@@ -414,6 +424,9 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
   // Every station in the room, the leaving included: ONE array, because React
   // scopes keys to an array and a robot moved between two would be a remount.
   const stations = useMemo(() => [...plan.stations.values()], [plan])
+  // The camera's focus reads the room as it is at the press (M425's tour).
+  const stationsRef = useRef<ReadonlyMap<string, Station>>(plan.stations)
+  stationsRef.current = plan.stations
   const leftAt = useMemo(() => new Map([...leavers].map(([id, l]) => [id, l.at])), [leavers])
   // The card ranking is for the live: a leaver keeps the card it had (WorldRobot) and takes no one's.
   const live = useMemo(() => stations.filter((station) => !leftAt.has(station.agentId)), [stations, leftAt])
@@ -463,7 +476,7 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
           <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
         ))}
         <Controls controls={controls} limit={limit} maxDistance={Math.max(40, half * 4)} />
-        <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} />
+        <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} stations={stationsRef} />
         {bloom && <WorldBloom />}
         <StatsProbe target={stats} />
         <QualityGovernor />
