@@ -37,6 +37,8 @@ buildSync({
       "  sim: require('./src/main/world-sim.ts'),",
       "  store: require('./src/renderer/world/agent-world-store.ts'),",
       "  scene: require('./src/renderer/world/world-scene.ts'),",
+      "  set: require('./src/renderer/world/world-set.ts'),",
+      "  palette: require('./src/renderer/world/world-palette.ts'),",
       "  trans: require('./src/renderer/world/world-transition.ts'),",
       "  toggle: require('./src/renderer/world/world-toggle.ts'),",
       "  presence: require('./src/shared/presence.ts'),",
@@ -53,7 +55,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, trans: T, toggle: G, presence: P, feed: F, perf: PF, wiring: WW, ipc: IPCC, panelState: PS } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, wiring: WW, ipc: IPCC, panelState: PS } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -413,8 +415,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const files = readdirSync(dir).filter((f) => /\.tsx?$/.test(f))
   const THREE_DOOR = /from '(?:three|@react-three\/fiber|@react-three\/drei)(?:\/[^']*)?'/
   const importers = files.filter((f) => THREE_DOOR.test(read(f))).sort()
-  const SCENE = ['WorldCard.tsx', 'WorldOffice.tsx', 'WorldRobot.tsx', 'WorldView.tsx']
-  ok('world.door.1 three, fiber and drei are imported by exactly the four scene files — never by the pure modules, the roster hook, the palette, the store or the route (a fifth importer is how three.js reaches the first chunk)',
+  const SCENE = ['WorldCard.tsx', 'WorldOffice.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx', 'WorldRobot.tsx', 'WorldView.tsx', 'world-gloss.ts']
+  ok('world.door.1 three, fiber and drei are imported by exactly the seven scene files (M416 added the platform, the props and the shared gloss) — never by the pure modules, the chrome, the roster hook, the palette, the store or the route (an eighth importer is how three.js reaches the first chunk)',
     importers.join() === SCENE.join(), importers.join())
 
   const { execFileSync } = require('node:child_process')
@@ -446,9 +448,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 
   // M415. The robot is primitives now; its silent traps are the gloss and the shared kit.
   const robotCode = robot.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const glossCode = read('world-gloss.ts').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   const bodyFn = robotCode.slice(robotCode.indexOf('function RobotBody('), robotCode.indexOf('function ErrorBug('))
   ok('world.door.6 the robots\' gloss is a RoomEnvironment built in code and prefiltered once per renderer, set on the robot materials and never as scene.environment (it would relight the office); the geometry is ONE shared kit, built outside the robot and never disposed by one, while each robot\'s own shell material is',
-    /new RoomEnvironment\(\)/.test(robotCode) && /pmrem\.fromScene\(room/.test(robotCode) && /envs = new WeakMap<THREE\.WebGLRenderer/.test(robotCode) &&
+    /new RoomEnvironment\(\)/.test(glossCode) && /pmrem\.fromScene\(room/.test(glossCode) && /envs = new WeakMap<THREE\.WebGLRenderer/.test(glossCode) && /studioEnv\(gl\)/.test(robotCode) &&
       !files.some((f) => /\.environment\s*=/.test(read(f))) && /let kit: Kit \| null = null/.test(robotCode) &&
       !/new THREE\.\w*Geometry\(/.test(bodyFn) && /conform\(visor, /.test(robotCode) && !/\b(?:kit|k)\.\w+\.dispose\(\)/.test(robotCode) &&
       /useEffect\(\(\) => \(\) => shell\.dispose\(\), \[shell\]\)/.test(bodyFn) && /clearcoat: 1, clearcoatRoughness: 0\.15/.test(robotCode) &&
@@ -460,7 +463,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 
   const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
   ok('world.door.8 the classes the scene paints with exist in the stylesheet',
-    ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-tag', 'world-pill', 'world-dot', 'world-card', 'world-card__title', 'world-card__badge', 'world-card__tools', 'world-route__note', 'shell__world-toggle'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
+    ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-tag', 'world-pill', 'world-dot', 'world-card', 'world-card__title', 'world-card__badge', 'world-card__tools', 'world-route__note', 'shell__world-toggle', 'world-chrome', 'world-tools', 'world-ask', 'world-ask__field', 'world-legend', 'world-legend__dot'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
 
   const topBar = readFileSync(join(root, 'src/renderer/shell/TopBar.tsx'), 'utf8')
   ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and Canvas gates the toggle bit and the top bar\'s button on DEV (a hidden scene keeps a WebGL context drawing for nobody)',
@@ -785,6 +788,139 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.wire.5 the channels are declared once and carried by the bridge: WORLD_CONNECTION as an event, WORLD_STATUS and WORLD_RETRY as invokes, and the project index lists them',
     IPCC.IPC_EVENTS.WORLD_CONNECTION === 'world:connection' && IPCC.IPC.WORLD_STATUS === 'world:status' && IPCC.IPC.WORLD_RETRY === 'world:retry' &&
       /world:events world:connection world:status world:retry/.test(text('CLAUDE.md')) && /IPC_EVENTS\.WORLD_CONNECTION/.test(text('src/preload/index.ts')) && /IPC\.WORLD_RETRY/.test(text('src/preload/index.ts')))
+}
+
+// ── the studio (M416): the platform, the set dressing, the camera, the ask pill, the chrome ──
+{
+  const text = (f) => readFileSync(join(root, 'src/renderer/world', f), 'utf8')
+  const code = (f) => text(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const rosterOf = (n) => Array.from({ length: n }, (_, i) => ({ agentId: `s${i}`, name: `Agent ${i}` }))
+
+  // The platform is big enough for ANY roster: a desk, the robot standing behind it and a table seat all sit inside it with the margin to spare.
+  const sizes = [0, 1, 2, 3, 4, 9, 14, 25]
+  const fits = sizes.map((n) => {
+    const plan = Z.stationPlan(rosterOf(n))
+    const half = SET.slabHalf(plan.arcRadius)
+    let worst = Infinity
+    for (const st of plan.stations.values()) {
+      for (const slot of [st.desk, st.home, st.seat]) if (slot) worst = Math.min(worst, half - Math.max(Math.abs(slot.x), Math.abs(slot.z)))
+    }
+    return { n, half, worst }
+  })
+  ok('world.set.slab.1 the platform holds every desk, the robot behind it and every table seat, with the margin to spare, for any roster — and it only grows with the ring (a ring wider than its slab walks robots off the edge)',
+    fits.every((f) => f.worst >= SET.SLAB.margin - 1e-6) && fits.every((f, i) => i === 0 || f.half >= fits[i - 1].half), JSON.stringify(fits.map((f) => [f.n, +f.half.toFixed(2), +f.worst.toFixed(2)])))
+
+  // The props live in the corners the ring never reaches, at every size.
+  const propsClear = sizes.every((n) => {
+    const plan = Z.stationPlan(rosterOf(n))
+    const half = SET.slabHalf(plan.arcRadius)
+    const spots = [SET.boardSpot(half), ...SET.stoolSpots(half)]
+    const taken = [...plan.stations.values()].flatMap((st) => [st.desk, st.home].filter(Boolean))
+    return spots.every((p) => Math.max(Math.abs(p.x), Math.abs(p.z)) <= half - 0.8 && taken.every((t) => Math.hypot(p.x - t.x, p.z - t.z) > 1.5))
+  })
+  ok('world.set.props.1 the whiteboard and the four stools stand on the platform and clear of every desk and robot for rosters of 0 to 25 — including the rosters that wrap most of the way round the table — and there are exactly four stools',
+    propsClear && SET.stoolSpots(9).length === 4)
+
+  // The trim: a closed rounded-rectangle outline, laid only on the slab's FLAT top, and bands built from it that index real vertices.
+  const path = SET.roundedRectPath(5, 4, 1.1)
+  const pathOk = path.length > 20 && path.every(([x, z]) => Math.abs(x) <= 5 + 1e-9 && Math.abs(z) <= 4 + 1e-9) &&
+    path.every((p, i) => { const q = path[(i + 1) % path.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-6 })
+  const prof = SET.glowProfile(0.8, 0.2)
+  const band = SET.bandBuffers(path, prof.offsets, prof.alphas, 0.01)
+  const m = prof.offsets.length
+  ok('world.set.trim.1 the trim outline is a closed rounded rectangle (no repeated point — a repeat has no tangent), and its glow band is a strip whose every index names a vertex, one alpha per vertex, alphas in [0,1]',
+    pathOk && band.positions.length === path.length * m * 3 && band.alphas.length === path.length * m && band.index.length === path.length * (m - 1) * 6 &&
+      Math.max(...band.index) === path.length * m - 1 && band.alphas.every((a) => a >= 0 && a <= 1) && SET.roundedRectPath(1, 1, 5).every(([x, z]) => Math.abs(x) <= 1 && Math.abs(z) <= 1) &&
+      // a square whose radius is its half-extent still produces points that are all distinct
+      SET.roundedRectPath(1, 1, 1).every((p, i, a) => i === 0 || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 1e-6),
+    `path ${path.length} band ${band.positions.length / 3}v`)
+  ok('world.set.trim.2 the glow reaches further INWARD (the flat top) than outward (the lip), peaks at the line and fades to nothing at both ends — and the whole band stays on the flat part of a RoundedBox top, inset past its corner radius (a band over the curve hangs in the air)',
+    prof.offsets[0] === -0.8 && prof.offsets.at(-1) === 0.2 && prof.alphas[0] === 0 && prof.alphas.at(-1) === 0 && prof.offsets.every((o, i) => i === 0 || o > prof.offsets[i - 1]) &&
+      Math.max(...prof.alphas) === 1 && prof.alphas[prof.offsets.indexOf(0)] === 1 &&
+      SET.TRIM.inset - SET.TRIM.glowOut >= SET.SLAB.radius - 1e-9 && SET.TRIM.inset - SET.TRIM.half >= SET.SLAB.radius && SET.SLAB.radius <= SET.SLAB.thickness / 2 &&
+      SET.trimPath(5.8).every(([x, z]) => Math.abs(x) <= SET.slabHalf(5.8) - SET.TRIM.inset + 1e-9 && Math.abs(z) <= SET.slabHalf(5.8) - SET.TRIM.inset + 1e-9))
+
+  // The cubes: seeded, so the same room is the same room; floating clear above the robots, their cards and the zone label.
+  const fields = SET.CUBE_CLUSTERS.map((_, i) => SET.cubeField(i))
+  const again = SET.CUBE_CLUSTERS.map((_, i) => SET.cubeField(i))
+  const lowest = Math.min(...fields.flatMap((f, i) => f.map((c) => SET.clusterCenter(i, 9).y + c.y - c.drift - c.size)))
+  ok('world.set.cubes.1 three clusters of cubes, the same every time, each cube a unit-axis spinner with a size in [0.16, 0.36], all floating above the zone label (2.55 + its height) so a drift never puts a cube through a robot or its name',
+    fields.length === 3 && JSON.stringify(fields) === JSON.stringify(again) && fields.every((f, i) => f.length === SET.CUBE_CLUSTERS[i].count) &&
+      fields.flat().every((c) => c.size >= 0.16 && c.size <= 0.36 && Math.abs(Math.hypot(...c.axis) - 1) < 1e-9 && c.spin > 0) && lowest >= 2.95, `lowest=${lowest.toFixed(2)}`)
+
+  // The camera: a corner view looking down, never under the floor, never straight down, and the buttons only move it along its own line.
+  const pose = SET.isoPose(5.8)
+  const dist = Math.hypot(pose.x - SET.ORBIT_TARGET.x, pose.y - SET.ORBIT_TARGET.y, pose.z - SET.ORBIT_TARGET.z)
+  const polar = Math.acos((pose.y - SET.ORBIT_TARGET.y) / dist)
+  const lowestEye = sizes.map((n) => SET.ORBIT_TARGET.y + SET.viewDistance(Z.stationPlan(rosterOf(n)).arcRadius) * Math.cos(SET.VIEW.maxPolar))
+  const near = SET.dollyBy(pose, SET.ORBIT_TARGET, 0.5, 4, 100)
+  const clamped = [SET.dollyBy(pose, SET.ORBIT_TARGET, 0.0001, 4, 100), SET.dollyBy(pose, SET.ORBIT_TARGET, 1000, 4, 100)]
+  const cross = (v) => Math.hypot(v.x - SET.ORBIT_TARGET.x, v.y - SET.ORBIT_TARGET.y, v.z - SET.ORBIT_TARGET.z)
+  ok('world.set.cam.1 the opening camera is a corner view at the declared polar angle (inside the limits, well short of the horizon), its lowest orbit stays above the floor for every roster, a dolly step stays on the line to the target and inside [min, max], and a glide eases 0 to 1 monotonically',
+    Math.abs(polar - SET.VIEW.polar) < 1e-9 && SET.VIEW.minPolar < SET.VIEW.polar && SET.VIEW.polar < SET.VIEW.maxPolar && SET.VIEW.maxPolar <= Math.PI / 2 - 0.15 &&
+      Math.abs(Math.atan2(pose.x, pose.z) - SET.VIEW.azimuth) < 1e-9 && lowestEye.every((y) => y > 0.3) &&
+      Math.abs(cross(near) - dist / 2) < 1e-9 && Math.abs(near.y / dist - 0.5 * pose.y / dist) < 1e9 && Math.abs(cross(clamped[0]) - 4) < 1e-9 && Math.abs(cross(clamped[1]) - 100) < 1e-9 &&
+      SET.glide(0, 700) === 0 && SET.glide(700, 700) === 1 && SET.glide(900, 700) === 1 && SET.glide(5, 0) === 1 &&
+      [0.1, 0.3, 0.5, 0.7, 0.9].every((u, i, a) => i === 0 || SET.glide(u * 700, 700) > SET.glide(a[i - 1] * 700, 700)) && SET.ZOOM_STEP > 0 && SET.ZOOM_STEP < 1,
+    `polar=${polar.toFixed(3)} dist=${dist.toFixed(1)}`)
+
+  // "Ask your team": a message from a pseudo-agent in the SAME store, never live, so it has no robot and never moves the roster.
+  ok('world.ask.1 a request is trimmed, its whitespace runs one space, cut at ASK_MAX; nothing at all is no request',
+    SET.askText('  fix   the\n\tbuild  ') === 'fix the build' && SET.askText('   \n ') === null && SET.askText('') === null && SET.askText('x'.repeat(SET.ASK_MAX + 50)).length === SET.ASK_MAX)
+  const before = W.getAgentIds().length
+  const okA = W.postTeamAsk('  Audit   the auth paths ', 5000)
+  const okB = W.postTeamAsk('second request', 6000)
+  const empty = W.postTeamAsk('   ', 7000)
+  const rec = W.getAgent(SET.ASK_AGENT_ID)
+  const ev0 = SET.askEvent('x', 3, 9)
+  ok('world.ask.2 posting writes message events into the event store under ONE pseudo-agent with its own strictly rising seq — the contract accepts them, an empty request writes nothing and spends no seq, and the pseudo-agent is never live so it never gets a robot or a legend entry',
+    okA === true && okB === true && empty === false && W.getAgentIds().length === before + 1 && rec !== undefined && rec.events.length === 2 &&
+      rec.events[0].seq + 1 === rec.events[1].seq && rec.events.every((e) => e.type === 'message' && e.agentId === SET.ASK_AGENT_ID) && rec.name === SET.ASK_NAME &&
+      rec.events[0].payload.text === 'Audit the auth paths' && C.isAgentEvent(ev0) && SET.askEvent('  ', 1, 1) === null &&
+      Z.isLiveStatus(rec.status) === false && rec.status === 'idle')
+  ok('world.ask.3 the whiteboard says the LATEST request with when it was posted, and before any it says what the board is for',
+    SET.boardCard(rec).body === 'second request' && SET.boardCard(rec).stamp === 6000 && SET.boardCard(rec).title === 'Request' &&
+      SET.boardCard(undefined).stamp === null && SET.boardCard(undefined).title === 'Board' && SET.boardCard({ events: [] }).stamp === null &&
+      SET.boardCard({ events: [{ agentId: 'a', seq: 1, ts: 1, type: 'thought', payload: { text: 'hm' } }] }).stamp === null)
+
+  // The legend: the live agents, in roster order, in the colour their robot wears.
+  const legend = SET.legendEntries(rosterOf(11))
+  const hsl = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; return { l, s: mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)) } }
+  ok('world.legend.1 the legend names the first LEGEND_MAX live agents in roster order with a candy-saturated dot, says how many more there were, and an unreadable colour is left alone',
+    legend.shown.length === SET.LEGEND_MAX && legend.more === 3 && legend.shown[0].agentId === 's0' && legend.shown.every((e) => /^#[0-9a-f]{6}$/.test(e.color) && hsl(e.color).s > 0.7 && hsl(e.color).l >= 0.44 && hsl(e.color).l <= 0.6) &&
+      SET.legendEntries([]).shown.length === 0 && SET.legendEntries(rosterOf(3)).more === 0 && SET.candyHex('hsl(1,2%,3%)') === 'hsl(1,2%,3%)')
+
+  // The chrome: DOM only, wired to the camera and the store, and honest about what the pill does.
+  const chrome = code('WorldChrome.tsx'), chromeRaw = text('WorldChrome.tsx'), view = code('WorldView.tsx')
+  ok('world.chrome.1 the overlay is plain DOM (no three, fiber or drei — it is not in the scene\'s importer set), reads the LIVE roster for its legend, posts through the store, says where the post goes beside the field, and every control has a name',
+    !/from '(?:three|@react-three\/[^']*)/.test(chrome) && /useRoster\(\)/.test(chrome) && /legendEntries\(roster\)/.test(chrome) && /postTeamAsk\(draft\)/.test(chrome) &&
+      /Posts to the board/.test(chrome) && /aria-label="Ask your team"/.test(chrome) && /aria-label="Zoom in"/.test(chrome) && /aria-label="Zoom out"/.test(chrome) &&
+      /camera\.current\?\.fit\(\)/.test(chrome) && /camera\.current\?\.zoom\(1\)/.test(chrome) && /camera\.current\?\.zoom\(-1\)/.test(chrome) && />Fit room</.test(chrome) &&
+      /role="status"/.test(chrome) && /event\.key !== 'Escape'/.test(chrome) && /event\.stopPropagation\(\)/.test(chrome) && !/window\.canvas/.test(chromeRaw))
+  ok('world.chrome.2 the chrome sits over the card layer (later in the DOM), and the camera buttons reach the rig through ONE CameraApi ref the rig fills and clears',
+    view.indexOf('className="world-view__cards"') > 0 && view.indexOf('<WorldChrome camera={camera} />') > view.indexOf('className="world-view__cards"') &&
+      /api\.current = \{/.test(view) && /return \(\) => \{ api\.current = null \}/.test(view) && /api=\{camera\}/.test(view))
+  const stageLook = code('WorldPlatform.tsx')
+  ok('world.studio.1 the canvas is a lit studio: ACES tone mapping and NOT `flat`, percentage-closer shadows (three r186 removed PCFSoft — `true` and "soft" log a warning and fall back), a key light that casts into a shadow camera sized to the room, the studio ground as the background, the capped pixel ratio and no contact-shadow pass',
+    /toneMapping: THREE\.ACESFilmicToneMapping/.test(view) && !/<Canvas[^>]*\bflat\b/.test(view) && /shadows="percentage"/.test(view) && !/shadows=\{true\}|shadows="soft"|<Canvas[^>]*\bshadows\s/.test(view) &&
+      /<directionalLight\s[^>]*castShadow/.test(view.replace(/\s+/g, ' ')) && /cam\.updateProjectionMatrix\(\)/.test(view) && /<color attach="background" args=\{\[STUDIO\.ground\]\} \/>/.test(view) &&
+      PAL.STUDIO.ground === '#eef0f3' && /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && !/ContactShadows/.test(view) && /info\.autoReset = false/.test(view) &&
+      /maxPolarAngle=\{VIEW\.maxPolar\}/.test(view) && /minPolarAngle=\{VIEW\.minPolar\}/.test(view))
+  ok('world.studio.2 the platform is a drei RoundedBox, and its trim is two unlit bands on its top: a bright core and a NORMALLY-blended halo (additive over a pale slab clips to white and the glow vanishes), neither tone-mapped, laid above the slab\'s top (y = 0, the floor)',
+    /<RoundedBox args=\{\[half \* 2, SLAB\.thickness, half \* 2\]\}/.test(stageLook) && /castShadow receiveShadow/.test(stageLook) && !/AdditiveBlending/.test(stageLook) &&
+      (stageLook.match(/toneMapped=\{false\}/g) ?? []).length >= 2 && /vertexColors transparent/.test(stageLook) && /depthWrite=\{false\}/.test(stageLook) && /position=\{\[0, -SLAB\.thickness \/ 2, 0\]\}/.test(stageLook) &&
+      /y=\{0\.012\}/.test(stageLook))
+  const robotSrc = code('WorldRobot.tsx'), officeSrc = code('WorldOffice.tsx'), propsSrc = code('WorldProps.tsx')
+  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk parts, the table, the stools and the board — and the cubes do NOT (they float high and drift; a moving shadow cluster would cost an instanced shadow pass for nothing)',
+    (robotSrc.match(/castShadow/g) ?? []).length === 6 && (officeSrc.match(/castShadow/g) ?? []).length >= 5 && (propsSrc.match(/castShadow/g) ?? []).length >= 4 &&
+      !/<instancedMesh[^>]*castShadow/.test(propsSrc) && /frustumCulled=\{false\}/.test(propsSrc))
+  ok('world.studio.4 the table is a black clearcoat plate with the robots\' RoomEnvironment on THIS material (never scene.environment), a cyan edge line in the same TrimLine as the platform, and the zone label floats over only the FIRST desk',
+    /<meshPhysicalMaterial color=\{STUDIO\.tableTop\}[^>]*clearcoat=\{1\}[^>]*envMap=\{env\}/.test(officeSrc) && /studioEnv\(gl\)/.test(officeSrc) && /<TrimLine path=\{line\}/.test(officeSrc) &&
+      /label=\{station\.agentId === first \? 'DESK 01' : null\}/.test(officeSrc) && !/\.environment\s*=/.test(officeSrc) && PAL.STUDIO.tableTop === '#07080b')
+  const rigAt = view.indexOf('if (atRest && g && c)'), handBackAt = view.indexOf('if (c && !c.enabled)')
+  ok('world.rig.1 a Fit-room or zoom glide runs BEFORE the rig\'s hand-back at rest and disables the controls while it writes the camera — the hand-back snaps the camera to the rest pose whenever the controls are off, so a glide that ran after it would be undone on its first frame — and a move to or from the canvas ends the glide',
+    rigAt > 0 && handBackAt > rigAt && /if \(!atRest\) gliding\.current = null/.test(view) && /c\.enabled = false\n\s*const at = mix/.test(view) && /gliding\.current = null\n\s*c\.enabled = true\n\s*c\.update\(\)/.test(view) &&
+      /fit: \(\) => begin\(isoPose\(arc\.current\), ORBIT_TARGET, FIT_MS\)/.test(view))
 }
 
 const failures = results.filter((r) => !r.pass)

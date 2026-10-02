@@ -2,11 +2,11 @@ import { memo, Suspense, useEffect, useMemo, useRef, type JSX, type RefObject } 
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { getAgent, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
+import { studioEnv } from './world-gloss'
 import { agentTint, effectOf, goalOf, hopsOn, isTyping, leanOf, type Station } from './world-scene'
 import { ARRIVE_MS, easeInOutCubic, popOf, type WorldTransition } from './world-transition'
 
@@ -39,8 +39,9 @@ import { ARRIVE_MS, easeInOutCubic, popOf, type WorldTransition } from './world-
  * (1) **The gloss is a generated room, not an HDR.** A clearcoat with nothing
  *     to reflect is a flat plastic; drei's `<Environment>` would fetch an HDR
  *     from a CDN the CSP refuses. `RoomEnvironment` is built in code and
- *     prefiltered once per renderer (`studioEnv`) — and it is set on the ROBOT
- *     materials only, never `scene.environment`, which would relight the office.
+ *     prefiltered once per renderer (`studioEnv`, world-gloss.ts) — and it is set on
+ *     the glossy materials only, never `scene.environment`, which would relight
+ *     the office.
  * (2) **History is not replayed.** The event cursor starts at the record's
  *     last seq, so opening the view mid-session does not make every robot hop,
  *     wave and shake through its ring of fifty events at once.
@@ -188,21 +189,6 @@ function robotKit(): Kit {
   return kit
 }
 
-const envs = new WeakMap<THREE.WebGLRenderer, THREE.Texture>()
-/** The reflections the clearcoat needs — see (1). Built once per renderer. */
-function studioEnv(gl: THREE.WebGLRenderer): THREE.Texture {
-  let texture = envs.get(gl)
-  if (!texture) {
-    const pmrem = new THREE.PMREMGenerator(gl)
-    const room = new RoomEnvironment()
-    texture = pmrem.fromScene(room, 0.04).texture
-    room.dispose()
-    pmrem.dispose()
-    envs.set(gl, texture)
-  }
-  return texture
-}
-
 /**
  * The shell: the agent's colour (`agentTint`, the 2D canvas's hash) pushed to
  * full saturation, because the reference's toys are candy-bright and the 2D
@@ -216,7 +202,7 @@ function shellMaterial(tint: string, env: THREE.Texture): THREE.MeshPhysicalMate
   color.setHSL(hsl.h, Math.max(hsl.s, 0.82), Math.min(Math.max(hsl.l, 0.5), 0.6))
   return new THREE.MeshPhysicalMaterial({
     color, roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
-    envMap: env, envMapIntensity: 0.55
+    envMap: env, envMapIntensity: 0.4
   })
 }
 
@@ -448,21 +434,21 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
         <group ref={lean}>
           <group ref={hopper}>
             <group ref={legL} position={[-0.13, HIP_Y, 0]}>
-              <mesh geometry={k.leg} material={shell} />
+              <mesh geometry={k.leg} material={shell} castShadow />
             </group>
             <group ref={legR} position={[0.13, HIP_Y, 0]}>
-              <mesh geometry={k.leg} material={shell} />
+              <mesh geometry={k.leg} material={shell} castShadow />
             </group>
             <group ref={upper}>
-              <mesh geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} />
+              <mesh geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} castShadow />
               <group ref={armL} position={[-SHOULDER.x, SHOULDER.y, 0]}>
-                <mesh geometry={k.arm} material={shell} />
+                <mesh geometry={k.arm} material={shell} castShadow />
               </group>
               <group ref={armR} position={[SHOULDER.x, SHOULDER.y, 0]}>
-                <mesh geometry={k.arm} material={shell} />
+                <mesh geometry={k.arm} material={shell} castShadow />
               </group>
               <group ref={head} position-y={HEAD_Y}>
-                <mesh geometry={k.head} material={shell} scale={HEAD_SCALE} />
+                <mesh geometry={k.head} material={shell} scale={HEAD_SCALE} castShadow />
                 <mesh geometry={k.visor} material={k.visorMaterial} />
                 <group ref={eyes} position-y={VISOR.y + 0.012}>
                   <mesh geometry={k.halo} material={k.haloMaterial} />

@@ -350,6 +350,9 @@
   --world-stop: #d4283b;
   --world-wait: #b06d00;
   --world-rest: #8a919e;
+  /* M416. The overlay chrome over that room: the legend bar's frosted white and a button's hover wash. */
+  --world-chrome-bar:   rgba(255, 255, 255, .62);
+  --world-chrome-hover: rgba(20, 23, 29, .07);
 }
 
 :root[data-theme="dark"] {
@@ -484,6 +487,9 @@
   --world-stop: #d4283b;
   --world-wait: #b06d00;
   --world-rest: #8a919e;
+  /* M416. The overlay chrome over that room: the legend bar's frosted white and a button's hover wash. */
+  --world-chrome-bar:   rgba(255, 255, 255, .62);
+  --world-chrome-hover: rgba(20, 23, 29, .07);
 }
 
 /* Forced colours. Every boundary in this file is already a border, so the UA
@@ -10939,10 +10945,70 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* Where drei's <Html> cards mount (WorldCard's `portal`): the canvas's own box, so a card is clipped to the view and sits under the page's buttons. */
 .world-view__cards { position: absolute; inset: 0; overflow: hidden; pointer-events: none; isolation: isolate; }
 .world-view__stats {
-  position: absolute; left: var(--sp-6); bottom: var(--sp-6);
-  font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3);
+  position: absolute; left: var(--sp-6); top: var(--sp-6);
+  font-family: var(--font-mono); font-size: var(--t-xs); color: var(--world-holo-ink-2);
   pointer-events: none; user-select: none;
 }
+
+/* M416. The overlay chrome over the room, after the reference's layout: the
+   camera buttons bottom-left, the "Ask your team" pill bottom-centre, a legend
+   bar along the bottom edge. A layer of its own over the cards layer (later in
+   the DOM, so over it) that takes no pointer events but its controls', so it
+   never eats the drag that orbits the camera. The same white glass tokens as
+   the pills and cards: their ground is the lit room, in both themes. */
+.world-chrome { position: absolute; inset: 0; pointer-events: none; font-family: var(--font-ui); color: var(--world-holo-ink); }
+.world-tools {
+  position: absolute; left: var(--sp-6); bottom: calc(30px + var(--sp-5));
+  display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-1);
+  border-radius: var(--r-full); background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
+  pointer-events: auto;
+}
+.world-tools button {
+  display: grid; place-items: center; height: 32px; min-width: 32px; padding: 0;
+  border: 0; border-radius: var(--r-full); background: transparent; color: inherit; cursor: pointer;
+  font: inherit; font-size: var(--t-sm); font-weight: 500;
+}
+.world-tools .world-tools__fit { padding: 0 var(--sp-5); }
+.world-tools button:hover { background: var(--world-chrome-hover); }
+.world-tools button:focus-visible, .world-ask__send:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.world-ask {
+  position: absolute; left: 50%; bottom: calc(30px + var(--sp-5)); transform: translateX(-50%);
+  box-sizing: border-box; width: min(460px, calc(100% - 380px));
+  display: flex; align-items: center; gap: var(--sp-4); height: 44px; padding: 0 var(--sp-3) 0 var(--sp-6);
+  border-radius: var(--r-full); background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
+  pointer-events: auto;
+}
+.world-ask:focus-within { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--iris); }
+.world-ask__icon { display: grid; flex: none; color: var(--world-holo-ink-2); }
+.world-ask__field {
+  flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent;
+  color: inherit; font: inherit; font-size: var(--t-sm); font-weight: 500;
+}
+.world-ask__field::placeholder { color: var(--world-holo-ink); font-weight: 600; opacity: 1; }
+/* What the field does, said beside it: it posts to the room's board and sends nothing to a running agent. */
+.world-ask__hint { flex: none; font-size: var(--t-xs); color: var(--world-holo-ink-2); white-space: nowrap; }
+.world-ask__send {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: 50%; background: var(--world-holo-ink); color: var(--world-holo-solid); cursor: pointer;
+}
+.world-ask__send:disabled { background: var(--world-chrome-hover); color: var(--world-holo-ink-2); cursor: default; }
+.world-ask__posted {
+  position: absolute; left: 50%; bottom: calc(100% + var(--sp-3)); transform: translateX(-50%);
+  font-size: var(--t-xs); font-weight: 600; color: var(--world-go); white-space: nowrap; pointer-events: none;
+}
+.world-ask__posted:empty { display: none; }
+.world-legend {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 30px; box-sizing: border-box;
+  display: flex; align-items: center; gap: var(--sp-7); margin: 0; padding: 0 var(--sp-6);
+  list-style: none; overflow: hidden; white-space: nowrap;
+  background: var(--world-chrome-bar); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border-top: 1px solid var(--world-holo-rule);
+  font-family: var(--font-mono); font-size: var(--t-xs); color: var(--world-holo-ink-2);
+  pointer-events: none; user-select: none;
+}
+.world-legend__item { display: inline-flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.world-legend__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.world-legend__name { overflow: hidden; text-overflow: ellipsis; max-width: 20ch; }
 .world-route__note {
   position: absolute; top: var(--sp-6); left: 50%; transform: translateX(-50%);
   margin: 0; padding: var(--sp-3) var(--sp-5);

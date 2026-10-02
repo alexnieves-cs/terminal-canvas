@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { applyAgentEvent, emptyAgent, isAgentEvent, type AgentRecord, type AgentStatus, type WorldConnection } from '@shared/world-events'
 import type { CanvasBridge } from '@shared/ipc-contract'
+import { ASK_AGENT_ID, askEvent } from './world-set'
 
 /**
  * Every agent the world feed has described: a ring of its last events and the
@@ -57,6 +58,25 @@ export function ingestAgentEvents(batch: readonly unknown[]): void {
   for (const id of changed) notifyAll(agentListeners.get(id))
   if (rosterGrew) notifyAll(rosterListeners)
   notifyAll(worldListeners)
+}
+
+/** The pseudo-agent's own seq: it is the only writer of its stream, so a counter is all the contract asks. */
+let askSeq = 0
+
+/**
+ * The "Ask your team" pill's door (M416). There is no existing command for it —
+ * the app's "team ask" is the approval queue, an agent asking people, the other
+ * way round — so a request is a `message` event in this store from a
+ * pseudo-agent (`ASK_AGENT_ID`) that is never live and so never has a robot.
+ * Only the whiteboard reads it. NOTHING here dispatches to a running agent;
+ * that is a bridge call, and the scene reads the store and nothing else
+ * (`verify:world world.door.3`). Returns false for a request with nothing in it.
+ */
+export function postTeamAsk(text: string, now: number = Date.now()): boolean {
+  const event = askEvent(text, ++askSeq, now)
+  if (event === null) { askSeq--; return false }
+  ingestAgentEvents([event])
+  return agents.has(ASK_AGENT_ID)
 }
 
 let connection: WorldConnection = { state: 'live' }
