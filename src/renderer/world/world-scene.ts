@@ -25,6 +25,9 @@ export interface Slot {
   facing: number
 }
 
+/** Where a robot's head is above the floor — where a line to a file it is on starts (M423). */
+export const ROBOT_HEAD_Y = 1.2
+
 export const TABLE = {
   /** Tabletop radius. */
   radius: 1.2,
@@ -78,15 +81,30 @@ export interface Station {
   index: number
 }
 
+/**
+ * A task's stretch of the ring (M423): the angles its desks span, padded by
+ * half a desk either side, so the terrace under them reads as one place.
+ */
+export interface Zone {
+  /** The task's id. */
+  groupId: string
+  /** Angles as `ringPoint` reads them, from < to. */
+  from: number
+  to: number
+  members: readonly string[]
+}
+
 export interface StationPlan {
   conductorId: string | null
   stations: ReadonlyMap<string, Station>
   /** The arc's radius — how big a room this is, for framing the camera. */
   arcRadius: number
+  /** One per task with a desk in the room, in ring order (M423). Empty when nobody is grouped — or only one group is. */
+  zones: readonly Zone[]
 }
 
 /** Angle from the far (−z) side of the table, going round toward +x. */
-function ringPoint(angle: number, radius: number): { x: number; z: number } {
+export function ringPoint(angle: number, radius: number): { x: number; z: number } {
   return { x: Math.sin(angle) * radius, z: -Math.cos(angle) * radius }
 }
 
@@ -110,10 +128,32 @@ function seatAngle(deskAngle: number): number {
  * wander a little, by a function of its index rather than of chance, so the
  * same roster is always the same room.
  */
-export function stationPlan(roster: readonly RosterEntry[]): StationPlan {
+export function stationPlan(roster: readonly RosterEntry[], groupOf?: (agentId: string) => string | null): StationPlan {
   const conductor = roster.find(isConductor)
-  const workers = roster.filter((a) => a !== conductor)
-  const n = workers.length
+  const listed = roster.filter((a) => a !== conductor)
+  // M423: with a grouping, workers on the same task sit together — the tasks in
+  // the order their first member arrived, first-seen order within each — and a
+  // desk's width of empty floor separates one task from the next. Ungrouped
+  // agents keep their own block, after the tasks. One group (or none) is the
+  // M412 ring exactly: nothing to tell apart, so nothing moves.
+  const groups = new Map<string | null, RosterEntry[]>()
+  for (const a of listed) {
+    const g = groupOf?.(a.agentId) ?? null
+    const list = groups.get(g)
+    if (list) list.push(a)
+    else groups.set(g, [a])
+  }
+  const grouped = groupOf !== undefined && groups.size >= 2
+  const blocks = grouped ? [...groups.entries()].sort(([a], [b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0)) : [[null, listed] as [string | null, RosterEntry[]]]
+  const workers = blocks.flatMap(([, members]) => members)
+  // A slot per desk, and one empty slot between blocks.
+  const slotOf = new Map<string, number>()
+  let slot = 0
+  blocks.forEach(([, members], b) => {
+    if (b > 0) slot++
+    for (const m of members) slotOf.set(m.agentId, slot++)
+  })
+  const n = Math.max(slot, workers.length)
 
   const wanted = n > 1 ? ((n - 1) * DESK_ARC.perDesk) / DESK_ARC.radius : 0
   const spread = Math.min(wanted, DESK_ARC.maxSpread)
@@ -130,7 +170,8 @@ export function stationPlan(roster: readonly RosterEntry[]): StationPlan {
       stations.set(agent.agentId, { agentId: agent.agentId, conductor: true, seat: { ...at, facing: facingToward(at, center) }, index })
       return
     }
-    const i = workerIndex++
+    const i = slotOf.get(agent.agentId) ?? workerIndex
+    workerIndex++
     const baseAngle = n > 1 ? -spread / 2 + (spread * i) / (n - 1) : 0
     const angle = baseAngle + (n > 1 ? Math.sin(i * 1.31) * 0.05 : 0)
     const radius = arcRadius + Math.sin(i * 2.17) * 0.3
@@ -146,7 +187,17 @@ export function stationPlan(roster: readonly RosterEntry[]): StationPlan {
       index
     })
   })
-  return { conductorId: conductor?.agentId ?? null, stations, arcRadius }
+  const zones: Zone[] = []
+  if (grouped) {
+    const step = n > 1 ? spread / (n - 1) : DESK_ARC.perDesk / arcRadius
+    for (const [groupId, members] of blocks) {
+      if (groupId === null) continue
+      const slots = members.map((m) => slotOf.get(m.agentId)!)
+      const at = (k: number): number => (n > 1 ? -spread / 2 + (spread * k) / (n - 1) : 0)
+      zones.push({ groupId, from: at(Math.min(...slots)) - step / 2, to: at(Math.max(...slots)) + step / 2, members: members.map((m) => m.agentId) })
+    }
+  }
+  return { conductorId: conductor?.agentId ?? null, stations, arcRadius, zones }
 }
 
 // ── who is in the room ──────────────────────────────────────────────────────

@@ -158,72 +158,6 @@ export const TABLE_PLATE = { hx: 1.4, hz: 1.05, radius: 0.62, top: 0.78, thickne
 
 // ── the set dressing ─────────────────────────────────────────────────────────
 
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-/** Three clusters, one per cube colour (brown, teal, purple — `STUDIO.cubes`). */
-export const CUBE_CLUSTERS = [
-  { count: 26, at: [-0.52, 4.7, -0.46] },
-  { count: 24, at: [0.58, 5.0, -0.3] },
-  { count: 20, at: [0.04, 5.8, -0.84] }
-] as const
-
-/** A cluster's centre, in terms of the platform's half-width, so a bigger room spreads them. */
-export function clusterCenter(index: number, half: number): Vec3 {
-  const c = CUBE_CLUSTERS[index]!.at
-  return { x: c[0] * half, y: c[1], z: c[2] * half }
-}
-
-export interface CubeSpec {
-  /** From the cluster's centre. */
-  x: number
-  y: number
-  z: number
-  size: number
-  /** 0…2π: out of step with its neighbours. */
-  phase: number
-  /** A unit vector the cube turns about. */
-  axis: readonly [number, number, number]
-  /** rad/s. */
-  spin: number
-  /** How far it wanders, world units. */
-  drift: number
-  /** −1…1: a shade either side of the cluster's colour, so a cluster is not one flat colour. */
-  tone: number
-}
-
-/** A cluster's cubes: a loose ellipsoid, seeded by its index so the same room is the same room. */
-export function cubeField(index: number): CubeSpec[] {
-  const cluster = CUBE_CLUSTERS[index]!
-  const rnd = mulberry32(0x6a09e667 + index * 7919)
-  const out: CubeSpec[] = []
-  for (let i = 0; i < cluster.count; i++) {
-    // Rejection-sample the unit ball, then stretch it into the cluster's own shape.
-    let x = 0, y = 0, z = 0
-    do { x = rnd() * 2 - 1; y = rnd() * 2 - 1; z = rnd() * 2 - 1 } while (x * x + y * y + z * z > 1)
-    const ax = rnd() * 2 - 1, ay = rnd() * 2 - 1, az = rnd() * 2 - 1
-    const al = Math.hypot(ax, ay, az) || 1
-    out.push({
-      x: x * 2.6, y: y * 1.15, z: z * 2.2,
-      size: 0.16 + rnd() * 0.2,
-      phase: rnd() * Math.PI * 2,
-      axis: [ax / al, ay / al, az / al],
-      spin: 0.08 + rnd() * 0.22,
-      drift: 0.06 + rnd() * 0.16,
-      tone: rnd() * 2 - 1
-    })
-  }
-  return out
-}
-
 export interface Spot { x: number; z: number; facing: number }
 
 /**
@@ -336,11 +270,29 @@ export function askEvent(raw: string, seq: number, now: number): AgentEvent | nu
   return text === null ? null : { agentId: ASK_AGENT_ID, seq, ts: now, type: 'message', payload: { text }, name: ASK_NAME }
 }
 
+export interface BoardStep {
+  title: string
+  word: string
+  tone: string
+}
+
 export interface BoardCard {
   title: string
   body: string
   /** When the request was posted, or null before any was. */
   stamp: number | null
+  /** M423: the task's plan, when the board shows a task — at most `BOARD_STEPS` lines. */
+  steps?: readonly BoardStep[]
+}
+
+/**
+ * M423: the board shows the task in focus (`focusTask`) and its plan; with no
+ * task in the room it keeps M416's last request. A task with no plan yet is
+ * its title alone — the board never states a zero ("0 steps").
+ */
+export function taskBoard(task: { title: string; steps: readonly BoardStep[] } | undefined, record: Pick<AgentRecord, 'events'> | undefined): BoardCard {
+  if (task === undefined) return boardCard(record)
+  return task.steps.length > 0 ? { title: 'Plan', body: task.title, stamp: null, steps: task.steps } : { title: 'Task', body: task.title, stamp: null }
 }
 
 /** What the whiteboard's document card says: the latest request, or the board's own invitation to make one. */

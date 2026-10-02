@@ -27,8 +27,6 @@ export interface WorldPalette {
   readonly amber: string
   /** The meeting table's glossy top. */
   readonly tableTop: string
-  /** The three floating-cube clusters, brown / teal / purple (muted, like the reference's). */
-  readonly cubes: readonly [string, string, string]
   /** Ink for the labels painted onto a texture. */
   readonly ink: string
   /** The zone sign's grey (M417): a room label, quieter than any agent. */
@@ -108,7 +106,6 @@ export const STUDIO: WorldPalette = {
   cyanCore: '#a6f6ff',
   amber: '#ffb02e',
   tableTop: '#07080b',
-  cubes: ['#8a5f48', '#3d8a90', '#6b5b9c'],
   ink: '#161a22',
   zoneInk: '#868c97'
 }

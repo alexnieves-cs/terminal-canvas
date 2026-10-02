@@ -7,6 +7,9 @@ import { acesPreimage, useBloomOn } from './world-bloom'
 import { WorldChrome } from './WorldChrome'
 import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
+import { WorldStructure } from './WorldStructure'
+import { useWorldContext } from './world-context-store'
+import { taskOfAgent } from './world-structure'
 import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, createDprGovernor, DPR_MAX, DPR_MIN, type CardCandidate } from './world-perf'
 import { getAgent, getAgentIds } from './agent-world-store'
@@ -426,7 +429,11 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
   const bloom = useBloomOn()
   const leavers = useLeavers(roster, reduced)
   const held = useMemo(() => heldRoster(roster, leavers), [roster, leavers])
-  const plan = useMemo(() => stationPlan(held), [held])
+  // M423: agents on the same task sit together on one terrace; the plan re-flows when that changes.
+  const ctx = useWorldContext()
+  const groups = useMemo(() => taskOfAgent(ctx.tasks), [ctx.tasks])
+  const groupKey = useMemo(() => held.map((a) => `${a.agentId}=${groups.get(a.agentId) ?? ''}`).join(','), [held, groups])
+  const plan = useMemo(() => stationPlan(held, (id) => groups.get(id) ?? null), [held, groupKey])
   // Every station in the room, the leaving included: ONE array, because React
   // scopes keys to an array and a robot moved between two would be a remount.
   const stations = useMemo(() => [...plan.stations.values()], [plan])
@@ -474,6 +481,7 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
         <Lights extent={half + 3} />
         <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} waiting={waiting.length} />
         <TableSign waiting={waiting} layer={cards} />
+        <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} />
         {stations.map((station) => (
           <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
         ))}

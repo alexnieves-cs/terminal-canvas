@@ -51,7 +51,8 @@ buildSync({
       "  panelState: require('./src/renderer/panels/panel-state.ts'),",
       "  activity: require('./src/renderer/world/world-activity.ts'),",
       "  ctx: require('./src/renderer/world/world-context-store.ts'),",
-      "  sel: require('./src/renderer/world/world-select.ts')",
+      "  sel: require('./src/renderer/world/world-select.ts'),",
+      "  struct: require('./src/renderer/world/world-structure.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -60,7 +61,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -438,8 +439,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const files = readdirSync(dir).filter((f) => /\.tsx?$/.test(f))
   const THREE_DOOR = /from '(?:three|@react-three\/fiber|@react-three\/drei)(?:\/[^']*)?'/
   const importers = files.filter((f) => THREE_DOOR.test(read(f))).sort()
-  const SCENE = ['WorldBloom.tsx', 'WorldCard.tsx', 'WorldOffice.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx', 'WorldRobot.tsx', 'WorldView.tsx', 'world-gloss.ts']
-  ok('world.door.1 three, fiber and drei are imported by exactly the eight scene files (M416 added the platform, the props and the shared gloss; M420 the bloom composer) — never by the pure modules, the chrome, the roster hook, the palette, the store or the route (a ninth importer is how three.js reaches the first chunk)',
+  const SCENE = ['WorldBloom.tsx', 'WorldCard.tsx', 'WorldOffice.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx', 'WorldRobot.tsx', 'WorldStructure.tsx', 'WorldView.tsx', 'world-gloss.ts']
+  ok('world.door.1 three, fiber and drei are imported by exactly the nine scene files (M416 added the platform, the props and the shared gloss; M420 the bloom composer; M423 the structure — terraces, file tiles, handoff arcs) — never by the pure modules, the chrome, the roster hook, the palette, the store or the route (a ninth importer is how three.js reaches the first chunk)',
     importers.join() === SCENE.join(), importers.join())
 
   const { execFileSync } = require('node:child_process')
@@ -866,13 +867,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       SET.TRIM.inset - SET.TRIM.glowOut >= SET.SLAB.radius - 1e-9 && SET.TRIM.inset - SET.TRIM.half >= SET.SLAB.radius && SET.SLAB.radius <= SET.SLAB.thickness / 2 &&
       SET.trimPath(5.8).every(([x, z]) => Math.abs(x) <= SET.slabHalf(5.8) - SET.TRIM.inset + 1e-9 && Math.abs(z) <= SET.slabHalf(5.8) - SET.TRIM.inset + 1e-9))
 
-  // The cubes: seeded, so the same room is the same room; floating clear above the robots, their cards and the zone label.
-  const fields = SET.CUBE_CLUSTERS.map((_, i) => SET.cubeField(i))
-  const again = SET.CUBE_CLUSTERS.map((_, i) => SET.cubeField(i))
-  const lowest = Math.min(...fields.flatMap((f, i) => f.map((c) => SET.clusterCenter(i, 9).y + c.y - c.drift - c.size)))
-  ok('world.set.cubes.1 three clusters of cubes, the same every time, each cube a unit-axis spinner with a size in [0.16, 0.36], all floating above the zone label (2.55 + its height) so a drift never puts a cube through a robot or its name',
-    fields.length === 3 && JSON.stringify(fields) === JSON.stringify(again) && fields.every((f, i) => f.length === SET.CUBE_CLUSTERS[i].count) &&
-      fields.flat().every((c) => c.size >= 0.16 && c.size <= 0.36 && Math.abs(Math.hypot(...c.axis) - 1) < 1e-9 && c.spin > 0) && lowest >= 2.95, `lowest=${lowest.toFixed(2)}`)
+  // M423: the cubes are retired — the file tiles (world-structure.ts, world.tiles.*) took their place
+  // in the sky with a file behind each one. world.set.cubes.1 is retired with them, not renumbered.
+  ok('world.set.cubes.retired the decorative cube clusters are gone from the room and the palette — every object in the sky is now a file',
+    SET.CUBE_CLUSTERS === undefined && SET.cubeField === undefined && PAL.STUDIO.cubes === undefined)
 
   // The camera: a corner view looking down, never under the floor, never straight down, and the buttons only move it along its own line.
   const pose = SET.isoPose(5.8)
@@ -941,12 +939,12 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       (stageLook.match(/toneMapped=\{false\}/g) ?? []).length >= 2 && /vertexColors transparent/.test(stageLook) && /depthWrite=\{false\}/.test(stageLook) && /position=\{\[0, -SLAB\.thickness \/ 2, 0\]\}/.test(stageLook) &&
       /y=\{0\.012\}/.test(stageLook))
   const robotSrc = code('WorldRobot.tsx'), officeSrc = code('WorldOffice.tsx'), propsSrc = code('WorldProps.tsx')
-  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk parts, the table, the stools and the board — and the cubes do NOT (they float high and drift; a moving shadow cluster would cost an instanced shadow pass for nothing)',
+  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk parts, the table, the stools and the board — and the floating file tiles do NOT (M423, as the cubes they replaced: they float high and bob, and a moving shadow would cost a pass for nothing) — the terraces cast and take one',
     (robotSrc.match(/castShadow/g) ?? []).length === 6 && (officeSrc.match(/castShadow/g) ?? []).length >= 5 && (propsSrc.match(/castShadow/g) ?? []).length >= 4 &&
-      !/<instancedMesh[^>]*castShadow/.test(propsSrc) && /frustumCulled=\{false\}/.test(propsSrc))
-  ok('world.studio.4 the table is a black clearcoat plate with the robots\' RoomEnvironment on THIS material (never scene.environment), a cyan edge line in the same TrimLine as the platform, and the zone label floats over only the FIRST desk',
+      !/<instancedMesh/.test(propsSrc) && /<mesh geometry=\{geometry\} receiveShadow castShadow>/.test(code('WorldStructure.tsx')) && !/<Tile[\s\S]{0,400}castShadow/.test(code('WorldStructure.tsx').slice(code('WorldStructure.tsx').indexOf('function Tile('), code('WorldStructure.tsx').indexOf('function headOf('))))
+  ok('world.studio.4 the table is a black clearcoat plate with the robots\' RoomEnvironment on THIS material (never scene.environment), a cyan edge line in the same TrimLine as the platform, and no \'DESK 01\' (M423: a desk number named nothing; the terraces name the tasks)',
     /<meshPhysicalMaterial color=\{STUDIO\.tableTop\}[^>]*clearcoat=\{1\}[^>]*envMap=\{env\}/.test(officeSrc) && /studioEnv\(gl\)/.test(officeSrc) && /<TrimLine path=\{line\}/.test(officeSrc) &&
-      /label=\{station\.agentId === first \? 'DESK 01' : null\}/.test(officeSrc) && !/\.environment\s*=/.test(officeSrc) && PAL.STUDIO.tableTop === '#07080b')
+      !/DESK 01/.test(officeSrc) && !/ZoneLabel/.test(officeSrc) && !/\.environment\s*=/.test(officeSrc) && PAL.STUDIO.tableTop === '#07080b')
   const rigAt = view.indexOf('if (atRest && g && c)'), handBackAt = view.indexOf('if (c && !c.enabled)')
   ok('world.rig.1 a Fit-room or zoom glide runs BEFORE the rig\'s hand-back at rest and disables the controls while it writes the camera — the hand-back snaps the camera to the rest pose whenever the controls are off, so a glide that ran after it would be undone on its first frame — and a move to or from the canvas ends the glide',
     rigAt > 0 && handBackAt > rigAt && /if \(!atRest\) gliding\.current = null/.test(view) && /c\.enabled = false\n\s*const at = mix/.test(view) && /gliding\.current = null\n\s*c\.enabled = true\n\s*c\.update\(\)/.test(view) &&
@@ -1006,7 +1004,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       back.size === 0 && over.size === 0 && T.settleLeavers(none, [A, B], [A], 7, 0).size === 0 && T.settleLeavers(one, [A, C2], [C2], 1100).get('b').at === 1000 && T.settleLeavers(one, [A, C2], [C2], 1100).get('a').at === 1100)
   const view = code('src/renderer/world/WorldView.tsx'), robot = code('src/renderer/world/WorldRobot.tsx'), office = code('src/renderer/world/WorldOffice.tsx')
   ok('world.critic.leave.3 the leave is wired so it cannot remount and the room holds still: WorldView derives the leavers DURING render from the live roster (an effect would commit the unmount first), plans the room over the roster WITH the leavers so nothing re-flows until a leave is over, renders every robot and desk from ONE keyed array, ranks cards over the live alone, and the robot fades the card on the leave\'s card line while it shrinks and sinks `bob` (not `placer`, which carries the card), keeping the card it had',
-    /if \(track\.roster !== roster\) \{\s*current = \{ roster, leaving: settleLeavers\(/.test(view) && /setTrack\(current\)/.test(view) && /stationPlan\(held\)/.test(view) && /heldRoster\(roster, leavers\)/.test(view) &&
+    /if \(track\.roster !== roster\) \{\s*current = \{ roster, leaving: settleLeavers\(/.test(view) && /setTrack\(current\)/.test(view) && /stationPlan\(held, \(id\) => groups\.get\(id\) \?\? null\)/.test(view) && /heldRoster\(roster, leavers\)/.test(view) &&
       (view.match(/<WorldRobot /g) ?? []).length === 1 && /stations\.map\(\(station\) => \(\s*<WorldRobot /.test(view) && /<CardBudget stations=\{live\}/.test(view) && /leftAt=\{leftAt\.get\(station\.agentId\) \?\? null\}/.test(view) &&
       /pop\.current = shown \* \(leave\?\.card \?\? 1\)/.test(robot) && /const body = shown \* \(leave\?\.scale \?\? 1\)/.test(robot) && /bob\.current\.position\.y = -\(leave\?\.sink \?\? 0\)/.test(robot) && /if \(leftAt === null\) cardless\.current = compact/.test(robot) &&
       /compact=\{cardless\.current\}/.test(robot) && (office.match(/<Desk /g) ?? []).length === 1 && /leftAt=\{leftAt\.get\(station\.agentId\) \?\? null\}/.test(office) && /leavePose\(performance\.now\(\) - leaving\.current/.test(office))
@@ -1014,9 +1012,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   // The zone sign was the loudest thing in the wide shot.
   const props = code('src/renderer/world/WorldProps.tsx')
   const lum = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).reduce((a, b) => a + b, 0) / 3
-  ok('world.critic.label.1 the zone sign is a quiet room label, as the reference\'s are: a semibold letter-spaced word in a mid grey (lighter than the room\'s ink), on a sprite well under the robot-width it had',
-    /ctx\.font = `600 92px \$\{uiFont\(\)\}`/.test(props) && /ctx\.letterSpacing = '22px'/.test(props) && /ctx\.fillStyle = STUDIO\.zoneInk/.test(props) &&
-      /<sprite position-y=\{y\} scale=\{\[1\.5, 0\.47, 1\]\}>/.test(props) && lum(PAL.STUDIO.zoneInk) > lum(PAL.STUDIO.ink) + 80 && lum(PAL.STUDIO.zoneInk) < 180)
+  const structSrc = code('src/renderer/world/WorldStructure.tsx')
+  ok('world.critic.label.1 the room\'s signs stay quiet room labels, as the reference\'s are (M423: the zone sign is now each task\'s terrace sign): a letter-spaced title in a dark grey and its progress in the zone grey, both lighter than the room\'s ink, with a pale outline so they read over the floor',
+    /ctx\.letterSpacing = '6px'/.test(structSrc) && /ctx\.fillStyle = STUDIO\.zoneInk/.test(structSrc) && /ctx\.fillStyle = '#3a404d'/.test(structSrc) && /strokeStyle = 'rgba\(244, 246, 249, 0\.9\)'/.test(structSrc) &&
+      lum(PAL.STUDIO.zoneInk) > lum(PAL.STUDIO.ink) + 80 && lum(PAL.STUDIO.zoneInk) < 180 && lum('#3a404d') > lum(PAL.STUDIO.ink))
 
   // The shell takes the palette's colour as it is: a saturation push turns the white and graphite robots into colours.
   ok('world.critic.shell.1 the robot\'s shell is its tint AS IS — no HSL push (which would make the white robot blue-grey and the graphite one mud) — and the robot, its desk screen and its legend dot all read the store\'s first-seen order',
@@ -1215,6 +1214,91 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /\{picked \? <mesh geometry=\{k\.pick\}/.test(robot) && /\.world-tag\[data-picked\] \.world-pill/.test(styles))
   ok('world.pill.act.1 the pill says what the hands are on — a room verb and its glyph beside the name — and the card re-reads it once a second with the badge, because a call goes stale with the clock',
     /verb !== null \? <span className="world-pill__act">/.test(card) && /activityOf\(rec, Date\.now\(\)\) !== doing\.current/.test(card) && /data-activity=\{activity\}/.test(card))
+}
+
+// ── M423: the room's structure ───────────────────────────────────────────────
+{
+  const people = (...ids) => ids.map((agentId) => ({ agentId, name: agentId }))
+  const roster = people('a', 'b', 'c', 'd', 'e')
+  const g = { a: 't1', c: 't1', b: 't2', d: 't2' }
+  const plan = Z.stationPlan(roster, (id) => g[id] ?? null)
+  const plain = Z.stationPlan(roster)
+  const one = Z.stationPlan(roster, () => 't1')
+  const ang = (p, id) => Math.atan2(p.stations.get(id).desk.x, -p.stations.get(id).desk.z)
+  const order = ['a', 'b', 'c', 'd', 'e'].sort((x, y) => ang(plan, x) - ang(plan, y))
+  ok('world.zone.1 agents on the same task sit together — tasks in the order their first member arrived, first-seen within each, the ungrouped after them — with one desk of empty floor between tasks; one task (or none) is the M412 ring exactly, nothing moves',
+    order.join('') === 'acbde' && plan.zones.length === 2 && plan.zones[0].groupId === 't1' && plan.zones[0].members.join() === 'a,c' && plan.zones[1].members.join() === 'b,d' &&
+      plan.zones.every((z) => z.from < z.to) && plan.zones[0].to <= plan.zones[1].from + 1e-9 &&
+      JSON.stringify([...one.stations.values()]) === JSON.stringify([...plain.stations.values()]) && one.zones.length === 0 && plain.zones.length === 0,
+    order.join(''))
+  const gap = Math.abs(ang(plan, 'b') - ang(plan, 'c'))
+  const within = Math.abs(ang(plan, 'c') - ang(plan, 'a'))
+  ok('world.zone.2 the gap between two tasks is a whole desk wider than the step within one (two steps, less the ring\'s ±0.05 rad wander), and every desk of a task lies inside its terrace\'s span',
+    gap > within * 1.5 && plan.zones.every((z) => z.members.every((m) => { const a = ang(plan, m); return a > z.from && a < z.to })), `gap=${gap.toFixed(3)} within=${within.toFixed(3)}`)
+  const outline = ST.terraceOutline(plan.zones[0], plan.arcRadius, 8)
+  const radii = outline.map(([x, z]) => Math.hypot(x, z))
+  ok('world.zone.3 a terrace is the annular sector under its desks — inside the desks to past the robots behind them — and its sign stands just outside it',
+    outline.length === 18 && Math.max(...radii) <= plan.arcRadius + ST.TERRACE.outer + 1e-9 && Math.min(...radii) >= plan.arcRadius - ST.TERRACE.inner - 1e-9 &&
+      ST.TERRACE.outer > Z.DESK_ARC.standBehind + 0.3 && Math.hypot(ST.terraceSignSpot(plan.zones[0], plan.arcRadius).x, ST.terraceSignSpot(plan.zones[0], plan.arcRadius).z) > plan.arcRadius + ST.TERRACE.outer)
+  ok('world.zone.4 a terrace says its task and how far the plan has got — never a zero (a task with no plan is its title alone) — and an agent sits with the first task that lists it',
+    JSON.stringify(ST.terraceLine({ title: 'Auth', steps: [{ tone: 'done', word: 'Verified' }, { tone: 'working', word: 'Working' }] }, 'x')) === JSON.stringify({ title: 'Auth', progress: '1/2 steps' }) &&
+      ST.terraceLine({ title: 'Auth', steps: [] }, 'x').progress === null && ST.terraceLine(undefined, 'Task 1').title === 'Task 1' &&
+      ST.taskOfAgent([{ id: 'x', members: ['a'] }, { id: 'y', members: ['a', 'b'] }]).get('a') === 'x')
+
+  // The file tiles.
+  const call = (agentId, seq, tool, path, callId, ts = 1000 + seq) => ({ agentId, seq, ts, type: 'tool_call', payload: { tool, summary: `${tool} ${path}`, status: 'started', path, callId } })
+  const done = (agentId, seq, callId) => ({ agentId, seq, ts: 1000 + seq, type: 'tool_result', payload: { tool: 'Edit', summary: '', status: 'done', callId } })
+  const recs = [
+    { agentId: 'a', events: [call('a', 1, 'Edit', 'src/auth/session.ts', 'a1'), done('a', 2, 'a1'), call('a', 3, 'Read', 'src/x.ts', 'a3')] },
+    { agentId: 'b', events: [call('b', 4, 'Read', 'src/auth/session.ts', 'b1'), done('b', 5, 'b1'), call('b', 6, 'Edit', 'src/auth/session.ts', 'b2')] },
+    { agentId: 'c', events: [{ agentId: 'c', seq: 7, ts: 1007, type: 'tool_call', payload: { tool: 'Bash', summary: 'npm test', status: 'started', callId: 'c1' } }] }
+  ]
+  const tiles = ST.fileTiles(recs, 1010)
+  const session = tiles.find((t) => t.path === 'src/auth/session.ts')
+  ok('world.tiles.1 a tile per file the live agents have in play, named by its file and folder; two agents WRITING one file is a conflict (a reader is not), the conflict comes first, and a tool with no path makes no tile',
+    tiles.length === 2 && tiles[0] === session && session.conflict && session.writers.join() === 'a,b' && session.name === 'session.ts' && session.dir === 'src/auth' &&
+      session.lastAgent === 'b' && session.open.join() === 'b' && tiles[1].path === 'src/x.ts' && !tiles[1].conflict && tiles[1].open.join() === 'a',
+    JSON.stringify(tiles.map((t) => [t.path, t.conflict, t.open])))
+  const many = [{ agentId: 'a', events: Array.from({ length: 30 }, (_, i) => call('a', i, 'Read', `f${i}.ts`, `r${i}`)) }]
+  ok('world.tiles.2 the sky holds at most TILE_MAX tiles, newest first, and a conflict is never the one dropped',
+    ST.fileTiles(many, 2000).length === ST.TILE_MAX && ST.fileTiles(many, 2000)[0].path === 'f29.ts' &&
+      ST.fileTiles([...recs, ...many], 2000).some((t) => t.conflict))
+  const st = Z.stationPlan(people('a', 'b', 'c')).stations
+  const spots = ST.tileSpots(tiles, st)
+  const colTiles = ST.fileTiles([{ agentId: 'a', events: Array.from({ length: 9 }, (_, i) => call('a', i, 'Read', `g${i}.ts`, `q${i}`)) }], 3000)
+  const col = ST.tileSpots(colTiles, st)
+  const aHome = st.get('a').home
+  ok('world.tiles.3 a file floats over the desk of whoever touched it last, outward from the table and clear above the robot\'s pill and card; a column is TILE_COLUMN tall at most; a conflict floats over the table; a tile whose agent left the room is not placed',
+    spots.get('src/auth/session.ts').y === ST.CONFLICT_Y && Math.hypot(spots.get('src/auth/session.ts').x, spots.get('src/auth/session.ts').z) < 2 &&
+      Math.hypot(spots.get('src/x.ts').x, spots.get('src/x.ts').z) > Math.hypot(aHome.x, aHome.z) && spots.get('src/x.ts').y >= ST.TILE_BASE_Y && ST.TILE_BASE_Y >= 2.6 &&
+      col.size === ST.TILE_COLUMN && ST.tileSpots(tiles, new Map()).size === 1)
+
+  // The handoff arcs.
+  const arcs = ST.handoffArcs([{ from: 'a', to: 'b', firedAt: 9000 }, { from: 'a', to: 'gone', firedAt: null }, { from: 'c', to: 'c', firedAt: null }], st, 10000)
+  const mid = arcs[0].points[Math.floor(arcs[0].points.length / 2)]
+  const ends = [arcs[0].points[0], arcs[0].points.at(-1)]
+  ok('world.handoff.1 a handoff between two agents in the room is a floor curve from one desk to the other, bowed toward the table, fresh for HANDOFF_FRESH_MS after it fired — and one to an agent not in the room, or to itself, is not drawn',
+    arcs.length === 1 && arcs[0].fresh === true && Math.hypot(mid[0], mid[1]) < Math.min(...ends.map(([x, z]) => Math.hypot(x, z))) &&
+      Math.hypot(ends[0][0] - st.get('a').desk.x, ends[0][1] - st.get('a').desk.z) < 1e-9 && ST.handoffArcs([{ from: 'a', to: 'b', firedAt: 1 }], st, 1 + ST.HANDOFF_FRESH_MS + 1)[0].fresh === false)
+
+  // The board.
+  const tasks = [{ id: 'x', title: 'Docs', state: 'working', members: ['z'], steps: [] }, { id: 'y', title: 'Auth', state: 'working', members: ['a', 'b'], steps: [] }]
+  ok('world.board.1 the board shows the picked agent\'s task, else the one with the most agents in the room, else none (and then the last request) — a task with a plan is its steps, one without is its title alone',
+    ST.focusTask(tasks, 'z', ['a', 'b']).id === 'x' && ST.focusTask(tasks, null, ['a', 'b']).id === 'y' && ST.focusTask(tasks, null, []) === undefined &&
+      SET.taskBoard({ title: 'Auth', steps: [{ title: 's', word: 'Working', tone: 'working' }] }, undefined).steps.length === 1 && SET.taskBoard({ title: 'Auth', steps: [] }, undefined).steps === undefined &&
+      SET.taskBoard(undefined, undefined).title === 'Board')
+  const steps = Array.from({ length: 8 }, (_, i) => ({ id: `${i}`, title: `s${i}`, word: i < 4 ? 'Verified' : 'Waiting', tone: i < 4 ? 'done' : 'idle' }))
+  ok('world.board.2 a long plan shows BOARD_STEPS lines, opened one above the first unfinished step so a person sees where it is up to',
+    ST.boardSteps(steps).length === ST.BOARD_STEPS && ST.boardSteps(steps)[0].id === '3' && ST.boardSteps(steps.slice(0, 3)).length === 3)
+
+  // The sub-agents and the drawing's doors.
+  const dir = join(root, 'src/renderer/world')
+  const robot = readFileSync(join(dir, 'WorldRobot.tsx'), 'utf8')
+  const struct = readFileSync(join(dir, 'WorldStructure.tsx'), 'utf8')
+  ok('world.subagent.1 a robot with a delegation open has a small robot orbiting it per sub-agent (at most SUB_MAX), inside the body\'s group so it leaves with it, read from the same open calls as the activity',
+    /openDelegations\(rec, Date\.now\(\)\)\.length/.test(robot) && /const SUB_MAX = 3/.test(robot) && robot.indexOf('{subs > 0 ? (') > robot.indexOf('<group ref={bob}>'))
+  ok('world.structure.1 the structure re-renders only when a tile would look different (a string snapshot), paints a tile\'s texture only when its words change, and draws its lines as meshes (a THREE.Line is one pixel wide whatever it is told)',
+    /useSyncExternalStore\(subscribeAgentWorld, tilesKey, tilesKey\)/.test(struct) && /\}, \[texture, tile\.name, tile\.dir, tile\.conflict, tile\.writers\.length, tint\]\)/.test(struct) && !/new THREE\.Line\b|<line\b/.test(struct) && /<cylinderGeometry args=\{\[1, 1, 1, 6, 1, true\]\} \/>/.test(struct))
 }
 
 const failures = results.filter((r) => !r.pass)

@@ -8,7 +8,7 @@ import { agentTint, type Slot, type Station } from './world-scene'
 import { roundedRectPath, slabHalf, TABLE_PLATE } from './world-set'
 import { leavePose } from './world-transition'
 import { TrimLine, WorldPlatform } from './WorldPlatform'
-import { WorldProps, ZoneLabel } from './WorldProps'
+import { WorldProps } from './WorldProps'
 import type { AgentStatus } from '@shared/world-events'
 
 /**
@@ -75,10 +75,8 @@ const SCREEN_GLOW: Readonly<Record<AgentStatus, number>> = {
   working: 1.3, thinking: 0.8, idle: 0.12, waiting_approval: 0.55, error: 1.0
 }
 
-/** Where the zone label floats: above the robot's head and its name pill, so the two never overlap. */
-const LABEL_Y = 2.55
 
-function Desk({ station, label, leftAt, reduced }: { station: Station; label: string | null; leftAt: number | null; reduced: boolean }): JSX.Element | null {
+function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number | null; reduced: boolean }): JSX.Element | null {
   const slot = station.desk
   const group = useGlide(slot, leftAt, reduced)
   const screen = useRef<THREE.MeshStandardMaterial>(null)
@@ -124,7 +122,6 @@ function Desk({ station, label, leftAt, reduced }: { station: Station; label: st
         <boxGeometry args={[0.5, 0.025, 0.16]} />
         <meshStandardMaterial color={dark} roughness={0.6} />
       </mesh>
-      {label !== null ? <ZoneLabel text={label} y={LABEL_Y} /> : null}
     </group>
   )
 }
@@ -182,15 +179,13 @@ export const WorldOffice = memo(function WorldOffice({
   waiting: number
 }): JSX.Element {
   const half = slabHalf(arcRadius)
-  // "DESK 01" floats over the first desk in the room — the first station that has one (a conductor has none).
-  const first = stations.find((station) => station.desk !== undefined)?.agentId ?? null
   return (
     <group>
       <WorldPlatform arcRadius={arcRadius} />
       <MeetingTable waiting={waiting > 0} />
-      <WorldProps half={half} reduced={reduced} />
+      <WorldProps half={half} />
       {stations.map((station) => (
-        <Desk key={station.agentId} station={station} label={station.agentId === first ? 'DESK 01' : null} leftAt={leftAt.get(station.agentId) ?? null} reduced={reduced} />
+        <Desk key={station.agentId} station={station} leftAt={leftAt.get(station.agentId) ?? null} reduced={reduced} />
       ))}
     </group>
   )

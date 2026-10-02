@@ -539,13 +539,13 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
 // island; a third importer anywhere Canvas.tsx reaches puts the +2.2MB chunk
 // into startup with no error and every suite green. The check reads the source
 // AND the built chunks: the first chunk must not carry three's renderer.
-ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304), orchestration-bloom.tsx and the 3D world scene (M412: WorldOffice, WorldRobot, WorldView; M413: WorldCard useFrame; M416: WorldPlatform, WorldProps, world-gloss; M420: WorldBloom — verify:world world.door.1 pins the whole set, drei included), and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
+ok('orch-zoom.3 three and @react-three/fiber are imported only by OrchestrationCubes.tsx, OrchestrationLive.tsx (M304), orchestration-bloom.tsx and the 3D world scene (M412: WorldOffice, WorldRobot, WorldView; M413: WorldCard useFrame; M416: WorldPlatform, WorldProps, world-gloss; M420: WorldBloom; M423: WorldStructure — verify:world world.door.1 pins the whole set, drei included), and a real build keeps three.js out of the first chunk (no WebGLRenderer in any index-*.js)',
   (() => {
     const { execFileSync } = require('node:child_process')
     const hits = execFileSync('grep', ['-rlE', "from '(three|@react-three/fiber)'", join(root, 'src')], { encoding: 'utf8' })
       .trim().split('\n').filter(Boolean).map((x) => x.replace(join(root, 'src/'), '')).sort()
     const allowed = ['renderer/orchestration/OrchestrationCubes.tsx', 'renderer/orchestration/OrchestrationLive.tsx', 'renderer/orchestration/orchestration-bloom.tsx',
-      'renderer/world/WorldBloom.tsx', 'renderer/world/WorldCard.tsx', 'renderer/world/WorldOffice.tsx', 'renderer/world/WorldPlatform.tsx', 'renderer/world/WorldProps.tsx', 'renderer/world/WorldRobot.tsx', 'renderer/world/WorldView.tsx', 'renderer/world/world-gloss.ts']
+      'renderer/world/WorldBloom.tsx', 'renderer/world/WorldCard.tsx', 'renderer/world/WorldOffice.tsx', 'renderer/world/WorldPlatform.tsx', 'renderer/world/WorldProps.tsx', 'renderer/world/WorldRobot.tsx', 'renderer/world/WorldStructure.tsx', 'renderer/world/WorldView.tsx', 'renderer/world/world-gloss.ts']
     if (hits.join() !== allowed.join()) return false
     const assets = join(root, 'out/renderer/assets')
     if (!existsSync(assets)) return true // no build yet: the source half stands alone (verify-all builds before the Electron tier, not before this suite)

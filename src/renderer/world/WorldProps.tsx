@@ -1,11 +1,15 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { memo, useEffect, useMemo, type JSX } from 'react'
+import { useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { useAgent } from './agent-world-store'
 import { STUDIO } from './world-palette'
 import { unlitInk, unlitScale, useBloomOn } from './world-bloom'
-import { ASK_AGENT_ID, boardCard, boardSpot, clusterCenter, CUBE_CLUSTERS, cubeField, stoolSpots, type BoardCard } from './world-set'
+import { ASK_AGENT_ID, boardSpot, stoolSpots, taskBoard, type BoardCard } from './world-set'
+import { useWorldContext } from './world-context-store'
+import { useRoster } from './world-roster'
+import { useSelectedAgent } from './world-select'
+import { boardSteps, focusTask } from './world-structure'
 
 /**
  * The set dressing (M416): three drifting clusters of small cubes, a few
@@ -35,62 +39,6 @@ import { ASK_AGENT_ID, boardCard, boardSpot, clusterCenter, CUBE_CLUSTERS, cubeF
  */
 
 const uiFont = (): string => getComputedStyle(document.documentElement).getPropertyValue('--font-ui').trim() || 'system-ui, sans-serif'
-
-// ── the cubes ────────────────────────────────────────────────────────────────
-
-function CubeCluster({ index, half, reduced }: { index: number; half: number; reduced: boolean }): JSX.Element {
-  const mesh = useRef<THREE.InstancedMesh>(null)
-  const field = useMemo(() => cubeField(index), [index])
-  const axes = useMemo(() => field.map((c) => new THREE.Vector3(...c.axis)), [field])
-  const dummy = useMemo(() => new THREE.Object3D(), [])
-  const center = useRef(clusterCenter(index, half))
-  center.current = clusterCenter(index, half)
-
-  const write = (t: number): void => {
-    const m = mesh.current
-    if (!m) return
-    const c = center.current
-    for (let i = 0; i < field.length; i++) {
-      const f = field[i]!
-      dummy.position.set(
-        c.x + f.x + Math.sin(t * 0.21 + f.phase) * f.drift,
-        c.y + f.y + Math.sin(t * 0.33 + f.phase * 1.7) * f.drift,
-        c.z + f.z + Math.cos(t * 0.18 + f.phase * 0.6) * f.drift
-      )
-      dummy.quaternion.setFromAxisAngle(axes[i]!, f.phase + t * f.spin)
-      dummy.scale.setScalar(f.size)
-      dummy.updateMatrix()
-      m.setMatrixAt(i, dummy.matrix)
-    }
-    m.instanceMatrix.needsUpdate = true
-  }
-
-  useLayoutEffect(() => {
-    const m = mesh.current
-    if (!m) return
-    const base = new THREE.Color(STUDIO.cubes[index]!)
-    const shade = new THREE.Color()
-    field.forEach((f, i) => {
-      shade.copy(base).offsetHSL(0, 0, f.tone * 0.07)
-      m.setColorAt(i, shade)
-    })
-    if (m.instanceColor) m.instanceColor.needsUpdate = true
-    write(0)
-    // `write` closes over refs only; the cluster re-lays itself when the room's size moves its centre.
-  }, [field, index, half])
-
-  useFrame((state) => {
-    if (reduced) return
-    write(state.clock.elapsedTime)
-  })
-
-  return (
-    <instancedMesh ref={mesh} args={[undefined, undefined, CUBE_CLUSTERS[index]!.count]} frustumCulled={false}>
-      <boxGeometry args={[1, 1, 0.78]} />
-      <meshStandardMaterial roughness={0.5} metalness={0.04} />
-    </instancedMesh>
-  )
-}
 
 // ── the stools ───────────────────────────────────────────────────────────────
 
@@ -180,6 +128,30 @@ function paintBoard(canvas: HTMLCanvasElement, card: BoardCard, bloom: boolean):
     ctx.fillText(new Date(card.stamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), W - m - 44, m + 78)
     ctx.textAlign = 'left'
   }
+  if (card.steps !== undefined) {
+    // M423: the plan — the task's name, then a line per step with its word in the plan's own tone.
+    ctx.fillStyle = ink(STUDIO.ink)
+    ctx.font = `700 44px ${font}`
+    wrap(ctx, card.body, W - m * 2 - 88, 1).forEach((line) => ctx.fillText(line, m + 44, m + 146))
+    const TONE: Record<string, string> = { working: '#2f6fe0', 'needs-you': '#b06d00', exited: '#c2382f', done: '#7b8494', kind: '#2c8a4f', idle: '#9aa2b0', none: '#c3c9d2' }
+    card.steps.forEach((step, i) => {
+      const y = m + 214 + i * 50
+      ctx.fillStyle = ink(TONE[step.tone] ?? '#9aa2b0')
+      ctx.beginPath()
+      ctx.arc(m + 58, y - 12, 9, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = ink(STUDIO.ink)
+      ctx.font = `500 32px ${font}`
+      const words = wrap(ctx, step.title, W - m * 2 - 330, 1)[0] ?? ''
+      ctx.fillText(words, m + 84, y)
+      ctx.textAlign = 'right'
+      ctx.fillStyle = ink(TONE[step.tone] ?? '#7b8494')
+      ctx.font = `600 26px ${font}`
+      ctx.fillText(step.word, W - m - 44, y)
+      ctx.textAlign = 'left'
+    })
+    return
+  }
   const posted = card.stamp !== null
   ctx.fillStyle = ink(posted ? STUDIO.ink : '#8a93a3')
   ctx.font = `${posted ? 600 : 500} ${posted ? 52 : 42}px ${font}`
@@ -225,8 +197,14 @@ function useBoardTexture(card: BoardCard, bloom: boolean): THREE.CanvasTexture {
 function Whiteboard({ half }: { half: number }): JSX.Element {
   const spot = useMemo(() => boardSpot(half), [half])
   const record = useAgent(ASK_AGENT_ID)
-  // The card is rebuilt only when the record is: the same object keeps the same texture.
-  const card = useMemo(() => boardCard(record), [record])
+  // M423: the board is the plan of the task in focus — the picked agent's, else the busiest.
+  const ctx = useWorldContext()
+  const picked = useSelectedAgent()
+  const roster = useRoster()
+  const task = focusTask(ctx.tasks, picked, roster.map((a) => a.agentId))
+  const taskKey = task === undefined ? '' : JSON.stringify([task.title, task.steps])
+  // The card is rebuilt only when what it says is: the same object keeps the same texture.
+  const card = useMemo(() => taskBoard(task === undefined ? undefined : { title: task.title, steps: boardSteps(task.steps) }, record), [taskKey, record])
   const bloom = useBloomOn()
   const texture = useBoardTexture(card, bloom)
   // Unlit, so the bloom's tone map would grey the sheet and crush its words (world-bloom.ts).
@@ -256,57 +234,9 @@ function Whiteboard({ half }: { half: number }): JSX.Element {
   )
 }
 
-// ── the zone label ───────────────────────────────────────────────────────────
-
-/** A line of display type over an agent's desk — "DESK 01" — facing the camera, drawn once into a texture. */
-export function ZoneLabel({ text, y }: { text: string; y: number }): JSX.Element {
-  const texture = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 640
-    canvas.height = 200
-    const t = new THREE.CanvasTexture(canvas)
-    t.colorSpace = THREE.SRGBColorSpace
-    return t
-  }, [])
-  useEffect(() => () => texture.dispose(), [texture])
-  useEffect(() => {
-    let live = true
-    const paint = (): void => {
-      const canvas = texture.image as HTMLCanvasElement
-      const ctx = canvas.getContext('2d')
-      if (!live || !ctx) return
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      // M417: a quiet room sign, as the reference's zone words are — small,
-      // letter-spaced, a mid grey. At 700/118px in the room's ink it was the
-      // loudest thing in the wide shot, louder than any agent.
-      ctx.font = `600 92px ${uiFont()}`
-      ctx.letterSpacing = '22px'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.lineJoin = 'round'
-      // A pale outline so the word stays readable over a robot, a desk or the ground alike.
-      ctx.lineWidth = 12
-      ctx.strokeStyle = 'rgba(244, 246, 249, 0.85)'
-      ctx.strokeText(text, canvas.width / 2, canvas.height / 2 + 4)
-      ctx.fillStyle = STUDIO.zoneInk
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4)
-      texture.needsUpdate = true
-    }
-    paint()
-    void document.fonts?.ready.then(paint)
-    return () => { live = false }
-  }, [texture, text])
-  return (
-    <sprite position-y={y} scale={[1.5, 0.47, 1]}>
-      <spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
-    </sprite>
-  )
-}
-
-export const WorldProps = memo(function WorldProps({ half, reduced }: { half: number; reduced: boolean }): JSX.Element {
+export const WorldProps = memo(function WorldProps({ half }: { half: number }): JSX.Element {
   return (
     <group>
-      {CUBE_CLUSTERS.map((_, i) => <CubeCluster key={i} index={i} half={half} reduced={reduced} />)}
       <Stools half={half} />
       <Whiteboard half={half} />
     </group>

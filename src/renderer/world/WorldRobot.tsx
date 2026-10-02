@@ -1,4 +1,4 @@
-import { memo, Suspense, useEffect, useMemo, useRef, type JSX, type RefObject } from 'react'
+import { memo, Suspense, useEffect, useMemo, useRef, useState, type JSX, type RefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
@@ -8,7 +8,7 @@ import { getAgent, getAgentIds, useAgentStatus } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { glowScale, useBloomOn } from './world-bloom'
 import { studioEnv } from './world-gloss'
-import { activityOf, poseOf, POSES, type Activity, type Pose } from './world-activity'
+import { activityOf, openDelegations, poseOf, POSES, type Activity, type Pose } from './world-activity'
 import { agentTint, effectOf, goalOf, hopsOn, leanOf, type Station } from './world-scene'
 import { CLICK_SLOP_PX, selectAgent, useSelectedAgent } from './world-select'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
@@ -90,6 +90,12 @@ const WAVE_S = 1.5
 const SHAKE_S = 0.55
 const TILT_S = 1.3
 const BLINK_EVERY_S = 4.3
+
+/** M423: at most this many sub-agents orbit a robot, this small, this far out, this high. */
+const SUB_MAX = 3
+const SUB_SCALE = 0.34
+const SUB_RADIUS = 0.95
+const SUB_Y = 0.75
 
 /** Every number a pose has, damped one by one toward the activity's. */
 const POSE_KEYS = Object.keys(POSES.rest) as (keyof Pose)[]
@@ -325,6 +331,10 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
   const ring = useRef<THREE.Mesh>(null)
+  // M423: the sub-agents it has out — a small robot each, orbiting it, while the delegation is open.
+  const [subs, setSubs] = useState(0)
+  const subsRef = useRef(0)
+  const orbit = useRef<THREE.Group>(null)
   // This robot's pop (0…1), written by the frame loop and read by its card.
   const pop = useRef(0)
   // The delay is read in the frame loop, which must not be rebuilt for it.
@@ -400,6 +410,8 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     if (rec && t - st.activityCheckedAt > 0.5) {
       st.activity = activityOf(rec, Date.now())
       st.activityCheckedAt = t
+      const out = Math.min(SUB_MAX, openDelegations(rec, Date.now()).length)
+      if (out !== subsRef.current) { subsRef.current = out; setSubs(out) }
     }
 
     // ── where to be, and getting there ───────────────────────────────────
@@ -487,6 +499,10 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       head.current.rotation.y = Math.sin(t * p.scanHz * 2 + phase) * p.scan * still
       head.current.rotation.z = (thinking ? Math.sin(t * 1.5) * 0.07 : 0) + 0.32 * pulse(t, st.tiltAt, TILT_S)
     }
+    if (orbit.current) {
+      orbit.current.rotation.y = reducedRef.current ? 0 : t * 0.9
+      orbit.current.position.y = SUB_Y + Math.sin(t * 2.3 + phase) * 0.05
+    }
     if (ring.current) {
       ring.current.visible = p.ring > 0.02
       ring.current.rotation.y = t * (st.activity === 'delegate' ? 1.6 : 3.2)
@@ -513,6 +529,23 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     >
       {picked ? <mesh geometry={k.pick} material={k.ringMaterial} position-y={0.02} /> : null}
       <group ref={bob}>
+        {subs > 0 ? (
+          <group ref={orbit} position-y={SUB_Y}>
+            {Array.from({ length: subs }, (_, i) => {
+              const a = (i / subs) * Math.PI * 2
+              return (
+                <group key={i} position={[Math.sin(a) * SUB_RADIUS, 0, Math.cos(a) * SUB_RADIUS]} rotation-y={a} scale={SUB_SCALE}>
+                  <mesh geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} />
+                  <group position-y={HEAD_Y}>
+                    <mesh geometry={k.head} material={shell} scale={HEAD_SCALE} />
+                    <mesh geometry={k.visor} material={k.visorMaterial} />
+                    <mesh geometry={k.eyes} material={k.eyeMaterial} position-y={VISOR.y + 0.012} />
+                  </group>
+                </group>
+              )
+            })}
+          </group>
+        ) : null}
         <group ref={lean}>
           <group ref={hopper}>
             <group ref={legL} position={[-0.13, HIP_Y, 0]}>
