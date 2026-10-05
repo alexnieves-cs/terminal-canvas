@@ -6,7 +6,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { getAgent, getAgentIds, replayAt, useAgentStatus, worldNow } from './agent-world-store'
 import { WorldCard } from './WorldCard'
-import { glowScale, useBloomOn } from './world-bloom'
+import { glowScale } from './world-bloom'
+import { useBloomRendered } from './world-quality'
 import { studioEnv } from './world-gloss'
 import { activityOf, openDelegations, poseOf, POSES, type Activity, type Pose } from './world-activity'
 import { agentTint, effectOf, goalOf, hopsOn, leanOf, type Station } from './world-scene'
@@ -306,7 +307,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   // The eyes are unlit; with bloom on they are pushed past 1.0 so the composer
   // has something to bloom, and off they are the plain colour (world-bloom.ts).
   // The kit is shared by every robot, so each writes the same value.
-  const bloom = useBloomOn()
+  const bloom = useBloomRendered()
   useEffect(() => {
     k.eyeMaterial.color.set(EYE_COLOR).multiplyScalar(glowScale(EYE_COLOR, bloom))
   }, [k, bloom])

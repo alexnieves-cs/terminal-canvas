@@ -4,7 +4,8 @@ import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { useAgent } from './agent-world-store'
 import { STUDIO } from './world-palette'
-import { unlitInk, unlitScale, useBloomOn } from './world-bloom'
+import { unlitInk, unlitScale } from './world-bloom'
+import { useBloomRendered } from './world-quality'
 import { ASK_AGENT_ID, boardSpot, stoolSpots, taskBoard, type BoardCard } from './world-set'
 import { useWorldContext } from './world-context-store'
 import { useRoster } from './world-roster'
@@ -205,7 +206,7 @@ function Whiteboard({ half }: { half: number }): JSX.Element {
   const taskKey = task === undefined ? '' : JSON.stringify([task.title, task.steps])
   // The card is rebuilt only when what it says is: the same object keeps the same texture.
   const card = useMemo(() => taskBoard(task === undefined ? undefined : { title: task.title, steps: boardSteps(task.steps) }, record), [taskKey, record])
-  const bloom = useBloomOn()
+  const bloom = useBloomRendered()
   const texture = useBoardTexture(card, bloom)
   // Unlit, so the bloom's tone map would grey the sheet and crush its words (world-bloom.ts).
   const scale = unlitScale(bloom)

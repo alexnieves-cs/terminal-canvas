@@ -2,7 +2,8 @@ import { memo, useEffect, useMemo, type JSX } from 'react'
 import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { STUDIO } from './world-palette'
-import { glowScale, haloShare, useBloomOn } from './world-bloom'
+import { glowScale, haloShare } from './world-bloom'
+import { useBloomRendered } from './world-quality'
 import { bandBuffers, glowProfile, SLAB, slabHalf, TRIM, trimPath, type Pt } from './world-set'
 
 /**
@@ -61,7 +62,7 @@ export function TrimLine({ path, y, half, glowIn, glowOut, peak, overPale = fals
   // core would be desaturated to white by the tone map) so the composer has
   // something to bloom, and the halo band steps back to the share the bloom does not cover
   // (world-bloom.ts). Off, both are exactly M416's.
-  const bloom = useBloomOn()
+  const bloom = useBloomRendered()
   const coreColor = useMemo(() => {
     const hex = hue ?? (bloom ? STUDIO.cyan : STUDIO.cyanCore)
     return new THREE.Color(hex).multiplyScalar(glowScale(hex, bloom))

@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { WorldBloom } from './WorldBloom'
-import { acesPreimage, isBloomOn, setBloomOn, useBloomOn } from './world-bloom'
+import { acesPreimage, bloomDprCap, isBloomOn } from './world-bloom'
 import { WorldChrome } from './WorldChrome'
 import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
@@ -11,7 +11,8 @@ import { WorldStructure } from './WorldStructure'
 import { useWorldContext } from './world-context-store'
 import { taskOfAgent } from './world-structure'
 import { STUDIO } from './world-palette'
-import { cardTiers, clampDpr, createDprGovernor, DPR_MAX, DPR_MIN, statsOn, type CardCandidate } from './world-perf'
+import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
+import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionQuality, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
 import { selectAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
@@ -61,10 +62,23 @@ import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, ty
  * (4b) **`frameloop="always"`, on purpose.** The Watch lens renders on demand
  *     because it is a still image between events. Here the robots' idle
  *     motion is the point, so something moves every frame; the cost is held
- *     down by a capped pixel ratio (and `QualityGovernor`, which steps it
- *     down further if the frame rate stays low), a few hundred draw calls
- *     including the shadow pass, and a budget of full cards (`CardBudget`) —
- *     the rest are dots.
+ *     down by ONE quality tier (M430, `world-quality.ts`): `full` | `lean` |
+ *     `flat`, decided from the MEASURED frame rate by `QualityGovernor` and
+ *     never stored. A tier is a plan — whether the bloom may run, the key
+ *     light's shadow map (2048, 1024, none: `Lights`), the pixel ratio's cap
+ *     and floor, and how many full cards `CardBudget` hands out (the rest are
+ *     dots). The ratio steps down inside a tier, the tier steps down at the
+ *     ratio's floor, and neither steps back up in a session (the governor's
+ *     comment in world-quality.ts says why). The harness pins a tier through
+ *     `window.__tcWorldQuality`; the app never writes it, and
+ *     `.world-view[data-quality]` says which tier is drawn.
+ * (4c) **The pixel ratio is the Canvas's `dpr` PROP, never a `setDpr` alone.**
+ *     fiber 9.8 re-applies the prop's ratio on EVERY render of `<Canvas>`
+ *     (`applyRootConfiguration`: "the pixel ratio follows the device on every
+ *     call"), so a `setDpr` from inside the scene lasts only until this view
+ *     next re-renders — a card re-ranking, an agent arriving — and the room
+ *     silently goes back to the full ratio. The governor reports the ratio up
+ *     (`onDpr`) and this view hands it back down as the prop.
  * (5) **The orbit controls are OFF while the camera is travelling, and the
  *     rest pose is whatever the orbit last held.** OrbitControls rebuilds the
  *     camera from its own spherical state on every `update()`, so a dolly
@@ -95,7 +109,7 @@ import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, ty
  * platform's half-width plus a margin: the key's shadow camera is an
  * orthographic box over it, re-fitted when the room grows.
  */
-function Lights({ extent }: { extent: number }): JSX.Element {
+function Lights({ extent, shadowMap }: { extent: number; shadowMap: number }): JSX.Element {
   const key = useRef<THREE.DirectionalLight>(null)
   useLayoutEffect(() => {
     const light = key.current
@@ -109,6 +123,34 @@ function Lights({ extent }: { extent: number }): JSX.Element {
     cam.far = extent * 4
     cam.updateProjectionMatrix()
   }, [extent])
+  // M430: the tier's shadow map. Two facts from three r186's source, each a
+  // silent failure if missed:
+  //  - three allocates a light's map only while `shadow.map` is null
+  //    (WebGLShadowMap.render), so a new `mapSize` alone changes NOTHING — the
+  //    old target is disposed and nulled here, and the next frame allocates
+  //    one at the new size;
+  //  - the switch that makes "no shadows" cost nothing is the LIGHT's
+  //    `castShadow`, not the canvas's `shadows` (`gl.shadowMap.enabled`).
+  //    `shadowMapEnabled` is a program parameter, but the renderer's
+  //    `needsProgramChange` never compares it, so flipping the renderer's flag
+  //    alone keeps every lit material on its USE_SHADOWMAP program: still
+  //    paying the filtered lookup per fragment, against a map no longer drawn —
+  //    shadows frozen where the robots stood. Flipping the light's `castShadow`
+  //    changes the lights' hash (`numDirectionalShadows`), which bumps
+  //    `lights.state.version`, which recompiles every lit material — with no
+  //    shadow caster, so without the lookup — and leaves the shadow pass no
+  //    light to draw for (it returns on `lights.length === 0` before it
+  //    starts). No `material.needsUpdate` is needed; the recompile is one
+  //    hitch at the step, which the down-only governor pays once.
+  useLayoutEffect(() => {
+    const shadow = key.current?.shadow
+    if (!shadow) return
+    if (shadowMap > 0) shadow.mapSize.set(shadowMap, shadowMap)
+    if (shadow.map) {
+      shadow.map.dispose()
+      shadow.map = null
+    }
+  }, [shadowMap])
   return (
     <>
       <hemisphereLight args={['#ffffff', '#c3cad6', 0.95]} />
@@ -116,9 +158,7 @@ function Lights({ extent }: { extent: number }): JSX.Element {
         ref={key}
         position={[extent * 0.7, extent * 1.5, extent * 0.55]}
         intensity={1.7}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        castShadow={shadowMap > 0}
         shadow-bias={-0.0005}
         shadow-normalBias={0.04}
         shadow-radius={3.5}
@@ -297,7 +337,8 @@ function StatsProbe({ target }: { target: RefObject<HTMLDivElement | null> }): n
     const el = target.current
     if (el) {
       const fps = Math.round(a.frames / (now - a.since))
-      el.textContent = `${fps} fps · ${a.calls} calls · ${Math.round(a.tris / 1000)}k tris`
+      // M430: the tier and the ratio it is drawn at, so a live run can say what it measured.
+      el.textContent = `${fps} fps · ${a.calls} calls · ${Math.round(a.tris / 1000)}k tris · ${getWorldQuality()} @${state.viewport.dpr.toFixed(2)}x`
       el.dataset.fps = String(fps)
     }
     a.frames = 0
@@ -307,14 +348,48 @@ function StatsProbe({ target }: { target: RefObject<HTMLDivElement | null> }): n
 }
 
 /**
- * Steps the pixel ratio down when the frame rate stays low. Reads the same
- * once-per-half-second window `StatsProbe` writes to the readout, but through
- * its own frame hook so neither depends on the other being mounted.
+ * The room's quality tier and pixel ratio (M430, `world-quality.ts`). Reads the
+ * same once-per-half-second window `StatsProbe` writes to the readout, but
+ * through its own frame hook so neither depends on the other being mounted.
+ *
+ * Each window it reads the harness pin, feeds the governor (unless pinned, or
+ * the window was a stall), publishes a tier step to the session's store — where
+ * the view, the cards and the materials read it — and reports the ratio to
+ * draw at UP to the view, which hands it to `<Canvas dpr>` (header, (4c)). The
+ * ratio is the governed one under the tier's cap, the display's own and, while
+ * the bloom renders, its pixel budget (`bloomDprCap`). That budget used to be
+ * applied by the composer itself; it moved here because two writers of one
+ * ratio fought — the composer's unmount put the display's ratio back over the
+ * governor's step, so a tier that dropped the bloom RAISED the fill.
  */
-function QualityGovernor(): null {
-  const setDpr = useThree((s) => s.setDpr)
-  const governor = useRef(createDprGovernor(clampDpr(window.devicePixelRatio)))
+function QualityGovernor({ onDpr, bloom }: { onDpr: (dpr: number) => void; bloom: boolean }): null {
+  const width = useThree((s) => s.size.width)
+  const height = useThree((s) => s.size.height)
+  const governor = useRef<Governor | null>(null)
+  // A reopened view starts at the session's tier: a tier that failed is not tried again.
+  governor.current ??= createQualityGovernor(window.devicePixelRatio, sessionQuality())
   const acc = useRef({ frames: 0, since: 0 })
+  const reported = useRef(-1)
+  const latest = useRef({ onDpr, width, height })
+  latest.current = { onDpr, width, height }
+
+  const apply = useCallback((): void => {
+    const g = governor.current!
+    const { onDpr: report, width: w, height: h } = latest.current
+    const tier = getWorldQuality()
+    const display = window.devicePixelRatio
+    // A pinned tier is drawn at its own cap, not wherever the governor had got to.
+    const governed = readQualityPin(harnessPin()) !== null ? Infinity : g.dpr
+    const ceiling = bloomRenders(isBloomOn(), tier) ? bloomDprCap(w, h, display) : Infinity
+    const next = worldDpr(governed, display, qualityPlan(tier), ceiling)
+    if (Math.abs(next - reported.current) < 1e-3) return
+    reported.current = next
+    report(next)
+  }, [])
+
+  // A resize, or the bloom coming or going (the person's switch or the tier), moves the budget now, not at the next window.
+  useEffect(() => { apply() }, [apply, width, height, bloom])
+
   useFrame((state) => {
     const a = acc.current
     const now = state.clock.elapsedTime
@@ -322,31 +397,64 @@ function QualityGovernor(): null {
     a.frames++
     const span = now - a.since
     if (span < 0.5) return
+    const g = governor.current!
+    const pin = readQualityPin(harnessPin())
+    pinWorldQuality(pin)
     // A window much longer than half a second means the loop stalled (a hidden
-    // window, a long model load): that is not a frame rate to act on.
-    if (span > 1.5) governor.current.gap()
+    // window, a long model load, the recompile after a tier step): that is not
+    // a frame rate to act on. Nor is a pinned tier's — the harness is measuring it.
+    if (span > 1.5 || pin !== null) g.gap()
     else {
-      const next = governor.current.observe(a.frames / span)
-      if (next !== null) setDpr(next)
-      // M427: at the floor and still slow, the bloom (the one full-frame pass) goes — for this
-      // session only; a person's own choice is the only one that is stored.
-      if (governor.current.starved() && isBloomOn()) setBloomOn(false, false)
+      const { width: w, height: h } = latest.current
+      const display = window.devicePixelRatio
+      const ceiling = bloomRenders(isBloomOn(), g.tier) ? Math.min(clampDpr(display), bloomDprCap(w, h, display)) : clampDpr(display)
+      const step = g.observe(a.frames / span, ceiling)
+      if (step !== null) stepWorldQuality(step.tier)
     }
+    apply()
     a.frames = 0
     a.since = now
   }, -1)
   return null
 }
 
+/** The harness's tier pin. The app never writes it (`world.quality.pin.1`). */
+function harnessPin(): unknown {
+  return (window as unknown as { __tcWorldQuality?: unknown }).__tcWorldQuality
+}
+
+/**
+ * A context LOST while the room is up (a GPU reset, the driver taking it back)
+ * leaves the last frame frozen on screen — three only stops drawing. The stage
+ * replaces the scene with its no-WebGL note instead. The listener goes in this
+ * effect's cleanup, which fiber runs before its own teardown loses the context
+ * on purpose (`forceContextLoss` after an unmount), so leaving the world is
+ * never reported as a loss (and the stage only acts on it while the world is on).
+ */
+function ContextWatch({ onLost }: { onLost: () => void }): null {
+  const canvas = useThree((s) => s.gl.domElement)
+  const latest = useRef(onLost)
+  latest.current = onLost
+  useEffect(() => {
+    const lost = (): void => latest.current()
+    canvas.addEventListener('webglcontextlost', lost)
+    return () => canvas.removeEventListener('webglcontextlost', lost)
+  }, [canvas])
+  return null
+}
+
 /**
  * Which agents get the FULL status card: the nearest few to the camera
- * (`cardTiers`), re-ranked four times a second and only re-rendered when the
- * set actually changes. A robot's station is its desk, not its live position —
+ * (`cardTiers`, as many as the tier's plan allows — `max`), re-ranked four
+ * times a second and only re-rendered when the set actually changes. A robot's station is its desk, not its live position —
  * a walk to the table is a few metres and would only shuffle the ranking
  * between agents that were close anyway.
  */
-function CardBudget({ stations, onChange }: { stations: readonly Station[]; onChange: (full: ReadonlySet<string>) => void }): null {
+function CardBudget({ stations, max, onChange }: { stations: readonly Station[]; max: number; onChange: (full: ReadonlySet<string>) => void }): null {
   const camera = useThree((s) => s.camera)
+  // Read at the tick: a tier step re-ranks at the next quarter second.
+  const budget = useRef(max)
+  budget.current = max
   const current = useRef<ReadonlySet<string>>(new Set())
   const last = useRef(-Infinity)
   const stationsRef = useRef(stations)
@@ -359,7 +467,7 @@ function CardBudget({ stations, onChange }: { stations: readonly Station[]; onCh
       const at = station.home ?? station.seat
       return { agentId: station.agentId, distance: Math.hypot(camera.position.x - at.x, camera.position.z - at.z) }
     })
-    const next = cardTiers(candidates, current.current)
+    const next = cardTiers(candidates, current.current, budget.current)
     if (next === current.current) return
     current.current = next
     onChange(next)
@@ -413,10 +521,15 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
   return getAgentIds().filter((id) => byId.has(id)).map((id) => byId.get(id)!)
 }
 
-export function WorldView({ transition, reduced }: { transition: WorldTransition; reduced: boolean }): JSX.Element {
+export function WorldView({ transition, reduced, onLost }: { transition: WorldTransition; reduced: boolean; onLost: () => void }): JSX.Element {
   const roster = useRoster()
   const waiting = useWaiting()
-  const bloom = useBloomOn()
+  // M430: the room's tier, and the bloom as RENDERED — the person's choice AND the tier's, never the person's bit alone.
+  const quality = useWorldQuality()
+  const tierPlan = qualityPlan(quality)
+  const bloom = useBloomRendered()
+  // The ratio the governor reports; it rides the Canvas's prop (header, (4c)).
+  const [dpr, setDpr] = useState(() => worldDpr(Infinity, window.devicePixelRatio, qualityPlan(getWorldQuality())))
   const leavers = useLeavers(roster, reduced)
   const held = useMemo(() => heldRoster(roster, leavers), [roster, leavers])
   // M423: agents on the same task sit together on one terrace; the plan re-flows when that changes.
@@ -462,17 +575,17 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
   const limit = half - 2
 
   return (
-    <div className="world-view" data-world-view>
+    <div className="world-view" data-world-view data-quality={quality}>
       <Canvas
         shadows="percentage"
-        dpr={[DPR_MIN, DPR_MAX]}
+        dpr={dpr}
         camera={{ position: [start.x, start.y, start.z], fov: VIEW.fov, near: 0.1, far: 220 }}
         // A click on empty floor lets the picked robot go (an orbit's release is not a click: fiber measures the drag).
         onPointerMissed={(event) => { if (event.type === 'click') selectAgent(null) }}
         gl={{ antialias: true, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <color attach="background" args={[ground]} />
-        <Lights extent={half + 3} />
+        <Lights extent={half + 3} shadowMap={tierPlan.shadowMap} />
         <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} waiting={waiting.length} />
         <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} />
         {stations.map((station) => (
@@ -482,8 +595,9 @@ export function WorldView({ transition, reduced }: { transition: WorldTransition
         <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} stations={stationsRef} />
         {bloom && <WorldBloom />}
         <StatsProbe target={stats} />
-        <QualityGovernor />
-        <CardBudget stations={live} onChange={setFull} />
+        <QualityGovernor onDpr={setDpr} bloom={bloom} />
+        <CardBudget stations={live} max={tierPlan.cards} onChange={setFull} />
+        <ContextWatch onLost={onLost} />
       </Canvas>
       <div className="world-view__cards" ref={cards} />
       <WorldChrome camera={camera} />
