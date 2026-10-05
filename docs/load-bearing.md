@@ -5592,3 +5592,23 @@ While a person scrubs, every record is the past room's; a rule that reads the wa
 stale call, a fresh tile) would judge a past record against now and call every agent quiet. The
 handoff arcs are the one exception — `firedAt` is live context, not a past record.
 `verify:world world.replay.5`.
+
+**A cap's hold keeps the agent's desk, though the feed calls it idle (`world-facts.ts`'s `inRoom`, `world-roster.ts`, M428).**
+Main holds an agent at a cap AFTER its turn ends: it is `ready`, it serves its queue nothing, and the
+feed says `idle` — so a roster read through `isLiveStatus` alone drops the robot the moment the hold
+begins, and the hold's lead on the card (the one blocker the room exists to show) is never seen, with
+no error anywhere. The roster asks `inRoom`: live, or held in the LIVE room. The hold is canvas
+context, so the roster subscribes to the context store as well as the feed. Not in the past room: a
+hold is a present-day fact. `verify:world world.facts.8`, `world.live.2`.
+
+**The room's `open` refuses an id it cannot land BEFORE it closes the room (`useWorldContextPublisher.ts`, `canJumpAnywhere` in `Canvas.tsx`, M429).**
+`jumpAnywhere` drops a panel id it cannot place, silently — the simulator's agents and a teammate's
+agent on another canvas have none — and `open` closed the room first, so a press threw the person onto
+an unchanged canvas. `canOpen` is the jump's own two cases asked up front; every Open affordance hides
+on it and the door guards itself for any caller that does not ask. `verify:world world.open.4`.
+
+**The second click of a double-click must not toggle the pick (`WorldRobot.tsx`'s `onClick`, `world-select.ts`'s `isRepeatClick`, M429).**
+A click on a picked robot lets it go, and a double-click is two clicks and then a `dblclick`: the first
+picks, the second un-picks, and the open fires from a robot whose card just collapsed. The click reads
+the browser's own count (`nativeEvent.detail >= 2`) and leaves a repeat alone; the double-click re-picks
+before it opens. `verify:world world.open.3`.

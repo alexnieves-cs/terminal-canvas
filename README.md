@@ -1214,6 +1214,8 @@ price of not killing something.
 | M425 | Time in the room: a journal of what the room showed, a scrubber over the last hour that shows the room as it was, and after five minutes away a list of what happened with a camera tour of each beat. [log](docs/build-log/m421-m427-world-ahead.md) |
 | M426 | The shared room: teammates' initials on the agent each is looking at, a strip that follows one with the camera, and the room telling teammates you are in it and which robot you picked — no new presence field. [log](docs/build-log/m421-m427-world-ahead.md) |
 | M427 | The World view ships: no dev gate, measured loading the room and its model under `file://` in the built renderer and in the packaged app; a GPU still slow at the pixel ratio's floor drops the bloom for the session; the first-chunk check reads the built entry. [log](docs/build-log/m421-m427-world-ahead.md) |
+| M428 | The work's own facts in the room: an agent's model, spend (of its cap), context used, branch, teammate and queue on its card up close or when picked; a cap's hold leads the card in the decision queue's own words, turns its dot to needs-you and keeps its desk; none of it in the past room. [log](docs/build-log/m428-m429-world-facts-open.md) |
+| M429 | From a robot to its panel: a double-click opens it, so does Enter on the picked robot and an Open on its card, all through the room's existing open door — and none of them for an agent with no panel to land on, which used to close the room onto nothing. [log](docs/build-log/m428-m429-world-facts-open.md) |
 
 ### What's next — the v10 run (D01–D20)
 
