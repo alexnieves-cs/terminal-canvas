@@ -364,6 +364,15 @@ export interface TrimPulse { hz: number; depth: number }
 export const TRIM_STILL: TrimPulse = { hz: 0, depth: 0 }
 
 /**
+ * Which statuses make the trim breathe. A table, not `s === 'working'`: `verify:rail state.2`
+ * keeps state words out of renderer literals (world-scene's `CAN_TYPE` is the precedent),
+ * and every status answers.
+ */
+const BREATHES: Readonly<Record<AgentStatus, boolean>> = {
+  working: true, thinking: true, idle: false, waiting_approval: false, error: false
+}
+
+/**
  * The trim follows the room's work: still while nobody is busy — the resting
  * look is M416's exactly, so an idle room is the quiet room it always was —
  * and breathing while agents work, deeper and a little quicker the larger the
@@ -375,7 +384,7 @@ export const TRIM_STILL: TrimPulse = { hz: 0, depth: 0 }
 export function trimPulse(statuses: readonly (AgentStatus | undefined)[]): TrimPulse {
   const live = statuses.filter((s) => s !== undefined && s !== 'idle')
   if (live.length === 0) return TRIM_STILL
-  const busy = live.filter((s) => s === 'working' || s === 'thinking').length
+  const busy = live.filter((s) => s !== undefined && BREATHES[s]).length
   if (busy === 0) return TRIM_STILL
   const share = busy / live.length
   return { hz: 0.3 + 0.25 * share, depth: 0.25 + 0.35 * share }
