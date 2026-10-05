@@ -5,7 +5,7 @@ import { getAgent, getAgentIds } from './agent-world-store'
 import { STUDIO } from './world-palette'
 import { studioEnv } from './world-gloss'
 import { agentTint, type Slot, type Station } from './world-scene'
-import { roundedRectPath, slabHalf, TABLE_PLATE } from './world-set'
+import { deskAccessory, roundedRectPath, slabHalf, TABLE_PLATE, type Accessory } from './world-set'
 import { leavePose } from './world-transition'
 import { TrimLine, WorldPlatform } from './WorldPlatform'
 import { WorldProps } from './WorldProps'
@@ -82,11 +82,82 @@ const SCREEN_GLOW: Readonly<Record<AgentStatus, number>> = {
 }
 
 
+/**
+ * The thing on a desk beside the screen (the richness pass): a plant, a mug, a
+ * lamp or a stack of papers, picked by the agent's seat (`deskAccessory`) so a
+ * ring of desks is not one desk repeated. Primitives in standard materials,
+ * like the rest of the furniture; they cast a shadow like the rest of it too.
+ * The colours are the room's neutrals and one leaf green — the agent's tint
+ * stays the robot's and its screen's, so a desk never claims a second owner.
+ */
+function DeskAccessory({ kind }: { kind: Accessory }): JSX.Element {
+  switch (kind) {
+    case 'plant':
+      return (
+        <group>
+          <mesh position-y={0.07} castShadow>
+            <cylinderGeometry args={[0.07, 0.055, 0.14, 16]} />
+            <meshStandardMaterial color="#e9ebef" roughness={0.6} />
+          </mesh>
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} position={[Math.sin(i * 2.1) * 0.04, 0.2 + i * 0.03, Math.cos(i * 2.1) * 0.04]} castShadow>
+              <sphereGeometry args={[0.075 - i * 0.012, 12, 10]} />
+              <meshStandardMaterial color="#5fae6e" roughness={0.7} />
+            </mesh>
+          ))}
+        </group>
+      )
+    case 'mug':
+      return (
+        <group>
+          <mesh position-y={0.055} castShadow>
+            <cylinderGeometry args={[0.05, 0.045, 0.11, 18]} />
+            <meshStandardMaterial color="#f4f5f7" roughness={0.45} />
+          </mesh>
+          <mesh position={[0.058, 0.06, 0]} rotation-y={Math.PI / 2} castShadow>
+            <torusGeometry args={[0.028, 0.009, 6, 14]} />
+            <meshStandardMaterial color="#f4f5f7" roughness={0.45} />
+          </mesh>
+        </group>
+      )
+    case 'lamp':
+      return (
+        <group>
+          <mesh position-y={0.012} castShadow>
+            <cylinderGeometry args={[0.07, 0.08, 0.024, 18]} />
+            <meshStandardMaterial color={STUDIO.dark} roughness={0.5} metalness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.14, 0]} rotation-z={0.25} castShadow>
+            <cylinderGeometry args={[0.01, 0.01, 0.26, 8]} />
+            <meshStandardMaterial color={STUDIO.dark} roughness={0.5} metalness={0.3} />
+          </mesh>
+          <mesh position={[-0.05, 0.27, 0]} rotation-z={-0.9} castShadow>
+            <coneGeometry args={[0.06, 0.09, 16, 1, true]} />
+            <meshStandardMaterial color={STUDIO.dark} roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      )
+    case 'papers':
+      return (
+        <group rotation-y={0.18}>
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} position-y={0.006 + i * 0.012} rotation-y={(i - 1) * 0.09} castShadow>
+              <boxGeometry args={[0.21, 0.01, 0.28]} />
+              <meshStandardMaterial color={i === 2 ? '#ffffff' : '#eef0f3'} roughness={0.8} />
+            </mesh>
+          ))}
+        </group>
+      )
+  }
+}
+
 function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number | null; reduced: boolean }): JSX.Element | null {
   const slot = station.desk
   const group = useGlide(slot, leftAt, reduced)
   const screen = useRef<THREE.MeshStandardMaterial>(null)
   const tint = useMemo(() => new THREE.Color(agentTint(station.agentId, getAgentIds())), [station.agentId])
+  // The seat order is append-only, so this is fixed for the session — like the tint read beside it.
+  const accessory = useMemo(() => deskAccessory(station.agentId, getAgentIds()), [station.agentId])
   const body = useMemo(() => new THREE.Color(STUDIO.desk), [])
   const side = useMemo(() => new THREE.Color(STUDIO.desk).multiplyScalar(0.86), [])
   const dark = useMemo(() => new THREE.Color(STUDIO.dark), [])
@@ -128,6 +199,10 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
         <boxGeometry args={[0.5, 0.025, 0.16]} />
         <meshStandardMaterial color={dark} roughness={0.6} />
       </mesh>
+      {/* Out at one end, clear of the screen (±0.31) and the keyboard, toward the screen's side so the robot's arms never reach into it. */}
+      <group position={[accessory.side * 0.6, DESK.top, 0.1]}>
+        <DeskAccessory kind={accessory.kind} />
+      </group>
     </group>
   )
 }
@@ -187,7 +262,7 @@ export const WorldOffice = memo(function WorldOffice({
   const half = slabHalf(arcRadius)
   return (
     <group>
-      <WorldPlatform arcRadius={arcRadius} />
+      <WorldPlatform arcRadius={arcRadius} reduced={reduced} />
       <MeetingTable waiting={waiting > 0} />
       <WorldProps half={half} />
       {stations.map((station) => (

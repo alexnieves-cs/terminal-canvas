@@ -1,5 +1,7 @@
 import type { AgentEvent, AgentRecord } from '@shared/world-events'
+import type { AgentStatus } from '@shared/world-events'
 import { agentTint, DESK_ARC, facingToward, type RosterEntry } from './world-scene'
+import { seatIndex } from './world-palette'
 import type { Vec3 } from './world-transition'
 
 /**
@@ -338,4 +340,103 @@ export interface LegendEntry {
 export function legendEntries(roster: readonly RosterEntry[], order: readonly string[], max: number = LEGEND_MAX): { shown: LegendEntry[]; more: number } {
   const shown = roster.slice(0, max).map((a) => ({ agentId: a.agentId, name: a.name, color: agentTint(a.agentId, order) }))
   return { shown, more: Math.max(0, roster.length - max) }
+}
+
+// ── the richness pass: rim, breath, contact, floor, accessories ─────────────
+
+/**
+ * The shell's rim: three's `sheen` on the robots' MeshPhysicalMaterial, a
+ * lobe that lights only at grazing angles — so the silhouette catches a pale
+ * edge against the pale slab instead of the tint running flat into it. White,
+ * and soft (`roughness`), because a tinted or tight sheen reads as a second
+ * colour painted on the outline rather than light on plastic.
+ */
+export const SHELL_RIM = { sheen: 0.55, roughness: 0.42, color: '#ffffff' } as const
+
+/** How the platform's trim breathes: `hz` cycles a second, `depth` the most it brightens (0 = still). */
+export interface TrimPulse { hz: number; depth: number }
+
+export const TRIM_STILL: TrimPulse = { hz: 0, depth: 0 }
+
+/**
+ * The trim follows the room's work: still while nobody is busy — the resting
+ * look is M416's exactly, so an idle room is the quiet room it always was —
+ * and breathing while agents work, deeper and a little quicker the larger the
+ * share of the room that is busy. `working` and `thinking` count; waiting
+ * does not, because the table already turns amber for that (M422) and two
+ * signals for one fact would compete. The slowest breath is ~0.3 Hz and the
+ * quickest under 0.6, below anything that reads as a blink or an alarm.
+ */
+export function trimPulse(statuses: readonly (AgentStatus | undefined)[]): TrimPulse {
+  const live = statuses.filter((s) => s !== undefined && s !== 'idle')
+  if (live.length === 0) return TRIM_STILL
+  const busy = live.filter((s) => s === 'working' || s === 'thinking').length
+  if (busy === 0) return TRIM_STILL
+  const share = busy / live.length
+  return { hz: 0.3 + 0.25 * share, depth: 0.25 + 0.35 * share }
+}
+
+/**
+ * The multiplier on the trim's glow at time `t` seconds: 1 at the bottom of
+ * each breath, `1 + depth` at the top. It only ever BRIGHTENS, so a still room
+ * (and prefers-reduced-motion, which holds it still) is exactly 1 — the trim
+ * as it was before it breathed.
+ */
+export function trimBreath(t: number, pulse: TrimPulse, reduced: boolean): number {
+  if (reduced || pulse.depth <= 0 || pulse.hz <= 0) return 1
+  return 1 + pulse.depth * 0.5 * (1 - Math.cos(2 * Math.PI * pulse.hz * t))
+}
+
+/**
+ * The soft shadow under each robot: a contact blob that grounds it where the
+ * key light's shadow cannot — the `flat` quality tier draws no shadow map at
+ * all, and even with one a shadow falls off to the side, leaving the feet
+ * floating. The blob follows the body: smaller and fainter as it hops off the
+ * floor, and gone with it when it pops in, leaves or sinks.
+ */
+// Tighter and denser after a look at the lit room (M431 critic): at 0.5/0.34 the key light's cast shadow drowned it and the robots read as hovering.
+export const CONTACT = { radius: 0.42, opacity: 0.5 } as const
+
+export function contactBlob(lift: number, body: number): { scale: number; opacity: number } {
+  const off = Math.min(Math.max(lift, 0) / 0.4, 1)
+  const b = Math.min(Math.max(body, 0), 1)
+  return { scale: b * (1 - 0.3 * off), opacity: CONTACT.opacity * b * (1 - 0.6 * off) }
+}
+
+/**
+ * The floor's paint: large soft tiles centred on the table, so the seams run
+ * through the room's middle and every desk ring sits on the same grid, and a
+ * faint darkening toward the lip that keeps the eye in. Painted once in code
+ * (the CSP takes no image from elsewhere) and only ever darkens, a few percent.
+ */
+export const FLOOR = { tile: 1.6, seam: 0.07, vignette: 0.09, px: 1024 } as const
+
+/**
+ * Where the seams cross a floor `span` wide, as fractions 0…1 across it: one
+ * through the middle and then every `tile` out to the edges.
+ */
+export function floorSeams(span: number, tile: number = FLOOR.tile): number[] {
+  if (!(span > 0) || !(tile > 0)) return []
+  const half = span / 2
+  const out: number[] = []
+  for (let k = -Math.floor(half / tile); k <= Math.floor(half / tile); k++) {
+    const at = (half + k * tile) / span
+    if (at > 0 && at < 1) out.push(at)
+  }
+  return out
+}
+
+/** What stands on a desk beside the screen. One per agent, so desks in a ring differ. */
+export type Accessory = 'mug' | 'plant' | 'papers' | 'lamp'
+export const ACCESSORIES: readonly Accessory[] = ['plant', 'mug', 'lamp', 'papers']
+
+/**
+ * An agent's desk accessory and which end of the desk it stands at, from its
+ * seat in the first-seen order (`seatIndex`, the same count its tint comes
+ * from) — so it never changes in a session, and neighbours differ. The side
+ * flips every full turn of the list, so the fifth desk is not the first's twin.
+ */
+export function deskAccessory(agentId: string, order: readonly string[]): { kind: Accessory; side: 1 | -1 } {
+  const i = seatIndex(agentId, order)
+  return { kind: ACCESSORIES[i % ACCESSORIES.length]!, side: Math.floor(i / ACCESSORIES.length) % 2 === 0 ? 1 : -1 }
 }

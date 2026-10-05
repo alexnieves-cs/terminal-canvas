@@ -353,6 +353,8 @@
   --world-rest: #8a919e;
   /* M416. The overlay chrome over that room: the legend bar's frosted white and a button's hover wash. */
   --world-chrome-bar:   rgba(255, 255, 255, .62);
+  --world-mask:         #fff; /* M431: an opaque stop for a mask-image — only its alpha is read */
+  --world-flat-ground:  #eef0f3; /* M431: the flat room's floor — STUDIO.ground, the lit room's own, in both themes */
   --world-chrome-hover: rgba(20, 23, 29, .07);
 }
 
@@ -491,6 +493,8 @@
   --world-rest: #8a919e;
   /* M416. The overlay chrome over that room: the legend bar's frosted white and a button's hover wash. */
   --world-chrome-bar:   rgba(255, 255, 255, .62);
+  --world-mask:         #fff; /* M431: an opaque stop for a mask-image — only its alpha is read */
+  --world-flat-ground:  #eef0f3; /* M431: the flat room's floor — STUDIO.ground, the lit room's own, in both themes */
   --world-chrome-hover: rgba(20, 23, 29, .07);
 }
 
@@ -11257,3 +11261,67 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-route__note--action button:hover { border-color: var(--fg-3); }
 .world-route__note--action button:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
 .world-route__note--action button:disabled { color: var(--fg-3); cursor: default; }
+/* M431. The FLAT room — what a machine with no WebGL gets (WorldFlat.tsx): the
+   note as a strip at the top, then the agents as a scrolling grid of tiles, each
+   a 3D card held open (the same --world-holo-* glass, on the studio's own light
+   ground). The host clears the chrome's top row (replay, the requests count,
+   teammates) and its bottom one (the Ask pill and the legend); the chrome itself
+   is the room's, absolutely over the host, and scrolls with nothing. */
+.world-flat-host {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; gap: var(--sp-5);
+  /* The chrome rows it clears: the top row's tallest control, and the Ask pill (44px) over the 30px legend. */
+  --world-flat-row: 44px;
+  --world-flat-legend: 30px;
+  padding: calc(var(--sp-6) + var(--world-flat-row)) var(--sp-6) calc(var(--world-flat-legend) + var(--sp-5) + var(--world-flat-row) + var(--sp-6));
+  background: var(--world-flat-ground);
+}
+.world-route__note--flat {
+  position: static; transform: none; align-self: center; max-width: min(720px, 100%);
+  flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: center;
+}
+/* The strip takes the room's light glass, not the theme's note surface: the flat
+   room's ground is the studio's in both themes, and a dark note on it is a slab. */
+.world-route__note--flat {
+  border-color: var(--world-holo-line); background: var(--world-holo-solid); color: var(--world-holo-ink-2);
+  box-shadow: var(--world-holo-shade);
+}
+.world-route__note--flat button { border-color: var(--world-holo-line); background: var(--world-chrome-hover); color: var(--world-holo-ink); }
+.world-route__note--flat button:hover { border-color: var(--world-holo-ink-2); }
+.world-flat { flex: 1; min-height: 0; display: flex; }
+.world-flat__grid {
+  flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: var(--sp-4) var(--sp-4) var(--sp-8); list-style: none;
+  /* A grid taller than the room fades out at its foot, so a cut-off row says there is more; the
+     bottom padding lets the last row scroll clear of the fade, and the side padding keeps the tiles' shadows. */
+  -webkit-mask-image: linear-gradient(to bottom, var(--world-mask) calc(100% - var(--sp-8)), transparent);
+  mask-image: linear-gradient(to bottom, var(--world-mask) calc(100% - var(--sp-8)), transparent);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); align-content: start; gap: var(--sp-5);
+}
+.world-flat__tile { --world-badge: var(--world-rest); }
+.world-flat__tile[data-badge="busy"] { --world-badge: var(--world-go); }
+.world-flat__tile[data-badge="quiet"],
+.world-flat__tile[data-badge="stopped"] { --world-badge: var(--world-stop); }
+.world-flat__tile[data-badge="wants-you"] { --world-badge: var(--world-wait); }
+.world-flat__tile {
+  min-width: 0; padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  border: 1px solid var(--world-holo-line); border-radius: var(--r-lg);
+  background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
+  font-family: var(--font-ui); color: var(--world-holo-ink);
+}
+/* A request is never a quiet tile, as it is never a dot in the room. */
+.world-flat__tile[data-badge="wants-you"] { box-shadow: var(--world-holo-shade), inset 0 0 0 1.5px var(--world-wait); }
+.world-flat__tile[data-picked] { box-shadow: var(--world-holo-shade), 0 0 0 2px var(--iris); }
+.world-flat__tile[data-badge="wants-you"][data-picked] { box-shadow: var(--world-holo-shade), inset 0 0 0 1.5px var(--world-wait), 0 0 0 2px var(--iris); }
+.world-flat__pick {
+  display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-width: 0;
+  margin: 0 0 var(--sp-3); padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer;
+  font: inherit; font-size: var(--t-xs); font-weight: 600; line-height: 16px; text-align: left;
+}
+.world-flat__pick:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; border-radius: var(--r-sm); }
+/* The robot's shell colour, ringed like the legend's dot (a white robot's swatch is white). */
+.world-flat__swatch { flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--world-dot-ring); }
+.world-flat__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-flat__pick .world-pill__act { margin-left: auto; }
+/* On a tile the verbs sit on light glass, not the 3D card's frosted one, so the quiet ones need a fill to read as buttons; none stretches alone. */
+.world-flat__tile .world-card__act { flex: 0 0 auto; padding: 0 var(--sp-5); background: var(--world-chrome-hover); }
+.world-flat__tile .world-card__act--go { background: var(--world-wait); }

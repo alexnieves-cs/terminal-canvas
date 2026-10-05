@@ -13,6 +13,7 @@ import { activityOf, openDelegations, poseOf, POSES, type Activity, type Pose } 
 import { agentTint, effectOf, goalOf, hopsOn, leanOf, type Station } from './world-scene'
 import { worldActions } from './world-context-store'
 import { CLICK_SLOP_PX, isRepeatClick, OPEN_HINT, openableFrom, selectAgent, useSelectedAgent } from './world-select'
+import { contactBlob, CONTACT, SHELL_RIM } from './world-set'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
@@ -114,6 +115,9 @@ interface Kit {
   ring: THREE.BufferGeometry
   /** The floor ring under the robot a person picked. */
   pick: THREE.BufferGeometry
+  /** The contact blob's quad, flat on the floor, and its soft round falloff (the richness pass). */
+  blob: THREE.BufferGeometry
+  blobTexture: THREE.Texture
   visorMaterial: THREE.MeshPhysicalMaterial
   eyeMaterial: THREE.MeshBasicMaterial
   haloMaterial: THREE.MeshBasicMaterial
@@ -132,6 +136,24 @@ function glowTexture(): THREE.Texture {
   const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32)
   grad.addColorStop(0, '#ffffff')
   grad.addColorStop(0.35, '#7a7a7a')
+  grad.addColorStop(1, '#000000')
+  g.fillStyle = grad
+  g.fillRect(0, 0, 64, 64)
+  const texture = new THREE.CanvasTexture(c)
+  texture.colorSpace = THREE.NoColorSpace
+  return texture
+}
+
+/** The contact blob's alpha: dense under the feet, gone by the edge — a smoother falloff than the eyes' halo, because a ring at its rim would read as a decal. */
+function contactTexture(): THREE.Texture {
+  const c = document.createElement('canvas')
+  c.width = 64
+  c.height = 64
+  const g = c.getContext('2d')!
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  grad.addColorStop(0, '#ffffff')
+  grad.addColorStop(0.4, '#a0a0a0')
+  grad.addColorStop(0.75, '#2a2a2a')
   grad.addColorStop(1, '#000000')
   g.fillStyle = grad
   g.fillRect(0, 0, 64, 64)
@@ -212,6 +234,8 @@ function robotKit(): Kit {
     // A broken ring (three quarters of a torus), so its turning reads at any distance.
     ring: new THREE.TorusGeometry(0.26, 0.022, 8, 40, Math.PI * 1.5).rotateX(Math.PI / 2),
     pick: new THREE.RingGeometry(0.46, 0.53, 56).rotateX(-Math.PI / 2),
+    blob: new THREE.PlaneGeometry(CONTACT.radius * 2, CONTACT.radius * 2).rotateX(-Math.PI / 2),
+    blobTexture: contactTexture(),
     visorMaterial: new THREE.MeshPhysicalMaterial({ color: '#07090d', roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.7 }),
     // Unlit and outside tone mapping: a glow that reads the same in a light or a dark room.
     eyeMaterial: new THREE.MeshBasicMaterial({ color: EYE_COLOR, toneMapped: false }),
@@ -230,7 +254,9 @@ function robotKit(): Kit {
 function shellMaterial(tint: string, env: THREE.Texture): THREE.MeshPhysicalMaterial {
   return new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(tint), roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
-    envMap: env, envMapIntensity: 0.4
+    envMap: env, envMapIntensity: 0.4,
+    // The rim (SHELL_RIM, world-set.ts): a grazing-angle lobe, so the silhouette reads against the pale slab.
+    sheen: SHELL_RIM.sheen, sheenRoughness: SHELL_RIM.roughness, sheenColor: new THREE.Color(SHELL_RIM.color)
   })
 }
 
@@ -333,6 +359,10 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
   const ring = useRef<THREE.Mesh>(null)
+  const blob = useRef<THREE.Mesh>(null)
+  // Per robot, because its opacity is this robot's hop; the texture under it is the kit's, shared.
+  const blobMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#1b2030', alphaMap: k.blobTexture, transparent: true, depthWrite: false, toneMapped: false }), [k])
+  useEffect(() => () => blobMaterial.dispose(), [blobMaterial])
   // M423: the sub-agents it has out — a small robot each, orbiting it, while the delegation is open.
   const [subs, setSubs] = useState(0)
   const subsRef = useRef(0)
@@ -478,6 +508,13 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       // Stretch on the way up, settle back as it lands.
       hopper.current.scale.set(1 - hop * 0.05, 1 + hop * 0.09, 1 - hop * 0.05)
     }
+    // The contact blob reads the body's own scale and lift, so it pops, hops and leaves with the robot.
+    if (blob.current) {
+      const b = contactBlob(hopper.current?.position.y ?? 0, body)
+      blob.current.visible = b.opacity > 0.005
+      blob.current.scale.setScalar(Math.max(b.scale, 1e-4))
+      blobMaterial.opacity = b.opacity
+    }
     const beatW = p.type * (1 - st.walkW)
     if (upper.current) {
       upper.current.position.y = Math.sin(t * 2.1 + phase) * 0.022 * (1 - st.walkW) + beatW * Math.abs(Math.sin(t * p.typeHz * 0.5)) * 0.012
@@ -564,6 +601,8 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       }}
       onPointerOut={() => { hovered.current = false; gl.domElement.style.cursor = ''; gl.domElement.title = '' }}
     >
+      {/* Under the pick ring and the slab's trim (renderOrder 0, no depth write), a few mm over the floor paint. */}
+      <mesh ref={blob} geometry={k.blob} material={blobMaterial} position-y={0.008} />
       {picked ? <mesh geometry={k.pick} material={k.ringMaterial} position-y={0.02} /> : null}
       <group ref={bob}>
         {subs > 0 ? (

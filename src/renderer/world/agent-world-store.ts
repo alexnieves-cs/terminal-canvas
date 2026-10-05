@@ -90,13 +90,17 @@ export function ingestAgentEvents(batch: readonly unknown[], arrivedAt: number =
 let askSeq = 0
 
 /**
- * The "Ask your team" pill's door (M416). There is no existing command for it —
- * the app's "team ask" is the approval queue, an agent asking people, the other
- * way round — so a request is a `message` event in this store from a
- * pseudo-agent (`ASK_AGENT_ID`) that is never live and so never has a robot.
- * Only the whiteboard reads it. NOTHING here dispatches to a running agent;
- * that is a bridge call, and the scene reads the store and nothing else
- * (`verify:world world.door.3`). Returns false for a request with nothing in it.
+ * The board's RECORD of what the "Ask your team" pill sent (M416; since M422
+ * written only after a send went). The send itself is not here: WorldChrome
+ * dispatches to the addressed agent through Canvas's door
+ * (`worldActions().send`, the composer's `agentSession.send` — a person's own
+ * words to their own agent, so it does not pass `outward`; see
+ * useWorldContextPublisher.ts), and calls this once the agent took it. A
+ * request is a `message` event in this store from a pseudo-agent
+ * (`ASK_AGENT_ID`) that is never live and so never has a robot; only the
+ * whiteboard reads it. NOTHING here dispatches — that is a bridge call, and
+ * the scene reads the store and nothing else (`verify:world world.door.3`).
+ * Returns false for a request with nothing in it.
  */
 export function postTeamAsk(text: string, now: number = Date.now()): boolean {
   const event = askEvent(text, ++askSeq, now)

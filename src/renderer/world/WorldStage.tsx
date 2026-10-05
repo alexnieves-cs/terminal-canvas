@@ -58,9 +58,22 @@ import { createWorldTransition, hostLook, WORLD_TRANSITION_MS } from './world-tr
  *     probe is `renderer/webgl-probe.ts`, shared with Orchestrate: importing
  *     Orchestrate's own copy would tie this first-chunk file to that module's
  *     whole graph.
+ * (6) **No WebGL is not no room** (M431): the probe's no, or a context lost
+ *     for good, mounts the FLAT room (`WorldFlat.tsx`, its own lazy chunk,
+ *     no three) under the note — every agent as a tile with the same words
+ *     and the same doors (answer, open, ask), as Orchestrate's flat SVG
+ *     bodies do (M293). The note stays: it says why, and the way back.
  */
 const loadWorldView = (): Promise<typeof import('./WorldView')> => import('./WorldView')
 const WorldView = /* @__PURE__ */ lazy(async () => ({ default: (await loadWorldView()).WorldView }))
+/**
+ * (6) The FLAT room (M431), for a machine with no WebGL: its own lazy chunk,
+ * plain DOM that imports none of three — so a machine that cannot draw the
+ * room fetches the room's words and doors, never the scene. Never imported
+ * statically either: the stage is in the first chunk, and the flat room
+ * carries the chrome and the card body with it.
+ */
+const WorldFlat = /* @__PURE__ */ lazy(async () => ({ default: (await import('./WorldFlat')).WorldFlat }))
 
 /**
  * The last answer the WebGL probe gave (M430): the stage asks afresh each time
@@ -223,6 +236,19 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   }
 
   if (!on && !present) return null
+  // The feed's state over the room, flat or not: lost with its reason and a retry, or empty.
+  const feedNote = connection.state === 'lost' ? (
+    // The feed's own failure, with the way out. The room stays up under it,
+    // showing the last thing it was told — a retry rebuilds the feed and says every agent again.
+    <div className="world-route__note world-route__note--stage world-route__note--action" role="alert" data-world-lost>
+      <p>The live agent feed disconnected: {connection.reason}</p>
+      <button type="button" onClick={retry} disabled={retrying}>{retrying ? 'Retrying…' : 'Retry'}</button>
+    </div>
+  ) : agents === 0 || live === 0 ? (
+    <p className="world-route__note world-route__note--stage" role="status" data-world-empty>
+      No live agents. Start one from the canvas.
+    </p>
+  ) : null
   return (
     <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-on={on ? '' : undefined}>
       {fits ? (webgl && !lost ? (
@@ -232,26 +258,24 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
               <WorldView transition={transition} reduced={reduced} onLost={onLost} />
             </Suspense>
           </WorldBoundary>
-          {connection.state === 'lost' ? (
-            // The feed's own failure, with the way out. The room stays up under it,
-            // showing the last thing it was told — a retry rebuilds the feed and says every agent again.
-            <div className="world-route__note world-route__note--stage world-route__note--action" role="alert" data-world-lost>
-              <p>The live agent feed disconnected: {connection.reason}</p>
-              <button type="button" onClick={retry} disabled={retrying}>{retrying ? 'Retrying…' : 'Retry'}</button>
-            </div>
-          ) : agents === 0 || live === 0 ? (
-            <p className="world-route__note world-route__note--stage" role="status" data-world-empty>
-              No live agents. Start one from the canvas.
-            </p>
-          ) : null}
+          {feedNote}
         </>
       ) : (
-        // (5) No scene and no lazy load: the machine gave no WebGL context, or took the room's away.
-        <div className="world-route__note world-route__note--stage world-route__note--action" role="alert" data-world-no-webgl={lost ? 'lost' : 'none'}>
-          <p>The world view needs WebGL, which this machine is not providing right now.</p>
-          {/* A lost context that did not come back by itself (WorldView's LOST_GRACE_MS) may still be given again: a retry remounts the scene with a new one. */}
-          {lost ? <button type="button" onClick={() => setLost(false)}>Try again</button> : null}
-          <button type="button" onClick={() => setWorldOn(false)}>Back to canvas</button>
+        // (5) No scene and no lazy load of it: the machine gave no WebGL context, or took the room's away.
+        // (6) The flat room instead, under a strip that says why.
+        <div className="world-flat-host" data-world-flat-host>
+          <div className="world-route__note world-route__note--flat world-route__note--action" role="alert" data-world-no-webgl={lost ? 'lost' : 'none'}>
+            <p>The world view needs WebGL, which this machine is not providing right now. The room is shown flat: every agent at work, and everything the room lets you do.</p>
+            {/* A lost context that did not come back by itself (WorldView's LOST_GRACE_MS) may still be given again: a retry remounts the scene with a new one. */}
+            {lost ? <button type="button" onClick={() => setLost(false)}>Try again</button> : null}
+            <button type="button" onClick={() => setWorldOn(false)}>Back to canvas</button>
+          </div>
+          <WorldBoundary>
+            <Suspense fallback={null}>
+              <WorldFlat />
+            </Suspense>
+          </WorldBoundary>
+          {feedNote}
         </div>
       )) : (
         // No scene, no lazy load, no WebGL context: below the width the room is a postage stamp.
