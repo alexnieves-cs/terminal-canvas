@@ -54,7 +54,9 @@ buildSync({
       "  sel: require('./src/renderer/world/world-select.ts'),",
       "  struct: require('./src/renderer/world/world-structure.ts'),",
       "  replay: require('./src/renderer/world/world-replay.ts'),",
-      "  away: require('./src/renderer/world/world-away.ts')",
+      "  away: require('./src/renderer/world/world-away.ts'),",
+      "  facts: require('./src/renderer/world/world-facts.ts'),",
+      "  session: require('./src/shared/agent-session.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -63,7 +65,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW, facts: FX, session: AS } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -377,8 +379,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.live.1 only working, thinking and waiting_approval get a robot — idle and error stay on the 2D canvas',
     statuses.filter(Z.isLiveStatus).join() === 'working,thinking,waiting_approval', statuses.filter(Z.isLiveStatus).join())
   const roster = readFileSync(join(root, 'src/renderer/world/world-roster.ts'), 'utf8')
-  ok('world.live.2 the scene roster is filtered through isLiveStatus, so a dormant or finished agent has no desk and the plan re-flows without it',
-    /isLiveStatus\(record\.status\)/.test(roster) && /\.filter\(/.test(roster))
+  // M428: through `inRoom`, which is isLiveStatus plus a cap's hold (a held agent is waiting on a person, but its feed status is idle).
+  ok('world.live.2 the scene roster is filtered through inRoom — isLiveStatus, or held at a cap in the live room — so a dormant or finished agent has no desk and the plan re-flows without it',
+    /inRoom\(record\.status, facts\[id\]\?\.held !== undefined, past\)/.test(roster) && /\.filter\(/.test(roster) && /return isLiveStatus\(status\) \|\| \(held && !past\)/.test(readFileSync(join(root, 'src/renderer/world/world-facts.ts'), 'utf8')))
 
   const near = (a, b) => Math.abs(a - b) < 1e-9
   ok('world.trans.1 easeInOutCubic is 0 at 0, 1 at 1, 1/2 at 1/2, never leaves 0…1, and only rises',
@@ -1438,6 +1441,93 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.ship.1 a GPU still slow at the pixel ratio\'s floor gives up the bloom after STARVED_WINDOWS low windows — not before the ratio has stepped down, not on a streak a good window broke — and the scene turns it off for the session only (persist=false)',
     starvedAt === PF.STARVED_WINDOWS && !early && !g3.starved() && /if \(governor\.current\.starved\(\) && isBloomOn\(\)\) setBloomOn\(false, false\)/.test(readFileSync(join(root, 'src/renderer/world/WorldView.tsx'), 'utf8')),
     `starvedAt=${starvedAt}`)
+}
+
+// ── M428: the work's own facts in the room ──────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const src = (f) => readFileSync(join(dir, f), 'utf8')
+  const meter = (m) => ({ meter: m })
+  const A = FX.agentFacts
+  ok('world.facts.1 an agent nothing knows anything about has NO facts (null, never a record of zeros), and each zero is omitted rather than said: a spend that rounds to $0.00, an empty queue, the default backend, a blank model',
+    A({}) === null && A({ queued: 0, backend: 'claude', model: '  ' }) === null && A(meter({ spentUsd: 0 })) === null && A(meter({ spentUsd: 0.004 })) === null &&
+      A({ queued: 2 }).queued === 2 && A({ backend: 'codex' }).backend === 'codex' && A({ backend: 'acp' }).backend === 'copilot (acp)',
+    JSON.stringify([A({}), A(meter({ spentUsd: 0.004 })), A({ backend: 'codex' })]))
+  ok('world.facts.2 the figures are kept at the precision the card says them — cents, whole percent, thousands — so the store\'s by-value dedupe drops a meter tick nobody could see',
+    A(meter({ spentUsd: 1.234 })).spentUsd === 1.23 && A(meter({ spentUsd: 1.236 })).spentUsd === 1.24 &&
+      JSON.stringify(A(meter({ spentUsd: 1.231, context: 124_100, window: 200_000 }))) === JSON.stringify(A(meter({ spentUsd: 1.234, context: 124_300, window: 200_000 }))),
+    JSON.stringify(A(meter({ spentUsd: 1.231, context: 124_100, window: 200_000 }))))
+  const capsCtx = { usd: 0, context: 150_000, ownUsd: false, ownContext: false }
+  ok('world.facts.3 a context percentage needs a MEASURED window — none without one (a guessed window is the confident wrong answer); with a context cap and no window it is the tokens against the cap; with neither, nothing',
+    A(meter({ context: 124_000, window: 200_000 })).contextPct === 62 && A(meter({ context: 124_000 })) === null && A(meter({ context: 124_000, window: 0 })) === null &&
+      A(meter({ context: 84_400, caps: capsCtx })).contextK === 84 && A(meter({ context: 84_400, caps: capsCtx })).capContextK === 150 &&
+      A(meter({ context: 999_000, window: 200_000 })).contextPct === 100)
+  const inspector = readFileSync(join(root, 'src/renderer/shell/inspector-fields.ts'), 'utf8')
+  ok('world.facts.4 the room\'s context figure and the Work tab\'s Window line are ONE rule (contextUsedPct, shared) — the inspector reads it too, so the two never round one meter differently',
+    AS.contextUsedPct(124_000, 200_000) === 62 && AS.contextUsedPct(300_000, 200_000) === 100 && /const used = contextUsedPct\(context, window\)/.test(inspector) &&
+      /import \{ contextUsedPct, holdWords, type CapHold, type NodeMeter \} from '@shared\/agent-session'/.test(src('world-facts.ts')))
+  const full = { model: 'gpt-5.1-codex', backend: 'codex', spentUsd: 1.2, capUsd: 5, contextPct: 62, branch: 'tc/auth-fix', owner: 'Reviewer', queued: 2 }
+  ok('world.facts.5 the fact line reads model · backend · spend (of its cap) · context · branch · teammate · queue, in that order, with money as $x.xx — and a teammate the agent is already named for is not said twice',
+    FX.factLine(full, 'api') === 'gpt-5.1-codex · codex · $1.20 of $5.00 · 62% context · on tc/auth-fix · as Reviewer · 2 queued' &&
+      FX.factLine(full, 'Reviewer · api').includes('as Reviewer') === false && FX.factLine({ spentUsd: 0.5 }) === '$0.50' &&
+      FX.factLine({ contextK: 84, capContextK: 150 }) === '84k of 150k context' && FX.factLine(undefined) === '' &&
+      !FX.factParts({ ...full, held: { unit: 'usd', spent: 2.1, limit: 2 } }).some((p) => /held/i.test(p.text)),
+    FX.factLine(full, 'api'))
+  const usd = { unit: 'usd', spent: 2.1, limit: 2 }, ctxHold = { unit: 'context', spent: 151_000, limit: 150_000, own: true }
+  ok('world.facts.6 a hold leads in the decision queue\'s own words (holdWords) standing on their own — only the leading "is " goes — so the room says a hold the way the rest of the app does',
+    FX.holdLead(usd) === 'Held at its $2.00 spend cap ($2.10 reported)' && FX.holdLead(ctxHold) === 'Held at its own 150k-token context cap (151k in the conversation)' &&
+      [usd, ctxHold].every((h) => `is ${FX.holdLead(h).charAt(0).toLowerCase()}${FX.holdLead(h).slice(1)}` === AS.holdWords(h)),
+    FX.holdLead(usd))
+  const at = (seq, type, payload) => ({ agentId: 'a', seq, ts: 1000 + seq, type, payload })
+  const rec = (status, events) => ({ status, events, lastTs: events.length ? events[events.length - 1].ts : 0, name: 'A' })
+  const H = (r, o = {}) => ST.cardHeadline(r, { now: 2000, activity: AC.activityOf(r, 2000), words: 'my words', ...o })
+  const failed = [at(1, 'tool_call', { tool: 'Bash', summary: 'npm test', status: 'started', callId: 'x' }), at(2, 'tool_result', { tool: 'Bash', summary: 'npm test', status: 'failed', detail: '1 failed', callId: 'x' })]
+  ok('world.facts.7 a hold is a BLOCKER: it takes the card\'s lead (and so the mid-distance chip) in warn amber — second, after a request naming its tool, ahead of a stop, a failure, a conflict and the agent\'s own words',
+    H(rec('idle', []), { held: usd }).text === FX.holdLead(usd) && H(rec('idle', []), { held: usd }).tone === 'warn' &&
+      H(rec('waiting_approval', []), { held: usd, approval: { toolName: 'Bash' } }).text === 'Asks to run Bash' &&
+      H(rec('error', [at(1, 'error', { message: 'boom' })]), { held: usd }).tone === 'warn' && H(rec('working', failed), { held: usd }).tone === 'warn' &&
+      H(rec('working', failed), { held: usd, partners: { file: 'b.ts', others: ['z'] } }).text === FX.holdLead(usd) && H(rec('idle', [])).tone === 'said')
+  const idle = rec('idle', [])
+  ok('world.facts.8 a held agent wears the needs-you badge (the rest layer\'s one state: amber, and its card stands at any distance like a request\'s) and keeps its desk in the LIVE room — but not in the past room, and an idle agent with no hold still leaves',
+    FX.badgeFor(idle, 2000, true).kind === 'wants-you' && FX.badgeFor(idle, 2000, true).word === PS.agentWord('wants-you').word && FX.badgeFor(idle, 2000, false).kind === 'idle' &&
+      FX.inRoom('idle', true, false) === true && FX.inRoom('idle', true, true) === false && FX.inRoom('idle', false, false) === false && FX.inRoom('working', false, true) === true && FX.inRoom('error', true, false) === true)
+
+  const card = src('WorldCard.tsx'), styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8'), roster = src('world-roster.ts')
+  const pill = (card.match(/<div className="world-pill"[\s\S]*?\n {10}<\/div>/) ?? [''])[0]
+  ok('world.facts.9 the card shows the facts on its FULL card only, CSS shows them only up close (data-tier full) or on the picked robot, and the pill carries none of them',
+    /const parts = full \? factParts\(facts, record\.name\) : \[\]/.test(card) && /className="world-card__facts" data-world-facts/.test(card) &&
+      /\.world-tag:not\(\[data-tier="full"\]\):not\(\[data-picked\]\) \.world-card__facts \{ display: none; \}/.test(styles) &&
+      pill.length > 0 && !/factParts|factLine|facts|parts/.test(pill),
+    `pill=${pill.length}`)
+  ok('world.facts.10 the PAST room shows none of it — no facts, no hold lead, no held badge, no held desk: they are present-day values (RequestBlock hides its verbs for the same reason) — and the frame loop asks the badge with the same hold the render used, or it would re-render every second',
+    /const facts = past \? undefined : ctx\.facts\[agentId\]/.test(card) && /const held = facts\?\.held/.test(card) && /const badge = badgeFor\(record, worldNow\(\), held !== undefined\)/.test(card) &&
+      /const hold = replayAt\(\) === null \? getWorldContext\(\)\.facts\[agentId\]\?\.held : undefined/.test(card) && /badgeFor\(rec, n, hold !== undefined\)/.test(card) &&
+      /const past = replayAt\(\) !== null/.test(roster) && /subscribeWorldContext\(listener\)/.test(roster))
+  const pub = src('useWorldContextPublisher.ts')
+  ok('world.facts.11 the publisher derives the facts from what Canvas already holds — the chat store\'s snapshot (meter, model, backend, queue) read NOW, the panel\'s branch and teammate through Canvas\'s own resolutions — and republishes on a chat\'s own notify while the room is up, and only then (no subscription when it is off)',
+    /facts: factsOf\(panels, input\.branchOf, input\.teammateNameOf\)/.test(pub) && /const snap = getChat\(id\)\.snapshot/.test(pub) &&
+      /\.\.\.\(snap\?\.meter === undefined \? \{\} : \{ meter: snap\.meter \}\)/.test(pub) && /queued: snap\.queued/.test(pub) &&
+      /const chatKey = on \? panels\.filter\(isChatPanel\)/.test(pub) && /if \(chatKey === ''\) return/.test(pub) && /subscribeChat\(id, republish\)/.test(pub) &&
+      /publishWorldContext\(\{ \.\.\.getWorldContext\(\), facts: factsOf\(/.test(pub))
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  ok('world.facts.12 Canvas names the branch from a terminal\'s ACTIVE worktree outcome or a chat\'s task lane (the handoff hook\'s records, never the palette\'s lazy list), and the rail and the room share one teammate-name resolution',
+    /status\?\.kind === 'running' && status\.worktree\?\.kind === 'active' \? status\.worktree\.branch : undefined/.test(canvasSrc) && /laneOfPath\(panel\.chat\.cwd, lanes\)\?\.branch/.test(canvasSrc) &&
+      /const lane = taskLaneOf\(item\.id\); return lane === undefined/.test(canvasSrc) && (canvasSrc.match(/^\s+teammateNameOf,$/gm) ?? []).length === 2)
+  let n = 0
+  const off = CTX.subscribeWorldContext(() => n++)
+  const base = { tasks: [], approvals: [], handoffs: [], peers: [] }
+  CTX.publishWorldContext({ ...base, facts: { a: A(meter({ spentUsd: 1.231 })) } })
+  CTX.publishWorldContext({ ...base, facts: { a: A(meter({ spentUsd: 1.234 })) } })
+  CTX.publishWorldContext({ ...base, facts: { a: A(meter({ spentUsd: 1.236 })) } })
+  off()
+  CTX.publishWorldContext(CTX.EMPTY_CONTEXT)
+  ok('world.facts.13 a meter tick the card would not show publishes nothing; a cent does', n === 2, `notified=${n}`)
+
+  const factsSrc = src('world-facts.ts')
+  const imports = [...factsSrc.matchAll(/^import [^\n]* from '([^']+)'/gm)].map((m) => m[1])
+  ok('world.facts.door.1 world-facts imports the app\'s SHARED vocabulary and the world\'s own pure modules only — nothing from canvas, chat, shell or presence (only the publisher reaches those), no React and no three.js — so verify:world runs every rule in plain node',
+    imports.length > 0 && imports.every((m) => /^@shared\//.test(m) || m === '@renderer/panels/panel-state' || /^\.\/world-(scene|context-store)$/.test(m)) && !THREE_DOOR_RE.test(factsSrc) && !/from 'react'/.test(factsSrc),
+    imports.join())
 }
 
 const failures = results.filter((r) => !r.pass)

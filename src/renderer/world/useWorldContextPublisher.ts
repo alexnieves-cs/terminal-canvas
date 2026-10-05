@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
-import { getChat } from '@renderer/chat/chat-store'
+import { useEffect, useRef, useState } from 'react'
+import { getChat, subscribeChat } from '@renderer/chat/chat-store'
 import { answerRequest } from '@renderer/chat/ChatConversation'
 import { edgeFiredAt } from '@renderer/canvas/useEdgeActivity'
-import { isChatPanel, type Panel } from '@renderer/panels/panels'
+import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PendingApproval } from '@renderer/shell/rail-sections'
 import { latestRoster, onRoster } from '@renderer/presence/presence-store'
+import { backendOf } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import type { PresenceRoster } from '@shared/presence'
-import { publishWorldContext, setWorldActions, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
+import { getWorldContext, publishWorldContext, setWorldActions, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
+import { agentFacts } from './world-facts'
 
 /**
  * Canvas's side of the world context (M421): one hook call in Canvas.tsx that
@@ -25,6 +27,18 @@ import { publishWorldContext, setWorldActions, type WorldContext, type WorldHand
  *   `outward`: that gate is for text LEAVING the app (`shared/outward.ts`);
  * - open → `jump`, Canvas's `jumpAnywhere` (the rail's attention door), after
  *   the room closes.
+ *
+ * M428 adds each agent's FACTS (model, spend, context, a hold, branch,
+ * teammate, queue) — read off the chat store's snapshot (main's `meter`, its
+ * `model`, `backend` and `queue`) and the panel's record, shaped by the pure
+ * `agentFacts`. Two beats publish them: Canvas's own renders (the effect
+ * below, with everything else), AND a subscription to each chat agent's
+ * store entry while the room is up. Canvas does re-render on a meter today —
+ * it reads `useChatsVersion` for its rail — but that is a fact about two
+ * unrelated readers in Canvas, and the room's spend must not go stale the day
+ * one of them is narrowed. The subscription republishes the facts alone,
+ * without rendering Canvas, and the store's by-value dedupe drops a tick the
+ * card would not show.
  */
 
 export interface PublisherInput {
@@ -39,6 +53,46 @@ export interface PublisherInput {
   /** Canvas's attention jump; the room closes first. */
   jump: (panelId: string) => void
   closeWorld: () => void
+  /** M428. The worktree branch a panel runs in, when anything knows it (a terminal's PTY result, a chat's task lane). */
+  branchOf: (panel: Panel) => string | undefined
+  /** M428. A teammate's display name, the rail's own resolution. */
+  teammateNameOf: (teammateId: string) => string | undefined
+}
+
+/** Whose facts the room keeps: the panels that can be an agent in it. */
+function isAgentPanel(panel: Panel): boolean {
+  return isChatPanel(panel) || isTerminalPanel(panel)
+}
+
+/**
+ * Every agent panel's facts, by id. A chat's come from main's snapshot as the
+ * chat store holds it NOW (`getChat`, never a render's copy); a terminal has
+ * no meter, model or queue main can measure, so its only fact is its branch.
+ * A panel nothing knows anything about has no entry.
+ */
+export function factsOf(panels: readonly Panel[], branchOf: PublisherInput['branchOf'], teammateNameOf: PublisherInput['teammateNameOf']): Record<string, WorldAgentFacts> {
+  const out: Record<string, WorldAgentFacts> = {}
+  for (const panel of panels) {
+    if (!isAgentPanel(panel)) continue
+    const id = panel.rect.id
+    const branch = branchOf(panel)
+    const facts = isChatPanel(panel)
+      ? (() => {
+          const snap = getChat(id).snapshot
+          const owner = panel.chat.teammateId === undefined ? undefined : teammateNameOf(panel.chat.teammateId)
+          return agentFacts({
+            backend: snap?.backend ?? backendOf(panel.chat),
+            ...(snap?.model === undefined ? {} : { model: snap.model }),
+            ...(snap?.meter === undefined ? {} : { meter: snap.meter }),
+            ...(snap === null ? {} : { queued: snap.queued }),
+            ...(branch === undefined ? {} : { branch }),
+            ...(owner === undefined ? {} : { owner })
+          })
+        })()
+      : agentFacts(branch === undefined ? {} : { branch })
+    if (facts !== null) out[id] = facts
+  }
+  return out
 }
 
 function handoffsOf(panels: readonly Panel[]): WorldHandoff[] {
@@ -79,6 +133,11 @@ function useRoster(workspaceId: string | undefined, on: boolean): PresenceRoster
 export function useWorldContextPublisher(input: PublisherInput): void {
   const { on, panels, approvals, jump, closeWorld } = input
   const roster = useRoster(input.workspaceId, on)
+  // The latest render's inputs, for the chat subscription below, which runs
+  // between renders and must read what Canvas holds now, not what it held
+  // when the subscription was made.
+  const latest = useRef(input)
+  latest.current = input
 
   useEffect(() => {
     if (!on) return
@@ -86,10 +145,26 @@ export function useWorldContextPublisher(input: PublisherInput): void {
       tasks: input.tasks(),
       approvals: approvals.map((a) => ({ agentId: a.id, requestId: a.requestId, toolName: a.toolName, argument: a.argument, ...(a.description === undefined ? {} : { description: a.description }) })),
       handoffs: handoffsOf(panels),
-      peers: peersOf(roster)
+      peers: peersOf(roster),
+      facts: factsOf(panels, input.branchOf, input.teammateNameOf)
     }
     publishWorldContext(next)
   })
+
+  // M428. The chat agents' meters and queues, live while the room is up and
+  // only then: a closed room has no reader. Keyed on the chat ids, so a drag
+  // does not re-subscribe; one listener per chat, because the store notifies
+  // per id (a delta for one chat wakes only its own listeners).
+  const chatKey = on ? panels.filter(isChatPanel).map((p) => p.rect.id).join('\u0000') : ''
+  useEffect(() => {
+    if (chatKey === '') return
+    const republish = (): void => {
+      const now = latest.current
+      publishWorldContext({ ...getWorldContext(), facts: factsOf(now.panels, now.branchOf, now.teammateNameOf) })
+    }
+    const offs = chatKey.split('\u0000').map((id) => subscribeChat(id, republish))
+    return () => { for (const off of offs) off() }
+  }, [chatKey])
 
   useEffect(() => {
     const byId = (id: string): Panel | undefined => panels.find((p) => p.rect.id === id)

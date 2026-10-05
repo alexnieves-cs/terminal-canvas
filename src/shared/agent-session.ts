@@ -274,6 +274,17 @@ export function contextTokens(usage: TokenTotals): number {
 }
 
 /**
+ * M380/M428. How much of the context window the conversation has used, in
+ * whole percent, capped at 100 — ONE rule for the Work tab's Window line
+ * (`windowWords`) and the room's card (`world-facts.ts`), so the two never
+ * round the same meter to different figures. The caller has both figures and
+ * a window above 0: a guessed window is the confident wrong answer.
+ */
+export function contextUsedPct(context: number, window: number): number {
+  return Math.min(100, Math.round((context / window) * 100))
+}
+
+/**
  * M350. The cap a meter has reached, or null. Spend first: dollars are the
  * explicit hard stop, as in M82's budgetCrossing. An unmeasured figure
  * crosses nothing: "unknown" is never "over".

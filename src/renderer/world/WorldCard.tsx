@@ -1,12 +1,14 @@
-import { memo, useReducer, useRef, type JSX, type MutableRefObject, type RefObject } from 'react'
+import { Fragment, memo, useReducer, useRef, type JSX, type MutableRefObject, type RefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import type { Group } from 'three'
 import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
-import { getAgent, getAgentIds, useAgent, useReplayAt, worldNow } from './agent-world-store'
+import type { CapHold } from '@shared/agent-session'
+import { getAgent, getAgentIds, replayAt, useAgent, useReplayAt, worldNow } from './agent-world-store'
 import { ACTIVITY_VERB, activityOf, type Activity } from './world-activity'
-import { useWorldActions, useWorldContext } from './world-context-store'
-import { cardBadge, cardTitle, isLiveStatus, recentTools, type BadgeKind } from './world-scene'
+import { getWorldContext, useWorldActions, useWorldContext } from './world-context-store'
+import { badgeFor, factParts } from './world-facts'
+import { cardTitle, isLiveStatus, recentTools, type BadgeKind } from './world-scene'
 import { cardHeadline, cardTier, conflictPartners, type CardTier, type Headline } from './world-structure'
 import { useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
@@ -88,10 +90,11 @@ function liveRecords(): NonNullable<ReturnType<typeof getAgent>>[] {
   return getAgentIds().map((id) => getAgent(id)).filter((r): r is NonNullable<typeof r> => r !== undefined && isLiveStatus(r.status))
 }
 
-/** The card's lead (M424): `cardHeadline` over this record, the context's request and the room's conflicts. */
-function headlineOf(record: NonNullable<ReturnType<typeof getAgent>>, approval: { toolName: string } | undefined, words: string, now: number): Headline {
+/** The card's lead (M424): `cardHeadline` over this record, the context's request, a cap's hold (M428) and the room's conflicts. */
+function headlineOf(record: NonNullable<ReturnType<typeof getAgent>>, approval: { toolName: string } | undefined, words: string, now: number, held: CapHold | undefined): Headline {
   return cardHeadline(record, {
     ...(approval === undefined ? {} : { approval }),
+    ...(held === undefined ? {} : { held }),
     partners: conflictPartners(liveRecords(), record.agentId, now),
     partnerName: (id) => getAgent(id)?.name ?? id,
     now,
@@ -140,6 +143,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const tier = useRef<CardTier | null>(null)
   const ctx = useWorldContext()
   const picked = useSelectedAgent() === agentId
+  const past = useReplayAt() !== null
   // The last title the agent gave in its own words. The ring is fifty events,
   // and a long run of tool calls pushes the last thought out of it; the card
   // keeps saying what the agent is on rather than dropping back to its name.
@@ -185,12 +189,19 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
       askedAt.current = t
       const rec = getAgent(agentId)
       const n = worldNow()
-      if (rec && (cardBadge(rec, n).kind !== shown.current || activityOf(rec, n) !== doing.current || headlineOf(rec, undefined, said.current ?? rec.name, n).text !== led.current)) recheck()
+      // The same hold the render read (M428) — a badge asked without it would differ from the shown one every second, forever.
+      const hold = replayAt() === null ? getWorldContext().facts[agentId]?.held : undefined
+      if (rec && (badgeFor(rec, n, hold !== undefined).kind !== shown.current || activityOf(rec, n) !== doing.current || headlineOf(rec, undefined, said.current ?? rec.name, n, hold).text !== led.current)) recheck()
     }
   })
 
   if (!record || !layer.current) return null
-  const badge = cardBadge(record, worldNow())
+  // M428: the work's own facts — present-day values, so the past room (a
+  // replay) has none: today's spend under last hour's robot would read as
+  // what it had spent then. RequestBlock hides its verbs for the same reason.
+  const facts = past ? undefined : ctx.facts[agentId]
+  const held = facts?.held
+  const badge = badgeFor(record, worldNow(), held !== undefined)
   shown.current = badge.kind
   const activity = activityOf(record, worldNow())
   doing.current = activity
@@ -205,8 +216,11 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const words = said.current ?? latest
   const approval = ctx.approvals.find((a) => a.agentId === agentId)
   const watchers = ctx.peers.filter((p) => p.panelId === agentId)
-  const headline = headlineOf(record, approval, words, worldNow())
-  led.current = headlineOf(record, undefined, words, worldNow()).text
+  const headline = headlineOf(record, approval, words, worldNow(), held)
+  led.current = headlineOf(record, undefined, words, worldNow(), held).text
+  // The INSPECTOR layer (M428): model · spend · context · branch · teammate · queue.
+  // On the full card only, and CSS shows it only up close or on the picked robot.
+  const parts = full ? factParts(facts, record.name) : []
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
@@ -230,6 +244,11 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
                 <p className="world-card__title" data-lead={headline.tone}>{headline.text}</p>
                 {headline.tone !== 'said' && words !== record.name ? <p className="world-card__said">{words}</p> : null}
                 <p className="world-card__badge">{badge.word}</p>
+                {parts.length > 0 ? (
+                  <p className="world-card__facts" data-world-facts>
+                    {parts.map((part, i) => <Fragment key={part.key}>{i > 0 ? ' · ' : null}<span data-fact={part.key}>{part.text}</span></Fragment>)}
+                  </p>
+                ) : null}
                 {waiting ? <RequestBlock agentId={agentId} /> : null}
                 {tools.length > 0 ? (
                   <ul className="world-card__tools">

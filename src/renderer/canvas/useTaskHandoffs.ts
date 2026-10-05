@@ -58,7 +58,7 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
   handoffOf: (itemId: string) => ReviewHandoff | undefined
   /** The task's lane, from the SAME records the handoff was judged against. */
   /** M204 (D08). `panelId` is the record's: the panel that opened the lane, so a task can say that panel is gone without the palette's list. */
-  laneOf: (itemId: string) => { path: string; root: string; panelId: string } | undefined
+  laneOf: (itemId: string) => { path: string; root: string; panelId: string; branch: string } | undefined
   /** The lane's changed paths, from the SAME read the handoff was judged against. */
   pathsOf: (itemId: string) => readonly string[] | undefined
   refresh: () => void
@@ -123,12 +123,13 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
   // card whose worktree record is gone contributes NO root: it must not drag
   // a read of some other repository along behind it.
   const lanes = useMemo(() => {
-    const out: Record<string, { path: string; root: string; panelId: string }> = {}
+    // M428: the record's branch rides along — the world's card says which branch a lane's agent is on.
+    const out: Record<string, { path: string; root: string; panelId: string; branch: string }> = {}
     for (const item of workItems) {
       if (item.worktreeId === undefined) continue
       const record = worktreeRows.find((w) => w.id === item.worktreeId)
       if (record === undefined) continue
-      out[item.id] = { path: record.path, root: record.root, panelId: record.panelId }
+      out[item.id] = { path: record.path, root: record.root, panelId: record.panelId, branch: record.branch }
     }
     return out
   }, [workItems, worktreeRows])

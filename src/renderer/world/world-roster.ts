@@ -1,6 +1,8 @@
 import { useMemo, useSyncExternalStore } from 'react'
-import { getAgent, getAgentIds, subscribeAgentWorld } from './agent-world-store'
-import { isLiveStatus, type RosterEntry } from './world-scene'
+import { getAgent, getAgentIds, replayAt, subscribeAgentWorld } from './agent-world-store'
+import { getWorldContext, subscribeWorldContext } from './world-context-store'
+import { inRoom } from './world-facts'
+import type { RosterEntry } from './world-scene'
 
 /**
  * The scene's roster: every agent id and the name it currently goes by, as ONE
@@ -18,15 +20,24 @@ import { isLiveStatus, type RosterEntry } from './world-scene'
  * without it — and comes back, in its first-seen place, when it is live again.
  * A status flip between two live statuses changes nothing here, so the string,
  * and with it the render, stays put.
+ *
+ * M428: and an agent main HOLDS at a cap keeps its desk (`inRoom`). The feed
+ * calls it idle — its turn ended and main serves it nothing more — but it is
+ * waiting on a person, which is what the room is for; without this its hold
+ * would be the one blocker the room could never show. The hold is the
+ * canvas's fact (the context store), so the roster listens to both stores;
+ * the string still changes only when membership or a name does.
  */
 const SEP_FIELD = '\u0000'
 const SEP_ROW = '\u0001'
 
 function rosterKey(): string {
+  const past = replayAt() !== null
+  const facts = getWorldContext().facts
   return getAgentIds()
     .filter((id) => {
       const record = getAgent(id)
-      return record !== undefined && isLiveStatus(record.status)
+      return record !== undefined && inRoom(record.status, facts[id]?.held !== undefined, past)
     })
     .map((id) => `${id}${SEP_FIELD}${getAgent(id)?.name ?? id}`)
     .join(SEP_ROW)
@@ -60,8 +71,15 @@ export function useWaiting(): readonly string[] {
   return useMemo(() => (key === '' ? [] : key.split(SEP_ROW)), [key])
 }
 
+/** Either store moving can move the roster: the feed (who is at work) and the context (who is held). */
+function subscribeRoster(listener: () => void): () => void {
+  const offWorld = subscribeAgentWorld(listener)
+  const offContext = subscribeWorldContext(listener)
+  return () => { offWorld(); offContext() }
+}
+
 export function useRoster(): readonly RosterEntry[] {
-  const key = useSyncExternalStore(subscribeAgentWorld, rosterKey, rosterKey)
+  const key = useSyncExternalStore(subscribeRoster, rosterKey, rosterKey)
   return useMemo(
     () => (key === '' ? [] : key.split(SEP_ROW).map((row) => {
       const [agentId = '', name = ''] = row.split(SEP_FIELD)

@@ -11150,6 +11150,14 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-chip[data-lead="stop"], .world-card__title[data-lead="stop"] { color: var(--world-stop); }
 .world-chip[data-lead="warn"], .world-card__title[data-lead="warn"] { color: var(--world-wait); }
 .world-chip[data-lead="quiet"] { color: var(--world-holo-ink-2); }
+/* M428. The work's own facts — model, spend, context, branch, teammate, queue — are the
+   INSPECTOR layer: up close, or on the robot a person picked. Mid-distance the card's lead
+   carries the one blocker among them (a cap's hold); nothing of this reaches the pill. */
+.world-card__facts {
+  margin: var(--sp-2) 0 0; font-family: var(--font-mono); font-size: var(--t-xs); line-height: 1.45;
+  color: var(--world-holo-ink-2); overflow-wrap: anywhere;
+}
+.world-tag:not([data-tier="full"]):not([data-picked]) .world-card__facts { display: none; }
 /* The agent's own words, under the fact it leads with: nothing it said is lost. */
 .world-card__said {
   margin: var(--sp-1) 0 0; font-size: var(--t-xs); line-height: 1.35; color: var(--world-holo-ink-2);

@@ -1,5 +1,7 @@
+import type { CapHold } from '@shared/agent-session'
 import type { AgentRecord } from '@shared/world-events'
 import { isEditTool, openCalls } from './world-activity'
+import { holdLead } from './world-facts'
 import type { WorldHandoff, WorldStep, WorldTask } from './world-context-store'
 import { DESK_ARC, ringPoint, type Station, type Zone } from './world-scene'
 
@@ -268,20 +270,30 @@ const VERB_OF: Readonly<Record<string, string>> = {
 /**
  * The ONE fact a card leads with (M424): the thing that would change what a
  * person does next, not the agent's last sentence. In order — a request
- * waiting on them, a stop, a failure just now, a file another agent is also
- * writing, a long silence — and only when none of those is true, what the
- * hands are on, and then the agent's own latest words. The card's second line
- * keeps the words, so nothing the agent said is lost by leading with a fact.
+ * waiting on them, a cap's hold (M428), a stop, a failure just now, a file
+ * another agent is also writing, a long silence — and only when none of those
+ * is true, what the hands are on, and then the agent's own latest words. The
+ * card's second line keeps the words, so nothing the agent said is lost by
+ * leading with a fact.
+ *
+ * The hold sits SECOND: like a request it is a needs-you with a person's fix
+ * (the decision queue's "Allow more"), and while it stands main serves the
+ * agent nothing — so a stop or a failure under it is history the hold already
+ * outranks, and its next send would be refused whatever else is true. It
+ * comes after a request because a request names the one thing to answer
+ * first. `warn`, the amber of a conflict: a blocker, not a crash. The caller
+ * passes no hold in the past room (a present-day fact; WorldCard).
  */
 export function cardHeadline(
   record: Pick<AgentRecord, 'status' | 'events' | 'lastTs' | 'name'>,
-  opts: { approval?: { toolName: string }; partners?: { file: string; others: string[] } | null; partnerName?: (id: string) => string; now: number; activity: string; words: string }
+  opts: { approval?: { toolName: string }; held?: CapHold; partners?: { file: string; others: string[] } | null; partnerName?: (id: string) => string; now: number; activity: string; words: string }
 ): Headline {
   const { now } = opts
   if (record.status === 'waiting_approval') {
     const tool = opts.approval?.toolName
     return { text: tool === undefined ? 'Waiting on you' : `Asks to ${tool === 'Bash' ? 'run' : 'use'} ${tool}`, tone: 'wait' }
   }
+  if (opts.held !== undefined) return { text: holdLead(opts.held), tone: 'warn' }
   if (record.status === 'error') {
     for (let i = record.events.length - 1; i >= 0; i--) {
       const e = record.events[i]!

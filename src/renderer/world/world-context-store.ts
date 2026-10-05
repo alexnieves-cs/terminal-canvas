@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { CapHold } from '@shared/agent-session'
 import type { PlanStepView } from '@shared/task-plan'
 import type { WorkItemState } from '@shared/work-items'
 
@@ -72,14 +73,59 @@ export interface WorldPeer {
   active: boolean
 }
 
+/**
+ * M428. The work's own facts about ONE agent — what the canvas's chat store
+ * and panel records know and the feed never says: the model and backend, what
+ * it has spent and how full its context is (main's `NodeMeter`), a cap's HOLD,
+ * the branch it works on, the teammate it acts as, and how many messages wait
+ * behind its turn. Shaped by `agentFacts` (world-facts.ts) at the precision the
+ * card SAYS them — cents, whole percent — so `publishWorldContext`'s by-value
+ * dedupe drops a meter tick nobody could see.
+ *
+ * Every field is optional and absent means NOTHING KNOWS: no `0` is backfilled,
+ * so a card can never say "$0.00" or "0 queued" about an agent nobody measured
+ * (the inspector's "not reported yet is never $0.00" rule). They are PRESENT-DAY
+ * values: the past room (a replay) hides them rather than show today's spend
+ * as if it were then.
+ *
+ * Not on `AgentEvent`: the feed's contract is a view-level summary folded by
+ * one reducer, and these are canvas-owned state with their own author (the
+ * header's rule for this whole store).
+ */
+export interface WorldAgentFacts {
+  /** The model the session reported (`AgentSessionSnapshot.model`). */
+  model?: string
+  /** The backend's label (`BACKENDS[…].label`) — only when it is not the default, which every agent would otherwise repeat. */
+  backend?: string
+  /** Dollars across every process this agent ran, to the cent; absent until priced, and while it rounds to nothing. */
+  spentUsd?: number
+  /** The spend cap in force on it, when one is. */
+  capUsd?: number
+  /** Whole percent of the context window used (`contextUsedPct`); only when the window AND the context are measured. */
+  contextPct?: number
+  /** Thousands of tokens in the conversation and its cap — only while a context cap is in force and no window is known. */
+  contextK?: number
+  capContextK?: number
+  /** Main is holding this agent at a cap: the room's blocker for it. */
+  held?: CapHold
+  /** The worktree branch it runs in. */
+  branch?: string
+  /** The teammate it acts as, by display name. */
+  owner?: string
+  /** Messages waiting behind its turn; absent at 0. */
+  queued?: number
+}
+
 export interface WorldContext {
   tasks: readonly WorldTask[]
   approvals: readonly WorldApproval[]
   handoffs: readonly WorldHandoff[]
   peers: readonly WorldPeer[]
+  /** M428. By agent (= panel) id; an agent nothing knows anything about has no entry. */
+  facts: Readonly<Record<string, WorldAgentFacts>>
 }
 
-export const EMPTY_CONTEXT: WorldContext = { tasks: [], approvals: [], handoffs: [], peers: [] }
+export const EMPTY_CONTEXT: WorldContext = { tasks: [], approvals: [], handoffs: [], peers: [], facts: {} }
 
 let context: WorldContext = EMPTY_CONTEXT
 let key = ''

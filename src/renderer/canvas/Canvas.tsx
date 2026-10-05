@@ -3111,6 +3111,13 @@ export function Canvas({
     void window.canvas.teammate.list().then((rows) => { teammatesRef.current = rows; setTeammates(rows) })
   }, [])
   useEffect(() => { reloadTeammates() }, [reloadTeammates])
+  // A teammate's display name: its own name, its id when that name is blank,
+  // nothing when the roster does not hold it. ONE resolution for the rail's
+  // rows and (M428) the world's cards, so the two cannot name one agent twice.
+  const teammateNameOf = useCallback((teammateId: string): string | undefined => {
+    const t = (teammates ?? []).find((x) => x.id === teammateId)
+    return t === undefined ? undefined : (t.name.trim() === '' ? t.id : t.name)
+  }, [teammates])
   // M101. Routines: the list for the pane, and the TICK — main fires, the
   // renderer mints a fresh chat as the teammate, sends the prompt (a routine
   // is scheduled work: the send is the point — the design rule rides its
@@ -7869,10 +7876,7 @@ export function Canvas({
     // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name,
-    teammateNameOf: (teammateId: string) => {
-      const t = (teammates ?? []).find((x) => x.id === teammateId)
-      return t === undefined ? undefined : (t.name.trim() === '' ? t.id : t.name)
-    },
+    teammateNameOf,
     templateOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId),
     // M196 (D04). The lane records, already read for the skills door's own
     // lane question. ONE source: this is the same list main's `laneRootOf`
@@ -8659,6 +8663,22 @@ export function Canvas({
     approvals: pendingApprovals,
     jump: jumpAnywhere,
     closeWorld: closeWorldView,
+    // M428. The branch an agent works on: a terminal's from its PTY's
+    // worktree outcome (only `active` names one — a refusal ran in the plain
+    // cwd), a chat's from the task lane its folder sits in — the handoff
+    // hook's records, never the palette's lazily-read worktree list (which is
+    // empty until ⌘K opens: task.show.1's trap).
+    branchOf: (panel) => {
+      if (isTerminalPanel(panel)) {
+        const status = registry.get(panel.rect.id)?.status
+        return status?.kind === 'running' && status.worktree?.kind === 'active' ? status.worktree.branch : undefined
+      }
+      if (!isChatPanel(panel)) return undefined
+      const lanes = workItems.flatMap((item) => { const lane = taskLaneOf(item.id); return lane === undefined ? [] : [lane] })
+      const branch = laneOfPath(panel.chat.cwd, lanes)?.branch
+      return branch === undefined || branch === '' ? undefined : branch
+    },
+    teammateNameOf,
     tasks: () => workItems.filter((item) => item.state !== 'done').map((item) => {
       const members = taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
       const views = planViewsFor(item.id) ?? []

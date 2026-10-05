@@ -9,7 +9,7 @@ import { watchStateInput } from '@renderer/watcher/watcher-store'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
-import { capSentence, type AgentCaps, type NodeMeter } from '@shared/agent-session'
+import { capSentence, contextUsedPct, type AgentCaps, type NodeMeter } from '@shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolEntry, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { cacheReturnOf, costOf } from '@shared/pricing'
@@ -655,7 +655,7 @@ export function capsField(meter: NodeMeter | undefined, own: AgentCaps | undefin
 
 /** M380. "76k of 200k left — 62% used", under its `Window` label (which is why the value does not repeat the word). */
 export function windowWords(context: number, window: number): string {
-  const used = Math.min(100, Math.round((context / window) * 100))
+  const used = contextUsedPct(context, window)
   return `${kTokens(Math.max(0, window - context))} of ${kTokens(window)} left — ${used}% used`
 }
 
