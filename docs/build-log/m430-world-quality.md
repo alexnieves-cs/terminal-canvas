@@ -139,9 +139,26 @@ reads `NN fps · NNN calls · NNk tris · <tier> @<ratio>x`.
 7. **No WebGL / lost context.** Launch with `--disable-gpu --disable-software-rasterizer` (or
    `--disable-webgl`) and open the world: the note, no `WorldView-*.js` request in the Network tab.
    Lost at runtime: in DevTools, `document.querySelector('.world-view canvas').getContext('webgl2').getExtension('WEBGL_lose_context').loseContext()`
-   → the note with `data-world-no-webgl="lost"`; Back to canvas, reopen → the room again. Leaving
-   the world normally must never show the note.
+   → after `LOST_GRACE_MS` (2 s) unrestored, the note with `data-world-no-webgl="lost"` and Try again;
+   `…restoreContext()` within the grace → no note, and look at whether the room (and the bloom's
+   composer) actually draws again after three's restore. Leaving the world normally must never
+   show the note.
 8. `verify:visual` and the Electron tier, before merge. Goldens should not move — `full` is the M427
    room — with one caveat: a governor step under harness contention now STICKS (the (4c) fix), where
    before it was undone at the next re-render. A world scene that differs only in sharpness is that;
    pin `window.__tcWorldQuality = 'full'` in the shot harness rather than re-baselining it.
+
+## Review round (fresh-context reviewer, merged on `m428-m430-world`)
+
+Three findings taken, each with a check:
+
+- **A lost context was shown at once**, which unmounted the scene and threw away three's own restore
+  (it prevents the loss, and Chromium restores a prevented loss). Now `LOST_GRACE_MS` (2 s), cleared
+  by `webglcontextrestored`, and the note offers Try again. `world.quality.lost.1`.
+- **A reopened view started at the tier's cap**, re-earning in 1.5 s per step a ratio the session had
+  already measured too dear; and its first frames ignored the bloom's pixel budget. The governed
+  ratio is now carried down-only beside the tier (`sessionDpr`), and the first frame is drawn at it
+  under the budget. `world.quality.session-dpr.1`.
+- **A slow START could cost the session a tier for good** (compile, shadow map, composer, model,
+  dolly — each hitch under the 1.5 s stall rule). The first `SETTLE_WINDOWS` (2 s) of an open and of
+  each tier step are not counted. `world.quality.settle.1`.

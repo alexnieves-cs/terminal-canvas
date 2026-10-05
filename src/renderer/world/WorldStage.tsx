@@ -249,6 +249,8 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
         // (5) No scene and no lazy load: the machine gave no WebGL context, or took the room's away.
         <div className="world-route__note world-route__note--stage world-route__note--action" role="alert" data-world-no-webgl={lost ? 'lost' : 'none'}>
           <p>The world view needs WebGL, which this machine is not providing right now.</p>
+          {/* A lost context that did not come back by itself (WorldView's LOST_GRACE_MS) may still be given again: a retry remounts the scene with a new one. */}
+          {lost ? <button type="button" onClick={() => setLost(false)}>Try again</button> : null}
           <button type="button" onClick={() => setWorldOn(false)}>Back to canvas</button>
         </div>
       )) : (

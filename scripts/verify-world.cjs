@@ -1578,9 +1578,32 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /if \(!\(probed \?\? probeWebgl\(\)\)\) return\n\s*void loadWorldView\(\)/.test(stage) &&
       !/^import /m.test(probeSrc) && /WEBGL_lose_context/.test(probeSrc) && PROBE.webglAvailable() === false &&
       /import \{ webglAvailable \} from '@renderer\/webgl-probe'/.test(orchSrc) && !/getContext\('webgl/.test(orchSrc))
-  ok('world.quality.lost.1 a context LOST at runtime lands in the same note, not a frozen frame: the scene listens on its own canvas and removes the listener in the cleanup fiber runs before its own teardown loses the context, and the stage acts on it only while the world is on and starts each open clean',
-    /addEventListener\('webglcontextlost', lost\)/.test(view) && /return \(\) => canvas\.removeEventListener\('webglcontextlost', lost\)/.test(view) && /<ContextWatch onLost=\{onLost\} \/>/.test(view) &&
-      /const onLost = useCallback\(\(\) => \{ if \(onRef\.current\) setLost\(true\) \}, \[\]\)/.test(stage) && /if \(on\) setLost\(false\)/.test(stage) && /data-world-no-webgl=\{lost \? 'lost' : 'none'\}/.test(stage))
+  ok('world.quality.lost.1 a context LOST at runtime that does not come back within LOST_GRACE_MS lands in the same note (with a retry), not a frozen frame — and one three restores by itself (it prevents the loss, so Chromium gives it back) never does: the scene listens on its own canvas for the loss AND the restore, removes both and the timer in the cleanup fiber runs before its own teardown loses the context, and the stage acts only while the world is on and starts each open clean',
+    /addEventListener\('webglcontextlost', lost\)/.test(view) && /addEventListener\('webglcontextrestored', restored\)/.test(view) && /const restored = \(\): void => window\.clearTimeout\(timer\)/.test(view) &&
+      /window\.setTimeout\(\(\) => latest\.current\(\), LOST_GRACE_MS\)/.test(view) && /export const LOST_GRACE_MS = \d{3,4}\b/.test(view) &&
+      /return \(\) => \{\s*window\.clearTimeout\(timer\)\s*canvas\.removeEventListener\('webglcontextlost', lost\)\s*canvas\.removeEventListener\('webglcontextrestored', restored\)/.test(view) && /<ContextWatch onLost=\{onLost\} \/>/.test(view) &&
+      /const onLost = useCallback\(\(\) => \{ if \(onRef\.current\) setLost\(true\) \}, \[\]\)/.test(stage) && /if \(on\) setLost\(false\)/.test(stage) && /data-world-no-webgl=\{lost \? 'lost' : 'none'\}/.test(stage) &&
+      /\{lost \? <button type="button" onClick=\{\(\) => setLost\(false\)\}>Try again<\/button> : null\}/.test(stage))
+  {
+    // The open's (and each tier step's) compile/load/dolly windows are not a trend.
+    const S = Q.SETTLE_WINDOWS, L = PF.LOW_WINDOWS, T = Q.TIER_WINDOWS
+    const g = Q.createQualityGovernor(2, 'full', S)
+    const at = []
+    for (let i = 1; i <= S + 2 * L + T + S + L; i++) { const s = g.observe(20); if (s !== null) at.push(`${i}:${s.tier}@${s.dpr}`) }
+    const want = [`${S + L}:full@1.5`, `${S + 2 * L}:full@1.25`, `${S + 2 * L + T}:lean@1.25`, `${S + 2 * L + T + S + L}:lean@1`]
+    ok('world.quality.settle.1 the governor does not count the first SETTLE_WINDOWS windows of an open, nor those after a TIER step (each recompiles every lit material) — a slow start is not a trend, and with no step back up it would cost the session a tier for good; WorldView makes its governor with them',
+      S >= 2 && at.join() === want.join() && /sessionQuality\(\), SETTLE_WINDOWS\)/.test(view), at.join())
+  }
+  {
+    const before = Q.sessionDpr()
+    Q.stepSessionDpr(1.5); const a = Q.sessionDpr()
+    Q.stepSessionDpr(1.75); const b = Q.sessionDpr()
+    Q.stepSessionDpr(NaN); const c = Q.sessionDpr()
+    ok('world.quality.session-dpr.1 the governed RATIO is carried across a reopen beside the tier, down only, in memory: a reopened view\'s governor and its first frame start from it (and the first frame under the bloom\'s budget), not from the tier\'s cap',
+      before === Infinity && a === 1.5 && b === 1.5 && c === 1.5 && /stepSessionDpr\(step\.dpr\)/.test(view) &&
+        /createQualityGovernor\(Math\.min\(window\.devicePixelRatio, sessionDpr\(\)\)/.test(view) && /worldDpr\(sessionDpr\(\), display, qualityPlan\(getWorldQuality\(\)\), ceiling\)/.test(view) &&
+        !/localStorage|sessionStorage/.test(code('world-quality.ts').replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')))
+  }
 }
 
 // ── M428: the work's own facts in the room ──────────────────────────────────

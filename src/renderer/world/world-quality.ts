@@ -89,6 +89,20 @@ export function bloomRenders(personOn: boolean, tier: WorldQuality): boolean {
 export const TIER_WINDOWS = LOW_WINDOWS * 2
 
 /**
+ * Windows the governor does not count after the room opens and after each
+ * tier step: two seconds. The first seconds of an open are the shader compile
+ * of every lit material, the shadow map's allocation, the composer's buffers,
+ * the bee's model and the one-second dolly — and a tier step recompiles every
+ * lit material again. None of it is the room's frame rate, and since nothing
+ * here ever steps back up, a slow START counted as a trend would cost the
+ * session a tier for good (the M430 review's finding: a machine at 30–39 fps
+ * through the open would lose its ratio in 1.5 s and, on a 1x display, its tier
+ * in 3). The stall rule (a window over 1.5 s) does not catch these: each
+ * hitch is shorter than that.
+ */
+export const SETTLE_WINDOWS = 4
+
+/**
  * The pixel ratio the canvas draws at: the governed ratio, under the tier's
  * cap, under what the display asks for (a window moved to a 1x monitor is not
  * drawn at 1.75), and under `ceiling` — whatever else caps it this frame (the
@@ -141,14 +155,17 @@ export interface QualityGovernor {
  * failing it, "never return to a tier that failed" and "never step up" are the
  * same rule. The way back up is a new session (a relaunch or a reload): the
  * tier is in memory only, and a reopened view starts from the session's tier
- * (`sessionQuality`), its ratio from that tier's cap.
+ * and ratio (`sessionQuality`, `sessionDpr`) after `SETTLE_WINDOWS` uncounted.
  */
-export function createQualityGovernor(start: number, tier: WorldQuality = 'full'): QualityGovernor {
+export function createQualityGovernor(start: number, tier: WorldQuality = 'full', settle: number = 0): QualityGovernor {
   let current = tier
   let dpr = Math.min(clampDpr(start), PLANS[current].dprMax)
   let low = 0
+  // Windows still to ignore: the open's, and again after each tier step (`SETTLE_WINDOWS`).
+  let settling = settle
   return {
     observe(fps, ceiling = Infinity) {
+      if (settling > 0) { settling -= 1; low = 0; return null }
       if (!Number.isFinite(fps)) { low = 0; return null }
       if (fps >= LOW_FPS) { low = 0; return null }
       low += 1
@@ -167,6 +184,7 @@ export function createQualityGovernor(start: number, tier: WorldQuality = 'full'
       if (next === undefined) return null
       current = next
       dpr = Math.min(drawn, PLANS[current].dprMax)
+      settling = settle
       return { tier: current, dpr }
     },
     gap() { low = 0 },
@@ -192,6 +210,13 @@ export function readQualityPin(value: unknown): WorldQuality | null {
 // session got to. NOTHING here touches storage (`world.quality.store.1`).
 
 let governed: WorldQuality = 'full'
+/**
+ * The governed pixel ratio the session has stepped down to (Infinity: never
+ * stepped). Carried beside the tier for the same reason: a reopened view that
+ * started again at the tier's cap would spend `LOW_WINDOWS` per step earning
+ * back a ratio this session already measured too dear (the M430 review).
+ */
+let governedDpr = Infinity
 let pinned: WorldQuality | null = null
 const listeners = new Set<() => void>()
 
@@ -207,6 +232,16 @@ export function getWorldQuality(): WorldQuality {
 /** The governed tier alone — where a reopened view's governor starts. */
 export function sessionQuality(): WorldQuality {
   return governed
+}
+
+/** The governed ratio alone — where a reopened view's governor, and its first frame, start. */
+export function sessionDpr(): number {
+  return governedDpr
+}
+
+/** The governor's ratio step, down only, like the tier's. Nothing listens: it is read at the next open. */
+export function stepSessionDpr(dpr: number): void {
+  if (Number.isFinite(dpr) && dpr < governedDpr) governedDpr = dpr
 }
 
 /** The governor's step. Down only: a call naming a dearer tier than the session's is ignored. */

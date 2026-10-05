@@ -12,7 +12,7 @@ import { useWorldContext } from './world-context-store'
 import { taskOfAgent } from './world-structure'
 import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
-import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionQuality, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
+import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
 import { selectAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
@@ -366,8 +366,9 @@ function QualityGovernor({ onDpr, bloom }: { onDpr: (dpr: number) => void; bloom
   const width = useThree((s) => s.size.width)
   const height = useThree((s) => s.size.height)
   const governor = useRef<Governor | null>(null)
-  // A reopened view starts at the session's tier: a tier that failed is not tried again.
-  governor.current ??= createQualityGovernor(window.devicePixelRatio, sessionQuality())
+  // A reopened view starts at the session's tier AND ratio: neither is tried again once it failed.
+  // The open's own compile/load/dolly windows are not counted (`SETTLE_WINDOWS`).
+  governor.current ??= createQualityGovernor(Math.min(window.devicePixelRatio, sessionDpr()), sessionQuality(), SETTLE_WINDOWS)
   const acc = useRef({ frames: 0, since: 0 })
   const reported = useRef(-1)
   const latest = useRef({ onDpr, width, height })
@@ -409,7 +410,10 @@ function QualityGovernor({ onDpr, bloom }: { onDpr: (dpr: number) => void; bloom
       const display = window.devicePixelRatio
       const ceiling = bloomRenders(isBloomOn(), g.tier) ? Math.min(clampDpr(display), bloomDprCap(w, h, display)) : clampDpr(display)
       const step = g.observe(a.frames / span, ceiling)
-      if (step !== null) stepWorldQuality(step.tier)
+      if (step !== null) {
+        stepWorldQuality(step.tier)
+        stepSessionDpr(step.dpr)
+      }
     }
     apply()
     a.frames = 0
@@ -424,21 +428,42 @@ function harnessPin(): unknown {
 }
 
 /**
+ * How long a lost context has to come back on its own before the stage says
+ * so. three `preventDefault`s the loss (WebGLRenderer's `onContextLost`) and
+ * re-initialises on `webglcontextrestored`, and Chromium restores a context
+ * whose loss was prevented — a GPU-process reset usually brings the room back
+ * by itself within a second. Unmounting the scene at the loss (the first cut)
+ * threw that recovery away and left the note up until a reopen.
+ */
+export const LOST_GRACE_MS = 2000
+
+/**
  * A context LOST while the room is up (a GPU reset, the driver taking it back)
- * leaves the last frame frozen on screen — three only stops drawing. The stage
- * replaces the scene with its no-WebGL note instead. The listener goes in this
- * effect's cleanup, which fiber runs before its own teardown loses the context
- * on purpose (`forceContextLoss` after an unmount), so leaving the world is
- * never reported as a loss (and the stage only acts on it while the world is on).
+ * that does NOT come back within `LOST_GRACE_MS` leaves a dead canvas; the
+ * stage then replaces the scene with its no-WebGL note (with a retry). The
+ * listeners go in this effect's cleanup, which fiber runs before its own
+ * teardown loses the context on purpose (`forceContextLoss` after an unmount),
+ * so leaving the world is never reported as a loss (and the stage only acts on
+ * it while the world is on).
  */
 function ContextWatch({ onLost }: { onLost: () => void }): null {
   const canvas = useThree((s) => s.gl.domElement)
   const latest = useRef(onLost)
   latest.current = onLost
   useEffect(() => {
-    const lost = (): void => latest.current()
+    let timer = 0
+    const lost = (): void => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => latest.current(), LOST_GRACE_MS)
+    }
+    const restored = (): void => window.clearTimeout(timer)
     canvas.addEventListener('webglcontextlost', lost)
-    return () => canvas.removeEventListener('webglcontextlost', lost)
+    canvas.addEventListener('webglcontextrestored', restored)
+    return () => {
+      window.clearTimeout(timer)
+      canvas.removeEventListener('webglcontextlost', lost)
+      canvas.removeEventListener('webglcontextrestored', restored)
+    }
   }, [canvas])
   return null
 }
@@ -529,7 +554,13 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const tierPlan = qualityPlan(quality)
   const bloom = useBloomRendered()
   // The ratio the governor reports; it rides the Canvas's prop (header, (4c)).
-  const [dpr, setDpr] = useState(() => worldDpr(Infinity, window.devicePixelRatio, qualityPlan(getWorldQuality())))
+  // The first frame is drawn at what the governor will ask for — the session's ratio and, while the
+  // bloom renders, its pixel budget (the window's size stands in for the canvas's until fiber measures it).
+  const [dpr, setDpr] = useState(() => {
+    const display = window.devicePixelRatio
+    const ceiling = bloom ? bloomDprCap(window.innerWidth, window.innerHeight, display) : Infinity
+    return worldDpr(sessionDpr(), display, qualityPlan(getWorldQuality()), ceiling)
+  })
   const leavers = useLeavers(roster, reduced)
   const held = useMemo(() => heldRoster(roster, leavers), [roster, leavers])
   // M423: agents on the same task sit together on one terrace; the plan re-flows when that changes.

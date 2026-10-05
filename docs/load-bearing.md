@@ -5622,7 +5622,11 @@ shadows popping, a shader recompile on every flip. Bloom renders iff the person'
 the tier allows it (`bloomRenders`); every material that compensates for the composer (the ground's
 pre-image, the trim, the eyes, the board, the terraces) must read `useBloomRendered()`, never
 `useBloomOn()` — a material painted for a composer the tier holds off is a clipped trim and a wrong
-ground, with no error. The tier lives in memory for the app's run (a reopened view starts from it);
+ground, with no error. The tier AND the governed ratio live in memory for the app's run (a reopened
+view starts from both, `sessionQuality`/`sessionDpr`, or it re-earns a ratio the session already measured
+too dear); the first `SETTLE_WINDOWS` windows of an open and of each tier step are not counted — the
+compile, the model load and the dolly are each under the 1.5 s stall rule, and with no climb back a
+slow START counted as a trend would cost the session a tier for good;
 the person's bloom bit is the only thing written to storage. The harness pins a tier through
 `window.__tcWorldQuality`, which no app code writes. `verify:world world.quality.*`, `world.ship.1`.
 
@@ -5654,7 +5658,12 @@ already rendered the lazy `WorldView` and started its fetch — and while the vi
 answer stands (a fresh `true` there would mount the scene during the move back). The probe is a
 shared, import-free module that Orchestrate's `orchWebglAvailable` now calls too: importing
 Orchestrate's own copy would tie a first-chunk file to that module's whole graph. A context lost
-while the room is up is heard by `ContextWatch` on the scene's own canvas; its listener is removed in
-the effect cleanup that fiber runs before its own teardown force-loses the context, and the stage
-acts on it only while the world is on — so leaving the world is never reported as a loss.
-`verify:world world.quality.probe.1`, `world.quality.lost.1`.
+while the room is up is heard by `ContextWatch` on the scene's own canvas — and given
+`LOST_GRACE_MS` to come back: three `preventDefault`s the loss and re-initialises on
+`webglcontextrestored`, and Chromium restores a prevented loss, so a GPU-process reset usually
+recovers the room by itself. Showing the note AT the loss (the first cut) unmounted the scene and
+threw that recovery away. Only a loss still unrestored after the grace lands in the note, which then
+offers "Try again" (a remount, a new context). Its listeners and timer go in the effect cleanup that
+fiber runs before its own teardown force-loses the context, and the stage acts only while the world
+is on — so leaving the world is never reported as a loss. `verify:world world.quality.probe.1`,
+`world.quality.lost.1`, `world.quality.settle.1`, `world.quality.session-dpr.1`.
