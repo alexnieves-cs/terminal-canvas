@@ -53,3 +53,58 @@ export function peerFollowTarget(peer: { panelId: string | null } | undefined, i
   const id = peer?.panelId ?? null
   return id !== null && inRoom.includes(id) ? id : null
 }
+
+// ── from a robot to its panel (M429) ────────────────────────────────────────
+
+/**
+ * The second click of a double-click. The first click picks the robot; the
+ * second must NOT toggle that pick off again (a picked robot's click lets it
+ * go), or every double-click would flash the card full, drop it, and then
+ * leave the room. `detail` is the browser's own click count.
+ */
+export function isRepeatClick(detail: number): boolean {
+  return detail >= 2
+}
+
+/** The hint a robot (its hover tooltip, its tag's label) and the card's Open button give for the way to its panel. Short: it sits on a tooltip. */
+export const OPEN_HINT = 'Double-click, or pick and press Enter, to open its panel'
+
+/**
+ * Whether the room may take a person from this robot to its panel — the ONE
+ * gate the double-click, Enter and the card's Open button all ask. A door
+ * Canvas registered, a panel to land on (`canOpen`: the simulator's agents and
+ * a teammate's agent on another canvas have none, and the jump would close the
+ * room and land nowhere), and the LIVE room: the past room's robots are what
+ * the room showed then, which is why its request card has no verbs either.
+ */
+export function openableFrom(agentId: string | null, past: boolean, actions: { canOpen(agentId: string): boolean } | null): agentId is string {
+  return agentId !== null && !past && actions !== null && actions.canOpen(agentId)
+}
+
+/**
+ * Where a key belongs to something else and the room must not act on it: a
+ * field (the Ask pill is an input — Enter there sends), and an open menu,
+ * dialog or listbox (Enter there chooses). Shared by WorldStage's Escape and
+ * WorldChrome's Enter, so the two keys cannot disagree about what owns them.
+ */
+export const FIELD_SELECTOR = 'input, textarea, select, [contenteditable="true"]'
+export const OVERLAY_SELECTOR = '[role="menu"]:not([hidden]), [role="dialog"], [role="listbox"]'
+/** A control's own Enter is its activation: a focused button pressed with Enter is that button, never "open the picked robot". */
+export const CONTROL_SELECTOR = 'button, a[href], [role="button"], summary'
+
+export interface EnterFacts {
+  key: string
+  repeat: boolean
+  /** Any of ⌘, ⌃, ⌥ or ⇧ held: a chord is somebody else's. */
+  modified: boolean
+  /** An IME is composing: its Enter commits the composition. */
+  composing: boolean
+  inField: boolean
+  onControl: boolean
+  overlayOpen: boolean
+}
+
+/** Whether a keydown is the room's Enter — open the picked robot's panel. Pure, so the guard is checked without a window. */
+export function enterOpens(k: EnterFacts): boolean {
+  return k.key === 'Enter' && !k.repeat && !k.modified && !k.composing && !k.inField && !k.onControl && !k.overlayOpen
+}

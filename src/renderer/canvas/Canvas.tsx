@@ -3354,6 +3354,12 @@ export function Canvas({
     void switchWorkspace(owner.id).then((ok) => { if (!ok) pendingJumpRef.current = null })
   }, [workspaceRows, switchWorkspace, jumpToAttention])
   useEffect(() => { attentionJumpRef.current = jumpAnywhere }, [jumpAnywhere])
+  // M429. Whether jumpAnywhere has somewhere to land — its own two cases,
+  // asked before the world room closes for it (it drops an id it cannot place,
+  // silently, and the room would have closed onto an unchanged canvas).
+  const canJumpAnywhere = useCallback((panelId: string): boolean =>
+    displayPanelsRef.current.some((p) => p.rect.id === panelId) || workspaceRows.some((w) => !w.active && w.panelIds.includes(panelId)),
+  [workspaceRows])
   useEffect(() => {
     const id = pendingJumpRef.current
     if (id === null || !displayPanels.some((p) => p.rect.id === id)) return
@@ -8662,6 +8668,7 @@ export function Canvas({
     panels: displayPanels,
     approvals: pendingApprovals,
     jump: jumpAnywhere,
+    canJump: canJumpAnywhere,
     closeWorld: closeWorldView,
     // M428. The branch an agent works on: a terminal's from its PTY's
     // worktree outcome (only `active` names one — a refusal ran in the plain

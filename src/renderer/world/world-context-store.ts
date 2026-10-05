@@ -172,6 +172,13 @@ export interface WorldActions {
   open(agentId: string): void
   /** Whether a message can be sent to this agent from the room (a chat agent, not a terminal). */
   canSend(agentId: string): boolean
+  /**
+   * M429. Whether `open` has a panel to land on: one on this canvas, or in
+   * another workspace the jump can switch to. The simulator's agents and a
+   * teammate's agent on someone else's canvas have none — `open` would close
+   * the room and land nowhere — so the room offers no way there.
+   */
+  canOpen(agentId: string): boolean
 }
 
 let actions: WorldActions | null = null

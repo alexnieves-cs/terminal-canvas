@@ -1403,7 +1403,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.replay.5 the room\'s parts read the room\'s clock (worldNow), never the wall clock, so the past room is quiet where it was quiet and a tile is fresh when it was',
     scene.every((src) => !/Date\.now\(\)/.test(src.replace(/handoffArcs\(ctx\.handoffs, byId, Date\.now\(\)\)/, ''))) && scene.every((src) => /worldNow\(\)/.test(src)))
   ok('world.replay.6 the past takes no actions: a past request has no Approve or Deny, the ask is off, the room goes back to live when it closes, and the away tracker is installed at startup (from the store), not when the room first opens',
-    /const asked = past \? undefined :/.test(card) && /\{past \? null : <button type="button" className="world-card__act"/.test(card) && /sending \|\| past\) return/.test(chrome) &&
+    /const asked = past \? undefined :/.test(card) && /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act"/.test(card) && /sending \|\| past\) return/.test(chrome) &&
       /useEffect\(\(\) => \(\) => setReplayAt\(null\), \[\]\)/.test(time) && /installAwayTracker\(\)\n\s*if \(!disconnect\)/.test(store))
   ok('world.tour.1 the tour shows each beat at its own moment with the camera on its agent — the moment BEFORE a stop, when the robot was still at its desk — falls back to the whole room when the agent is not in it, and ends live on the whole room',
     /setReplayAt\(beat\.kind === 'stopped' \? beat\.at - 1 : beat\.at\)/.test(time) && /if \(camera\.current\?\.focus\(beat\.agentId\) !== true\) camera\.current\?\.fit\(\)/.test(time) &&
@@ -1528,6 +1528,51 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.facts.door.1 world-facts imports the app\'s SHARED vocabulary and the world\'s own pure modules only — nothing from canvas, chat, shell or presence (only the publisher reaches those), no React and no three.js — so verify:world runs every rule in plain node',
     imports.length > 0 && imports.every((m) => /^@shared\//.test(m) || m === '@renderer/panels/panel-state' || /^\.\/world-(scene|context-store)$/.test(m)) && !THREE_DOOR_RE.test(factsSrc) && !/from 'react'/.test(factsSrc),
     imports.join())
+}
+
+// ── M429: from a robot to its panel ──────────────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const src = (f) => readFileSync(join(dir, f), 'utf8')
+  const door = (can) => ({ canOpen: (id) => can.includes(id) })
+  ok('world.open.1 one gate for every way to a panel: a picked id, the LIVE room, a door Canvas registered, and a panel to land on — and the second click of a double-click is a repeat that must leave the pick alone',
+    SEL.openableFrom('a', false, door(['a'])) === true && SEL.openableFrom('a', true, door(['a'])) === false && SEL.openableFrom('sim', false, door(['a'])) === false &&
+      SEL.openableFrom(null, false, door(['a'])) === false && SEL.openableFrom('a', false, null) === false &&
+      SEL.isRepeatClick(1) === false && SEL.isRepeatClick(2) === true && SEL.isRepeatClick(3) === true && SEL.isRepeatClick(0) === false)
+  const E = (o = {}) => SEL.enterOpens({ key: 'Enter', repeat: false, modified: false, composing: false, inField: false, onControl: false, overlayOpen: false, ...o })
+  ok('world.open.2 Enter is the room\'s only when nothing else owns it — never in a field (the Ask pill sends on Enter), on a focused button (its own activation), in an open menu or dialog, as a chord, mid-IME, or as a held key repeating',
+    E() === true && E({ key: 'a' }) === false && E({ inField: true }) === false && E({ onControl: true }) === false && E({ overlayOpen: true }) === false &&
+      E({ modified: true }) === false && E({ composing: true }) === false && E({ repeat: true }) === false)
+  const robot = src('WorldRobot.tsx')
+  const onClick = (robot.match(/onClick=\{\(event\) => \{[\s\S]*?\n {6}\}\}/) ?? [''])[0]
+  const onDouble = (robot.match(/onDoubleClick=\{\(event\) => \{[\s\S]*?\n {6}\}\}/) ?? [''])[0]
+  ok('world.open.3 a double-click on a robot opens its panel through the room\'s open door (worldActions → Canvas\'s jump), behind the same drag guard as the click, re-picking it first; the click skips its toggle on a repeat, BEFORE it would toggle; and the robot reaches no canvas code and no bridge',
+    /if \(event\.delta > CLICK_SLOP_PX \|\| leftAtRef\.current !== null\) return/.test(onDouble) && /selectAgent\(agentId\)/.test(onDouble) &&
+      /const actions = worldActions\(\)\n\s*if \(openableFrom\(agentId, replayAt\(\) !== null, actions\)\) actions!\.open\(agentId\)/.test(onDouble) &&
+      onClick.indexOf('if (isRepeatClick(event.nativeEvent.detail)) return') > 0 && onClick.indexOf('if (isRepeatClick(event.nativeEvent.detail)) return') < onClick.indexOf('selectAgent(picked ? null : agentId)') &&
+      !/from '@renderer\/(canvas|chat|shell|panels\/panels)/.test(robot) && !/window\.canvas/.test(robot),
+    `click=${onClick.length} dbl=${onDouble.length}`)
+  const store = src('world-context-store.ts'), pub = src('useWorldContextPublisher.ts')
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  ok('world.open.4 canOpen is on the room\'s door interface and Canvas answers it with jumpAnywhere\'s own two cases (a panel on this canvas, or in another workspace) — and open itself refuses an id it cannot land, BEFORE the room closes (jumpAnywhere drops one silently)',
+    /\n {2}canOpen\(agentId: string\): boolean\n\}/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
+      /canJump: canJumpAnywhere,/.test(canvasSrc) &&
+      /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc) &&
+      /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc))
+  const card = src('WorldCard.tsx')
+  ok('world.open.5 the card\'s Open is on the PICKED robot\'s card only, never in the past room, never for an agent with no panel, never twice on a waiting card (its request has one) — the shared act styling inside the one pointer-taking group — and the request\'s own Open hides for an agent with no panel too',
+    /const openable = openableFrom\(agentId, past, actions\)/.test(card) && /const openHere = picked && !waiting && openable/.test(card) &&
+      /\{openHere \? \(\s*<div className="world-card__actions"[^>]*>\s*<button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
+      /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card))
+  const chrome = src('WorldChrome.tsx'), stage = src('WorldStage.tsx')
+  ok('world.open.6 Enter opens the picked robot from the chrome\'s one window listener — the pure guard, the room ON (the chrome outlives it through the move back), the same gate and the same door — and Escape and Enter ask the SAME field and overlay selectors',
+    /if \(!enterOpens\(facts\) \|\| !isWorldOn\(\)\) return/.test(chrome) && /const id = selectedAgent\(\)/.test(chrome) && /if \(!openableFrom\(id, replayAt\(\) !== null, door\)\) return/.test(chrome) && /door!\.open\(id\)/.test(chrome) &&
+      /inField: el\?\.closest\(FIELD_SELECTOR\) != null/.test(chrome) && /overlayOpen: document\.querySelector\(OVERLAY_SELECTOR\) !== null/.test(chrome) &&
+      /target\.closest\(FIELD_SELECTOR\) !== null\) return/.test(stage) && /document\.querySelector\(OVERLAY_SELECTOR\) !== null\) return/.test(stage) && !/window\.canvas/.test(chrome))
+  ok('world.open.7 the way there is discoverable: the robot\'s hover tooltip (the canvas element\'s title — the card layer is deaf to the pointer, so a title there never shows), the tag\'s label and the button\'s title say it, short, and only when it can open',
+    SEL.OPEN_HINT.length <= 64 && /gl\.domElement\.title = openableFrom\(agentId, replayAt\(\) !== null, worldActions\(\)\) \? OPEN_HINT : ''/.test(robot) && /gl\.domElement\.title = ''/.test(robot) &&
+      /\$\{openable \? `\. \$\{OPEN_HINT\}` : ''\}/.test(card) && /title=\{OPEN_HINT\} data-world-open/.test(card),
+    SEL.OPEN_HINT)
 }
 
 const failures = results.filter((r) => !r.pass)

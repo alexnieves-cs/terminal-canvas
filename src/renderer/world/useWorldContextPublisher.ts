@@ -26,7 +26,8 @@ import { agentFacts } from './world-facts'
  *   own words to their own agent, so — like the composer — it does not pass
  *   `outward`: that gate is for text LEAVING the app (`shared/outward.ts`);
  * - open → `jump`, Canvas's `jumpAnywhere` (the rail's attention door), after
- *   the room closes.
+ *   the room closes — and (M429) only when `canJump` says it lands somewhere,
+ *   which is also the room's `canOpen`.
  *
  * M428 adds each agent's FACTS (model, spend, context, a hold, branch,
  * teammate, queue) — read off the chat store's snapshot (main's `meter`, its
@@ -52,6 +53,8 @@ export interface PublisherInput {
   approvals: readonly PendingApproval[]
   /** Canvas's attention jump; the room closes first. */
   jump: (panelId: string) => void
+  /** M429. Whether that jump has somewhere to land — the same two cases `jumpAnywhere` takes. */
+  canJump: (panelId: string) => boolean
   closeWorld: () => void
   /** M428. The worktree branch a panel runs in, when anything knows it (a terminal's PTY result, a chat's task lane). */
   branchOf: (panel: Panel) => string | undefined
@@ -131,7 +134,7 @@ function useRoster(workspaceId: string | undefined, on: boolean): PresenceRoster
 }
 
 export function useWorldContextPublisher(input: PublisherInput): void {
-  const { on, panels, approvals, jump, closeWorld } = input
+  const { on, panels, approvals, jump, canJump, closeWorld } = input
   const roster = useRoster(input.workspaceId, on)
   // The latest render's inputs, for the chat subscription below, which runs
   // between renders and must read what Canvas holds now, not what it held
@@ -181,6 +184,11 @@ export function useWorldContextPublisher(input: PublisherInput): void {
         }
       },
       open: (agentId) => {
+        // M429: never close the room for a jump that lands nowhere (jumpAnywhere
+        // drops an id it cannot place, silently — the person would be thrown
+        // out of the room onto an unchanged canvas). The room asks canOpen
+        // first; this is the door's own guard for any caller that does not.
+        if (!canJump(agentId)) return
         closeWorld()
         // The canvas is uncovered on the next commit; land after it.
         requestAnimationFrame(() => jump(agentId))
@@ -188,9 +196,10 @@ export function useWorldContextPublisher(input: PublisherInput): void {
       canSend: (agentId) => {
         const panel = byId(agentId)
         return panel !== undefined && isChatPanel(panel)
-      }
+      },
+      canOpen: (agentId) => canJump(agentId)
     })
-  }, [panels, jump, closeWorld])
+  }, [panels, jump, canJump, closeWorld])
 
   useEffect(() => () => setWorldActions(null), [])
 }

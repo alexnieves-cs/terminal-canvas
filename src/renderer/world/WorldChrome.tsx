@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type JSX, type KeyboardEvent, type RefObject } from 'react'
 import { KindChat, Minus, Plus, Send } from '@renderer/icons'
-import { getAgent, postTeamAsk, useAgentIds, useReplayAt } from './agent-world-store'
-import { useWorldActions } from './world-context-store'
-import { askTarget, selectAgent, useSelectedAgent } from './world-select'
+import { getAgent, postTeamAsk, replayAt, useAgentIds, useReplayAt } from './agent-world-store'
+import { useWorldActions, worldActions } from './world-context-store'
+import { askTarget, CONTROL_SELECTOR, enterOpens, FIELD_SELECTOR, openableFrom, OVERLAY_SELECTOR, selectAgent, selectedAgent, useSelectedAgent } from './world-select'
+import { isWorldOn } from './world-toggle'
 import { useRoster, useWaiting } from './world-roster'
 import { WorldPeers } from './WorldPeers'
 import { WorldTime } from './WorldTime'
@@ -81,6 +82,36 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
     setDraft('')
     field.current?.blur()
   }
+  // M429. Enter opens the PICKED robot's panel — the keyboard's door to what a
+  // double-click does, through the same `open` and the same gate
+  // (`openableFrom`). Never Enter that belongs elsewhere (`enterOpens`): in a
+  // field (the Ask pill sends on Enter), on a focused button (its own
+  // activation — the card's Approve is a button), in an open menu or dialog,
+  // a chord, an IME composing, a held key repeating. Read from the stores at
+  // the keypress, so the listener is made once; and only while the room is
+  // ON, since the chrome is still mounted during the move back.
+  useEffect(() => {
+    const onEnter = (event: globalThis.KeyboardEvent): void => {
+      const el = event.target instanceof HTMLElement ? event.target : null
+      const facts = {
+        key: event.key,
+        repeat: event.repeat,
+        modified: event.metaKey || event.ctrlKey || event.altKey || event.shiftKey,
+        composing: event.isComposing,
+        inField: el?.closest(FIELD_SELECTOR) != null,
+        onControl: el?.closest(CONTROL_SELECTOR) != null,
+        overlayOpen: document.querySelector(OVERLAY_SELECTOR) !== null
+      }
+      if (!enterOpens(facts) || !isWorldOn()) return
+      const id = selectedAgent()
+      const door = worldActions()
+      if (!openableFrom(id, replayAt() !== null, door)) return
+      event.preventDefault()
+      door!.open(id)
+    }
+    window.addEventListener('keydown', onEnter)
+    return () => window.removeEventListener('keydown', onEnter)
+  }, [])
   // M422/M424: the decision table's count, over the room — a sign in the scene sat on the waiting
   // robots' own cards. A press picks the agent that has waited longest, so its request card stands full.
   const waiting = useWaiting()

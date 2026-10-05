@@ -4,13 +4,14 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { getAgent, getAgentIds, useAgentStatus, worldNow } from './agent-world-store'
+import { getAgent, getAgentIds, replayAt, useAgentStatus, worldNow } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { glowScale, useBloomOn } from './world-bloom'
 import { studioEnv } from './world-gloss'
 import { activityOf, openDelegations, poseOf, POSES, type Activity, type Pose } from './world-activity'
 import { agentTint, effectOf, goalOf, hopsOn, leanOf, type Station } from './world-scene'
-import { CLICK_SLOP_PX, selectAgent, useSelectedAgent } from './world-select'
+import { worldActions } from './world-context-store'
+import { CLICK_SLOP_PX, isRepeatClick, OPEN_HINT, openableFrom, selectAgent, useSelectedAgent } from './world-select'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
@@ -522,10 +523,35 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       onClick={(event) => {
         if (event.delta > CLICK_SLOP_PX || leftAtRef.current !== null) return
         event.stopPropagation()
+        // M429: the second click of a double-click leaves the first one's pick
+        // alone — toggling it off here would drop the card the double-click
+        // is about to open from.
+        if (isRepeatClick(event.nativeEvent.detail)) return
         selectAgent(picked ? null : agentId)
       }}
-      onPointerOver={(event) => { event.stopPropagation(); gl.domElement.style.cursor = 'pointer' }}
-      onPointerOut={() => { gl.domElement.style.cursor = '' }}
+      // M429. A double-click opens its panel, through the room's open door
+      // (Canvas's jump, after the room closes) — the same drag guard as the
+      // click: fiber measures `delta` from this press, so a double-click
+      // whose second press dragged was an orbit. It (re)picks first, so the
+      // robot is picked whatever its first click toggled; an agent with no
+      // panel to land on (the simulator's, a teammate's elsewhere), or the
+      // past room, is picked and goes nowhere.
+      onDoubleClick={(event) => {
+        if (event.delta > CLICK_SLOP_PX || leftAtRef.current !== null) return
+        event.stopPropagation()
+        selectAgent(agentId)
+        const actions = worldActions()
+        if (openableFrom(agentId, replayAt() !== null, actions)) actions!.open(agentId)
+      }}
+      // The canvas's own tooltip is the robot's hint (its card layer is deaf
+      // to the pointer, so a title there never shows): asked on each hover,
+      // because whether it can open changes with the canvas and the replay.
+      onPointerOver={(event) => {
+        event.stopPropagation()
+        gl.domElement.style.cursor = 'pointer'
+        gl.domElement.title = openableFrom(agentId, replayAt() !== null, worldActions()) ? OPEN_HINT : ''
+      }}
+      onPointerOut={() => { gl.domElement.style.cursor = ''; gl.domElement.title = '' }}
     >
       {picked ? <mesh geometry={k.pick} material={k.ringMaterial} position-y={0.02} /> : null}
       <group ref={bob}>

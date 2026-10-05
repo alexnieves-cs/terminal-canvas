@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef,
 import { retryAgentWorld, useAgentIds, useWorldConnection } from './agent-world-store'
 import { prefersReducedMotion, worldFits } from './world-perf'
 import { useRoster } from './world-roster'
+import { FIELD_SELECTOR, OVERLAY_SELECTOR } from './world-select'
 import { setWorldOn } from './world-toggle'
 import { createWorldTransition, hostLook, WORLD_TRANSITION_MS } from './world-transition'
 
@@ -167,8 +168,9 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
       // Escape in a field cancels the field, and Escape in an open menu or dialog closes
       // that; neither should also drop the person out of the view.
       const target = event.target
-      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]') !== null) return
-      if (document.querySelector('[role="menu"]:not([hidden]), [role="dialog"], [role="listbox"]') !== null) return
+      // (M429: the same two selectors WorldChrome's Enter asks — world-select.ts.)
+      if (target instanceof HTMLElement && target.closest(FIELD_SELECTOR) !== null) return
+      if (document.querySelector(OVERLAY_SELECTOR) !== null) return
       setWorldOn(false)
     }
     window.addEventListener('keydown', onKey)

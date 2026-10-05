@@ -10,7 +10,7 @@ import { getWorldContext, useWorldActions, useWorldContext } from './world-conte
 import { badgeFor, factParts } from './world-facts'
 import { cardTitle, isLiveStatus, recentTools, type BadgeKind } from './world-scene'
 import { cardHeadline, cardTier, conflictPartners, type CardTier, type Headline } from './world-structure'
-import { useSelectedAgent } from './world-select'
+import { OPEN_HINT, openableFrom, useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
 
@@ -123,7 +123,8 @@ function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
             <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
           </>
         ) : null}
-        {past ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
+        {/* M429: no Open for an agent with no panel to land on (the simulator's, a teammate's elsewhere) — it would close the room onto nothing. */}
+        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
       </div>
     </div>
   )
@@ -144,6 +145,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const ctx = useWorldContext()
   const picked = useSelectedAgent() === agentId
   const past = useReplayAt() !== null
+  const actions = useWorldActions()
   // The last title the agent gave in its own words. The ring is fifty events,
   // and a long run of tool calls pushes the last thought out of it; the card
   // keeps saying what the agent is on rather than dropping back to its name.
@@ -221,10 +223,17 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   // The INSPECTOR layer (M428): model · spend · context · branch · teammate · queue.
   // On the full card only, and CSS shows it only up close or on the picked robot.
   const parts = full ? factParts(facts, record.name) : []
+  // M429. The way to the panel, on the PICKED robot's card only: the card
+  // layer is deaf to the pointer but for its controls, and every control over
+  // the room is a patch an orbit cannot start from — one Open, on the card a
+  // person chose, not one on every card. A waiting card's request already has
+  // its Open; the past room has none (`openableFrom`).
+  const openable = openableFrom(agentId, past, actions)
+  const openHere = picked && !waiting && openable
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
-        <div ref={anchor} className="world-tag" style={{ opacity: 0 }} data-status={record.status} data-badge={badge.kind} data-activity={activity} data-picked={picked ? '' : undefined} role="group" aria-label={`${record.name}: ${verb ?? badge.word}`}>
+        <div ref={anchor} className="world-tag" style={{ opacity: 0 }} data-status={record.status} data-badge={badge.kind} data-activity={activity} data-picked={picked ? '' : undefined} role="group" aria-label={`${record.name}: ${verb ?? badge.word}${openable ? `. ${OPEN_HINT}` : ''}`}>
           <div className="world-pill" aria-hidden="true">
             <span className="world-dot" />
             <span className="world-pill__name">{record.name}</span>
@@ -259,6 +268,11 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
                       </li>
                     ))}
                   </ul>
+                ) : null}
+                {openHere ? (
+                  <div className="world-card__actions" role="group" aria-label="Its panel">
+                    <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open panel</button>
+                  </div>
                 ) : null}
               </div>
             </div>
