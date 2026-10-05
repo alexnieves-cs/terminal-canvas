@@ -346,6 +346,14 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   reducedRef.current = reduced
   const leftAtRef = useRef(leftAt)
   leftAtRef.current = leftAt
+  // fiber drops an unmounted object from its hovered set WITHOUT a pointerout, so a robot that sinks
+  // under a resting pointer would leave its hint and the pointer cursor on the canvas over bare floor.
+  const hovered = useRef(false)
+  useEffect(() => () => {
+    if (!hovered.current) return
+    gl.domElement.style.cursor = ''
+    gl.domElement.title = ''
+  }, [gl])
   // A leaving robot keeps the card it had: it is out of the card ranking the
   // moment it leaves, and a card that vanished on that frame would be the very
   // pop the leave exists to remove. The card fades with the robot's pop instead.
@@ -549,10 +557,12 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       // because whether it can open changes with the canvas and the replay.
       onPointerOver={(event) => {
         event.stopPropagation()
+        hovered.current = true
         gl.domElement.style.cursor = 'pointer'
-        gl.domElement.title = openableFrom(agentId, replayAt() !== null, worldActions()) ? OPEN_HINT : ''
+        // A robot mid-leave opens nothing (both doors refuse it), so it promises nothing either.
+        gl.domElement.title = leftAtRef.current === null && openableFrom(agentId, replayAt() !== null, worldActions()) ? OPEN_HINT : ''
       }}
-      onPointerOut={() => { gl.domElement.style.cursor = ''; gl.domElement.title = '' }}
+      onPointerOut={() => { hovered.current = false; gl.domElement.style.cursor = ''; gl.domElement.title = '' }}
     >
       {picked ? <mesh geometry={k.pick} material={k.ringMaterial} position-y={0.02} /> : null}
       <group ref={bob}>

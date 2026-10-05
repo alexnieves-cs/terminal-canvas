@@ -66,9 +66,12 @@ export function agentFacts(input: FactsInput): WorldAgentFacts | null {
   if (input.backend !== undefined && input.backend !== DEFAULT_BACKEND) out.backend = BACKENDS[input.backend].label
   const m = input.meter
   if (m?.spentUsd !== undefined && cents(m.spentUsd) > 0) out.spentUsd = cents(m.spentUsd)
-  if (m?.caps !== undefined && m.caps.usd > 0) out.capUsd = cents(m.caps.usd)
-  if (m?.context !== undefined && m.window !== undefined && m.window > 0) out.contextPct = contextUsedPct(m.context, m.window)
-  else if (m?.context !== undefined && m.caps !== undefined && m.caps.context > 0) {
+  // A cap under half a cent rounds to "$0.00", and a context under half a percent to "0%": both are zero-value statements.
+  if (m?.caps !== undefined && cents(m.caps.usd) > 0) out.capUsd = cents(m.caps.usd)
+  const pct = m?.context !== undefined && m.window !== undefined && m.window > 0 ? contextUsedPct(m.context, m.window) : null
+  if (pct !== null) {
+    if (pct > 0) out.contextPct = pct
+  } else if (m?.context !== undefined && m.caps !== undefined && m.caps.context > 0 && thousands(m.context) > 0) {
     out.contextK = thousands(m.context)
     out.capContextK = thousands(m.caps.context)
   }

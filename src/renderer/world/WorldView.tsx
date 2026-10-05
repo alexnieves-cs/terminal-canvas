@@ -14,7 +14,7 @@ import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
-import { selectAgent } from './world-select'
+import { selectAgent, selectedAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
 import { dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
@@ -549,6 +549,16 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
 export function WorldView({ transition, reduced, onLost }: { transition: WorldTransition; reduced: boolean; onLost: () => void }): JSX.Element {
   const roster = useRoster()
   const waiting = useWaiting()
+  // A pick is of a robot IN this room (M429 review): one that has left — gone idle and sunk, or
+  // moved out with its workspace — lets the pick go, or Enter would open a panel for a robot no one
+  // can see any more, and the Ask field would stay addressed to it.
+  useEffect(() => {
+    const id = selectedAgent()
+    if (id !== null && !roster.some((a) => a.agentId === id)) selectAgent(null)
+  }, [roster])
+  // And a closed room keeps no pick: a reopened room is a fresh look (world-select.ts's header) —
+  // after a double-click left for a panel, the next open's first Enter would otherwise go straight back.
+  useEffect(() => () => selectAgent(null), [])
   // M430: the room's tier, and the bloom as RENDERED — the person's choice AND the tier's, never the person's bit alone.
   const quality = useWorldQuality()
   const tierPlan = qualityPlan(quality)

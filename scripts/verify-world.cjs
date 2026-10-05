@@ -1612,6 +1612,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const src = (f) => readFileSync(join(dir, f), 'utf8')
   const meter = (m) => ({ meter: m })
   const A = FX.agentFacts
+  ok('world.facts.zero.1 a context under half a percent of its window is not "0% context", a context cap\'s figure under a thousand is not "0k", and a cap under half a cent is not "$0.00" — each zero is omitted like the spend\'s',
+    A(meter({ context: 100, window: 200000 })) === null && A(meter({ context: 300, caps: { usd: 0, context: 150000 } })) === null &&
+      A(meter({ spentUsd: 1, caps: { usd: 0.004, context: 0 } })).capUsd === undefined && A(meter({ context: 2000, window: 200000 })).contextPct === 1,
+    JSON.stringify([A(meter({ context: 100, window: 200000 })), A(meter({ spentUsd: 1, caps: { usd: 0.004, context: 0 } }))]))
   ok('world.facts.1 an agent nothing knows anything about has NO facts (null, never a record of zeros), and each zero is omitted rather than said: a spend that rounds to $0.00, an empty queue, the default backend, a blank model',
     A({}) === null && A({ queued: 0, backend: 'claude', model: '  ' }) === null && A(meter({ spentUsd: 0 })) === null && A(meter({ spentUsd: 0.004 })) === null &&
       A({ queued: 2 }).queued === 2 && A({ backend: 'codex' }).backend === 'codex' && A({ backend: 'acp' }).backend === 'copilot (acp)',
@@ -1733,9 +1737,17 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /inField: el\?\.closest\(FIELD_SELECTOR\) != null/.test(chrome) && /overlayOpen: document\.querySelector\(OVERLAY_SELECTOR\) !== null/.test(chrome) &&
       /target\.closest\(FIELD_SELECTOR\) !== null\) return/.test(stage) && /document\.querySelector\(OVERLAY_SELECTOR\) !== null\) return/.test(stage) && !/window\.canvas/.test(chrome))
   ok('world.open.7 the way there is discoverable: the robot\'s hover tooltip (the canvas element\'s title — the card layer is deaf to the pointer, so a title there never shows), the tag\'s label and the button\'s title say it, short, and only when it can open',
-    SEL.OPEN_HINT.length <= 64 && /gl\.domElement\.title = openableFrom\(agentId, replayAt\(\) !== null, worldActions\(\)\) \? OPEN_HINT : ''/.test(robot) && /gl\.domElement\.title = ''/.test(robot) &&
+    SEL.OPEN_HINT.length <= 64 && /gl\.domElement\.title = leftAtRef\.current === null && openableFrom\(agentId, replayAt\(\) !== null, worldActions\(\)\) \? OPEN_HINT : ''/.test(robot) && /gl\.domElement\.title = ''/.test(robot) &&
       /\$\{openable \? `\. \$\{OPEN_HINT\}` : ''\}/.test(card) && /title=\{OPEN_HINT\} data-world-open/.test(card),
     SEL.OPEN_HINT)
+  {
+    const view = src('WorldView.tsx'), chrome = src('WorldChrome.tsx')
+    ok('world.open.8 a pick is of a robot IN the room: one that leaves the roster lets the pick go, a closed room keeps none (a reopened room is a fresh look — the first Enter after a double-click left for a panel would otherwise go straight back), and the Enter door asks the room itself at the keypress',
+      /if \(id !== null && !roster\.some\(\(a\) => a\.agentId === id\)\) selectAgent\(null\)/.test(view) && /useEffect\(\(\) => \(\) => selectAgent\(null\), \[\]\)/.test(view) &&
+        /if \(!inRoom\.current\.includes\(id\)\) return/.test(chrome) && /inRoom\.current = roster\.map\(\(a\) => a\.agentId\)/.test(chrome))
+    ok('world.open.9 a robot that unmounts under a resting pointer takes its hint and cursor with it — fiber drops an unmounted object from its hovered set with NO pointerout (removeInteractivity) — and a robot mid-leave promises no open',
+      /const hovered = useRef\(false\)/.test(robot) && /useEffect\(\(\) => \(\) => \{\s*if \(!hovered\.current\) return\s*gl\.domElement\.style\.cursor = ''\s*gl\.domElement\.title = ''/.test(robot))
+  }
 }
 
 const failures = results.filter((r) => !r.pass)

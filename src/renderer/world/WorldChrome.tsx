@@ -48,6 +48,8 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
   const picked = useSelectedAgent()
   const actions = useWorldActions()
   const sendable = useMemo(() => roster.filter((a) => actions?.canSend(a.agentId) ?? false), [roster, actions])
+  const inRoom = useRef<readonly string[]>([])
+  inRoom.current = roster.map((a) => a.agentId)
   const target = askTarget(picked, roster.map((a) => a.agentId), (id) => actions?.canSend(id) ?? false)
   const targetName = roster.find((a) => a.agentId === target)?.name ?? null
   const [draft, setDraft] = useState('')
@@ -106,6 +108,8 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
       const id = selectedAgent()
       const door = worldActions()
       if (!openableFrom(id, replayAt() !== null, door)) return
+      // Only a robot standing in the room (WorldView also lets a departed pick go; this is the keypress's own look).
+      if (!inRoom.current.includes(id)) return
       event.preventDefault()
       door!.open(id)
     }

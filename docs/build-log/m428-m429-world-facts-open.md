@@ -129,3 +129,17 @@ None of these was seen. Each needs `npm run dev` from a real checkout (not this 
    press Enter, to open its panel"; moving off clears it.
 10. `verify:visual`: no world scene is in `shot.cjs`, so no golden should move; the Electron tier
     (`verify:panels:*`) reads `Canvas.tsx` and should be run once before merging.
+
+## Review round (fresh-context reviewer, merged on `m428-m430-world`)
+
+- **A stale pick opened a robot no one could see.** `selected` was never cleared when its agent left
+  the roster or the room closed, so Enter opened a sunk robot's panel — and after a double-click left
+  for a panel, the next open's first Enter went straight back. WorldView now lets a departed pick go and
+  clears it on unmount; the Enter door also asks the roster at the keypress. `world.open.8`.
+- **"0% context", "0k of 150k" and "$x of $0.00" could reach a card** — zero-value statements. Omitted
+  like the spend's. `world.facts.zero.1`.
+- **A robot that sank under a resting pointer left its hint and cursor on the canvas.** fiber's
+  `removeInteractivity` drops the object from its hovered set with no pointerout (read in 9.8.1's
+  source). The robot clears them on unmount if it set them; a robot mid-leave sets no hint. `world.open.9`.
+- Not taken: the context fan-out (bounded — only a visible fact republishes) and the hold/idle order
+  flicker (unconfirmed which IPC lands first; the leave path stands the robot back up) — both for the live run.
