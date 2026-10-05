@@ -5592,3 +5592,49 @@ While a person scrubs, every record is the past room's; a rule that reads the wa
 stale call, a fresh tile) would judge a past record against now and call every agent quiet. The
 handoff arcs are the one exception — `firedAt` is live context, not a past record.
 `verify:world world.replay.5`.
+
+**The room has ONE quality tier, it only ever steps DOWN, and nothing about it is stored (`world-quality.ts`, replacing `world-perf.ts`'s ratio governor and M427's starved stopgap, M430).**
+`full` | `lean` | `flat` is decided from the measured frame rate: the pixel ratio steps inside a tier
+(`LOW_WINDOWS` low windows each) to the tier's floor, then `TIER_WINDOWS` more step the tier. It never
+climbs back, unlike Orchestrate's `orchQualityStep`: lowering the quality is what raised the rate, so
+the fast windows measure the CHEAPER tier and a climb would fail again and drop — the bloom pulsing,
+shadows popping, a shader recompile on every flip. Bloom renders iff the person's own bit is on AND
+the tier allows it (`bloomRenders`); every material that compensates for the composer (the ground's
+pre-image, the trim, the eyes, the board, the terraces) must read `useBloomRendered()`, never
+`useBloomOn()` — a material painted for a composer the tier holds off is a clipped trim and a wrong
+ground, with no error. The tier lives in memory for the app's run (a reopened view starts from it);
+the person's bloom bit is the only thing written to storage. The harness pins a tier through
+`window.__tcWorldQuality`, which no app code writes. `verify:world world.quality.*`, `world.ship.1`.
+
+**`gl.shadowMap.enabled` recompiles NOTHING; the light's `castShadow` recompiles everything (`WorldView.tsx`'s `Lights`, three r186, M430).**
+`shadowMapEnabled` is a program parameter, but `WebGLRenderer`'s `needsProgramChange` never compares
+it, so turning shadows off through the canvas's `shadows` prop (which only sets the renderer's flag)
+keeps every lit material on its USE_SHADOWMAP program — still paying the filtered lookup per
+fragment, against a map that is no longer drawn: shadows frozen where the robots stood, no error.
+Flipping the key light's `castShadow` changes the lights' hash (`numDirectionalShadows`), which bumps
+`lights.state.version`, which recompiles every lit material without the lookup, and leaves
+`WebGLShadowMap.render` no light to draw for. No `material.needsUpdate` is needed. And three
+allocates a light's map only while `shadow.map` is null, so a new `mapSize` alone changes nothing:
+the old target is disposed and set to null on every tier change. The canvas's `shadows` stays the
+one constant `"percentage"`. `verify:world world.quality.shadow.1`.
+
+**A `setDpr` from inside an R3F scene lasts only until `<Canvas>` next renders; the ratio must be the `dpr` PROP (`WorldView.tsx` (4c), fiber 9.8.1, M430).**
+fiber's `applyRootConfiguration` runs on EVERY render of `<Canvas>` and resets the ratio to the
+prop's whenever they differ ("the pixel ratio follows the device on every call"). So the M414
+governor's steps and M420's bloom pixel budget were each undone the next time the view re-rendered
+(a card re-ranking, an agent arriving), and the room silently went back to the full ratio. The
+governor now reports the ratio up (`onDpr`) and the view passes it down as `dpr={dpr}`. The bloom's
+pixel budget is one term of that ratio (`worldDpr`), not a second writer: `WorldBloom`'s own
+unmount used to put the display's ratio back, so a tier that dropped the bloom would have RAISED the
+fill. `verify:world world.perf.11`, `world.bloom.budget.1`.
+
+**WebGL is probed BEFORE the world's lazy load, and a lost context lands in the same note (`WorldStage.tsx` (5), `renderer/webgl-probe.ts`, M430).**
+The probe runs in the render that opens the view — an effect would run after that render had
+already rendered the lazy `WorldView` and started its fetch — and while the view closes the open's
+answer stands (a fresh `true` there would mount the scene during the move back). The probe is a
+shared, import-free module that Orchestrate's `orchWebglAvailable` now calls too: importing
+Orchestrate's own copy would tie a first-chunk file to that module's whole graph. A context lost
+while the room is up is heard by `ContextWatch` on the scene's own canvas; its listener is removed in
+the effect cleanup that fiber runs before its own teardown force-loses the context, and the stage
+acts on it only while the world is on — so leaving the world is never reported as a loss.
+`verify:world world.quality.probe.1`, `world.quality.lost.1`.

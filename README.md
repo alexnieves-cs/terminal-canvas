@@ -1214,6 +1214,7 @@ price of not killing something.
 | M425 | Time in the room: a journal of what the room showed, a scrubber over the last hour that shows the room as it was, and after five minutes away a list of what happened with a camera tour of each beat. [log](docs/build-log/m421-m427-world-ahead.md) |
 | M426 | The shared room: teammates' initials on the agent each is looking at, a strip that follows one with the camera, and the room telling teammates you are in it and which robot you picked — no new presence field. [log](docs/build-log/m421-m427-world-ahead.md) |
 | M427 | The World view ships: no dev gate, measured loading the room and its model under `file://` in the built renderer and in the packaged app; a GPU still slow at the pixel ratio's floor drops the bloom for the session; the first-chunk check reads the built entry. [log](docs/build-log/m421-m427-world-ahead.md) |
+| M430 | One quality tier for the World view — full, lean, flat — from the measured frame rate, in place of three separately-tuned knobs and an always-on shadow pass: each tier says whether the bloom may run, the shadow map's size (or none), the pixel ratio's range and how many full cards; it only ever steps down in a session and is never stored, and the person's own bloom choice still wins downward. WebGL is probed before the room loads, and a lost context says so instead of freezing. [log](docs/build-log/m430-world-quality.md) |
 
 ### What's next — the v10 run (D01–D20)
 
