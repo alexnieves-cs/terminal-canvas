@@ -56,6 +56,8 @@ export interface PublisherInput {
   /** M429. Whether that jump has somewhere to land — the same two cases `jumpAnywhere` takes. */
   canJump: (panelId: string) => boolean
   closeWorld: () => void
+  /** M432. Canvas's switch to Orchestrate with this panel selected; the room closes with the page change. */
+  orchestrate: (panelId: string) => void
   /** M428. The worktree branch a panel runs in, when anything knows it (a terminal's PTY result, a chat's task lane). */
   branchOf: (panel: Panel) => string | undefined
   /** M428. A teammate's display name, the rail's own resolution. */
@@ -134,7 +136,7 @@ function useRoster(workspaceId: string | undefined, on: boolean): PresenceRoster
 }
 
 export function useWorldContextPublisher(input: PublisherInput): void {
-  const { on, panels, approvals, jump, canJump, closeWorld } = input
+  const { on, panels, approvals, jump, canJump, closeWorld, orchestrate } = input
   const roster = useRoster(input.workspaceId, on)
   // The latest render's inputs, for the chat subscription below, which runs
   // between renders and must read what Canvas holds now, not what it held
@@ -197,9 +199,14 @@ export function useWorldContextPublisher(input: PublisherInput): void {
         const panel = byId(agentId)
         return panel !== undefined && isChatPanel(panel)
       },
-      canOpen: (agentId) => canJump(agentId)
+      canOpen: (agentId) => canJump(agentId),
+      orchestrate: (agentId) => {
+        if (byId(agentId) === undefined) return
+        orchestrate(agentId)
+      },
+      canOrchestrate: (agentId) => byId(agentId) !== undefined
     })
-  }, [panels, jump, canJump, closeWorld])
+  }, [panels, jump, canJump, closeWorld, orchestrate])
 
   useEffect(() => () => setWorldActions(null), [])
 }

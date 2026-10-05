@@ -996,9 +996,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       (stageLook.match(/toneMapped=\{false\}/g) ?? []).length >= 2 && /vertexColors transparent/.test(stageLook) && /depthWrite=\{false\}/.test(stageLook) && /position=\{\[0, -SLAB\.thickness \/ 2, 0\]\}/.test(stageLook) &&
       /y=\{0\.012\}/.test(stageLook))
   const robotSrc = code('WorldRobot.tsx'), officeSrc = code('WorldOffice.tsx'), propsSrc = code('WorldProps.tsx')
-  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk parts, the table, the stools and the board — and the floating file tiles do NOT (M423, as the cubes they replaced: they float high and bob, and a moving shadow would cost a pass for nothing) — the terraces cast and take one',
-    (robotSrc.match(/castShadow/g) ?? []).length === 6 && (officeSrc.match(/castShadow/g) ?? []).length >= 5 && (propsSrc.match(/castShadow/g) ?? []).length >= 4 &&
-      !/<instancedMesh/.test(propsSrc) && /<mesh geometry=\{geometry\} receiveShadow castShadow>/.test(code('WorldStructure.tsx')) && !/<Tile[\s\S]{0,400}castShadow/.test(code('WorldStructure.tsx').slice(code('WorldStructure.tsx').indexOf('function Tile('), code('WorldStructure.tsx').indexOf('function headOf('))))
+  // M433: the desks' bodies and the stools are instanced — each instanced mesh casts as one; a robot's six casters keep their marks (the LOD only lifts them far off).
+  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk bodies (one instanced mesh, M433), the table, the stools (instanced) and the board — and the floating file tiles do NOT (M423, as the cubes they replaced: they float high and bob, and a moving shadow would cost a pass for nothing) — the terraces cast and take one',
+    (robotSrc.match(/ castShadow[ />]/g) ?? []).length === 6 && /m\.castShadow = true\s*m\.receiveShadow = true/.test(officeSrc) && (officeSrc.match(/ castShadow[ />]/g) ?? []).length >= 2 &&
+      /<instancedMesh ref=\{seats\}[^>]*castShadow receiveShadow \/>/.test(propsSrc) && /<instancedMesh ref=\{legs\}[^>]*castShadow \/>/.test(propsSrc) && (propsSrc.match(/ castShadow[ />]/g) ?? []).length >= 5 && /<mesh geometry=\{geometry\} receiveShadow castShadow>/.test(code('WorldStructure.tsx')) && !/<Tile[\s\S]{0,400}castShadow/.test(code('WorldStructure.tsx').slice(code('WorldStructure.tsx').indexOf('function Tile('), code('WorldStructure.tsx').indexOf('function headOf('))))
   ok('world.studio.4 the table is a black clearcoat plate with the robots\' RoomEnvironment on THIS material (never scene.environment), a cyan edge line in the same TrimLine as the platform, and no \'DESK 01\' (M423: a desk number named nothing; the terraces name the tasks)',
     /<meshPhysicalMaterial color=\{STUDIO\.tableTop\}[^>]*clearcoat=\{1\}[^>]*envMap=\{env\}/.test(officeSrc) && /studioEnv\(gl\)/.test(officeSrc) && /<TrimLine path=\{line\}/.test(officeSrc) &&
       !/DESK 01/.test(officeSrc) && !/ZoneLabel/.test(officeSrc) && !/\.environment\s*=/.test(officeSrc) && PAL.STUDIO.tableTop === '#07080b')
@@ -1765,14 +1766,14 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const store = src('world-context-store.ts'), pub = src('useWorldContextPublisher.ts')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   ok('world.open.4 canOpen is on the room\'s door interface and Canvas answers it with jumpAnywhere\'s own two cases (a panel on this canvas, or in another workspace) — and open itself refuses an id it cannot land, BEFORE the room closes (jumpAnywhere drops one silently)',
-    /\n {2}canOpen\(agentId: string\): boolean\n\}/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
+    /\n {2}canOpen\(agentId: string\): boolean\n/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
       /canJump: canJumpAnywhere,/.test(canvasSrc) &&
       /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc) &&
       /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc))
   const card = src('WorldCard.tsx') + src('WorldCardBody.tsx')
   ok('world.open.5 the card\'s Open is on the PICKED robot\'s card only, never in the past room, never for an agent with no panel, never twice on a waiting card (its request has one) — the shared act styling inside the one pointer-taking group — and the request\'s own Open hides for an agent with no panel too',
     /const openable = openableFrom\(agentId, past, actions\)/.test(card) && /const openHere = picked && !waiting && openable/.test(card) &&
-      /\{openHere \? \(\s*<div className="world-card__actions"[^>]*>\s*<button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
+      /\{openHere \|\| orchHere \? \(\s*<div className="world-card__actions"[^>]*>\s*\{openHere \? <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
       /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card))
   const chrome = src('WorldChrome.tsx'), stage = src('WorldStage.tsx')
   ok('world.open.6 Enter opens the picked robot from the chrome\'s one window listener — the pure guard, the room ON (the chrome outlives it through the move back), the same gate and the same door — and Escape and Enter ask the SAME field and overlay selectors',
@@ -1835,6 +1836,74 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       JSON.stringify(SET.deskAccessory('c', order)) === JSON.stringify(SET.deskAccessory('c', [...order, 'z'])) &&
       PAL.seatIndex('c', order) === 2 && PAL.robotTint('c', order) === PAL.ROBOT_TINTS[2 % PAL.ROBOT_TINTS.length],
     JSON.stringify(picks))
+}
+
+// ── M432–M434: Orchestrate ↔ World, the instanced room, the minimap ────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const src = (f) => readFileSync(join(dir, f), 'utf8')
+  const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  buildSync({
+    entryPoints: [join(dir, 'world-minimap.ts')], outfile: join(root, 'out/verify/world-minimap.cjs'),
+    bundle: true, platform: 'node', format: 'cjs', logLevel: 'error'
+  })
+  const MAP = require('../out/verify/world-minimap.cjs')
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const orch = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+
+  // The arrival: held until the room settles, the first member IN the room, kept a grace while none is, then dropped.
+  const inRoom = (ids) => (id) => ids.includes(id)
+  SEL.requestArrival(['x', 'b', 'c'], 0)
+  const none = SEL.takeArrival(inRoom([]), 100)
+  const kept = SEL.hasArrival()
+  const got = SEL.takeArrival(inRoom(['b', 'c']), 200)
+  const cleared = !SEL.hasArrival()
+  SEL.requestArrival(['x'], 0)
+  SEL.takeArrival(inRoom([]), SEL.ARRIVAL_GRACE_MS + 1)
+  const expired = !SEL.hasArrival()
+  SEL.requestArrival([], 0)
+  ok('world.cross.1 a "View in World" arrival waits for the room: none of it in the room yet keeps it (the feed says every agent a beat after the room opens), the first member standing in it is taken and the request cleared, a request older than ARRIVAL_GRACE_MS is dropped (a stale one would yank the camera on some later open), and an empty one is no request',
+    none === null && kept && got === 'b' && cleared && expired && !SEL.hasArrival(), `none=${none} kept=${kept} got=${got} cleared=${cleared} expired=${expired}`)
+  const view = code('WorldView.tsx')
+  ok('world.cross.2 the rig takes an arrival only on a RESTING frame (a glide mid-transition is dropped by the rig itself), picks the robot and glides to it through the same focus door the tour uses — and Canvas asks for it BEFORE the page change, turning the room on a frame later, from the focused plate\'s chip only',
+    /if \(atRest\) \{[\s\S]{0,700}if \(hasArrival\(\)\) \{\s*const id = takeArrival\(\(agentId\) => stations\.current\?\.has\(agentId\) === true, Date\.now\(\)\)\s*if \(id !== null\) \{\s*selectAgent\(id\)\s*api\.current\?\.focus\(id\)/.test(view) &&
+      /onViewInWorld=\{\(ids\) => \{\s*requestArrival\(ids, Date\.now\(\)\)\s*leaveForCanvas\(\)\s*requestAnimationFrame\(\(\) => setWorldOn\(true\)\)/.test(canvasSrc) &&
+      /props\.onViewInWorld !== undefined && focusedIsOn\(t\.id\) && \(pp\.p\.island\?\.memberIds\.length \?\? 0\) > 0/.test(orch) && /data-orch-platform-world=\{p\.id\} role="button" tabIndex=\{0\}/.test(orch))
+  const card = src('WorldCard.tsx'), pub = src('useWorldContextPublisher.ts'), store = src('world-context-store.ts')
+  ok('world.cross.3 "View in Orchestrate" is on the PICKED robot\'s card, never in the past room, only for an agent with a panel on THIS canvas (Orchestrate has no row for another workspace\'s or the simulator\'s) — and Canvas makes it the selection before the page switch, the carry every canvas → Orchestrate switch gets',
+    /const orchHere = picked && !past && actions !== null && actions\.canOrchestrate\(agentId\)/.test(card) && /data-world-orchestrate>View in Orchestrate</.test(card) &&
+      /orchestrate\(agentId: string\): void/.test(store) && /canOrchestrate: \(agentId\) => byId\(agentId\) !== undefined/.test(pub) && /if \(byId\(agentId\) === undefined\) return\s*orchestrate\(agentId\)/.test(pub) &&
+      /orchestrate: \(panelId\) => \{\s*selectOnly\(panelId\)\s*setCenterView\('orchestration'\)/.test(canvasSrc))
+
+  // The level of detail: a far robot drops its casters and its halo, with a band so an orbit on the line does not flicker it.
+  const L = PF.robotLod
+  ok('world.lod.1 robotLod: near up close, far below LOD_FAR_PX, and back to near only past LOD_FAR_PX × LOD_HYSTERESIS — a non-finite measure keeps what it had',
+    L(100, null) === 'near' && L(PF.LOD_FAR_PX - 1, null) === 'far' && L(PF.LOD_FAR_PX + 1, 'far') === 'far' && L(PF.LOD_FAR_PX * PF.LOD_HYSTERESIS, 'far') === 'near' &&
+      L(PF.LOD_FAR_PX - 1, 'near') === 'far' && L(NaN, 'far') === 'far' && L(NaN, null) === 'near')
+  const robot = code('WorldRobot.tsx'), office = code('WorldOffice.tsx')
+  ok('world.lod.2 the robot writes its LOD only when it flips — every caster\'s castShadow (no recompile: it moves the mesh in or out of the shadow pass) and the halo — and all six casters are collected',
+    /if \(nextLod !== lod\.current\) \{\s*lod\.current = nextLod\s*for \(const mesh of casters\.current\) mesh\.castShadow = nextLod === 'near'\s*if \(halo\.current\) halo\.current\.visible = nextLod === 'near'/.test(robot) &&
+      (robot.match(/<mesh ref=\{cast\} [^>]*castShadow \/>/g) ?? []).length === 6)
+  ok('world.lod.3 the desks are ONE instanced draw, culled never (its bounds are where the desks started), each desk writing its slot AFTER its glide, hidden when sunk, and its slot freed when it goes — the screen stays a mesh per desk (its glow is its agent\'s)',
+    (office.match(/new THREE\.InstancedMesh\(/g) ?? []).length === 1 && /m\.frustumCulled = false/.test(office) && /slots\.write\(mine\.current, g\.visible \? g\.matrixWorld : null\)/.test(office) &&
+      /return \(\) => \{ slots\.give\(taken\); mine\.current = -1 \}/.test(office) && (office.slice(office.indexOf('function Desk('), office.indexOf('function MeetingTable(')).match(/<mesh /g) ?? []).length === 1 && /<meshStandardMaterial ref=\{screen\}/.test(office))
+
+  // The minimap: the floor and the map are each other's inverse, a press off the slab lands on its edge, and a small room has none.
+  const half = 9
+  const pts = [{ x: 0, z: 0 }, { x: 4.5, z: -3 }, { x: -9, z: 9 }]
+  const round = pts.every((p) => { const m = MAP.toMap(p, half); const back = MAP.fromMap(m.x, m.y, half); return Math.abs(back.x - p.x) < 1e-9 && Math.abs(back.z - p.z) < 1e-9 })
+  const off = MAP.fromMap(-50, MAP.MINIMAP_SIZE + 50, half)
+  const plan = { half, camera: { x: 10, z: 10 }, target: { x: 0, z: 0 }, agents: [{ agentId: 'a', at: { x: 1, z: 1 }, waiting: false }] }
+  const nudged = { ...plan, camera: { x: 10.001, z: 10 } }
+  ok('world.map.1 the minimap maps the floor and back exactly, clamps a press off the slab onto its edge, keys a plan by what it can SHOW (a hair of camera drift re-renders nothing; a robot sent to the table does), and is shown only from MINIMAP_MIN_AGENTS',
+    round && off.x === -half && off.z === half && MAP.planKey(plan) === MAP.planKey(nudged) &&
+      MAP.planKey(plan) !== MAP.planKey({ ...plan, agents: [{ ...plan.agents[0], waiting: true }] }) && MAP.planKey(null) === '' &&
+      !MAP.minimapShown(MAP.MINIMAP_MIN_AGENTS - 1) && MAP.minimapShown(MAP.MINIMAP_MIN_AGENTS), JSON.stringify(off))
+  const mini = src('WorldMinimap.tsx'), pure = src('world-minimap.ts')
+  ok('world.map.2 the minimap is plain DOM and its rules are pure — neither imports three, fiber or drei — it reaches the scene through the CameraApi (plan, centre, focus), polls it a few times a second rather than per frame, and a dot press picks before it glides',
+    !THREE_DOOR_RE.test(mini) && !THREE_DOOR_RE.test(pure) && !/^import(?!.*type)/m.test(pure) && /camera\.current\?\.plan\(\)/.test(mini) && /camera\.current\?\.centre\(floor\.x, floor\.z\)/.test(mini) &&
+      /window\.setInterval\(look, POLL_MS\)/.test(mini) && !/useFrame/.test(mini) && /selectAgent\(a\.agentId\)\s*camera\.current\?\.focus\(a\.agentId\)/.test(mini) &&
+      /plan\(\): RoomPlan \| null/.test(src('world-set.ts')) && /centre\(x: number, z: number\): void/.test(src('world-set.ts')) && /<WorldMinimap camera=\{camera\} \/>/.test(src('WorldChrome.tsx')))
 }
 
 const failures = results.filter((r) => !r.pass)

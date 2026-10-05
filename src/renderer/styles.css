@@ -10977,6 +10977,20 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-tools .world-tools__fit { padding: 0 var(--sp-5); }
 .world-tools button:hover { background: var(--world-chrome-hover); }
 .world-tools button:focus-visible, .world-ask__send:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+/* M434. The room from above, over the camera buttons (WorldMinimap.tsx): the slab, the table, a dot per
+   robot in its shell's colour, the camera's sight line. The same white glass as the buttons under it. */
+.world-minimap {
+  position: absolute; left: var(--sp-6); bottom: calc(30px + var(--sp-5) + 40px + var(--sp-3));
+  display: block; border-radius: var(--r-md); background: var(--world-holo-solid); box-shadow: var(--world-holo-shade);
+  cursor: crosshair; pointer-events: auto;
+}
+.world-minimap__slab { fill: var(--world-chrome-hover); stroke: var(--world-holo-rule); stroke-width: 1; }
+.world-minimap__table { fill: color-mix(in srgb, var(--world-holo-ink) 55%, transparent); pointer-events: none; }
+.world-minimap__sight { stroke: var(--world-holo-ink-2); stroke-width: 1; stroke-dasharray: 2 2; pointer-events: none; }
+.world-minimap__aim { fill: none; stroke: var(--world-holo-ink); stroke-width: 1.5; pointer-events: none; }
+.world-minimap__agent { stroke: var(--world-dot-ring); stroke-width: 1; cursor: pointer; }
+.world-minimap__agent[data-waiting] { stroke: var(--world-wait); stroke-width: 2; }
+.world-minimap__agent[data-picked] { stroke: var(--iris); stroke-width: 2.5; }
 .world-ask {
   position: absolute; left: 50%; bottom: calc(30px + var(--sp-5)); transform: translateX(-50%);
   box-sizing: border-box; width: min(520px, calc(100% - 380px));

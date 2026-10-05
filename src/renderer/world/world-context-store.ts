@@ -179,6 +179,14 @@ export interface WorldActions {
    * the room and land nowhere — so the room offers no way there.
    */
   canOpen(agentId: string): boolean
+  /**
+   * M432. Leave the room for Orchestrate with this agent selected there — the
+   * same carry a canvas selection gets on the canvas → Orchestrate switch, so
+   * the page opens on its task's island and session.
+   */
+  orchestrate(agentId: string): void
+  /** M432. Whether Orchestrate has a row for it: a panel on THIS canvas (another workspace's, or the simulator's, has none). */
+  canOrchestrate(agentId: string): boolean
 }
 
 let actions: WorldActions | null = null

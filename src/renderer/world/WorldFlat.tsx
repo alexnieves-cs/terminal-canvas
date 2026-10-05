@@ -65,7 +65,10 @@ export function WorldFlat(): JSX.Element {
         if (tile === undefined) return false
         tile.scrollIntoView({ block: 'nearest' })
         return true
-      }
+      },
+      // M434: no floor to map — the chrome draws no minimap over the flat room — and nothing to centre on.
+      plan: () => null,
+      centre: () => undefined
     }
     return () => { camera.current = null }
   }, [])

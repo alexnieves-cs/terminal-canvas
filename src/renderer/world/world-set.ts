@@ -3,6 +3,7 @@ import type { AgentStatus } from '@shared/world-events'
 import { agentTint, DESK_ARC, facingToward, type RosterEntry } from './world-scene'
 import { seatIndex } from './world-palette'
 import type { Vec3 } from './world-transition'
+import type { RoomPlan } from './world-minimap'
 
 /**
  * The studio around the robots (M416), as decisions with no three.js and no
@@ -230,6 +231,10 @@ export interface CameraApi {
   zoom(direction: 1 | -1): void
   /** M425: glide to one agent — its desk, or the table when it waits there — from the side the camera is on. False when it is not in the room. */
   focus(agentId: string): boolean
+  /** M434: the room from above, for the minimap (`world-minimap.ts`) — null before the scene has its controls. */
+  plan(): RoomPlan | null
+  /** M434: glide so the orbit looks at this point on the floor, from the same side and distance. */
+  centre(x: number, z: number): void
 }
 
 /** How far a focus glide stands from its agent. */
