@@ -16,7 +16,7 @@ import { clampDpr, DPR_MIN } from './world-perf'
  * **Bloom is a lens over the scene, and the scene keeps a complete look
  * without it.** Everything that glows is also drawn as geometry (the trim's
  * halo band, the eyes' halo plane), and `glowScale(.., false)` / `haloShare(false)` /
- * `unlitScale(false)` / `unlitInk(.., false)` are the identity — so turning bloom off, by hand or by the governor, returns
+ * `unlitScale(false)` / `unlitInk(.., false)` are the identity — so turning bloom off, by hand or by the quality tier (M430), returns
  * the M416/M417 picture exactly rather than a half-lit one.
  */
 export const BLOOM = {
@@ -237,10 +237,13 @@ export function isBloomOn(): boolean {
 }
 
 /**
- * Turns the bloom on or off live: the scene re-renders without the composer
- * and the glowing materials fall back to their un-boosted colours. `persist`
- * is false for the governor's own call — a slow GPU this minute is not a
- * preference to carry into the next session.
+ * Turns the PERSON's bloom on or off live: the scene re-renders without the
+ * composer and the glowing materials fall back to their un-boosted colours.
+ * `persist: false` flips it for this session only. Since M430 nothing in the
+ * app calls it for a slow GPU: the quality tier holds the composer off without
+ * touching this bit (`bloomRenders` in world-quality.ts — rendered iff this is
+ * on AND the tier allows it), so a slow GPU this minute is never written here
+ * and never carried into the next session.
  */
 export function setBloomOn(next: boolean, persist = true): void {
   if (next === on) return

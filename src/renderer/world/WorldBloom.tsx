@@ -2,8 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BloomEffect, EffectComposer, EffectPass, FXAAEffect, RenderPass, ToneMappingEffect, ToneMappingMode } from 'postprocessing'
-import { BLOOM, bloomDprCap, bloomThreshold } from './world-bloom'
-import { clampDpr } from './world-perf'
+import { BLOOM, bloomThreshold } from './world-bloom'
 
 /**
  * The World view's bloom (M420): the SECOND importer of `postprocessing`, behind
@@ -24,7 +23,8 @@ import { clampDpr } from './world-perf'
  *     zero — takes the render away from fiber's automatic `gl.render()` for as
  *     long as this component is mounted, and gives it back the frame it
  *     unmounts. That handover IS the fallback: `WorldView` mounts this only
- *     while bloom is on, and without it the scene renders straight to the
+ *     while bloom RENDERS — the person has it on and the quality tier allows it
+ *     (M430, `bloomRenders`) — and without it the scene renders straight to the
  *     screen as it did in M417. A composer driven from a `requestAnimationFrame`
  *     of its own would fight fiber's loop and render twice.
  * (2) **The studio's tone map is ACES, applied once, in this pass.** three
@@ -58,13 +58,16 @@ import { clampDpr } from './world-perf'
  *     the edges read the same); it is its own later pass because it samples its
  *     neighbours and must see the tone-mapped picture.
  * (7) **A pixel-ratio change must resize the composer.** The governor steps the
- *     ratio with `setDpr`, which changes the drawing buffer but NOT fiber's
+ *     ratio (through the Canvas's `dpr` prop since M430, which fiber applies
+ *     with `setDpr`), which changes the drawing buffer but NOT fiber's
  *     `size` (CSS pixels), so an effect keyed on `size` alone leaves the
  *     composer at the old buffer size — a blurry or offset picture after the
  *     first governor step, with nothing logged. `viewport.dpr` is in the deps.
  * (8) **The pixel budget lowers the ratio, not the bloom** (`bloomDprCap`): the
  *     composer's cost is fill, so a canvas over `BLOOM.maxPixels` is brought
- *     under it, and the display's own ratio is put back when this unmounts.
+ *     under it. Since M430 the budget is one term of the ratio the view's
+ *     `QualityGovernor` reports (WorldView's header, (4c)), applied only while
+ *     the bloom renders — this component sets no ratio of its own.
  * (9) **The composer is disposed; the renderer is not.** `composer.dispose()`
  *     frees its buffers and passes and leaves the renderer alone, which is
  *     what `world.door.11` requires (R3F owns the context's life).
@@ -75,16 +78,12 @@ export function WorldBloom(): null {
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   const dpr = useThree((s) => s.viewport.dpr)
-  const setDpr = useThree((s) => s.setDpr)
 
-  // The pixel budget (BLOOM.maxPixels): on every resize, the ratio the window may
-  // run at WITH bloom — the display's own, or less when the canvas is huge — and
-  // back to the display's when bloom goes away. The governor still steps it down
-  // from there if the frame rate stays low.
-  useEffect(() => {
-    setDpr(bloomDprCap(size.width, size.height, window.devicePixelRatio))
-  }, [setDpr, size.width, size.height])
-  useEffect(() => () => setDpr(clampDpr(window.devicePixelRatio)), [setDpr])
+  // The pixel budget (BLOOM.maxPixels) is NOT applied here since M430: the
+  // view's `QualityGovernor` folds `bloomDprCap` into the one ratio it reports,
+  // while the bloom renders. A second writer here fought it — this component's
+  // unmount put the display's ratio back over the governor's step, so the tier
+  // that dropped the bloom raised the fill.
 
   const composer = useMemo(() => {
     const next = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType })

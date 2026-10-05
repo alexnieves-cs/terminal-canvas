@@ -18,6 +18,12 @@
    pins for the traps that fail with no error (the glTF decoders the CSP
    refuses, drei Html's re-targeting, an additive bone pose that compounds).
 
+   M430 adds the room's ONE quality tier (renderer/world/world-quality.ts,
+   pure: the plan per tier, the down-only step rule, bloom = person AND tier)
+   and the WebGL probe that gates the lazy load (`world.quality.*`). What
+   none of it can see is a frame rate: the tiers' costs are argued in
+   docs/build-log/m430-world-quality.md and owed to a live run.
+
    What this cannot see: the IPC hop itself (main's readyContents send and the
    preload's subscribe) — `SIMULATE_AGENTS=true npm run dev` is where that was
    watched by hand. */
@@ -54,7 +60,9 @@ buildSync({
       "  sel: require('./src/renderer/world/world-select.ts'),",
       "  struct: require('./src/renderer/world/world-structure.ts'),",
       "  replay: require('./src/renderer/world/world-replay.ts'),",
-      "  away: require('./src/renderer/world/world-away.ts')",
+      "  away: require('./src/renderer/world/world-away.ts'),",
+      "  quality: require('./src/renderer/world/world-quality.ts'),",
+      "  probe: require('./src/renderer/webgl-probe.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -63,7 +71,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW, quality: Q, probe: PROBE } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -511,7 +519,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       !files.some((f) => /\bgl\.(dispose|forceContextLoss)\(|\.forceContextLoss\(/.test(code(f))))
 
   ok('world.door.12 the stage, the scene and the 2D host share ONE transition object — the scene takes it as a prop, robots sample it in their frame loop, and no file keeps a progress of its own',
-    /<WorldView transition=\{transition\} reduced=\{reduced\} \/>/.test(stage) && /transition\.sample\(/.test(robot) && /transition\.sample\(/.test(view) &&
+    /<WorldView transition=\{transition\} reduced=\{reduced\} onLost=\{onLost\} \/>/.test(stage) && /transition\.sample\(/.test(robot) && /transition\.sample\(/.test(view) &&
       !files.some((f) => /\b(?:let|const)\s+progress\b|progress\s*\+=/.test(code(f))))
 
   // The model names are string literals in the scene; a re-download that renamed
@@ -729,16 +737,18 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.perf.2 the pixel ratio is clamped into [1, 1.75] whatever the display reports, and a garbage ratio is 1',
     PF.clampDpr(3) === 1.75 && PF.clampDpr(2) === 1.75 && PF.clampDpr(1.25) === 1.25 && PF.clampDpr(0.5) === 1 && PF.clampDpr(NaN) === 1 && PF.clampDpr(-2) === 1)
   {
-    const g = PF.createDprGovernor(2)
+    // M430: the ratio governor is the quality governor's inner step (world-quality.ts); the same four rules hold of it.
+    const g = Q.createQualityGovernor(2)
     const steps = []
-    const feed = (fps, n = 1) => { for (let i = 0; i < n; i++) { const r = g.observe(fps); if (r !== null) steps.push(r) } }
+    const feed = (fps, n = 1) => { for (let i = 0; i < n; i++) { const r = g.observe(fps); if (r !== null) steps.push(r.dpr) } }
     feed(120, 10); feed(30, 2); feed(120)           // two low windows, then a good one: a hitch, not a trend
     ok('world.perf.3 the pixel ratio does not move for a hitch — only for a SUSTAINED low frame rate', steps.length === 0 && g.dpr === 1.75)
     feed(30, 3)
     ok('world.perf.4 three low windows in a row step it down one notch', steps.join() === '1.5' && g.dpr === 1.5)
-    feed(30, 30)
-    ok('world.perf.5 it only ever steps DOWN (a rule that also stepped up would oscillate) and stops at 1', steps.at(-1) === 1 && g.dpr === 1 && steps.every((x, i) => i === 0 || x < steps[i - 1]), steps.join())
-    const g2 = PF.createDprGovernor(1.75); g2.observe(10); g2.observe(10); g2.gap(); const r = g2.observe(10)
+    feed(30, 60)
+    ok('world.perf.5 it only ever steps DOWN (a rule that also stepped up would oscillate) and stops at 1 — through the tiers since M430',
+      steps.at(-1) === 1 && g.dpr === 1 && steps.every((x, i) => i === 0 || x <= steps[i - 1]) && (feed(120, 50), g.dpr === 1), steps.join())
+    const g2 = Q.createQualityGovernor(1.75); g2.observe(10); g2.observe(10); g2.gap(); const r = g2.observe(10)
     ok('world.perf.6 a stalled window (a hidden app) forgets the streak instead of counting as low', r === null && g2.dpr === 1.75)
   }
   {
@@ -789,8 +799,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.stage.4 prefers-reduced-motion skips the choreography, live: the move is a 0ms snap, the stagger is dropped and a robot that turns live appears at once',
     /createWorldTransition\(on \? 1 : 0, reduced \? 0 : WORLD_TRANSITION_MS\)/.test(stage) && /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/.test(stage) && /addEventListener\('change'/.test(stage) &&
       /reduced \? 0 : pops\[i\]!/.test(view) && /reducedRef\.current \? 1 : easeInOutCubic/.test(robot))
-  ok('world.perf.11 the scene clamps its pixel ratio to [DPR_MIN, DPR_MAX], steps it down by the governor, and ranks cards by the camera four times a second — a far agent wears the pill alone (its dot carries the state) in the same Html element, except one waiting on a person or picked by one (M422), whose card is never a dot',
-    /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && /<QualityGovernor \/>/.test(view) && /<CardBudget /.test(view) && /t - last\.current < 0\.25/.test(view) &&
+  ok('world.perf.11 the scene draws at the ratio the quality governor reports (the Canvas\'s dpr PROP — M430), and ranks cards by the camera four times a second, as many as the tier allows — a far agent wears the pill alone (its dot carries the state) in the same Html element, except one waiting on a person or picked by one (M422), whose card is never a dot',
+    /dpr=\{dpr\}/.test(view) && /<QualityGovernor onDpr=\{setDpr\} bloom=\{bloom\} \/>/.test(view) && /<CardBudget stations=\{live\} max=\{tierPlan\.cards\} /.test(view) && /t - last\.current < 0\.25/.test(view) &&
       /compact=\{leftAt\.has\(station\.agentId\) \|\| \(full !== null && !full\.has\(station\.agentId\)\)\}/.test(view) && /className="world-dot"/.test(card) && /!full \? null : \(/.test(card) && /const full = !compact \|\| waiting \|\| picked/.test(card) && /const tools = full && !waiting \? recentTools\(record\) : \[\]/.test(card))
 }
 
@@ -934,7 +944,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.studio.1 the canvas is a lit studio: ACES tone mapping and NOT `flat`, percentage-closer shadows (three r186 removed PCFSoft — `true` and "soft" log a warning and fall back), a key light that casts into a shadow camera sized to the room, the studio ground as the background, the capped pixel ratio and no contact-shadow pass',
     /toneMapping: THREE\.ACESFilmicToneMapping/.test(view) && !/<Canvas[^>]*\bflat\b/.test(view) && /shadows="percentage"/.test(view) && !/shadows=\{true\}|shadows="soft"|<Canvas[^>]*\bshadows\s/.test(view) &&
       /<directionalLight\s[^>]*castShadow/.test(view.replace(/\s+/g, ' ')) && /cam\.updateProjectionMatrix\(\)/.test(view) && /<color attach="background" args=\{\[ground\]\} \/>/.test(view) && /new THREE\.Color\(STUDIO\.ground\)/.test(view) &&
-      PAL.STUDIO.ground === '#eef0f3' && /dpr=\{\[DPR_MIN, DPR_MAX\]\}/.test(view) && !/ContactShadows/.test(view) && /info\.autoReset = false/.test(view) &&
+      PAL.STUDIO.ground === '#eef0f3' && /dpr=\{dpr\}/.test(view) && Q.worldDpr(Infinity, 3, Q.qualityPlan('full')) === PF.DPR_MAX && !/ContactShadows/.test(view) && /info\.autoReset = false/.test(view) &&
       /maxPolarAngle=\{VIEW\.maxPolar\}/.test(view) && /minPolarAngle=\{VIEW\.minPolar\}/.test(view))
   ok('world.studio.2 the platform is a drei RoundedBox, and its trim is two unlit bands on its top: a bright core and a NORMALLY-blended halo (additive over a pale slab clips to white and the glow vanishes), neither tone-mapped, laid above the slab\'s top (y = 0, the floor)',
     /<RoundedBox args=\{\[half \* 2, SLAB\.thickness, half \* 2\]\}/.test(stageLook) && /castShadow receiveShadow/.test(stageLook) && !/AdditiveBlending/.test(stageLook) &&
@@ -1053,8 +1063,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.bloom.resize.1 the composer resizes on a pixel-ratio change as well as a size change (the governor\'s setDpr moves the drawing buffer and NOT fiber\'s size, so a size-only effect leaves it stale and blurry), without touching the canvas style, and disposes itself and never the renderer',
     /composer\.setSize\(size\.width, size\.height, false\)/.test(bloom) && /\[composer, size\.width, size\.height, dpr\]/.test(bloom) &&
       /composer\.dispose\(\)/.test(bloom) && !/\bgl\.(dispose|forceContextLoss)\(/.test(bloom))
-  ok('world.bloom.mount.1 the view mounts the composer only while bloom is on, paints the unlit ground as its ACES pre-image while it is, and the canvas still tone-maps with ACES (the fallback render is the M417 picture)',
-    /const bloom = useBloomOn\(\)/.test(view) && /\{bloom && <WorldBloom \/>\}/.test(view) && /acesPreimage\(\[c\.r, c\.g, c\.b\]\)/.test(view) && /toneMapping: THREE\.ACESFilmicToneMapping/.test(view))
+  ok('world.bloom.mount.1 the view mounts the composer only while bloom RENDERS (the person\'s choice and the tier\'s — M430), paints the unlit ground as its ACES pre-image while it does, and the canvas still tone-maps with ACES (the fallback render is the M417 picture)',
+    /const bloom = useBloomRendered\(\)/.test(view) && /\{bloom && <WorldBloom \/>\}/.test(view) && /acesPreimage\(\[c\.r, c\.g, c\.b\]\)/.test(view) && /toneMapping: THREE\.ACESFilmicToneMapping/.test(view))
   ok('world.bloom.glow.1 every unlit thing the composer would otherwise grey takes its bloom treatment from the same pure module — the trim\'s core and halo (the halo\'s extra opacity only over the pale slab, never on the black table), the eyes, the whiteboard — and each one is the identity with bloom off',
     /glowScale\(hex, bloom\)/.test(platform) && /haloShare\(bloom\)/.test(platform) && /peak=\{TRIM\.glowPeak\} overPale \/>/.test(platform) && !/overPale/.test(code('WorldOffice.tsx')) && /glowScale\(EYE_COLOR, bloom\)/.test(robot) && /unlitScale\(bloom\)/.test(props) && /unlitInk\(hex, bloom\)/.test(props) &&
       BL.glowScale('#36e6ff', false) === 1 && BL.haloShare(false) === 1 && BL.unlitScale(false) === 1 && BL.unlitInk('#7b8494', false) === '#7b8494')
@@ -1083,10 +1093,16 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     BL.isBloomOn() === true && (BL.setBloomOn(false, false), BL.isBloomOn() === false) && (BL.setBloomOn(true, false), BL.isBloomOn() === true) &&
       /try \{[\s\S]*?localStorage\.getItem[\s\S]*?\} catch/.test(text('world-bloom.ts')))
   const big = BL.bloomDprCap(3200, 2000, 2), mid = BL.bloomDprCap(1800, 1100, 2)
-  ok('world.bloom.budget.1 the composer\'s pixel budget lowers the pixel ratio and does not drop the bloom: a typical retina window keeps the capped ratio it had, the 18 MP wide-retina one is brought under the budget, and the ratio is never below DPR_MIN or above what the display asks for — and the composer applies it on resize and puts the display\'s ratio back when it unmounts',
+  // M430: the budget is one term of the ONE ratio the view's governor reports, applied while the bloom
+  // renders, and gone when it goes — back to the governed ratio, never above it. The composer sets no
+  // ratio of its own any more: its unmount put the display's ratio back over the governor's step.
+  const fullPlan = Q.qualityPlan('full')
+  ok('world.bloom.budget.1 the composer\'s pixel budget lowers the pixel ratio and does not drop the bloom: a typical retina window keeps the capped ratio it had, the 18 MP wide-retina one is brought under the budget, and the ratio is never below DPR_MIN or above what the display asks for — the governor applies it on resize and only while the bloom renders, the ratio returns to the governed one (never above it) when the bloom goes, and the composer itself sets no ratio',
     mid === PF.clampDpr(2) && big < mid && big >= PF.DPR_MIN && Math.round(3200 * 2000 * big * big) <= BL.BLOOM.maxPixels + 1 &&
       BL.bloomDprCap(1000, 700, 1) === 1 && BL.bloomDprCap(4000, 2500, 1) === PF.DPR_MIN &&
-      /setDpr\(bloomDprCap\(size\.width, size\.height, window\.devicePixelRatio\)\)/.test(bloom) && /setDpr\(clampDpr\(window\.devicePixelRatio\)\)/.test(bloom),
+      Q.worldDpr(1.75, 2, fullPlan, big) === big && Q.worldDpr(1.5, 2, fullPlan) === 1.5 && Q.worldDpr(1.5, 2, fullPlan, Infinity) <= 1.5 &&
+      /const ceiling = bloomRenders\(isBloomOn\(\), tier\) \? bloomDprCap\(w, h, display\) : Infinity/.test(view) && /useEffect\(\(\) => \{ apply\(\) \}, \[apply, width, height, bloom\]\)/.test(view) &&
+      !/setDpr/.test(bloom),
     `mid=${mid} big=${big.toFixed(3)}`)
 }
 
@@ -1426,18 +1442,142 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 
 // ── M427: shipping it ───────────────────────────────────────────────────────
 {
-  const g = PF.createDprGovernor(PF.DPR_MIN)
-  let starvedAt = -1
-  for (let i = 0; i < PF.STARVED_WINDOWS * 2; i++) { g.observe(20); if (g.starved() && starvedAt < 0) starvedAt = i + 1 }
-  const g2 = PF.createDprGovernor(1.75)
-  const early = Array.from({ length: PF.STARVED_WINDOWS }, () => (g2.observe(20), g2.starved())).some(Boolean)
-  const g3 = PF.createDprGovernor(PF.DPR_MIN)
-  for (let i = 0; i < PF.STARVED_WINDOWS - 1; i++) g3.observe(20)
+  // M430 replaced M427's stopgap (`starved()` → `setBloomOn(false, false)`) with the quality tier; the
+  // intent is the same and so is this check's: a GPU still slow at the floor loses the bloom, not
+  // before the ratio has stepped down, not on a broken streak, and for the session only — now by the
+  // TIER holding the composer off, with the person's own bit untouched.
+  const g = Q.createQualityGovernor(1.25)           // full, already at its floor (1.25)
+  let leanAt = -1
+  for (let i = 0; i < Q.TIER_WINDOWS * 2; i++) { const s = g.observe(20); if (s !== null && s.tier === 'lean' && leanAt < 0) leanAt = i + 1 }
+  const g2 = Q.createQualityGovernor(1.75)
+  const early = Array.from({ length: Q.TIER_WINDOWS }, () => g2.observe(20)).some((s) => s !== null && s.tier !== 'full')
+  const g3 = Q.createQualityGovernor(1.25)
+  for (let i = 0; i < Q.TIER_WINDOWS - 1; i++) g3.observe(20)
   g3.observe(60)
-  for (let i = 0; i < PF.STARVED_WINDOWS - 1; i++) g3.observe(20)
-  ok('world.ship.1 a GPU still slow at the pixel ratio\'s floor gives up the bloom after STARVED_WINDOWS low windows — not before the ratio has stepped down, not on a streak a good window broke — and the scene turns it off for the session only (persist=false)',
-    starvedAt === PF.STARVED_WINDOWS && !early && !g3.starved() && /if \(governor\.current\.starved\(\) && isBloomOn\(\)\) setBloomOn\(false, false\)/.test(readFileSync(join(root, 'src/renderer/world/WorldView.tsx'), 'utf8')),
-    `starvedAt=${starvedAt}`)
+  for (let i = 0; i < Q.TIER_WINDOWS - 1; i++) g3.observe(20)
+  const viewSrc = readFileSync(join(root, 'src/renderer/world/WorldView.tsx'), 'utf8')
+  ok('world.ship.1 a GPU still slow at the pixel ratio\'s floor gives up the bloom after TIER_WINDOWS low windows there — not before the ratio has stepped down, not on a streak a good window broke — by stepping the TIER to lean, whose plan holds the composer off; the person\'s stored bit is never written for it (M430: the M427 stopgap is gone)',
+    leanAt === Q.TIER_WINDOWS && !early && g3.tier === 'full' && !Q.qualityPlan('lean').bloom && !Q.bloomRenders(true, 'lean') && !/setBloomOn/.test(viewSrc),
+    `leanAt=${leanAt}`)
+}
+
+// ── M430: one quality tier for the room ─────────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const text = (f) => readFileSync(join(dir, f), 'utf8')
+  const code = (f) => text(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const P = Q.QUALITY_ORDER.map((t) => Q.qualityPlan(t))
+  const [full, lean, flat] = P
+  ok('world.quality.plan.1 each tier draws a plan: full is the M420 room (bloom, a 2048 shadow map, ratio up to 1.75, three cards), lean gives up the composer, a quarter of the shadow fill (1024), ratio up to 1.5 and a card, flat has no pass but the scene (no bloom, NO shadow map, 1x, one card)',
+    Q.QUALITY_ORDER.join() === 'full,lean,flat' &&
+      full.bloom === true && full.shadowMap === 2048 && full.dprMax === PF.DPR_MAX && full.cards === PF.CARD_BUDGET &&
+      lean.bloom === false && lean.shadowMap === 1024 && lean.dprMax === 1.5 && lean.cards === 2 &&
+      flat.bloom === false && flat.shadowMap === 0 && flat.dprMax === PF.DPR_MIN && flat.dprFloor === PF.DPR_MIN && flat.cards === 1,
+    JSON.stringify(P))
+  ok('world.quality.plan.2 a later tier never draws MORE of anything — bloom, shadow map, ratio cap or floor, cards — every tier keeps at least one full card, and each floor sits at or under its cap and at or over 1x',
+    P.every((p, i) => i === 0 || (Number(p.bloom) <= Number(P[i - 1].bloom) && p.shadowMap <= P[i - 1].shadowMap && p.dprMax <= P[i - 1].dprMax && p.dprFloor <= P[i - 1].dprFloor && p.cards <= P[i - 1].cards)) &&
+      P.every((p) => p.cards >= 1 && p.dprFloor <= p.dprMax && p.dprFloor >= PF.DPR_MIN))
+
+  // The whole walk down, one low window at a time, from a 2x display.
+  const g = Q.createQualityGovernor(2)
+  const walk = []
+  for (let i = 1; i <= 60; i++) { const s = g.observe(20); if (s !== null) walk.push(`${i}:${s.tier}@${s.dpr}`) }
+  const L = PF.LOW_WINDOWS, T = Q.TIER_WINDOWS
+  const want = [`${L}:full@1.5`, `${2 * L}:full@1.25`, `${2 * L + T}:lean@1.25`, `${3 * L + T}:lean@1`, `${3 * L + 2 * T}:flat@1`]
+  ok('world.quality.step.1 a sustained low frame rate steps the ratio inside a tier (LOW_WINDOWS each) down to the tier\'s floor, then the TIER (TIER_WINDOWS at the floor, twice a ratio step\'s), bringing the ratio under the new cap — full@1.75 → 1.5 → 1.25 → lean → 1 → flat — and stops there',
+    walk.join() === want.join() && g.tier === 'flat' && g.dpr === 1, walk.join())
+  // Never back up: a lean governor in a fast room stays lean at its ratio, a new one starts at the session's tier, and the store refuses a dearer tier.
+  const up = Q.createQualityGovernor(2)
+  for (let i = 0; i < 2 * L + T; i++) up.observe(20)
+  const before = `${up.tier}@${up.dpr}`
+  let rose = false
+  for (let i = 0; i < 200; i++) if (up.observe(144) !== null) rose = true
+  const fresh = Q.createQualityGovernor(2, 'lean')
+  ok('world.quality.step.2 it never steps back UP — not the ratio, not the tier — however fast the cheaper room runs (the fast windows measure the cheaper tier, which is why the room is fast: a rule that climbed would fail again and drop, the bloom pulsing and the shadows popping, with a recompile on every flip); a governor made for a reopened view starts at the session\'s tier and its cap',
+    before === 'lean@1.25' && !rose && `${up.tier}@${up.dpr}` === before && fresh.tier === 'lean' && fresh.dpr === 1.5 && Q.createQualityGovernor(3, 'flat').dpr === 1, before)
+  // Gaps and good windows forget the streak, at a ratio step and at a tier step alike.
+  const gap = Q.createQualityGovernor(1.25)
+  const half = Math.ceil(T / 2)
+  const seen = []
+  for (let i = 0; i < half; i++) seen.push(gap.observe(20))
+  gap.gap()
+  for (let i = 0; i < T - 1; i++) seen.push(gap.observe(20))
+  seen.push(gap.observe(NaN))
+  for (let i = 0; i < T - 1; i++) seen.push(gap.observe(20))
+  ok('world.quality.step.3 a stalled window (gap), a good window or a non-number forgets the low streak — at the tier step as at a ratio step — so only an UNBROKEN run of low windows moves anything',
+    seen.every((s) => s === null) && gap.tier === 'full' && gap.dpr === 1.25)
+  // A step starts from what is DRAWN: under the bloom's budget the governor does not spend windows "stepping" a ratio nobody draws at.
+  const cap = Q.createQualityGovernor(2)
+  let capped = null
+  for (let i = 0; i < L; i++) capped = cap.observe(20, 1.4) ?? capped
+  const floorCap = Q.createQualityGovernor(2)
+  let tierAt = -1
+  for (let i = 1; i <= T; i++) { const s = floorCap.observe(20, 1.1); if (s !== null && tierAt < 0) tierAt = i }
+  ok('world.quality.step.4 a step starts from the ratio actually drawn (the display and the bloom\'s budget cap it): 1.4 drawn steps to the floor, not to 1.5, and a ratio already capped under the floor steps the TIER after TIER_WINDOWS without wasted ratio steps',
+    capped !== null && capped.dpr === 1.25 && tierAt === T && floorCap.tier === 'lean', `capped=${JSON.stringify(capped)} tierAt=${tierAt}`)
+  ok('world.quality.dpr.1 the drawn ratio is the governed one under the tier\'s cap, the display\'s own and the bloom\'s budget — a 1x monitor is drawn at 1x, a pinned tier (governed = Infinity) at its own cap, and never under 1x',
+    Q.worldDpr(1.75, 1, full) === 1 && Q.worldDpr(Infinity, 2, lean) === 1.5 && Q.worldDpr(Infinity, 2, flat) === 1 && Q.worldDpr(1.5, 2, full, 1.2) === 1.2 &&
+      Q.worldDpr(1.5, 2, full, 0.4) === PF.DPR_MIN && Q.worldDpr(NaN, NaN, full) === PF.DPR_MIN)
+
+  const scene = ['WorldView.tsx', 'WorldRobot.tsx', 'WorldStructure.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx']
+  // Who CALLS the person's bit (its own definition in world-bloom.ts is not a call).
+  const personOnly = readdirSync(dir).filter((f) => /\.tsx?$/.test(f) && /(?<!function )useBloomOn\(\)/.test(code(f)))
+  ok('world.quality.bloom.1 bloom renders iff the PERSON has it on AND the tier allows it — the tier only takes it away — and every part that compensates for the composer (the ground\'s pre-image, the trim, the eyes, the board, the terraces) reads THAT, never the person\'s bit alone (a material painted for a composer the tier holds off is a clipped trim and a wrong ground)',
+    Q.bloomRenders(true, 'full') && !Q.bloomRenders(false, 'full') && !Q.bloomRenders(true, 'lean') && !Q.bloomRenders(true, 'flat') && !Q.bloomRenders(false, 'flat') &&
+      scene.every((f) => /useBloomRendered\(\)/.test(code(f))) && personOnly.join() === 'world-quality.ts', personOnly.join())
+
+  const store = code('world-quality.ts')
+  const personBefore = BL.isBloomOn()
+  const t0 = Q.getWorldQuality()
+  Q.stepWorldQuality('lean')
+  const t1 = Q.getWorldQuality()
+  Q.stepWorldQuality('full')
+  const t2 = Q.getWorldQuality()
+  Q.pinWorldQuality('full')
+  const t3 = Q.getWorldQuality()
+  Q.pinWorldQuality(null)
+  const t4 = Q.getWorldQuality()
+  ok('world.quality.store.1 the tier is held in memory and NEVER stored (the M427 rule: a person\'s own choice is the only one written) — a step only goes down, a pin overrides it and lifting the pin returns to the governed tier, and none of it touches the person\'s bloom bit',
+    [t0, t1, t2, t3, t4].join() === 'full,lean,lean,full,lean' && Q.sessionQuality() === 'lean' && BL.isBloomOn() === personBefore &&
+      !/localStorage|sessionStorage|indexedDB/.test(store) && !/setBloomOn/.test(store), [t0, t1, t2, t3, t4].join())
+
+  const view = code('WorldView.tsx'), perfSrc = code('world-perf.ts')
+  ok('world.quality.stopgap.1 the M427 stopgap is gone: no starved() streak, no session-only setBloomOn from the scene, no second ratio governor — the tier is the one knob',
+    PF.createDprGovernor === undefined && PF.STARVED_WINDOWS === undefined && !/starved/.test(perfSrc + view + store) && !/setBloomOn/.test(view) &&
+      (view.match(/createQualityGovernor\(/g) ?? []).length === 1 && !/createDprGovernor/.test(view))
+
+  const { execFileSync } = require('node:child_process')
+  const grep = (args) => { try { return execFileSync('grep', args, { encoding: 'utf8' }).trim().split('\n').filter(Boolean) } catch { return [] } }
+  const writes = grep(['-rnE', '__tcWorldQuality\\s*(=[^=]|\\?\\?=|\\|\\|=)', join(root, 'src')])
+  ok('world.quality.pin.1 the harness pin `window.__tcWorldQuality` is READ once a window and written by no app code; a pinned tier is not fed to the governor (it is being measured); `.world-view[data-quality]` names the drawn tier and the stats readout shows it with the ratio',
+    writes.length === 0 && /__tcWorldQuality\?: unknown/.test(view) && /pinWorldQuality\(pin\)/.test(view) && /if \(span > 1\.5 \|\| pin !== null\) g\.gap\(\)/.test(view) &&
+      /className="world-view" data-world-view data-quality=\{quality\}/.test(view) && /\$\{getWorldQuality\(\)\} @\$\{state\.viewport\.dpr\.toFixed\(2\)\}x/.test(view) &&
+      Q.readQualityPin('lean') === 'lean' && Q.readQualityPin('ultra') === null && Q.readQualityPin(undefined) === null && Q.readQualityPin(1) === null,
+    writes.join(' | '))
+
+  const flatView = view.replace(/\s+/g, ' ')
+  ok('world.quality.shadow.1 shadows follow the tier through the KEY LIGHT\'s castShadow (it recompiles every lit material without the lookup and leaves the pass no light — the canvas\'s `shadows` flag alone recompiles nothing and freezes a stale map), the map is disposed and nulled on a size change (three allocates one only while it is null), and the canvas\'s `shadows` stays one constant',
+    /castShadow=\{shadowMap > 0\}/.test(flatView) && /if \(shadowMap > 0\) shadow\.mapSize\.set\(shadowMap, shadowMap\)/.test(view) &&
+      /if \(shadow\.map\) \{ shadow\.map\.dispose\(\) shadow\.map = null \}/.test(flatView) && /\}, \[shadowMap\]\)/.test(view) &&
+      /shadows="percentage"/.test(view) && !/shadows=\{/.test(view) && !/shadow-mapSize/.test(view) && /<Lights extent=\{half \+ 3\} shadowMap=\{tierPlan\.shadowMap\} \/>/.test(view))
+  const card = code('WorldCard.tsx')
+  ok('world.quality.cards.1 the card budget follows the tier (read at each quarter-second ranking), and a waiting or picked agent still always gets its full card whatever the budget',
+    /cardTiers\(candidates, current\.current, budget\.current\)/.test(view) && /budget\.current = max/.test(view) && /const full = !compact \|\| waiting \|\| picked/.test(card) &&
+      PF.cardTiers([0, 1, 2, 3].map((i) => ({ agentId: `a${i}`, distance: i })), new Set(), flat.cards).size === 1)
+
+  const stage = code('WorldStage.tsx'), probeSrc = readFileSync(join(root, 'src/renderer/webgl-probe.ts'), 'utf8')
+  const gate = stage.indexOf('webgl && !lost ? ('), lazyAt = stage.indexOf('<WorldView '), note = stage.indexOf('data-world-no-webgl')
+  const orchSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  ok('world.quality.probe.1 WebGL is PROBED before the lazy load: the stage asks a scratch context in the render that opens the view, renders the lazy WorldView only inside the probe\'s yes, says what and the way back otherwise, and the warm-up fetches nothing on a machine that said no — one shared probe (no imports, released at once), which Orchestrate uses too',
+    /import \{ webglAvailable \} from '@renderer\/webgl-probe'/.test(stage) && /const webgl = useMemo\(\(\) => \(on && fits \? probeWebgl\(\) : \(probed \?\? true\)\), \[on, fits\]\)/.test(stage) &&
+      gate > 0 && lazyAt > gate && note > lazyAt && (stage.match(/<WorldView /g) ?? []).length === 1 &&
+      /The world view needs WebGL, which this machine is not providing right now\./.test(stage) && /data-world-no-webgl[\s\S]{0,400}onClick=\{\(\) => setWorldOn\(false\)\}>Back to canvas/.test(stage) &&
+      /if \(!\(probed \?\? probeWebgl\(\)\)\) return\n\s*void loadWorldView\(\)/.test(stage) &&
+      !/^import /m.test(probeSrc) && /WEBGL_lose_context/.test(probeSrc) && PROBE.webglAvailable() === false &&
+      /import \{ webglAvailable \} from '@renderer\/webgl-probe'/.test(orchSrc) && !/getContext\('webgl/.test(orchSrc))
+  ok('world.quality.lost.1 a context LOST at runtime lands in the same note, not a frozen frame: the scene listens on its own canvas and removes the listener in the cleanup fiber runs before its own teardown loses the context, and the stage acts on it only while the world is on and starts each open clean',
+    /addEventListener\('webglcontextlost', lost\)/.test(view) && /return \(\) => canvas\.removeEventListener\('webglcontextlost', lost\)/.test(view) && /<ContextWatch onLost=\{onLost\} \/>/.test(view) &&
+      /const onLost = useCallback\(\(\) => \{ if \(onRef\.current\) setLost\(true\) \}, \[\]\)/.test(stage) && /if \(on\) setLost\(false\)/.test(stage) && /data-world-no-webgl=\{lost \? 'lost' : 'none'\}/.test(stage))
 }
 
 const failures = results.filter((r) => !r.pass)

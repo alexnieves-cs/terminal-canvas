@@ -5,6 +5,7 @@
  * returns to the canvas so pan/zoom/PTY stay the canvas's.
  */
 import { MotionSurface } from '@renderer/primitives/MotionSurface'
+import { webglAvailable } from '@renderer/webgl-probe'
 import { Component, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import {
@@ -1496,17 +1497,9 @@ class WebglBoundary extends Component<{ onLost: () => void; children: ReactNode 
   override render(): ReactNode { return this.state.failed ? <div className="orch__cube-canvas" aria-hidden="true" /> : this.props.children }
 }
 
+/** The scratch-context probe, shared with the World view's stage since M430 (`renderer/webgl-probe.ts`). */
 export function orchWebglAvailable(): boolean {
-  try {
-    const c = document.createElement('canvas')
-    const gl = c.getContext('webgl2') ?? c.getContext('webgl')
-    if (gl === null) return false
-    const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_lose_context')
-    ext?.loseContext()
-    return true
-  } catch {
-    return false
-  }
+  return webglAvailable()
 }
 
 export function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | undefined, active: boolean): string[] {

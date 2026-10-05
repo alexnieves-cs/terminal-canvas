@@ -1,5 +1,6 @@
-import { Component, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode, type RefObject } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode, type RefObject } from 'react'
 import { retryAgentWorld, useAgentIds, useWorldConnection } from './agent-world-store'
+import { webglAvailable } from '@renderer/webgl-probe'
 import { prefersReducedMotion, worldFits } from './world-perf'
 import { useRoster } from './world-roster'
 import { setWorldOn } from './world-toggle'
@@ -47,12 +48,34 @@ import { createWorldTransition, hostLook, WORLD_TRANSITION_MS } from './world-tr
  *     the built entry). Since M427 Canvas mounts the stage in production too:
  *     the packaged renderer was measured loading the room and the bee's `.glb`
  *     under `file://` (status 200), which is what kept it dev-only before.
+ * (5) **WebGL is PROBED before the lazy load** (M430, as Orchestrate's island
+ *     does since M293): a scratch context is asked for each time the view
+ *     opens, and with none the stage renders its note and never the lazy
+ *     `<WorldView>` — so no scene code is fetched and no renderer is made only
+ *     to throw. A context LOST while the room is up (`ContextWatch` in
+ *     WorldView) lands in the SAME note instead of a frozen last frame. The
+ *     probe is `renderer/webgl-probe.ts`, shared with Orchestrate: importing
+ *     Orchestrate's own copy would tie this first-chunk file to that module's
+ *     whole graph.
  */
 const loadWorldView = (): Promise<typeof import('./WorldView')> => import('./WorldView')
 const WorldView = /* @__PURE__ */ lazy(async () => ({ default: (await loadWorldView()).WorldView }))
 
-/** Fetches the scene's code and models ahead of the toggle, so the first move does not wait on the network. Mounts nothing. */
+/**
+ * The last answer the WebGL probe gave (M430): the stage asks afresh each time
+ * the view opens (a GPU process that came back is worth a second look), and the
+ * warm-up below reads the cached answer so a hover does not make a scratch
+ * context every time.
+ */
+let probed: boolean | null = null
+function probeWebgl(): boolean {
+  probed = webglAvailable()
+  return probed
+}
+
+/** Fetches the scene's code and models ahead of the toggle, so the first move does not wait on the network. Mounts nothing — and fetches nothing on a machine with no WebGL, where the scene will never load. */
 export function warmWorldView(): void {
+  if (!(probed ?? probeWebgl())) return
   void loadWorldView()
 }
 
@@ -107,6 +130,23 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   const live = useRoster().length
   const connection = useWorldConnection()
   const [retrying, setRetrying] = useState(false)
+  // (5) Asked DURING the render that opens the view: an effect would run after
+  // this render had already rendered the lazy view and started its fetch.
+  // While it closes, the open's answer stands — a `true` here would mount the scene during the move back.
+  // A window too narrow for the room is not asked (it mounts no scene); widening it asks.
+  const webgl = useMemo(() => (on && fits ? probeWebgl() : (probed ?? true)), [on, fits])
+  // A context lost while the room was up. Each open starts clean (derived from
+  // `on` during render, so the reopening render already mounts the scene).
+  const [lost, setLost] = useState(false)
+  const [openedOn, setOpenedOn] = useState(on)
+  if (openedOn !== on) {
+    setOpenedOn(on)
+    if (on) setLost(false)
+  }
+  const onRef = useRef(on)
+  onRef.current = on
+  // Only while the world is on: leaving tears the scene down, and fiber loses its context on purpose then.
+  const onLost = useCallback(() => { if (onRef.current) setLost(true) }, [])
 
   useLayoutEffect(() => {
     if (on) setPresent(true)
@@ -183,11 +223,11 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   if (!on && !present) return null
   return (
     <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-on={on ? '' : undefined}>
-      {fits ? (
+      {fits ? (webgl && !lost ? (
         <>
           <WorldBoundary>
             <Suspense fallback={<p className="world-route__note">Loading the world…</p>}>
-              <WorldView transition={transition} reduced={reduced} />
+              <WorldView transition={transition} reduced={reduced} onLost={onLost} />
             </Suspense>
           </WorldBoundary>
           {connection.state === 'lost' ? (
@@ -204,6 +244,12 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
           ) : null}
         </>
       ) : (
+        // (5) No scene and no lazy load: the machine gave no WebGL context, or took the room's away.
+        <div className="world-route__note world-route__note--stage world-route__note--action" role="alert" data-world-no-webgl={lost ? 'lost' : 'none'}>
+          <p>The world view needs WebGL, which this machine is not providing right now.</p>
+          <button type="button" onClick={() => setWorldOn(false)}>Back to canvas</button>
+        </div>
+      )) : (
         // No scene, no lazy load, no WebGL context: below the width the room is a postage stamp.
         <div className="world-route__note world-route__note--stage world-route__note--action" role="status" data-world-narrow>
           <p>The world view needs a wider window. Widen this one, or go back to the canvas.</p>

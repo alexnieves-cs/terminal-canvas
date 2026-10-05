@@ -2,7 +2,8 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type 
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getAgent, getAgentIds, subscribeAgentWorld, worldNow } from './agent-world-store'
-import { useBloomOn, glowScale } from './world-bloom'
+import { glowScale } from './world-bloom'
+import { useBloomRendered } from './world-quality'
 import { useWorldContext, type WorldTask } from './world-context-store'
 import { STUDIO } from './world-palette'
 import { agentTint, goalOf, isLiveStatus, ROBOT_HEAD_Y, type Station, type Zone } from './world-scene'
@@ -73,7 +74,7 @@ const monoFont = (): string => getComputedStyle(document.documentElement).getPro
 const UP = new THREE.Vector3(0, 1, 0)
 
 function Beam({ from, to, color, width = 0.018, opacity = 0.75 }: { from: TileSpot; to: TileSpot; color: string; width?: number; opacity?: number }): JSX.Element {
-  const bloom = useBloomOn()
+  const bloom = useBloomRendered()
   const { position, quaternion, length } = useMemo(() => {
     const a = new THREE.Vector3(from.x, from.y, from.z)
     const b = new THREE.Vector3(to.x, to.y, to.z)
@@ -262,7 +263,7 @@ function Terrace({ zone, task, arcRadius, index }: { zone: Zone; task: WorldTask
   }, [zone.from, zone.to, arcRadius])
   useEffect(() => () => geometry.dispose(), [geometry])
   // The terrace's lit edge: a closed tube just above its rim — the reference's glowing walkway edge.
-  const bloom = useBloomOn()
+  const bloom = useBloomRendered()
   const edge = useMemo(() => {
     const outline = terraceOutline(zone, arcRadius)
     const curve = new THREE.CatmullRomCurve3(outline.map(([x, z]) => new THREE.Vector3(x, TERRACE.lift + 0.02, z)), true, 'catmullrom', 0.05)

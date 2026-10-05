@@ -6,7 +6,9 @@
  * Three limits, all of them about a view that must never cost the 2D canvas
  * anything: the size of the picture (pixel ratio), how many cards the DOM
  * carries over it (a card is a live React tree that follows a 3D point every
- * frame), and the screens it will not open on at all.
+ * frame), and the screens it will not open on at all. Since M430 the first two
+ * are terms of ONE quality tier (world-quality.ts), which picks them together
+ * with the bloom and the shadow map; this file keeps the units they are made of.
  */
 
 /**
@@ -28,8 +30,7 @@ export const DPR_MIN = 1
 /**
  * The pixel ratio, given the display's own — clamped into [DPR_MIN, DPR_MAX].
  * A 3x phone display and a 2x laptop both land at the cap; a 1x monitor stays
- * at 1. (R3F clamps `dpr={[min, max]}` itself; this is the same rule where the
- * governor below needs a number.)
+ * at 1. (The quality governor, world-quality.ts, needs it as a number.)
  */
 export function clampDpr(devicePixelRatio: number, max: number = DPR_MAX): number {
   if (!Number.isFinite(devicePixelRatio) || devicePixelRatio <= 0) return DPR_MIN
@@ -42,58 +43,9 @@ export const LOW_FPS = 40
 export const LOW_WINDOWS = 3
 /** What one step costs. */
 export const DPR_STEP = 0.25
-
-export interface DprGovernor {
-  /** One window's fps. The new pixel ratio when it should change, else null. */
-  observe(fps: number): number | null
-  /**
-   * M427: the frame rate stayed low for `STARVED_WINDOWS` windows AFTER the
-   * ratio reached its floor — nothing left to step but the bloom, the one
-   * full-frame pass (a base-M1 or an integrated GPU on a big display). True
-   * once, then the streak starts over.
-   */
-  starved(): boolean
-  /** The window was not a clean measurement (the page was hidden, the frame loop stalled): forget the streak. */
-  gap(): void
-  readonly dpr: number
-}
-
-/**
- * Steps the pixel ratio DOWN, and only down, after a sustained run of low
- * frame rates. Down-only on purpose: lowering it is what raises the frame
- * rate, so a rule that also stepped back up would oscillate between the two
- * and the picture would shimmer for as long as the view was open.
- */
-/** Low windows at the floor before the governor gives up the bloom — twice a step's, because this one is not undone for the session. */
-export const STARVED_WINDOWS = LOW_WINDOWS * 2
-
-export function createDprGovernor(start: number): DprGovernor {
-  let dpr = clampDpr(start)
-  let low = 0
-  let floorLow = 0
-  let starved = false
-  return {
-    observe(fps) {
-      if (fps >= LOW_FPS) { low = 0; floorLow = 0; return null }
-      low += 1
-      if (dpr <= DPR_MIN) {
-        floorLow += 1
-        if (floorLow >= STARVED_WINDOWS) { floorLow = 0; starved = true }
-      }
-      if (low < LOW_WINDOWS || dpr <= DPR_MIN) return null
-      low = 0
-      dpr = Math.max(DPR_MIN, dpr - DPR_STEP)
-      return dpr
-    },
-    gap() { low = 0; floorLow = 0 },
-    starved() {
-      const was = starved
-      starved = false
-      return was
-    },
-    get dpr() { return dpr }
-  }
-}
+// M430: the governor that used these — and M427's "starved → bloom off" — is
+// `createQualityGovernor` in world-quality.ts, which steps the ratio inside a
+// quality tier and the tier at the ratio's floor.
 
 /**
  * How many agents get a full status card; the rest get a status dot. Three
