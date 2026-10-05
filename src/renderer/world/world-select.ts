@@ -108,3 +108,47 @@ export interface EnterFacts {
 export function enterOpens(k: EnterFacts): boolean {
   return k.key === 'Enter' && !k.repeat && !k.modified && !k.composing && !k.inField && !k.onControl && !k.overlayOpen
 }
+
+// ── arriving from Orchestrate (M432) ────────────────────────────────────────
+
+/**
+ * A look at some agents, asked for from OUTSIDE the room — Orchestrate's
+ * "View in World" on a task's plate, which turns the room on in the same
+ * press. The room cannot take it then: the scene is a lazy chunk that has not
+ * mounted, and a camera glide asked for mid-transition is dropped (a glide
+ * belongs to the resting view, WorldView's TransitionRig). So it waits here,
+ * and the rig takes it on the first frame the room is at rest.
+ *
+ * A list, not one id: a task's members are named in the order the task gives
+ * them, and the first may not be in the room (a terminal with no agent, one
+ * that has gone idle and sunk). Never persisted. Cleared when taken, or once
+ * `ARRIVAL_GRACE_MS` has passed with none of it in the room: the feed says
+ * every agent again when the room opens, so a member may arrive a beat after
+ * the room settles — but a stale request would yank the camera the next time
+ * the room opened for some other reason.
+ */
+export const ARRIVAL_GRACE_MS = 4000
+
+let arrival: { ids: readonly string[]; at: number } | null = null
+
+export function requestArrival(agentIds: readonly string[], now: number): void {
+  arrival = agentIds.length === 0 ? null : { ids: agentIds, at: now }
+}
+
+/** The pending request, taken: the first of its ids `inRoom` accepts, or null — kept for a later frame while it is young. */
+export function takeArrival(inRoom: (agentId: string) => boolean, now: number): string | null {
+  if (arrival === null) return null
+  const id = arrivalTarget(arrival.ids, inRoom)
+  if (id !== null || now - arrival.at > ARRIVAL_GRACE_MS) arrival = null
+  return id
+}
+
+/** Whether a request is waiting — the rig asks before it builds anything. */
+export function hasArrival(): boolean {
+  return arrival !== null
+}
+
+/** Pure: which of a task's members the room frames — the first one standing in it. */
+export function arrivalTarget(ids: readonly string[], inRoom: (agentId: string) => boolean): string | null {
+  return ids.find(inRoom) ?? null
+}

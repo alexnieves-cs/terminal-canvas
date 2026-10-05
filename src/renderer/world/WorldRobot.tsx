@@ -7,6 +7,7 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { getAgent, getAgentIds, replayAt, useAgentStatus, worldNow } from './agent-world-store'
 import { WorldCard } from './WorldCard'
 import { glowScale } from './world-bloom'
+import { robotLod, type RobotLod } from './world-perf'
 import { useBloomRendered } from './world-quality'
 import { studioEnv } from './world-gloss'
 import { activityOf, openDelegations, poseOf, POSES, type Activity, type Pose } from './world-activity'
@@ -333,6 +334,13 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
   const ring = useRef<THREE.Mesh>(null)
+  // M433. The level of detail: the meshes that cast, and the halo — both dropped for a far robot (`robotLod`).
+  const casters = useRef(new Set<THREE.Mesh>())
+  const cast = (mesh: THREE.Mesh | null): void => { if (mesh) casters.current.add(mesh) }
+  const halo = useRef<THREE.Mesh>(null)
+  const lod = useRef<RobotLod | null>(null)
+  const camera = useThree((s) => s.camera)
+  const viewHeight = useThree((s) => s.size.height)
   // M423: the sub-agents it has out — a small robot each, orbiting it, while the delegation is open.
   const [subs, setSubs] = useState(0)
   const subsRef = useRef(0)
@@ -381,6 +389,16 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     const t = state.clock.elapsedTime
     const dt = Math.min(delta, 0.1)
     const rec = getAgent(agentId)
+
+    // ── M433: level of detail, from how large the robot is on screen ──
+    const away = Math.max(0.1, camera.position.distanceTo(group.position))
+    const fov = 'fov' in camera ? (camera.fov as number) : 40
+    const nextLod = robotLod(viewHeight / (2 * Math.tan((fov * Math.PI) / 360) * away), lod.current)
+    if (nextLod !== lod.current) {
+      lod.current = nextLod
+      for (const mesh of casters.current) mesh.castShadow = nextLod === 'near'
+      if (halo.current) halo.current.visible = nextLod === 'near'
+    }
 
     // ── the pop: the move between the canvas and the world, and arriving ──
     const nowMs = performance.now()
@@ -586,24 +604,24 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
         <group ref={lean}>
           <group ref={hopper}>
             <group ref={legL} position={[-0.13, HIP_Y, 0]}>
-              <mesh geometry={k.leg} material={shell} castShadow />
+              <mesh ref={cast} geometry={k.leg} material={shell} castShadow />
             </group>
             <group ref={legR} position={[0.13, HIP_Y, 0]}>
-              <mesh geometry={k.leg} material={shell} castShadow />
+              <mesh ref={cast} geometry={k.leg} material={shell} castShadow />
             </group>
             <group ref={upper}>
-              <mesh geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} castShadow />
+              <mesh ref={cast} geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} castShadow />
               <group ref={armL} position={[-SHOULDER.x, SHOULDER.y, 0]}>
-                <mesh geometry={k.arm} material={shell} castShadow />
+                <mesh ref={cast} geometry={k.arm} material={shell} castShadow />
               </group>
               <group ref={armR} position={[SHOULDER.x, SHOULDER.y, 0]}>
-                <mesh geometry={k.arm} material={shell} castShadow />
+                <mesh ref={cast} geometry={k.arm} material={shell} castShadow />
               </group>
               <group ref={head} position-y={HEAD_Y}>
-                <mesh geometry={k.head} material={shell} scale={HEAD_SCALE} castShadow />
+                <mesh ref={cast} geometry={k.head} material={shell} scale={HEAD_SCALE} castShadow />
                 <mesh geometry={k.visor} material={k.visorMaterial} />
                 <group ref={eyes} position-y={VISOR.y + 0.012}>
-                  <mesh geometry={k.halo} material={k.haloMaterial} />
+                  <mesh ref={halo} geometry={k.halo} material={k.haloMaterial} />
                   <mesh geometry={k.eyes} material={k.eyeMaterial} />
                 </group>
               </group>

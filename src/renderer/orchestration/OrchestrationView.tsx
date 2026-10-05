@@ -237,6 +237,12 @@ export interface OrchestrationViewProps {
   onStartWork?: (itemId: string) => void
   /** M327. A task's plan progress, when it has a plan. */
   planOf?: (itemId: string) => BoardPlanInput | undefined
+  /**
+   * M432. "View in World": open the 3D room framed on these panels' robots —
+   * an island's members, the selected session first. Optional like every
+   * capability here: absent, no chip is drawn.
+   */
+  onViewInWorld?: (panelIds: readonly string[]) => void
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
@@ -881,10 +887,12 @@ function EdgePackets({ edges, points, fires }: {
  * fits the camera to it. The `data-orch-island-id` hook is the same one the
  * List's column carries, so a check may address the island either way.
  */
-function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, onFit }: {
+function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, onFit, onWorld }: {
   /** M294. The plate is CENTRED on the diamond's top tip (`cx`), its bottom edge `y + h` a gap above the tip. */
   p: OrchPlatform; cx: number; y: number; w: number; level: OrchZoomLevel; focused: boolean; selected: boolean
   onFocus: (id: string) => void; onFit: (id: string) => void
+  /** M432. Present only for a FOCUSED island with members: the "View in World" chip. */
+  onWorld?: (id: string) => void
 }): JSX.Element {
   const waiting = p.counts.needsYou > 0
   const ambiguous = p.island !== undefined && p.island.placement.kind === 'shared' && (p.island.writers > 1 || p.island.sharedWith.length > 0)
@@ -907,6 +915,9 @@ function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, onFit }
   // label, below a lower-row one) inside the plate's width — beside it, it ran past the fit's
   // reserved width into the rail (measured on the 61- and 100-session fixtures).
   const moreY = p.labelSide === 'above' ? -(ORCH_PLATE_MORE.h + ORCH_PLATE_MORE.gap) : ORCH_PLATE_LABEL.h + ORCH_PLATE_MORE.gap
+  // M432. The "View in World" chip stands on the same far side, one chip further out when the
+  // `+N more` chip is there too — side by side they overran a narrow plate.
+  const worldY = hidden === null ? moreY : moreY + (p.labelSide === 'above' ? -1 : 1) * (ORCH_PLATE_MORE.h + ORCH_PLATE_MORE.gap)
   const fitLine = (text: string, px: number): string => { const cap = Math.max(8, Math.floor((plateW - 16) / px)); return text.length > cap ? `${text.slice(0, cap - 1).trimEnd()}…` : text }
   const placeShown = fitLine(placeLine, 5.4)
   const thirdShown = fitLine(thirdLine, 5.4)
@@ -934,9 +945,23 @@ function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, onFit }
           <text x={8} y={12.5} className="orch__pplate-sub">{hidden}</text>
         </g>
       )}
+      {onWorld !== undefined && (
+        <g className="orch__pplate-more orch__pplate-world" transform={`translate(0, ${worldY})`} data-orch-platform-world={p.id} role="button" tabIndex={0}
+          aria-label="View in World — this island's agents in the 3D room"
+          onClick={(e) => { e.stopPropagation(); onWorld(p.id) }}
+          onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); onWorld(p.id) } }}>
+          <title>This island's agents in the World view.</title>
+          <rect className="orch__pplate-bg" width={ORCH_WORLD_CHIP.length * 5.6 + 16} height={ORCH_PLATE_MORE.h} rx={9} />
+          <text x={8} y={12.5} className="orch__pplate-sub">{ORCH_WORLD_CHIP}</text>
+        </g>
+      )}
     </g>
   )
 }
+
+/** M432. The plate's way to the 3D room. */
+const ORCH_WORLD_CHIP = 'View in World'
+
 
 /**
  * M292. The minimap: every platform as a rectangle in model space, the camera's
@@ -989,6 +1014,8 @@ function GraphBoard(props: {
   /** M291. The focused island's platform (expands past the cap; the breadcrumb's middle). */
   focusedPlatformId: string | null
   onFocusPlatform: (id: string | null) => void
+  /** M432. The focused plate's "View in World" chip; absent, none is drawn. */
+  onViewInWorld?: (platformId: string) => void
   /** M292. Quality tier from the view's frame-time read. */
   quality: 'full' | 'lean' | 'flat'
   /** M293. WebGL could not be had: paint flat SVG bodies instead of mounting the island. */
@@ -1410,7 +1437,8 @@ function GraphBoard(props: {
                 <polygon className="orch__platform-hit" data-orch-platform-hit={t.id} points={pp.points.map((q) => `${q.x},${q.y}`).join(' ')} fill="transparent"
                   onClick={() => onFocusPlatform(t.id)} onDoubleClick={() => { onFocusPlatform(t.id); fitPlatform(t.id) }} />
                 <PlatformPlate p={pp.p} cx={pp.x} y={pp.label.y} w={pp.w} level={pp.level} focused={focusedIsOn(t.id)} selected={focusedIsOn(t.id) && selectedId === null}
-                  onFocus={(id) => onFocusPlatform(id)} onFit={(id) => { onFocusPlatform(id); fitPlatform(id) }} />
+                  onFocus={(id) => onFocusPlatform(id)} onFit={(id) => { onFocusPlatform(id); fitPlatform(id) }}
+                  {...(props.onViewInWorld !== undefined && focusedIsOn(t.id) && (pp.p.island?.memberIds.length ?? 0) > 0 ? { onWorld: props.onViewInWorld } : {})} />
               </g>
             )
           }
@@ -1550,7 +1578,7 @@ export function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, onContinueOnBackend, backendsAvailable, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange, taskQueue, onOpenTask, onStartWork, planOf } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onOpenPath, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas, orchestrate, onOrchestrate, onPatchWorkItem, taskHandoffOf, onRefreshTaskHandoffs, automationResults, onRetryOnCanvas, onContinueOnBackend, backendsAvailable, workspaceName, onSend, onSaveArrangement, initialSelectedId, onSelectionChange, taskQueue, onOpenTask, onStartWork, planOf, onViewInWorld } = props
   // M287. The workspace's persisted record seeds the in-memory prefs BEFORE
   // the states below read them — a useState initializer, so it runs once per
   // mount and never on a later render of the same page.
@@ -3012,6 +3040,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 // and it never left the evidence level, whatever the zoom.
                 focusedPlatformId={focusIslandId}
                 onFocusPlatform={(id) => { setFocusIslandId(id); setSelectedIds([]); setFreshNeeds(new Set()) }}
+                // M432. The island's members, the selected session first when it is one of them.
+                {...(onViewInWorld === undefined ? {} : { onViewInWorld: (id: string) => {
+                  const members = platforms.find((p) => p.id === id)?.island?.memberIds ?? []
+                  onViewInWorld(selectedId !== null && members.includes(selectedId) ? [selectedId, ...members.filter((m) => m !== selectedId)] : members)
+                } })}
                 quality={quality}
                 webgl={webgl}
                 onWebglLost={() => setWebgl('unavailable')}

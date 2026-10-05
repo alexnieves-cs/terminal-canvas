@@ -230,6 +230,8 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   // its Open; the past room has none (`openableFrom`).
   const openable = openableFrom(agentId, past, actions)
   const openHere = picked && !waiting && openable
+  // M432. The other view of the same work, on the picked card too: its task's island in Orchestrate.
+  const orchHere = picked && !past && actions !== null && actions.canOrchestrate(agentId)
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
@@ -269,9 +271,10 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
                     ))}
                   </ul>
                 ) : null}
-                {openHere ? (
+                {openHere || orchHere ? (
                   <div className="world-card__actions" role="group" aria-label="Its panel">
-                    <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open panel</button>
+                    {openHere ? <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open panel</button> : null}
+                    {orchHere ? <button type="button" className="world-card__act" onClick={() => actions?.orchestrate(agentId)} title="Its task's island in Orchestrate" data-world-orchestrate>View in Orchestrate</button> : null}
                   </div>
                 ) : null}
               </div>

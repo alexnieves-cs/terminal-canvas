@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, type JSX } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, type JSX } from 'react'
 import { useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
@@ -20,9 +20,9 @@ import { boardSteps, focusTask } from './world-structure'
  * Reached only through the lazily-loaded WorldView (CLAUDE.md's library table).
  * Nothing here is an object the product knows about — it is the room's
  * furniture, so none of it is selectable, none of it is read by anything, and
- * all of it is cheap: one InstancedMesh per cluster, a handful of meshes for
- * the stools, a canvas texture each for the board and the label that is
- * painted when its words change and never per frame.
+ * all of it is cheap: (M433) two InstancedMeshes for every stool — the seats,
+ * and the legs — and a canvas texture for the board that is painted when its
+ * words change and never per frame.
  *
  * Load-bearing, and each fails SILENTLY:
  *
@@ -51,20 +51,43 @@ function Stools({ half }: { half: number }): JSX.Element {
   const seat = useMemo(() => new THREE.CylinderGeometry(0.3, 0.3, 0.07, 32), [])
   const leg = useMemo(() => new THREE.CylinderGeometry(0.022, 0.022, SEAT_Y - 0.035, 8), [])
   useEffect(() => () => { seat.dispose(); leg.dispose() }, [seat, leg])
+  const seatMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f6f7f9', roughness: 0.55 }), [])
+  const legMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: STUDIO.dark, roughness: 0.5, metalness: 0.2 }), [])
+  useEffect(() => () => { seatMaterial.dispose(); legMaterial.dispose() }, [seatMaterial, legMaterial])
+  // M433. Every stool's seat in one draw and every leg in another (they were five meshes a
+  // stool). The stools never move, so the matrices are written once, when the room's size does.
+  const seats = useRef<THREE.InstancedMesh>(null)
+  const legs = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const s = seats.current
+    const l = legs.current
+    if (!s || !l) return
+    const stool = new THREE.Object3D()
+    const part = new THREE.Object3D()
+    stool.add(part)
+    let n = 0
+    spots.forEach((spot, i) => {
+      stool.position.set(spot.x, 0, spot.z)
+      stool.rotation.set(0, spot.facing, 0)
+      part.position.set(0, SEAT_Y, 0)
+      stool.updateMatrixWorld(true)
+      s.setMatrixAt(i, part.matrixWorld)
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        part.position.set(sx * LEG_OFFSET, (SEAT_Y - 0.035) / 2, sz * LEG_OFFSET)
+        stool.updateMatrixWorld(true)
+        l.setMatrixAt(n++, part.matrixWorld)
+      }
+    })
+    s.instanceMatrix.needsUpdate = true
+    l.instanceMatrix.needsUpdate = true
+    // Static, so the bounds are right once computed — unlike a drifting cluster's.
+    s.computeBoundingSphere()
+    l.computeBoundingSphere()
+  }, [spots])
   return (
     <>
-      {spots.map((spot, i) => (
-        <group key={i} position={[spot.x, 0, spot.z]} rotation-y={spot.facing}>
-          <mesh geometry={seat} position-y={SEAT_Y} castShadow receiveShadow>
-            <meshStandardMaterial color="#f6f7f9" roughness={0.55} />
-          </mesh>
-          {([-1, 1] as const).flatMap((sx) => ([-1, 1] as const).map((sz) => (
-            <mesh key={`${sx}${sz}`} geometry={leg} position={[sx * LEG_OFFSET, (SEAT_Y - 0.035) / 2, sz * LEG_OFFSET]} castShadow>
-              <meshStandardMaterial color={STUDIO.dark} roughness={0.5} metalness={0.2} />
-            </mesh>
-          )))}
-        </group>
-      ))}
+      <instancedMesh ref={seats} args={[seat, seatMaterial, spots.length]} castShadow receiveShadow />
+      <instancedMesh ref={legs} args={[leg, legMaterial, spots.length * 4]} castShadow />
     </>
   )
 }

@@ -14,7 +14,7 @@ import { STUDIO } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
-import { selectAgent, selectedAgent } from './world-select'
+import { hasArrival, selectAgent, selectedAgent, takeArrival } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
 import { dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
@@ -264,6 +264,23 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
         const pose = focusPose(slot, copyOf(camera.position), copyOf(c.target))
         begin(pose.position, pose.target, FIT_MS)
         return true
+      },
+      plan: () => {
+        const c = controls.current
+        if (!c) return null
+        const agents = [...(stations.current?.values() ?? [])].map((station) => {
+          const waiting = getAgent(station.agentId)?.status === 'waiting_approval'
+          const slot = goalOf(getAgent(station.agentId)?.status ?? 'idle', station.conductor) === 'table' ? station.seat : (station.home ?? station.seat)
+          return { agentId: station.agentId, at: { x: slot.x, z: slot.z }, waiting }
+        })
+        return { half: slabHalf(arc.current), camera: { x: camera.position.x, z: camera.position.z }, target: { x: c.target.x, z: c.target.z }, agents }
+      },
+      centre: (x, z) => {
+        const c = controls.current
+        if (!c) return
+        // The whole rig slides: the camera keeps its side and its distance, only what it looks at moves.
+        const dx = x - c.target.x, dz = z - c.target.z
+        begin({ x: camera.position.x + dx, y: camera.position.y, z: camera.position.z + dz }, { x, y: c.target.y, z }, FIT_MS)
       }
     }
     return () => { api.current = null }
@@ -301,6 +318,15 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
         c.update()
       }
       rest.current = { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+      // M432. A look asked for from Orchestrate ("View in World"), taken on the first
+      // resting frame that has one of its agents in the room: pick it and glide to it.
+      if (hasArrival()) {
+        const id = takeArrival((agentId) => stations.current?.has(agentId) === true, Date.now())
+        if (id !== null) {
+          selectAgent(id)
+          api.current?.focus(id)
+        }
+      }
       return
     }
     if (c) c.enabled = false
