@@ -695,3 +695,76 @@ Linux, Node v22.14.0. `npm ci --ignore-scripts`.
 | `npm run verify:rd-l-f` | 17/17 |
 | `npm run verify:styles` | 97/97 |
 | `npm run verify:rail` | 266/266 |
+
+## M448 · W0 night studio
+
+Branch `rd/w0-night` from `redesign/main` at `c432e511` (after R-024). Base the brief names is `rd-canvas` (`5cf60839`); the branch includes the hint merge and does not move that tag.
+
+### Plan
+
+Reverse M415/M416. The room is the night ink (`#0b0d12`, dark `--s-0`) in both app themes. Shells are one neutral. Identity hues are the chest light only, and none sits within ΔE 20 (CIE76) of the five dark state colours. State is drawn in the eyes, the antenna, the floor ring and (once R-039 lands) the desk screen, read from `state-palette.ts` through `stateHexForAgent`. Trims are a dim neutral so only state blooms. Amber, the needs token, is the only vertical beacon, and only while an agent is waiting. Idle and errored agents stay in the roster; an error slumps. Agents do not walk to the table. `isLiveStatus` is unchanged (still the at-work set). `goalOf` is unchanged; `WorldRobot` stops using it.
+
+`STUDIO` is the same object as `NIGHT`, so WorldOffice, WorldPlatform, WorldProps and WorldStructure pick up the night ground without an edit this lane does not own. `tableTop`, `ink` and `zoneInk` stay, so `world.studio.4` and `world.critic.label.1` stay green. The bloom threshold stays calibrated to the pale floor `#eef0f3`: a threshold taken from the night ground drops the whiteboard under `world.bloom.ink.1`. `glowScale` returns 1 for a colour under luma 0.12, so the dim trim does not bloom; `#36e6ff` and `#7ff4ff` still boost (`world.bloom.threshold.1`). `world.bloom.preimage.1` keeps the round-trip and now only requires that ACES does not lift the ground (the night ground compresses by less than the pale 0.02).
+
+### PLAN CHECK
+
+- [x] Every state colour in world/* reads state-palette.ts; identity hues only on the chest light.
+- [x] The F1 world exemption is a request for the lead (R-038), not an edit to `scripts/verify-rd-f1.cjs`.
+- [x] No three import in a pure module. WorldStage was not edited; it still has its one `/* @__PURE__ */ lazy()` for WorldView, and the flat room's existing second lazy (M431).
+
+Watched red before the palette existed: `verify:rd-w0` 1/4. `rd-world.parity.1` named `world-palette.ts:#a6f6ff`. `rd-world.identity.1` named `#ee2b4a` 19.8, `#ffc614` 19.8, `#11b9b2` 16.6. `rd-world.night.1` was the missing wiring. The esbuild of the suite did not throw: the parity walk short-circuited before the missing exports were read.
+
+### CSS override
+
+Inside `/* ── rd:W0 ── */`, badge rules that follow the earlier `.world-tag` / `.world-flat__tile` rules and win by source order:
+
+- `busy` → `var(--state-working)` (was `--world-go`, green)
+- `quiet` and `idle` → `var(--state-idle)` (quiet was `--world-stop`, red)
+- `stopped` → `var(--state-failed)`
+- `wants-you` → `var(--state-needs)`
+- `done` → `var(--state-done)`
+
+### Exports other lanes read
+
+`NIGHT`, `SHELL`, `TRIM`, `stateHexForAgent`, `ROBOT_TINTS` (chest lights, still length 10), and `STUDIO` aliased to `NIGHT`.
+
+### Requests
+
+R-038 open: drop `src/renderer/world/` from `rd-tone.literal.1`'s exemption in `scripts/verify-rd-f1.cjs` (lead, after merge). R-039 open: WorldOffice desk screen reads `stateHexForAgent`, and `MeetingTable` unmounts. R-040 done in `6dd3cad6`: an unread worktree list is one module-level array, so the resume summary does not rebuild every render. W0 does not own `useTaskHandoffs.ts`. The lead landed it on this branch before the night shot, because opening the world during that loop threw React's nested-update limit and unmounted the tree.
+
+### G2
+
+Shot `rd-world-night` (Plan tier, `TC_FIXTURE=rd-steward`, swiftshader under xvfb, Linux Electron `node_modules/electron/dist/electron`). `UPDATE_GOLDENS` was not set. Nothing was written under `verify/visual/goldens/`. `visual.1` stays red: the scene has `run`, and its golden is missing until Phase 4.
+
+World-guard: no blockers. `three` / fiber / drei / `postprocessing` stay on the existing doors. WorldStage still has one `/* @__PURE__ */ lazy()` for WorldView and the flat room's existing second lazy. `world-palette.ts` does not import three. No drei `<Environment>`. `useGLTF` still passes both decoders off. The built entry loads the WorldView chunk with `import()`, not a static three import. Reduced motion and context-loss fallback were already in WorldStage and were not edited.
+
+### Critic · rd-world-night
+
+Composite `out/shots/rd-world-night.vs-reference.png` (reference on top, capture below). Verdict: **does-not-read**.
+
+1. Silhouette. The reference is five terraces stepping back. The capture is one dark slab with desks in a loose ring. W2 owns screen 11's layout. W0 does not build terraces. Recorded disagreement.
+2. Material. The reference paints saturated candy bodies. The capture's shells are one warm neutral (`SHELL` `#6e6256`); identity is the chest light. The kickoff overrides the mockup's colored bodies. Recorded disagreement.
+3. Glow. Eyes, floor rings and the waiting antenna carry the light. The reference's tall amber beacon columns are not in this shot.
+4. Connectors. No handoff arcs between robots.
+5. Labels. The reference puts a name card on every robot. The capture does not read those cards at this framing.
+6. Composition. The capture is a closer orbit of one cluster. The reference is a wide establishing shot with a plan whiteboard behind the room. The whiteboard stays in the scene (WorldProps); it is not the subject of this frame.
+7. Chrome. The capture shows the app top bar (World view pressed, Sessions, Review, Orchestrate). The reference's bottom pill and 2D minimap are absent. Those are shared chrome, not this lane's room.
+8. STATE COLOUR. Last and smallest. Working reads cyan, needs-you amber, done green, failed red, idle slate, on the eyes and floor rings. The failed agent is in the room. Amber is the waiting beacon, not a second body colour.
+
+Ignored, per the critic brief: sample copy (Steward, ledger-export) and the 1600×1000 mockup versus the 1440×865 shot.
+
+### Gates (Linux, before merge)
+
+| Step | Result |
+|---|---|
+| typecheck | pass (`tsc --noEmit` web and node) |
+| `verify:rd-w0` | 4/4 (`rd-w0.0`, `parity.1`, `identity.1`, `night.1`) |
+| `verify:world` | 251/251 |
+| `verify:rd-f1` | 7/7 (exemption still in place; R-038 lands after merge) |
+| `verify:styles` | 97/97 |
+| `verify:rail` | 266/266 |
+| lane suites | `rd-l-a` 15/15, `rd-l-b` 14/14, `rd-l-c` 11/11, `rd-l-d` 18/18, `rd-l-e` 15/15, `rd-l-f` 17/17 alone, `rd-w1`–`rd-w6` pass |
+| plain wave | `npm run verify` 64/67 in 49.4s, stopped after wave 1. `verify:rd-l-f` `kill.1` failed in the concurrent wave (`killed: null`) and is 17/17 alone. `verify:canvas-sync` passed (15.1s). `verify:relay` passed (2.4s). `verify:flowchart` passed (1.0s). `verify:tmux` passed (0.1s; the node ABI of `pty.node` is present). |
+| Electron tier | did not start; wave 1 stopped. The night shot ran separately under xvfb and swiftshader and wrote the composite. |
+
+Known reds, not this diff: `verify:meta` 51/53 (`panels-split.2` tag `pre-v7-run` absent; `visual.1` declared 90 / goldens 79, missing redesign goldens including `rd-world-night`). `verify:first-run` 28/29 (`revamp.create.1`). `UPDATE_GOLDENS` was not set.

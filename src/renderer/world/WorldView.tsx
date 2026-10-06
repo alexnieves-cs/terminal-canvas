@@ -10,7 +10,7 @@ import { WorldRobot } from './WorldRobot'
 import { WorldStructure } from './WorldStructure'
 import { useWorldContext } from './world-context-store'
 import { taskOfAgent } from './world-structure'
-import { STUDIO } from './world-palette'
+import { NIGHT } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
@@ -635,7 +635,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const start = useMemo((): Vec3 => isoPose(plan.arcRadius), [])
   // The ground is unlit, and the bloom's tone map would darken it; paint the value that comes out right.
   const ground = useMemo(() => {
-    const c = new THREE.Color(STUDIO.ground)
+    const c = new THREE.Color(NIGHT.ground)
     return bloom ? c.setRGB(...acesPreimage([c.r, c.g, c.b])) : c
   }, [bloom])
   const half = slabHalf(plan.arcRadius)
