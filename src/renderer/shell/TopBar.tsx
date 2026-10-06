@@ -1,4 +1,5 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useState, type JSX } from 'react'
+import { createPortal } from 'react-dom'
 import type { PresetRow } from '../palette/commands'
 import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
@@ -6,7 +7,12 @@ import { Check, ChevronDown, Lanes, PanelLeft, PanelRight, Pin, ProductMark, Sea
 import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem, SegmentedControl } from '@renderer/primitives'
 import { LiveStatus } from './LiveStatus'
 import { AccountMenu } from '../account/AccountMenu'
+import { initialsOf } from '../account/account-model'
 import type { Accounts } from '../account/useAccounts'
+import { sessionCountLabel, sessionsBadgeLabel, useAttentionCensus } from '@renderer/canvas/command-pill'
+import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
+import { SessionsHost } from '@renderer/sessions/SessionsHost'
+import { ReviewHost } from '@renderer/review/ReviewHost'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -52,6 +58,12 @@ export interface TopBarProps {
   /** M279. The live status cluster: agents working and waiting, from the inspector's summary. */
   running: number
   waiting: number
+  /**
+   * M438. How many sessions the bar names. Absent: the bar counts terminal
+   * and chat panels itself, until Canvas passes the number (that mount is
+   * another lane's file). A non-positive count draws nothing.
+   */
+  sessionCount?: number
   onJumpWaiting: () => void
   /** M336. The signed-in accounts; the menu is absent when accounts are unconfigured and nobody is signed in. */
   accounts?: Accounts
@@ -80,7 +92,7 @@ export interface TopBarProps {
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext, navigatorOpen, onToggleNavigator,
   workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
-  centerView, onSetCenterView, worldView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false
+  centerView, onSetCenterView, worldView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false, sessionCount
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -99,6 +111,22 @@ export function TopBar({
   // the segment stays while the view is showing, so the pressed place never
   // vanishes from under the person looking at it.
   const showPeople = (accounts?.sessions.length ?? 0) > 0 || sharedWorkspace || centerView === 'team'
+  const attentionQueue = useAttentionQueue(useAttentionCensus())
+  const badge = sessionsBadgeLabel(attentionQueue.length)
+  const observed = useObservedSessionCount(sessionCount)
+  const sessionsLabel = sessionCountLabel(observed)
+  const [shellEl, setShellEl] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const el = document.querySelector('.shell')
+    setShellEl(el instanceof HTMLElement ? el : null)
+  }, [])
+  const page = centerView === 'sessions' || centerView === 'review' ? (
+    <div className="shell__page" data-center-view={centerView}>
+      {centerView === 'sessions'
+        ? <SessionsHost onShowOrchestrate={() => onSetCenterView('orchestration')} />
+        : <ReviewHost />}
+    </div>
+  ) : null
 
   return (
     <header className="shell__top" aria-label="Toolbar">
@@ -129,10 +157,15 @@ export function TopBar({
         // stays first: it is what the dock, the palette and the docs call it.
         options={[
           { id: 'canvas', label: <><span className="shell__center-name">Canvas</span><span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
-          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Orchestrate — monitor and review: what the agents are doing, and what is ready for you', className: 'shell__center-btn' },
-          // M404 (C1). "People", not "Team": Teammates (the dock) are AGENT
-          // identities, and two places one letter-string apart read as one.
-          // The code id stays `team`.
+          { id: 'sessions', label: <><span className="shell__center-name">Sessions{badge !== null && <span className="shell__nav-badge" data-sessions-badge>{badge}</span>}</span></>, title: 'Sessions', className: 'shell__center-btn' },
+          { id: 'review', label: <><span className="shell__center-name">Review</span></>, title: 'Review', className: 'shell__center-btn' },
+          // D2. Orchestrate is not a tab. The segment stays in this control so
+          // the panels harness can still press [data-seg="orchestration"];
+          // the F3 stylesheet clips it. The doors a person uses are the View
+          // menu row, the palette, and the Sessions header link.
+          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Show Orchestrate', className: 'shell__center-btn' },
+          // M404 (C1). "People", not a second name for teammates. The code id
+          // stays `team`. Conditional: only when there are people to see.
           ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span><span className="shell__center-purpose">See who is working</span></>, title: 'People — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
         ]}
       />
@@ -148,6 +181,7 @@ export function TopBar({
         // ⌘⇧N stays the expert door to a raw panel, so the button no longer
         // shows it as its own shortcut.
         title={preferred ? `Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N; ⌘N starts ${preferred.name} at once` : 'Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N'}
+        tabIndex={-1}
         {...shellControl(onOpenSheet)}
       >
         <span>+ New task</span>
@@ -175,8 +209,10 @@ export function TopBar({
             : <button type="button" className="shell__crumb shell__task" aria-current="location" title={`Show ${taskName} on the canvas`} {...shellControl(onShowTask)}>{taskName}</button>}</>}
       </nav>
 
+      {sessionsLabel !== '' && <span className="shell__sessions" data-session-count>{sessionsLabel}</span>}
+
       <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
-        {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
+        {...shellControl(onSearch)}><Search /><span>Find or run anything</span><kbd>⌘K</kbd></button>
 
       {/* M279. What the agents are doing, at the bar's right after the field
           (the reference pass moved it from before the field): the one fact a
@@ -252,6 +288,7 @@ export function TopBar({
                   with no group to be one of. */}
               <MenuCheckboxItem checked={centerView === 'orchestration'}
                 onSelect={() => onSetCenterView(centerView === 'orchestration' ? 'canvas' : 'orchestration')}
+                title="Show Orchestrate"
               >
                 <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
                 Orchestrate
@@ -262,7 +299,34 @@ export function TopBar({
       </div>
       {/* M336. Last in the bar, where an account lives in every Mac app with
           one: WHO the doors act as is a fact about the window, not the canvas. */}
+      {accounts !== undefined && accounts.sessions.slice(1, 3).map((session) => (
+        <span key={session.githubLogin} className="shell__avatar" aria-hidden="true" title={session.githubLogin}>{initialsOf(session.githubLogin)}</span>
+      ))}
       {accounts !== undefined && <AccountMenu accounts={accounts} />}
+      {page !== null && shellEl !== null && createPortal(page, shellEl)}
     </header>
   )
+}
+
+/**
+ * Terminal and chat panels are the sessions the bar counts. Notes and
+ * pictures are objects, not sessions. A passed `sessionCount` wins; otherwise
+ * the bar looks, on a slow tick, so an xterm redraw does not recount.
+ */
+function useObservedSessionCount(override: number | undefined): number {
+  const [seen, setSeen] = useState(0)
+  useEffect(() => {
+    if (override !== undefined) return
+    const count = (): number => document.querySelectorAll('[data-panel-kind="terminal"], [data-panel-kind="chat"]').length
+    const update = (): void => {
+      setSeen((prev) => {
+        const next = count()
+        return prev === next ? prev : next
+      })
+    }
+    update()
+    const timer = window.setInterval(update, 1000)
+    return () => window.clearInterval(timer)
+  }, [override])
+  return override ?? seen
 }

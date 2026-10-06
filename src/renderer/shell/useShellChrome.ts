@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { focusLocked } from '@shared/shortcuts'
 import type { ShellBreakpoint } from './useShellBreakpoint'
 
 export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board' | 'skills'
@@ -11,7 +12,7 @@ export type ContextTab = 'detail' | 'work' | 'tools' | 'activity'
  * a place they did not ask to be. Every "is the canvas covered" test reads
  * `!== 'canvas'`, so a third page is covered the way Orchestrate is.
  */
-export type CenterView = 'canvas' | 'orchestration' | 'focus' | 'team'
+export type CenterView = 'canvas' | 'orchestration' | 'focus' | 'team' | 'sessions' | 'review'
 
 export interface ShellChrome {
   /** The breakpoint the shell measured for itself; stamped as `data-bp`. */
@@ -162,7 +163,16 @@ export function useShellChrome(deps: {
           const suppress = bootRef.current
           bootRef.current = false
           // M324. A settings re-read never pulls a person out of a focus view.
-          setCenterViewState((cur) => (cur === 'focus' ? cur : center.value === 'orchestration' && !suppress ? 'orchestration' : 'canvas'))
+          // Sessions and Review are not in the settings enum yet (L-E). A stored
+          // value of either is dropped by the store, so this branch is live
+          // only after that enum grows. In memory, setCenterView still shows them.
+          setCenterViewState((cur) => {
+            if (cur === 'focus') return cur
+            const value = center.value
+            if (value === 'orchestration' && suppress) return 'canvas'
+            if (value === 'orchestration' || value === 'sessions' || value === 'review') return value
+            return 'canvas'
+          })
         }
       })
     }
@@ -311,11 +321,15 @@ export function useShellChrome(deps: {
     setNavDrawer(false); setCtxDrawer(false); setAttentionOpen(false)
   }, [])
 
+  const centerRef = useRef(centerView)
+  centerRef.current = centerView
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Escape closes a transient surface — the palette's own rule, on a
       // second and third surface. Only when one is up, so a bare Escape still
-      // reaches the agent every other time.
+      // reaches the agent every other time. Not a canvas chord, so a focus
+      // lock does not yield it.
       if (event.key === 'Escape' && (navDrawer || ctxDrawer || attentionOpen)) {
         if (paletteIsOpen()) return
         event.preventDefault()
@@ -325,6 +339,17 @@ export function useShellChrome(deps: {
       // Cmd, and only Cmd — the same gate every canvas shortcut obeys so that
       // a bare keystroke always reaches the PTY.
       if (!event.metaKey || event.ctrlKey || event.altKey) return
+      // D4. A locked panel owns every canvas chord except ⌘⇧L (that one is
+      // useKeyboardNav's). Returning here, before preventDefault, is the yield.
+      if (focusLocked()) return
+      // ⌘⇧S: Sessions, and back. Bound here because this hook owns the page.
+      if (event.shiftKey && event.code === 'KeyS') {
+        if (paletteIsOpen()) return
+        event.preventDefault()
+        if (event.repeat) return
+        setCenterView(centerRef.current === 'sessions' ? 'canvas' : 'sessions')
+        return
+      }
       // Cmd+B: the Files pane. preventDefault BEFORE the repeat bail: this
       // rejects a chord that IS ours and we are declining to act on, so the
       // tail of a held Cmd+B must still be swallowed rather than leaking to
@@ -349,7 +374,7 @@ export function useShellChrome(deps: {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [paletteIsOpen, toggleNavigator, toggleContext, toggleTree, dismissTransient, navDrawer, ctxDrawer, attentionOpen])
+  }, [paletteIsOpen, toggleNavigator, toggleContext, toggleTree, dismissTransient, navDrawer, ctxDrawer, attentionOpen, setCenterView])
 
   return {
     bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, attentionFocus, contextTab, centerView,

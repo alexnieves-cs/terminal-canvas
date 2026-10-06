@@ -6,6 +6,8 @@ import { agentWord } from '@renderer/panels/panel-state'
 import { Bell, ChevronLeft, ChevronRight, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Link, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 import { needsYouCount } from '@shared/attention-words'
+import { useAttentionCensus } from '@renderer/canvas/command-pill'
+import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
 import { useAttentionOsSettings } from './useAttentionOsSettings'
 import { ApprovalAcks, ApprovalDetail } from './ApprovalDetail'
 import { useApprovalOutcomes } from './approval-outcome'
@@ -250,7 +252,12 @@ function DockImpl({
   // M378. The team's asks wait on this person too — on anyone who may edit
   // the canvas — so the badge counts them beside the panels waiting here.
   const team = useTeamAsks()
+  // M438. The badge is F2's queue. The aria-label below still uses the
+  // snooze-aware count: the queue does not know snooze, and a team ask is
+  // not one of its kinds (requests.md R-005).
+  const attentionQueue = useAttentionQueue(useAttentionCensus())
   const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length + team.length
+  const badgeCount = attentionQueue.length
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const [historyOpen, setHistoryOpen] = useState<string | null>(null)
@@ -513,8 +520,8 @@ function DockImpl({
             nothing. */}
         {/* M308. The badge counts what is NOT snoozed — putting a decision
             off is the point of a snooze — and the popover still lists both. */}
-        <span className="dock__badge" data-dock-badge data-attention-new={waiting > 0 ? '' : undefined} aria-live="polite" hidden={waiting === 0}>
-          {waiting === 0 ? '' : String(waiting)}
+        <span className="dock__badge" data-dock-badge data-attention-new={badgeCount > 0 ? '' : undefined} aria-live="polite" hidden={badgeCount === 0}>
+          {badgeCount === 0 ? '' : String(badgeCount)}
         </span>
         {/* M318. Back from the evidence to the decision you left. */}
         {!attentionOpen && returnTo !== null && queue !== undefined && order.includes(returnTo) && (

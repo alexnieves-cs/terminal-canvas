@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import { APPEARANCE_CATEGORY, RESTORE_CATEGORY, settingsInCategory, type SettingValue } from '../shared/settings-schema'
+import { electronAccelerator } from '../shared/shortcuts'
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
@@ -93,7 +94,7 @@ export function buildAppMenu(options: AppMenuOptions): void {
           // M65. The spawn sheet: where, what, how. ⌘N stays the instant
           // default; this is the considered one.
           label: 'New panel…',
-          accelerator: 'CmdOrCtrl+Shift+N',
+          accelerator: electronAccelerator('spawn-sheet'),
           click: () => options.onOpenSheet()
         },
         {
@@ -119,23 +120,23 @@ export function buildAppMenu(options: AppMenuOptions): void {
       submenu: [
         {
           label: 'Undo',
-          accelerator: 'CmdOrCtrl+Z',
+          accelerator: electronAccelerator('undo'),
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_UNDO)
         },
         {
           label: 'Redo',
-          accelerator: 'Shift+CmdOrCtrl+Z',
+          accelerator: electronAccelerator('redo'),
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_REDO)
         },
         { type: 'separator' },
         {
           label: 'Copy',
-          accelerator: 'CmdOrCtrl+C',
+          accelerator: electronAccelerator('copy'),
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_COPY)
         },
         {
           label: 'Paste',
-          accelerator: 'CmdOrCtrl+V',
+          accelerator: electronAccelerator('paste'),
           click: () => {
             // Read the clipboard here in main and ship the text down, so the
             // renderer never needs clipboard permissions of its own.
@@ -152,8 +153,8 @@ export function buildAppMenu(options: AppMenuOptions): void {
       // deliberately — a view state, never persisted).
       label: 'Workspace',
       submenu: [
-        { label: 'Tidy Panes', accelerator: 'CmdOrCtrl+Alt+T', click: () => options.onTidy() },
-        { label: 'Flip Terminals', accelerator: 'CmdOrCtrl+Alt+F', click: () => options.onFlip() }
+        { label: 'Tidy Panes', accelerator: electronAccelerator('tidy-alias'), click: () => options.onTidy() },
+        { label: 'Flip Terminals', accelerator: electronAccelerator('flip'), click: () => options.onFlip() }
       ]
     },
     {
