@@ -275,6 +275,7 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 import { TopBar } from '../shell/TopBar'
 import { focusLocked, matchShortcut } from '@shared/shortcuts'
 import { SessionsHost } from '@renderer/sessions/SessionsHost'
+import { openSettingsPage } from '@renderer/settings/open'
 import { ReviewHost } from '@renderer/review/ReviewHost'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { FocusTask } from '../focus/FocusTask'
@@ -7881,28 +7882,13 @@ export function Canvas({
     event.stopPropagation()
   }, [])
 
-  /**
-   * The top bar's ⚙. It opens the palette straight into the settings
-   * drill-in through the controller's own scope — the SAME authority the
-   * `Manage settings…` row's `entersScope: 'settings'` reaches, not a second
-   * door. The scope is what makes the button honest: every setting row is
-   * hiddenAtRest, so merely opening the palette would land the user on a list
-   * with no settings visible at all, which reads as a feature that was never
-   * built.
-   */
   // M68. The Jira panel's Connect verb: the palette's Credentials scope.
   const openCredentials = useCallback(() => palette.openPalette('credentials'), [palette.openPalette])
+  // R-026. The dock's Settings opens the page. Manage settings… stays the
+  // palette drill-in (entersScope: 'settings' on that row).
   const openSettingsScope = useCallback(() => {
-    palette.openPalette('settings')
-    // A useCallback for consistency with its sibling verbs, not for a
-    // load-bearing reason. An earlier comment here claimed an unstable
-    // identity would re-render TopBar on every mousemove over the canvas;
-    // that is false. TopBar is not memo-wrapped, so it re-renders whenever
-    // Canvas does — which a mousemove's setCursor already makes it do —
-    // whatever this prop's identity is. The parallel note in useViewport.ts
-    // IS true and load-bearing (those callbacks sit in a keydown effect's dep
-    // array); don't read this one as saying the same thing.
-  }, [palette.openPalette])
+    openSettingsPage()
+  }, [])
 
   // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
   // declared earlier in this component — see that ref's own comment for why
