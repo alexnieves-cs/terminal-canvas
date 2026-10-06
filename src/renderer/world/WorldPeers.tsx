@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX, type RefObject } from 'react'
 import { useWorldContext } from './world-context-store'
+import { watchersOn } from './world-minimap'
 import { useRoster } from './world-roster'
 import { peerFollowTarget } from './world-select'
 import type { CameraApi } from './world-set'
@@ -43,6 +44,7 @@ export function WorldPeers({ camera }: { camera: RefObject<CameraApi | null> }):
           className="world-peers__peer"
           data-in-room={p.mode === 'world' ? '' : undefined}
           data-idle={p.active ? undefined : ''}
+          data-watching={p.panelId ?? undefined}
           aria-pressed={following === p.userId}
           title={`${p.name}${p.mode === 'world' ? ' — in the room' : ''}. ${following === p.userId ? 'Stop following' : 'Follow'}`}
           onClick={() => setFollowing((f) => (f === p.userId ? null : p.userId))}
@@ -51,6 +53,15 @@ export function WorldPeers({ camera }: { camera: RefObject<CameraApi | null> }):
           {p.initials}
         </button>
       ))}
+      {roster.map((agent) => {
+        const watching = watchersOn(ordered, agent.agentId)
+        if (watching.length === 0) return null
+        return (
+          <span key={agent.agentId} className="world-peers__chip" data-world-watcher={agent.agentId}>
+            {watching.map((p) => <span key={p.userId} style={{ background: p.color }} title={`${p.name} is watching`}>{p.initials}</span>)}
+          </span>
+        )
+      })}
     </div>
   )
 }

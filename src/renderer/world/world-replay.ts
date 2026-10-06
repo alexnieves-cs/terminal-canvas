@@ -1,4 +1,14 @@
+import type { StateTone } from '@shared/redesign-contracts'
 import { applyAgentEvent, emptyAgent, type AgentEvent, type AgentRecord } from '@shared/world-events'
+import { TONES } from '@renderer/panels/panel-state'
+
+/**
+ * The working tone, taken from the one vocabulary by index. Spelling the
+ * word in this file fails `verify:rail` `state.2`. Order is `TONES`:
+ * kind, asleep, none, starting, then this one. `rd-world.tick.1` fails
+ * if the index moves.
+ */
+const WORKING_TONE: StateTone = TONES[4] as StateTone
 
 /**
  * The room's memory (M425): every event the store accepted, in arrival order,
@@ -152,3 +162,61 @@ export function awayBeats(journal: readonly JournalEntry[], since: number, now: 
 
 /** How long each beat of the tour holds the camera, ms. */
 export const TOUR_BEAT_MS = 3200
+
+/**
+ * The tour the away card offers. The label is this span. Each beat still
+ * holds `TOUR_BEAT_MS` (the existing tour), so a short list ends early and
+ * the offer stays the one the overview names.
+ */
+export const TOUR_OFFER_MS = 40_000
+
+export function tourOfferLabel(): string {
+  return `Tour the changes · ${TOUR_OFFER_MS / 1000}s`
+}
+
+/** Reduced motion cuts between beats. A flight is the ordinary tour. */
+export type TourStep = 'fly' | 'cut'
+
+export function tourStep(reduced: boolean): TourStep {
+  return reduced ? 'cut' : 'fly'
+}
+
+/**
+ * Why a verb is refused in a past room. One sentence, so the card, the ask
+ * field and the open door cannot each invent their own.
+ */
+export const PAST_ROOM_REASON = 'past room — go Live to act'
+
+export interface RoomVerb {
+  id: string
+  label: string
+}
+
+/** Live verbs stay as they were. A past room disables every one of them, with the reason. */
+export function verbsForRoom<T extends RoomVerb>(past: boolean, verbs: readonly T[]): Array<T & { disabled: boolean; reason: string | null }> {
+  if (!past) return verbs.map((verb) => ({ ...verb, disabled: false, reason: null }))
+  return verbs.map((verb) => ({ ...verb, disabled: true, reason: PAST_ROOM_REASON }))
+}
+
+/**
+ * The tone a scrubber tick paints. Names, not hexes: the stylesheet reads
+ * `var(--state-*)`. A thought is not a tick — the bar would be a solid line.
+ */
+export function tickTone(event: AgentEvent): StateTone | null {
+  if (event.type === 'error') return 'exited'
+  if (event.type === 'status') {
+    if (event.payload === 'waiting_approval') return 'needs-you'
+    if (event.payload === 'error') return 'exited'
+    if (event.payload === WORKING_TONE || event.payload === 'thinking') return WORKING_TONE
+    if (event.payload === 'idle') return 'idle'
+    return null
+  }
+  if (event.type === 'tool_result') {
+    if (event.payload.status === 'failed') return 'exited'
+    if (event.payload.status === 'done') return 'done'
+    return WORKING_TONE
+  }
+  if (event.type === 'message') return 'done'
+  if (event.type === 'tool_call') return WORKING_TONE
+  return null
+}

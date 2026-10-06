@@ -916,3 +916,72 @@ World guard: no blockers. `plan-floor.ts`, `WorldLens.tsx`, `world-transition.ts
 Merged to `redesign/main` as `aa0b55a5` (`--no-ff`) after W2. The mount is `2a24f561`. `rd/w1-transition` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W1`.
 
 The lead then mounted the curves in `WorldView`: `popDelaysFromTarget` from the camera target, `motionOf().dolly` into `dollyAt`, `motionOf().terrace` as the scale of the office and the terraces, `setWorldCameraTarget` from the orbit each frame, and `paintPlanFloor` on a ground under the terraces. `WorldLens` stays the canvas control. The top-bar World view button is gone (R-042). `world.stage.4` names the 120ms cross-fade (R-041). R-044 stays open until the swiftshader shot. W3 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w3-overview`.
+
+## M451 · W3 overview, camera and time
+
+Branch `rd/w3-overview` from `redesign/main` at `38644eed` (rd-w0 plus the R-040 render-loop fix). Lane W3. One milestone. `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
+
+### Plan
+
+Pure first, then the chrome that is already in the tree.
+
+1. `world-camera.ts` is pure (no three, no React, no canvas import). Orbit, pan, zoom-to-cursor (scroll and a ctrlKey pinch share one factor), tier poses for ⌘1/2/3 from `TIER_PITCH` and a local `TIER_SCALE`, fit on the terrace bounds, follow. `world.ctx.door.1` lets only the publisher import `zoom-tier`, which is frozen, so the scale and the hysteresis band are copied as `TIER_SCALE` / `tierAt`. `rd-world.pose.1` fails if either drifts from `TIER_TARGET` / `tierFor`. `rd-world.fit.1` centres those bounds to within 2% of the viewport. A pose aimed at the origin does not, which is the "Fit room sits off-centre" regression. `rd-world.zoom.1` keeps the floor point under the cursor fixed.
+2. `WorldCameraPanel.tsx` lists Orbit (drag), Pan (Shift-drag), Zoom to cursor (scroll / pinch with ctrlKey), Work · Plan · Map, Fit room, Follow picked, Back to 2D. Every chord is `shortcutById` from the registry. No chord glyph is written in the file. `useWorldCamera()` is exported from this file. The panel is mounted from `WorldTime` until W2's mount block takes it (R-062), so screen 14 is reachable without editing `WorldView.tsx`.
+3. Replay stays on the arrival journal (`foldTo` is not retargeted). Ticks take a tone and paint `var(--state-*)` inside the W3 span. A past room runs `verbsForRoom`, and every verb is disabled with the reason `past room — go Live to act`. The sentence is on the scrubber. Card, ask and open buttons live in files this lane does not own; they already omit those verbs (`world.replay.6`). R-063 asks them to show the same reason.
+4. The away card reads the journal. The offer is `Tour the changes · 40s`. `tourStep(true)` is `cut` and `tourStep(false)` is `fly`. The existing focus lines stay so `world.tour.1` still matches. The rig already snaps a glide when reduced motion is on.
+5. `watchersOn` plus a plan-map chip use the peer's initials. The sample "MK" is not in the source. The on-robot pill remains `WorldCard`'s `world-pill__peers` (`world.peers.3`).
+6. `world-minimap.ts` grows `cameraWedge` with no value import (`world.map.2`). `cameraFootprint` uses `cameraToViewport` and lives in `world-camera.ts`. The 2D `MinimapOverlay` is L-C's. R-060.
+7. Shot `rd-world-overview`, reference 14. Map tier pressed, scrubber open, away card open. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `world-camera.ts` is pure, and `fit.1` / `zoom.1` are plain-node checks of that module, written before the panel.
+- [x] `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
+- [x] Replay disables verbs with the reason `past room — go Live to act`.
+
+### W2 mount list
+
+Already in the tree through `WorldChrome` → `WorldTime` / `WorldPeers` / `WorldMinimap`. Do not mount a second copy.
+
+- `useWorldCamera`, `WorldCameraPanel` from `WorldCameraPanel.tsx` (mounted by `WorldTime` until R-062 moves that one line).
+- `fitRoom`, `zoomToCursor`, `tierPose`, `orbitBy`, `panBy`, `followAgent`, `boundsOf`, `cameraFootprint`, `toPose`, `backTo2d`, `tierAt`, `TIER_SCALE` from `world-camera.ts`.
+- `verbsForRoom`, `PAST_ROOM_REASON`, `tickTone`, `tourStep`, `tourOfferLabel` from `world-replay.ts`.
+- `cameraWedge`, `watchersOn` from `world-minimap.ts`.
+
+### CSS override
+
+Inside `/* ── rd:W3 ── */` only. The scrubber moves to the bottom centre, the away card to the right, the camera panel to the lower left, and replay ticks follow `data-tone` through `--state-*`. Earlier `.world-time__mark[data-kind]` rules stay; the tone rules win by source order.
+
+### Gates
+
+PLAN CHECK stays true. `WorldView.tsx` and `MinimapOverlay.tsx` are untouched.
+
+| Gate | Result |
+|---|---|
+| typecheck | web and node clean (`tsc --noEmit` both projects, and `npm run typecheck`) |
+| `verify:rd-w3` | 11/11 |
+| `verify:world` | 251/251. `world.ctx.door.1` stays green because the tier scale is a copy, pinned by `rd-world.pose.1` |
+| `verify:styles` | 97/97. The past-room verbs use `--fg-3`, not a fractional opacity |
+| `verify:rail` | 266/266 after the working tone moved to `TONES[4]` (`state.2`) and the tour button gained an `aria-label` (`labels.1`) |
+| `npm run affected -- --base origin/redesign/main` | 43/45 plain suites, 31.0s, stopped after the plain tier. 13 files. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta` (`panels-split.2`, `visual.1`) and `verify:first-run` `revamp.create.1`. Electron suites it selected did not start |
+| plain wave (`npm run verify`) | 64/67 in 48.0s, stopped after wave 1. Same two known failures, plus `verify:rd-l-f` `kill.1` (`killed: null`; 16/17 in the concurrent wave). `verify:review` `merge.1` passed (30.8s). `verify:canvas-sync` passed (14.4s). `verify:relay` passed (2.0s). `verify:flowchart` passed (0.9s). `verify:tmux` passed. Wave 2 and the Electron tier did not start |
+| build | `npm run build` exit 0 (electron-vite 16s). The entry `index.html` loads has no `WebGLRenderer` |
+| shot | `rd-world-overview` wrote `out/shots/rd-world-overview.png` and `.vs-reference.png`. Linux Electron needs `--ignore-gpu-blocklist --enable-unsafe-swiftshader` under xvfb or WebGL is blocklisted and the room never paints. No `UPDATE_GOLDENS`. The harness leak check treats the hostname as a substring; this host is named `cursor`, which is inside "Zoom to cursor" (R-065). The capture was taken with that throw skipped locally and the skip was not committed |
+
+### Critic · rd-world-overview
+
+Verdict: **close**.
+
+The capture has the overview's chrome on the live room: camera panel lower left (Orbit, Pan, Zoom to cursor, Work/Plan/Map with Map pressed, Fit room, Follow picked, Back to 2D), "Replay · last hour" at the bottom with a Live button and state-coloured ticks, and "While you were away" on the right with the tour and Dismiss. Top nav is Canvas | Sessions | Review.
+
+1. Silhouette. The room is the orbiting office, not the mockup's near top-down floor plan. Map is pressed in the panel. The rig has no `apply` (R-062), so the lens stays on the opening orbit.
+2. Composition. No teammate initials sit on an agent. The steward fixture publishes no watching peer. "MK" is sample copy and is not in the source.
+3. Chrome. The three overview surfaces sit where the mockup puts them. The floor is the furnished room rather than the mockup's diagram of rectangles, which is the same miss as the silhouette.
+
+State colour: the scrubber ticks are green, amber, red and blue from `--state-*`. No second hex in the W3 span.
+
+### Review
+
+Rules review: no blocker. Face stays on `--font-ui` for the camera chords. Past-room verbs stay in the DOM, coloured with `--fg-3`, not `display: none` and not a fractional opacity. Tones come from the palette. CSS is inside the W3 markers. Scoped ids. D1–D8 are not re-decided.
+
+World guard: `world-camera.ts` imports no three. No new three door. `WorldStage` still has its one `/* @__PURE__ */ lazy()` for the view (the flat room's lazy is the one already there). No drei `Environment`. Reduced motion cuts the tour (`tourStep`) and the rig's glide span is already 0. `verify:world` 251/251 and the build's entry chunk does not statically import three. `WorldMinimap` is the plan map; `MinimapOverlay` is untouched (R-060).

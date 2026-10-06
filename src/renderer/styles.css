@@ -12624,7 +12624,145 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:W2 ── */
 
 /* ── rd:W3 ── */
-
+/* M451. The overview chrome. Earlier world-time rules stay; these win by
+   source order. Ticks take the state token for their tone, not a second hex. */
+.world-time-col {
+  left: 50%;
+  top: auto;
+  bottom: calc(30px + var(--sp-5) + 64px);
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 440px));
+  align-items: stretch;
+}
+.world-time__open, .world-time, .world-away {
+  background: color-mix(in srgb, var(--s-2) 92%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.world-time {
+  height: auto;
+  min-height: 36px;
+  flex-wrap: wrap;
+  border-radius: var(--r-lg);
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+}
+.world-time__title {
+  flex: 1 0 100%;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.world-time__past {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--fg-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.world-time__verb {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--t-xs);
+  padding: 0 var(--sp-2);
+  cursor: not-allowed;
+}
+.world-time__mark[data-tone="working"] { background: var(--state-working); }
+.world-time__mark[data-tone="needs-you"] { background: var(--state-needs); }
+.world-time__mark[data-tone="done"] { background: var(--state-done); }
+.world-time__mark[data-tone="exited"] { background: var(--state-failed); }
+.world-time__mark[data-tone="idle"] { background: var(--state-idle); }
+.world-away-host {
+  position: absolute;
+  right: var(--sp-6);
+  top: 88px;
+  width: 300px;
+  pointer-events: none;
+  z-index: 3;
+}
+.world-away-host > * { pointer-events: auto; }
+.world-away { border-radius: var(--r-lg); }
+.world-camera {
+  position: absolute;
+  left: var(--sp-6);
+  bottom: 210px;
+  width: 248px;
+  z-index: 3;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--s-2) 92%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--line);
+}
+.world-camera__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 28px;
+  margin: 0;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--t-xs);
+  text-align: left;
+  cursor: pointer;
+}
+div.world-camera__row { cursor: default; }
+.world-camera__row[aria-pressed="true"] { background: var(--s-4); }
+.world-camera__row:hover { background: var(--s-3); }
+.world-camera__kbd, .world-camera__chords {
+  color: var(--fg-3);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 500;
+}
+.world-camera__chords { display: flex; gap: var(--sp-2); }
+.world-minimap__wedge {
+  fill: color-mix(in srgb, var(--iris) 28%, transparent);
+  stroke: var(--iris);
+  stroke-width: 1;
+  pointer-events: none;
+}
+.world-minimap__watcher {
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  fill: var(--fg);
+  pointer-events: none;
+}
+.world-peers__chip {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+.world-peers__chip span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--s-0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .world-camera__row { transition: none; }
+}
 /* ── /rd:W3 ── */
 
 /* ── rd:W4 ── */

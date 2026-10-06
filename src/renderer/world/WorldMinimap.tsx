@@ -1,7 +1,8 @@
 import { useEffect, useReducer, useRef, type JSX, type MouseEvent, type RefObject } from 'react'
 import { useAgentIds } from './agent-world-store'
+import { useWorldContext } from './world-context-store'
 import { robotTint } from './world-palette'
-import { fromMap, MINIMAP_SIZE, minimapShown, planKey, toMap, type RoomPlan } from './world-minimap'
+import { cameraWedge, fromMap, MINIMAP_SIZE, minimapShown, planKey, toMap, watchersOn, type RoomPlan } from './world-minimap'
 import { useRoster } from './world-roster'
 import { selectAgent, useSelectedAgent } from './world-select'
 import { TABLE_PLATE, type CameraApi } from './world-set'
@@ -28,6 +29,7 @@ export function WorldMinimap({ camera }: { camera: RefObject<CameraApi | null> }
   const roster = useRoster()
   const order = useAgentIds()
   const picked = useSelectedAgent()
+  const peers = useWorldContext().peers
   const shown = minimapShown(roster.length)
   const plan = useRef<RoomPlan | null>(null)
   const key = useRef('')
@@ -52,6 +54,7 @@ export function WorldMinimap({ camera }: { camera: RefObject<CameraApi | null> }
   const table = { a: at({ x: -TABLE_PLATE.hx, z: -TABLE_PLATE.hz }), b: at({ x: TABLE_PLATE.hx, z: TABLE_PLATE.hz }) }
   const eye = at(p.camera)
   const aim = at(p.target)
+  const wedge = cameraWedge(p.camera, p.target).map((pt) => { const m = at(pt); return `${m.x},${m.y}` }).join(' ')
   const onFloor = (event: MouseEvent<SVGSVGElement>): void => {
     const box = event.currentTarget.getBoundingClientRect()
     const floor = fromMap(event.clientX - box.left, event.clientY - box.top, p.half, S)
@@ -62,6 +65,7 @@ export function WorldMinimap({ camera }: { camera: RefObject<CameraApi | null> }
       <rect className="world-minimap__slab" x={slab.x} y={slab.y} width={S - 2 * slab.x} height={S - 2 * slab.y} rx={6} />
       <rect className="world-minimap__table" x={table.a.x} y={table.a.y} width={table.b.x - table.a.x} height={table.b.y - table.a.y} rx={2} />
       {/* The camera: a line from where it stands (clipped by the map's edge when it stands off the slab) to what it looks at. */}
+      <polygon className="world-minimap__wedge" points={wedge} />
       <line className="world-minimap__sight" x1={eye.x} y1={eye.y} x2={aim.x} y2={aim.y} />
       <circle className="world-minimap__aim" cx={aim.x} cy={aim.y} r={3} data-world-minimap-aim />
       {p.agents.map((a) => {
@@ -78,6 +82,12 @@ export function WorldMinimap({ camera }: { camera: RefObject<CameraApi | null> }
             <title>{name}</title>
           </circle>
         )
+      })}
+      {p.agents.map((a) => {
+        const m = at(a.at)
+        return watchersOn(peers, a.agentId).map((w, i) => (
+          <text key={w.userId} className="world-minimap__watcher" x={m.x + 7} y={m.y - 4 - i * 9} data-world-watcher={a.agentId}>{w.initials}</text>
+        ))
       })}
     </svg>
   )
