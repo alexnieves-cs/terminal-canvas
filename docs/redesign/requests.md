@@ -353,3 +353,10 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: Back to 2D calls `setWorldOn(false)`. `backTo2d(camera, size)` is the viewport for that pose. Nothing the world owns writes the canvas viewport.
 - Smallest change: on leaving the world, `goTo` the viewport `backTo2d` returns, so the canvas and the room are the same spot.
 - Status: open
+
+### R-065 · The shot leak check matches the hostname as a substring
+- Lane: W3
+- File: `scripts/shot.cjs` (not W3's)
+- Why the contract or the owner cannot absorb it: `k.shot` fails the scene when `document.body.innerText` includes the hostname. This Linux host is named `cursor`, and the overview's own row is "Zoom to cursor", so `rd-world-overview` cannot write a PNG here. The label is the mockup's. W3 does not own the harness.
+- Smallest change: match the username and the hostname as whole words, not as substrings, so a product word that contains the host does not fail the scene.
+- Status: open
