@@ -248,3 +248,26 @@ R-016 is open for the header path, branch and duration. The pill helper is `stat
 `gapGrid: 24` is opt-in on the canvas's `smartSnap` call. Callers that omit it, including the flowchart, keep the previous candidates. A connected drop on a shape still calls `extend`. A panel drop opens the menu and the next `onSpawn` links with `trigger: 'exit'` in the same history entry. Ground double-click is unchanged.
 
 The first plain wave went red on checks this lane had caused. `verify:styles` 5 and 6 rejected literal padding, margin, gap and a 2px radius in the lane span. `shadow.1` rejected `--lift` on `.review-node`, the marquee toolbar and the connected menu. `motion.2` rejected the new name `rd-panel-settle`. `verify:rail` `state.2` rejected the spelled word in `make-task.ts` and `Canvas.tsx`. Spacing now uses the scale. The overshoot is a second `@keyframes panel-settle` (the name `motion.2` already allows); the first definition stays the dip. `revamp.motion.1` still reads that first definition, so it does not see the overshoot that paints. R-017 asks F1 to read the last one. The work item's state is `WORK_ITEM_STATES[1]`. After that: `verify:rd-l-b` 14/14, `verify:styles` green including `shadow.1`, `motion.2` and `revamp.motion.1`, `verify:rail` 266/266.
+
+### Gates
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:styles` | green, including checks 5 and 6, `shadow.1`, `motion.2`, `revamp.motion.1` |
+| `npm run verify:rail` | 266/266, including `state.2` |
+| Plain-node wave (67 suites, no build, no Electron) | 64/67 in 31.3s. Failed: `verify:meta`, `verify:tmux`, `verify:first-run` |
+| `npm run affected -- --list --base redesign/main` | 22 files on this branch. The plain suites in that list ran inside the wave. The Electron suites were not run. UNMAPPED: `docs/redesign/requests.md`. A `--list` with no `--base` compares with `fba024f2c8` and is not this branch's diff |
+
+`verify:meta` fails two checks. `panels-split.2` is the known red: `git show pre-v7-run:scripts/verify-panels.cjs` fails because the tag is absent. `visual.1` reports `declared` 81, `goldens` 79, `missing` `rd-workspace` and `rd-arrange`. That red is expected once a scene's `run` sits on the same line as `{ name:`. The goldens were not written. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+`verify:first-run` is 28/29. `revamp.create.1` still wants `/^<div class="canvas-hud">/`. The HUD renders `data-screen-control` on that element. Create still sits before the zoom cluster. The attribute was not removed.
+
+`verify:tmux` fails loading `prebuilds/linux-x64/pty.node`. `npm ci --ignore-scripts` never rebuilt it. Not fixed.
+
+`verify:flowchart` passed in 1.0s and did not spike. `verify:relay` passed in 2.9s. `verify:canvas-sync` passed in 14.9s. No WebSocket errors on this host.
+
+Electron. `npm run verify:panels:core` through `scripts/redesign/with-electron-lock.sh` exits 127: `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron` is not on this machine. `xvfb-run` is `/usr/bin/xvfb-run`, and `node_modules/electron/dist/electron` exists. Under xvfb that binary starts and then dies: `Cannot find module './prebuilds/linux-x64//pty.node'`. The same death stops `scripts/shot.cjs` (`TC_FIXTURE=rd-steward`, `TC_SHOT_ONLY=rd-workspace`). dbus logs `Failed to connect to the bus`. No PNG was written, no `out/shots/*.vs-reference.png`, no golden. `scripts/panels-entry.cjs` also warns `Duplicate key "credentialDir"`; that warning is not this lane's.
+
+G2's mockup critic and rules review were not run. There is no composite to hand them. `npm run build` was not run, because shots cannot paint. `verify:panels`, `verify:canvas`, `verify:xterm`, `verify:window`, `verify:visual` and `verify:packaged` did not run.
