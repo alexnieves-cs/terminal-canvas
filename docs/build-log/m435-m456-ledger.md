@@ -227,3 +227,22 @@ Slots. `TierLayer` is a zero-size absolute `data-tier-layer` inside `.world` for
 Deviations. A double-click on empty ground still mints a flowchart process step (`flowchart.app.1`). ⌘N lands at the cursor only when the mouse has moved over the canvas and the call is the one-argument path; otherwise the view centre and `place()` cascade stay. ⌘T is a new listener, not a retarget of `useViewport`. Header path, branch and duration are R-016 (`PanelFrame` / `TerminalPanel` are not owned). `statePill` is ready and is not written into `shown.word`. Making a task commits one panel history entry; the work item is a second store and does not undo with ⌘Z. Handoff animation already runs only on `data-edge-activity="firing"`; M442 pins that rather than rewriting the gesture.
 
 Shot scenes `rd-workspace` and `rd-arrange` gain a `run`. `verify:meta` `visual.1` will ask for goldens. Those goldens are not written here.
+
+### M442
+
+Watched red: `verify:rd-l-b` exited 1 because esbuild could not resolve `header-rest.ts` and `session-facts.ts`. The comment at the top of `scripts/verify-rd-l-b.cjs` records that.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-b` | 9/9 pass (`rd-l-b.0`, `header.1`, `wait.1`, `allow.1`, `region.1`, `well.1`, `slot.1`, `handoff.1`, `inspector.1`) |
+
+R-016 is open for the header path, branch and duration. The pill helper is `statePill` in `header-rest.ts`.
+
+### M443
+
+| Check | Result |
+|---|---|
+| `npm run verify:rd-l-b` | 14/14 pass. Added `menu.1`, `gap.1`, `marquee.1`, `cursor.1`, `settle.1`. |
+
+`gapGrid: 24` is opt-in on the canvas's `smartSnap` call. Callers that omit it, including the flowchart, keep the previous candidates. A connected drop on a shape still calls `extend`. A panel drop opens the menu and the next `onSpawn` links with `trigger: 'exit'` in the same history entry. Ground double-click is unchanged.

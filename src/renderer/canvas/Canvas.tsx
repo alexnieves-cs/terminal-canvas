@@ -34,7 +34,7 @@ import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
-import { smartSnap, type SpacingGuide } from './arrange'
+import { alignRects, smartSnap, type SpacingGuide } from './arrange'
 import { SNAP_PX, type SnapGuide } from './placement'
 import { attemptOf, contextualHint, hintsLeft, STARTER_HINT, type HintId } from './hints'
 import { FirstTaskHint } from './FirstTaskHint'
@@ -75,6 +75,9 @@ import { InlineApproval } from '@renderer/shell/ApprovalDetail'
 import { allowPendingTarget } from '@renderer/palette/commands/approval-row'
 import { waitingSince } from '@renderer/panels/header-rest'
 import { criteriaChecklist } from '@renderer/panels/session-facts'
+import { applyMakeTask } from '@renderer/panels/make-task'
+import { connectedSpawnMenu } from '@renderer/panels/connected-spawn'
+import { armConnectedSpawn, clearArmedSpawn, noteSpawnCursor, openConnectedSpawn, setConnectedOpener, spawnCursor, spawnSize, takeArmedSpawn, type ConnectedRequest } from '@renderer/panels/spawn-cursor'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
@@ -160,6 +163,7 @@ import { shellQuote } from '@renderer/shell/file-tree-model'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
+import { ConnectedSpawnMenu } from '@renderer/palette/SpawnSheet'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
@@ -829,13 +833,25 @@ export function Canvas({
     }
   }, [])
   const onSpawn = useCallback(
-    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true }) => {
+    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true; atCursor?: true }) => {
+      // M443. A connected drop is exact: the panel lands on the release and
+      // links back with a handoff-on-exit. A bare Cmd+N (no template, no
+      // opening) uses the cursor when the mouse has moved, and still runs
+      // place() so two presses with no further move keep cascading.
+      const armed = takeArmedSpawn()
+      const bare = template === undefined && opening === undefined
+      const cursorPoint = bare ? spawnCursor() : null
+      const asked = armed?.at ?? cursorPoint ?? centre
+      const atCursor = opening?.atCursor === true || cursorPoint !== null || armed !== null
       const chosen = template ?? defaultTemplateRef.current
+      const presetSized = chosen?.w !== undefined || chosen?.h !== undefined
+      const size = atCursor && !presetSized ? spawnSize(panelsRef.current, selectedIdsRef.current) : (chosen ? { w: chosen.w, h: chosen.h } : undefined)
       const id = `n${nextIdRef.current++}`
       if (opening?.focus) setPendingFocusId(id)
       setEnteringPanelIds((current) => new Set(current).add(id))
       // M402. The one placement rule (placer, above) unless the caller gave an EXACT point.
-      const place = opening?.exact ? null : placer()
+      // An armed connected spawn is exact too: the person dropped on that point.
+      const place = opening?.exact === true || armed !== null ? null : placer()
       setPanels((current) => {
         // Where the panel ACTUALLY goes. Without this, N presses at an
         // unmoved camera produce N byte-identical rects and the canvas looks
@@ -856,7 +872,7 @@ export function Canvas({
         // could not place the panel somewhere else.
         const made: Panel = { ...makePanel(
             id,
-            centre,
+            asked,
             nextZ(current),
             chosen
               ? {
@@ -882,9 +898,12 @@ export function Canvas({
                   ...(chosen.env !== undefined ? { env: { ...chosen.env } } : {})
                 }
               : undefined,
-            chosen ? { w: chosen.w, h: chosen.h } : undefined
+            size
           ), ...(opening?.title === undefined ? {} : { title: opening.title }) }
-        const next = [...current, place === null ? made : place(current, made)]
+        let next = [...current, place === null ? made : place(current, made)]
+        if (armed !== null) {
+          next = setLinkAutomation(addLink(next, armed.from, id), armed.from, id, { kind: 'handoff', enabled: true, trigger: 'exit' })
+        }
         commitHistory(next)
         return next
       })
@@ -2327,7 +2346,16 @@ export function Canvas({
     // Before, the release cancelled silently.
     onDropEmpty: (from, cursor) => {
       if (mergedRef.current) return
-      connectorsRef.current?.extend(from, null, cursor)
+      // A shape still quick-connects a process step (flowchart.app.1's door
+      // is the double-click; this one is the port). A panel opens the
+      // connected-object menu instead of minting a shape.
+      const source = panelsRef.current.find((panel) => panel.rect.id === from)
+      if (source !== undefined && isShapePanel(source)) {
+        connectorsRef.current?.extend(from, null, cursor)
+        return
+      }
+      const name = source === undefined ? from : panelName(source)
+      openConnectedSpawn(from, cursor, name)
     },
     onCommit: (from, to) => {
       // The VERB refuses, not only the affordance. This repo's standing rule,
@@ -2542,7 +2570,7 @@ export function Canvas({
       const top = Math.min(...members.map((p) => p.rect.y))
       return Math.max(0, ...members.filter((p) => p.rect.y === top).map((p) => p.rect.y - occupiedRect(p, rim).y))
     }
-    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, rimOf })
+    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, gapGrid: 24, rimOf })
     setSnapGuides(out.guides, out.spacing)
     return out.rect
   }, [setSnapGuides])
@@ -8723,24 +8751,62 @@ export function Canvas({
   laneChordRef.current = { approvals: pendingApprovals, waiting: waitingIds }
   const onPausePanel = useCallback((id: string) => { void window.canvas.agentSession.interrupt(id) }, [])
   const onHandOffPanel = useCallback((id: string) => { paletteActionsRef.current?.beginLink(id) }, [])
+  const makeTaskRef = useRef<() => void>(() => {})
+  makeTaskRef.current = () => {
+    if (mergedRef.current) return
+    const selected = [...selectedIdsRef.current]
+    if (selected.length === 0) return
+    const cardId = `n${nextIdRef.current++}`
+    const itemId = `w${nextIdRef.current++}`
+    const now = Date.now()
+    const named = panelsRef.current.find((panel) => panel.rect.id === selected[0])
+    const title = named !== undefined && named.title !== undefined && named.title !== '' ? named.title : 'Task'
+    const item = { id: itemId, source: 'typed' as const, title, state: 'working' as const, createdAt: now, updatedAt: now }
+    setWorkItems((items) => items.some((row) => row.id === item.id) ? items : [...items, item])
+    setPanels((current) => {
+      const result = applyMakeTask({ panels: current, selectedIds: selected, cardId, itemId, now, title })
+      if (result === null) return current
+      commitHistory(result.panels)
+      return result.panels
+    })
+  }
+  const [connectedSpawn, setConnectedSpawn] = useState<ConnectedRequest | null>(null)
+  useEffect(() => {
+    setConnectedOpener(setConnectedSpawn)
+    return () => setConnectedOpener(null)
+  }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (shouldIgnoreKeys()) return
       const hit = matchShortcut({ metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, code: event.code })
-      if (hit?.id !== 'allow') return
-      event.preventDefault()
-      const selected = selectedIdsRef.current
-      const target = allowPendingTarget({
-        selectionEmpty: selected.size === 0,
-        selectedId: selected.size === 1 ? [...selected][0] ?? null : null,
-        approvals: laneChordRef.current.approvals,
-        queueHeadId: laneChordRef.current.waiting[0] ?? null
-      })
-      if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
+      if (hit?.id === 'allow') {
+        event.preventDefault()
+        const selected = selectedIdsRef.current
+        const target = allowPendingTarget({
+          selectionEmpty: selected.size === 0,
+          selectedId: selected.size === 1 ? [...selected][0] ?? null : null,
+          approvals: laneChordRef.current.approvals,
+          queueHeadId: laneChordRef.current.waiting[0] ?? null
+        })
+        if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
+        return
+      }
+      if (hit?.id === 'make-task') {
+        event.preventDefault()
+        makeTaskRef.current()
+        return
+      }
+      if (hit?.id === 'new-shell') {
+        event.preventDefault()
+        const selected = selectedIdsRef.current
+        const only = selected.size === 1 ? panelsRef.current.find((panel) => panel.rect.id === [...selected][0]) : undefined
+        const cwd = only !== undefined && isTerminalPanel(only) ? only.spec.cwd : only !== undefined && isChatPanel(only) ? only.chat.cwd : '~'
+        onSpawn(spawnCursor() ?? worldCentre(), { cwd, args: [] }, { focus: true, atCursor: true })
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shouldIgnoreKeys])
+  }, [shouldIgnoreKeys, onSpawn, worldCentre])
 
   const taskRegions = regionsFromMemberships(
     taskMemberships(displayPanels, workItems),
@@ -9251,7 +9317,14 @@ export function Canvas({
         onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
         onContextMenu={contextMenu.onContextMenu}
-        onMouseMove={onMouseMove}
+        onMouseMove={(event) => {
+          const host = hostRef.current
+          if (host !== null) {
+            const box = host.getBoundingClientRect()
+            noteSpawnCursor(screenToWorld({ x: event.clientX - box.left, y: event.clientY - box.top }, viewportRef.current))
+          }
+          onMouseMove(event)
+        }}
         onDoubleClick={onCanvasDoubleClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -9897,7 +9970,61 @@ export function Canvas({
         {/* Beside the pips and outside .world for the same reason — see
             Marquee.tsx. It renders null at rest, so there is no "no marquee"
             element for anything to find. */}
-        <Marquee rect={marquee} />
+        <Marquee
+          rect={marquee}
+          selectionCount={selectedIds.size}
+          onAlign={() => {
+            setPanels((prev) => {
+              const wanted = selectedIdsRef.current
+              const chosen = prev.filter((panel) => wanted.has(panel.rect.id) && panel.locked !== true)
+              if (chosen.length < 2) return prev
+              const positions = alignRects(chosen.map((panel) => panel.rect), 'left')
+              const next = prev.map((panel) => {
+                const at = positions.get(panel.rect.id)
+                return at === undefined ? panel : { ...panel, rect: { ...panel.rect, x: at.x, y: at.y } }
+              })
+              if (next.every((panel, index) => panel === prev[index])) return prev
+              commitHistory(next)
+              return next
+            })
+          }}
+          onTidy={() => paletteActions.tidyPanels([...selectedIds])}
+          onMakeTask={() => makeTaskRef.current()}
+          onPauseAll={() => { for (const id of selectedIds) void window.canvas.agentSession.interrupt(id) }}
+        />
+        {connectedSpawn !== null && (() => {
+          const at = worldToScreen(connectedSpawn.at, viewport)
+          const model = connectedSpawnMenu(connectedSpawn.name, presetRows)
+          const from = connectedSpawn.from
+          const point = connectedSpawn.at
+          const cwdOf = (): string => {
+            const source = panels.find((panel) => panel.rect.id === from)
+            if (source !== undefined && isTerminalPanel(source)) return source.spec.cwd
+            if (source !== undefined && isChatPanel(source)) return source.chat.cwd
+            return '~'
+          }
+          return (
+            <ConnectedSpawnMenu
+              title={model.title}
+              agents={model.agents}
+              presets={model.presets}
+              foot={model.foot}
+              style={{ position: 'absolute', left: at.x, top: at.y, zIndex: 40 }}
+              onClose={() => { clearArmedSpawn(); setConnectedSpawn(null) }}
+              onAgent={(kind) => {
+                armConnectedSpawn({ from, at: point })
+                const cwd = cwdOf()
+                onSpawn(point, kind === 'shell' ? { cwd, args: [] } : { cwd, args: [], agent: kind === 'claude' ? 'claude-code' : 'codex' }, { focus: true })
+                setConnectedSpawn(null)
+              }}
+              onPreset={(id) => {
+                armConnectedSpawn({ from, at: point })
+                void window.canvas.preset.spawnById(id)
+                setConnectedSpawn(null)
+              }}
+            />
+          )
+        })()}
         {/* Presence: remote selections and cursors on their own 2D canvas, and
             the roster of who else is here. Siblings of .world like Marquee —
             screen-pinned, and a remote update repaints this layer only. */}

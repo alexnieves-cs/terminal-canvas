@@ -46,6 +46,14 @@ buildSync({
       export { allowPendingTarget, allowCommandId } from '../src/renderer/palette/commands/approval-row'
       export { regionLabel } from '../src/renderer/canvas/task-regions'
       export { sessionFacts, criteriaChecklist } from '../src/renderer/panels/session-facts'
+      export { connectedSpawnMenu } from '../src/renderer/panels/connected-spawn'
+      export { applyMakeTask } from '../src/renderer/panels/make-task'
+      export { makePanel, PANEL_W, PANEL_H } from '../src/renderer/panels/panels'
+      export { noteSpawnCursor, spawnCursor, spawnSize } from '../src/renderer/panels/spawn-cursor'
+      export { smartSnap } from '../src/renderer/canvas/arrange'
+      export { TIDY_GAP } from '../src/renderer/canvas/placement'
+      export { taskMembership } from '../src/renderer/canvas/task-members'
+      export { regionsFromMemberships } from '../src/renderer/canvas/task-regions'
     `,
     resolveDir: __dirname,
     sourcefile: 'rd-l-b-entry.ts',
@@ -171,6 +179,86 @@ ok('rd-l-b.slot.1 tier layer and recovery slot',
     !/data-inspector-action="review"/.test(span),
     JSON.stringify({ labels, criteria: list.label }))
 }
+
+// ── connected spawn ──────────────────────────────────────────────────────────
+
+{
+  const menu = M.connectedSpawnMenu('Claude', [{ id: 'plan', name: 'Plan' }])
+  ok('rd-l-b.menu.1 connected spawn is a handoff on exit',
+    menu.title === 'New object connected to Claude' &&
+    menu.agents.map((row) => row.label).join(',') === 'Claude Code,Codex,Shell' &&
+    menu.foot === 'Starts when Claude finishes, with its summary as input' &&
+    menu.handoff.trigger === 'exit' && menu.handoff.kind === 'handoff' && menu.handoff.enabled === true &&
+    /openConnectedSpawn\(/.test(canvas) &&
+    /trigger: 'exit'/.test(canvas),
+    menu.title)
+}
+
+// ── 24px gap, only when asked ────────────────────────────────────────────────
+
+{
+  const left = { id: 'l', x: 0, y: 0, w: 100, h: 100 }
+  const near = { id: 'r', x: 140, y: 0, w: 100, h: 100 }
+  const snapped = M.smartSnap(near, [left], 30, { spacing: true, grid: null, gapGrid: 24 })
+  const plain = M.smartSnap(near, [left], 30, { spacing: true, grid: null })
+  const far = M.smartSnap({ id: 'r', x: 400, y: 0, w: 100, h: 100 }, [left], 8, { spacing: true, grid: null, gapGrid: 24 })
+  ok('rd-l-b.gap.1 gaps snap to 24 when the drag is close',
+    snapped.rect.x === 124 && plain.rect.x === 140 && far.rect.x === 400 &&
+    M.TIDY_GAP === 24 &&
+    /s\.gap/.test(guides) &&
+    /gapGrid: 24/.test(canvas) &&
+    /smartSnap\(rect,/.test(canvas),
+    JSON.stringify({ snapped: snapped.rect.x, plain: plain.rect.x, far: far.rect.x }))
+}
+
+// ── marquee toolbar and make-task ────────────────────────────────────────────
+
+{
+  const marquee = read('src/renderer/canvas/MarqueeLayer.tsx') || ''
+  const a = M.makePanel('a', { x: 0, y: 0 }, 1)
+  const b = M.makePanel('b', { x: 800, y: 0 }, 2)
+  const made = M.applyMakeTask({ panels: [a, b], selectedIds: ['a', 'b'], cardId: 'card', itemId: 'item', now: 1, title: 'Ledger' })
+  const membership = made === null ? null : M.taskMembership({ item: { id: 'item' }, panels: made.panels, cwdOf: () => undefined, runs: [] })
+  const regions = made === null || membership === null ? [] : M.regionsFromMemberships(
+    [membership],
+    made.panels.map((panel) => ({ panelId: panel.rect.id, rect: panel.rect, agent: panel.kind === 'terminal' })),
+    { item: { ticket: null, title: 'Ledger', criteriaDone: 0, criteriaTotal: 0 } }
+  )
+  const memberIds = membership === null ? [] : membership.members.map((member) => member.panelId).sort()
+  ok('rd-l-b.marquee.1 toolbar and one task from the selection',
+    /Align/.test(marquee) && /Tidy/.test(marquee) && /Make task/.test(marquee) && /Pause all/.test(marquee) &&
+    /tidy-alias/.test(shortcuts) &&
+    /applyMakeTask\(/.test(canvas) &&
+    made !== null && made.item.id === 'item' && made.item.source === 'typed' &&
+    memberIds.includes('a') && memberIds.includes('b') && memberIds.includes('card') &&
+    regions.length === 1 &&
+    M.applyMakeTask({ panels: [a], selectedIds: [], cardId: 'c', itemId: 'i', now: 1 }) === null,
+    JSON.stringify(memberIds))
+}
+
+// ── cursor spawn ─────────────────────────────────────────────────────────────
+
+{
+  M.noteSpawnCursor(null)
+  const absent = M.spawnCursor()
+  M.noteSpawnCursor({ x: 12, y: 34 })
+  const noted = M.spawnCursor()
+  const sized = M.spawnSize([{ rect: { id: 'a', w: 400, h: 300 } }], new Set(['a']))
+  const fallback = M.spawnSize([], new Set())
+  ok('rd-l-b.cursor.1 spawn follows the cursor when one was recorded',
+    absent === null && noted !== null && noted.x === 12 && noted.y === 34 &&
+    sized.w === 400 && sized.h === 300 &&
+    fallback.w === M.PANEL_W && fallback.h === M.PANEL_H &&
+    /spawnCursor\(\)/.test(canvas) && /atCursor/.test(canvas),
+    JSON.stringify({ absent, noted, sized, fallback }))
+}
+
+ok('rd-l-b.settle.1 settle overshoots and reduced motion drops it',
+  /translateY\(-3px\)/.test(span) &&
+  /prefers-reduced-motion:\s*reduce/.test(span) &&
+  /animation:\s*none/.test(span) &&
+  !/translateY\(-3px\)/.test((css.split('@keyframes panel-settle {')[1] ?? '').split('}')[0]),
+  'overshoot lives in the lane span; the base keyframes do not')
 
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')

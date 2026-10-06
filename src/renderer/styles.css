@@ -11630,6 +11630,53 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .tier-layer { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
 .recovery-slot { display: contents; }
 
+/* M443. A slight overshoot, then settle. The base panel-settle keyframes
+   stay a dip; this name wins by source order. Reduced motion drops it. */
+@keyframes rd-panel-settle {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+  70% { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+.panel[data-panel-settling] > .panel__motion { animation: rd-panel-settle var(--dur-2) var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .panel[data-panel-settling] > .panel__motion { animation: none; }
+}
+
+.marquee-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  box-shadow: var(--lift);
+  pointer-events: auto;
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  color: var(--fg);
+}
+.marquee-toolbar button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+
+.connected-spawn {
+  min-width: 240px;
+  padding: 10px;
+  border-radius: var(--r-lg);
+  background: var(--s-1);
+  box-shadow: var(--lift);
+  pointer-events: auto;
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+}
+.connected-spawn__group { margin-top: 8px; color: var(--fg-3); font-size: var(--t-xs); letter-spacing: 0.04em; }
+.connected-spawn__row, .connected-spawn__close { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 4px 0; }
+.connected-spawn__foot { margin: 8px 0 0; color: var(--fg-3); font-size: var(--t-xs); }
+
 /* ── /rd:L-B ── */
 
 /* ── rd:L-C ── */
