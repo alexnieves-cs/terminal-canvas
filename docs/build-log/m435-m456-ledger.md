@@ -1501,3 +1501,9 @@ Fresh-context critics, one line each, against the composites that existed when t
 
 A Mac still has to look. These lines are the critic's sentences for that look. They do not by themselves add a code row beyond the fix list.
 
+## Phase 5 · 6.0.0 (M456)
+
+`package.json` is `6.0.0`. README's status line names `v6.0.0`. The notes are [docs/release-notes/6.0.0.md](../release-notes/6.0.0.md). D8's bump is this phase. No golden was rewritten. No DMG was built; it is attached after a Mac package pass. The build stays unsigned (`mac.identity: null`). Tag `v6.0.0` is the annotated tag on `main` after the merge, not a tag on this commit.
+
+Gates on this commit, Linux: `npm run verify:meta` 51/53 (`panels-split.2` absent `pre-v7-run`, `visual.1` missing redesign goldens). `npm run verify:package` 13/13, check 8 `present=true value=null`. `npm run typecheck` pass. Plain wave of `npm run verify` 65/67 in 31.2s, stopped after wave 1: `verify:meta` and `verify:first-run` `revamp.create.1`. Electron tier, shot, visual compare, and the DMG were not run.
+

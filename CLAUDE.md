@@ -19,7 +19,7 @@ An index. Every rule in this repository exists because the obvious version fails
 
 An Electron app for macOS: an infinite canvas of authored objects — agents, terminals, files,
 previews, workflows, pictures and notes — each of which a person arranges, edits and keeps.
-A terminal is ONE thing a panel can be. **This is 5.0 (M192); the v10 run opened at M193.**
+A terminal is ONE thing a panel can be. **This is 6.0, the redesign (M435–M456). 5.0 was M192; the v10 run opened at M193.**
 
 The core job: move a meaningful task from intention to reviewed result while the person keeps
 control and understanding. *A workspace holds your work; tasks connect agents, tools and
