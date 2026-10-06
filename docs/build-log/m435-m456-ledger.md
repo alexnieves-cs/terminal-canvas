@@ -51,6 +51,8 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | P0 | main (this PR) | `rd-p0` after merge | kit only |
 | P1 F1 | main | — | tokens and the one state colour. Merges before F2 and F3. |
 | P1 F3 | main (PR 6) | — | shell frame, after F1 and F2. |
+| P3a W0 | redesign/main | — | night studio, `5353e47f` |
+| P3b W2 | redesign/main | `rd-w3b` after W1 and W3 | the room, `695a71da`. Mounts `rd:W1` and `rd:W3` stay empty until those lanes land. |
 
 ## M438 · F3 shell frame
 
@@ -822,3 +824,11 @@ Critic, against `docs/redesign/mockups/11-world-main.png`, ignoring sample copy 
 Rules review: no blocker. State colour is `stateHexForAgent` or `var(--state-*)`. CSS stays inside the W2 markers. Frozen files and `redesign-contracts.ts` are untouched. `.panel__*` names are unchanged. `world-structure.ts` and `world-set.ts` do not import `three`.
 
 World guard: no source blocker. `WorldStage`'s lazy door is untouched. No `<Environment>`. `useGLTF` decoders are unchanged. The first built chunk does not construct a `WebGLRenderer` (WorldView stays its own lazy chunk). The shot not presenting the room is R-053, not a door change.
+
+### Merge
+
+Merged to `redesign/main` as `695a71da` (`--no-ff`). `rd/w2-room` was not deleted. The two mount comments (`rd:W1 mount`, `rd:W3 mount`) are in `WorldView.tsx`. R-039 was already marked done on the lane: the desk screen reads `stateHexForAgent` and `MeetingTable` returns an empty group.
+
+Linux gates on the merge, before W1: typecheck pass; `verify:world` 251/251; `verify:rd-w2` 4/4; `verify:rd-w1` and `verify:rd-w3` still the seam stub (1/1); `npm run build` exit 0. Plain wave 65/67 in 31.2s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 91, goldens 79), `verify:first-run` `revamp.create.1`. `verify:review` `merge.1` passed. `verify:rd-l-f` `kill.1` passed. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. Electron tier did not start.
+
+W1 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w1-transition`. W3 does the same after W1.
