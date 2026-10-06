@@ -1,5 +1,13 @@
 import type { AdvancedDoor, AdvancedDoorId } from './advanced-doors'
 import { REASON_GROUP_NEEDS_TWO, type PaletteActions } from '@renderer/palette/commands'
+import { requestArrival } from '@renderer/world/world-select'
+import { setWorldCameraTarget, setWorldOn } from '@renderer/world/world-toggle'
+import { boxFromStyle } from '@renderer/world/world-structure'
+import {
+  worldDoor, type WorldBox, type WorldDoor, type WorldScope
+} from '@renderer/sessions/sessions-model'
+
+export { roomKind, worldDoor, flatTerraceLayout, urgentFace, panelsInRegion, type WorldBox, type WorldDoor, type WorldScope, type FlatTerracePlace } from '@renderer/sessions/sessions-model'
 
 /**
  * M408 (D1). THE OBJECT VERB LISTS — one per surface family, read by every
@@ -67,6 +75,8 @@ export function panelVerbs(f: PanelVerbFacts): PanelVerb[] {
     rows.push({ id: 'task.show', section: 'task', label: 'Show this task', title: 'Frame this task — nothing moves', attr: ['data-panel-menu-task-verb', 'show'] })
     rows.push({ id: 'task.related', section: 'task', label: t.related ? 'Stop showing related' : 'Show related', title: t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves', attr: ['data-panel-menu-task-verb', 'related'] })
     rows.push({ id: 'task.arrange', section: 'task', label: 'Arrange this task', title: f.readOnly ? READ_ONLY : 'Compact this task\'s panels in reading order, clear of everything else — one undo', ...(f.readOnly ? { disabled: READ_ONLY } : {}), attr: ['data-panel-menu-task-verb', 'arrange'] })
+    // M454. The task's way into the room: the terrace centre, this panel picked first.
+    rows.push({ id: 'task.world', section: 'task', label: 'View in World', title: 'Open the World on this task, with this panel picked', attr: ['data-panel-menu-world', 'task'] })
   }
   if (!f.readOnly) {
     for (const d of f.advanced ?? []) rows.push({ id: `door.${d.id}`, section: 'advanced', label: d.label, title: d.benefit, benefit: d.benefit, attr: ['data-panel-menu-door', d.id] })
@@ -79,6 +89,8 @@ export function panelVerbs(f: PanelVerbFacts): PanelVerb[] {
       ...(f.readOnly ? { disabled: READ_ONLY } : {}), attr: ['data-panel-menu-maximise', verb]
     })
   }
+  // M454. A panel that is not in one task still has the door. It lands on that panel's own floor point.
+  rows.push({ id: 'frame.world', section: 'frame', label: 'View in World', title: 'Open the World on this panel', attr: ['data-panel-menu-world', 'panel'] })
   if (f.palette) rows.push({ id: 'frame.palette', section: 'frame', label: 'Verbs in ⌘K…', title: 'Every verb for this panel, in the palette', attr: ['data-panel-menu-palette', 'true'] })
   return rows
 }
@@ -100,7 +112,58 @@ export function runPanelVerb(verbId: string, panelId: string, doors: PanelVerbDo
   else if (verbId === 'frame.maximise') doors.maximise(panelId)
   else if (verbId === 'frame.restore') doors.restore(panelId)
   else if (verbId === 'frame.palette') doors.more?.(panelId)
+  else if (verbId === 'task.world') viewInWorld(panelId, 'task')
+  else if (verbId === 'frame.world') viewInWorld(panelId, 'panel')
   else if (verbId.startsWith('door.')) doors.advanced?.run(panelId, verbId.slice('door.'.length) as AdvancedDoorId)
+}
+
+/** The palette id R-080 asks `commands.ts` to spell as a literal. Kept here so the row and the check name one string. */
+export function worldViewPaletteId(): string {
+  return 'world.view'
+}
+
+/** Regions and panels, read off the canvas that stays mounted under the room. */
+export function readWorldBoxes(doc?: Pick<Document, 'querySelectorAll'>): { panels: WorldBox[]; regions: WorldBox[] } {
+  const root = doc ?? (typeof document === 'undefined' ? undefined : document)
+  if (root === undefined || typeof root.querySelectorAll !== 'function') return { panels: [], regions: [] }
+  doc = root
+  const panels: WorldBox[] = []
+  for (const el of doc.querySelectorAll<HTMLElement>('.panel[data-panel-id]')) {
+    const id = el.getAttribute('data-panel-id')
+    if (id === null) continue
+    const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
+    if (box !== null) panels.push(box)
+  }
+  const regions: WorldBox[] = []
+  for (const el of doc.querySelectorAll<HTMLElement>('[data-task-region]')) {
+    const id = el.getAttribute('data-task-region')
+    if (id === null) continue
+    const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
+    if (box !== null) regions.push(box)
+  }
+  return { panels, regions }
+}
+
+/**
+ * Ask the room to frame this door. Does not turn the world on: Sessions is
+ * still another page, and turning the world on there makes Canvas turn it
+ * straight off. The caller opens it once the canvas page is showing.
+ */
+export function stageWorldDoor(door: WorldDoor, now: number): void {
+  if (door.agentIds.length === 0) return
+  requestArrival(door.agentIds, now)
+  if (door.floor !== null) setWorldCameraTarget(door.floor)
+}
+
+/** The panel menu's door. Already on the canvas, so the world opens now. */
+export function viewInWorld(panelId: string, scope: WorldScope, now = Date.now()): void {
+  const door = worldDoor(panelId, scope, ...boxesOf(readWorldBoxes()))
+  stageWorldDoor(door, now)
+  setWorldOn(true)
+}
+
+function boxesOf(read: { panels: WorldBox[]; regions: WorldBox[] }): [WorldBox[], WorldBox[]] {
+  return [read.panels, read.regions]
 }
 
 export type SelectionVerbKey = 'fit' | 'plan' | 'layout' | 'tidy' | 'align' | 'space' | 'arrange' | 'related' | 'group' | 'close'

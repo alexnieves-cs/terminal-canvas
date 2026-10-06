@@ -21,6 +21,7 @@ import { deckExportSentence } from '@shared/deck-pptx'
 import type { GithubPublishRequest } from '@shared/ipc-contract'
 import { isFilePanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
+import { viewInWorld, worldViewPaletteId } from '@renderer/canvas/object-verbs'
 import type { ActionCtx } from './types'
 
 export type ObjectsActions = Pick<PaletteActions,
@@ -220,4 +221,21 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     // one table and not two.
     say: (sentence: string) => { notify({ sentence }) }
   })
+}
+
+/**
+ * M454. The palette row's body. `commands.ts` is not this lane's, so the
+ * literal `id: 'world.view'` is R-080. This is the function that row runs.
+ */
+export function worldViewPaletteRow(panelId: string | undefined, say: (sentence: string) => void): { id: string; title: string; subtitle: string; searchText: string; run: () => void } {
+  return {
+    id: worldViewPaletteId(),
+    title: 'View in World',
+    subtitle: 'Open the World on this panel, or on its task when it has one',
+    searchText: 'world view show in world camera floor task panel',
+    run: () => {
+      if (panelId === undefined) say('select a panel first')
+      else viewInWorld(panelId, 'task')
+    }
+  }
 }

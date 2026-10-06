@@ -13,7 +13,7 @@ import { filterFacts, stateWords, type CardAction, type SessionFact, type Sessio
  * file does not read a store except the sparkline's own series, and it
  * does not build a queue.
  */
-export function SessionsView({ facts, tasks, theme, items, names, selected, openId, stateFilter, onStateFilter, onToggle, onOpen, onCard, onPause, onRestart, onMove, onEnd, onDetailPause, onDetach, onDetailEnd, onShow, onSend }: {
+export function SessionsView({ facts, tasks, theme, items, names, selected, openId, stateFilter, onStateFilter, onToggle, onOpen, onCard, onPause, onRestart, onMove, onEnd, onShowInWorld, onDetailPause, onDetach, onDetailEnd, onShow, onSend }: {
   facts: readonly SessionFact[]
   tasks: readonly SessionSourceTask[]
   theme: PaletteTheme
@@ -30,6 +30,7 @@ export function SessionsView({ facts, tasks, theme, items, names, selected, open
   onRestart: (ids: readonly string[]) => void
   onMove: (ids: readonly string[], taskId: string) => void
   onEnd: (ids: readonly string[]) => void
+  onShowInWorld: (id: string) => void
   onDetailPause: () => void
   onDetach: () => void
   onDetailEnd: () => void
@@ -76,6 +77,7 @@ export function SessionsView({ facts, tasks, theme, items, names, selected, open
           onRestart={onRestart}
           onMove={onMove}
           onEnd={onEnd}
+          onShowInWorld={onShowInWorld}
         />
       </div>
       {open !== undefined && (
@@ -86,6 +88,7 @@ export function SessionsView({ facts, tasks, theme, items, names, selected, open
           onDetach={onDetach}
           onEnd={onDetailEnd}
           onShow={onShow}
+          onShowInWorld={() => { if (open !== undefined) onShowInWorld(open.id) }}
           onSend={onSend}
         />
       )}
@@ -93,18 +96,19 @@ export function SessionsView({ facts, tasks, theme, items, names, selected, open
   )
 }
 
-function OpenDetail({ fact, theme, onPause, onDetach, onEnd, onShow, onSend }: {
+function OpenDetail({ fact, theme, onPause, onDetach, onEnd, onShow, onShowInWorld, onSend }: {
   fact: SessionFact
   theme: PaletteTheme
   onPause: () => void
   onDetach: () => void
   onEnd: () => void
   onShow: () => void
+  onShowInWorld: () => void
   onSend: (text: string) => void
 }): JSX.Element {
   const live = useMachineSeries(fact.id)
   const samples = live.length >= 2 ? live.map((sample) => sample.cpuPercent) : fact.activity
-  return <SessionDetail fact={fact} theme={theme} samples={samples} onPause={onPause} onDetach={onDetach} onEnd={onEnd} onShow={onShow} onSend={onSend} />
+  return <SessionDetail fact={fact} theme={theme} samples={samples} onPause={onPause} onDetach={onDetach} onEnd={onEnd} onShow={onShow} onShowInWorld={onShowInWorld} onSend={onSend} />
 }
 
 /** The palette the sparkline reads. `data-theme` is what the stylesheet already stamps. */

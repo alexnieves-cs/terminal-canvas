@@ -445,9 +445,30 @@ from: centerViewNow === 'focus'
 - Smallest change: add `WorldFocusSheet.tsx` (M452, the close-up) to that plain-DOM sentence, beside `WorldCardBody.tsx`.
 - Status: done: `59e80eba`. The three-door sentence names `WorldFocusSheet.tsx` (M452, the close-up) beside `WorldCardBody.tsx`. The sheet still imports no three.
 
+### R-080 · Palette literal and V9_DOORS for View in World
+- Lane: W6
+- File: `src/renderer/palette/commands.ts`, `src/shared/verb-table.ts`
+- Why the contract or the owner cannot absorb it: neither file is W6's. `closure.v9.1` reads `commands.ts` for a literal palette id and `verb-table.ts` for the agent line and the workflow door. The canvas gesture and the Sessions row already call `viewInWorld` / `stageWorldDoor`. The palette action body is `worldViewPaletteRow` in `palette-actions/objects.ts`. Adding the verb only in `verb-table.ts` would turn `closure.v9.1` red until the literal lands, so this lane does not add the row there.
+- Smallest change: in `buildCommands`, a literal `id: 'world.view'` whose run is `worldViewPaletteRow` (title View in World). A `V9_DOORS` key with palette `world.view`, the canvas gesture the ⋯ menu and Sessions “Show in World”, the agent line, and a workflow action node with the same line.
+- Status: open
+
 ### R-081 · RequestBlock says Open, the flat door says Open in Canvas
 - Lane: W6
 - File: `src/renderer/world/WorldCardBody.tsx` (W4 this wave)
 - Why the contract or the owner cannot absorb it: W4 owns the file. A waiting tile uses RequestBlock, whose open button says Open. The redesign word, already on the flat room's own picked-tile button, is Open in Canvas.
 - Smallest change: the open button text becomes Open in Canvas. Keep `data-world-answer="open"`. Do not add a second wording.
-- Status: done: `ab85b75f` on `rd/w4-focus`. RequestBlock's open button reads Open in Canvas. `data-world-answer="open"` is unchanged. No other W6 request was taken.
+- Status: done: `ab85b75f` on `rd/w4-focus`. RequestBlock's open button reads Open in Canvas. `data-world-answer="open"` is unchanged. W4 landed this before the W6 merge; the W6 copy of the request said open.
+
+### R-082 · The WebGL probe cannot see a context that does not present
+- Lane: W6
+- File: `src/renderer/webgl-probe.ts` (shared with Orchestrate; this lane does not edit it)
+- Why the contract or the owner cannot absorb it: `webglAvailable` is getContext webgl2 or webgl, then `WEBGL_lose_context`. On this xvfb host getContext succeeds (SwiftShader) and the world canvas reads back `[0, 0, 0, 0]` (R-053). A presenting check would be a clear and a readPixels of a known colour. That would change the answer for every caller, including Orchestrate. This lane forces the flat room in the shot by stubbing getContext, and leaves the probe as it is.
+- Smallest change: none in this lane. Report only.
+- Status: open
+
+### R-083 · The flat room cannot import the attention line
+- Lane: W6
+- File: `src/renderer/canvas/command-pill.ts` (not W6's), or a module the world is allowed to import
+- Why the contract or the owner cannot absorb it: `world.ctx.door.1` refuses a world file importing `@renderer/canvas/`. `attentionPillLine` and `useAttentionCensus` live there. The flat room quotes the mounted pill's `aria-label` (`[data-pill-state="attention"]`) because the canvas stays mounted under the room. That is the same sentence only while the pill is in the document and in its attention rest. The room's own requests count stays on `WorldChrome`.
+- Smallest change: publish the attention line from a module the world may import, and have the flat room read that. Do not give the world a second queue.
+- Status: open

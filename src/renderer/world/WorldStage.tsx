@@ -157,6 +157,11 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   // this render had already rendered the lazy view and started its fetch.
   // While it closes, the open's answer stands — a `true` here would mount the scene during the move back.
   // A window too narrow for the room is not asked (it mounts no scene); widening it asks.
+  // `probeWebgl` is "getContext returned a context". A context that does not
+  // present (this host reads the world canvas back blank, R-053) still answers
+  // yes. Telling those apart would be a clear and a read of a known colour,
+  // which would change the probe for Orchestrate too. The flat room is the
+  // probe's no, and a context the browser then takes away.
   const webgl = useMemo(() => (on && fits ? probeWebgl() : (probed ?? true)), [on, fits])
   // A context lost while the room was up. Each open starts clean (derived from
   // `on` during render, so the reopening render already mounts the scene).
@@ -169,6 +174,7 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   const onRef = useRef(on)
   onRef.current = on
   // Only while the world is on: leaving tears the scene down, and fiber loses its context on purpose then.
+  // The 2D canvas is `hostRef`. This sets `lost` and the flat room replaces the scene inside the layer. The host is not removed.
   const onLost = useCallback(() => { if (onRef.current) setLost(true) }, [])
 
   useLayoutEffect(() => {
@@ -284,7 +290,7 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
     </p>
   ) : null
   return (
-    <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-on={on ? '' : undefined}>
+    <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-canvas-kept data-world-on={on ? '' : undefined}>
       {fits ? (webgl && !lost ? (
         <>
           <WorldBoundary>

@@ -17,7 +17,7 @@ function scrub(text: string, id: string): string {
  * and an agent must not send until the person presses Send. The delivery
  * the parent performs is paste (or the chat's own send), never pty.write.
  */
-export function SessionDetail({ fact, theme, samples, onPause, onDetach, onEnd, onShow, onSend }: {
+export function SessionDetail({ fact, theme, samples, onPause, onDetach, onEnd, onShow, onShowInWorld, onSend }: {
   fact: SessionFact
   theme: PaletteTheme
   samples: readonly number[]
@@ -25,6 +25,7 @@ export function SessionDetail({ fact, theme, samples, onPause, onDetach, onEnd, 
   onDetach: () => void
   onEnd: () => void
   onShow: () => void
+  onShowInWorld: () => void
   onSend: (text: string) => void
 }): JSX.Element {
   const box = replyBox(fact.shell, fact.canPaste)
@@ -110,6 +111,7 @@ export function SessionDetail({ fact, theme, samples, onPause, onDetach, onEnd, 
         <button type="button" data-session-end {...shellControl(onEnd)}>End session</button>
       </div>
       <button type="button" className="sessions-show" data-session-show {...shellControl(onShow)}>Show on canvas</button>
+      <button type="button" className="sessions-world" data-session-world={fact.id} {...shellControl(onShowInWorld)}>Show in World</button>
     </aside>
   )
 }

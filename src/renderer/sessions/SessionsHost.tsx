@@ -1,7 +1,9 @@
 import { useState, type JSX } from 'react'
 import type { AttentionItem } from '@shared/redesign-contracts'
 import { useAttentionCensus } from '@renderer/canvas/command-pill'
+import { readWorldBoxes, stageWorldDoor, worldDoor } from '@renderer/canvas/object-verbs'
 import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
+import { setWorldOn } from '@renderer/world/world-toggle'
 import { shellControl } from '@renderer/shell/shell-control'
 import { SessionsView, useSessionsTheme } from './SessionsView'
 import { useSessionBoard, type SessionRegistryFacts } from './sessions-live'
@@ -87,6 +89,15 @@ export function SessionsHost({ onShowOrchestrate, confirmEnd, onEnd, onPause, on
     if (fact.kind === 'chat') void window.canvas.agentSession.send(fact.id, text, [])
   }
 
+  // Stage the door, then the canvas page, then the room. Turning the world on
+  // while Sessions is the page makes Canvas turn it straight back off.
+  const showInWorld = (id: string): void => {
+    const read = readWorldBoxes()
+    stageWorldDoor(worldDoor(id, 'task', read.panels, read.regions), Date.now())
+    onShowOnCanvas?.(id)
+    requestAnimationFrame(() => setWorldOn(true))
+  }
+
   const onCard = (item: AttentionItem, action: CardAction['id']): void => {
     if (action === 'snooze') {
       setSnoozeUntil((prev) => {
@@ -140,6 +151,7 @@ export function SessionsHost({ onShowOrchestrate, confirmEnd, onEnd, onPause, on
         onRestart={(ids) => { onRestart?.(ids) }}
         onMove={(ids, taskId) => { onMove?.(ids, taskId) }}
         onEnd={end}
+        onShowInWorld={showInWorld}
         onDetailPause={() => { if (open !== undefined) onPause?.([open.id]) }}
         onDetach={() => { if (open !== undefined) onDetach?.(open.id) }}
         onDetailEnd={() => { if (open !== undefined) end([open.id]) }}

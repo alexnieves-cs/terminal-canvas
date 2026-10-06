@@ -1157,3 +1157,17 @@ Left open: R-070 (`world.ctx.door.2` still requires `answerRequest`; `answerAppr
 Linux gates after the landing: typecheck pass; `verify:world` 251/251; `verify:rd-w4` 13/13; `verify:rd-w1` 15/15; `verify:rd-w2` 4/4; `verify:rd-w3` 11/11; `verify:rd-w6` still the seam stub (1/1); `npm run build` exit 0 (`WorldView` is its own chunk). Plain wave 65/67 in 31.2s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 95, goldens 79), `verify:first-run` `revamp.create.1`. `verify:review` `merge.1` passed (30.8s). `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (14.6s). `verify:relay` passed (2.4s). `verify:flowchart` passed (1.0s). `UPDATE_GOLDENS` was not set.
 
 W6 rebases with `git fetch origin && git rebase origin/redesign/main`.
+
+## M454 · W6 WebGL fallback and the doors both ways
+
+Branch `rd/w6-doors`, cut from `redesign/main` at `rd-w3b` (`fa49bdd8`). Wave 3c, beside W4. W4 owns `WorldView.tsx` and `WorldCardBody.tsx` this wave. This lane does not.
+
+### PLAN CHECK
+
+- [x] WorldFlat is extended, not duplicated. `world.flat.1` stays the import-closure pin. No second flat room.
+- [x] Context loss never unmounts the 2D canvas. `onLost` only sets `lost`. The host stays the canvas under the layer (`docs/load-bearing.md` — hidden, never unmounted). The flat room replaces the WebGL scene inside the layer.
+- [x] Every door has its palette row (`closure.v9.1`). The canvas gesture and the Sessions row call `viewInWorld` / `stageWorldDoor`. The palette row body is `worldViewPaletteRow` (`id: 'world.view'`) in `palette-actions/objects.ts`. The literal `id: 'world.view'` in `commands.ts`, and the `V9_DOORS` row in `verb-table.ts`, are R-080: those files are not W6's. A new verb written only in `verb-table.ts` would turn `closure.v9.1` red until the literal lands, so this lane does not add the row there.
+
+Files: `WorldFlat.tsx`, `WorldStage.tsx`, `sessions/**`, `object-verbs.ts`, `palette-actions/objects.ts`, `scripts/verify-rd-w6.cjs`, `scripts/shot-scenes/rd-w6.cjs`, CSS inside `rd:W6`. Shot: `rd-world-flat`, probe forced off in the scene (not in `webgl-probe.ts`), reference 11 for words.
+
+Pure model first: `roomKind`, `worldDoor`, `flatTerraceLayout`, `urgentFace`. Then the UI. `webgl-probe.ts` is read, not edited.

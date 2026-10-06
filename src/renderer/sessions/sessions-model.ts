@@ -16,8 +16,9 @@
  */
 
 import type { AttentionKind, StateTone } from '@shared/redesign-contracts'
-import { TONES, toneIsAsleep } from '@renderer/panels/panel-state'
+import { statePriority, TONES, toneIsAsleep } from '@renderer/panels/panel-state'
 import { STATE_PALETTE, TONE_TO_TOKEN, type PaletteTheme } from '@shared/state-palette'
+import { panelFloor } from '@renderer/world/world-structure'
 
 export const SESSIONS_FEED_EVENT = 'tc-sessions-feed'
 /** Ten minutes, the shell-prompt card's snooze. */
@@ -507,4 +508,83 @@ export function parseFeed(value: unknown): SessionFact[] | null {
     })
   }
   return out
+}
+
+/**
+ * M454. The flat-room and door math. It lives here, not in `object-verbs`,
+ * because the flat room must not import that file: `object-verbs` pulls the
+ * palette, and a no-WebGL machine would then fetch it with the tiles.
+ * `worldDoor` uses `panelFloor`, the same centre the 3D terrace uses.
+ */
+
+export interface WorldBox { id: string; x: number; y: number; w: number; h: number }
+export interface WorldDoor { agentIds: string[]; floor: { x: number; z: number } | null }
+export type WorldScope = 'panel' | 'task'
+
+/** Probe false, or a context that has been given up, is the flat room. */
+export function roomKind(webgl: boolean, lost: boolean): 'scene' | 'flat' {
+  return webgl && !lost ? 'scene' : 'flat'
+}
+
+function contains(region: WorldBox, panel: WorldBox): boolean {
+  const cx = panel.x + panel.w / 2
+  const cy = panel.y + panel.h / 2
+  return cx >= region.x && cx <= region.x + region.w && cy >= region.y && cy <= region.y + region.h
+}
+
+/** Panel ids whose centres sit on this terrace, in the order the panels were given. */
+export function panelsInRegion(region: WorldBox, panels: readonly WorldBox[]): string[] {
+  return panels.filter((panel) => contains(region, panel)).map((panel) => panel.id)
+}
+
+/**
+ * Where a "View in World" / "Show in World" press lands. A task uses the
+ * terrace centre and names every member, the panel that was asked first, so
+ * the arrival picks that agent. A panel with no terrace is its own floor point.
+ */
+export function worldDoor(panelId: string, scope: WorldScope, panels: readonly WorldBox[], regions: readonly WorldBox[]): WorldDoor {
+  if (panelId === '') return { agentIds: [], floor: null }
+  const panel = panels.find((item) => item.id === panelId)
+  const region = panel === undefined ? undefined : regions.find((item) => contains(item, panel))
+  if (scope === 'task' && region !== undefined && panel !== undefined) {
+    const members = panelsInRegion(region, panels)
+    return { agentIds: [panelId, ...members.filter((id) => id !== panelId)], floor: panelFloor(region) }
+  }
+  return { agentIds: [panelId], floor: panel === undefined ? null : panelFloor(panel) }
+}
+
+export interface FlatTerracePlace { id: string; left: number; top: number; width: number; height: number }
+
+/** Fit canvas-pixel boxes into the flat host. Left stays left. An empty list stays empty. */
+export function flatTerraceLayout(boxes: readonly WorldBox[], host: { w: number; h: number }): FlatTerracePlace[] {
+  if (boxes.length === 0 || !(host.w > 0) || !(host.h > 0)) return []
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const box of boxes) {
+    minX = Math.min(minX, box.x)
+    minY = Math.min(minY, box.y)
+    maxX = Math.max(maxX, box.x + box.w)
+    maxY = Math.max(maxY, box.y + box.h)
+  }
+  const pad = 12
+  const scale = Math.min(Math.max(1, host.w - pad * 2) / Math.max(1, maxX - minX), Math.max(1, host.h - pad * 2) / Math.max(1, maxY - minY))
+  return boxes.map((box) => ({
+    id: box.id,
+    left: pad + (box.x - minX) * scale,
+    top: pad + (box.y - minY) * scale,
+    width: Math.max(1, box.w * scale),
+    height: Math.max(1, box.h * scale)
+  }))
+}
+
+/** The member the terrace wears: the queue's own order (`statePriority`), not a second sort. */
+export function urgentFace(faces: readonly { tone: StateTone; word: string }[]): { tone: StateTone; word: string } | null {
+  if (faces.length === 0) return null
+  let best = faces[0]!
+  for (const face of faces) {
+    if (statePriority(face.word) < statePriority(best.word)) best = face
+  }
+  return best
 }
