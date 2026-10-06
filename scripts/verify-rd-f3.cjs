@@ -206,12 +206,13 @@ ok('rd-keys.lockmark.1 a locked panel can show a lock mark from the F3 styleshee
   /\.panel\[data-focus-lock\]/.test(f3css) && /data-focus-lock/.test(nav),
   'css + stamp')
 
+const strip = (text) => text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
 const canvasSrc = read('src/renderer/canvas/Canvas.tsx')
 const ignoreAt = canvasSrc.indexOf('const shouldIgnoreKeys = useCallback')
-const ignoreBody = ignoreAt >= 0 ? canvasSrc.slice(ignoreAt, ignoreAt + 1600) : ''
-const paletteSrc = read('src/renderer/palette/usePalette.ts')
+const ignoreBody = ignoreAt >= 0 ? strip(canvasSrc.slice(ignoreAt, ignoreAt + 1600)) : ''
+const paletteSrc = strip(read('src/renderer/palette/usePalette.ts'))
 const kAt = paletteSrc.indexOf("event.key !== 'k'")
-const kBody = kAt >= 0 ? paletteSrc.slice(kAt, kAt + 500) : ''
+const kBody = kAt >= 0 ? paletteSrc.slice(kAt, kAt + 400) : ''
 ok('rd-keys.yield.1 shouldIgnoreKeys and the palette stand down while focus is locked, before ⌘K is swallowed',
   /focusLocked\(\)/.test(ignoreBody) && /from '@shared\/shortcuts'/.test(canvasSrc) &&
   /if \(focusLocked\(\)\) return/.test(kBody) &&
