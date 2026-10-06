@@ -8765,6 +8765,15 @@ export function Canvas({
     },
     teammateNameOf,
     moveRegion: moveTaskRegion,
+    // R-071. An agent terminal's reply: bracketed paste, then one explicit submit.
+    // The publisher refuses a plain shell before this runs.
+    pasteTerminal: async (agentId, text) => {
+      const handle = registry.get(agentId)?.handle
+      if (handle === undefined) return 'answer in its terminal'
+      handle.paste(text)
+      handle.write('\r')
+      return null
+    },
     tasks: () => workItems.filter((item) => item.state !== 'done').map((item) => {
       const members = taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
       const views = planViewsFor(item.id) ?? []

@@ -177,6 +177,10 @@ export interface WorldActions {
   open(agentId: string): void
   /** Whether a message can be sent to this agent from the room (a chat agent, not a terminal). */
   canSend(agentId: string): boolean
+  /** R-071. A terminal that is an agent, so a reply may be pasted and submitted. A plain shell is not. */
+  agentTerminal(agentId: string): boolean
+  /** Paste into that agent's terminal and submit once. A plain shell is refused. */
+  pasteReply(agentId: string, text: string): Promise<SendOutcome>
   /**
    * M429. Whether `open` has a panel to land on: one on this canvas, or in
    * another workspace the jump can switch to. The simulator's agents and a

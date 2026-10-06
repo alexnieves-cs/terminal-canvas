@@ -115,9 +115,8 @@ export function WorldFocusSheet(): JSX.Element | null {
   const steps = focusSteps(shown, id, task?.steps ?? [])
   const facts = past ? undefined : (preview !== null && preview.agentId === id ? preview.facts : ctx.facts[id])
   const parts = factParts(facts, record?.name ?? '')
-  const route: ReplyRoute = replyRoute({ canSend: actions?.canSend(id) ?? false, agentTerminal: false })
-  const pasteDoor = actions !== null && typeof (actions as { pasteReply?: unknown }).pasteReply === 'function'
-  const reply = replyControl(route, pasteDoor)
+  const route: ReplyRoute = replyRoute({ canSend: actions?.canSend(id) ?? false, agentTerminal: actions?.agentTerminal(id) ?? false })
+  const reply = replyControl(route, actions !== null)
   const openable = actions !== null && actions.canOpen(id) && !past
 
   const answer = (allow: boolean): void => {
@@ -146,10 +145,9 @@ export function WorldFocusSheet(): JSX.Element | null {
       })
       return
     }
-    const paste = (actions as { pasteReply?: (agentId: string, text: string) => Promise<string | null> }).pasteReply
-    if (route === 'paste' && paste !== undefined) {
+    if (route === 'paste') {
       setSending(true)
-      void paste(id, text).then((refusal) => {
+      void actions.pasteReply(id, text).then((refusal) => {
         setSending(false)
         if (refusal !== null) { setNote(refusal); return }
         setDraft('')

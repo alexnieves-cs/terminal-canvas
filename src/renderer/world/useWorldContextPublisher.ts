@@ -12,6 +12,7 @@ import { readyDiscardFor } from '@renderer/review/discard-offer'
 import { getWorldContext, publishWorldContext, setRegionMover, setWorldActions, type RegionMoveCommit, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
 import type { DiscardOffer } from './world-flight'
 import { agentFacts } from './world-facts'
+import { SHELL_REPLY_REASON } from './world-select'
 
 /**
  * Canvas's side of the world context (M421): one hook call in Canvas.tsx that
@@ -70,6 +71,11 @@ export interface PublisherInput {
    * region with nothing to move — the drag commits nothing.
    */
   moveRegion: (regionId: string, dx: number, dy: number) => readonly string[]
+  /**
+   * R-071. Paste into an agent terminal and submit. Canvas owns the session
+   * handle. The publisher refuses a plain shell before calling this.
+   */
+  pasteTerminal: (agentId: string, text: string) => Promise<string | null>
 }
 
 /** Whose facts the room keeps: the panels that can be an agent in it. */
@@ -218,6 +224,16 @@ export function useWorldContextPublisher(input: PublisherInput): void {
       canSend: (agentId) => {
         const panel = byId(agentId)
         return panel !== undefined && isChatPanel(panel)
+      },
+      agentTerminal: (agentId) => {
+        const panel = byId(agentId)
+        return panel !== undefined && isTerminalPanel(panel) && panel.spec.agent !== undefined
+      },
+      pasteReply: (agentId, text) => {
+        const panel = byId(agentId)
+        // A plain shell stays closed. Typing into one from the room is how a stray Enter runs a command.
+        if (panel === undefined || !isTerminalPanel(panel) || panel.spec.agent === undefined) return Promise.resolve(SHELL_REPLY_REASON)
+        return latest.current.pasteTerminal(agentId, text)
       },
       canOpen: (agentId) => canJump(agentId),
       orchestrate: (agentId) => {

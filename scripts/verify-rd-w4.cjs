@@ -59,6 +59,17 @@ const send = SEL.replyControl(SEL.replyRoute({ canSend: true, agentTerminal: fal
 const paste = SEL.replyControl(SEL.replyRoute({ canSend: false, agentTerminal: true }), true)
 const pasteClosed = SEL.replyControl(SEL.replyRoute({ canSend: false, agentTerminal: true }), false)
 const shell = SEL.replyControl(SEL.replyRoute({ canSend: false, agentTerminal: false }), false)
+const replySheet = read('src/renderer/world/WorldFocusSheet.tsx')
+const replyCanvas = read('src/renderer/canvas/Canvas.tsx')
+const replyPub = read('src/renderer/world/useWorldContextPublisher.ts')
+const shellCard = replySheet.slice(replySheet.indexOf('function ShellConsoleCard'), replySheet.indexOf('export function WorldFocusSheet'))
+ok('rd-w4.reply.2 an agent terminal reply pastes and submits from the sheet; a plain shell is refused and the shell card has no reply field',
+  /agentTerminal: actions\?\.agentTerminal\(id\)/.test(replySheet) &&
+  /actions\.pasteReply\(id, text\)/.test(replySheet) &&
+  /handle\.paste\(text\)/.test(replyCanvas) && /handle\.write\('\\r'\)/.test(replyCanvas) &&
+  /SHELL_REPLY_REASON/.test(replyPub) && /panel\.spec\.agent !== undefined/.test(replyPub) &&
+  !/<textarea/.test(shellCard))
+
 ok('rd-w4.reply.1 a chat sends, an agent terminal pastes once a door exists, and a plain shell stays closed with one reason',
   send.enabled === true && send.reason === null &&
   paste.enabled === true && paste.reason === null &&
