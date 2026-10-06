@@ -486,9 +486,82 @@ Two reds from the first affected run were this lane and are fixed: `verify:style
 - Disabled controls are `--muted`, not a fractional opacity. Check 3 allows 0 and 1 only.
 - The detail's tail is scrubbed with `outward` at the read. The terminal's own buffer is unchanged.
 
+## L-C · M444 Navigate (Plan tier and ⌘K)
+
+Branch `rd/l-c-navigate` from tag `rd-wave2a` (`877c71c2`). `RD_LANE=L-C`.
+
+### Plan
+
+Presentation only. `NavigateTier` mounts beside `<TierLayer />` inside `.world`. It does not reorder Canvas hooks. The import of that component is the other Canvas edit. `cardIds` are stamped onto the existing `collapsedPanelIds` set from the child's `useLayoutEffect`, using `enterTier` on terminal ids, so `useTiering` (not owned) still passes that set and does not learn a new argument. Ids a collapsed group already held are not claimed, and are not removed on the way back to Work. Entering Plan or Map blurs, calls `releaseFocus` (`setFocusedId(null)`), and focuses the canvas host before the passive tier effect. `LIVE_BUDGET` and `LIVE_MIN_SCALE` stay 8 and 0.5. Dormancy still outranks focus. Flights to a tier are a new `flyToTier` (ease-out, 220ms, anchor at the cursor, else the selection, else the centre). `flyTo` stays ease-in-out for bookmarks, fit and reset. ⌘0 fits all, ⌘1/⌘2/⌘3 fly to Work/Plan/Map, ⌘⇧0 fits the task, ⌘⇧T tidies beside the ⌘⌥T alias. The palette keeps `.palette__section` and `SECTIONS`. Kind bands are extra `.palette__band` rows. A path stays in Panels so check 48 still sees one Panels header. The Files chip is how those rows are read. Shortcut chips stay the set `verify:palette` 48 pins (`canvas.fit` still wears ⌘0).
+
+PLAN CHECK:
+
+1. Canvas is touched only at the TierLayer slot, plus the `NavigateTier` import. `<TierLayer />` stays, so `rd-l-b.slot.1` still sees it and `data-tier-layer`. Hooks are not reordered. Holds.
+2. `LIVE_BUDGET` (8), `LIVE_MIN_SCALE` (0.5) and dormancy precedence are unchanged. `rd-l-c.pid.1` keeps pids 145 and 148 across Work, Plan and Map, and cards both terminals at scale 0.6 where the live floor would otherwise promote them. Holds.
+3. R-009 is already done (`focusLocked()` returns before ⌘K `preventDefault`). R-011 is this lane's chord retarget. R-015 is already done (`Show Orchestrate`). R-005's remainder cannot drop `attentionCount` without editing `CommandPill` (R-030). R-022 and the palette half of R-026 are in this change. Holds.
+
+### What landed
+
+`NavigateTier` (`src/renderer/palette/navigate-tier.tsx`) mounts on the line after `<TierLayer />`. The import is the other Canvas edit. Its `useLayoutEffect` stamps `enterTier().cardIds` for terminal ids onto `collapsedPanelIds`, the set `useTiering` already passes. Ids a collapsed group already held are not claimed, and stay when the tier leaves. Plan and Map blur, call `releaseFocus` (`setFocusedId(null)`), and focus the canvas host before the passive tier effect, then set `data-zoom-tier` on `.world`. A merged canvas skips the stamp and publishes Work. Plan cards show the name, a `data-tone` pill from `panelState`, and `planStatusSentence`. A card mousedown selects through `selectAndRaise`. Map draws a tone dot at each panel's centre. `LIVE_BUDGET` stays 8 and `LIVE_MIN_SCALE` stays 0.5. `lod.ts`, `useTiering.ts` and `zoom-tier.ts` are untouched.
+
+`flyToTier` is the tier flight. It still runs through `interpolateViewport` and sets `flying`. Duration is `tierFlightMs`: 0 when reduced motion is set, otherwise 220ms, ease-out. The anchor is the cursor, else the selection's screen centre, else the view centre. `flyTo` stays ease-in-out.
+
+`useViewport` matches `fit-all`, `tier-work`, `tier-plan`, `tier-map`, `fit-task`, `tidy` and `tidy-alias` with `matchShortcut` / `electronAccelerator`. `chordCode` fills an empty `code` from the key, so a harness event that only sets `key` still matches. The old `case '0'` and `case '1'` are gone. Reset zoom remains the palette row `canvas.fit`. The menu still shows tidy-alias (`CmdOrCtrl+Alt+T`); `menu.ts` is outside this lane.
+
+The palette keeps `SECTIONS` and `.palette__section`. A kind chip (Everything; Tab cycles at the top level) filters with `filterByKind`. Band headers are extra `.palette__band` rows. Path rows stay in Panels, so check 48 still sees one Panels header; the Files chip is how those rows are read. Enter still flies to the row. ⌘Enter on a `panel.goto.` row also fits the task. The placeholder is "Find or run anything". `canvas.settings` ("Open Settings") calls `openSettingsPage`. `Manage settings…` stays the drill-in. No new shortcut chips.
+
+The zoom HUD grows Work / Plan / Map (`requestTier`, `aria-pressed` from the shown tier). Fit all's title is the `fit-all` chord. The switch stays on an empty canvas. Fit stays gated by `empty !== true`.
+
+An empty minimap renders `emptyState('minimap').sentence` ("Nothing placed yet") and no digit. A populated one reads `minimapHeader`: `MAP`, `MAP · 1 TASK`, or `MAP · N TASKS`.
+
+Shots `rd-plan-palette` (zoom 0.34, palette open on "plaid") and `rd-map` (zoom 0.18) both require `TC_FIXTURE=rd-steward` and name `docs/redesign/mockups/06-navigate-palette.png`. `{ name:` sits on one line so `visual.1` sees `run`.
+
+### Checks (Linux, Node v22, `npm ci --ignore-scripts`)
+
+Rebase onto `origin/redesign/main` (`877c71c2`): this branch is that commit. No commits to replay.
+
+Watched red first: `verify:rd-l-c` passed `rd-l-c.0` and then threw `TypeError: M.planStatusSentence is not a function`. The suite's header records that. A later chord expectation said `CmdOrCtrl+Shift+0`; `electronAccelerator` emits `Shift+CmdOrCtrl+0` and `Shift+CmdOrCtrl+T`. The check now expects those strings. 11/11 after that.
+
+Two reds from the first neighbouring runs were this lane and are fixed. `verify:styles` check 6 rejected `gap: 2px` on `.canvas-hud__tiers`; the gap is `var(--sp-1)`. `verify:rail` `labels.1` rejected the kind chip because its only child is a function call; the chip carries `aria-label`. `useSyncExternalStore` in `CanvasHud` and `NavigateTier` takes `getShownTier` as the third argument. The first `verify:first-run` threw `Missing getServerSnapshot` (`renderToStaticMarkup`). After that argument, the suite is back to the known `revamp.create.1`.
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.web.json --noEmit` | pass |
+| `npm run verify:rd-l-c` | 11/11. Watched red first on `planStatusSentence`. |
+| `npm run verify:palette` | 182/182, including check 48 and `zoom.fit.1` |
+| `npm run verify:viewport` | 199/199 |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:verbs` | 30/30 |
+| `npm run verify:rail` | 266/266 |
+| `npm run verify:rd-l-b` | 14/14, including `rd-l-b.slot.1` |
+| `npm run verify:first-run` | 28/29. `revamp.create.1` still wants `/^<div class="canvas-hud">/`. The HUD renders `data-screen-control`. Fit verbs stay off an empty canvas. Known, left as it is. |
+| `npm run affected -- --base origin/redesign/main` | 44/46 plain suites, 31.0s, 17 files, stopped after the plain tier. Failures: `verify:meta` (check 14 missing `boot:progress` in the README — R-018; `panels-split.2` tag `pre-v7-run` absent; `visual.1`) and `verify:first-run` `revamp.create.1`. `docs/redesign/requests.md` is UNMAPPED. Electron suites it selected (`verify:window`, `verify:canvas`, `verify:xterm`, `verify:panels:*`) did not start. |
+| `npm run verify` | 64/67 of the plain wave, 50.1s, stopped after wave 1. Same `verify:meta` and `verify:first-run`, plus `verify:tmux` (`Cannot find module './prebuilds/linux-x64//pty.node'`). `verify:canvas-sync` passed (14.5s). `verify:relay` passed (2.2s). `verify:flowchart` passed in 0.9s. Wave 2 (build) and wave 3 (Electron) did not start. `verify:panels` did not run. |
+
+`visual.1` reports `declared` 88, `goldens` 79, `missing` `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-plan-palette`, `rd-map`, `rd-sessions`. The two new names are this lane. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+Shot. `npm run shot` launches `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`. That path is absent. The Linux ELF is `node_modules/electron/dist/electron` (present, executable). A direct attempt, `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-plan-palette` and `TC_FIXTURE=rd-steward`, booted Electron and then threw `Cannot find module './prebuilds/linux-x64//pty.node'` from `shot-entry.cjs`. Prebuilds on disk are `darwin-arm64`, `darwin-x64`, `win32-arm64`, `win32-x64`. The probe was stopped at about 80s. No PNG was written, and no `out/shots/*.vs-reference.png`. The mockup critic and the rules reviewer did not run. `UPDATE_GOLDENS` was not set.
+
+Known reds left as they are: `verify:meta` check 14 (R-018), `panels-split.2`, `visual.1` (the missing `rd-*` goldens, including this lane's two scenes), `verify:first-run` `revamp.create.1`, `verify:tmux` (no linux `pty.node`). `verify:canvas-sync` and `verify:relay` were green on this run. `verify:flowchart` did not spike.
+
+### Deviations
+
+- Commands stay query-filtered. A command list that stays on screen while the query is "plaid" would fail the palette's filter checks. The Files chip, not a third `.palette__section`, is how path rows are read.
+- `canvas.fit` still wears the ⌘0 chip. Check 48 pins `canvas.fit=⌘0` exactly. Fit all has the chord and no chip (R-032). Reset zoom remains that row (`zoom.fit.1`).
+- `flyToTier` has its own duration and ease-out. Bookmarks, fit and reset still use `flyTo`. Both paths call `interpolateViewport` and set `flying`.
+- The minimap header is positioned from the L-C span (`.minimap` overflow visible, header above the map). `minimap.ts` is L-B's and was not edited.
+- Placeholder and footer copy changed. Palette goldens that paint the old "Type a command…" bar will differ. The lead rebaselines those. This lane writes none.
+- R-009 and R-015 were already done on this base and were not repeated. `rd-l-c.lock.1` pins the ⌘K return before `preventDefault`.
+- R-005's remainder is R-030. Canvas still passes `attentionCount`. `CommandPill.tsx` is outside the slot and outside this lane.
+- The dock half of R-026 stays open. `openSettingsScope` still opens the palette settings scope, and that call sits outside the TierLayer slot.
+- `chordCode` makes a key-only `0` Fit all and a key-only `1` Work. Electron suites that still reset with `zoomTo(wc, '0')` or fit with `zoomTo(wc, '1')` are R-031. They did not run on this machine. Pinch `zoomToScale` is unchanged.
+
 ## L-F · M447
 
 Branch `rd/l-f-recovery` off tag `rd-wave2a` (`877c71c2`, redesign/main at the wave 2a merge). Lane `RD_LANE=L-F`. R-006 is already done: `subscribeLiveSessions` fires from `notify()` and `useAttentionQueue` subscribes. It is not reopened. R-023 is done in `5fe2abdf`: issue lines on `ReopenNotice` carry `data-boot-issue`, and `bootIssueSentence` is that sentence.
+
+Merged `origin/redesign/main` at `ddf8363f` (L-C, PR #14). L-C keeps R-030, R-031 and R-032. This lane's requests moved up: publishing `session:host` is R-033, terminal frames are R-034, the offline mark is R-035, the pill sentence is R-036, and the README fence is R-037.
+
 
 ### Plan
 
@@ -498,7 +571,7 @@ PLAN CHECK:
 
 - [x] `exit-explain.ts` and the reducer come first, with checks. The suite was watched red before the module existed: esbuild reported it could not resolve `src/shared/exit-explain.ts` and the process status was 1. That sentence is at the top of `scripts/verify-rd-l-f.cjs`. `reduceHost` and `reduceRecovery` are in the module. `rd-l-f.exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1` and `pause.1` call them.
 - [x] No new polling loop. Host detection rides `createTmuxBackend().list()`, which `pollLive` already calls every `LIVE_TICK_MS`. `session-backend.ts` has no `setInterval` (`rd-l-f.mount.1`). The kill-server test uses `verifySocket('terminal-canvas-verify-l-f')` and holds `scripts/redesign/with-electron-lock.sh`. The socket is `terminal-canvas-verify-l-f`. It is not `terminal-canvas`, `terminal-canvas-app`, empty, or a path (`rd-l-f.socket.1`).
-- [x] The offline marker for GitHub and Jira is `OfflineCachedMark` plus R-032. `GithubNode.tsx` and `JiraNode.tsx` are not edited.
+- [x] The offline marker for GitHub and Jira is `OfflineCachedMark` plus R-035. `GithubNode.tsx` and `JiraNode.tsx` are not edited.
 
 ### What the surface does
 
@@ -506,16 +579,16 @@ PLAN CHECK:
 - The banner is `hostBanner`: "Session host stopped responding. tmux server on this Mac didn't answer for 20s. N sessions are paused, not lost — their output is buffered." Retry is `Retrying in Ns`, from `retryAt = at + 8_000`. While already paused, a sample at or after `retryAt` resets the countdown. There is no renderer timer. Reconnect now and Details are the verbs. Reconnect sets phase `reattaching` and the next `list()` is the sample.
 - A paused frame says "paused · output kept" and "nothing you type is lost or sent twice", with `data-keys-blocked`. `keystrokesBlocked` is true only for `paused`. A reattaching frame is three skeleton rows (`data-recovery-skeleton`, `aria-busy`), never an empty well.
 - A survivor is the same `panelId` and the same pid. A missing pane, or a different pid, is `ended`, with the sample's exit code or null. Phase stays `paused` while any paused pane remains.
-- A crash card says "This session ended unexpectedly", `explainExit` (137 is "killed, usually by memory pressure"), and "The pending edit was not applied". Primary is "Restart with last prompt". Then "Read log". Restart calls `restartKeepsPanel`, which returns the same id. Cmd+Enter (meta+Enter, skipped on an input or textarea) restarts the first crash card. The card does not call `paletteActions.restartPanel`; that wiring is R-031, because `TerminalPanel` is not owned. Checks 90 and 92 stay in `scripts/verify-panels-shell.cjs`.
+- A crash card says "This session ended unexpectedly", `explainExit` (137 is "killed, usually by memory pressure"), and "The pending edit was not applied". Primary is "Restart with last prompt". Then "Read log". Restart calls `restartKeepsPanel`, which returns the same id. Cmd+Enter (meta+Enter, skipped on an input or textarea) restarts the first crash card. The card does not call `paletteActions.restartPanel`; that wiring is R-034, because `TerminalPanel` is not owned. Checks 90 and 92 stay in `scripts/verify-panels-shell.cjs`.
 - Offline copy is "offline · cached · last updated <time>". The toast fires only when a source flips offline, through `notify` in `toast.ts`. The sentence is "GitHub is offline" (or Jira). The detail is "The canvas, terminals and notes keep working. Cached data stays marked until the connection returns." Host loss is not a toast. `isAttentionQueueRestatement` matches needs-you counts, and `rd-l-f.offline.1` asserts the toast does not.
-- `recoveryPillLine(2, 4)` is "2 sessions need recovery · 4 paused · Review". The 09 surface paints it as `data-recovery-pill`. The real command pill is R-033: `AttentionItem` is frozen and has no paused count, and a non-zero exit is `failed` before `recovery`.
+- `recoveryPillLine(2, 4)` is "2 sessions need recovery · 4 paused · Review". The 09 surface paints it as `data-recovery-pill`. The real command pill is R-036: `AttentionItem` is frozen and has no paused count, and a non-zero exit is `failed` before `recovery`.
 - A failed restore shows through `ReopenNotice`. Issue lines carry `data-boot-issue`. `bootIssueSentence` is the first non-empty issue. RecoveryHost does not also read `bootIssues()`, so the reopen notice is not duplicated.
 
 ### Mount
 
 `useJobRecovery` subscribes to the recovery store with `useSyncExternalStore` as its first call, so Canvas's hook order is unchanged. The model gains `surface`. `JobRecoveryNotice` renders `RecoveryHost` when the view is on, and the unfinished-work list only when jobs, runs or a sentence exist. `.recovery-host` is `position: fixed` so it is not a box inside the bottom-left stack. `.recovery-slot { display: contents; }` is L-B's rule and is not edited.
 
-`session:host` is an event (`IPC_EVENTS.SESSION_HOST`). `verify:ipc` counts invokes, so `EXPECTED_CHANNELS` stays 206. The name is in the CLAUDE.md channel diagram (`rd-l-f.channel.1`). Direct backend `hostReport()` stays `initialHost()` and `reconnectHost` is a no-op. Publishing the event from `pollLive`, and subscribing in preload, is R-030.
+`session:host` is an event (`IPC_EVENTS.SESSION_HOST`). `verify:ipc` counts invokes, so `EXPECTED_CHANNELS` stays 206. The name is in the CLAUDE.md channel diagram (`rd-l-f.channel.1`). Direct backend `hostReport()` stays `initialHost()` and `reconnectHost` is a no-op. Publishing the event from `pollLive`, and subscribing in preload, is R-033.
 
 ### Shot
 
@@ -545,16 +618,16 @@ The first affected run failed `verify:rail` `labels.1`: the four recovery verbs 
 | Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.3s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.8s). `verify:relay` passed (2.8s). `verify:flowchart` passed (1.0s) and did not spike. No WebSocket error on this host. |
 | Electron tier, `npm run shot`, `verify:visual` | not reached by the gate, because wave 1 was already red. A direct attempt downloaded the Linux Electron binary (`v43.4.1`, `node_modules/electron/dist/electron`, ELF x86-64) via `node node_modules/electron/install.js`. `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-recovery` and `TC_FIXTURE=rd-steward` booted Electron and threw `Cannot find module './prebuilds/linux-x64//pty.node'` from `shot-entry.cjs`. `node-pty` prebuilds on disk are `darwin-arm64`, `darwin-x64`, `win32-arm64`, `win32-x64`. The Mac path `Electron.app/Contents/MacOS/Electron` is absent. The process did not exit; `timeout 90` stopped it (exit 124). No PNG under `out/shots/`. `UPDATE_GOLDENS` was not set. Mockup-critic and the rules reviewer were not run: there is no `out/shots/rd-recovery.vs-reference.png`. |
 
-`verify:meta` failures, reported and not fixed: check 14 missing `session:host` and `boot:progress` (the second is R-018; the first is R-034, because the README fence is not owned); `panels-split.2` (`git show pre-v7-run:scripts/verify-panels.cjs` fails); `visual.1` missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-sessions`, `rd-settings-keys`, `rd-recovery` (declared 87 / goldens 79). `verify:tmux` throws on `pty.node` for `linux-x64`. `verify:first-run` `revamp.create.1` wants `/^<div class="canvas-hud">/` and `CanvasHud` renders `data-screen-control`. `CanvasHud.tsx` is not in this diff.
+`verify:meta` failures, reported and not fixed: check 14 missing `session:host` and `boot:progress` (the second is R-018; the first is R-037, because the README fence is not owned); `panels-split.2` (`git show pre-v7-run:scripts/verify-panels.cjs` fails); `visual.1` missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-sessions`, `rd-settings-keys`, `rd-recovery` (declared 87 / goldens 79). `verify:tmux` throws on `pty.node` for `linux-x64`. `verify:first-run` `revamp.create.1` wants `/^<div class="canvas-hud">/` and `CanvasHud` renders `data-screen-control`. `CanvasHud.tsx` is not in this diff.
 
 ### Deviations
 
 - The mockup shows paused panels, a crash card and a skeleton at once. The shot uses `catalogView`. Transitions stay in `reduceHost`.
-- Paused and crash frames, and the pill sentence, render inside `RecoveryHost`. They are not yet on `.panel` or in `CommandPill`. R-031 and R-033.
+- Paused and crash frames, and the pill sentence, render inside `RecoveryHost`. They are not yet on `.panel` or in `CommandPill`. R-034 and R-036.
 - "paused · output kept" is overlay copy. It is not a `panelState` word. `state.1` pins that vocabulary in `scripts/verify-rail.cjs`, which this lane does not own.
 - Tones are `needs-you`, `starting`, `exited` and `idle` through `[data-tone]`. No state hex, no new `@keyframes`, no `--lift` off `.panel`.
 - The L-F CSS comment does not name `.panel__slot` or `.xterm`. `rd-l-f.well.1` walks from the lane span and a comment that named those classes matched the next `height:`.
-- Restart in place keeps the id in the reducer. Calling `restartPanel` is R-031.
-- `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-030.
-- The README architecture fence does not list `session:host`. Check 14 already misses `boot:progress` (R-018). R-034 asks for `session:host` only. The README is not edited.
+- Restart in place keeps the id in the reducer. Calling `restartPanel` is R-034.
+- `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-033.
+- The README architecture fence does not list `session:host`. Check 14 already misses `boot:progress` (R-018). R-037 asks for `session:host` only. The README is not edited.
 - Recovery verbs carry `aria-label`. `labels.1` strips a child expression unless it looks like a name, a label or a title, so `{view.reconnect}` alone was an unlabelled button.

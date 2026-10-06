@@ -11857,6 +11857,124 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 
 /* ── rd:L-C ── */
 
+/* Plan hides the live frame; the card overlay is the panel. Map hides the
+   frame and the cluster hulls. Task region labels stay: they are the
+   territories. visibility, not display — a collapsed box refits xterm. */
+.world[data-zoom-tier="plan"] .panel,
+.world[data-zoom-tier="map"] .panel { visibility: hidden; }
+.world[data-zoom-tier="map"] .task-clusters { visibility: hidden; }
+
+.navigate-tier { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.navigate-card {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(4px * var(--far-scale, 1));
+  padding: calc(10px * var(--far-scale, 1));
+  border: 1px solid var(--line);
+  border-left: calc(3px * var(--far-scale, 1)) solid var(--tone);
+  border-radius: calc(8px * var(--far-scale, 1));
+  background: var(--s-1);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.navigate-card__name {
+  font-size: calc(13px * var(--far-scale, 1));
+  font-weight: 600;
+  line-height: 1.2;
+}
+.navigate-card__pill {
+  font-size: calc(11px * var(--far-scale, 1));
+  line-height: 1.2;
+  color: var(--tone);
+  text-transform: lowercase;
+}
+.navigate-card__line {
+  font-size: calc(13px * var(--far-scale, 1));
+  line-height: 1.3;
+  color: var(--fg-2);
+}
+.navigate-dot {
+  position: absolute;
+  width: calc(8px * var(--far-scale, 1));
+  height: calc(8px * var(--far-scale, 1));
+  margin-left: calc(-4px * var(--far-scale, 1));
+  margin-top: calc(-4px * var(--far-scale, 1));
+  border-radius: 50%;
+  background: var(--tone);
+  pointer-events: none;
+}
+
+.palette__bar { display: flex; align-items: center; gap: var(--sp-2); }
+.palette__kind {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--t-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+.palette__band {
+  list-style: none;
+  padding: var(--sp-2) var(--sp-3) var(--sp-1);
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.palette__go {
+  margin-left: auto;
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+.canvas-hud__tiers { display: inline-flex; align-items: center; gap: var(--sp-1); margin-left: var(--sp-2); }
+.canvas-hud__tier {
+  border: 0;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--t-xs);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+.canvas-hud__tier[aria-pressed="true"] { color: var(--fg); }
+
+/* The header sits above the thumb. The base rule clips overflow and pins
+   the map to --sp-5; this span is later, so the header has room. */
+.minimap { overflow: visible; top: calc(var(--sp-5) + 1.25em); }
+.minimap__header {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin: 0 0 var(--sp-1);
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.minimap--empty {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  cursor: default;
+  padding: var(--sp-2) var(--sp-3);
+}
+.minimap__empty { margin: 0; color: var(--fg-3); font-size: var(--t-xs); }
+
 /* ── /rd:L-C ── */
 
 /* ── rd:L-D ── */
