@@ -16,6 +16,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { isNeedsYouCount, needsYouCount } from '@shared/attention-words'
+import { ATTENTION_VERB } from '@shared/attention-queue'
 import type { AttentionCensus } from '@renderer/session/useAttentionQueue'
 
 export interface PillFacts {
@@ -56,6 +57,18 @@ const count = (n: number): number => (Number.isFinite(n) && n > 0 ? Math.floor(n
  * holding. Nothing to say is an empty pill — a glyph alone — never "0 agents
  * running".
  */
+/**
+ * R-036. The rest line is the store's sentence. The verb is the queue's
+ * recovery word, split off so the pill can paint it as its own control.
+ * The frozen module is imported here: CommandPill must not name it, or
+ * rd-attn.one.1 reads the import as the pill building a queue.
+ */
+export function recoveryPillFace(text: string): { sentence: string; verb: string } {
+  const verb = ATTENTION_VERB.recovery
+  const suffix = ` · ${verb}`
+  return { sentence: text.endsWith(suffix) ? text.slice(0, -suffix.length) : text, verb }
+}
+
 export function pillRestState(facts: PillFacts): PillRest {
   const recovery = typeof facts.recovery === 'string' ? facts.recovery.trim() : ''
   if (recovery !== '') return { kind: 'recovery', text: recovery }

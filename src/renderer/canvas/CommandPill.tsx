@@ -8,9 +8,8 @@ import { useAttentionQueue, type AttentionCensus } from '@renderer/session/useAt
 import type { StateInput } from '@renderer/panels/panel-state'
 import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
-import { ATTENTION_VERB } from '@shared/attention-queue'
 import { getRecoveryView, subscribeRecovery } from '@renderer/panels/recovery-store'
-import { attentionPillLine, pillRestState, publishAttentionCensus, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
+import { attentionPillLine, pillRestState, publishAttentionCensus, recoveryPillFace, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
 import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type SelectionVerbKey } from './object-verbs'
 
 /**
@@ -184,6 +183,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     ...(taskTitle !== undefined ? { taskTitle } : {}),
     ...(recoveryLine !== '' ? { recovery: recoveryLine } : {})
   })
+  const recoveryFace = rest.kind === 'recovery' ? recoveryPillFace(rest.text) : null
 
   // 4.3. Teach Cmd+J once, beside the first attention sentence; retire it when
   // that queue empties, so it is seen for a whole episode rather than a blink.
@@ -549,8 +549,8 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
       )}
       {rest.kind === 'recovery' && note === null && !expanded ? (
         <div className="command-pill__rest command-pill__rest--line" data-pill-rest="" data-pill-state="recovery" role="group" aria-label={rest.text}>
-          <span className="command-pill__text">{rest.text.endsWith(` · ${ATTENTION_VERB.recovery}`) ? rest.text.slice(0, -(ATTENTION_VERB.recovery.length + 3)) : rest.text}</span>
-          <span data-pill-recovery="">{ATTENTION_VERB.recovery}</span>
+          <span className="command-pill__text">{recoveryFace?.sentence}</span>
+          <span data-pill-recovery="">{recoveryFace?.verb}</span>
         </div>
       ) : attentionLine !== '' && note === null && !expanded ? (
         <div className="command-pill__rest command-pill__rest--line" data-pill-rest="" data-pill-state="attention" role="group" aria-label={attentionLine}>
