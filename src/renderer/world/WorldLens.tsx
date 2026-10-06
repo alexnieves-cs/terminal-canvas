@@ -13,7 +13,7 @@ export function WorldLens({ on }: { on: boolean }): JSX.Element {
   const chord = shortcutById('world')?.chord ?? '⌘⇧W'
   return (
     <div className="world-lens shell__world-toggle" role="group" aria-label="Canvas lens" data-world-lens>
-      <button type="button" aria-pressed={!on} onClick={() => setWorldOn(false)}>2D</button>
+      <button type="button" aria-pressed={!on} aria-label="2D canvas" onClick={() => setWorldOn(false)}>2D</button>
       <button type="button" aria-pressed={on} title={`World (${chord})`} onPointerEnter={() => warmWorldView()} onFocus={() => warmWorldView()} onClick={() => setWorldOn(true)}>
         World <kbd>{chord}</kbd>
       </button>

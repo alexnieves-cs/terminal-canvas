@@ -12478,7 +12478,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   color: var(--fg-3);
   font: inherit;
   font-size: var(--t-sm);
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   cursor: pointer;
 }
 .world-lens button[aria-pressed="true"] {
@@ -12488,7 +12488,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-lens kbd {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
-  margin-left: 6px;
+  margin-left: var(--sp-3);
   color: var(--fg-3);
 }
 .world-move {
@@ -12505,7 +12505,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 8px 14px;
+  padding: var(--sp-4) var(--sp-5);
   border-radius: var(--r-full);
   background: var(--s-1);
   border: 1px solid var(--line);
@@ -12533,7 +12533,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   bottom: var(--sp-4);
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -12550,8 +12550,12 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 4px;
+  padding-bottom: var(--sp-2);
 }
+/* display:flex would beat the UA [hidden] rule, so a resting move would
+   keep the chip and the filmstrip on screen. */
+.world-move__chip[hidden],
+.world-move__strip[hidden] { display: none; }
 .world-move__strip li[data-on] {
   border-color: var(--fg-2);
   color: var(--fg);
