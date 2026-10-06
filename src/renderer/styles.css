@@ -11756,6 +11756,18 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   padding-inline: var(--sp-4);
   border: 1px solid var(--line);
 }
+/* R-016. The path is a mono leaf. The branch is the same faint fact, in the
+   UI face, because it is a name and not a path. */
+.pf__path {
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  min-width: 0;
+}
+.pf__branch, .pf__duration {
+  color: var(--fg-4);
+  font-size: var(--t-xs);
+}
 .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { opacity: 0; }
 .pf:hover .pf__chrome button, .pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close,
 .pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,

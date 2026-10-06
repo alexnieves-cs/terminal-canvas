@@ -5,6 +5,8 @@ import type { PanelSession } from '@renderer/session/panel-session'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { noteStateWord, useLastActive } from '@renderer/session/last-active-store'
+import { statePill } from '@renderer/panels/header-rest'
+import { displayPath } from '@shared/display-path'
 import { useAgentOwner, useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
@@ -170,6 +172,24 @@ function TerminalPanelImpl({
   // M258. The last-active store stamps a time only on an OBSERVED change of
   // word; a remount on a tier change re-notes the same word and stamps nothing.
   useEffect(() => { noteStateWord(session.id, shown.word) }, [session.id, shown.word])
+  // R-016. The duration is a sibling of the state word. The first observation
+  // has no time, and statePill then returns the word — that sibling stays off
+  // so the word is not painted twice.
+  const lastAt = useLastActive(session.id)
+  const pill = statePill(shown.word, lastAt === undefined ? null : Math.max(0, Date.now() - lastAt))
+  const cwd = session.status.kind === 'running' && session.status.cwd !== '' ? session.status.cwd : session.spec.cwd
+  const pathShown = cwd === '' ? undefined : displayPath(cwd)
+  const [branch, setBranch] = useState<string | null>(null)
+  useEffect(() => {
+    if (cwd === '') { setBranch(null); return }
+    let live = true
+    const status = window.canvas?.git?.status
+    if (typeof status !== 'function') { setBranch(null); return }
+    void status(cwd).then((st) => {
+      if (live) setBranch(st.kind === 'status' && st.branch !== '' ? st.branch : null)
+    }).catch(() => { if (live) setBranch(null) })
+    return () => { live = false }
+  }, [cwd])
   useEffect(() => {
     if (openingContext === undefined || session.status.kind !== 'running') return
     session.handle.paste(openingContext)
@@ -260,6 +280,9 @@ function TerminalPanelImpl({
       rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
       title={panelLabel}
       titleHint={titleHint}
+      headerPath={pathShown?.short}
+      headerPathTitle={pathShown?.full}
+      headerBranch={branch ?? undefined}
       onRename={readOnly || onRename === undefined ? undefined : (name) => onRename(session.id, name)}
       agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
@@ -311,6 +334,7 @@ function TerminalPanelImpl({
             sentence) can ellipsise inside the badge — a flex container's bare
             text node cannot — with the whole sentence in the title. */}
         <span className="badge pf__word" data-tone={shown.tone} data-state-word title={shown.word}><span className="pf__word-text">{shown.word}</span></span>
+        {pill !== shown.word && <span className="pf__duration" data-state-duration title={pill}>{pill.slice(shown.word.length)}</span>}
         {/* M74. Never a control that cannot work: shown only for a claude
             session whose process is not live (one front-end at a time). A
             LABELLED word after the pill, the row's own control slot. */}
