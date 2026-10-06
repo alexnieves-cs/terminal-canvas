@@ -29,6 +29,10 @@
 import { toast } from 'sonner'
 import { toastDecision, TOAST_MS, type ToastRequest, type ToastDecision } from './toast-decision'
 import type { PillRest } from '../canvas/command-pill'
+import { engageFocus } from '../world/world-select'
+import {
+  approvalToast, discardReady, requestFullDiff, subscribeApproved, type ApprovedEvent
+} from '../world/world-flight'
 
 export { toastDecision, TOAST_MS } from './toast-decision'
 export type { ToastOutcome, ToastRequest, ToastDecision } from './toast-decision'
@@ -49,6 +53,41 @@ export function notify (request: ToastRequest, restKind?: PillRest['kind']): Toa
   else toast.success(decision.sentence, options)
   return decision
 }
+
+/**
+ * D9. The approval has already been sent. Undo is the action only when review
+ * discard can revert that panel; otherwise the action is View diff. Nothing
+ * here delays the send, and nothing un-tells an agent that already received y.
+ */
+export function notifyApproved (event: ApprovedEvent): void {
+  const decision = approvalToast(event)
+  const gate = toastDecision({ sentence: decision.sentence })
+  if (gate.kind !== 'show') return
+  const action = decision.undo
+    ? { label: 'Undo', onClick: () => undoApproved(event) }
+    : { label: 'View diff', onClick: () => viewApproved(event) }
+  toast.success(gate.sentence, { duration: TOAST_MS.done, action })
+}
+
+function undoApproved (event: ApprovedEvent): void {
+  const offer = event.discard
+  if (!discardReady(offer)) return
+  void window.canvas.review.discard({
+    root: offer.root,
+    baseline: offer.baseline,
+    subjectId: offer.subjectId,
+    paths: [...offer.paths]
+  })
+}
+
+function viewApproved (event: ApprovedEvent): void {
+  engageFocus(event.panelId)
+  requestFullDiff(event.panelId)
+}
+
+// The world emits; this file is the only sonner caller. Subscribing here keeps
+// the scene off the shell import `world.ctx.door.1` forbids.
+subscribeApproved((event) => { notifyApproved(event) })
 
 /** Convenience for the common pair, so a caller never has to remember the arm names. */
 export const notifyDone = (sentence: string, detail?: string): ToastDecision => notify({ sentence, outcome: 'done', ...(detail === undefined ? {} : { detail }) })

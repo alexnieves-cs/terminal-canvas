@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type JSX, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentRef, type JSX, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -14,7 +14,7 @@ import { NIGHT } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
-import { hasArrival, selectAgent, selectedAgent, takeArrival, useFocusedAgent } from './world-select'
+import { engageFocus, FIELD_SELECTOR, hasArrival, selectAgent, selectedAgent, takeArrival, useFocusedAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
 import type { CameraPose } from '@shared/redesign-contracts'
@@ -23,8 +23,15 @@ import { arcFraming, dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf,
 import { dollyAt, LEAVE_MS, motionOf, popDelaysFromTarget, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
 import { paintPlanFloor } from './plan-floor'
 import { liveView } from './world-camera'
-import { setWorldCameraTarget, setWorldCameraWedge, setWorldLandingViewport, worldCameraTarget } from './world-toggle'
+import { isWorldOn, setWorldCameraTarget, setWorldCameraWedge, setWorldLandingViewport, worldCameraTarget } from './world-toggle'
 import { WorldCameraPanel } from './WorldCameraPanel'
+import { WorldQueueStrip } from './WorldQueueStrip'
+import { matchShortcut } from '@shared/shortcuts'
+import {
+  beginFlight, clearFlight, currentFlight, emitApproved, flightDots, flightQueue, holdFlight,
+  publishFlightQueue, setAttentionCursor, shellFromItem, showShell, subscribeFlight, subscribeWalk, walkAttention,
+  type ApprovedEvent, type FloorPoint, type FlightItem, type ShellCard
+} from './world-flight'
 
 /**
  * The 3D world view: every live agent in the event store as a robot at its own
@@ -231,6 +238,44 @@ interface Glide {
 const copyOf = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z })
 const mix = (a: Vec3, b: Vec3, k: number): Vec3 => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k })
 
+interface PathGlide {
+  positions: Vec3[]
+  targets: Vec3[]
+  at: number
+  span: number
+}
+
+function sampleVec(points: readonly Vec3[], t: number): Vec3 {
+  const first = points[0] ?? { x: 0, y: 0, z: 0 }
+  if (points.length <= 1) return first
+  const u = Math.min(1, Math.max(0, t))
+  const f = u * (points.length - 1)
+  const i = Math.min(points.length - 2, Math.floor(f))
+  return mix(points[i] ?? first, points[i + 1] ?? first, f - i)
+}
+
+/** Amber dots on the floor, the visible path ⌘J flies. A cut (span 0) draws none. */
+function FlightDots(): JSX.Element | null {
+  const flight = useSyncExternalStore(subscribeFlight, currentFlight, currentFlight)
+  const geom = useMemo(() => {
+    if (flight === null || flight.span === 0 || flight.arc.length < 2) return null
+    const dots = flightDots(flight.arc, 0.45)
+    if (dots.length < 2) return null
+    const g = new THREE.BufferGeometry()
+    const arr = new Float32Array(dots.length * 3)
+    dots.forEach((p, i) => { arr[i * 3] = p.x; arr[i * 3 + 1] = 0.08; arr[i * 3 + 2] = p.z })
+    g.setAttribute('position', new THREE.BufferAttribute(arr, 3))
+    return g
+  }, [flight])
+  useEffect(() => () => { geom?.dispose() }, [geom])
+  if (geom === null) return null
+  return (
+    <points geometry={geom}>
+      <pointsMaterial color={NIGHT.amber} size={0.16} sizeAttenuation toneMapped={false} />
+    </points>
+  )
+}
+
 /**
  * The opening and closing shot: the camera dollies between a high, wide pose
  * and the resting orbit as the transition runs. See (5) in the header. The same
@@ -241,6 +286,8 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
   const camera = useThree((s) => s.camera)
   const rest = useRef<Vec3>(start)
   const gliding = useRef<Glide | null>(null)
+  const path = useRef<PathGlide | null>(null)
+  const seenFlight = useRef(0)
   // Read at the click, not at mount: the room has grown since the view opened.
   const arc = useRef(arcRadius)
   arc.current = arcRadius
@@ -251,6 +298,9 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
     const begin = (to: Vec3, toTarget: Vec3, span: number): void => {
       const c = controls.current
       if (!c) return
+      // A fit or a zoom owns the camera. The attention path stops, or the two glides write the same frame.
+      path.current = null
+      clearFlight()
       gliding.current = { from: copyOf(camera.position), to, fromTarget: copyOf(c.target), toTarget, at: performance.now(), span: snap.current ? 0 : span }
     }
     api.current = {
@@ -331,7 +381,46 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
     }
     const atRest = s.settled && s.target === 1
     // A glide belongs to the resting view; a move to or from the canvas ends it.
+    // world.rig.1 pins the first line as one statement: the hand-back snaps the
+    // camera whenever the controls are off, so a glide that survived the move
+    // would be undone on its first resting frame. The path dies with it.
     if (!atRest) gliding.current = null
+    if (!atRest) path.current = null
+    const flightNow = currentFlight()
+    if (atRest && flightNow && !flightNow.held && flightNow.generation !== seenFlight.current && c) {
+      seenFlight.current = flightNow.generation
+      const shiftX = shift?.[0] ?? 0
+      const shiftZ = shift?.[2] ?? 0
+      const targets = flightNow.arc.map((p) => ({ x: p.x + shiftX, y: 0.9, z: p.z + shiftZ }))
+      const dx = camera.position.x - c.target.x
+      const dy = camera.position.y - c.target.y
+      const dz = camera.position.z - c.target.z
+      path.current = {
+        positions: targets.map((t) => ({ x: t.x + dx, y: t.y + dy, z: t.z + dz })),
+        targets,
+        at: now,
+        span: flightNow.span
+      }
+      gliding.current = null
+    }
+    const flying = path.current
+    if (atRest && flying && c) {
+      const k = glide(now - flying.at, flying.span)
+      // Orbit stays off while the camera travels (header 5). A span of 0 is the cut.
+      c.enabled = false
+      const at = sampleVec(flying.positions, k)
+      const look = sampleVec(flying.targets, k)
+      camera.position.set(at.x, at.y, at.z)
+      c.target.set(look.x, look.y, look.z)
+      camera.lookAt(look.x, look.y, look.z)
+      if (k >= 1) {
+        path.current = null
+        clearFlight()
+        c.enabled = true
+        c.update()
+      }
+      return
+    }
     const g = gliding.current
     if (atRest && g && c) {
       const k = glide(now - g.at, g.span)
@@ -756,6 +845,70 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   }, [bloom])
   const half = slabHalf(framingArc ?? plan.arcRadius)
   const limit = Math.max(half - 2, shift === null ? 0 : Math.hypot(placement.frame?.center.x ?? 0, placement.frame?.center.z ?? 0) + 4)
+  const tasksRef = useRef(ctx.tasks)
+  tasksRef.current = ctx.tasks
+  const reducedRef = useRef(reduced)
+  reducedRef.current = reduced
+
+  // ⌘J / ⌘⇧J step the published queue, then the rig flies. The listener is the
+  // one landing, so the strip's Next and the key cannot each pick a different id.
+  useEffect(() => {
+    const floorOf = (id: string): FloorPoint | null => {
+      const station = stationsRef.current.get(id)
+      if (station === undefined) return null
+      const slot = goalOf(getAgent(id)?.status ?? 'idle', station.conductor) === 'table' ? station.seat : (station.home ?? station.seat)
+      return { x: slot.x, z: slot.z }
+    }
+    return subscribeWalk((step) => {
+      const item = flightQueue().find((row) => row.panelId === step.id)
+      engageFocus(step.id)
+      if (item !== undefined && item.kind === 'shell-prompt') {
+        const task = tasksRef.current.find((row) => row.members.includes(step.id))
+        showShell(shellFromItem(item, task?.title ?? ''))
+      } else {
+        showShell(null)
+      }
+      const to = floorOf(step.id)
+      const from = step.from === null ? null : floorOf(step.from)
+      if (from !== null && to !== null) beginFlight(from, to, reducedRef.current)
+      else camera.current?.focus(step.id)
+    })
+  }, [])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!isWorldOn() || event.repeat) return
+      const el = event.target instanceof HTMLElement ? event.target : null
+      if (el?.closest(FIELD_SELECTOR) != null) return
+      const hit = matchShortcut({
+        metaKey: event.metaKey || event.ctrlKey,
+        ctrlKey: false,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        code: event.code
+      })
+      if (hit?.id !== 'jump' && hit?.id !== 'jump-prev') return
+      event.preventDefault()
+      walkAttention(hit.id === 'jump-prev' ? -1 : 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    const door = {
+      pose(next: { items: readonly FlightItem[]; cursor: string | null; shell: ShellCard | null; from?: FloorPoint; to?: FloorPoint }): void {
+        publishFlightQueue(next.items)
+        setAttentionCursor(next.cursor)
+        showShell(next.shell)
+        if (next.shell !== null) engageFocus(next.shell.agentId)
+        if (next.from !== undefined && next.to !== undefined) holdFlight(next.from, next.to)
+      },
+      approve(event: ApprovedEvent): void { emitApproved(event) }
+    }
+    Object.defineProperty(window, '__rdW5', { configurable: true, value: door })
+    return () => { Reflect.deleteProperty(window, '__rdW5') }
+  }, [])
 
   return (
     <div className="world-view" data-world-view data-quality={quality} data-world-focus={focused !== null ? '' : undefined}>
@@ -778,6 +931,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
           {stations.map((station) => (
             <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
           ))}
+          <FlightDots />
         </group>
         <Controls controls={controls} limit={limit} maxDistance={Math.max(80, half * 6)} />
         <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} stations={stationsRef} terraces={terraces} shift={shift} />
@@ -789,6 +943,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
       </Canvas>
       <div className="world-view__cards" ref={cards} />
       <WorldChrome camera={camera} />
+      <WorldQueueStrip />
       {/* rd:W1 mount. WorldLens is on the canvas. The rig reads motionOf, popDelaysFromTarget, setWorldCameraTarget and paintPlanFloor. */}
       <div data-rd-mount="W1" hidden />
       {/* rd:W3 mount. useWorldCamera, the camera panel, the away card and peers. Props kept stable: camera, tier, following, onFollow. */}

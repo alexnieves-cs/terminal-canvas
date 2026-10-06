@@ -1,9 +1,13 @@
-import { useState, type FormEvent, type JSX } from 'react'
+import { useEffect, useState, useSyncExternalStore, type FormEvent, type JSX } from 'react'
 import { shortcutById } from '@shared/shortcuts'
 import { useAgent, useReplayAt } from './agent-world-store'
 import { factParts } from './world-facts'
 import { askChip } from './world-structure'
-import { useWorldActions, useWorldContext } from './world-context-store'
+import { useWorldActions, useWorldContext, type WorldActions } from './world-context-store'
+import {
+  agentShort, attentionSnapshot, emitApproved, fileOf, SHELL_ROOM_SENTENCE, shellFromItem,
+  showShell, snoozePanel, subscribeFlight, walkAttention, type ShellCard
+} from './world-flight'
 import {
   diffPreview, focusPrimary, focusQuestion, focusSteps, replyControl, replyRoute,
   useFocusPreview, useFocusedAgent, type ReplyRoute
@@ -24,6 +28,63 @@ function Kbd({ chord }: { chord: string | undefined }): JSX.Element | null {
   return <kbd>{chord}</kbd>
 }
 
+/**
+ * A shell prompt (M453). The same sheet, and not a reply: the command runs
+ * in its terminal. Next is the queue walk. Snooze hides this id for ten minutes.
+ */
+function ShellConsoleCard({ card, actions, past }: { card: ShellCard; actions: WorldActions | null; past: boolean }): JSX.Element {
+  const stepInChord = shortcutById('step-in')?.chord
+  const openable = actions !== null && actions.canOpen(card.agentId) && !past
+  return (
+    <aside className="world-focus" role="dialog" aria-modal="false" aria-label="Shell console" data-world-focus-sheet data-world-shell-card>
+      <header className="world-focus__shell-head">
+        <span className="world-focus__mark" data-tone="needs-you" aria-hidden="true" />
+        <h2 className="world-focus__question">{card.title}</h2>
+        {card.place !== '' ? <span className="world-focus__shell-place">{card.place}</span> : null}
+        <span className="world-focus__shell-kind">Shell console</span>
+      </header>
+      {card.prompt !== '' ? <p className="world-focus__shell-prompt">{card.prompt}</p> : null}
+      {card.command !== '' ? (
+        <pre className="world-focus__shell-command"><code>{card.command}</code></pre>
+      ) : null}
+      <p className="world-focus__shell-note">{SHELL_ROOM_SENTENCE}</p>
+      <div className="world-focus__foot">
+        <button
+          type="button"
+          className="world-focus__act"
+          data-primary=""
+          data-world-focus-open
+          disabled={!openable}
+          onClick={() => actions?.open(card.agentId)}
+        >
+          Open in Canvas <Kbd chord={stepInChord} />
+        </button>
+        <button
+          type="button"
+          className="world-focus__act"
+          data-world-shell-snooze
+          onClick={() => snoozePanel(card.agentId, Date.now())}
+        >
+          Snooze 10m
+        </button>
+        <button
+          type="button"
+          className="world-focus__act"
+          data-world-shell-next
+          onClick={() => {
+            const step = walkAttention(1)
+            if (step === null) return
+            const item = attentionSnapshot().items.find((row) => row.panelId === step.id)
+            if (item?.kind === 'shell-prompt') showShell(shellFromItem(item, card.place))
+            else showShell(null)
+          }}
+        >
+          Next</button>
+      </div>
+    </aside>
+  )
+}
+
 export function WorldFocusSheet(): JSX.Element | null {
   const id = useFocusedAgent()
   const preview = useFocusPreview()
@@ -35,8 +96,14 @@ export function WorldFocusSheet(): JSX.Element | null {
   const [full, setFull] = useState(false)
   const [sending, setSending] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  const snap = useSyncExternalStore(subscribeFlight, attentionSnapshot, attentionSnapshot)
+  useEffect(() => {
+    if (id !== null && snap.fullDiff === id) setFull(true)
+  }, [id, snap.fullDiff])
 
   if (id === null) return null
+  const shell = snap.shell !== null && snap.shell.agentId === id ? snap.shell : null
+  if (shell !== null) return <ShellConsoleCard card={shell} actions={actions} past={past} />
   const task = ctx.tasks.find((item) => item.members.includes(id))
   const live = past ? undefined : ctx.approvals.find((item) => item.agentId === id)
   const shown = preview !== null && preview.agentId === id ? preview : null
@@ -55,7 +122,15 @@ export function WorldFocusSheet(): JSX.Element | null {
 
   const answer = (allow: boolean): void => {
     if (asked.requestId === null || actions === null || past) return
+    // D9. The approval goes out now. The toast cannot un-tell an agent that already received y.
     actions.answer(id, asked.requestId, allow)
+    if (!allow) return
+    emitApproved({
+      agent: agentShort(record?.name ?? ''),
+      file: fileOf(asked.question, asked.diff),
+      panelId: id,
+      discard: null
+    })
   }
   const submit = (event: FormEvent): void => {
     event.preventDefault()
