@@ -345,7 +345,7 @@ from: centerViewNow === 'focus'
 - File: none in this repo. The shot is `scripts/shot-scenes/rd-w1.cjs`, run as `xvfb-run -a node_modules/electron/dist/electron --no-sandbox scripts/shot.cjs`.
 - Why the contract or the owner cannot absorb it: Electron on this host logs `ContextResult::kFatalFailure: WebGL2 blocklisted` (and WebGL1). `--disable-gpu` paints the same empty field. The scene's DOM checks passed (the cancel chip is shown, the canvas stays mounted, reduced motion does not write `rotateX`). The room itself is not in the PNG, so the capture cannot be judged against mockup 10. W1 does not own the Electron binary path in `package.json`.
 - Smallest change: re-shot `rd-world-transition` and `rd-world-transition-rm` on a machine where WebGL is allowed. Do not set `UPDATE_GOLDENS` until that capture has been looked at. The terraces in the mockup are still R-043.
-- Status: open
+- Status: open. Re-shot on this host with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only (`package.json` unchanged). The captures are the dark-theme canvas, not the tilted plan. Critic: does-not-read. `UPDATE_GOLDENS` was not set.
 
 ### R-050 · The 2D minimap needs the world's camera wedge
 - Lane: W2
@@ -373,7 +373,7 @@ from: centerViewNow === 'focus'
 - File: `scripts/shot.cjs` (the capture) and the WorldView renderer (`alpha: false` is already set)
 - Why the contract or the owner cannot absorb it: `rd-world-room` mounts. The DOM has five `[data-task-region]` boxes, eleven panels, a sized `.world-view canvas`, and the shared pill. The context is not lost and there is no `.world-route__note`. `capturePage` still paints the shell ground (`--s-0`, centre about 227, 231, 238). A CSS outline on that canvas is captured; the bitmap is not. `drawImage` of the WebGL canvas read back `[0, 0, 0, 0]` with `preserveDrawingBuffer` on. W0's night shot on this host was dark, so the capture can present a GL frame. This lane's timebox on the shot is spent.
 - Smallest change: find why swiftshader under xvfb presents an empty buffer for this scene (clear colour, bloom, or the canvas host stacked over `.shell__world`) and make `out/shots/rd-world-room.png` show the night room. Do not set `UPDATE_GOLDENS`.
-- Status: open
+- Status: open. Re-shot after the mount with the same electron flags, not `--use-gl=angle`. Centre still `(227, 231, 238)`, dark pixels 0%. The overview capture is the same field. Critic: does-not-read. Timebox spent. `UPDATE_GOLDENS` was not set.
 
 ### R-060 · The 2D minimap draws the world camera wedge
 - Lane: W3

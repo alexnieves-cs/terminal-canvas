@@ -52,8 +52,9 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | P1 F1 | main | — | tokens and the one state colour. Merges before F2 and F3. |
 | P1 F3 | main (PR 6) | — | shell frame, after F1 and F2. |
 | P3a W0 | redesign/main | — | night studio, `5353e47f` |
-| P3b W2 | redesign/main | `rd-w3b` after W1 and W3 | the room, `695a71da`. Mounts `rd:W1` and `rd:W3` stay marked until those lanes land. |
-| P3b W1 | redesign/main | `rd-w3b` after W3 | the transition, after W2. R-041, R-042 and R-043 land with the mount. |
+| P3b W2 | redesign/main | `rd-w3b` | the room, `695a71da`. The mount marks stay. W1 and W3 are wired beside them. |
+| P3b W1 | redesign/main | `rd-w3b` | the transition, after W2, `aa0b55a5`. The mount is `2a24f561`. R-041, R-042 and R-043 landed with it. |
+| P3b W3 | redesign/main | `rd-w3b` | the overview, after W1, `613d72b9`. The camera apply is `252fc68c`. |
 
 ## M438 · F3 shell frame
 
@@ -834,6 +835,25 @@ Linux gates on the merge, before W1: typecheck pass; `verify:world` 251/251; `ve
 
 W1 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w1-transition`. W3 does the same after W1.
 
+### Critic · rd-world-room after the wave
+
+Re-shot on this host with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only. Capture centre `(227, 231, 238)`, dark pixels 0%. `out/shots/rd-world-room.png`, composite `out/shots/rd-world-room.vs-reference.png`.
+
+VERDICT does-not-read
+
+The last-golden half is a blank field labeled NO IMAGE. The capture beside it is a light flat page, and it does not read as the dark room above.
+
+1. **Silhouette.** The reference is a night room: a receding grid floor, raised terraces, and standing robot figures. The capture, lower right, is an orthographic page of white rounded rectangles, a tall list column, and a left icon rail. No floor, no terraces, no figures.
+2. **Material.** The reference is near-black ink with glossy white figures on dark slabs. The capture is a high-key white and pale-gray field, white cards, and a light list.
+3. **Glow.** The reference has tall amber beams and colored floor rings under the figures. The capture has no beams and no rings. The only tint is a pale mint card at the upper left of the canvas.
+4. **Connectors.** The reference has thin arcs between figures and small tiles on the terraces. The capture’s cards sit in two loose bands with no arcs between them.
+5. **Labels.** The reference puts short floating pills over the figures and terraces. The capture puts names in a left-hand list and on the white cards, each card with a gray status line.
+6. **Composition.** The reference is a high, wide view into the room, with the small map at the room’s lower right and the attention pill along the bottom. The capture is a 2D workbench: list on the left, cards to the right, map at the top right.
+7. **Chrome.** The reference keeps a thin top bar, a Work / Plan / Map control, the bottom pill, and a camera wedge. The capture shows the full 2D shell: icon rail, panels column, search field, a 2D | World control with 2D active, and a zoom strip along the bottom.
+8. **STATE COLOUR.** The reference uses cyan, amber (the only tall glow), green, and red on rings, eyes, and beams. The capture’s cards are white with gray status lines. Nothing reads as working cyan, needs-you amber, done green, or failed red.
+
+No disagreement. R-053 stays open. The flags that presented a room on the previous host did not present one here.
+
 ## M449 · W1 Canvas → World transition
 
 Branch `rd/w1-transition` from `redesign/main` (rd-w0 plus the R-040 render-loop fix). Wave 3b. Merges after W2. `WorldView.tsx` is not edited.
@@ -917,6 +937,36 @@ Merged to `redesign/main` as `aa0b55a5` (`--no-ff`) after W2. The mount is `2a24
 
 The lead then mounted the curves in `WorldView`: `popDelaysFromTarget` from the camera target, `motionOf().dolly` into `dollyAt`, `motionOf().terrace` as the scale of the office and the terraces, `setWorldCameraTarget` from the orbit each frame, and `paintPlanFloor` on a ground under the terraces. `WorldLens` stays the canvas control. The top-bar World view button is gone (R-042). `world.stage.4` names the 120ms cross-fade (R-041). R-044 stays open until the swiftshader shot. W3 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w3-overview`.
 
+### Critic · after the mount
+
+Same host, electron flags `--ignore-gpu-blocklist --enable-unsafe-swiftshader` only on that command. `rd-world-transition` centre `(16, 19, 26)`, 92% of samples under a sum of 90. `rd-world-transition-rm` centre `(193, 193, 194)`, mean about `(21, 24, 28)`. Neither capture is the tilted plan. Paths: `out/shots/rd-world-transition.png`, `out/shots/rd-world-transition-rm.png`, and the `.vs-reference.png` beside each.
+
+`rd-world-transition`. VERDICT does-not-read
+
+The lower-left golden slot is a blank field labeled NO IMAGE. The lower-right capture is a flat 2D canvas with a panels column and dashed boxes. It does not show a tilted plan, terraces, or robots.
+
+1. **Silhouette** — Upper reference is a perspective floor of raised cards with small robot figures. Lower-right capture is orthogonal rectangles and a left column. No tilted floor, rising terraces, or robots anywhere in the lower half.
+2. **Material** — Reference cards are dark glass with lit rims on a receding dot grid. Capture boxes are flat dashed outlines on a flat dark field, with one solid teal card in the left column.
+3. **Glow** — Reference cards carry cyan, amber, and red blooms. Capture has a solid teal panel and a small cyan map mark at the upper right of its window. No bloom, no floor pool, no amber beacon.
+4. **Connectors** — Thin lines and dots link the dashed boxes across the capture’s right canvas. The reference’s readable links are the white callout pills around the tilted cards, not that flat graph.
+5. **Labels** — Reference labels sit on the floating cards, the top transition chips, and the bottom filmstrip. Capture labels sit in the left tree and inside the flat boxes. No filmstrip captions.
+6. **Composition** — The reference fills its frame with the tilting plan. The capture splits into a panels column on the left and a flat diagram on the right, with the map at that window’s upper right.
+7. **Chrome** — Both show the top nav and a 2D | World control. The reference also has a left icon rail, a cancel / entering-world chip, and a bottom filmstrip of the move. The capture adds the panels column, a zoom footer, and a minimap, and has no filmstrip and no cancel chip.
+8. **STATE COLOUR** — Reference card rims read cyan, amber, red, and green. Capture boxes read slate, the left card and map mark read cyan/teal, and amber, green, and red state are not visible on the canvas. Amber is not the only glow in the reference art.
+
+`rd-world-transition-rm`. VERDICT: does-not-read
+
+1. Silhouette. Center of the capture: one dark trapezoid with a tight knot of tiny pills. The reference’s stage is two rows of large glass cards, each with a white robot. No robot bodies, card slabs, or terrace blocks are in the capture.
+2. Material. That same stage is a flat near-black plane. The reference cards are frosted glass on a visible floor grid. The capture’s only solid panels are the left task column (teal header, dark rows) and a small dark card beside the pill cluster.
+3. Glow. Reference card edges bloom cyan, amber, and green, with amber the loud pool. The capture plane has no bloom. The strongest color is the teal header fill on the left.
+4. Connectors. Reference callouts have leader lines onto the cards. The capture’s pill cluster has no leaders and no arcs.
+5. Labels. Reference labels sit as large floating notes over the room and as titles on the glass. Capture labels are the left-hand row list plus micro white pills on the plane. They do not read as room callouts.
+6. Composition. The reference room fills the window, with a three-frame filmstrip along the bottom. The capture gives the left third to the task list; the plane occupies the right and is mostly empty dark, and the focal cluster is small. The lower capture is not a blank field. It is that list plus the empty tilted plane. No robots or terraces are visible there.
+7. Chrome. The reference top bar has a center status chip, and the filmstrip sits on the moving plan. The capture top bar is the ordinary view switch, a 2D | World control with World filled, and search, plus a zoom control at the bottom right and a small map box at the top right. No center chip and no filmstrip.
+8. STATE COLOUR. Reference rims use cyan, amber, and green, and amber is the glow. The capture does not show those as eyes, rings, screens, or beacons. A few specks in the cluster are not a state read, and the teal header competes with them. No red failed figure and no slate idle body.
+
+No disagreement. R-044 stays open. The dark field is the dark theme the scene sets; it is not the night room.
+
 ## M451 · W3 overview, camera and time
 
 Branch `rd/w3-overview` from `redesign/main` at `38644eed` (rd-w0 plus the R-040 render-loop fix). Lane W3. One milestone. `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
@@ -985,3 +1035,32 @@ State colour: the scrubber ticks are green, amber, red and blue from `--state-*`
 Rules review: no blocker. Face stays on `--font-ui` for the camera chords. Past-room verbs stay in the DOM, coloured with `--fg-3`, not `display: none` and not a fractional opacity. Tones come from the palette. CSS is inside the W3 markers. Scoped ids. D1–D8 are not re-decided.
 
 World guard: `world-camera.ts` imports no three. No new three door. `WorldStage` still has its one `/* @__PURE__ */ lazy()` for the view (the flat room's lazy is the one already there). No drei `Environment`. Reduced motion cuts the tour (`tourStep`) and the rig's glide span is already 0. `verify:world` 251/251 and the build's entry chunk does not statically import three. `WorldMinimap` is the plan map; `MinimapOverlay` is untouched (R-060).
+
+### Merge
+
+Merged to `redesign/main` as `613d72b9` (`--no-ff`) after W1. `rd/w3-overview` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W3`.
+
+The lead then landed the mount in `252fc68c`. `CameraApi.apply` glides to the pose's target, distance and pitch and keeps the camera's azimuth. The floor target is shifted back onto the scene. `VIEW.minPolar` is 0.2 so Map's 78° is inside the orbit limits. `WorldCameraPanel` sits beside the `rd:W3 mount` mark and is no longer a child of `WorldTime`. The flat room's `apply` does nothing. The rig publishes `liveView` each frame: the 2D minimap draws that footprint while the world is up (R-050, R-060), and leaving restores that viewport when the move back settles (R-064). `setWorldOn(false)` does not clear it. The shot leak check matches whole tokens, and it leaves the camera row out of the page scan (R-065).
+
+Left open: R-061 (`shortcuts.ts` is frozen), R-063 (past-room verbs on the card; `world.replay.6` still wants them omitted), R-051 (terrace drag through `moveRegion`), R-052 (Follow on `CanvasHud`). R-044 and R-053 stay open: the swiftshader flags were on the electron command and the room still did not present.
+
+Linux gates after the mount: typecheck pass; `verify:world` 251/251; `verify:rd-w1` 15/15; `verify:rd-w2` 4/4; `verify:rd-w3` 11/11; `npm run build` exit 0 (`WorldView` is its own chunk). Plain wave 64/67 in 31.4s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 94, goldens 79), `verify:first-run` `revamp.create.1`, `verify:review` `merge.1` (`{kind:'failed', detail:''}`). Alone, `verify:review` is 163/163. `UPDATE_GOLDENS` was not set.
+
+World guard on the mount: `apply` is inside `WorldView`, which is already a three door. `world-camera.ts` and `world-toggle.ts` import no three. `MinimapOverlay` imports `world-toggle` only. No `<Environment>`. Reduced motion is still the 120ms cross-fade. The entry chunk does not construct a `WebGLRenderer`.
+
+### Critic · rd-world-overview
+
+Shot under xvfb with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only. Capture centre `(227, 231, 238)`, dark pixels 0%. `out/shots/rd-world-overview.png`, composite `out/shots/rd-world-overview.vs-reference.png`.
+
+VERDICT does-not-read
+
+1. **Silhouette** — The current capture’s main field (lower right) is a near-blank pale dotted rectangle with a few dark specks. The reference (upper window, center) is a near top-down floor of raised rectangular terraces with standing figures. No floor plan, terraces, or figures are in the lower half.
+2. **Material** — The lower window is a light gray/white shell. The reference is a dark night studio: ink floor, dark glass platforms.
+3. **Glow** — The reference floor has cyan rings and an amber bloom on agents, plus a cyan control on the lower-right card. The capture has no bloom, no floor pools, and no beacons. The pale mint wash on the top card of the left list is flat.
+4. **Connectors** — The lower canvas has no traces between objects. The reference floor shows the terraces as a linked layout; nothing like that is in the lower half.
+5. **Labels** — Reference labels sit on the terraces, on the figures, in the left camera list, on the bottom scrubber, and on the lower-right card. The capture’s only labels are the left-hand list; the pale field has none.
+6. **Composition** — The reference fills the window with the room, a camera list on the left, a scrubber along the bottom, and a card at the lower right. The capture splits into a tall left list and an empty right field, so the focus is the list.
+7. **Chrome** — The capture’s title bar, list column, and bottom zoom cluster are light. Missing from the lower half: the dark title bar, the 2D | World lens, the camera panel, the replay scrubber, and the away card. The lower-left golden slot is an empty placeholder, not a scene.
+8. **STATE COLOUR** — The reference floor shows cyan, amber (the glow), and green on the rings and scrubber ticks. The capture’s specks are dark gray. No cyan working, amber needs-you glow, green done, red failed, or slate idle appears on the canvas.
+
+No disagreement. The centre sample is the shell ground. R-053, same host as the room shot.
