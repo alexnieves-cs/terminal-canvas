@@ -296,3 +296,132 @@ export function firstWorkRepoAnswer(status: RepoStatus, folder: string, top?: st
   }
   return { kind: 'not-a-repository', reason: `${shortPath(trimSeparators(folder))} is not a git repository — a task works on its own branch, so it needs one` }
 }
+
+/**
+ * M440. The first-run card. Four steps, one primary, and no spawn: a toggle
+ * records a preset, and the last step only names the existing sheet. Discovery
+ * is a probe result the caller measured. A binary that timed out is not
+ * "not installed" — that sentence would send a person to install a tool that
+ * may already be there.
+ */
+export const ONBOARDING_RAIL = [
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'agents', label: 'Agents' },
+  { id: 'sessions', label: 'Sessions' },
+  { id: 'task', label: 'First task' }
+] as const
+
+export type OnboardingStepId = typeof ONBOARDING_RAIL[number]['id']
+
+export const AGENTS_STEP_TITLE = 'Which agents live on your canvas?'
+export const AGENTS_STEP_LEAD = 'These were found on your PATH. Turn on the ones you want as presets.'
+export const ONBOARDING_FOOTER = 'You can change all of this later in Settings. Nothing runs until you start it.'
+export const STATE_PREVIEW_CAPTION = 'One colour per state, everywhere. The same words a panel uses.'
+export const CUSTOM_COMMAND = { label: 'Add a custom command…', opens: 'preset-editor' } as const
+
+/** Copied onto the clipboard. Nothing in this module runs it. */
+export const INSTALL_COMMANDS: Readonly<Record<string, string>> = {
+  claude: 'npm install -g @anthropic-ai/claude-code',
+  codex: 'npm install -g @openai/codex',
+  gemini: 'npm install -g @google/gemini-cli'
+}
+
+export const ONBOARDING_AGENTS = [
+  { id: 'claude', label: 'Claude Code' },
+  { id: 'codex', label: 'Codex CLI' },
+  { id: 'gemini', label: 'Gemini CLI' }
+] as const
+
+export const PLAIN_SHELL = { id: 'shell', label: 'Plain shell', locked: true as const }
+
+export function installCommand(id: string): string | null {
+  return Object.prototype.hasOwnProperty.call(INSTALL_COMMANDS, id) ? INSTALL_COMMANDS[id] : null
+}
+
+export function readyLabel(ready: number): string {
+  if (!(ready > 0)) return 'Turn one on to continue'
+  if (ready === 1) return '1 agent ready'
+  return `${ready} agents ready`
+}
+
+export function stepWords(step: OnboardingStepId): string {
+  const index = ONBOARDING_RAIL.findIndex((row) => row.id === step)
+  const at = index < 0 ? 0 : index + 1
+  return `Step ${at} of ${ONBOARDING_RAIL.length}`
+}
+
+export interface AgentProbe {
+  id: string
+  path: string | null
+  version?: string | null
+  timedOut?: boolean
+}
+
+export interface CanvasAgentRow {
+  id: string
+  label: string
+  /** `unknown` is a probe that did not answer. It is not `missing`. */
+  phase: 'found' | 'missing' | 'unknown'
+  status: string
+  path?: string
+  version?: string
+  enabled: boolean
+  locked: boolean
+  install?: string
+}
+
+export interface AgentStepView {
+  rows: CanvasAgentRow[]
+  shell: CanvasAgentRow
+  ready: number
+  label: string
+  canContinue: boolean
+}
+
+export function agentRows(probes: readonly AgentProbe[], enabled: readonly string[]): AgentStepView {
+  const on = new Set(enabled)
+  const rows = ONBOARDING_AGENTS.map((agent): CanvasAgentRow => {
+    const probe = probes.find((row) => row.id === agent.id)
+    const timedOut = probe?.timedOut === true
+    const path = !timedOut && probe?.path !== undefined && probe.path !== null && probe.path !== '' ? probe.path : undefined
+    const phase = timedOut || probe === undefined ? 'unknown' : path === undefined ? 'missing' : 'found'
+    const version = phase === 'found' && probe?.version !== undefined && probe.version !== null && probe.version.trim() !== '' ? probe.version.trim() : undefined
+    const install = installCommand(agent.id) ?? undefined
+    return {
+      id: agent.id,
+      label: agent.label,
+      phase,
+      status: phase === 'found' ? 'found' : phase === 'missing' ? 'not installed' : 'discovery did not answer',
+      ...(path === undefined ? {} : { path }),
+      ...(version === undefined ? {} : { version }),
+      enabled: phase === 'found' && on.has(agent.id),
+      locked: false,
+      ...(install === undefined ? {} : { install })
+    }
+  })
+  const ready = rows.filter((row) => row.phase === 'found' && row.enabled).length
+  return {
+    rows,
+    shell: { id: PLAIN_SHELL.id, label: PLAIN_SHELL.label, phase: 'found', status: 'always on', enabled: true, locked: true },
+    ready,
+    label: readyLabel(ready),
+    canContinue: ready > 0
+  }
+}
+
+/**
+ * Step 3. Persistence is a sentence about tmux, and only when the probe
+ * answered. An unanswered probe does not claim tmux is installed or absent.
+ */
+export function sessionsPersistence(tmux: { path: string | null; timedOut?: boolean } | undefined): { known: boolean; persist: boolean; sentence: string } {
+  if (tmux === undefined || tmux.timedOut === true) {
+    return { known: false, persist: false, sentence: 'Whether sessions survive quit is unknown until tmux answers.' }
+  }
+  if (tmux.path !== null && tmux.path !== '') {
+    return { known: true, persist: true, sentence: 'Sessions survive quit. tmux is installed, so closing the app leaves them running.' }
+  }
+  return { known: true, persist: false, sentence: 'Sessions end when you quit, until tmux is installed.' }
+}
+
+/** Step 4 names the existing sheet. It does not spawn. */
+export const FIRST_TASK_HANDOFF = { sheet: 'start-work', spawns: false } as const

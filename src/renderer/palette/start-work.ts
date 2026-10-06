@@ -41,7 +41,7 @@ import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { teammateRefusal, workItemRefusal, type WorkItemState } from '@shared/work-items'
 import { SWARM_PRESETS, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 import { BACKENDS, BACKEND_IDS, DEFAULT_BACKEND, type AgentBackend } from '@shared/agent-backends'
-import { FIRST_LAUNCH_ENGINES, folderTeammatePlan, isFirstLaunchBackend, placeContains } from '@shared/onboarding'
+import { FIRST_LAUNCH_ENGINES, DESCRIBE_FIRST, folderTeammatePlan, isFirstLaunchBackend, placeContains } from '@shared/onboarding'
 import type { PermissionMode } from '@shared/cost'
 import { backendFit, briefIsReadOnly, briefWantsImages, taskRequirements, type BackendFit, type TaskRequirement } from '@shared/backend-fit'
 
@@ -309,4 +309,10 @@ export function startWorkBackendRows(choice: StartWorkChoice, ctx: StartWorkCont
     const fit = startWorkBackendFit({ ...choice, backend }, ctx, text)
     return { backend, label: BACKENDS[backend].label, fit }
   })
+}
+
+/** M441. The empty canvas's one filled verb. An empty sentence stays disabled and says what is missing. */
+export function blankTaskVerb(sentence: string): { label: 'Start task'; enabled: boolean; reason?: string } {
+  if (sentence.trim() === '') return { label: 'Start task', enabled: false, reason: DESCRIBE_FIRST }
+  return { label: 'Start task', enabled: true }
 }

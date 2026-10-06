@@ -21,3 +21,8 @@ export function noteBootIssue(sentence: string): void {
 export function bootIssues(): readonly string[] {
   return issues
 }
+
+/** M439. A restore step that failed. The splash stops; this sentence is what the reopen notice already reads. The 09 surface is L-F's. */
+export function noteRestoreFailure(sentence: string): void {
+  noteBootIssue(sentence)
+}

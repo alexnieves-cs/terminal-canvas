@@ -271,3 +271,110 @@ The first plain wave went red on checks this lane had caused. `verify:styles` 5 
 Electron. `npm run verify:panels:core` through `scripts/redesign/with-electron-lock.sh` exits 127: `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron` is not on this machine. `xvfb-run` is `/usr/bin/xvfb-run`, and `node_modules/electron/dist/electron` exists. Under xvfb that binary starts and then dies: `Cannot find module './prebuilds/linux-x64//pty.node'`. The same death stops `scripts/shot.cjs` (`TC_FIXTURE=rd-steward`, `TC_SHOT_ONLY=rd-workspace`). dbus logs `Failed to connect to the bus`. No PNG was written, no `out/shots/*.vs-reference.png`, no golden. `scripts/panels-entry.cjs` also warns `Duplicate key "credentialDir"`; that warning is not this lane's.
 
 G2's mockup critic and rules review were not run. There is no composite to hand them. `npm run build` was not run, because shots cannot paint. `verify:panels`, `verify:canvas`, `verify:xterm`, `verify:window`, `verify:visual` and `verify:packaged` did not run.
+
+## L-A · plan (M439–M441)
+
+Branch `rd/l-a-launch`. No separate approval step: the plan is this section, checked against the kickoff boxes, then built in order. `splashMode` stays the APEX field (`splash.1`). The restore card is a second surface. `Launcher` markup stays so `onboarding.markup.*` keeps reading the same buttons.
+
+PLAN CHECK:
+
+- 01 is the only main-process change. `boot:progress` is a send, so the key is `IPC_EVENTS.BOOT_PROGRESS`, not an invoke. An invoke would need `ipcMain.handle` in `src/main/ipc.ts` and a new `EXPECTED_CHANNELS`, and both files are outside this lane. `FILE_CHANGED`'s comment is the precedent: verify:ipc walks `IPC` only. The sender is `publishBootProgress` in the new `boot-progress.ts`. `CLAUDE.md`'s diagram gains the name in the same commit. README's diagram is R-018.
+- `src/renderer/onboarding/` is new. Its tree does not spawn, exec, or call a pty.
+- MinimapOverlay and CanvasHud are not edited. The minimap sentence is `emptyState('minimap')`. L-B reads it (R-022).
+
+| Milestone | Pure model first | Checks | UI | Shot |
+|---|---|---|---|---|
+| M439 | `restoreLines`, `splashShouldLeave`, `ghostLayout` in `splash.ts`; `skipRemaining` and `publishBootProgress` in `boot-progress.ts` | `rd-restore.lines.1`, `rd-restore.skip.1`, `rd-restore.leave.1`, `rd-restore.channel.1` | `RestoreSplash` in `StartupSplash.tsx`, CSS in `rd:L-A` | `rd-splash` run, frozen at 3 of 5 |
+| M440 | agent rows, ready label, install copy, preset default, handoff in `onboarding.ts` / `env-report.ts` / `presets.ts` | `rd-onboard.rows.1`, `rd-onboard.ready.1`, `rd-onboard.copy.1`, `rd-onboard.preset.1`, `rd-onboard.handoff.1` | `src/renderer/onboarding/Onboarding.tsx` | `rd-onboarding` run, step 2 |
+| M441 | blank title, repo chip, starter layouts, empty-canvas hints, start verb | `rd-empty.title.1`, `rd-empty.layouts.1`, `rd-empty.hints.1`, `rd-empty.verb.1` | `BlankCanvas` in `EmptyState.tsx` | `rd-empty` run |
+
+Mounting the three screens from `Canvas.tsx` is R-021. The shot door is `window.__rdLA.mount`, registered by `StartupSplash` because Canvas already imports that module. A failed restore stops the spinner and calls `noteBootIssue`; the 09 surface is L-F (R-023). `resume-summary.ts` and `tmux-probe.ts` stay as they are: the splash does not invent a resume narrative, and the probe's backend choice is not the reattach loop.
+
+## M439 · Launch and restore
+
+Four lines, each pending until a fact arrives. Workspace is done only when both the name and the path are present; the path is the mono detail. Layout says the measured counts in words (`2 tasks, 9 objects`; zero is `no tasks, no objects`). Tmux in flight is the active line and says `N of M`; zero done is `none of N yet`; nothing to reattach is `none to reattach`. Agents stay pending when only a planned catalog is known (`claude, codex` is a list, not a result). A found list sets `found`. Option held marks the tmux line skipped; `skipRemaining` sets `asleep` on panes not yet reattached, leaves reattached panes awake, and returns `killed: []` with the same pids. A failed step settles that line, leaves the later lines pending, and stops the breath. `splashShouldLeave` is true the moment `settled` is true, including at 0ms. Reduced motion and a settled view do not breathe. Ghost frames are the rects' own bbox, padded, and an absent list is empty.
+
+`RestoreSplash` is a second surface. `splashMode` is unchanged (`splash.1`–`splash.3` passed). The card leaves in the effect that sees settled. Option is `altKey`. A failure calls `noteRestoreFailure`, which is `noteBootIssue`. The APEX field component is the same component it was.
+
+`boot:progress` is `IPC_EVENTS.BOOT_PROGRESS`. `publishBootProgress` sends it. It is not an invoke: `verify:ipc` walks `IPC` only, and a handler would have to live in `src/main/ipc.ts` with a new `EXPECTED_CHANNELS`, neither of which this lane owns. `CLAUDE.md` names the channel. README does not (R-018). Nothing in the composition root calls the publisher yet (R-019). The preload does not subscribe (R-020). Canvas does not mount the card (R-021).
+
+The ghost fill is `color-mix` at 55%. A fractional `opacity` failed `verify:styles` check 3 and was removed. The breath reuses `state-breath` on `var(--dur-breath)`. Reduced motion sets `animation: none`.
+
+### Checks
+
+Linux, Node v22. Electron's Linux binary is present under `node_modules/electron/dist/electron` (ELF). The npm scripts still invoke `Electron.app/Contents/MacOS/Electron`, which is not on this machine. `pty.node` was not rebuilt (`npm ci --ignore-scripts`). Watched red first: `verify:rd-l-a` exited 1 because esbuild could not resolve `boot-progress.ts`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 5/5 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:viewport` | pass, including `splash.1`–`splash.3` |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rd-f1` | 7/7 pass |
+| `npm run affected -- --base redesign/main` | 53/55 plain suites passed in 31.4s, then stopped. Failed: `verify:meta` (`14` missing `boot:progress` in the README — R-018; `panels-split.2` tag `pre-v7-run` absent, known; `visual.1` missing golden `rd-splash`, expected until Phase 4) and `verify:first-run` (`revamp.create.1`, known, CanvasHud is L-B). Electron tier not reached. |
+| `shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window` | not run. Each script's binary path is the macOS app bundle. `UPDATE_GOLDENS` was not set. |
+
+### Deviations
+
+- The channel is a send, not the invoke the kickoff's "main handler" sentence describes. Direction is main→renderer. An invoke would edit files outside the lane.
+- `tmux-probe.ts` and `resume-summary.ts` are unchanged.
+- The shot scene has `run`. `visual.1` lists `rd-splash` as missing a golden. That red stays until the lead writes it.
+
+## M440 · Onboarding
+
+Four steps on `ONBOARDING_RAIL`: Workspace, Agents, Sessions, First task. Step 2's title is `Which agents live on your canvas?`. A row is `found` only with a path. A null path that answered is `not installed` and offers the install string. A timeout is `discovery did not answer`, and `sessionsPersistence(undefined)` does not say tmux is installed. Plain shell is locked on and is not in the ready count. `readyLabel(0)` is `Turn one on to continue`. The footer is the mockup's sentence. `FIRST_TASK_HANDOFF` is `{ sheet: 'start-work', spawns: false }`. `presetsFromEnabledAgents` makes the first enabled id the ⌘N default and leaves `shell` when none are on. Gemini's preset has no `agent` field. `discoverBinary` takes `which` and `versionOf`; it does not import `child_process`.
+
+`Onboarding.tsx` is the card. Copy calls `installCommand` and `clipboard.writeText`. The preview frames take their word and `data-tone` from `panelState`. Nothing in `src/renderer/onboarding/` spawns.
+
+The shot fixture is the mockup's frozen probe (claude and codex found at the paths and versions drawn on `02-onboarding.png`, gemini missing), not a measurement of this machine.
+
+### Checks
+
+Watched red: esbuild of `import { readyLabel } from onboarding.ts` exited 1, `No matching export`. A bare `export { missing }` in the suite entry was tree-shaken without that error, so the entry also assigns `keep`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 11/11 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rail` | 266/266 pass (`state.2`, `hints.1`, `empty.2`) |
+| `shot` / Electron | not run. The scripts still call `Electron.app/Contents/MacOS/Electron`. `rd-onboarding` now has `run`, so `visual.1` will also list that golden as missing. `UPDATE_GOLDENS` was not set. |
+
+## M441 · Empty canvas
+
+`BlankCanvas` in `EmptyState.tsx`. The title is `A blank canvas for <workspace>`, or `A blank canvas` when the name is empty. The purpose sentence is the mockup's. The task field's verb is `Start task`, disabled with `Describe the task first` until there is a sentence. The repo chip is the name, or `no repository chosen`. Quick spawns are buttons labelled Claude Code, Shell and Import a layout…; the chords come from `shortcutById` (`⌘N`, `⌘T`). They call back and do not spawn. `STARTER_LAYOUTS` is a separate list from `LINEUPS` (`lineup.1` still sees solo, pair, workbench, swarm). `starterLayoutAction` places nothing until `clicked` is true. `EMPTY_CANVAS_GESTURES` is separate from `HINTS` (`hints.1` ids are unchanged). The ghost line is `Double-click to place a terminal`. The minimap sentence is `emptyState('minimap')` — `Nothing placed yet` — rendered in `BlankCanvas`. L-B's overlay does not read it yet (R-022). Canvas's double-click still places a process step (R-024). `Launcher.tsx` was not edited, so `onboarding.markup.*` still reads the same buttons.
+
+### Checks
+
+Watched red: `verify:rd-l-a` exited 1 with `ReferenceError: blankCanvasTitle is not defined` before the functions existed.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 15/15 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:rail` | 266/266 pass. `empty.2` sees the minimap id rendered. `hints.1` ids unchanged. |
+
+## L-A · G2
+
+Rebase onto `origin/redesign/main` at `6bffde9f` was a no-op: that commit is the branch point.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass, each milestone |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run affected -- --base redesign/main` | at M439, 53/55 plain suites, then stopped. Failures were `verify:meta` and `verify:first-run` only. Electron tier not reached. |
+| Full plain wave (67 suites, no build, no Electron) | 64/67 in 31.5s. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. |
+| `npm run shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window`, the panels parts | not painted. |
+
+Could not run on Linux:
+
+- `package.json` points every Electron suite and `shot` at `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`. That path does not exist. `scripts/redesign/with-electron-lock.sh` running it exits `No such file or directory`.
+- The Linux binary is present and answers `--version` (`v43.4.1`) under `xvfb-run`. Invoking `scripts/shot.cjs` with that binary dies in main: `Failed to load native module: pty.node` — `prebuilds/linux-x64/pty.node` is absent. The prebuilds on disk are darwin and win32. `verify:tmux` fails the same way in 0.2s.
+- No `out/shots/*.vs-reference.png`. No critic pass. `UPDATE_GOLDENS` was not set. `visual.1` is red on purpose: missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`.
+
+Other reds, not fixed: `verify:meta` `panels-split.2` (`pre-v7-run` absent), `verify:first-run` `revamp.create.1`, `verify:meta` 14 (`boot:progress` absent from the README — R-018).
+
+Requests open: R-018 README fence, R-019 composition root publishes progress, R-020 preload subscribes, R-021 Canvas mounts the three screens, R-022 minimap reads `emptyState('minimap')`, R-023 L-F's 09 surface shows the boot-issue sentence, R-024 empty-canvas double-click still places a process step.

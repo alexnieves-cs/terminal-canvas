@@ -299,3 +299,30 @@ export function unreviewedPresetReason(preset: { name: string; reviewed?: false 
   if (preset.reviewed !== false) return null
   return `"${preset.name}" came from a pack and has not been read yet — open it in ⌘K › Presets and choose "I've read this" before spawning it`
 }
+
+/**
+ * M440. Agents the person turned on become presets. The first one is ⌘N
+ * (`defaultId`). None turned on leaves the login shell, which is already the
+ * built-in default. Gemini has no `AgentKind`, so its preset carries no
+ * `agent` — a kind map, not a comparison against a backend literal.
+ */
+const PRESET_AGENT: Readonly<Record<string, AgentKind>> = {
+  claude: 'claude-code',
+  codex: 'codex',
+  copilot: 'copilot'
+}
+
+export function presetsFromEnabledAgents(enabled: readonly { id: string; label: string; command?: string }[]): { presets: Preset[]; defaultId: string } {
+  const presets = enabled.map((agent): Preset => {
+    const kind = PRESET_AGENT[agent.id]
+    return {
+      id: agent.id,
+      name: agent.label,
+      cwd: '~',
+      command: agent.command ?? agent.id,
+      args: [],
+      ...(kind === undefined ? {} : { agent: kind })
+    }
+  })
+  return { presets, defaultId: presets[0] === undefined ? DEFAULT_PRESET_ID : presets[0].id }
+}
