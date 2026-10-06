@@ -5,6 +5,7 @@ import { useWorldActions, worldActions } from './world-context-store'
 import { askTarget, CONTROL_SELECTOR, enterOpens, FIELD_SELECTOR, openableFrom, OVERLAY_SELECTOR, selectAgent, selectedAgent, useSelectedAgent } from './world-select'
 import { isWorldOn } from './world-toggle'
 import { useRoster, useWaiting } from './world-roster'
+import { WorldMinimap } from './WorldMinimap'
 import { WorldPeers } from './WorldPeers'
 import { WorldTime } from './WorldTime'
 import { ASK_MAX, askText, legendEntries, type CameraApi } from './world-set'
@@ -40,7 +41,12 @@ import { ASK_MAX, askText, legendEntries, type CameraApi } from './world-set'
 /** How long the "Sent" line stays. */
 const POSTED_MS = 2600
 
-export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> }): JSX.Element {
+/**
+ * `flat` (M431): the chrome over the flat room (`WorldFlat`, no WebGL), which
+ * has no camera to fit or zoom — those buttons are left out rather than shown
+ * dead. Everything else is the same chrome, through the same doors.
+ */
+export function WorldChrome({ camera, flat = false }: { camera: RefObject<CameraApi | null>; flat?: boolean }): JSX.Element {
   const roster = useRoster()
   // The first-seen order the robots take their colours from, so a dot is its robot's shell.
   const order = useAgentIds()
@@ -125,14 +131,18 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
   const placeholder = past ? 'Back to Live to ask' : sendable.length === 0 ? 'No agent here takes a message' : targetName !== null ? `Ask ${targetName}` : 'Ask your team'
 
   return (
-    <div className="world-chrome" data-world-chrome>
+    <div className="world-chrome" data-world-chrome data-flat={flat ? '' : undefined}>
       <WorldTime camera={camera} />
       <WorldPeers camera={camera} />
-      <div className="world-tools" role="group" aria-label="Camera">
-        <button type="button" className="world-tools__fit" onClick={() => camera.current?.fit()} data-world-fit>Fit room</button>
-        <button type="button" className="world-tools__step" aria-label="Zoom out" title="Zoom out" onClick={() => camera.current?.zoom(-1)} data-world-zoom="out"><Minus size={14} /></button>
-        <button type="button" className="world-tools__step" aria-label="Zoom in" title="Zoom in" onClick={() => camera.current?.zoom(1)} data-world-zoom="in"><Plus size={14} /></button>
-      </div>
+      {/* M434: the minimap reads the 3D camera; the flat room has none. */}
+      {flat ? null : <WorldMinimap camera={camera} />}
+      {flat ? null : (
+        <div className="world-tools" role="group" aria-label="Camera">
+          <button type="button" className="world-tools__fit" onClick={() => camera.current?.fit()} data-world-fit>Fit room</button>
+          <button type="button" className="world-tools__step" aria-label="Zoom out" title="Zoom out" onClick={() => camera.current?.zoom(-1)} data-world-zoom="out"><Minus size={14} /></button>
+          <button type="button" className="world-tools__step" aria-label="Zoom in" title="Zoom in" onClick={() => camera.current?.zoom(1)} data-world-zoom="in"><Plus size={14} /></button>
+        </div>
+      )}
 
       <form className="world-ask" onSubmit={submit} data-world-ask data-sending={sending ? '' : undefined}>
         <span className="world-ask__icon" aria-hidden="true"><KindChat size={16} /></span>
@@ -166,7 +176,7 @@ export function WorldChrome({ camera }: { camera: RefObject<CameraApi | null> })
         <span className={`world-ask__posted${said !== null && !said.ok ? ' world-ask__posted--refused' : ''}`} role="status" aria-live="polite">{said?.text ?? ''}</span>
       </form>
 
- {waiting.length > 0 ? (
+      {waiting.length > 0 ? (
         <button type="button" className="world-requests" onClick={() => selectAgent(waiting[0]!)} data-world-requests>
           <strong>{waiting.length === 1 ? '1 request' : `${waiting.length} requests`}</strong>
           <span>{waiting.length === 1 ? `${firstName} is waiting on you` : `${firstName} has waited longest`}</span>

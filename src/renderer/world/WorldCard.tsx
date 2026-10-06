@@ -2,17 +2,16 @@ import { Fragment, memo, useReducer, useRef, type JSX, type MutableRefObject, ty
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import type { Group } from 'three'
-import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
-import type { CapHold } from '@shared/agent-session'
-import { getAgent, getAgentIds, replayAt, useAgent, useReplayAt, worldNow } from './agent-world-store'
+import { getAgent, replayAt, useAgent, useReplayAt, worldNow } from './agent-world-store'
 import { ACTIVITY_VERB, activityOf, type Activity } from './world-activity'
 import { getWorldContext, useWorldActions, useWorldContext } from './world-context-store'
 import { badgeFor, factParts } from './world-facts'
-import { cardTitle, isLiveStatus, recentTools, type BadgeKind } from './world-scene'
-import { cardHeadline, cardTier, conflictPartners, type CardTier, type Headline } from './world-structure'
+import { cardTitle, recentTools, type BadgeKind } from './world-scene'
+import { cardTier, type CardTier } from './world-structure'
 import { OPEN_HINT, openableFrom, useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
+import { ACTIVITY_ICON, headlineOf, RequestBlock } from './WorldCardBody'
 
 /**
  * What floats over a robot (M415): a white NAME PILL above its head, and —
@@ -72,63 +71,6 @@ import { cardStand, cardTiltDeg } from './world-transition'
 const REACH_UNITS = 0.62
 const REACH_GAP_PX = 8
 
-/** The pill's glyph for what the hands are on (M422) — the reference's pill carries an icon; ours says the work. */
-const ACTIVITY_ICON: Partial<Record<Activity, (props: { size?: number }) => JSX.Element>> = {
-  read: ToolRead, search: ToolSearch, edit: ToolEdit, test: ToolRun, shell: ToolRun, web: KindBrowser, delegate: People
-}
-
-/**
- * A waiting agent's card is the REQUEST (M422): what it wants to do, and the
- * three verbs — the same answer door the chat card uses, and the jump to the
- * panel for anything the room cannot answer (a terminal's prompt, a question
- * with options). The only controls in the card layer, so the only things in
- * it that take the pointer; everything else stays deaf to it, or a card over
- * a drag would eat the orbit.
- */
-/** The live agents' records — what a card's conflict line is read against. */
-function liveRecords(): NonNullable<ReturnType<typeof getAgent>>[] {
-  return getAgentIds().map((id) => getAgent(id)).filter((r): r is NonNullable<typeof r> => r !== undefined && isLiveStatus(r.status))
-}
-
-/** The card's lead (M424): `cardHeadline` over this record, the context's request, a cap's hold (M428) and the room's conflicts. */
-function headlineOf(record: NonNullable<ReturnType<typeof getAgent>>, approval: { toolName: string } | undefined, words: string, now: number, held: CapHold | undefined): Headline {
-  return cardHeadline(record, {
-    ...(approval === undefined ? {} : { approval }),
-    ...(held === undefined ? {} : { held }),
-    partners: conflictPartners(liveRecords(), record.agentId, now),
-    partnerName: (id) => getAgent(id)?.name ?? id,
-    now,
-    activity: activityOf(record, now),
-    words
-  })
-}
-
-function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
-  const ctx = useWorldContext()
-  const actions = useWorldActions()
-  // M425: a request in the PAST room is history — it may have been answered since — so it has no verbs.
-  const past = useReplayAt() !== null
-  const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
-  return (
-    <div className="world-card__request" data-world-request>
-      {asked !== undefined ? (
-        <p className="world-card__ask"><span className="world-card__tool">{asked.toolName}</span>{asked.argument}</p>
-      ) : (
-        <p className="world-card__ask world-card__ask--open">{past ? 'Was waiting on you here' : 'Waiting on you in its panel'}</p>
-      )}
-      <div className="world-card__actions" role="group" aria-label="Answer the request">
-        {asked !== undefined && actions !== null ? (
-          <>
-            <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Approve</button>
-            <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
-          </>
-        ) : null}
-        {/* M429: no Open for an agent with no panel to land on (the simulator's, a teammate's elsewhere) — it would close the room onto nothing. */}
-        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
-      </div>
-    </div>
-  )
-}
 export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compact }: { agentId: string; y: number; layer: RefObject<HTMLElement | null>; pop: MutableRefObject<number>; compact: boolean }): JSX.Element | null {
   const record = useAgent(agentId)
   const anchor = useRef<HTMLDivElement>(null)
@@ -230,6 +172,8 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   // its Open; the past room has none (`openableFrom`).
   const openable = openableFrom(agentId, past, actions)
   const openHere = picked && !waiting && openable
+  // M432. The other view of the same work, on the picked card too: its task's island in Orchestrate.
+  const orchHere = picked && !past && actions !== null && actions.canOrchestrate(agentId)
   return (
     <group ref={point} position={[0, y, 0]}>
       <Html zIndexRange={[20, 0]} pointerEvents="none" portal={layer as RefObject<HTMLElement>}>
@@ -269,9 +213,10 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
                     ))}
                   </ul>
                 ) : null}
-                {openHere ? (
+                {openHere || orchHere ? (
                   <div className="world-card__actions" role="group" aria-label="Its panel">
-                    <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open panel</button>
+                    {openHere ? <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open panel</button> : null}
+                    {orchHere ? <button type="button" className="world-card__act" onClick={() => actions?.orchestrate(agentId)} title="Its task's island in Orchestrate" data-world-orchestrate>View in Orchestrate</button> : null}
                   </div>
                 ) : null}
               </div>

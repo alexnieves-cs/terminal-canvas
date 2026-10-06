@@ -272,6 +272,7 @@ import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { WorldStage, warmWorldView } from '../world/WorldStage'
 import { setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
+import { requestArrival } from '../world/world-select'
 import { useSelectedAgent } from '../world/world-select'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
@@ -8670,6 +8671,13 @@ export function Canvas({
     jump: jumpAnywhere,
     canJump: canJumpAnywhere,
     closeWorld: closeWorldView,
+    // M432. "View in Orchestrate" on a picked robot's card: the panel becomes the canvas's
+    // selection (selectOnly writes the ref at once), and the page switch carries it, as
+    // any canvas → Orchestrate switch does. Leaving the canvas page turns the room off (M413).
+    orchestrate: (panelId) => {
+      selectOnly(panelId)
+      setCenterView('orchestration')
+    },
     // M428. The branch an agent works on: a terminal's from its PTY's
     // worktree outcome (only `active` names one — a refusal ran in the plain
     // cwd), a chat's from the task lane its folder sits in — the handoff
@@ -8949,6 +8957,14 @@ export function Canvas({
               openFileAtCentre(path)
             }}
             onShowCanvas={() => setCenterView('canvas')}
+            // M432. "View in World" on a focused island's plate: back to the canvas page, then
+            // the room on the next frame (the page change has uncovered the host the room's
+            // move starts from); the room frames the first member standing in it when it settles.
+            onViewInWorld={(ids) => {
+              requestArrival(ids, Date.now())
+              leaveForCanvas()
+              requestAnimationFrame(() => setWorldOn(true))
+            }}
             // M284. The Dock's, the palette's and the inspector's executor — one permission path.
             onAnswer={paletteActions.answerApproval}
             onReviewOnCanvas={(id) => {

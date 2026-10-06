@@ -96,6 +96,27 @@ export function cardTiers(candidates: readonly CardCandidate[], current: Readonl
   return same ? current : new Set(ranked)
 }
 
+/**
+ * M433. A robot's level of detail, from how many screen pixels one world unit
+ * spans at it — the same measure the card's density reads (`cardTier`). FAR, a
+ * robot is a figure some 30px tall: its six body meshes stop casting into the
+ * key light's map (six shadow draws a robot, for a smudge a few pixels wide)
+ * and the eyes' additive halo goes (a glow a pixel or two across). The body,
+ * the visor and the eyes stay: the figure and its state read the same.
+ * Changing `castShadow` recompiles nothing — it only moves the mesh in or out
+ * of the shadow pass's list.
+ */
+export type RobotLod = 'near' | 'far'
+export const LOD_FAR_PX = 28
+/** A robot must come this much closer than the threshold to leave FAR, so an orbit on the line does not flicker its shadow. */
+export const LOD_HYSTERESIS = 1.2
+
+export function robotLod(pxPerUnit: number, previous: RobotLod | null): RobotLod {
+  if (!Number.isFinite(pxPerUnit)) return previous ?? 'near'
+  if (previous === 'far') return pxPerUnit >= LOD_FAR_PX * LOD_HYSTERESIS ? 'near' : 'far'
+  return pxPerUnit < LOD_FAR_PX ? 'far' : 'near'
+}
+
 /** The reduced-motion query, read live — a person may flip the setting while the view is open. */
 export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches

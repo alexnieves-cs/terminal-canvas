@@ -14,7 +14,7 @@ Check:
 - Colours come from `src/shared/state-palette.ts` once F1 has created it (no literal state hex in `world/*`). Until F1, do not invent a second palette.
 - `prefers-reduced-motion` is handled (flights collapse; the redesign's reduced-motion move is a 120 ms cross-fade).
 - WebGL context count (xterm `LIVE_BUDGET` 8 + world) stays under ~16, and context loss falls back to the flat room.
-- There is no `WorldFlat.tsx` or `WorldCardBody.tsx` or `WorldMinimap.tsx` in the tree today. The no-WebGL path is the note in `WorldStage` / `WorldView`. W6 creates `WorldFlat.tsx`. Do not treat the missing file as a regression before that lane.
+- `WorldFlat.tsx`, `WorldCardBody.tsx` and `WorldMinimap.tsx` exist (M431, M434). W6 extends the flat room; it does not add a second one. `WorldCardBody` stays free of three.js (`world.door.1`). `WorldMinimap` is the room's plan map, not `MinimapOverlay`.
 - Run `npm run verify:world` and `npm run build`, then check the built entry does not statically import three (`orch-zoom.3`).
 
 Output BLOCKERS / SHOULD-FIX.

@@ -445,6 +445,48 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   void notified
 }
 
+// ── the flat room (M431) ─────────────────────────────────────────────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const read = (f) => readFileSync(join(dir, f), 'utf8')
+  const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  // The flat room's whole local import closure: no file in it may be a scene file, or import three itself.
+  const THREE_DOOR = /from '(?:three|@react-three\/fiber|@react-three\/drei|postprocessing)(?:\/[^']*)?'|import\('(?:three|@react-three|postprocessing)/
+  const SCENE = ['WorldBloom.tsx', 'WorldCard.tsx', 'WorldOffice.tsx', 'WorldPlatform.tsx', 'WorldProps.tsx', 'WorldRobot.tsx', 'WorldStructure.tsx', 'WorldView.tsx', 'world-gloss.ts']
+  const seen = new Set()
+  const walk = (f) => {
+    if (seen.has(f)) return
+    seen.add(f)
+    // Multi-line imports and dynamic import()s too: either one fetches the file.
+    for (const m of code(f).matchAll(/^import (?!type )[^;]*?from '\.\/([^']+)'|\bimport\('\.\/([^']+)'\)/gm)) {
+      const next = ['.tsx', '.ts'].map((x) => (m[1] ?? m[2]) + x).find((x) => existsSync(join(dir, x)))
+      if (next) walk(next)
+    }
+  }
+  walk('WorldFlat.tsx')
+  const closure = [...seen].sort()
+  ok('world.flat.1 the flat room reaches NO scene file and no three, fiber or drei through anything it imports (its request block and lead come from WorldCardBody, the card\'s plain-DOM half) — a machine with no WebGL never fetches the scene',
+    closure.includes('WorldCardBody.tsx') && closure.includes('WorldChrome.tsx') && closure.every((f) => !SCENE.includes(f) && !THREE_DOOR.test(read(f))),
+    closure.join())
+  const stage = code('WorldStage.tsx')
+  const gate = stage.indexOf('webgl && !lost ? ('), note = stage.indexOf('data-world-no-webgl'), flatAt = stage.indexOf('<WorldFlat />'), narrow = stage.indexOf('data-world-narrow')
+  const statics = readdirSync(dir).filter((f) => /\.tsx?$/.test(f) && /from '\.\/WorldFlat'/.test(read(f)))
+  ok('world.flat.2 the flat room is reached only through its own pure-annotated lazy() in the stage, mounted ONLY in the no-WebGL branch, after the note that says why (the note keeps its Back to canvas), and never imported statically — the stage is in the first chunk',
+    /const WorldFlat = \/\* @__PURE__ \*\/ lazy\(async \(\) => \(\{ default: \(await import\('\.\/WorldFlat'\)\)\.WorldFlat \}\)\)/.test(read('WorldStage.tsx')) &&
+      statics.length === 0 && gate > 0 && note > gate && flatAt > note && narrow > flatAt && (stage.match(/<WorldFlat /g) ?? []).length === 1,
+    statics.join())
+  const flat = code('WorldFlat.tsx'), chrome = code('WorldChrome.tsx')
+  ok('world.flat.3 every tile acts through the room\'s own doors — the shared request block (Approve / Deny / Open), the same open gate, the same pick store with the double-click\'s repeat rule, the same two pick rules as the 3D room — and its chrome is the room\'s, without the camera buttons it has no camera for',
+    /\{waiting \? <RequestBlock agentId=\{agentId\} \/> : null\}/.test(flat) && /const openable = openableFrom\(agentId, past, actions\)/.test(flat) &&
+      /if \(isRepeatClick\(event\.detail\)\) return/.test(flat) && /if \(event\.detail === 0 && picked && openable\) \{ actions!\.open\(agentId\); return \}/.test(flat) && /\{picked && !waiting && openable \? \(/.test(flat) && /<WorldChrome camera=\{camera\} flat \/>/.test(flat) &&
+      /if \(id !== null && !roster\.some\(\(a\) => a\.agentId === id\)\) selectAgent\(null\)/.test(flat) && /useEffect\(\(\) => \(\) => selectAgent\(null\), \[\]\)/.test(flat) &&
+      /const facts = past \? undefined : ctx\.facts\[agentId\]/.test(flat) && !/window\.canvas/.test(flat) &&
+      /\{flat \? null : \(\s*<div className="world-tools"/.test(chrome))
+  ok('world.flat.4 a tour or a follow reaches the flat room through the same CameraApi: focus scrolls a tile into view and says false for an agent with no tile, fit goes to the top, and the api is cleared with the room',
+    /focus: \(agentId\) => \{\s*const tile = tiles\.current\.get\(agentId\)\s*if \(tile === undefined\) return false/.test(flat) && /fit: \(\) => grid\.current\?\.scrollTo\(\{ top: 0 \}\)/.test(flat) &&
+      /return \(\) => \{ camera\.current = null \}/.test(flat))
+}
+
 // ── the doors and the silent traps ───────────────────────────────────────────
 {
   const dir = join(root, 'src/renderer/world')
@@ -954,9 +996,10 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       (stageLook.match(/toneMapped=\{false\}/g) ?? []).length >= 2 && /vertexColors transparent/.test(stageLook) && /depthWrite=\{false\}/.test(stageLook) && /position=\{\[0, -SLAB\.thickness \/ 2, 0\]\}/.test(stageLook) &&
       /y=\{0\.012\}/.test(stageLook))
   const robotSrc = code('WorldRobot.tsx'), officeSrc = code('WorldOffice.tsx'), propsSrc = code('WorldProps.tsx')
-  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk parts, the table, the stools and the board — and the floating file tiles do NOT (M423, as the cubes they replaced: they float high and bob, and a moving shadow would cost a pass for nothing) — the terraces cast and take one',
-    (robotSrc.match(/castShadow/g) ?? []).length === 6 && (officeSrc.match(/castShadow/g) ?? []).length >= 5 && (propsSrc.match(/castShadow/g) ?? []).length >= 4 &&
-      !/<instancedMesh/.test(propsSrc) && /<mesh geometry=\{geometry\} receiveShadow castShadow>/.test(code('WorldStructure.tsx')) && !/<Tile[\s\S]{0,400}castShadow/.test(code('WorldStructure.tsx').slice(code('WorldStructure.tsx').indexOf('function Tile('), code('WorldStructure.tsx').indexOf('function headOf('))))
+  // M433: the desks' bodies and the stools are instanced — each instanced mesh casts as one; a robot's six casters keep their marks (the LOD only lifts them far off).
+  ok('world.studio.3 everything that stands in the room casts a shadow — each robot body part, the desk bodies (one instanced mesh, M433), the table, the stools (instanced) and the board — and the floating file tiles do NOT (M423, as the cubes they replaced: they float high and bob, and a moving shadow would cost a pass for nothing) — the terraces cast and take one',
+    (robotSrc.match(/ castShadow[ />]/g) ?? []).length === 6 && /m\.castShadow = true\s*m\.receiveShadow = true/.test(officeSrc) && (officeSrc.match(/ castShadow[ />]/g) ?? []).length >= 2 &&
+      /<instancedMesh ref=\{seats\}[^>]*castShadow receiveShadow \/>/.test(propsSrc) && /<instancedMesh ref=\{legs\}[^>]*castShadow \/>/.test(propsSrc) && (propsSrc.match(/ castShadow[ />]/g) ?? []).length >= 5 && /<mesh geometry=\{geometry\} receiveShadow castShadow>/.test(code('WorldStructure.tsx')) && !/<Tile[\s\S]{0,400}castShadow/.test(code('WorldStructure.tsx').slice(code('WorldStructure.tsx').indexOf('function Tile('), code('WorldStructure.tsx').indexOf('function headOf('))))
   ok('world.studio.4 the table is a black clearcoat plate with the robots\' RoomEnvironment on THIS material (never scene.environment), a cyan edge line in the same TrimLine as the platform, and no \'DESK 01\' (M423: a desk number named nothing; the terraces name the tasks)',
     /<meshPhysicalMaterial color=\{STUDIO\.tableTop\}[^>]*clearcoat=\{1\}[^>]*envMap=\{env\}/.test(officeSrc) && /studioEnv\(gl\)/.test(officeSrc) && /<TrimLine path=\{line\}/.test(officeSrc) &&
       !/DESK 01/.test(officeSrc) && !/ZoneLabel/.test(officeSrc) && !/\.environment\s*=/.test(officeSrc) && PAL.STUDIO.tableTop === '#07080b')
@@ -1069,7 +1112,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.bloom.mount.1 the view mounts the composer only while bloom RENDERS (the person\'s choice and the tier\'s — M430), paints the unlit ground as its ACES pre-image while it does, and the canvas still tone-maps with ACES (the fallback render is the M417 picture)',
     /const bloom = useBloomRendered\(\)/.test(view) && /\{bloom && <WorldBloom \/>\}/.test(view) && /acesPreimage\(\[c\.r, c\.g, c\.b\]\)/.test(view) && /toneMapping: THREE\.ACESFilmicToneMapping/.test(view))
   ok('world.bloom.glow.1 every unlit thing the composer would otherwise grey takes its bloom treatment from the same pure module — the trim\'s core and halo (the halo\'s extra opacity only over the pale slab, never on the black table), the eyes, the whiteboard — and each one is the identity with bloom off',
-    /glowScale\(hex, bloom\)/.test(platform) && /haloShare\(bloom\)/.test(platform) && /peak=\{TRIM\.glowPeak\} overPale \/>/.test(platform) && !/overPale/.test(code('WorldOffice.tsx')) && /glowScale\(EYE_COLOR, bloom\)/.test(robot) && /unlitScale\(bloom\)/.test(props) && /unlitInk\(hex, bloom\)/.test(props) &&
+    /glowScale\(hex, bloom\)/.test(platform) && /haloShare\(bloom\)/.test(platform) && /peak=\{TRIM\.glowPeak\} overPale(?: [^/]*)? \/>/.test(platform) && !/overPale/.test(code('WorldOffice.tsx')) && /glowScale\(EYE_COLOR, bloom\)/.test(robot) && /unlitScale\(bloom\)/.test(props) && /unlitInk\(hex, bloom\)/.test(props) &&
       BL.glowScale('#36e6ff', false) === 1 && BL.haloShare(false) === 1 && BL.unlitScale(false) === 1 && BL.unlitInk('#7b8494', false) === '#7b8494')
 
   // The pure half.
@@ -1222,7 +1265,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.select.1 picking is a module store the scene, the chrome and the board share, never persisted, and letting go is null', SEL.selectedAgent() === 'a' && (SEL.selectAgent(null), SEL.selectedAgent() === null) && !/localStorage/.test(src('world-select.ts')))
 
   // The request card and the decision table.
-  const card = src('WorldCard.tsx'), office = src('WorldOffice.tsx'), view = src('WorldView.tsx'), roster = src('world-roster.ts')
+  // M431: the request block moved to the card's plain-DOM half (WorldCardBody), which the flat room shares.
+  const card = src('WorldCard.tsx') + src('WorldCardBody.tsx'), office = src('WorldOffice.tsx'), view = src('WorldView.tsx'), roster = src('world-roster.ts')
   const styles = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8')
   ok('world.request.1 a waiting agent\'s card is its REQUEST — the tool and its argument from the context store, Approve and Deny through Canvas\'s answer door, Open for anything the room cannot answer — and those buttons are the only things in the card layer that take the pointer',
     /\{waiting \? <RequestBlock agentId=\{agentId\} \/> : null\}/.test(card) && /actions\.answer\(agentId, asked\.requestId, true\)/.test(card) && /actions\.answer\(agentId, asked\.requestId, false\)/.test(card) && /actions\?\.open\(agentId\)/.test(card) &&
@@ -1414,7 +1458,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       (AW.noteLeft(10), AW.noteBack(10 + RP.AWAY_MS), AW.awaySince() === 10) && (AW.dismissAway(), AW.awaySince() === null))
 
   const dir = join(root, 'src/renderer/world')
-  const time = readFileSync(join(dir, 'WorldTime.tsx'), 'utf8'), card = readFileSync(join(dir, 'WorldCard.tsx'), 'utf8'), chrome = readFileSync(join(dir, 'WorldChrome.tsx'), 'utf8'), store = readFileSync(join(dir, 'agent-world-store.ts'), 'utf8')
+  const time = readFileSync(join(dir, 'WorldTime.tsx'), 'utf8'), card = readFileSync(join(dir, 'WorldCard.tsx'), 'utf8') + readFileSync(join(dir, 'WorldCardBody.tsx'), 'utf8'), chrome = readFileSync(join(dir, 'WorldChrome.tsx'), 'utf8'), store = readFileSync(join(dir, 'agent-world-store.ts'), 'utf8')
   const scene = ['WorldCard.tsx', 'WorldRobot.tsx', 'WorldStructure.tsx'].map((f) => readFileSync(join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''))
   ok('world.replay.5 the room\'s parts read the room\'s clock (worldNow), never the wall clock, so the past room is quiet where it was quiet and a tile is fresh when it was',
     scene.every((src) => !/Date\.now\(\)/.test(src.replace(/handoffArcs\(ctx\.handoffs, byId, Date\.now\(\)\)/, ''))) && scene.every((src) => /worldNow\(\)/.test(src)))
@@ -1722,14 +1766,14 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const store = src('world-context-store.ts'), pub = src('useWorldContextPublisher.ts')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   ok('world.open.4 canOpen is on the room\'s door interface and Canvas answers it with jumpAnywhere\'s own two cases (a panel on this canvas, or in another workspace) — and open itself refuses an id it cannot land, BEFORE the room closes (jumpAnywhere drops one silently)',
-    /\n {2}canOpen\(agentId: string\): boolean\n\}/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
+    /\n {2}canOpen\(agentId: string\): boolean\n/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
       /canJump: canJumpAnywhere,/.test(canvasSrc) &&
       /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc) &&
       /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc))
-  const card = src('WorldCard.tsx')
+  const card = src('WorldCard.tsx') + src('WorldCardBody.tsx')
   ok('world.open.5 the card\'s Open is on the PICKED robot\'s card only, never in the past room, never for an agent with no panel, never twice on a waiting card (its request has one) — the shared act styling inside the one pointer-taking group — and the request\'s own Open hides for an agent with no panel too',
     /const openable = openableFrom\(agentId, past, actions\)/.test(card) && /const openHere = picked && !waiting && openable/.test(card) &&
-      /\{openHere \? \(\s*<div className="world-card__actions"[^>]*>\s*<button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
+      /\{openHere \|\| orchHere \? \(\s*<div className="world-card__actions"[^>]*>\s*\{openHere \? <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
       /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card))
   const chrome = src('WorldChrome.tsx'), stage = src('WorldStage.tsx')
   ok('world.open.6 Enter opens the picked robot from the chrome\'s one window listener — the pure guard, the room ON (the chrome outlives it through the move back), the same gate and the same door — and Escape and Enter ask the SAME field and overlay selectors',
@@ -1748,6 +1792,118 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     ok('world.open.9 a robot that unmounts under a resting pointer takes its hint and cursor with it — fiber drops an unmounted object from its hovered set with NO pointerout (removeInteractivity) — and a robot mid-leave promises no open',
       /const hovered = useRef\(false\)/.test(robot) && /useEffect\(\(\) => \(\) => \{\s*if \(!hovered\.current\) return\s*gl\.domElement\.style\.cursor = ''\s*gl\.domElement\.title = ''/.test(robot))
   }
+}
+
+// ── the richness pass: rim, breath, contact, floor, accessories ─────────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const src = (f) => readFileSync(join(dir, f), 'utf8')
+  // The breath: still for an idle (or empty, or only-waiting) room, deeper the busier the room, and only ever brightening.
+  const still = SET.trimPulse([]), idle = SET.trimPulse(['idle', 'idle']), waits = SET.trimPulse(['waiting_approval'])
+  const some = SET.trimPulse(['working', 'idle', 'waiting_approval']), all = SET.trimPulse(['working', 'thinking'])
+  const samples = Array.from({ length: 200 }, (_, i) => SET.trimBreath(i * 0.037, all, false))
+  ok('world.rich.1 the trim breathes with the room\'s work: still (depth 0) with nobody busy — empty, all idle, or only waiting (the table\'s amber says that) — deeper and quicker the larger the busy share, and below 0.6 Hz',
+    still.depth === 0 && idle.depth === 0 && waits.depth === 0 && some.depth > 0 && all.depth > some.depth && all.hz > some.hz && all.hz < 0.6,
+    JSON.stringify({ some, all }))
+  ok('world.rich.2 the breath only brightens — 1 at rest, at most 1 + depth — and is EXACTLY 1 for a still room and under reduced motion, so the resting trim is M416\'s',
+    samples.every((b) => b >= 1 - 1e-9 && b <= 1 + all.depth + 1e-9) && Math.max(...samples) > 1 + all.depth * 0.9 &&
+      SET.trimBreath(1.3, all, true) === 1 && SET.trimBreath(1.3, still, false) === 1)
+  const plat = src('WorldPlatform.tsx')
+  ok('world.rich.3 the breath is written from the frame loop onto the trim\'s materials — the busy share re-read from the store on a slow beat, never React state — and the room\'s frameloop is still `always`, so it forces no extra frames',
+    /trimPulse\(getAgentIds\(\)\.map\(\(id\) => getAgent\(id\)\?\.status\)\)/.test(plat) && /trimBreath\(state\.clock\.elapsedTime, pulse\.current, reduced\)/.test(plat) &&
+      /<WorldPlatform arcRadius=\{arcRadius\} reduced=\{reduced\} \/>/.test(src('WorldOffice.tsx')) && /frameloop="always"/.test(src('WorldView.tsx')) && !/useState/.test(plat))
+  // The contact blob.
+  const rest = SET.contactBlob(0, 1), up = SET.contactBlob(0.16, 1), gone = SET.contactBlob(0, 0), half = SET.contactBlob(0, 0.5)
+  ok('world.rich.4 the contact blob is full under a standing robot, smaller and fainter as it hops, and nothing when the body is (popping in, leaving, sunk)',
+    rest.scale === 1 && rest.opacity === SET.CONTACT.opacity && up.scale < 1 && up.opacity < rest.opacity && gone.scale === 0 && gone.opacity === 0 && half.opacity < rest.opacity,
+    JSON.stringify({ rest, up, half }))
+  const robot = src('WorldRobot.tsx')
+  ok('world.rich.5 the blob follows the BODY\'s scale and the hopper\'s lift, its material is per robot and disposed, its texture is the shared kit\'s, and it writes no depth; the shell has its sheen rim',
+    /contactBlob\(hopper\.current\?\.position\.y \?\? 0, body\)/.test(robot) && /useEffect\(\(\) => \(\) => blobMaterial\.dispose\(\), \[blobMaterial\]\)/.test(robot) &&
+      /alphaMap: k\.blobTexture, transparent: true, depthWrite: false/.test(robot) && /sheen: SHELL_RIM\.sheen, sheenRoughness: SHELL_RIM\.roughness/.test(robot))
+  // The floor.
+  const seams = SET.floorSeams(12, 1.6)
+  ok('world.rich.6 the floor\'s tile seams are centred on the table (one through the middle, symmetric), every tile apart, strictly inside the floor — and the paint is a disposed canvas texture on its own plane over the flat top, writing no depth',
+    seams.includes(0.5) && seams.every((s, i) => Math.abs(s + seams[seams.length - 1 - i] - 1) < 1e-9) && seams.every((s) => s > 0 && s < 1) &&
+      seams.slice(1).every((s, i) => Math.abs((s - seams[i]) * 12 - 1.6) < 1e-9) && SET.floorSeams(0).length === 0 &&
+      /useEffect\(\(\) => \(\) => texture\.dispose\(\), \[texture\]\)/.test(plat) && /alphaMap=\{texture\} transparent depthWrite=\{false\}/.test(plat) && /const span = \(half - SLAB\.radius\) \* 2/.test(plat),
+    JSON.stringify(seams))
+  // The accessories.
+  const order = ['a', 'world:you', 'b', 'c', 'd', 'e']
+  const picks = order.filter((id) => !id.startsWith('world:')).map((id) => SET.deskAccessory(id, order))
+  ok('world.rich.7 a desk\'s accessory comes from the agent\'s seat — the SAME count its tint reads (the board\'s pseudo-agent takes no seat) — so the first four desks differ, the fifth repeats the first on the other end, and it never changes for an agent',
+    new Set(picks.slice(0, 4).map((p) => p.kind)).size === 4 && picks[4].kind === picks[0].kind && picks[4].side === -picks[0].side &&
+      JSON.stringify(SET.deskAccessory('c', order)) === JSON.stringify(SET.deskAccessory('c', [...order, 'z'])) &&
+      PAL.seatIndex('c', order) === 2 && PAL.robotTint('c', order) === PAL.ROBOT_TINTS[2 % PAL.ROBOT_TINTS.length],
+    JSON.stringify(picks))
+}
+
+// ── M432–M434: Orchestrate ↔ World, the instanced room, the minimap ────────
+{
+  const dir = join(root, 'src/renderer/world')
+  const src = (f) => readFileSync(join(dir, f), 'utf8')
+  const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  buildSync({
+    entryPoints: [join(dir, 'world-minimap.ts')], outfile: join(root, 'out/verify/world-minimap.cjs'),
+    bundle: true, platform: 'node', format: 'cjs', logLevel: 'error'
+  })
+  const MAP = require('../out/verify/world-minimap.cjs')
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const orch = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+
+  // The arrival: held until the room settles, the first member IN the room, kept a grace while none is, then dropped.
+  const inRoom = (ids) => (id) => ids.includes(id)
+  SEL.requestArrival(['x', 'b', 'c'], 0)
+  const none = SEL.takeArrival(inRoom([]), 100)
+  const kept = SEL.hasArrival()
+  const got = SEL.takeArrival(inRoom(['b', 'c']), 200)
+  const cleared = !SEL.hasArrival()
+  SEL.requestArrival(['x'], 0)
+  SEL.takeArrival(inRoom([]), SEL.ARRIVAL_GRACE_MS + 1)
+  const expired = !SEL.hasArrival()
+  SEL.requestArrival([], 0)
+  ok('world.cross.1 a "View in World" arrival waits for the room: none of it in the room yet keeps it (the feed says every agent a beat after the room opens), the first member standing in it is taken and the request cleared, a request older than ARRIVAL_GRACE_MS is dropped (a stale one would yank the camera on some later open), and an empty one is no request',
+    none === null && kept && got === 'b' && cleared && expired && !SEL.hasArrival(), `none=${none} kept=${kept} got=${got} cleared=${cleared} expired=${expired}`)
+  const view = code('WorldView.tsx')
+  ok('world.cross.2 the rig takes an arrival only on a RESTING frame (a glide mid-transition is dropped by the rig itself), picks the robot and glides to it through the same focus door the tour uses — and Canvas asks for it BEFORE the page change, turning the room on a frame later, from the focused plate\'s chip only',
+    /if \(atRest\) \{[\s\S]{0,700}if \(hasArrival\(\)\) \{\s*const id = takeArrival\(\(agentId\) => stations\.current\?\.has\(agentId\) === true, Date\.now\(\)\)\s*if \(id !== null\) \{\s*selectAgent\(id\)\s*api\.current\?\.focus\(id\)/.test(view) &&
+      /onViewInWorld=\{\(ids\) => \{\s*requestArrival\(ids, Date\.now\(\)\)\s*leaveForCanvas\(\)\s*requestAnimationFrame\(\(\) => setWorldOn\(true\)\)/.test(canvasSrc) &&
+      /props\.onViewInWorld !== undefined && focusedIsOn\(t\.id\) && \(pp\.p\.island\?\.memberIds\.length \?\? 0\) > 0/.test(orch) && /data-orch-platform-world=\{p\.id\} role="button" tabIndex=\{0\}/.test(orch))
+  const card = src('WorldCard.tsx'), pub = src('useWorldContextPublisher.ts'), store = src('world-context-store.ts')
+  ok('world.cross.3 "View in Orchestrate" is on the PICKED robot\'s card, never in the past room, only for an agent with a panel on THIS canvas (Orchestrate has no row for another workspace\'s or the simulator\'s) — and Canvas makes it the selection before the page switch, the carry every canvas → Orchestrate switch gets',
+    /const orchHere = picked && !past && actions !== null && actions\.canOrchestrate\(agentId\)/.test(card) && /data-world-orchestrate>View in Orchestrate</.test(card) &&
+      /orchestrate\(agentId: string\): void/.test(store) && /canOrchestrate: \(agentId\) => byId\(agentId\) !== undefined/.test(pub) && /if \(byId\(agentId\) === undefined\) return\s*orchestrate\(agentId\)/.test(pub) &&
+      /orchestrate: \(panelId\) => \{\s*selectOnly\(panelId\)\s*setCenterView\('orchestration'\)/.test(canvasSrc))
+
+  // The level of detail: a far robot drops its casters and its halo, with a band so an orbit on the line does not flicker it.
+  const L = PF.robotLod
+  ok('world.lod.1 robotLod: near up close, far below LOD_FAR_PX, and back to near only past LOD_FAR_PX × LOD_HYSTERESIS — a non-finite measure keeps what it had',
+    L(100, null) === 'near' && L(PF.LOD_FAR_PX - 1, null) === 'far' && L(PF.LOD_FAR_PX + 1, 'far') === 'far' && L(PF.LOD_FAR_PX * PF.LOD_HYSTERESIS, 'far') === 'near' &&
+      L(PF.LOD_FAR_PX - 1, 'near') === 'far' && L(NaN, 'far') === 'far' && L(NaN, null) === 'near')
+  const robot = code('WorldRobot.tsx'), office = code('WorldOffice.tsx')
+  ok('world.lod.2 the robot writes its LOD only when it flips — every caster\'s castShadow (no recompile: it moves the mesh in or out of the shadow pass) and the halo — and all six casters are collected',
+    /if \(nextLod !== lod\.current\) \{\s*lod\.current = nextLod\s*for \(const mesh of casters\.current\) mesh\.castShadow = nextLod === 'near'\s*if \(halo\.current\) halo\.current\.visible = nextLod === 'near'/.test(robot) &&
+      (robot.match(/<mesh ref=\{cast\} [^>]*castShadow \/>/g) ?? []).length === 6)
+  ok('world.lod.3 the desks are ONE instanced draw, culled never (its bounds are where the desks started), each desk writing its slot AFTER its glide, hidden when sunk, and its slot freed when it goes — the screen stays a mesh per desk (its glow is its agent\'s)',
+    (office.match(/new THREE\.InstancedMesh\(/g) ?? []).length === 1 && /m\.frustumCulled = false/.test(office) && /slots\.write\(mine\.current, g\.visible \? g\.matrixWorld : null\)/.test(office) &&
+      /return \(\) => \{ slots\.give\(taken\); mine\.current = -1 \}/.test(office) && (office.slice(office.indexOf('function Desk('), office.indexOf('function MeetingTable(')).match(/<mesh /g) ?? []).length === 1 && /<meshStandardMaterial ref=\{screen\}/.test(office))
+
+  // The minimap: the floor and the map are each other's inverse, a press off the slab lands on its edge, and a small room has none.
+  const half = 9
+  const pts = [{ x: 0, z: 0 }, { x: 4.5, z: -3 }, { x: -9, z: 9 }]
+  const round = pts.every((p) => { const m = MAP.toMap(p, half); const back = MAP.fromMap(m.x, m.y, half); return Math.abs(back.x - p.x) < 1e-9 && Math.abs(back.z - p.z) < 1e-9 })
+  const off = MAP.fromMap(-50, MAP.MINIMAP_SIZE + 50, half)
+  const plan = { half, camera: { x: 10, z: 10 }, target: { x: 0, z: 0 }, agents: [{ agentId: 'a', at: { x: 1, z: 1 }, waiting: false }] }
+  const nudged = { ...plan, camera: { x: 10.001, z: 10 } }
+  ok('world.map.1 the minimap maps the floor and back exactly, clamps a press off the slab onto its edge, keys a plan by what it can SHOW (a hair of camera drift re-renders nothing; a robot sent to the table does), and is shown only from MINIMAP_MIN_AGENTS',
+    round && off.x === -half && off.z === half && MAP.planKey(plan) === MAP.planKey(nudged) &&
+      MAP.planKey(plan) !== MAP.planKey({ ...plan, agents: [{ ...plan.agents[0], waiting: true }] }) && MAP.planKey(null) === '' &&
+      !MAP.minimapShown(MAP.MINIMAP_MIN_AGENTS - 1) && MAP.minimapShown(MAP.MINIMAP_MIN_AGENTS), JSON.stringify(off))
+  const mini = src('WorldMinimap.tsx'), pure = src('world-minimap.ts')
+  ok('world.map.2 the minimap is plain DOM and its rules are pure — neither imports three, fiber or drei — it reaches the scene through the CameraApi (plan, centre, focus), polls it a few times a second rather than per frame, and a dot press picks before it glides',
+    !THREE_DOOR_RE.test(mini) && !THREE_DOOR_RE.test(pure) && !/^import(?!.*type)/m.test(pure) && /camera\.current\?\.plan\(\)/.test(mini) && /camera\.current\?\.centre\(floor\.x, floor\.z\)/.test(mini) &&
+      /window\.setInterval\(look, POLL_MS\)/.test(mini) && !/useFrame/.test(mini) && /selectAgent\(a\.agentId\)\s*camera\.current\?\.focus\(a\.agentId\)/.test(mini) &&
+      /plan\(\): RoomPlan \| null/.test(src('world-set.ts')) && /centre\(x: number, z: number\): void/.test(src('world-set.ts')) && /<WorldMinimap camera=\{camera\} \/>/.test(src('WorldChrome.tsx')))
 }
 
 const failures = results.filter((r) => !r.pass)

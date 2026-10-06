@@ -76,15 +76,22 @@ const OWN_NAMESPACE = 'world:'
  * caller with no store) falls back to a well-mixed hash of the id itself.
  */
 export function robotTint(agentId: string, order: readonly string[]): string {
-  let index = -1
+  return ROBOT_TINTS[seatIndex(agentId, order) % ROBOT_TINTS.length]!
+}
+
+/**
+ * An agent's place in the first-seen order, counting only agents — the index
+ * its tint is read at, and (the richness pass) its desk's accessory. One count
+ * for both, so a robot's colour and its desk never disagree about who came first.
+ */
+export function seatIndex(agentId: string, order: readonly string[]): number {
   let seen = 0
   for (const id of order) {
     if (id.startsWith(OWN_NAMESPACE)) continue
-    if (id === agentId) { index = seen; break }
+    if (id === agentId) return seen
     seen++
   }
-  if (index < 0) index = mixedHash(agentId)
-  return ROBOT_TINTS[index % ROBOT_TINTS.length]!
+  return mixedHash(agentId)
 }
 
 /** FNV-1a, then murmur3's finaliser: every input bit reaches every output bit, so `id-1` and `id-2` are not neighbours. */

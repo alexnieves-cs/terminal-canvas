@@ -63,9 +63,9 @@ Conflict: A TopBar comment says the toggle is dev-only. `src/renderer/CLAUDE.md`
 says Canvas mounts the World in production since M427.
 
 **Accepted default.** Ship it on by default with the WebGL probe and the flat
-fallback. Verify in a packaged build (`verify:packaged`) before release. The
-flat fallback is not a separate `WorldFlat.tsx` today; it is the no-WebGL note
-inside `WorldStage` / `WorldView` (see the W6 brief).
+fallback. Verify in a packaged build (`verify:packaged`) before release.
+`WorldFlat.tsx` landed on main in M431, after this run was planned. W6 extends
+that file. It does not invent a second flat room.
 
 ## D7 — Tone remap side effects
 
