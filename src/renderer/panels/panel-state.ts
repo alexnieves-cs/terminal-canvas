@@ -204,12 +204,13 @@ export function statePriority(word: string): number {
 /**
  * A watcher's last run, in the one vocabulary.
  *
- * `passed` is `idle` and a non-zero exit is `exited N` — the same two words a
- * terminal running the same command would show, which is what makes a green
- * or red watcher legible in the rail, the state edge, the minimap and the
- * far tiers with no code of their own. A SIGNAL is a failure: `exitCode` is
- * null for a signalled process, and a template that printed `exited null`
- * would be a state word nobody can act on.
+ * `passed` keeps the word `idle` and takes the `done` tone (D7): green means
+ * finished OK, and the word does not move. A non-zero exit is `exited N` —
+ * the same word a terminal running the same command would show, which is
+ * what makes a green or red watcher legible in the rail, the state edge, the
+ * minimap and the far tiers with no code of their own. A SIGNAL is a
+ * failure: `exitCode` is null for a signalled process, and a template that
+ * printed `exited null` would be a state word nobody can act on.
  */
 function watchState(watch: WatchStateInput | undefined): PanelStateWord {
   if (watch === undefined) return { word: 'not started', tone: 'none' }
@@ -217,7 +218,7 @@ function watchState(watch: WatchStateInput | undefined): PanelStateWord {
   switch (watch.status) {
     case 'not-started': return { word: 'not started', tone: 'none' }
     case 'running': return { word: 'working', tone: 'working' }
-    case 'passed': return { word: 'idle', tone: 'idle' }
+    case 'passed': return { word: 'idle', tone: 'done' }
     case 'exited':
       return watch.signal !== undefined && watch.signal !== null
         ? { word: `exited ${watch.signal}`, tone: 'exited' }
@@ -230,14 +231,13 @@ function watchState(watch: WatchStateInput | undefined): PanelStateWord {
  * record's own (`WORK_ITEM_STATES`), read by INDEX so a renamed state moves
  * here with it (`verify:rail state.2` bans the `'working'` literal outside
  * this file; the other three words are read by index here so a rename moves
- * them too); the tones are the existing four the states mean — a todo is a
- * document at rest (kind), a working lane works, a review is in flight
- * elsewhere (`starting`: amber is the attention union's, and a PR waiting on
- * someone else asks this user for nothing), a done item is idle — so no rule
- * and no token is new for the card. With no
- * record the card names its kind, like every document kind.
+ * them too); the tones are what the states mean — a todo is a document at
+ * rest (kind), a working lane works, a review is in flight elsewhere
+ * (`starting`: the working cyan, and a PR waiting on someone else asks this
+ * user for nothing), a done item is finished OK (`done`, D7 — the word stays
+ * `done`). With no record the card names its kind, like every document kind.
  */
-const WORK_TONES: readonly Tone[] = ['kind', 'working', 'starting', 'idle']
+const WORK_TONES: readonly Tone[] = ['kind', 'working', 'starting', 'done']
 function workState(work: { state: WorkItemState } | undefined): PanelStateWord {
   if (work === undefined) return { word: 'work', tone: 'kind' }
   const i = WORK_ITEM_STATES.indexOf(work.state)
@@ -302,14 +302,14 @@ function chatState(chat: ChatStateInput | undefined): PanelStateWord {
 
 /**
  * M97. The auto chip's tone, in the one vocabulary: a live run works, a
- * finished one is idle, a stuck one needs you, a stopped one has exited.
- * Here rather than in the chat node because `verify:rail state.2` keeps
- * every state word inside this file.
+ * finished one is done (D7 — the word the chip already says stays), a stuck
+ * one needs you, a stopped one has exited. Here rather than in the chat node
+ * because `verify:rail state.2` keeps every state word inside this file.
  */
 export function autoTone(state: 'running' | 'done' | 'stuck' | 'stopped'): Tone {
   switch (state) {
     case 'running': return 'working'
-    case 'done': return 'idle'
+    case 'done': return 'done'
     case 'stuck': return 'needs-you'
     case 'stopped': return 'exited'
   }
@@ -317,11 +317,12 @@ export function autoTone(state: 'running' | 'done' | 'stuck' | 'stopped'): Tone 
 
 /**
  * M258. THE MINIMAP'S LEGEND, in this file's vocabulary (state.2: no state
- * word is a literal outside panel-state.ts). The four block styles a person
- * meets on the map, each with the word the rail and the frame already say.
+ * word is a literal outside panel-state.ts). The block styles a person meets
+ * on the map, each with the word the rail and the frame already say. D7 adds
+ * the done row so a finished item is not drawn as idle.
  */
 export const MINIMAP_LEGEND: readonly { tone: Tone; word: string }[] = [
-  { tone: 'working', word: 'working' }, { tone: 'needs-you', word: 'needs you' }, { tone: 'idle', word: 'idle' }, { tone: 'asleep', word: 'asleep' }
+  { tone: 'working', word: 'working' }, { tone: 'needs-you', word: 'needs you' }, { tone: 'done', word: 'done' }, { tone: 'idle', word: 'idle' }, { tone: 'asleep', word: 'asleep' }
 ]
 
 /**
