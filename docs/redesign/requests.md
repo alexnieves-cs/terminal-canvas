@@ -108,7 +108,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/useViewport.ts`
 - Why the contract or the owner cannot absorb it: L-C owns the file. The registry names ⌘0 as Fit all and ⌘1 as Work (D5). Today ⌘0 resets the viewport and ⌘1 fits all. F3 did not retarget them, because changing those chords would change behavior this lane was told to keep. ⌘⇧T (tidy) is registered and not bound; the menu still shows the one-release alias ⌘⌥T.
 - Smallest change: when L-C rebinds, read `matchShortcut` / `electronAccelerator` and move the old meanings off those chords in the same change. Bind tidy to ⌘⇧T beside the alias.
-- Status: done in feat(m444): `useViewport` matches `fit-all`, `tier-work`, `tier-plan`, `tier-map`, `fit-task`, `tidy` and `tidy-alias` through `matchShortcut` / `electronAccelerator`. ⌘0 fits all, ⌘1/⌘2/⌘3 fly to the tier targets, ⌘⇧0 fits the task, ⌘⇧T tidies. The menu still shows tidy-alias. `shortcuts.ts` was not edited.
+- Status: done in 1b21a8ea (feat(m444)): `useViewport` matches `fit-all`, `tier-work`, `tier-plan`, `tier-map`, `fit-task`, `tidy` and `tidy-alias` through `matchShortcut` / `electronAccelerator`. ⌘0 fits all, ⌘1/⌘2/⌘3 fly to the tier targets, ⌘⇧0 fits the task, ⌘⇧T tidies. The menu still shows tidy-alias. `shortcuts.ts` was not edited.
 - Filed on the F3 branch as R-005.
 
 ### R-012 · Mount Sessions and Review from Canvas, and pass the session count
@@ -190,7 +190,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/MinimapOverlay.tsx`
 - Why the contract or the owner cannot absorb it: L-B owns the overlay. The sentence `Nothing placed yet` is `emptyState('minimap')` in `empty-states.ts`. A second sentence in the overlay would drift from `empty.2`.
 - Smallest change: when the canvas has no panels, render `emptyState('minimap').sentence` and no numeric zero.
-- Status: done in feat(m444): an empty canvas renders `emptyState('minimap').sentence` ("Nothing placed yet") and `minimapHeader(0)` is `MAP` with no digit.
+- Status: done in 1b21a8ea (feat(m444)): an empty canvas renders `emptyState('minimap').sentence` ("Nothing placed yet") and `minimapHeader(0)` is `MAP` with no digit.
 
 ### R-023 · A failed restore is the 09 surface's sentence
 - Lane: L-A
@@ -218,7 +218,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/palette/commands.ts`, `src/renderer/canvas/Canvas.tsx` (`openSettingsScope`)
 - Why the contract or the owner cannot absorb it: the row and the verb are `OPEN_SETTINGS_ROW` / `openSettingsPage` in `palette-actions/settings.ts`. The command list and the dock's Settings callback are other lanes. Nothing a person can click reaches the page. The shot calls `window.__tcOpenSettings`, which is the same function the row's `run` calls.
 - Smallest change: add a command whose `run` imports `openSettingsPage` from `@renderer/settings/open` (a new `PaletteActions` key would re-partition the slices). Point the dock's `onSettings` at `openSettingsPage()`. Leave `Manage settings…` as the palette drill-in.
-- Status: palette half done in feat(m444): `canvas.settings` ("Open Settings") calls `openSettingsPage`. Dock half still open: Canvas `openSettingsScope` still opens the palette settings scope, and that call is outside the TierLayer slot.
+- Status: palette half done in 1b21a8ea (feat(m444)): `canvas.settings` ("Open Settings") calls `openSettingsPage`. Dock half still open: Canvas `openSettingsScope` still opens the palette settings scope, and that call is outside the TierLayer slot.
 
 ### R-027 · Scope metrics.1 to canvas surfaces
 - Lane: L-D
