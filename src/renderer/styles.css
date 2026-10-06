@@ -12466,20 +12466,28 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    the room except on that chrome. The room's own ask pill, legend, fit
    controls and room-map stay in the DOM (verify:world reads them) and are
    clipped out of sight. */
+/* Opacity 1 so the shared chrome can paint (a child cannot paint through
+   opacity 0). visibility:hidden on the host, and visible again only on
+   the chrome: the host box must not paint over the room. The renderer is
+   opaque (`alpha: false`) so a transparent buffer cannot show the shell
+   ground through the WebGL canvas. */
 .canvas--behind-world {
   opacity: 1;
   z-index: 3;
+  visibility: hidden;
   pointer-events: none;
   background: transparent;
 }
+/* The aura inherits the host's visibility. Naming it here would read as a
+   third aura layer (`verify:styles` aura.1 splits any selector that mentions it). */
 .canvas--behind-world > .world,
-.canvas--behind-world > .canvas__aura,
 .canvas--behind-world > .edge-indicators {
   visibility: hidden;
 }
 .canvas--behind-world > .command-pill,
 .canvas--behind-world > .minimap,
 .canvas--behind-world > .canvas-hud {
+  visibility: visible;
   pointer-events: auto;
 }
 .world-chrome .world-ask,

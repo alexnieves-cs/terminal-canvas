@@ -16,7 +16,7 @@ import { agentTint, effectOf, hopsOn, leanOf, type Station } from './world-scene
 import { NIGHT, SHELL, TRIM, stateHexForAgent } from './world-palette'
 import { worldActions } from './world-context-store'
 import { CLICK_SLOP_PX, isRepeatClick, OPEN_HINT, openableFrom, selectAgent, useSelectedAgent } from './world-select'
-import { contactBlob, CONTACT, SHELL_RIM } from './world-set'
+import { agentBreathes, contactBlob, CONTACT, SHELL_RIM } from './world-set'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
@@ -443,7 +443,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     const hex = stateHexForAgent(status)
     const boost = glowScale(hex, bloom)
     // Working breathes. Needs-you is the beacon, not a second pulse on the eyes.
-    const breath = (status === 'working' || status === 'thinking') && !reducedRef.current ? 0.86 + 0.14 * Math.sin(t * 2.2) : 1
+    const breath = agentBreathes(status) && !reducedRef.current ? 0.86 + 0.14 * Math.sin(t * 2.2) : 1
     eyeMat.color.set(hex).multiplyScalar(boost * breath)
     haloMat.color.set(hex).multiplyScalar(boost * breath)
     floorMat.color.set(hex).multiplyScalar(boost * breath)

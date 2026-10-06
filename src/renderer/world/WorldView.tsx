@@ -685,7 +685,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
         camera={{ position: [start.x, start.y, start.z], fov: VIEW.fov, near: 0.1, far: 480 }}
         // A click on empty floor lets the picked robot go (an orbit's release is not a click: fiber measures the drag).
         onPointerMissed={(event) => { if (event.type === 'click') selectAgent(null) }}
-        gl={{ antialias: true, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <color attach="background" args={[ground]} />
         <Lights extent={half + 3} shadowMap={tierPlan.shadowMap} />

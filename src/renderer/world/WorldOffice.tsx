@@ -7,7 +7,7 @@ import { stateHexForAgent, STUDIO } from './world-palette'
 import { studioEnv } from './world-gloss'
 import { agentTint, type Slot, type Station } from './world-scene'
 import { panelFloor, type CanvasBox } from './world-structure'
-import { deskAccessory, roundedRectPath, slabHalf, TABLE_PLATE, type Accessory } from './world-set'
+import { agentBreathes, deskAccessory, roundedRectPath, slabHalf, TABLE_PLATE, type Accessory } from './world-set'
 import { leavePose } from './world-transition'
 import { TrimLine, WorldPlatform } from './WorldPlatform'
 import { WorldProps } from './WorldProps'
@@ -290,7 +290,7 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
     if (!material) return
     const status = getAgent(agentId)?.status ?? 'idle'
     material.emissive.set(stateHexForAgent(status))
-    const breath = status === 'working' || status === 'thinking' ? 0.82 + 0.18 * Math.sin(performance.now() / 420) : 1
+    const breath = agentBreathes(status) && !reduced ? 0.82 + 0.18 * Math.sin(performance.now() / 420) : 1
     const goal = SCREEN_GLOW[status] * breath
     material.emissiveIntensity += (goal - material.emissiveIntensity) * (1 - Math.exp(-6 * Math.min(delta, 0.1)))
   })

@@ -383,6 +383,11 @@ const BREATHES: Readonly<Record<AgentStatus, boolean>> = {
   working: true, thinking: true, idle: false, waiting_approval: false, error: false
 }
 
+/** Eyes, the floor ring and a desk screen breathe on these statuses. The same table as the trim, so the word is not spelled again (`verify:rail` `state.2`). */
+export function agentBreathes(status: AgentStatus): boolean {
+  return BREATHES[status]
+}
+
 /**
  * The trim follows the room's work: still while nobody is busy — the resting
  * look is M416's exactly, so an idle room is the quiet room it always was —
