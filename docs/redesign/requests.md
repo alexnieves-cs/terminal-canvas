@@ -30,7 +30,7 @@ A request is open until the lead writes `done:` and the commit.
 - File: scripts/verify-rail.cjs
 - Why the contract or the owner cannot absorb it: D7 moves the work item's done tone from `idle` to `done` inside `panel-state.ts` only. `board.1` pins `expectTones` as `['kind', 'working', 'starting', 'idle']`. F1 does not own this suite. `state.2` stays green and the words do not move.
 - Smallest change: `const expectTones = ['kind', 'working', 'starting', 'done']`, and the check title's parenthetical `(kind/working/starting/idle)` becomes `(kind/working/starting/done)`.
-- Status: open
+- Status: done: board.1 expects tone `done` for a done work item (D7). The owner asked for this after the F1 merge.
 
 ### R-003 · High-contrast glass is still the pre-F1 graphite
 - Lane: F1

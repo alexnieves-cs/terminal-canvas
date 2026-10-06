@@ -3501,8 +3501,9 @@ console.log('\n' + '='.repeat(60))
 // M116 — board.1. THE WORK CARD'S STATE WORD COMES FROM DATA. The `work`
 // arm of panel-state.ts speaks the ITEM's state — the one kind whose word is
 // neither its kind nor a process's — and each of the four words maps to an
-// EXISTING tone (todo→kind, working→working, review→starting, done→idle), so
-// no stylesheet rule and no token is new for it. The words are read off
+// EXISTING tone (todo→kind, working→working, review→starting, done→done).
+// D7 moved a finished item off idle: green is finished OK, and the word
+// stays `done`. The words are read off
 // `WORK_ITEM_STATES` by index here, never spelled: `state.2` forbids the
 // `'working'` literal outside panel-state.ts, and this check obeys the same rule so a
 // renamed state fails it loudly instead of passing on a stale string. The
@@ -3514,13 +3515,13 @@ console.log('\n' + '='.repeat(60))
   try {
     const S = R.WORK_ITEM_STATES, U = R.USER_SET_STATES
     const has = Array.isArray(S) && S.length === 4 && Array.isArray(U)
-    const expectTones = ['kind', 'working', 'starting', 'idle']
+    const expectTones = ['kind', 'working', 'starting', 'done']
     const arms = has ? S.map((state, i) => { const r = R.panelState({ kind: 'work', status: undefined, dormant: false, work: { state } }, undefined); return { state, r, ok: r.word === state && r.tone === expectTones[i] } }) : []
     // With no item (the record dropped) the arm names its kind, like every document kind.
     const gone = has ? R.panelState({ kind: 'work', status: undefined, dormant: false }, undefined) : null
     const label = R.railLabel({ kind: 'work', rect: { id: 'k1', x: 0, y: 0, w: 1, h: 1 }, z: 1, title: 'Fix the thing', work: { itemId: 'wi-7' } }, undefined)
     const bare = R.railLabel({ kind: 'work', rect: { id: 'k2', x: 0, y: 0, w: 1, h: 1 }, z: 1, work: { itemId: 'wi-7' } }, undefined)
-    ok('board.1 the work arm yields each of the four state words with its existing tone (kind/working/starting/idle) and `work` with tone kind when the item is gone; USER_SET_STATES is exactly two members of WORK_ITEM_STATES; the rail label is `work · <title>` and `work` for a card with no title',
+    ok('board.1 the work arm yields each of the four state words with its existing tone (kind/working/starting/done) and `work` with tone kind when the item is gone; USER_SET_STATES is exactly two members of WORK_ITEM_STATES; the rail label is `work · <title>` and `work` for a card with no title',
       has && arms.length === 4 && arms.every((a) => a.ok) && R.TONES.includes(arms[0].r.tone) &&
         gone !== null && gone.word === 'work' && gone.tone === 'kind' &&
         U.length === 2 && U.every((u) => S.includes(u)) && U[0] === S[0] && U[1] === S[3] &&
