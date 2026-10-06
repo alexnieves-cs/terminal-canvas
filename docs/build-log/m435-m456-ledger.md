@@ -644,3 +644,34 @@ The first affected run failed `verify:rail` `labels.1`: the four recovery verbs 
 | Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.2s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.7s). `verify:relay` passed (2.7s). `verify:flowchart` passed (0.9s). |
 
 `verify:meta` check 14 still misses `session:host` and `boot:progress`. `panels-split.2` is the absent `pre-v7-run` tag. `visual.1` is declared 89 / goldens 79. The check prints the first eight missing names; the full list is `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-plan-palette`, `rd-map`, `rd-sessions`, `rd-settings-keys`, `rd-recovery`. `verify:tmux` is still the missing `linux-x64` `pty.node`. `verify:first-run` is still `revamp.create.1`. The shot was not repeated: `prebuilds/linux-x64/pty.node` is still absent, and `UPDATE_GOLDENS` was not set.
+
+## Lead wiring (screens 01–09)
+
+Branch `rd/lead-wiring` from `redesign/main` at `9bfc3034`. The open requests R-016 through R-037 are landed except R-024, which stays open: D1–D8 do not choose between placing a terminal on an empty canvas and changing the empty-canvas copy, and `onCanvasDoubleClick` still places a flowchart process step. R-022 and R-023 were already done. Frozen foundations were not edited. `UPDATE_GOLDENS` was not set. Nothing was written under `verify/visual/goldens/`.
+
+Two measurements needed a second commit after the request they belong to. `revamp.motion.1` reads the later `panel-settle` as 0, −3px, 1px, 0; `translateY(0)` has no unit, so the px-only sample list saw two values (`f6a5b4d9`). `rd-attn.one.1` treats any `attention-queue` import in `CommandPill.tsx` as the pill building a queue, so `ATTENTION_VERB.recovery` is imported from the pill's pure module (`96c86df3`). `verify:ipc` was recomputed from `Object.values(IPC)`: the 206 tally had already omitted `world:status` and `world:retry`, and `dialog:confirm` makes 209 (`9275573d`).
+
+### Gates
+
+Linux, Node v22.14.0. `npm ci --ignore-scripts` first. The second plain wave is after the recovery-verb move. `npm run build` (typecheck plus electron-vite) passed in the Electron attempt below; it is not part of the plain-wave tally.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:rd-l-c` | 11/11 |
+| `npm run verify:rd-l-d` | 18/18 |
+| `npm run verify:rd-l-e` | 15/15 |
+| `npm run verify:rd-l-f` | 17/17 |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:rail` | 266/266 |
+| `npm run verify:palette` | 182/182 |
+| `npm run verify:viewport` | 199/199 |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.3s, stopped after wave 1 |
+
+The three plain failures are the known ones. `verify:meta` is 51/53: `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (declared 89 / goldens 79; the check prints the first eight missing names). Check 14 is green: `boot:progress` and `session:host` are in the README fence. `verify:first-run` is 28/29, `revamp.create.1`. `verify:tmux` throws on `pty.node` until it is rebuilt (below). `verify:canvas-sync` passed (14.6s). `verify:relay` passed (1.8s). `verify:flowchart` passed (1.1s). An earlier wave, before the recovery-verb move, also failed `verify:rd-f2` (`rd-attn.one.1`, the pill importing `attention-queue`) and once failed `verify:review` `merge.1` with `{kind:'failed', detail:''}` under the 8-wide run. Alone, `verify:review` is 163/163. `verify:rd-f2` is 19/19 after the verb moved.
+
+### Electron
+
+The Linux ELF is `node_modules/electron/dist/electron` (`v43.4.1`), from `node node_modules/electron/install.js`. The Mac path in the npm scripts is absent. `npm rebuild node-pty` wrote `build/Release/pty.node` and `verify:tmux` is then 35/35. `electron-rebuild -f -w node-pty` replaced that binary with the Electron ABI. Under `xvfb-run`, `TC_SHOT_ONLY=rd-splash` wrote `out/shots/rd-splash.png` and `rd-splash.vs-reference.png` and exited 0. DBus address errors are the host. `verify:ipc` is 1/1 at 209 channels. The rest of the Electron tier was not run. No golden was written.
