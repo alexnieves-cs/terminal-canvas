@@ -52,7 +52,8 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | P1 F1 | main | — | tokens and the one state colour. Merges before F2 and F3. |
 | P1 F3 | main (PR 6) | — | shell frame, after F1 and F2. |
 | P3a W0 | redesign/main | — | night studio, `5353e47f` |
-| P3b W2 | redesign/main | `rd-w3b` after W1 and W3 | the room, `695a71da`. Mounts `rd:W1` and `rd:W3` stay empty until those lanes land. |
+| P3b W2 | redesign/main | `rd-w3b` after W1 and W3 | the room, `695a71da`. Mounts `rd:W1` and `rd:W3` stay marked until those lanes land. |
+| P3b W1 | redesign/main | `rd-w3b` after W3 | the transition, after W2. R-041, R-042 and R-043 land with the mount. |
 
 ## M438 · F3 shell frame
 
@@ -909,3 +910,9 @@ Both composites are `does-not-read`. Mockup 10 is the plan tipping into terraces
 Rules review: no blockers. The filmstrip's millisecond labels use the mono face; `face.1` still passes. Two world toggles remain until R-042.
 
 World guard: no blockers. `plan-floor.ts`, `WorldLens.tsx`, `world-transition.ts` and `world-toggle.ts` import no three. `WorldStage` still has one `/* @__PURE__ */ lazy()` for `WorldView` and the existing flat-room lazy. No new `<Environment>`. Reduced motion is the 120ms cross-fade. `WorldFlat`, `WorldCardBody` and `WorldMinimap` are untouched.
+
+### Merge
+
+Merged to `redesign/main` after W2. `rd/w1-transition` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W1`.
+
+The lead then mounted the curves in `WorldView`: `popDelaysFromTarget` from the camera target, `motionOf().dolly` into `dollyAt`, `motionOf().terrace` as the scale of the office and the terraces, `setWorldCameraTarget` from the orbit each frame, and `paintPlanFloor` on a ground under the terraces. `WorldLens` stays the canvas control. The top-bar World view button is gone (R-042). `world.stage.4` names the 120ms cross-fade (R-041). R-044 stays open until the swiftshader shot. W3 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w3-overview`.
