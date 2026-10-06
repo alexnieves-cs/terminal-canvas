@@ -231,3 +231,22 @@ Shot: `rd-settings-keys` records Step in, reference 08. A `run` makes `verify:me
 The shot records Step in (`⌘↵`), not the mockup's combined "Step into / out of panel". Those are two registry rows, and `rd-keys.settings.1` forbids folding them by hand. Aliases fold onto their target: Tidy's note is "was ⌘⌥T · kept for one release".
 
 Checks were 1/15 (only `rd-l-e.0`) before the modules existed. `shortcuts.ts` was not edited. R-010 was already done and was not repeated.
+
+Boolean and enum controls on the other pages carry `aria-label` of the setting name plus the current value. `labels.1` reads a button whose only child is a function call as unlabelled, and the first affected run failed `verify:rail` on those two buttons. After the labels, that suite is 266/266.
+
+### Checks (Linux, Node v22, `npm ci --ignore-scripts`)
+
+Rebase onto `origin/redesign/main` (`6bffde9f`): already based there. No commits to replay.
+
+| Step | Result |
+|---|---|
+| `npm run typecheck` | Pass. Node and web. The hand-run `npm run build` after the wave also typechecked and bundled (`electron-vite build`). |
+| `npm run verify:rd-l-e` | 15/15. Watched red first at 1/15. |
+| `npm run affected` | 56/58 plain suites, 31s, stopped after the plain tier. Base `fba024f2c8`, 45 files. Failures: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (`rd-settings-keys` has `run` and no golden — expected until Phase 4), and `verify:first-run` `revamp.create.1`. `verify:rail` `labels.1` is green. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, `verify:panels:*`) did not start. |
+| `npm run verify` | 63/67 of the plain wave (67 plain, 13 Electron), 31s, stopped after wave 1. Same `panels-split.2`, `visual.1`, and `revamp.create.1`. `verify:tmux` throws `Cannot find module './prebuilds/linux-x64//pty.node'` (`npm ci --ignore-scripts` never rebuilt node-pty). `verify:review` `merge.1` returned `{kind:'failed', detail:''}` once in the 4-wide wave; alone it is 163/163. The lane does not touch `lane-merge.ts`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` passed in 0.9s. `verify:styles` passed. |
+| Electron tier | Did not start. Wave 1 rejected the tree. |
+| `npm run shot` | Under `xvfb-run` and `scripts/redesign/with-electron-lock.sh`, `TC_SHOT_ONLY=rd-settings-keys`: exit 127. `package.json` launches `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`, and that path is absent. The Linux ELF is `node_modules/electron/dist/electron`. Invoking that ELF directly, the app reached `shot-entry` and then threw the same missing `pty.node`. No PNG was written. The process stayed up until it was killed at 75s. |
+| Critic | No `out/shots/rd-settings-keys.vs-reference.png`, so the mockup critic and the rules reviewer did not run. |
+| Goldens | `UPDATE_GOLDENS` was not set. `visual.1` lists `rd-settings-keys` as the one missing golden (declared 80, goldens 79). |
+
+Known reds left as they are: `panels-split.2`, `revamp.create.1`, missing `pty.node`. `verify:canvas-sync` and `verify:relay` were green on this run.
