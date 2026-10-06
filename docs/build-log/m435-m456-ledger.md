@@ -378,3 +378,48 @@ Could not run on Linux:
 Other reds, not fixed: `verify:meta` `panels-split.2` (`pre-v7-run` absent), `verify:first-run` `revamp.create.1`, `verify:meta` 14 (`boot:progress` absent from the README — R-018).
 
 Requests open: R-018 README fence, R-019 composition root publishes progress, R-020 preload subscribes, R-021 Canvas mounts the three screens, R-022 minimap reads `emptyState('minimap')`, R-023 L-F's 09 surface shows the boot-issue sentence, R-024 empty-canvas double-click still places a process step.
+
+## M446 · L-E Settings › Keyboard
+
+Branch `rd/l-e-keyboard`. Screen 08. Decisions D4 and D5. `shortcuts.ts` stays frozen.
+
+### Plan
+
+PLAN CHECK, before any edit under `src/`:
+
+- `shortcut-overrides.ts` is pure and is checked before the Settings UI. `shortcuts.ts` is not edited. The merge, the canvas-scope ⌘ rule, duplicate detection within a scope, and the `tidy-alias` chord (⌘⌥T) live in that module. `matchEffective` and `acceleratorFor` are the same merge: one for a key event, one for the menu string. With an empty override list, `acceleratorFor` is `electronAccelerator`, so tidy-alias stays `CmdOrCtrl+Alt+T`.
+- Rendered rows come from `keyboardSections`, which walks `SHORTCUTS`. `rd-keys.settings.1` compares that walk to the registry (every id, registry labels, group order of the non-alias rows). `KeyboardPane.tsx` maps the function; it does not carry a second list of labels or group ids.
+- R-010 is done on this branch (`shell.centerView` is `canvas | orchestration | sessions | review`). It is not in this change.
+
+Then the page. `keyboard.overrides` is a list setting (tab-separated `id` + chord) because `SettingValue` has no record and `parsePreferences` already checks a list of strings. The Keyboard page hosts the registry. The other six nav pages are thin hosts over the schema rows in their categories, each with a purpose sentence. The "Open Settings" verb is `OPEN_SETTINGS_ROW` in `palette-actions/settings.ts`; the command list and the dock callback are other lanes (R-026). The menu rebuild on `settings:changed` already exists; the accelerator it paints still comes from the frozen registry (R-025).
+
+Shot: `rd-settings-keys` records Step in, reference 08. A `run` makes `verify:meta` `visual.1` list a missing golden. That red is expected until Phase 4. `UPDATE_GOLDENS` is not set.
+
+### What landed
+
+`shortcut-overrides.ts` merges a list of `id<TAB>chord` over `SHORTCUTS`. Canvas scope without ⌘ is refused by the shortcut's name. A duplicate inside one scope is refused and names the other row; nothing is returned to store. `tidy-alias` stays ⌘⌥T until that id is overridden, and moving Tidy onto ⌘⌥T clashes with the alias. Putting a chord back to the registry value drops the override. `acceleratorFor([])` is `electronAccelerator`, so the seven historical menu strings stay byte-for-byte. `matchEffective([])` agrees with `matchShortcut`. The frozen parser only knows the registry's keys, so a letter it has never seen (P, for one) is refused rather than stored as a chord nothing can match.
+
+`keyboard.overrides` is a list, default `[]`, not plan-writable. The Keyboard page maps `keyboardSections`. The other six pages host the schema rows for their categories and each says what it is for. List settings stay off those pages. The page mounts from a second root installed when `palette-actions/settings.ts` loads, because Canvas is not this lane's file. `OPEN_SETTINGS_ROW` calls `openSettingsPage`. The dock and the command list do not, yet (R-026). The menu still paints `electronAccelerator` (R-025).
+
+The shot records Step in (`⌘↵`), not the mockup's combined "Step into / out of panel". Those are two registry rows, and `rd-keys.settings.1` forbids folding them by hand. Aliases fold onto their target: Tidy's note is "was ⌘⌥T · kept for one release".
+
+Checks were 1/15 (only `rd-l-e.0`) before the modules existed. `shortcuts.ts` was not edited. R-010 was already done and was not repeated.
+
+Boolean and enum controls on the other pages carry `aria-label` of the setting name plus the current value. `labels.1` reads a button whose only child is a function call as unlabelled, and the first affected run failed `verify:rail` on those two buttons. After the labels, that suite is 266/266.
+
+### Checks (Linux, Node v22, `npm ci --ignore-scripts`)
+
+Rebase onto `origin/redesign/main` (`6bffde9f`): already based there. No commits to replay.
+
+| Step | Result |
+|---|---|
+| `npm run typecheck` | Pass. Node and web. The hand-run `npm run build` after the wave also typechecked and bundled (`electron-vite build`). |
+| `npm run verify:rd-l-e` | 15/15. Watched red first at 1/15. |
+| `npm run affected` | 56/58 plain suites, 31s, stopped after the plain tier. Base `fba024f2c8`, 45 files. Failures: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (`rd-settings-keys` has `run` and no golden — expected until Phase 4), and `verify:first-run` `revamp.create.1`. `verify:rail` `labels.1` is green. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, `verify:panels:*`) did not start. |
+| `npm run verify` | 63/67 of the plain wave (67 plain, 13 Electron), 31s, stopped after wave 1. Same `panels-split.2`, `visual.1`, and `revamp.create.1`. `verify:tmux` throws `Cannot find module './prebuilds/linux-x64//pty.node'` (`npm ci --ignore-scripts` never rebuilt node-pty). `verify:review` `merge.1` returned `{kind:'failed', detail:''}` once in the 4-wide wave; alone it is 163/163. The lane does not touch `lane-merge.ts`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` passed in 0.9s. `verify:styles` passed. |
+| Electron tier | Did not start. Wave 1 rejected the tree. |
+| `npm run shot` | Under `xvfb-run` and `scripts/redesign/with-electron-lock.sh`, `TC_SHOT_ONLY=rd-settings-keys`: exit 127. `package.json` launches `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`, and that path is absent. The Linux ELF is `node_modules/electron/dist/electron`. Invoking that ELF directly, the app reached `shot-entry` and then threw the same missing `pty.node`. No PNG was written. The process stayed up until it was killed at 75s. |
+| Critic | No `out/shots/rd-settings-keys.vs-reference.png`, so the mockup critic and the rules reviewer did not run. |
+| Goldens | `UPDATE_GOLDENS` was not set. `visual.1` lists `rd-settings-keys` as the one missing golden (declared 80, goldens 79). |
+
+Known reds left as they are: `panels-split.2`, `revamp.create.1`, missing `pty.node`. `verify:canvas-sync` and `verify:relay` were green on this run.

@@ -11864,7 +11864,174 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:L-D ── */
 
 /* ── rd:L-E ── */
-
+/* M446. Settings is a page over the canvas, not a panel: nothing here refits
+   xterm, so the chrome is ordinary flow. The host sits outside #root, which
+   is why the page sets its own face instead of inheriting a panel's. */
+.rd-settings {
+  position: fixed;
+  top: var(--titlebar-h);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 980;
+  display: flex;
+  background: var(--s-1);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.rd-settings__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 220px;
+  flex: none;
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--s-2);
+  border-right: 1px solid var(--line);
+}
+.rd-settings__brand {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-lg);
+  font-weight: 600;
+}
+.rd-settings__nav button {
+  font: inherit;
+  font-size: var(--t-md);
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  cursor: pointer;
+}
+.rd-settings__nav button[aria-current="page"] {
+  background: var(--s-4);
+  border-color: var(--line-strong);
+}
+.rd-settings__close { margin-top: auto; }
+.rd-settings__main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--sp-7) var(--sp-8);
+}
+.rd-settings__sheet { max-width: 640px; }
+.rd-settings__title {
+  margin: 0;
+  font-size: var(--t-xl);
+  font-weight: 600;
+}
+.rd-settings__lead {
+  margin: var(--sp-3) 0 var(--sp-5);
+  max-width: 62ch;
+  color: var(--fg-2);
+  font-size: var(--t-md);
+}
+.rd-settings__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.rd-settings__search {
+  flex: 1;
+  font: inherit;
+  font-size: var(--t-md);
+  color: var(--fg);
+  background: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+.rd-settings__main button,
+.rd-settings__banner button {
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--fg);
+  background: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-4);
+  cursor: pointer;
+}
+.rd-settings__banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: var(--sp-5) 0;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.rd-settings__banner p { margin: 0; flex: 1; }
+.rd-settings__refusal {
+  margin: var(--sp-3) 0 0;
+  color: var(--fg);
+  font-size: var(--t-sm);
+}
+.rd-settings__group {
+  margin: var(--sp-6) 0 var(--sp-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.rd-settings__group-note {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+}
+.rd-settings__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rd-settings__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+.rd-settings__row[data-clash="true"],
+.rd-settings__row[data-recording="true"] {
+  background: var(--s-3);
+}
+.rd-settings__name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 1;
+  min-width: 0;
+}
+.rd-settings__hint,
+.rd-settings__alias,
+.rd-settings__recording,
+.rd-settings__value {
+  color: var(--fg-3);
+  font-size: var(--t-sm);
+}
+.rd-settings__path {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+}
+.rd-settings__kbd {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--s-2);
+  color: var(--fg);
+}
+.rd-settings button:focus-visible,
+.rd-settings__search:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
 /* ── /rd:L-E ── */
 
 /* ── rd:L-F ── */

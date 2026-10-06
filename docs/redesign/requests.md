@@ -206,3 +206,17 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: M388's double-click places a process step. The empty canvas copy, from the mockup, says "Double-click to place a terminal". L-A does not own Canvas, and retargeting the gesture would change a pinned behavior (`attemptOf` already refuses to teach ⌘N after that double-click).
 - Smallest change: when the canvas is empty, a double-click places a terminal, or the copy changes to name the process step. Leave the gesture as it is until the owner decides.
 - Status: open
+
+### R-025 · Menu accelerators read keyboard overrides
+- Lane: L-E
+- File: `src/main/menu.ts`
+- Why the contract or the owner cannot absorb it: L-E owns the merge (`acceleratorFor` in `src/shared/shortcut-overrides.ts`) and the `keyboard.overrides` setting. The menu is F3's. It already rebuilds on `settings:changed` and calls `electronAccelerator`, which reads the frozen registry. A re-recorded chord persists and the Keyboard page shows it; the menu item keeps the registry accelerator, including tidy-alias `CmdOrCtrl+Alt+T`.
+- Smallest change: build each accelerator with `acceleratorFor(id, parseOverrideList(stringList(options.settingValue('keyboard.overrides'))))` instead of `electronAccelerator(id)`. An empty list matches today's historical strings. `stringList` is `Array.isArray(value) ? value.filter(v => typeof v === 'string') : []`. Listeners (`useKeyboardNav`'s `matchShortcut`, the palette's hardcoded ⌘K) still match the registry; `matchEffective` is the same merge when those files are next touched. That hook returns before an Option chord, so swapping the call alone does not fire an override that adds ⌥.
+- Status: open
+
+### R-026 · Open Settings from the palette and the dock
+- Lane: L-E
+- File: `src/renderer/palette/commands.ts`, `src/renderer/canvas/Canvas.tsx` (`openSettingsScope`)
+- Why the contract or the owner cannot absorb it: the row and the verb are `OPEN_SETTINGS_ROW` / `openSettingsPage` in `palette-actions/settings.ts`. The command list and the dock's Settings callback are other lanes. Nothing a person can click reaches the page. The shot calls `window.__tcOpenSettings`, which is the same function the row's `run` calls.
+- Smallest change: add a command whose `run` imports `openSettingsPage` from `@renderer/settings/open` (a new `PaletteActions` key would re-partition the slices). Point the dock's `onSettings` at `openSettingsPage()`. Leave `Manage settings…` as the palette drill-in.
+- Status: open
