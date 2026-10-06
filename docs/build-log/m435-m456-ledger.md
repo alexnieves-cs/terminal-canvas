@@ -631,3 +631,16 @@ The first affected run failed `verify:rail` `labels.1`: the four recovery verbs 
 - `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-033.
 - The README architecture fence does not list `session:host`. Check 14 already misses `boot:progress` (R-018). R-037 asks for `session:host` only. The README is not edited.
 - Recovery verbs carry `aria-label`. `labels.1` strips a child expression unless it looks like a name, a label or a title, so `{view.reconnect}` alone was an unlabelled button.
+
+### Gates after merging L-C
+
+`origin/redesign/main` at `ddf8363f` is in this branch (`25c471f9`). No rebase. The request list and this ledger keep both lanes. L-C's R-030, R-031 and R-032 are unchanged. This lane's five requests are R-033 through R-037. No code comment or check named the old ids.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-f` | 17/17 pass |
+| `npm run affected -- --base origin/redesign/main` | 52/55 plain suites, 31.1s, stopped after the plain tier. 14 files. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta`, `verify:tmux`, `verify:first-run`. Electron suites it selected did not start. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.2s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.7s). `verify:relay` passed (2.7s). `verify:flowchart` passed (0.9s). |
+
+`verify:meta` check 14 still misses `session:host` and `boot:progress`. `panels-split.2` is the absent `pre-v7-run` tag. `visual.1` is declared 89 / goldens 79. The check prints the first eight missing names; the full list is `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-plan-palette`, `rd-map`, `rd-sessions`, `rd-settings-keys`, `rd-recovery`. `verify:tmux` is still the missing `linux-x64` `pty.node`. `verify:first-run` is still `revamp.create.1`. The shot was not repeated: `prebuilds/linux-x64/pty.node` is still absent, and `UPDATE_GOLDENS` was not set.
