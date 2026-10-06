@@ -1066,3 +1066,33 @@ VERDICT does-not-read
 8. **STATE COLOUR** — The reference floor shows cyan, amber (the glow), and green on the rings and scrubber ticks. The capture’s specks are dark gray. No cyan working, amber needs-you glow, green done, red failed, or slate idle appears on the canvas.
 
 No disagreement. The centre sample is the shell ground. R-053, same host as the room shot.
+
+## M452 · W4 Focus and act
+
+Branch `rd/w4-focus` from `redesign/main` at `fa49bdd8` (tag `rd-w3b` plus the blank-shot note). Wave 3c. Merges first. One milestone. Mockup 12.
+
+### Plan
+
+Pure model in `world-select.ts`, then the sheet and the chrome.
+
+1. Focus is a second slot on the pick store. `engageFocus` selects and marks the robot followed. `clearFocus` drops both. Nothing is persisted. `focusPrimary(pending)` is `approve` while a request id is present and `open` otherwise, so one control is filled. `replyRoute` is `send` for a chat (`canSend`), `paste` for an agent terminal, and `shell` otherwise. A shell's composer is closed with the reason `answer in its terminal`. `focusQuestion` reads a shot preview, else the context approval (description, argument, request id), else the ask line. `diffPreview` shows eight lines until Full diff. `focusCrumb` is World, the task title, the agent name.
+2. `WorldFocusSheet.tsx` is plain DOM. It imports no three, fiber, or drei, and it does not call `window.canvas` or `agentSession`. Approve and Deny call `actions.answer`. Reply for a chat calls `actions.send`. Open in Canvas calls `actions.open` (M429's jump). The sheet is 400px, `role="dialog"`, sections Request, What it's doing, and the fact line from `factParts` (inspector density, D3). Chords are `shortcutById('allow')` and `shortcutById('step-in')`.
+3. A pick glides through `useWorldCamera(camera).follow()` in `WorldChrome`. Bare Enter on a picked robot calls `engageFocus` (the same glide). ⌘Enter is `step-in` and calls `door.open`. Esc steps back to the room (`fit`). ⌘Esc is `step-out` and calls `setTier('plan')`. Both stop the stage's leave-world Escape while a robot is in focus. The breadcrumb is `World › task › name · Esc`.
+4. The ask chip keeps its Approve control, calling `actions.answer`, shown while that robot is in focus.
+5. Shot `rd-world-focus`, reference 12. The steward fixture supplies the pending agent. `__rdW4` is the shot door, the same shape as `__rdW3`. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `WorldFocusSheet.tsx` imports no three, fiber, or drei.
+- [x] Approve, Deny, and Reply add no approval path. They call the room's registered doors (`actions.answer`, `actions.send`, `actions.open`). The publisher's `answer` is still `answerRequest`, not `answerApproval`, so the inspector history row is R-070. An agent terminal's paste-then-submit is R-071. The sheet never calls `agentSession` itself.
+- [x] The camera glide is `useWorldCamera().follow()`, not a new camera. Esc uses `fit`. ⌘Esc uses `setTier('plan')`.
+
+### CSS
+
+New rules only, inside `/* ── rd:W4 ── */`. The sheet is 400px. The diff's `code` leaf is mono. No state hex.
+
+### Requests
+
+R-070 open: point the room's `answer` at `answerApproval` so the sheet's decision is the inspector's history row. R-071 open: a paste door for agent terminals. R-072 open: `world.open.6`'s sentence still says bare Enter opens; the reachable open is ⌘Enter. R-074 open: name `WorldFocusSheet` in the plain-DOM sentence of `src/renderer/CLAUDE.md`.
+
+R-063 stays open. It wants past-room verbs disabled with one sentence, and `world.replay.6` still requires those buttons omitted. Landing it would edit `verify-world.cjs`, `WorldFlat.tsx`, and `WorldRobot.tsx`, which this lane does not own. No W6 request against `WorldCardBody.tsx` was open at the plan.
