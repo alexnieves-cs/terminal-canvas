@@ -1468,3 +1468,7 @@ Diff `7556aeec` (`pre-redesign`) to `db186caf`. No `.panel__*` or `*-node__*` se
 
 The two safe rows on the fix list landed in the shot scenes: `theme('dark')` on L-B, L-E, and W0–W6 except W1 (which already set it), and `loadMain` on `rd-workspace` and `rd-arrange`. The arrange drag is still not scripted. Re-shot under xvfb: `rd-workspace` and `rd-settings-keys` center luminance 20.9. `rd-world-flat` center is `#24272b` (the field was white before). Gates after the edit: typecheck pass, `verify:rd-l-b`, `verify:rd-l-e`, `verify:rd-w0` through `verify:rd-w6`, `verify:world` 251/251, `npm run build` pass, plain wave 65/67 with the same three known check failures.
 
+### Budget
+
+[docs/redesign/perf-6.0.0.md](../redesign/perf-6.0.0.md). First load 7919 KB at `pre-redesign` and 8203 KB here (+284 KB, 3.6%). `WorldView` stays a lazy chunk (297 KB → 318 KB). The three chunk is 2152 KB on both and is not in the entry. Worst-case WebGL contexts: `LIVE_BUDGET` 8 plus one world. `world-perf.ts` caps full cards at 3 (`world.perf.7`). A room of twenty desks is the reason the desks are one instanced draw, not an agent cap. No row was added to the fix list.
+
