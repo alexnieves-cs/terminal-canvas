@@ -154,7 +154,7 @@ export function WorldCameraPanel({ camera }: { camera: RefObject<CameraApi | nul
       }
       if (hit.id === 'fit-all') { api.fit(); return }
       if (hit.id === 'world') { api.backTo2d(); return }
-      if (hit.id === 'follow') api.follow()
+      if (hit.id === 'follow') { event.preventDefault(); api.follow(); return }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

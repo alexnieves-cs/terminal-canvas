@@ -196,6 +196,14 @@ const near = (a, b) => Math.abs(a - b) < 1e-6
     !/from 'three'|from '@react-three|from 'react'/.test(camera) &&
     !/from '@renderer\/canvas\//.test(camera),
     'registry')
+  const shortcuts = read('src/shared/shortcuts.ts')
+  ok('rd-world.follow.1 Follow picked is F, named followPicked, and the overview panel consumes that chord',
+    /\{ id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' \}/.test(shortcuts) &&
+    /'follow': 'followPicked'/.test(shortcuts) &&
+    (shortcuts.match(/chord: 'F'/g) ?? []).length === 1 &&
+    /chord: '⌘F'/.test(shortcuts) &&
+    /if \(hit\.id === 'follow'\) \{ event\.preventDefault\(\); api\.follow\(\); return \}/.test(panel),
+    'follow')
 }
 
 {

@@ -49,6 +49,9 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'tidy', chord: '⌘⇧T', scope: 'canvas', group: 'navigate', label: 'Tidy' },
   { id: 'world', chord: '⌘⇧W', scope: 'canvas', group: 'navigate', label: 'World' },
   { id: 'search', chord: '⌘F', scope: 'canvas', group: 'navigate', label: 'Search' },
+  // R-061. Bare F, so it does not collide with Search (⌘F). The overview
+  // panel is the handler; a bare key is not a canvas nav chord.
+  { id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' },
   { id: 'navigator', chord: '⌘\\', scope: 'canvas', group: 'navigate', label: 'Navigator' },
   { id: 'context', chord: '⇧⌘\\', scope: 'canvas', group: 'navigate', label: 'Context pane' },
 
@@ -102,6 +105,7 @@ export const SHORTCUT_HANDLERS: Readonly<Record<string, string>> = {
   'tidy-alias': 'tidyPanels',
   'world': 'toggleWorld',
   'search': 'openSearch',
+  'follow': 'followPicked',
   'navigator': 'toggleNavigator',
   'context': 'toggleContext',
   'flip': 'flipTerminals',
