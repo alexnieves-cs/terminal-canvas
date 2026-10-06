@@ -776,3 +776,49 @@ Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62
 R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
 
 The shot loop is recorded on R-040, after the tag, and the tag was not moved. The setter is `setResumeSummary` (`Canvas.tsx` resume effect), not `useSyncExternalStore`. The same `records ?? []` and the same effect are on `rd-canvas` (`5cf60839`). Opening the world is what turned the spin into #185.
+
+## M450 · W2 the room
+
+Branch `rd/w2-room` from `redesign/main` at `38644eed` (R-040's resume-loop note is on that commit). W1 and W3 are in parallel. This lane does not edit them. New requests are R-050 through R-053.
+
+### Plan
+
+Five terraces at the canvas regions. `terraceFloor` is `canvasToFloor` of the region centre, and the size is the box divided by `FLOOR_SCALE`. `panelFloor` is the same conversion for a panel: a desk when the roster has that agent, a console when it does not. `placeStations` moves the desk and the home onto that point; `stationPlan` and `goalOf` stay the ring, so `world.zone.1`–`4` stay green. The scene group subtracts the frame centre, so the frozen orbit, the lights and `TransitionRig` still look at the origin. Terrace math is `canvasToFloor` before that shift.
+
+`terraceDragCanvas` is the canvas delta of two floor points. `moveRegion` is the commit, one plan, one undo. The world does not import it (`world.ctx.door.1`). The check calls both. The scene reads the live region and panel boxes once, at open. The drag itself is R-051.
+
+State. Working and thinking breathe on the eyes, the halo, the floor ring and the desk screen, through `agentBreathes` (the trim's table). The word is not spelled again: `verify:rail` `state.2` fails a `'working'` literal outside `panel-state.ts`. Reduced motion holds the breath at 1. A waiting agent raises `NeedsBeacon`, a vertical column in `stateHexForAgent('waiting_approval')`, and no other status does. The failed pill is `failedLine` (the feed's own words). The ask chip is `askChip`, only while waiting. The visible card is the picked robot. The budget formula `const full = !compact || waiting || picked` stays, because `world.perf.11` and `world.quality.cards.1` read that line; the card branch is `picked` inside it.
+
+Shared chrome. `WorldChrome` keeps its ask pill, legend, Fit room, request count and room map in the DOM (`world.chrome.1`, `world.request.2`, `world.map.2`). The W2 span clips them. The canvas host is opacity 1, `z-index: 3`, `visibility: hidden`, pointer events none. `.command-pill`, `.minimap` and `.canvas-hud` are `visibility: visible` and take the pointer. The aura inherits the host's visibility: naming `.canvas__aura` in that rule is a third layer to `verify:styles` `aura.1`. Those are the 2D components, revealed, not reimplemented. The title bar was already outside the canvas. The camera wedge is R-050. Follow on the tier switch is R-052. Empty mounts: `data-rd-mount="W1"` and `"W3"`, marked `rd:W1 mount` and `rd:W3 mount`. The canvas is opaque (`alpha: false`).
+
+R-039. The desk screen emissive is `stateHexForAgent(status)`. `MeetingTable` returns an empty group (`drawTable` is false). The plate stays in the function so W0's suite, which this lane does not own, still sees it. `agentTint` is still read and does not paint the screen.
+
+### PLAN CHECK
+
+- [x] Two empty marked mount blocks for W1 and W3 in `WorldView.tsx` (`rd:W1 mount`, `rd:W3 mount`, `data-rd-mount`).
+- [x] `rd-world.layout.1` and `rd-world.chrome.1` are in `scripts/verify-rd-w2.cjs`. `rd-w2.0` stays.
+- [x] No literal state hex in the new world code. Screens, the beacon, the fail pill and the ask chip read `stateHexForAgent` or `var(--state-failed)` / `var(--state-needs)`. `rd-world.parity.1` is clean.
+
+`rd-world.layout.1` fails closed: the suite's esbuild imports `terraceFloor`, and a missing export does not resolve. `rd-world.chrome.1` fails if the W2 span does not name `.command-pill`, `.minimap` and `.canvas-hud`.
+
+### CSS override
+
+Inside `/* ── rd:W2 ── */` only. Later than `.canvas--behind-world { opacity: 0 }`, so the host paints. The host is `visibility: hidden`; `.world` and `.edge-indicators` restate that. The aura is not named (it inherits). The room's own ask, legend, tools, requests, room map and replay column are clipped, not deleted. An ask chip shows at any distance: `.world-tag .world-chip[data-ask]` follows the tier rule that hides every chip except up close.
+
+### Gates
+
+Typecheck passed (web and node). `verify:rd-w2` 4/4 (`rd-w2.0`, `rd-world.layout.1`, `rd-world.chrome.1`, `rd-world.state.1`). `verify:world` 251/251, including `rd-world.parity.1` and `world.rich.3`. `verify:rail` 266/266 (`state.2` clean). `verify:styles` 97/97 (`aura.1` clean).
+
+`npm run affected -- --base redesign/main` selected the suites this diff reaches and ran them. After the breath-table and aura-selector fixes, the plain wave of `npm run verify` is 65/67 and stops after wave 1. The two reds are the known ones: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (declared 91, goldens 79; `rd-world-room` is one missing golden, expected until Phase 4), and `verify:first-run` `revamp.create.1`. The build and the Electron tier were not entered. `UPDATE_GOLDENS` was not set.
+
+Shot. `rd-world-room` exits 0 under xvfb and the Linux Electron binary (`--use-gl=angle --use-angle=swiftshader`) and writes `out/shots/rd-world-room.png` and `rd-world-room.vs-reference.png`. The PNG is the light shell (centre 227, 231, 238; dark pixels 0%). The DOM had five regions, eleven panels, a sized WebGL canvas, and the context was not lost. Readback of that canvas was `[0, 0, 0, 0]`. A CSS outline on the canvas was captured and the interior was not. That is R-053. The probe that measured it is not in the tree.
+
+Critic, against `docs/redesign/mockups/11-world-main.png`, ignoring sample copy and 1440×865 versus 1600×1000. **does-not-read.** The capture is not the night room.
+
+1. Silhouette. No terraces, robots, consoles or beacons. The frame is one light field.
+2. Material and glow. Night ground `#0b0d12` is absent. The centre matches the shell ground.
+3. Chrome. The shared pill and minimap cannot be read as screen 11's chrome over a dark room, because the room under them is the shell.
+
+Rules review: no blocker. State colour is `stateHexForAgent` or `var(--state-*)`. CSS stays inside the W2 markers. Frozen files and `redesign-contracts.ts` are untouched. `.panel__*` names are unchanged. `world-structure.ts` and `world-set.ts` do not import `three`.
+
+World guard: no source blocker. `WorldStage`'s lazy door is untouched. No `<Environment>`. `useGLTF` decoders are unchanged. The first built chunk does not construct a `WebGLRenderer` (WorldView stays its own lazy chunk). The shot not presenting the room is R-053, not a door change.

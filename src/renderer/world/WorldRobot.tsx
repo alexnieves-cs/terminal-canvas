@@ -16,7 +16,7 @@ import { agentTint, effectOf, hopsOn, leanOf, type Station } from './world-scene
 import { NIGHT, SHELL, TRIM, stateHexForAgent } from './world-palette'
 import { worldActions } from './world-context-store'
 import { CLICK_SLOP_PX, isRepeatClick, OPEN_HINT, openableFrom, selectAgent, useSelectedAgent } from './world-select'
-import { contactBlob, CONTACT, SHELL_RIM } from './world-set'
+import { agentBreathes, contactBlob, CONTACT, SHELL_RIM } from './world-set'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
@@ -442,9 +442,11 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     const status = rec?.status ?? 'idle'
     const hex = stateHexForAgent(status)
     const boost = glowScale(hex, bloom)
-    eyeMat.color.set(hex).multiplyScalar(boost)
-    haloMat.color.set(hex).multiplyScalar(boost)
-    floorMat.color.set(hex).multiplyScalar(boost)
+    // Working breathes. Needs-you is the beacon, not a second pulse on the eyes.
+    const breath = agentBreathes(status) && !reducedRef.current ? 0.86 + 0.14 * Math.sin(t * 2.2) : 1
+    eyeMat.color.set(hex).multiplyScalar(boost * breath)
+    haloMat.color.set(hex).multiplyScalar(boost * breath)
+    floorMat.color.set(hex).multiplyScalar(boost * breath)
     if (status === 'waiting_approval') antennaMat.color.set(NIGHT.amber).multiplyScalar(glowScale(NIGHT.amber, bloom))
     else antennaMat.color.set(TRIM)
 
@@ -652,6 +654,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       {/* Under the pick ring and the slab's trim (renderOrder 0, no depth write), a few mm over the floor paint. */}
       <mesh ref={blob} geometry={k.blob} material={blobMaterial} position-y={0.008} />
       <mesh geometry={k.stateRing} material={floorMat} position-y={0.016} />
+      {status === 'waiting_approval' ? <NeedsBeacon reduced={reduced} /> : null}
       {picked ? <mesh geometry={k.pick} material={pickMat} position-y={0.02} /> : null}
       <group ref={bob}>
         {subs > 0 ? (
@@ -705,6 +708,31 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
       {status === 'error' ? <ErrorBug /> : null}
       <WorldCard agentId={agentId} y={ROBOT_TOP} layer={cards} pop={pop} compact={cardless.current} />
     </group>
+  )
+}
+
+/**
+ * The only vertical beacon (M450). Amber, and only while the agent is waiting.
+ * No shadow: `world.studio.3` counts the robot's six casters, and a beacon
+ * that cast would be a seventh.
+ */
+function NeedsBeacon({ reduced }: { reduced: boolean }): JSX.Element {
+  const mat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: stateHexForAgent('waiting_approval'),
+    transparent: true,
+    opacity: 0.9,
+    toneMapped: false,
+    depthWrite: false
+  }), [])
+  useEffect(() => () => mat.dispose(), [mat])
+  useFrame((state) => {
+    if (reduced) return
+    mat.opacity = 0.45 + 0.5 * (0.5 + 0.5 * Math.sin(state.clock.elapsedTime * 2.2))
+  })
+  return (
+    <mesh material={mat} position={[0, 2.6, 0]}>
+      <cylinderGeometry args={[0.04, 0.055, 4.6, 10]} />
+    </mesh>
   )
 }
 

@@ -217,6 +217,17 @@ export function viewDistance(arcRadius: number): number {
   return slabHalf(arcRadius) * 2.75
 }
 
+/**
+ * An arc whose opening pose frames a floor of this half-extent (M450). The
+ * ring's own radius is the floor: a canvas of terraces is wider than the
+ * meeting ring, and the same `isoPose` has to hold all of them.
+ */
+export function arcFraming(half: number): number {
+  const pad = slabHalf(0)
+  const distance = Math.max(viewDistance(DESK_ARC.radius), half * 4.2)
+  return Math.max(DESK_ARC.radius, distance / 2.75 - pad)
+}
+
 export function isoPose(arcRadius: number, target: Vec3 = ORBIT_TARGET): Vec3 {
   const d = viewDistance(arcRadius)
   const s = Math.sin(VIEW.polar)
@@ -370,6 +381,11 @@ export const TRIM_STILL: TrimPulse = { hz: 0, depth: 0 }
  */
 const BREATHES: Readonly<Record<AgentStatus, boolean>> = {
   working: true, thinking: true, idle: false, waiting_approval: false, error: false
+}
+
+/** Eyes, the floor ring and a desk screen breathe on these statuses. The same table as the trim, so the word is not spelled again (`verify:rail` `state.2`). */
+export function agentBreathes(status: AgentStatus): boolean {
+  return BREATHES[status]
 }
 
 /**

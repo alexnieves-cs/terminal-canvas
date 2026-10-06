@@ -7,9 +7,10 @@ import { useBloomRendered } from './world-quality'
 import { useWorldContext, type WorldTask } from './world-context-store'
 import { STUDIO } from './world-palette'
 import { agentTint, goalOf, isLiveStatus, ROBOT_HEAD_Y, type Station, type Zone } from './world-scene'
+import { roundedRectPath } from './world-set'
 import {
   fileTiles, handoffArcs, terraceLine, terraceOutline, terraceSignSpot, tileSpots, TERRACE, TILE_FRESH_MS,
-  type FileTile, type HandoffArc, type TileSpot
+  type FileTile, type FloorTerrace, type HandoffArc, type TileSpot
 } from './world-structure'
 
 /**
@@ -330,11 +331,60 @@ function Arc({ arc, reduced }: { arc: HandoffArc; reduced: boolean }): JSX.Eleme
 
 // ── the structure ────────────────────────────────────────────────────────────
 
-export const WorldStructure = memo(function WorldStructure({ stations, zones, arcRadius, reduced }: {
+/** A canvas region stood up: a dark slab at `terraceFloor`, labelled with the chip. */
+function FloorTerraceMesh({ terrace, index }: { terrace: FloorTerrace; index: number }): JSX.Element {
+  const geometry = useMemo(() => {
+    const shape = new THREE.Shape()
+    const radius = Math.min(0.45, terrace.w / 8, terrace.d / 8)
+    const outline = roundedRectPath(terrace.w / 2, terrace.d / 2, radius, 6)
+    outline.forEach(([x, z], i) => (i === 0 ? shape.moveTo(x, -z) : shape.lineTo(x, -z)))
+    shape.closePath()
+    const g = new THREE.ExtrudeGeometry(shape, { depth: TERRACE.lift, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.04, bevelSegments: 2, curveSegments: 4 })
+    g.rotateX(-Math.PI / 2)
+    g.translate(terrace.center.x, 0, terrace.center.z)
+    return g
+  }, [terrace.center.x, terrace.center.z, terrace.w, terrace.d])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  const color = useMemo(() => new THREE.Color(STUDIO.ink).lerp(new THREE.Color(STUDIO.desk), (index % 5) / 5), [index])
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 900
+    canvas.height = 220
+    const t = new THREE.CanvasTexture(canvas)
+    t.colorSpace = THREE.SRGBColorSpace
+    return t
+  }, [])
+  useEffect(() => () => texture.dispose(), [texture])
+  useEffect(() => {
+    let live = true
+    const paint = (): void => {
+      if (!live) return
+      paintSign(texture.image as HTMLCanvasElement, terrace.label, null)
+      texture.needsUpdate = true
+    }
+    paint()
+    void document.fonts?.ready.then(paint)
+    return () => { live = false }
+  }, [texture, terrace.label])
+  return (
+    <group>
+      <mesh geometry={geometry} receiveShadow castShadow>
+        <meshStandardMaterial color={color} roughness={0.72} metalness={0.04} />
+      </mesh>
+      <sprite position={[terrace.center.x, 0.9, terrace.center.z + terrace.d / 2 - 0.35]} scale={[Math.min(terrace.w * 0.7, 4.2), 0.9, 1]}>
+        <spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
+      </sprite>
+    </group>
+  )
+}
+
+export const WorldStructure = memo(function WorldStructure({ stations, zones, arcRadius, reduced, floors = [] }: {
   stations: readonly Station[]
   zones: readonly Zone[]
   arcRadius: number
   reduced: boolean
+  /** M450. Canvas regions, already converted. When present they replace the ring terraces. */
+  floors?: readonly FloorTerrace[]
 }): JSX.Element {
   const ctx = useWorldContext()
   const byId = useMemo(() => new Map(stations.map((s) => [s.agentId, s])), [stations])
@@ -342,7 +392,9 @@ export const WorldStructure = memo(function WorldStructure({ stations, zones, ar
   const arcs = useMemo(() => handoffArcs(ctx.handoffs, byId, Date.now()), [ctx.handoffs, byId])
   return (
     <group>
-      {zones.map((zone, i) => <Terrace key={zone.groupId} zone={zone} task={tasks.get(zone.groupId)} arcRadius={arcRadius} index={i} />)}
+      {floors.length > 0
+        ? floors.map((terrace, i) => <FloorTerraceMesh key={terrace.id} terrace={terrace} index={i} />)
+        : zones.map((zone, i) => <Terrace key={zone.groupId} zone={zone} task={tasks.get(zone.groupId)} arcRadius={arcRadius} index={i} />)}
       {arcs.map((arc) => <Arc key={`${arc.from}>${arc.to}`} arc={arc} reduced={reduced} />)}
       <FileSky stations={byId} reduced={reduced} />
     </group>
