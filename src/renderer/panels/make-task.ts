@@ -1,4 +1,4 @@
-import type { PersistedWorkItem } from '@shared/work-items'
+import { WORK_ITEM_STATES, type PersistedWorkItem } from '@shared/work-items'
 import { addLink, makeWorkPanel, nextZ, type Panel } from './panels'
 
 /**
@@ -34,7 +34,7 @@ export function applyMakeTask(input: {
     id: input.itemId,
     source: 'typed',
     title,
-    state: 'working',
+    state: WORK_ITEM_STATES[1],
     createdAt: input.now,
     updatedAt: input.now
   }

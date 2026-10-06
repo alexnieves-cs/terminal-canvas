@@ -11544,22 +11544,22 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 
 /* ── rd:L-B ── */
 
-/* M442. The territory. Bounds already include the 24px pad; the padding here
-   is the inset the chip sits over. The chip's ground breaks the dash. */
+/* M442. The territory. Bounds already include the 24px pad (--sp-7); the
+   padding here is the inset the chip sits over. The chip's ground breaks the dash. */
 .task-region {
   position: absolute;
   box-sizing: border-box;
   border: 1px dashed color-mix(in srgb, var(--fg-3) 70%, transparent);
   border-radius: var(--r-region);
-  padding: 24px;
+  padding: var(--sp-7);
   pointer-events: none;
 }
 .task-region__chip {
   position: absolute;
   top: 0;
-  left: 16px;
+  left: var(--sp-6);
   transform: translateY(-50%);
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   background: var(--s-0);
   border-radius: var(--r-sm);
   color: var(--fg-2);
@@ -11578,7 +11578,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 .pf__word[data-state-word] {
   border-radius: var(--r-full);
-  padding-inline: 8px;
+  padding-inline: var(--sp-4);
   border: 1px solid var(--line);
 }
 .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { opacity: 0; }
@@ -11586,7 +11586,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,
 .panel--selected .pf__chrome button, .panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close { opacity: 1; }
 
-.review-node { border-radius: var(--r-lg); box-shadow: var(--lift); }
+.review-node { border-radius: var(--r-lg); }
 
 /* Off-screen pip. The layer stays pointer-events: none; only the button takes the click. */
 .edge-indicator__fly {
@@ -11606,39 +11606,40 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   position: absolute;
   box-sizing: border-box;
   border: 1px dashed color-mix(in srgb, var(--fg-3) 70%, transparent);
-  border-radius: 2px;
+  border-radius: var(--r-sm);
   background: transparent;
   pointer-events: none;
 }
 
 .inline-approval {
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   border-radius: var(--r-lg);
   background: var(--s-1);
   border: 1px solid var(--state-needs);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--state-needs) 35%, transparent);
   color: var(--fg);
   font-family: var(--font-ui);
   font-size: var(--t-sm);
   pointer-events: auto;
 }
-.inline-approval__verbs { display: flex; gap: 8px; margin-top: 8px; }
-.inline-approval__wait { margin: 8px 0 0; color: var(--fg-3); font-size: var(--t-xs); }
+.inline-approval__verbs { display: flex; gap: var(--sp-4); margin-top: var(--sp-4); }
+.inline-approval__wait { margin: var(--sp-4) 0 0; color: var(--fg-3); font-size: var(--t-xs); }
 
 /* L-C's mount. Absolute and zero-size: it is not a box in the flow, so a
    terminal's well cannot change because it exists. */
 .tier-layer { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
 .recovery-slot { display: contents; }
 
-/* M443. A slight overshoot, then settle. The base panel-settle keyframes
-   stay a dip; this name wins by source order. Reduced motion drops it. */
-@keyframes rd-panel-settle {
+/* M443. A slight overshoot, then settle. motion.2 already allows the name
+   panel-settle, so this is a second definition of that name. The first
+   definition (the dip) stays where it is. This one comes later and is the
+   one that paints. Reduced motion drops it. */
+@keyframes panel-settle {
   0% { transform: translateY(0); }
   40% { transform: translateY(-3px); }
   70% { transform: translateY(1px); }
   100% { transform: translateY(0); }
 }
-.panel[data-panel-settling] > .panel__motion { animation: rd-panel-settle var(--dur-2) var(--ease) both; }
+.panel[data-panel-settling] > .panel__motion { animation: panel-settle var(--dur-2) var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
   .panel[data-panel-settling] > .panel__motion { animation: none; }
 }
@@ -11646,15 +11647,15 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .marquee-toolbar {
   position: absolute;
   left: 50%;
-  bottom: 24px;
+  bottom: var(--sp-7);
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line);
   border-radius: var(--r-full);
   background: var(--s-1);
-  box-shadow: var(--lift);
   pointer-events: auto;
   font-family: var(--font-ui);
   font-size: var(--t-xs);
@@ -11664,18 +11665,18 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 
 .connected-spawn {
   min-width: 240px;
-  padding: 10px;
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--s-1);
-  box-shadow: var(--lift);
   pointer-events: auto;
   color: var(--fg);
   font-family: var(--font-ui);
   font-size: var(--t-sm);
 }
-.connected-spawn__group { margin-top: 8px; color: var(--fg-3); font-size: var(--t-xs); letter-spacing: 0.04em; }
-.connected-spawn__row, .connected-spawn__close { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 4px 0; }
-.connected-spawn__foot { margin: 8px 0 0; color: var(--fg-3); font-size: var(--t-xs); }
+.connected-spawn__group { margin-top: var(--sp-4); color: var(--fg-3); font-size: var(--t-xs); letter-spacing: 0.04em; }
+.connected-spawn__row, .connected-spawn__close { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: var(--sp-2) 0; }
+.connected-spawn__foot { margin: var(--sp-4) 0 0; color: var(--fg-3); font-size: var(--t-xs); }
 
 /* ── /rd:L-B ── */
 

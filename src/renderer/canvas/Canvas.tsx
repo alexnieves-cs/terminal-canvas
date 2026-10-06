@@ -8761,7 +8761,7 @@ export function Canvas({
     const now = Date.now()
     const named = panelsRef.current.find((panel) => panel.rect.id === selected[0])
     const title = named !== undefined && named.title !== undefined && named.title !== '' ? named.title : 'Task'
-    const item = { id: itemId, source: 'typed' as const, title, state: 'working' as const, createdAt: now, updatedAt: now }
+    const item = { id: itemId, source: 'typed' as const, title, state: WORK_ITEM_STATES[1], createdAt: now, updatedAt: now }
     setWorkItems((items) => items.some((row) => row.id === item.id) ? items : [...items, item])
     setPanels((current) => {
       const result = applyMakeTask({ panels: current, selectedIds: selected, cardId, itemId, now, title })

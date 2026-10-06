@@ -130,7 +130,7 @@ ok('rd-l-b.region.1 region chip',
   M.regionLabel({ title: 'Ledger CSV export', ticket: 'SW-412', agentCount: 3, criteriaDone: 2, criteriaTotal: 4 }) === 'Ledger CSV export · SW-412 · 3 agents · 2 of 4 criteria' &&
   M.regionLabel({ title: 'Solo', ticket: null, agentCount: 0, criteriaDone: 0, criteriaTotal: 0 }) === 'Solo' &&
   /regionLabel\(/.test(cluster) &&
-  /1px dashed/.test(span) && /var\(--r-region\)/.test(span) && /padding:\s*24px/.test(span),
+  /1px dashed/.test(span) && /var\(--r-region\)/.test(span) && /padding:\s*var\(--sp-7\)/.test(span) && /--sp-7:\s*24px/.test(css),
   'chip, zero facts omitted, layer calls regionLabel')
 
 // ── chromeless well does not change on header hover ──────────────────────────
