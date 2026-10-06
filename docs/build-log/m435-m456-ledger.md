@@ -1408,3 +1408,7 @@ Cut from `redesign/main` at `9f390d90` (tag `rd-world` is `109d7e6b`). The owner
 Checks: `rd-world.drag.1`, `rd-w4.history.1`, `rd-w5.undo.3`, `rd-w5.walk.3`, `world.replay.6`, `rd-w4.reply.2`, `rd-world.follow.1`, `rd-w5.snooze.1`.
 
 Still open: R-044 and R-053 (WebGL does not present on this host), R-052 (Follow on the shared HUD; the chord itself landed), R-082.
+
+`orch-timeline.6` names `ChatConversation.tsx` as an importer of the one history door. That is the opt-in permission row. A chat answer that does not pass the history argument still files nothing.
+
+Gates on this branch: typecheck passed. `verify:world` 251/251. `verify:rd-l-a` through `verify:rd-l-f`, `verify:rd-w0` through `verify:rd-w6`, `verify:rd-f1` through `verify:rd-f3`, `verify:toast`, `verify:styles` and `verify:verbs` passed. `npm run build` passed. The plain wave was 65/67. `verify:meta` `panels-split.2` and `visual.1`, and `verify:first-run` `revamp.create.1`, are the known reds. `verify:tmux` passed after `npm rebuild node-pty`. `kill.1` and `merge.1` did not fail.
