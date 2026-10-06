@@ -197,7 +197,7 @@ from: centerViewNow === 'focus'
 - File: L-F's 09 states (M447)
 - Why the contract or the owner cannot absorb it: the 09 screen is L-F. The splash already stops on a failed step and calls `noteBootIssue` through `noteRestoreFailure`. `shell/ReopenNotice.tsx` already reads that list. An error card inside the splash would be a second 09.
 - Smallest change: the 09 surface shows the boot-issue sentence when restore failed. Do not invent another error card in L-A.
-- Status: open
+- Status: done: `5fe2abdf`. `ReopenNotice` marks a reopen line whose group is `issue` with `data-boot-issue`, and that line is already `bootIssues()` via `reopenLines`. `bootIssueSentence` is the same sentence on the recovery view.
 
 ### R-024 · Empty-canvas double-click still places a process step
 - Lane: L-A
@@ -260,4 +260,39 @@ from: centerViewNow === 'focus'
 - File: `scripts/verify-palette.cjs` (check 48), `src/renderer/palette/commands.ts` (`canvas.fit`)
 - Why the contract or the owner cannot absorb it: check 48 requires the shortcut set `canvas.fit=⌘0` exactly. ⌘0 is Fit all now. The Reset zoom row still wears that chip so the check stays green. Adding a chip to Go to Work or Fit all would fail the same check. The suite is not L-C's.
 - Smallest change: move the ⌘0 chip from `canvas.fit` to the Fit all row, and retarget check 48's expected string. Leave Reset zoom with no chord.
+- Status: open
+
+### R-033 · Publish `session:host` from the existing live tick
+- Lane: L-F
+- File: `src/main/pty-manager.ts` (`pollLive`), `src/preload/index.ts`, and the `CanvasBridge` method in the same change
+- Why the contract or the owner cannot absorb it: `session:host` is already an `IPC_EVENTS` member (`SESSION_HOST`). `createTmuxBackend` accepts `onHost` and exposes `hostReport()` / `reconnectHost()`. `sendHostReport` is the sender. `pollLive` already calls `list()` every `LIVE_TICK_MS`. Preload and `CanvasBridge` are not in L-F's list. Adding `onHost` to the bridge before preload implements it fails the web typecheck.
+- Smallest change: after `list()` in `pollLive`, if the host report changed, `sendHostReport(win.webContents.send.bind(win.webContents), backend.hostReport())`. Preload subscribes to `IPC_EVENTS.SESSION_HOST` and the bridge method is `session.onHost`. No new timer. The socket stays the one the backend was constructed with. `probeTmux` does not need `onHost`.
+- Status: open
+
+### R-034 · Paint recovery frames on the terminal and block paused keystrokes
+- Lane: L-F
+- File: `src/renderer/components/TerminalPanel.tsx`, `src/renderer/components/PanelFrame.tsx`
+- Why the contract or the owner cannot absorb it: those components are not owned. React wipes attributes injected into its children, so a frame painted beside the panel does not sit on `.panel`. `frameVariant` and `keystrokesBlocked` are in `src/shared/exit-explain.ts`. The 09 surface renders the same copy inside `RecoveryHost` so the shot can show it.
+- Smallest change: when `frameVariant` is `paused`, render `PAUSED_LINE` and `PAUSED_KEYS` and do not send keys to xterm. When it is `reattaching`, render the skeleton rows. A crash card's Restart calls `paletteActions.restartPanel(id)` so the panel id is unchanged (`verify:panels-shell` checks 90 and 92). `restartKeepsPanel` is the contract the card already uses. Drop the overlay frames once the panel paints them.
+- Status: open
+
+### R-035 · GitHub and Jira render the offline mark
+- Lane: L-F
+- File: `src/renderer/github/GithubNode.tsx`, `src/renderer/jira/JiraNode.tsx`
+- Why the contract or the owner cannot absorb it: those panels are not owned. `OfflineCachedMark` in `src/renderer/panels/offline-mark.tsx` already renders `offlineLine` with `data-recovery-offline` and `data-tone="idle"`. The 09 surface shows that mark when the recovery store says the source is offline.
+- Smallest change: when the recovery store's offline clock for that source is set, render `OfflineCachedMark` in the panel chrome (GitHub, beside the `data-github-fresh` span). Do not add a second sentence.
+- Status: open
+
+### R-036 · The command pill reads `recoveryPillLine`
+- Lane: L-F
+- File: `src/renderer/canvas/command-pill.ts`, `src/renderer/canvas/CommandPill.tsx`
+- Why the contract or the owner cannot absorb it: the pill is F3. `attentionPillLine` is "N agents need you · sentence · Go ⌘J · + New ⌘N". `recoveryPillLine(need, paused)` is the 09 sentence ("2 sessions need recovery · 4 paused · Review"). `AttentionItem` is frozen and has no paused count. `kindOf` returns `failed` before `recovery` when `failed` is set, and `useAttentionQueue` ors `failedState` for a non-zero exit, so a crash is `failed` and the paused count never reaches the pill.
+- Smallest change: when `recoveryPillLine` from the recovery store is non-empty, that is the rest line and the verb is Review (`ATTENTION_VERB.recovery`). Read the paused count from the store. Do not add a field to `AttentionItem`. The 09 surface already paints `data-recovery-pill`; drop that copy once the pill shows the sentence.
+- Status: open
+
+### R-037 · The README diagram lists `session:host`
+- Lane: L-F
+- File: `README.md` (the fence that contains `--invoke-->`, on the line with `session:live`)
+- Why the contract or the owner cannot absorb it: `verify:meta` check 14 reads every `'word:word'` declaration in `ipc-contract.ts`, events included, and looks for it in that fence. `session:host` is declared. L-F owns `CLAUDE.md`, which already lists it (`claude-md.1` / `rd-l-f.channel.1`). The README is not in this lane. `boot:progress` is the same check and stays R-018; this request does not add it.
+- Smallest change: add `session:host` beside `session:live` in that fence. Check 14 stays red until R-018 lands as well.
 - Status: open

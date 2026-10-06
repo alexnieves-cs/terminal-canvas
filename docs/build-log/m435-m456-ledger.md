@@ -555,3 +555,92 @@ Known reds left as they are: `verify:meta` check 14 (R-018), `panels-split.2`, `
 - R-005's remainder is R-030. Canvas still passes `attentionCount`. `CommandPill.tsx` is outside the slot and outside this lane.
 - The dock half of R-026 stays open. `openSettingsScope` still opens the palette settings scope, and that call sits outside the TierLayer slot.
 - `chordCode` makes a key-only `0` Fit all and a key-only `1` Work. Electron suites that still reset with `zoomTo(wc, '0')` or fit with `zoomTo(wc, '1')` are R-031. They did not run on this machine. Pinch `zoomToScale` is unchanged.
+
+## L-F · M447
+
+Branch `rd/l-f-recovery` off tag `rd-wave2a` (`877c71c2`, redesign/main at the wave 2a merge). Lane `RD_LANE=L-F`. R-006 is already done: `subscribeLiveSessions` fires from `notify()` and `useAttentionQueue` subscribes. It is not reopened. R-023 is done in `5fe2abdf`: issue lines on `ReopenNotice` carry `data-boot-issue`, and `bootIssueSentence` is that sentence.
+
+Merged `origin/redesign/main` at `ddf8363f` (L-C, PR #14). L-C keeps R-030, R-031 and R-032. This lane's requests moved up: publishing `session:host` is R-033, terminal frames are R-034, the offline mark is R-035, the pill sentence is R-036, and the README fence is R-037.
+
+
+### Plan
+
+The pure half is `src/shared/exit-explain.ts`. The reducer lives in that file because main samples it from the existing `list()` tick and the renderer paints it, and a second shared module is outside this lane's ownership. Checks in `scripts/verify-rd-l-f.cjs` bundle it with esbuild. The view is `RecoveryHost`, `recovery-store.ts` and `offline-mark.tsx` under `src/renderer/panels/`. It mounts from `JobRecoveryNotice`, which Canvas already renders inside `data-recovery-slot`. `Canvas.tsx` is not edited. CSS stays inside `/* ── rd:L-F ── */`. The shot is `rd-recovery`, reference `docs/redesign/mockups/09-error-disconnected.png`.
+
+PLAN CHECK:
+
+- [x] `exit-explain.ts` and the reducer come first, with checks. The suite was watched red before the module existed: esbuild reported it could not resolve `src/shared/exit-explain.ts` and the process status was 1. That sentence is at the top of `scripts/verify-rd-l-f.cjs`. `reduceHost` and `reduceRecovery` are in the module. `rd-l-f.exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1` and `pause.1` call them.
+- [x] No new polling loop. Host detection rides `createTmuxBackend().list()`, which `pollLive` already calls every `LIVE_TICK_MS`. `session-backend.ts` has no `setInterval` (`rd-l-f.mount.1`). The kill-server test uses `verifySocket('terminal-canvas-verify-l-f')` and holds `scripts/redesign/with-electron-lock.sh`. The socket is `terminal-canvas-verify-l-f`. It is not `terminal-canvas`, `terminal-canvas-app`, empty, or a path (`rd-l-f.socket.1`).
+- [x] The offline marker for GitHub and Jira is `OfflineCachedMark` plus R-035. `GithubNode.tsx` and `JiraNode.tsx` are not edited.
+
+### What the surface does
+
+- Twenty seconds of unanswered `list-panes` pauses the panes the last answer named. One missed sample sets `silentSince` and stays live. Exit 0 is an answer, including an empty pane list. A timeout (`exitCode` null) is not. stderr matching `no server running`, `error connecting`, `lost server`, or `no such file or directory` is not. Any other non-zero is a complaint that was heard, so the host is not treated as gone.
+- The banner is `hostBanner`: "Session host stopped responding. tmux server on this Mac didn't answer for 20s. N sessions are paused, not lost — their output is buffered." Retry is `Retrying in Ns`, from `retryAt = at + 8_000`. While already paused, a sample at or after `retryAt` resets the countdown. There is no renderer timer. Reconnect now and Details are the verbs. Reconnect sets phase `reattaching` and the next `list()` is the sample.
+- A paused frame says "paused · output kept" and "nothing you type is lost or sent twice", with `data-keys-blocked`. `keystrokesBlocked` is true only for `paused`. A reattaching frame is three skeleton rows (`data-recovery-skeleton`, `aria-busy`), never an empty well.
+- A survivor is the same `panelId` and the same pid. A missing pane, or a different pid, is `ended`, with the sample's exit code or null. Phase stays `paused` while any paused pane remains.
+- A crash card says "This session ended unexpectedly", `explainExit` (137 is "killed, usually by memory pressure"), and "The pending edit was not applied". Primary is "Restart with last prompt". Then "Read log". Restart calls `restartKeepsPanel`, which returns the same id. Cmd+Enter (meta+Enter, skipped on an input or textarea) restarts the first crash card. The card does not call `paletteActions.restartPanel`; that wiring is R-034, because `TerminalPanel` is not owned. Checks 90 and 92 stay in `scripts/verify-panels-shell.cjs`.
+- Offline copy is "offline · cached · last updated <time>". The toast fires only when a source flips offline, through `notify` in `toast.ts`. The sentence is "GitHub is offline" (or Jira). The detail is "The canvas, terminals and notes keep working. Cached data stays marked until the connection returns." Host loss is not a toast. `isAttentionQueueRestatement` matches needs-you counts, and `rd-l-f.offline.1` asserts the toast does not.
+- `recoveryPillLine(2, 4)` is "2 sessions need recovery · 4 paused · Review". The 09 surface paints it as `data-recovery-pill`. The real command pill is R-036: `AttentionItem` is frozen and has no paused count, and a non-zero exit is `failed` before `recovery`.
+- A failed restore shows through `ReopenNotice`. Issue lines carry `data-boot-issue`. `bootIssueSentence` is the first non-empty issue. RecoveryHost does not also read `bootIssues()`, so the reopen notice is not duplicated.
+
+### Mount
+
+`useJobRecovery` subscribes to the recovery store with `useSyncExternalStore` as its first call, so Canvas's hook order is unchanged. The model gains `surface`. `JobRecoveryNotice` renders `RecoveryHost` when the view is on, and the unfinished-work list only when jobs, runs or a sentence exist. `.recovery-host` is `position: fixed` so it is not a box inside the bottom-left stack. `.recovery-slot { display: contents; }` is L-B's rule and is not edited.
+
+`session:host` is an event (`IPC_EVENTS.SESSION_HOST`). `verify:ipc` counts invokes, so `EXPECTED_CHANNELS` stays 206. The name is in the CLAUDE.md channel diagram (`rd-l-f.channel.1`). Direct backend `hostReport()` stays `initialHost()` and `reconnectHost` is a no-op. Publishing the event from `pollLive`, and subscribing in preload, is R-033.
+
+### Shot
+
+`rd-recovery` has a `run`, size 1440×900, reference mockup 09. It calls `window.__rdLF.mount` with a catalog: four paused panes, one reattaching skeleton, exit 137 ("ship the ledger") plus a second crash, GitHub last updated 7:22 PM, retry 8s. `catalogView` paints those states together. One reducer phase is `paused` or `reattaching`, not both. Giving the scene a `run` makes `verify:meta` `visual.1` list `rd-recovery` as a missing golden. That red is expected until the lead writes the golden. This lane does not set `UPDATE_GOLDENS` and does not write under `verify/visual/goldens/`.
+
+### Checks
+
+Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebuilds/linux-x64`). The first `verify:rd-l-f`, before `node_modules` existed, threw `MODULE_NOT_FOUND` for esbuild. The second, before `exit-explain.ts` existed, threw because esbuild could not resolve that entry. Both are the watched red. SIGSTOP of the tmux client hung the probe (the client pid, not a server that still answers). It was continued and the leftover verify server was killed. The kill test does not stop the process.
+
+`rd-l-f.kill.1` creates two panes on `terminal-canvas-verify-l-f`, records their pids, `kill-server` through the electron lock, and asserts `list-panes` is unanswered. Two virtual silence samples then pause those pids. A new session after `start-server` has a new pid, and both original pids are in `ended`. Same-pid survival is `rd-l-f.host.2`, because a real kill-server destroys every pane.
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass (web, after dropping an unused `RecoveryView` import; the later CSS comment edit does not change TypeScript) |
+| `npm run verify:rd-l-f` | 17/17 pass (`rd-l-f.0`, `exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1`, `pause.1`, `pill.1`, `offline.1`, `catalog.1`, `boot.1`, `well.1`, `mount.1`, `channel.1`, `shot.1`, `socket.1`, `kill.1`) |
+| `npm run verify:styles` | 97/97 pass |
+
+G2, after the labels fix below. Local ref `redesign/main` is absent; the base is `origin/redesign/main` at `877c71c2`.
+
+The first affected run failed `verify:rail` `labels.1`: the four recovery verbs have children `{view.reconnect}`, `{view.details}`, `{frame.restart}` and `{frame.log}`, and that check does not treat those expressions as visible text. Each button now has `aria-label` of the same string. `verify:rail` is 266/266 after that. The numbers below are the re-run.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-f` | 17/17 pass, including `kill.1` on socket `terminal-canvas-verify-l-f` |
+| `npm run affected -- --base origin/redesign/main` | 52/55 plain suites, 31.2s, stopped after the plain tier. 14 files since `877c71c2`. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta`, `verify:tmux`, `verify:first-run`. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`) did not start. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.3s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.8s). `verify:relay` passed (2.8s). `verify:flowchart` passed (1.0s) and did not spike. No WebSocket error on this host. |
+| Electron tier, `npm run shot`, `verify:visual` | not reached by the gate, because wave 1 was already red. A direct attempt downloaded the Linux Electron binary (`v43.4.1`, `node_modules/electron/dist/electron`, ELF x86-64) via `node node_modules/electron/install.js`. `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-recovery` and `TC_FIXTURE=rd-steward` booted Electron and threw `Cannot find module './prebuilds/linux-x64//pty.node'` from `shot-entry.cjs`. `node-pty` prebuilds on disk are `darwin-arm64`, `darwin-x64`, `win32-arm64`, `win32-x64`. The Mac path `Electron.app/Contents/MacOS/Electron` is absent. The process did not exit; `timeout 90` stopped it (exit 124). No PNG under `out/shots/`. `UPDATE_GOLDENS` was not set. Mockup-critic and the rules reviewer were not run: there is no `out/shots/rd-recovery.vs-reference.png`. |
+
+`verify:meta` failures, reported and not fixed: check 14 missing `session:host` and `boot:progress` (the second is R-018; the first is R-037, because the README fence is not owned); `panels-split.2` (`git show pre-v7-run:scripts/verify-panels.cjs` fails); `visual.1` missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-sessions`, `rd-settings-keys`, `rd-recovery` (declared 87 / goldens 79). `verify:tmux` throws on `pty.node` for `linux-x64`. `verify:first-run` `revamp.create.1` wants `/^<div class="canvas-hud">/` and `CanvasHud` renders `data-screen-control`. `CanvasHud.tsx` is not in this diff.
+
+### Deviations
+
+- The mockup shows paused panels, a crash card and a skeleton at once. The shot uses `catalogView`. Transitions stay in `reduceHost`.
+- Paused and crash frames, and the pill sentence, render inside `RecoveryHost`. They are not yet on `.panel` or in `CommandPill`. R-034 and R-036.
+- "paused · output kept" is overlay copy. It is not a `panelState` word. `state.1` pins that vocabulary in `scripts/verify-rail.cjs`, which this lane does not own.
+- Tones are `needs-you`, `starting`, `exited` and `idle` through `[data-tone]`. No state hex, no new `@keyframes`, no `--lift` off `.panel`.
+- The L-F CSS comment does not name `.panel__slot` or `.xterm`. `rd-l-f.well.1` walks from the lane span and a comment that named those classes matched the next `height:`.
+- Restart in place keeps the id in the reducer. Calling `restartPanel` is R-034.
+- `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-033.
+- The README architecture fence does not list `session:host`. Check 14 already misses `boot:progress` (R-018). R-037 asks for `session:host` only. The README is not edited.
+- Recovery verbs carry `aria-label`. `labels.1` strips a child expression unless it looks like a name, a label or a title, so `{view.reconnect}` alone was an unlabelled button.
+
+### Gates after merging L-C
+
+`origin/redesign/main` at `ddf8363f` is in this branch (`25c471f9`). No rebase. The request list and this ledger keep both lanes. L-C's R-030, R-031 and R-032 are unchanged. This lane's five requests are R-033 through R-037. No code comment or check named the old ids.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-f` | 17/17 pass |
+| `npm run affected -- --base origin/redesign/main` | 52/55 plain suites, 31.1s, stopped after the plain tier. 14 files. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta`, `verify:tmux`, `verify:first-run`. Electron suites it selected did not start. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.2s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.7s). `verify:relay` passed (2.7s). `verify:flowchart` passed (0.9s). |
+
+`verify:meta` check 14 still misses `session:host` and `boot:progress`. `panels-split.2` is the absent `pre-v7-run` tag. `visual.1` is declared 89 / goldens 79. The check prints the first eight missing names; the full list is `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-plan-palette`, `rd-map`, `rd-sessions`, `rd-settings-keys`, `rd-recovery`. `verify:tmux` is still the missing `linux-x64` `pty.node`. `verify:first-run` is still `revamp.create.1`. The shot was not repeated: `prebuilds/linux-x64/pty.node` is still absent, and `UPDATE_GOLDENS` was not set.

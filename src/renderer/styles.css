@@ -12360,7 +12360,59 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:L-E ── */
 
 /* ── rd:L-F ── */
-
+/* M447. The 09 surface. Fixed, so it is not a box in a panel well.
+   A metric on the terminal slot would refit the terminal. No new
+   keyframes: the motion allowlist is closed, and a skeleton can be bars. */
+.recovery-host {
+  position: fixed;
+  top: var(--sp-7);
+  left: 50%;
+  z-index: 40;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: min(640px, calc(100% - var(--sp-8)));
+  pointer-events: none;
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  color: var(--fg);
+}
+.recovery-banner,
+.recovery-frame,
+.recovery-boot,
+.recovery-offline {
+  pointer-events: auto;
+  border: 1px solid var(--tone, var(--state-needs));
+  border-radius: var(--r-lg);
+  background: var(--s-2);
+  padding: var(--sp-4);
+}
+.recovery-banner { display: flex; flex-direction: column; gap: var(--sp-3); }
+.recovery-banner__copy,
+.recovery-frame__explain,
+.recovery-frame__kept,
+.recovery-frame__keys,
+.recovery-frame__prompt,
+.recovery-boot,
+.recovery-offline,
+.recovery-pill { margin: 0; }
+.recovery-banner__verbs,
+.recovery-frame__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.recovery-banner__retry { color: var(--fg-2); font-size: var(--t-xs); }
+.recovery-banner__list { margin: 0; padding: 0; list-style: none; color: var(--fg-2); font-size: var(--t-xs); }
+.recovery-pill { pointer-events: none; color: var(--fg-2); }
+.recovery-frames { display: flex; flex-direction: column; gap: var(--sp-3); }
+.recovery-frame { display: flex; flex-direction: column; gap: var(--sp-2); border-left-width: 3px; }
+.recovery-frame__title { margin: 0; font-size: var(--t-md); font-weight: 600; }
+.recovery-frame__primary { background: var(--tone); color: var(--bg); border-color: var(--tone); }
+.recovery-skeleton {
+  display: block;
+  height: var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--line);
+}
+.recovery-boot { border-color: var(--state-failed); }
 /* ── /rd:L-F ── */
 
 /* ── rd:W0 ── */
