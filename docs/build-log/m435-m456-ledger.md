@@ -776,3 +776,60 @@ Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62
 R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
 
 The shot loop is recorded on R-040, after the tag, and the tag was not moved. The setter is `setResumeSummary` (`Canvas.tsx` resume effect), not `useSyncExternalStore`. The same `records ?? []` and the same effect are on `rd-canvas` (`5cf60839`). Opening the world is what turned the spin into #185.
+
+## M449 · W1 Canvas → World transition
+
+Branch `rd/w1-transition` from `redesign/main` (rd-w0 plus the R-040 render-loop fix). Wave 3b. Merges after W2. `WorldView.tsx` is not edited.
+
+### Plan
+
+One milestone. `world-transition.ts` stays the one pure clock. Extend it; do not add a second timer.
+
+- Full move: 1000ms, `easeInOutCubic`, one `WorldTransition` sampled by the stage and (once R-043 lands) the scene. `__rdW1.atMs` freezes that same sample for the shot. It is not a second clock.
+- Plan tilt: `hostLook` gains `tilt` (`PLAN_TILT_DEG`), written as `rotateX` inside the host's existing `transform`. No layout write. Reduced motion: tilt 0, scale 1.
+- Terrace rise: `terraceRise(eased)`, already 1 when reduced. W2 mounts it (R-043).
+- Pop: `popDelays` is unchanged (nearest→farthest, `world.trans.5`). `popDelaysFromTarget` measures those distances from the camera target. W2 mounts it (R-043).
+- Reduced motion: `REDUCED_TRANSITION_MS` (120) with `{ reduced: true }`. `linear`/`fade` cross-fade; `raw` and `eased` are already at the destination, so the dolly and the pop do not play. Duration 0 still snaps (`world.trans.4`).
+- `plan-floor.ts` paints RGBA from region and panel rects through `world-space.ts`. No PNG. `handoffMisalignPx` is the 2px check at 1440×900. `landingViewport` is `cameraToViewport` of the orbit target; the stage calls it once the move back settles, after the inline transform is cleared.
+- `WorldLens` is the 2D | World control at the canvas top left. ⌘⇧W is `shortcutById('world')`. The lens keeps `shell__world-toggle`. The TopBar button stays until R-042.
+- Cancel chip: `CANCEL_CHIP` (`Entering World · Esc cancel`) plus a bar of `linear`. Esc still reverses through `setTarget` (same ramp). Filmstrip marks `FILMSTRIP_MS`.
+- The canvas host stays mounted. `inert` while covered. The world chord is handled before `shouldIgnoreKeys`, so it still fires while the world is up, and a focus lock still keeps the key.
+
+### PLAN CHECK
+
+- [x] world-transition.ts remains the single pure clock; no second timer.
+- [x] WorldView.tsx is not edited. Exports the lead or W2 must mount are listed below.
+- [x] TopBar's button removal is a request (R-042).
+
+### CSS
+
+New rules only, inside `/* ── rd:W1 ── */`. No override of an earlier rule.
+
+### Exports W2 or the lead must mount
+
+| Export | Who calls it |
+|---|---|
+| `motionOf(sample, reduced)` | WorldView's rig: `dolly`, `popRaw`, `terrace` |
+| `popDelaysFromTarget(points, target)` | WorldView, instead of distance to the origin |
+| `setWorldCameraTarget` | WorldView, the orbit target each frame. Until then the target is the floor origin and `landingViewport` centres there |
+| `paintPlanFloor(canvas, layout)` | The ground mesh. Pixels from the layout, never a screenshot |
+| `terraceRise` | WorldStructure, via `motionOf().terrace` |
+| `WorldLens` | Mounted by this lane in Canvas. Not W2's |
+
+`WorldStage` still passes the same `transition` object into `WorldView`. Reduced samples already snap `eased` and `raw`, so the current scene does not dolly or pop during the cross-fade.
+
+### Requests
+
+R-041 open: `world.stage.4` still names the 0ms snap. W0 owns `verify-world.cjs`. R-042 open: remove the TopBar World view button (F3) and retarget `world.door.9`. R-043 open: mount the curves in the scene (W2).
+
+### Gates
+
+Linux, Node. `npm ci` rebuilt the tree (`npm ci --no-audit --no-fund`). Electron binary was not in `node_modules/electron/dist` at the first commit; shots follow the rebuild.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`) |
+| `verify:rd-w1` | 15/15 |
+| `verify:world` | 250/251. The one failure is `world.stage.4` (the 0ms snap sentence). R-041. `world.trans.1`–`.8`, `world.door.1`–`.12` and `world.stage.1`–`.3` passed. |
+
+Affected, the plain wave, and the Electron shots are recorded on the next commit of this branch.

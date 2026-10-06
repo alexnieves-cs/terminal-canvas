@@ -11,10 +11,29 @@
  * so two readers in one frame agree and neither advances anything — a
  * `progress += dt` kept by each would drift apart, and the 2D fade and the
  * 3D dolly would end on different frames.
+ *
+ * The shot door `__rdW1.atMs` freezes that same sample (the move's origin
+ * plus those milliseconds). It is not a second clock: every reader still
+ * calls `sample`, and node leaves the door unset.
  */
 
 /** The whole move, either way. */
 export const WORLD_TRANSITION_MS = 1000
+
+/**
+ * prefers-reduced-motion. A cross-fade, not a snap and not the dolly:
+ * pass this duration with `{ reduced: true }`.
+ */
+export const REDUCED_TRANSITION_MS = 120
+
+/** How far the 2D plan rotates back onto the floor, in degrees. Reduced motion stays at 0. */
+export const PLAN_TILT_DEG = 68
+
+/** The cancel chip's words. One string, so the stage and the check cannot drift. */
+export const CANCEL_CHIP = 'Entering World · Esc cancel'
+
+/** The filmstrip's frames, milliseconds along the full move. */
+export const FILMSTRIP_MS = [0, 250, 500, 750, 1000] as const
 
 export function easeInOutCubic(t: number): number {
   const x = Math.min(1, Math.max(0, t))
@@ -22,10 +41,14 @@ export function easeInOutCubic(t: number): number {
 }
 
 export interface TransitionSample {
-  /** 0 = the 2D canvas, 1 = the world; linear in time. Staggers are timed on this. */
+  /** 0 = the 2D canvas, 1 = the world; linear in time. Staggers are timed on this. Under reduced motion this is already the destination, so nothing pops. */
   raw: number
-  /** `raw` through easeInOutCubic — what the fades and the dolly follow. */
+  /** `raw` through easeInOutCubic — what the fades and the dolly follow. Under reduced motion this is already the destination, so nothing dollies. */
   eased: number
+  /** The clock's own linear ramp, including under reduced motion, where `raw` has snapped. The chip's bar reads this. */
+  linear: number
+  /** Opacity of the world layer. `eased` on the full move; the cross-fade under reduced motion. */
+  fade: number
   /** Where it is heading. */
   target: 0 | 1
   /** At rest on `target`. */
@@ -40,10 +63,18 @@ export interface WorldTransition {
 
 /**
  * `durationMs` is the time for a FULL 0→1; a reversal from the middle takes
- * half as long, at the same speed, because the move is a ramp on `raw` and not
- * a restarted tween. 0 snaps (prefers-reduced-motion).
+ * half as long, at the same speed, because the move is a ramp on the linear
+ * clock and not a restarted tween. 0 snaps. prefers-reduced-motion passes
+ * `REDUCED_TRANSITION_MS` with `{ reduced: true }`: the linear ramp is a
+ * cross-fade, and `raw` / `eased` are already at the destination so the
+ * dolly, the tilt and the pop do not play.
  */
-export function createWorldTransition(initial: 0 | 1 = 0, durationMs: number = WORLD_TRANSITION_MS): WorldTransition {
+export function createWorldTransition(
+  initial: 0 | 1 = 0,
+  durationMs: number = WORLD_TRANSITION_MS,
+  options?: { reduced?: boolean }
+): WorldTransition {
+  const reduced = options?.reduced === true
   let from: number = initial
   let to: 0 | 1 = initial
   let start = 0
@@ -56,16 +87,27 @@ export function createWorldTransition(initial: 0 | 1 = 0, durationMs: number = W
   return {
     setTarget(target, now) {
       if (target === to) return
-      from = raw(now)
+      const pin = readPin()
+      from = raw(pin === null ? now : start + pin)
       to = target
       start = now
       span = durationMs * Math.abs(to - from)
     },
     sample(now) {
-      const r = raw(now)
-      return { raw: r, eased: easeInOutCubic(r), target: to, settled: r === to }
+      const pin = readPin()
+      const t = pin === null ? now : start + pin
+      const r = raw(t)
+      if (reduced) return { raw: to, eased: to, linear: r, fade: r, target: to, settled: r === to }
+      const eased = easeInOutCubic(r)
+      return { raw: r, eased, linear: r, fade: eased, target: to, settled: r === to }
     }
   }
+}
+
+/** `__rdW1.atMs` on the renderer global. Absent in node, so the suites sample real time. */
+function readPin(): number | null {
+  const pin = (globalThis as { __rdW1?: { atMs?: number } }).__rdW1?.atMs
+  return typeof pin === 'number' && Number.isFinite(pin) ? pin : null
 }
 
 // ── the 2D canvas and the 3D layer ───────────────────────────────────────────
@@ -73,8 +115,10 @@ export function createWorldTransition(initial: 0 | 1 = 0, durationMs: number = W
 /** "Slightly": the canvas settles back this far as it fades, enough to read as depth and not as a camera move. */
 export const HOST_SCALE_MIN = 0.94
 
-export function hostLook(eased: number): { opacity: number; scale: number } {
-  return { opacity: 1 - eased, scale: 1 - (1 - HOST_SCALE_MIN) * eased }
+export function hostLook(eased: number, reduced = false): { opacity: number; scale: number; tilt: number } {
+  const x = Math.min(1, Math.max(0, eased))
+  if (reduced) return { opacity: 1 - x, scale: 1, tilt: 0 }
+  return { opacity: 1 - x, scale: 1 - (1 - HOST_SCALE_MIN) * x, tilt: PLAN_TILT_DEG * x }
 }
 
 // ── the camera ───────────────────────────────────────────────────────────────
@@ -130,6 +174,69 @@ export function popDelays(distances: readonly number[]): number[] {
  */
 export function popOf(raw: number, delay: number): number {
   return easeInOutCubic((raw - delay) / (1 - POP_STAGGER))
+}
+
+export interface FloorXZ { x: number; z: number }
+
+/**
+ * `popDelays` of each point's distance to the camera target, not to the
+ * room's origin. A desk on the target pops first even when the origin is
+ * closer to someone else. The nearest→farthest normalisation is unchanged.
+ */
+export function popDelaysFromTarget(points: readonly FloorXZ[], target: FloorXZ): number[] {
+  return popDelays(points.map((p) => Math.hypot(p.x - target.x, p.z - target.z)))
+}
+
+/**
+ * Terrace height, 0 on the floor and 1 stood up. Reduced motion does not
+ * rise: the cross-fade shows the room already up.
+ */
+export function terraceRise(eased: number, reduced = false): number {
+  if (reduced) return 1
+  return Math.min(1, Math.max(0, eased))
+}
+
+/** Which filmstrip frame is nearest `ms`. */
+export function filmstripIndex(ms: number, marks: readonly number[] = FILMSTRIP_MS): number {
+  if (marks.length === 0) return 0
+  let best = 0
+  let bestDist = Infinity
+  for (let i = 0; i < marks.length; i++) {
+    const d = Math.abs((marks[i] ?? 0) - ms)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  }
+  return best
+}
+
+export interface WorldMotion {
+  /** World-layer opacity. */
+  fade: number
+  /** Third argument for `dollyAt`. Already at the destination when reduced. */
+  dolly: number
+  /** First argument for `popOf`. Already at the destination when reduced. */
+  popRaw: number
+  /** `terraceRise` for this sample. */
+  terrace: number
+  opacity: number
+  scale: number
+  tilt: number
+}
+
+/** What every reader of one sample should apply. W2's scene reads `dolly`, `popRaw` and `terrace`. */
+export function motionOf(sample: TransitionSample, reduced: boolean): WorldMotion {
+  const look = hostLook(reduced ? sample.linear : sample.eased, reduced)
+  return {
+    fade: reduced ? sample.linear : sample.fade,
+    dolly: reduced ? sample.target : sample.eased,
+    popRaw: reduced ? sample.target : sample.raw,
+    terrace: terraceRise(sample.eased, reduced),
+    opacity: look.opacity,
+    scale: look.scale,
+    tilt: look.tilt
+  }
 }
 
 /** How long a robot takes to appear on its own — an agent that turns live mid-session, or a model that loaded late. */
