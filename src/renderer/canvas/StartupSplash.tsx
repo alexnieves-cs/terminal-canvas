@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { createRoot, type Root } from 'react-dom/client'
 import type { JSX } from 'react'
+import { noteRestoreFailure } from '../session/boot-issues'
 import type { Viewport } from './viewport'
 import { worldToScreen } from './viewport'
 import {
   type SplashMode, FIELD_MS, GHOST_MS, SKIP_FADE_MS,
-  clamp, lerp, easeOut, easeInOut, seg, hash, filingAngle
+  clamp, lerp, easeOut, easeInOut, seg, hash, filingAngle,
+  ghostLayout, restoreLines, splashShouldLeave, RESTORE_SKIP_HINT, RESTORE_TAGLINE,
+  type GhostRect, type RestoreFacts
 } from './splash'
+import { Onboarding, type OnboardingProps } from '../onboarding/Onboarding'
+import { BlankCanvas } from '../shell/EmptyState'
 
 /* The startup splash: one <canvas>, one rAF loop, gone in under three seconds.
 
@@ -235,4 +241,103 @@ function drawField(ctx: CanvasRenderingContext2D, t: number, w: number, h: numbe
       ctx.beginPath(); ctx.moveTo(x - cx, y - cy); ctx.lineTo(x + cx, y + cy); ctx.stroke()
     }
   }
+}
+
+/**
+ * M439. The restore card. It leaves in the same effect that sees `settled`,
+ * with no timer: a minimum display time would report progress that had
+ * already finished. Option skips the remaining reattaches; the model marks
+ * those panes asleep and the caller (the composition root, R-019) applies it.
+ */
+export function RestoreSplash({ facts, rects, onDone, onSkip }: {
+  facts: RestoreFacts
+  rects?: readonly GhostRect[]
+  onDone?: () => void
+  onSkip?: () => void
+}): JSX.Element {
+  const view = restoreLines(facts)
+  const ghosts = ghostLayout(rects)
+  const noted = useRef(false)
+  useEffect(() => {
+    if (!view.failed || noted.current) return
+    const sentence = view.lines.find((line) => line.phase === 'failed')?.detail
+    if (sentence === undefined) return
+    noted.current = true
+    noteRestoreFailure(sentence)
+  }, [view.failed, view.lines])
+  useEffect(() => {
+    if (splashShouldLeave({ settled: view.settled, shownForMs: 0 })) onDone?.()
+  }, [view.settled, onDone])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => { if (e.altKey) onSkip?.() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onSkip])
+  return createPortal(
+    <div className="rd-splash" data-rd-splash="" data-breathing={view.breathing ? 'true' : 'false'} data-settled={view.settled ? 'true' : 'false'} role="status" aria-live="polite">
+      <div className="rd-splash__ghosts" aria-hidden="true">
+        {ghosts.map((box, i) => (
+          <span key={i} className="rd-splash__ghost" style={{ left: `${box.left * 100}%`, top: `${box.top * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%` }} />
+        ))}
+      </div>
+      <div className="rd-splash__card">
+        <div className="rd-splash__brand">
+          <span className="rd-splash__grid" aria-hidden="true" />
+          <span>Terminal Canvas</span>
+        </div>
+        <p className="rd-splash__tagline">{RESTORE_TAGLINE}</p>
+        <ol className="rd-splash__lines">
+          {view.lines.map((line) => (
+            <li key={line.id} data-restore-line={line.id} data-phase={line.phase}>
+              <span className="rd-splash__mark" data-phase={line.phase} aria-hidden="true" />
+              <span className="rd-splash__label">
+                {line.label}
+                {line.name !== undefined && <span className="rd-splash__name"> · {line.name}</span>}
+              </span>
+              {line.detail !== undefined && <span className="rd-splash__detail">{line.detail}</span>}
+            </li>
+          ))}
+        </ol>
+        <p className="rd-splash__hint">{RESTORE_SKIP_HINT}</p>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+/* The shot door. Canvas already imports this module, so the three screens
+   can paint before Canvas itself mounts them (R-021). Later milestones add
+   keys; an unknown scene returns false rather than painting a stand-in. */
+const rdScenes: Record<string, (fixture: RdFixture) => JSX.Element> = {
+  splash: (fixture) => <RestoreSplash facts={fixture.facts ?? {}} rects={fixture.rects} />,
+  onboarding: (fixture) => <Onboarding {...(fixture.onboard ?? {})} />,
+  empty: (fixture) => <BlankCanvas workspace={fixture.empty?.workspace ?? ''} repo={fixture.empty?.repo} />
+}
+
+let shotRoot: Root | null = null
+
+export interface RdFixture {
+  facts?: RestoreFacts
+  rects?: GhostRect[]
+  onboard?: OnboardingProps
+  empty?: { workspace: string; repo?: string | null }
+}
+
+export function mountRdScene(scene: string, fixture: RdFixture): boolean {
+  const render = rdScenes[scene]
+  if (render === undefined || typeof document === 'undefined') return false
+  let host = document.getElementById('rd-la-shot')
+  if (host === null) {
+    host = document.createElement('div')
+    host.id = 'rd-la-shot'
+    document.body.appendChild(host)
+  }
+  if (shotRoot === null) shotRoot = createRoot(host)
+  shotRoot.render(render(fixture))
+  return true
+}
+
+if (typeof window !== 'undefined') {
+  const w = window as unknown as { __rdLA?: { mount: typeof mountRdScene } }
+  w.__rdLA = { mount: mountRdScene }
 }

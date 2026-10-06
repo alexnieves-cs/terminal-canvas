@@ -206,6 +206,224 @@ R-011 stays open. L-C owns `useViewport` and its brief is the tier flights; the 
 
 The rest of the open list is closed on this branch: D1 in the material bullet, high-contrast dark glass, the two terminal cursors, the dock's spoken count (the queue, with snooze and team asks only when that queue is empty), `subscribeLiveSessions`, `shouldIgnoreKeys` and the palette's ⌘K yielding under the focus lock, the center-view enum, Sessions and Review mounted from Canvas, `dock.dup.1` measuring the View menu row, `TC_FIXTURE=rd-steward` shared by dev and shot, and the palette title `Show Orchestrate`. Canvas still passes `attentionCount` into `pillRestState` until L-C.
 
+## L-B · M442–M443
+
+Branch `rd/l-b-workspace` off `redesign/main`. Lane `RD_LANE=L-B`. R-008, R-012 and R-005 are done on this branch and are not reopened. Canvas still passes `attentionCount` into `pillRestState` until L-C (R-005). R-011 stays L-C's (`useViewport`).
+
+### Plan
+
+M442 paints the Work tier. M443 paints create-and-arrange. Pure modules land under `src/renderer/panels/` and the owned canvas modules. Checks live in `scripts/verify-rd-l-b.cjs`. CSS stays inside `/* ── rd:L-B ── */`.
+
+PLAN CHECK:
+
+- [x] No existing hook call in `Canvas.tsx` moves. `TierLayer` and the recovery slot are JSX, appended in the tree. New hooks (`connectedSpawn` state, the chord listener) sit immediately before `return`. `useJobRecovery` stays where it is. Cursor and the connected-spawn opener are module setters in `spawn-cursor.ts`, so `onDropEmpty` and `onSpawn` do not grow a hook.
+- [x] Restyles of existing panel rules are overrides inside `rd:L-B`, listed below. The base chromeless rule and `panel-settle` keyframes are not edited.
+- [x] `rd-l-b.well.1` is a pure check that the lane's hover rules do not set a box metric on `.panel__slot`, `.xterm`, `.pf__body` or `.pf__keep`, and that the chromeless `.pf__chrome` stays `position: absolute`. `rd-l-b.allow.1` proves ⌘Y calls `answerApproval` with `allowPendingTarget`, and that the palette Allow row's id is `approval.allow.${id}.${requestId}` and its `run` calls `answerApproval`.
+
+CSS overrides inside `rd:L-B` (M442): task region (1px dashed, `--r-region`, padding `--sp-7` which is 24px, chip); panel radius `--r-lg` and a resting shadow on `.panel` only; `.pf__word` as a pill; needs-you edge via `--state-needs`; selection restates `--glow-iris`; header verbs stay opacity 0 until hover, focus or selection (already true at `.pf__chrome button`; restated, no well metric); review card radius (the frame's own `--lift`, not a second one); edge pip as an amber pill with `pointer-events: auto` on the button only; HUD readout opacity 1; minimap region outline at `--r-sm`. (M443, same span): a second `@keyframes panel-settle` that overshoots, marquee toolbar, connected-spawn menu, snap-guide colour already `--guide`. The toolbar and the menu use a hairline. `shadow.1` keeps `--lift` on the frame.
+
+Slots. `TierLayer` is a zero-size absolute `data-tier-layer` inside `.world` for L-C. `data-recovery-slot` wraps the existing reopen stack for L-F and stays mounted when the stack is empty. Neither is a hook.
+
+Deviations. A double-click on empty ground still mints a flowchart process step (`flowchart.app.1`). ⌘N lands at the cursor only when the mouse has moved over the canvas and the call is the one-argument path; otherwise the view centre and `place()` cascade stay. ⌘T is a new listener, not a retarget of `useViewport`. Header path, branch and duration are R-016 (`PanelFrame` / `TerminalPanel` are not owned). `statePill` is ready and is not written into `shown.word`. Making a task commits one panel history entry; the work item is a second store and does not undo with ⌘Z. Handoff animation already runs only on `data-edge-activity="firing"`; M442 pins that rather than rewriting the gesture.
+
+Shot scenes `rd-workspace` and `rd-arrange` gain a `run`. `verify:meta` `visual.1` will ask for goldens. Those goldens are not written here.
+
+### M442
+
+Watched red: `verify:rd-l-b` exited 1 because esbuild could not resolve `header-rest.ts` and `session-facts.ts`. The comment at the top of `scripts/verify-rd-l-b.cjs` records that.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-b` | 9/9 pass (`rd-l-b.0`, `header.1`, `wait.1`, `allow.1`, `region.1`, `well.1`, `slot.1`, `handoff.1`, `inspector.1`) |
+
+R-016 is open for the header path, branch and duration. The pill helper is `statePill` in `header-rest.ts`.
+
+### M443
+
+| Check | Result |
+|---|---|
+| `npm run verify:rd-l-b` | 14/14 pass. Added `menu.1`, `gap.1`, `marquee.1`, `cursor.1`, `settle.1`. |
+
+`gapGrid: 24` is opt-in on the canvas's `smartSnap` call. Callers that omit it, including the flowchart, keep the previous candidates. A connected drop on a shape still calls `extend`. A panel drop opens the menu and the next `onSpawn` links with `trigger: 'exit'` in the same history entry. Ground double-click is unchanged.
+
+The first plain wave went red on checks this lane had caused. `verify:styles` 5 and 6 rejected literal padding, margin, gap and a 2px radius in the lane span. `shadow.1` rejected `--lift` on `.review-node`, the marquee toolbar and the connected menu. `motion.2` rejected the new name `rd-panel-settle`. `verify:rail` `state.2` rejected the spelled word in `make-task.ts` and `Canvas.tsx`. Spacing now uses the scale. The overshoot is a second `@keyframes panel-settle` (the name `motion.2` already allows); the first definition stays the dip. `revamp.motion.1` still reads that first definition, so it does not see the overshoot that paints. R-017 asks F1 to read the last one. The work item's state is `WORK_ITEM_STATES[1]`. After that: `verify:rd-l-b` 14/14, `verify:styles` green including `shadow.1`, `motion.2` and `revamp.motion.1`, `verify:rail` 266/266.
+
+### Gates
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:styles` | green, including checks 5 and 6, `shadow.1`, `motion.2`, `revamp.motion.1` |
+| `npm run verify:rail` | 266/266, including `state.2` |
+| Plain-node wave (67 suites, no build, no Electron) | 64/67 in 31.3s. Failed: `verify:meta`, `verify:tmux`, `verify:first-run` |
+| `npm run affected -- --list --base redesign/main` | 22 files on this branch. The plain suites in that list ran inside the wave. The Electron suites were not run. UNMAPPED: `docs/redesign/requests.md`. A `--list` with no `--base` compares with `fba024f2c8` and is not this branch's diff |
+
+`verify:meta` fails two checks. `panels-split.2` is the known red: `git show pre-v7-run:scripts/verify-panels.cjs` fails because the tag is absent. `visual.1` reports `declared` 81, `goldens` 79, `missing` `rd-workspace` and `rd-arrange`. That red is expected once a scene's `run` sits on the same line as `{ name:`. The goldens were not written. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+`verify:first-run` is 28/29. `revamp.create.1` still wants `/^<div class="canvas-hud">/`. The HUD renders `data-screen-control` on that element. Create still sits before the zoom cluster. The attribute was not removed.
+
+`verify:tmux` fails loading `prebuilds/linux-x64/pty.node`. `npm ci --ignore-scripts` never rebuilt it. Not fixed.
+
+`verify:flowchart` passed in 1.0s and did not spike. `verify:relay` passed in 2.9s. `verify:canvas-sync` passed in 14.9s. No WebSocket errors on this host.
+
+Electron. `npm run verify:panels:core` through `scripts/redesign/with-electron-lock.sh` exits 127: `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron` is not on this machine. `xvfb-run` is `/usr/bin/xvfb-run`, and `node_modules/electron/dist/electron` exists. Under xvfb that binary starts and then dies: `Cannot find module './prebuilds/linux-x64//pty.node'`. The same death stops `scripts/shot.cjs` (`TC_FIXTURE=rd-steward`, `TC_SHOT_ONLY=rd-workspace`). dbus logs `Failed to connect to the bus`. No PNG was written, no `out/shots/*.vs-reference.png`, no golden. `scripts/panels-entry.cjs` also warns `Duplicate key "credentialDir"`; that warning is not this lane's.
+
+G2's mockup critic and rules review were not run. There is no composite to hand them. `npm run build` was not run, because shots cannot paint. `verify:panels`, `verify:canvas`, `verify:xterm`, `verify:window`, `verify:visual` and `verify:packaged` did not run.
+
+## L-A · plan (M439–M441)
+
+Branch `rd/l-a-launch`. No separate approval step: the plan is this section, checked against the kickoff boxes, then built in order. `splashMode` stays the APEX field (`splash.1`). The restore card is a second surface. `Launcher` markup stays so `onboarding.markup.*` keeps reading the same buttons.
+
+PLAN CHECK:
+
+- 01 is the only main-process change. `boot:progress` is a send, so the key is `IPC_EVENTS.BOOT_PROGRESS`, not an invoke. An invoke would need `ipcMain.handle` in `src/main/ipc.ts` and a new `EXPECTED_CHANNELS`, and both files are outside this lane. `FILE_CHANGED`'s comment is the precedent: verify:ipc walks `IPC` only. The sender is `publishBootProgress` in the new `boot-progress.ts`. `CLAUDE.md`'s diagram gains the name in the same commit. README's diagram is R-018.
+- `src/renderer/onboarding/` is new. Its tree does not spawn, exec, or call a pty.
+- MinimapOverlay and CanvasHud are not edited. The minimap sentence is `emptyState('minimap')`. L-B reads it (R-022).
+
+| Milestone | Pure model first | Checks | UI | Shot |
+|---|---|---|---|---|
+| M439 | `restoreLines`, `splashShouldLeave`, `ghostLayout` in `splash.ts`; `skipRemaining` and `publishBootProgress` in `boot-progress.ts` | `rd-restore.lines.1`, `rd-restore.skip.1`, `rd-restore.leave.1`, `rd-restore.channel.1` | `RestoreSplash` in `StartupSplash.tsx`, CSS in `rd:L-A` | `rd-splash` run, frozen at 3 of 5 |
+| M440 | agent rows, ready label, install copy, preset default, handoff in `onboarding.ts` / `env-report.ts` / `presets.ts` | `rd-onboard.rows.1`, `rd-onboard.ready.1`, `rd-onboard.copy.1`, `rd-onboard.preset.1`, `rd-onboard.handoff.1` | `src/renderer/onboarding/Onboarding.tsx` | `rd-onboarding` run, step 2 |
+| M441 | blank title, repo chip, starter layouts, empty-canvas hints, start verb | `rd-empty.title.1`, `rd-empty.layouts.1`, `rd-empty.hints.1`, `rd-empty.verb.1` | `BlankCanvas` in `EmptyState.tsx` | `rd-empty` run |
+
+Mounting the three screens from `Canvas.tsx` is R-021. The shot door is `window.__rdLA.mount`, registered by `StartupSplash` because Canvas already imports that module. A failed restore stops the spinner and calls `noteBootIssue`; the 09 surface is L-F (R-023). `resume-summary.ts` and `tmux-probe.ts` stay as they are: the splash does not invent a resume narrative, and the probe's backend choice is not the reattach loop.
+
+## M439 · Launch and restore
+
+Four lines, each pending until a fact arrives. Workspace is done only when both the name and the path are present; the path is the mono detail. Layout says the measured counts in words (`2 tasks, 9 objects`; zero is `no tasks, no objects`). Tmux in flight is the active line and says `N of M`; zero done is `none of N yet`; nothing to reattach is `none to reattach`. Agents stay pending when only a planned catalog is known (`claude, codex` is a list, not a result). A found list sets `found`. Option held marks the tmux line skipped; `skipRemaining` sets `asleep` on panes not yet reattached, leaves reattached panes awake, and returns `killed: []` with the same pids. A failed step settles that line, leaves the later lines pending, and stops the breath. `splashShouldLeave` is true the moment `settled` is true, including at 0ms. Reduced motion and a settled view do not breathe. Ghost frames are the rects' own bbox, padded, and an absent list is empty.
+
+`RestoreSplash` is a second surface. `splashMode` is unchanged (`splash.1`–`splash.3` passed). The card leaves in the effect that sees settled. Option is `altKey`. A failure calls `noteRestoreFailure`, which is `noteBootIssue`. The APEX field component is the same component it was.
+
+`boot:progress` is `IPC_EVENTS.BOOT_PROGRESS`. `publishBootProgress` sends it. It is not an invoke: `verify:ipc` walks `IPC` only, and a handler would have to live in `src/main/ipc.ts` with a new `EXPECTED_CHANNELS`, neither of which this lane owns. `CLAUDE.md` names the channel. README does not (R-018). Nothing in the composition root calls the publisher yet (R-019). The preload does not subscribe (R-020). Canvas does not mount the card (R-021).
+
+The ghost fill is `color-mix` at 55%. A fractional `opacity` failed `verify:styles` check 3 and was removed. The breath reuses `state-breath` on `var(--dur-breath)`. Reduced motion sets `animation: none`.
+
+### Checks
+
+Linux, Node v22. Electron's Linux binary is present under `node_modules/electron/dist/electron` (ELF). The npm scripts still invoke `Electron.app/Contents/MacOS/Electron`, which is not on this machine. `pty.node` was not rebuilt (`npm ci --ignore-scripts`). Watched red first: `verify:rd-l-a` exited 1 because esbuild could not resolve `boot-progress.ts`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 5/5 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:viewport` | pass, including `splash.1`–`splash.3` |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rd-f1` | 7/7 pass |
+| `npm run affected -- --base redesign/main` | 53/55 plain suites passed in 31.4s, then stopped. Failed: `verify:meta` (`14` missing `boot:progress` in the README — R-018; `panels-split.2` tag `pre-v7-run` absent, known; `visual.1` missing golden `rd-splash`, expected until Phase 4) and `verify:first-run` (`revamp.create.1`, known, CanvasHud is L-B). Electron tier not reached. |
+| `shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window` | not run. Each script's binary path is the macOS app bundle. `UPDATE_GOLDENS` was not set. |
+
+### Deviations
+
+- The channel is a send, not the invoke the kickoff's "main handler" sentence describes. Direction is main→renderer. An invoke would edit files outside the lane.
+- `tmux-probe.ts` and `resume-summary.ts` are unchanged.
+- The shot scene has `run`. `visual.1` lists `rd-splash` as missing a golden. That red stays until the lead writes it.
+
+## M440 · Onboarding
+
+Four steps on `ONBOARDING_RAIL`: Workspace, Agents, Sessions, First task. Step 2's title is `Which agents live on your canvas?`. A row is `found` only with a path. A null path that answered is `not installed` and offers the install string. A timeout is `discovery did not answer`, and `sessionsPersistence(undefined)` does not say tmux is installed. Plain shell is locked on and is not in the ready count. `readyLabel(0)` is `Turn one on to continue`. The footer is the mockup's sentence. `FIRST_TASK_HANDOFF` is `{ sheet: 'start-work', spawns: false }`. `presetsFromEnabledAgents` makes the first enabled id the ⌘N default and leaves `shell` when none are on. Gemini's preset has no `agent` field. `discoverBinary` takes `which` and `versionOf`; it does not import `child_process`.
+
+`Onboarding.tsx` is the card. Copy calls `installCommand` and `clipboard.writeText`. The preview frames take their word and `data-tone` from `panelState`. Nothing in `src/renderer/onboarding/` spawns.
+
+The shot fixture is the mockup's frozen probe (claude and codex found at the paths and versions drawn on `02-onboarding.png`, gemini missing), not a measurement of this machine.
+
+### Checks
+
+Watched red: esbuild of `import { readyLabel } from onboarding.ts` exited 1, `No matching export`. A bare `export { missing }` in the suite entry was tree-shaken without that error, so the entry also assigns `keep`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 11/11 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rail` | 266/266 pass (`state.2`, `hints.1`, `empty.2`) |
+| `shot` / Electron | not run. The scripts still call `Electron.app/Contents/MacOS/Electron`. `rd-onboarding` now has `run`, so `visual.1` will also list that golden as missing. `UPDATE_GOLDENS` was not set. |
+
+## M441 · Empty canvas
+
+`BlankCanvas` in `EmptyState.tsx`. The title is `A blank canvas for <workspace>`, or `A blank canvas` when the name is empty. The purpose sentence is the mockup's. The task field's verb is `Start task`, disabled with `Describe the task first` until there is a sentence. The repo chip is the name, or `no repository chosen`. Quick spawns are buttons labelled Claude Code, Shell and Import a layout…; the chords come from `shortcutById` (`⌘N`, `⌘T`). They call back and do not spawn. `STARTER_LAYOUTS` is a separate list from `LINEUPS` (`lineup.1` still sees solo, pair, workbench, swarm). `starterLayoutAction` places nothing until `clicked` is true. `EMPTY_CANVAS_GESTURES` is separate from `HINTS` (`hints.1` ids are unchanged). The ghost line is `Double-click to place a terminal`. The minimap sentence is `emptyState('minimap')` — `Nothing placed yet` — rendered in `BlankCanvas`. L-B's overlay does not read it yet (R-022). Canvas's double-click still places a process step (R-024). `Launcher.tsx` was not edited, so `onboarding.markup.*` still reads the same buttons.
+
+### Checks
+
+Watched red: `verify:rd-l-a` exited 1 with `ReferenceError: blankCanvasTitle is not defined` before the functions existed.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 15/15 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:rail` | 266/266 pass. `empty.2` sees the minimap id rendered. `hints.1` ids unchanged. |
+
+## L-A · G2
+
+Rebase onto `origin/redesign/main` at `6bffde9f` was a no-op: that commit is the branch point.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass, each milestone |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run affected -- --base redesign/main` | at M439, 53/55 plain suites, then stopped. Failures were `verify:meta` and `verify:first-run` only. Electron tier not reached. |
+| Full plain wave (67 suites, no build, no Electron) | 64/67 in 31.5s. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. |
+| `npm run shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window`, the panels parts | not painted. |
+
+Could not run on Linux:
+
+- `package.json` points every Electron suite and `shot` at `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`. That path does not exist. `scripts/redesign/with-electron-lock.sh` running it exits `No such file or directory`.
+- The Linux binary is present and answers `--version` (`v43.4.1`) under `xvfb-run`. Invoking `scripts/shot.cjs` with that binary dies in main: `Failed to load native module: pty.node` — `prebuilds/linux-x64/pty.node` is absent. The prebuilds on disk are darwin and win32. `verify:tmux` fails the same way in 0.2s.
+- No `out/shots/*.vs-reference.png`. No critic pass. `UPDATE_GOLDENS` was not set. `visual.1` is red on purpose: missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`.
+
+Other reds, not fixed: `verify:meta` `panels-split.2` (`pre-v7-run` absent), `verify:first-run` `revamp.create.1`, `verify:meta` 14 (`boot:progress` absent from the README — R-018).
+
+Requests open: R-018 README fence, R-019 composition root publishes progress, R-020 preload subscribes, R-021 Canvas mounts the three screens, R-022 minimap reads `emptyState('minimap')`, R-023 L-F's 09 surface shows the boot-issue sentence, R-024 empty-canvas double-click still places a process step.
+
+## M446 · L-E Settings › Keyboard
+
+Branch `rd/l-e-keyboard`. Screen 08. Decisions D4 and D5. `shortcuts.ts` stays frozen.
+
+### Plan
+
+PLAN CHECK, before any edit under `src/`:
+
+- `shortcut-overrides.ts` is pure and is checked before the Settings UI. `shortcuts.ts` is not edited. The merge, the canvas-scope ⌘ rule, duplicate detection within a scope, and the `tidy-alias` chord (⌘⌥T) live in that module. `matchEffective` and `acceleratorFor` are the same merge: one for a key event, one for the menu string. With an empty override list, `acceleratorFor` is `electronAccelerator`, so tidy-alias stays `CmdOrCtrl+Alt+T`.
+- Rendered rows come from `keyboardSections`, which walks `SHORTCUTS`. `rd-keys.settings.1` compares that walk to the registry (every id, registry labels, group order of the non-alias rows). `KeyboardPane.tsx` maps the function; it does not carry a second list of labels or group ids.
+- R-010 is done on this branch (`shell.centerView` is `canvas | orchestration | sessions | review`). It is not in this change.
+
+Then the page. `keyboard.overrides` is a list setting (tab-separated `id` + chord) because `SettingValue` has no record and `parsePreferences` already checks a list of strings. The Keyboard page hosts the registry. The other six nav pages are thin hosts over the schema rows in their categories, each with a purpose sentence. The "Open Settings" verb is `OPEN_SETTINGS_ROW` in `palette-actions/settings.ts`; the command list and the dock callback are other lanes (R-026). The menu rebuild on `settings:changed` already exists; the accelerator it paints still comes from the frozen registry (R-025).
+
+Shot: `rd-settings-keys` records Step in, reference 08. A `run` makes `verify:meta` `visual.1` list a missing golden. That red is expected until Phase 4. `UPDATE_GOLDENS` is not set.
+
+### What landed
+
+`shortcut-overrides.ts` merges a list of `id<TAB>chord` over `SHORTCUTS`. Canvas scope without ⌘ is refused by the shortcut's name. A duplicate inside one scope is refused and names the other row; nothing is returned to store. `tidy-alias` stays ⌘⌥T until that id is overridden, and moving Tidy onto ⌘⌥T clashes with the alias. Putting a chord back to the registry value drops the override. `acceleratorFor([])` is `electronAccelerator`, so the seven historical menu strings stay byte-for-byte. `matchEffective([])` agrees with `matchShortcut`. The frozen parser only knows the registry's keys, so a letter it has never seen (P, for one) is refused rather than stored as a chord nothing can match.
+
+`keyboard.overrides` is a list, default `[]`, not plan-writable. The Keyboard page maps `keyboardSections`. The other six pages host the schema rows for their categories and each says what it is for. List settings stay off those pages. The page mounts from a second root installed when `palette-actions/settings.ts` loads, because Canvas is not this lane's file. `OPEN_SETTINGS_ROW` calls `openSettingsPage`. The dock and the command list do not, yet (R-026). The menu still paints `electronAccelerator` (R-025).
+
+The shot records Step in (`⌘↵`), not the mockup's combined "Step into / out of panel". Those are two registry rows, and `rd-keys.settings.1` forbids folding them by hand. Aliases fold onto their target: Tidy's note is "was ⌘⌥T · kept for one release".
+
+Checks were 1/15 (only `rd-l-e.0`) before the modules existed. `shortcuts.ts` was not edited. R-010 was already done and was not repeated.
+
+Boolean and enum controls on the other pages carry `aria-label` of the setting name plus the current value. `labels.1` reads a button whose only child is a function call as unlabelled, and the first affected run failed `verify:rail` on those two buttons. After the labels, that suite is 266/266.
+
+### Checks (Linux, Node v22, `npm ci --ignore-scripts`)
+
+Rebase onto `origin/redesign/main` (`6bffde9f`): already based there. No commits to replay.
+
+| Step | Result |
+|---|---|
+| `npm run typecheck` | Pass. Node and web. The hand-run `npm run build` after the wave also typechecked and bundled (`electron-vite build`). |
+| `npm run verify:rd-l-e` | 15/15. Watched red first at 1/15. |
+| `npm run affected` | 56/58 plain suites, 31s, stopped after the plain tier. Base `fba024f2c8`, 45 files. Failures: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (`rd-settings-keys` has `run` and no golden — expected until Phase 4), and `verify:first-run` `revamp.create.1`. `verify:rail` `labels.1` is green. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, `verify:panels:*`) did not start. |
+| `npm run verify` | 63/67 of the plain wave (67 plain, 13 Electron), 31s, stopped after wave 1. Same `panels-split.2`, `visual.1`, and `revamp.create.1`. `verify:tmux` throws `Cannot find module './prebuilds/linux-x64//pty.node'` (`npm ci --ignore-scripts` never rebuilt node-pty). `verify:review` `merge.1` returned `{kind:'failed', detail:''}` once in the 4-wide wave; alone it is 163/163. The lane does not touch `lane-merge.ts`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` passed in 0.9s. `verify:styles` passed. |
+| Electron tier | Did not start. Wave 1 rejected the tree. |
+| `npm run shot` | Under `xvfb-run` and `scripts/redesign/with-electron-lock.sh`, `TC_SHOT_ONLY=rd-settings-keys`: exit 127. `package.json` launches `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`, and that path is absent. The Linux ELF is `node_modules/electron/dist/electron`. Invoking that ELF directly, the app reached `shot-entry` and then threw the same missing `pty.node`. No PNG was written. The process stayed up until it was killed at 75s. |
+| Critic | No `out/shots/rd-settings-keys.vs-reference.png`, so the mockup critic and the rules reviewer did not run. |
+| Goldens | `UPDATE_GOLDENS` was not set. `visual.1` lists `rd-settings-keys` as the one missing golden (declared 80, goldens 79). |
+
+Known reds left as they are: `panels-split.2`, `revamp.create.1`, missing `pty.node`. `verify:canvas-sync` and `verify:relay` were green on this run.
+
 ## M445 · L-D Sessions
 
 Branch `rd/l-d-sessions`, cut from `redesign/main`. Screen 07. D3. The page is a peer of the canvas: it reads the same words and the same queue, and the actions it cannot perform are callbacks.
@@ -218,7 +436,7 @@ PLAN CHECK:
 
 1. Product code is new under `src/renderer/sessions/`, including the host F3 left. No store is edited. Holds.
 2. The reply box's delivery is paste and Send is a button. Enter does not submit. A shell-prompt card has Open on canvas and Snooze 10m, and no field. Holds.
-3. `metrics.1` is amended by R-016, not by an edit to `scripts/verify-styles.cjs`. Holds.
+3. `metrics.1` is amended by R-027, not by an edit to `scripts/verify-styles.cjs`. Holds.
 
 ### What the page does
 
@@ -227,11 +445,11 @@ PLAN CHECK:
 - Cards are `useAttentionQueue(useAttentionCensus())`, in that order, with `item.sentence`. Approval is Allow / Diff / Deny. A shell prompt is Open on canvas / Snooze 10m. A failure is Restart / Read log. Snooze is local (ten minutes) and hides that card. This file does not call `buildQueue`.
 - The table groups by the work item's single `panelId`. A panel named by two tasks is unassigned, in one trailing group. Columns are Session, Agent, Folder, Branch, State (`data-tone`), Activity, Run, Cost, Last line. The sparkline is an inline SVG. Its stroke is `STATE_PALETTE`, because a presentation attribute does not resolve `var()`. Recharts stays on the two shell charts. Last line and paths are mono. The state pill is `--tone`. Cost is `.sessions-cost`. There is no `data-machine-cost`.
 - The bulk bar is "N selected" plus Pause, Restart, Move to task…, End. Pause is off when every selected row is asleep, exited, done or none. End calls `endAsk` and then `confirmEnd`. If Canvas has not passed `confirmEnd`, End does not end. No `window.confirm`, no `pty.kill`.
-- Detail tails `scrollback.tail` and `pty.onData`. "Send to this session…" is disabled, with its reason, for a shell and for an agent this page cannot paste into. A chat with no `onSend` uses `agentSession.send`. A terminal paste waits for R-017. Facts (Started, Survives "reload and quit (tmux)", Tokens, Changes) render only when the reader has them. Show on canvas calls `onShowOnCanvas`.
+- Detail tails `scrollback.tail` and `pty.onData`. "Send to this session…" is disabled, with its reason, for a shell and for an agent this page cannot paste into. A chat with no `onSend` uses `agentSession.send`. A terminal paste waits for R-028. Facts (Started, Survives "reload and quit (tmux)", Tokens, Changes) render only when the reader has them. Show on canvas calls `onShowOnCanvas`.
 
 ### What this page cannot know yet
 
-`session-registry.ts` is a factory Canvas owns. There is no module-level reader, and this lane does not bump `registry.version()`. The live reader therefore reports every session as not dormant, `survives` and `startedAt` and `changes` as unknown, and a terminal's `canPaste` as false until `onSend` is passed. The header drops the dormant clause because the count is zero, which is what the rest rule says to do with the data in hand. R-017 asks Canvas to pass the registry facts and the verbs. R-018 asks the steward loader to stamp folder, engine and branch; until then the shot hands the cast through `tc-sessions-feed`. A malformed feed is ignored.
+`session-registry.ts` is a factory Canvas owns. There is no module-level reader, and this lane does not bump `registry.version()`. The live reader therefore reports every session as not dormant, `survives` and `startedAt` and `changes` as unknown, and a terminal's `canPaste` as false until `onSend` is passed. The header drops the dormant clause because the count is zero, which is what the rest rule says to do with the data in hand. R-028 asks Canvas to pass the registry facts and the verbs. R-029 asks the steward loader to stamp folder, engine and branch; until then the shot hands the cast through `tc-sessions-feed`. A malformed feed is ignored.
 
 The census `taskId` is null (CommandPill). Grouping uses work items. One member per task, plus a loose group, is what `layout.load` can say today.
 

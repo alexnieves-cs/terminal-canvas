@@ -10,6 +10,12 @@ export interface EdgeIndicatorsProps {
   ids: string[]
   /** M66. The panel's name for the pip's chip; a wedge at the edge with no name was M61's finding 21. */
   labelOf?: (id: string) => string
+  /**
+   * M442. Fly the camera to the panel. The button stops the mousedown so it
+   * never reaches the canvas background handler, which would wake whatever
+   * it hit. The parent layer stays pointer-events: none.
+   */
+  onFly?: (id: string) => void
 }
 
 /**
@@ -40,7 +46,7 @@ function chipOffset(angle: number): string {
   return s > 0 ? '-50%, -100%' : '-50%, 0%'
 }
 
-export function EdgeIndicators({ rects, viewport, ids, labelOf }: EdgeIndicatorsProps): JSX.Element | null {
+export function EdgeIndicators({ rects, viewport, ids, labelOf, onFly }: EdgeIndicatorsProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size | null>(null)
 
@@ -91,15 +97,22 @@ export function EdgeIndicators({ rects, viewport, ids, labelOf }: EdgeIndicators
             /* Inward of the wedge along its own axis, upright, and hung on
                the side AWAY from the edge the wedge sits on: a chip that
                always extended left ran off the canvas for a left-edge pip
-               (M66's verifier), clipped by the host with nothing to see. */
-            <div
-              className="edge-indicator__label"
+               (M66's verifier), clipped by the host with nothing to see.
+               M442. The chip is a button. stopPropagation: the layer is
+               pointer-events none, and a click that reached .canvas would
+               wake the panel the pip exists to point at. */
+            <button
+              type="button"
+              className="edge-indicator__label edge-indicator__fly"
               data-edge-label={pip.id}
+              data-edge-fly={pip.id}
               style={{ transform: `translate(${pip.x}px, ${pip.y}px) rotate(${pip.angle}rad) translate(-18px, 0) rotate(${-pip.angle}rad) translate(${chipOffset(pip.angle)})` }}
+              onMouseDown={(event) => { event.stopPropagation(); event.preventDefault() }}
+              onClick={(event) => { event.stopPropagation(); onFly?.(pip.id) }}
             >
               <span className="edge-indicator__name">{labelOf(pip.id)}</span>
               <span className="edge-indicator__word" data-tone={agentWord('wants-you').tone}>{agentWord('wants-you').word}</span>
-            </div>
+            </button>
           )}
         </Fragment>
       ))}

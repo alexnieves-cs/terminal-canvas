@@ -12,8 +12,8 @@
  * ONCE, so a `brew install` mid-session is invisible until relaunch, and a
  * report that did not say when it looked would turn that limit into a lie.
  */
-import { REPORTED_CLIS, type CliName, type EnvReport } from '../shared/env-report'
-export { INERT_ENV_REPORT, REPORTED_CLIS, probeOutcome, type CliName, type EnvReport, type ProbeOutcome } from '../shared/env-report'
+import { BINARY_PROBE_TIMEOUT_MS, REPORTED_CLIS, probeWithin, type CliName, type EnvReport } from '../shared/env-report'
+export { BINARY_PROBE_TIMEOUT_MS, INERT_ENV_REPORT, REPORTED_CLIS, classifyBinaryProbe, probeOutcome, probeWithin, versionWords, type BinaryProbeClass, type CliName, type EnvReport, type ProbeOutcome } from '../shared/env-report'
 
 export interface EnvReportFacts {
   env: Record<string, string>
@@ -44,4 +44,34 @@ export function buildEnvReport(f: EnvReportFacts): EnvReport {
     control: f.control,
     ...(f.probe === undefined ? {} : { probe: { shells: [...f.probe.shells], folders: path === '' ? [] : path.split(':').filter((p) => p !== ''), timedOut: f.probe.timedOut } })
   }
+}
+
+/**
+ * M440. One binary on the login PATH main already resolved. `which` and
+ * `versionOf` are injected so this module never spawns: the composition root
+ * owns the process, and a check can answer without one. A timeout is returned
+ * as `timedOut`, not as a missing path.
+ */
+export async function discoverBinary(
+  name: string,
+  which: (name: string) => Promise<string | null> | string | null,
+  versionOf: (path: string) => Promise<string | null> | string | null,
+  timeoutMs = BINARY_PROBE_TIMEOUT_MS,
+  timer: { set(fn: () => void, ms: number): unknown; clear(id: unknown): void } = {
+    set: (fn, ms) => setTimeout(fn, ms),
+    clear: (id) => clearTimeout(id as ReturnType<typeof setTimeout>)
+  }
+): Promise<{ name: string; path: string | null; version: string | null; timedOut: boolean }> {
+  const located = await probeWithin(Promise.resolve().then(() => which(name)), timeoutMs, timer)
+  if (typeof located === 'object' && located !== null && 'timedOut' in located) {
+    return { name, path: null, version: null, timedOut: true }
+  }
+  const path = typeof located === 'string' && located !== '' ? located : null
+  if (path === null) return { name, path: null, version: null, timedOut: false }
+  const printed = await probeWithin(Promise.resolve().then(() => versionOf(path)), timeoutMs, timer)
+  if (typeof printed === 'object' && printed !== null && 'timedOut' in printed) {
+    return { name, path, version: null, timedOut: true }
+  }
+  const version = typeof printed === 'string' && printed.trim() !== '' ? printed.trim() : null
+  return { name, path, version, timedOut: false }
 }

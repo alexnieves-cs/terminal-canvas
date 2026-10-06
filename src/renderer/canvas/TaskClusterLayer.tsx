@@ -1,4 +1,6 @@
 import type { JSX } from 'react'
+import type { TaskRegion } from '@shared/redesign-contracts'
+import { regionLabel } from './task-regions'
 import type { TaskCluster } from './task-clusters'
 
 /**
@@ -28,4 +30,35 @@ export function TaskClusterLayer({ clusters, region = false }: { clusters: reado
       ))}
     </div>
   )
+}
+
+/**
+ * M442. The labelled territory. Membership is already decided (task-regions);
+ * this only paints `regionLabel` on the snapped bounds. Pointer events stay
+ * off so the panels underneath still receive the drag.
+ */
+export function TaskRegionLayer({ regions }: { regions: readonly TaskRegion[] }): JSX.Element | null {
+  if (regions.length === 0) return null
+  return (
+    <div className="task-regions" aria-hidden="true">
+      {regions.map((region) => (
+        <div
+          key={region.id}
+          className="task-region"
+          data-task-region={region.id}
+          style={{ left: region.bounds.x, top: region.bounds.y, width: region.bounds.w, height: region.bounds.h }}
+        >
+          <span className="task-region__chip">{regionLabel(region)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * M442. L-C's mount. Zero size and absolute so it cannot sit in the flow
+ * and refit a terminal. The lane that fills it owns the contents.
+ */
+export function TierLayer(): JSX.Element {
+  return <div className="tier-layer" data-tier-layer="" aria-hidden="true" />
 }

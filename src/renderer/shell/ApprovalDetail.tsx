@@ -143,3 +143,33 @@ export function ApprovalAcks({ only }: { only?: (o: ApprovalOutcome) => boolean 
     </ul>
   )
 }
+
+/**
+ * M442. The request on the panel itself: the question, Allow (⌘Y), View diff,
+ * Deny, and how long it has been waiting. The buttons call the same
+ * `answerApproval` the palette row and the inspector use — this component
+ * does not answer by a second door. mousedown stops so a press does not
+ * drag the panel or wake it.
+ */
+export function InlineApproval({
+  approval, waiting, onAllow, onDeny, onViewDiff
+}: {
+  approval: PendingApproval
+  waiting: string
+  onAllow: () => void
+  onDeny: () => void
+  onViewDiff: () => void
+}): JSX.Element {
+  const stop = (event: { stopPropagation: () => void }): void => { event.stopPropagation() }
+  return (
+    <div className="inline-approval" data-inline-approval="" role="group" aria-label="Needs you" onMouseDown={stop}>
+      <p className="inline-approval__ask">{approval.argument}</p>
+      <div className="inline-approval__verbs">
+        <button type="button" data-inline-allow onMouseDown={stop} onClick={onAllow}>Allow <kbd>Y</kbd> <kbd>⌘Y</kbd></button>
+        <button type="button" data-inline-diff onMouseDown={stop} onClick={onViewDiff}>View diff</button>
+        <button type="button" data-inline-deny onMouseDown={stop} onClick={onDeny}>Deny</button>
+      </div>
+      <p className="inline-approval__wait">waiting {waiting}</p>
+    </div>
+  )
+}
