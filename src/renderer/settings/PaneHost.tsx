@@ -40,9 +40,9 @@ function SettingLine({ row }: { row: SettingRow }): JSX.Element {
         <span className="rd-settings__hint">{row.description}</span>
       </span>
       {row.type === 'boolean' ? (
-        <button type="button" aria-pressed={row.value === true} onClick={() => write(row.value !== true)}>{shown(row)}</button>
+        <button type="button" aria-pressed={row.value === true} aria-label={`${row.label}, ${shown(row)}`} onClick={() => write(row.value !== true)}>{shown(row)}</button>
       ) : row.type === 'enum' && (row.values?.length ?? 0) > 0 ? (
-        <button type="button" onClick={() => {
+        <button type="button" aria-label={`${row.label}, ${shown(row)}`} onClick={() => {
           const values = row.values ?? []
           const index = values.indexOf(String(row.value))
           const next = values[(index + 1) % values.length]
