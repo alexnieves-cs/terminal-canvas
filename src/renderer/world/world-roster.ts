@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from 'react'
 import { getAgent, getAgentIds, replayAt, subscribeAgentWorld } from './agent-world-store'
 import { getWorldContext, subscribeWorldContext } from './world-context-store'
 import { inRoom } from './world-facts'
-import type { RosterEntry } from './world-scene'
+import { isLiveStatus, type RosterEntry } from './world-scene'
 
 /**
  * The scene's roster: every agent id and the name it currently goes by, as ONE
@@ -15,11 +15,11 @@ import type { RosterEntry } from './world-scene'
  * the roster alone; the plan also needs names, because a conductor is found by
  * name, and a name may first arrive on a later event than the first.)
  *
- * LIVE agents only (`isLiveStatus`): the room is for work happening now, so an
- * agent that goes idle or errors leaves the roster — and the plan re-flows
- * without it — and comes back, in its first-seen place, when it is live again.
- * A status flip between two live statuses changes nothing here, so the string,
- * and with it the render, stays put.
+ * M448. Idle and errored agents stay. `isLiveStatus` is still who is at work
+ * (the structure, the live card); the roster is wider, so a failed agent can
+ * slump at its desk and an idle one keeps its place. The board's pseudo-agent
+ * (`world:`) is not an agent and never takes a desk. A status flip that does
+ * not change membership leaves the string, and the render, put.
  *
  * M428: and an agent main HOLDS at a cap keeps its desk (`inRoom`). The feed
  * calls it idle — its turn ended and main serves it nothing more — but it is
@@ -36,8 +36,9 @@ function rosterKey(): string {
   const facts = getWorldContext().facts
   return getAgentIds()
     .filter((id) => {
+      if (id.startsWith('world:')) return false
       const record = getAgent(id)
-      return record !== undefined && inRoom(record.status, facts[id]?.held !== undefined, past)
+      return record !== undefined && (inRoom(record.status, facts[id]?.held !== undefined, past) || !isLiveStatus(record.status))
     })
     .map((id) => `${id}${SEP_FIELD}${getAgent(id)?.name ?? id}`)
     .join(SEP_ROW)

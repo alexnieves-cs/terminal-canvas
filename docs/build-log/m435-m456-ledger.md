@@ -695,3 +695,39 @@ Linux, Node v22.14.0. `npm ci --ignore-scripts`.
 | `npm run verify:rd-l-f` | 17/17 |
 | `npm run verify:styles` | 97/97 |
 | `npm run verify:rail` | 266/266 |
+
+## M448 · W0 night studio
+
+Branch `rd/w0-night` from `redesign/main` at `c432e511` (after R-024). Base the brief names is `rd-canvas` (`5cf60839`); the branch includes the hint merge and does not move that tag.
+
+### Plan
+
+Reverse M415/M416. The room is the night ink (`#0b0d12`, dark `--s-0`) in both app themes. Shells are one neutral. Identity hues are the chest light only, and none sits within ΔE 20 (CIE76) of the five dark state colours. State is drawn in the eyes, the antenna, the floor ring and (once R-039 lands) the desk screen, read from `state-palette.ts` through `stateHexForAgent`. Trims are a dim neutral so only state blooms. Amber, the needs token, is the only vertical beacon, and only while an agent is waiting. Idle and errored agents stay in the roster; an error slumps. Agents do not walk to the table. `isLiveStatus` is unchanged (still the at-work set). `goalOf` is unchanged; `WorldRobot` stops using it.
+
+`STUDIO` is the same object as `NIGHT`, so WorldOffice, WorldPlatform, WorldProps and WorldStructure pick up the night ground without an edit this lane does not own. `tableTop`, `ink` and `zoneInk` stay, so `world.studio.4` and `world.critic.label.1` stay green. The bloom threshold stays calibrated to the pale floor `#eef0f3`: a threshold taken from the night ground drops the whiteboard under `world.bloom.ink.1`. `glowScale` returns 1 for a colour under luma 0.12, so the dim trim does not bloom; `#36e6ff` and `#7ff4ff` still boost (`world.bloom.threshold.1`). `world.bloom.preimage.1` keeps the round-trip and now only requires that ACES does not lift the ground (the night ground compresses by less than the pale 0.02).
+
+### PLAN CHECK
+
+- [x] Every state colour in world/* reads state-palette.ts; identity hues only on the chest light.
+- [x] The F1 world exemption is a request for the lead (R-038), not an edit to `scripts/verify-rd-f1.cjs`.
+- [x] No three import in a pure module. WorldStage was not edited; it still has its one `/* @__PURE__ */ lazy()` for WorldView, and the flat room's existing second lazy (M431).
+
+Watched red before the palette existed: `verify:rd-w0` 1/4. `rd-world.parity.1` named `world-palette.ts:#a6f6ff`. `rd-world.identity.1` named `#ee2b4a` 19.8, `#ffc614` 19.8, `#11b9b2` 16.6. `rd-world.night.1` was the missing wiring. The esbuild of the suite did not throw: the parity walk short-circuited before the missing exports were read.
+
+### CSS override
+
+Inside `/* ── rd:W0 ── */`, badge rules that follow the earlier `.world-tag` / `.world-flat__tile` rules and win by source order:
+
+- `busy` → `var(--state-working)` (was `--world-go`, green)
+- `quiet` and `idle` → `var(--state-idle)` (quiet was `--world-stop`, red)
+- `stopped` → `var(--state-failed)`
+- `wants-you` → `var(--state-needs)`
+- `done` → `var(--state-done)`
+
+### Exports other lanes read
+
+`NIGHT`, `SHELL`, `TRIM`, `stateHexForAgent`, `ROBOT_TINTS` (chest lights, still length 10), and `STUDIO` aliased to `NIGHT`.
+
+### Requests
+
+R-038 open: drop `src/renderer/world/` from `rd-tone.literal.1`'s exemption in `scripts/verify-rd-f1.cjs` (lead, after merge). R-039 open: WorldOffice desk screen reads `stateHexForAgent`, and `MeetingTable` unmounts.

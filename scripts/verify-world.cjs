@@ -64,7 +64,8 @@ buildSync({
       "  facts: require('./src/renderer/world/world-facts.ts'),",
       "  session: require('./src/shared/agent-session.ts'),",
       "  quality: require('./src/renderer/world/world-quality.ts'),",
-      "  probe: require('./src/renderer/webgl-probe.ts')",
+      "  probe: require('./src/renderer/webgl-probe.ts'),",
+      "  statePalette: require('./src/shared/state-palette.ts')",
       "}"
     ].join('\n'),
     resolveDir: root, loader: 'js'
@@ -73,7 +74,7 @@ buildSync({
   bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', external: ['react', 'electron'],
   alias: { '@shared': join(root, 'src/shared'), '@renderer': join(root, 'src/renderer') }
 })
-const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW, facts: FX, session: AS, quality: Q, probe: PROBE } = require('../out/verify/world.cjs')
+const { contract: C, sim: S, store: W, scene: Z, set: SET, palette: PAL, trans: T, toggle: G, presence: P, feed: F, perf: PF, bloom: BL, wiring: WW, ipc: IPCC, panelState: PS, activity: AC, ctx: CTX, sel: SEL, struct: ST, replay: RP, away: AW, facts: FX, session: AS, quality: Q, probe: PROBE, statePalette: SP } = require('../out/verify/world.cjs')
 
 const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 1000 + seq, type, payload, ...extra })
 
@@ -365,15 +366,26 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const hueOf = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < 0.2) return null; const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return h * 60 }
   const presenceHues = new Set(demoIds.map((id) => Math.round((hueOf(P.colorOf(id)) ?? 0) / 40)))
   const tints = demoIds.map((id) => Z.agentTint(id, demoIds))
-  ok('world.critic.hue.1 the demo roster (demo-0…8, ids one digit apart) is nine DIFFERENT shells — where the presence hash it replaced gives it no more than three hue families — and each is a hex the model can take',
+  ok('world.critic.hue.1 the demo roster (demo-0…8, ids one digit apart) is nine DIFFERENT chest lights — where the presence hash it replaced gives it no more than three hue families — and each is a hex the model can take',
     new Set(tints).size === 9 && tints.every((t) => /^#[0-9a-f]{6}$/.test(t)) && presenceHues.size <= 3, `tints=${tints.join()} presenceFamilies=${presenceHues.size}`)
-  const chroma = PAL.ROBOT_TINTS.map(hueOf).filter((h) => h !== null)
-  const gap = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d) }
-  const neighbours = PAL.ROBOT_TINTS.map((t, i) => [hueOf(t), hueOf(PAL.ROBOT_TINTS[(i + 1) % PAL.ROBOT_TINTS.length])]).filter(([a, b]) => a !== null && b !== null)
-  const minPair = Math.min(...chroma.flatMap((a, i) => chroma.slice(i + 1).map((b) => gap(a, b))))
-  ok('world.critic.hue.2 the shells are ten, with a white and a graphite among them; every two candy hues stand at least 18° apart and every two NEIGHBOURS in the order at least 60° apart, so consecutive arrivals never read as one colour',
-    PAL.ROBOT_TINTS.length === 10 && PAL.ROBOT_TINTS.length - chroma.length === 2 && minPair >= 18 && neighbours.every(([a, b]) => gap(a, b) >= 60),
-    `min=${minPair.toFixed(0)} neighbours=${neighbours.map(([a, b]) => gap(a, b).toFixed(0)).join()}`)
+  // M448. The candy spacing (18° / 60°) cannot be kept once a chest light must sit ΔE 20 clear of the five state colours: the safe hues are blue, violet and magenta only. Identity is the contract now; rd-world.identity.1 is the same rule in verify:rd-w0.
+  const srgbToLinear = (channel) => { const c = channel / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
+  const labOf = (hex) => {
+    const n = parseInt(hex.slice(1), 16)
+    const r = srgbToLinear((n >> 16) & 255), g = srgbToLinear((n >> 8) & 255), b = srgbToLinear(n & 255)
+    const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
+    const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
+    const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
+    const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116)
+    const fx = f(x / 0.95047), fy = f(y / 1), fz = f(z / 1.08883)
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+  }
+  const deltaE = (a, b) => { const A = labOf(a), B = labOf(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) }
+  const stateFive = ['--state-working', '--state-needs', '--state-done', '--state-failed', '--state-idle'].map((token) => SP.STATE_PALETTE.dark[token])
+  const nearState = PAL.ROBOT_TINTS.map((hex) => ({ hex, min: Math.min(...stateFive.map((s) => deltaE(hex, s))) })).filter((row) => row.min < 20)
+  ok('world.critic.hue.2 ten chest lights, none within Delta-E 20 of a state colour, and the neutral shell clear of idle — identity is not a state',
+    PAL.ROBOT_TINTS.length === 10 && nearState.length === 0 && deltaE(PAL.SHELL, SP.STATE_PALETTE.dark['--state-idle']) >= 20,
+    nearState.map((row) => `${row.hex}:${row.min.toFixed(1)}`).join(', ') || 'clear')
   const grown = [...demoIds, 'late-1', 'late-2']
   const withAsk = ['demo-0', 'world:you', 'demo-1']
   ok('world.critic.hue.3 a tint is the agent\'s place in the FIRST-SEEN order, so newcomers never recolour anyone already in the room; the board\'s pseudo-agent takes no place; the eleventh arrival starts the palette again; and an id the order does not know still gets a palette colour, the same one every time',
@@ -384,12 +396,12 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 // ── who gets a robot, and the move between canvas and world (M413) ───────────
 {
   const statuses = ['working', 'thinking', 'idle', 'waiting_approval', 'error']
-  ok('world.live.1 only working, thinking and waiting_approval get a robot — idle and error stay on the 2D canvas',
+  ok('world.live.1 isLiveStatus is the at-work set — working, thinking and waiting_approval — idle and error are not at work',
     statuses.filter(Z.isLiveStatus).join() === 'working,thinking,waiting_approval', statuses.filter(Z.isLiveStatus).join())
   const roster = readFileSync(join(root, 'src/renderer/world/world-roster.ts'), 'utf8')
   // M428: through `inRoom`, which is isLiveStatus plus a cap's hold (a held agent is waiting on a person, but its feed status is idle).
-  ok('world.live.2 the scene roster is filtered through inRoom — isLiveStatus, or held at a cap in the live room — so a dormant or finished agent has no desk and the plan re-flows without it',
-    /inRoom\(record\.status, facts\[id\]\?\.held !== undefined, past\)/.test(roster) && /\.filter\(/.test(roster) && /return isLiveStatus\(status\) \|\| \(held && !past\)/.test(readFileSync(join(root, 'src/renderer/world/world-facts.ts'), 'utf8')))
+  ok('world.live.2 the scene roster still calls inRoom, and also keeps an agent isLiveStatus would leave — idle and error stay at the desk (M448) — while the board pseudo-agent does not, and world-facts still answers isLiveStatus or a hold',
+    /inRoom\(record\.status, facts\[id\]\?\.held !== undefined, past\)/.test(roster) && /!isLiveStatus\(record\.status\)/.test(roster) && /id\.startsWith\('world:'\)/.test(roster) && /\.filter\(/.test(roster) && /return isLiveStatus\(status\) \|\| \(held && !past\)/.test(readFileSync(join(root, 'src/renderer/world/world-facts.ts'), 'utf8')))
 
   const near = (a, b) => Math.abs(a - b) < 1e-9
   ok('world.trans.1 easeInOutCubic is 0 at 0, 1 at 1, 1/2 at 1/2, never leaves 0…1, and only rises',
@@ -988,8 +1000,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const stageLook = code('WorldPlatform.tsx')
   ok('world.studio.1 the canvas is a lit studio: ACES tone mapping and NOT `flat`, percentage-closer shadows (three r186 removed PCFSoft — `true` and "soft" log a warning and fall back), a key light that casts into a shadow camera sized to the room, the studio ground as the background, the capped pixel ratio and no contact-shadow pass',
     /toneMapping: THREE\.ACESFilmicToneMapping/.test(view) && !/<Canvas[^>]*\bflat\b/.test(view) && /shadows="percentage"/.test(view) && !/shadows=\{true\}|shadows="soft"|<Canvas[^>]*\bshadows\s/.test(view) &&
-      /<directionalLight\s[^>]*castShadow/.test(view.replace(/\s+/g, ' ')) && /cam\.updateProjectionMatrix\(\)/.test(view) && /<color attach="background" args=\{\[ground\]\} \/>/.test(view) && /new THREE\.Color\(STUDIO\.ground\)/.test(view) &&
-      PAL.STUDIO.ground === '#eef0f3' && /dpr=\{dpr\}/.test(view) && Q.worldDpr(Infinity, 3, Q.qualityPlan('full')) === PF.DPR_MAX && !/ContactShadows/.test(view) && /info\.autoReset = false/.test(view) &&
+      /<directionalLight\s[^>]*castShadow/.test(view.replace(/\s+/g, ' ')) && /cam\.updateProjectionMatrix\(\)/.test(view) &&       /<color attach="background" args=\{\[ground\]\} \/>/.test(view) && /new THREE\.Color\(NIGHT\.ground\)/.test(view) &&
+      PAL.NIGHT.ground === '#0b0d12' && PAL.STUDIO === PAL.NIGHT && /dpr=\{dpr\}/.test(view) && Q.worldDpr(Infinity, 3, Q.qualityPlan('full')) === PF.DPR_MAX && !/ContactShadows/.test(view) && /info\.autoReset = false/.test(view) &&
       /maxPolarAngle=\{VIEW\.maxPolar\}/.test(view) && /minPolarAngle=\{VIEW\.minPolar\}/.test(view))
   ok('world.studio.2 the platform is a drei RoundedBox, and its trim is two unlit bands on its top: a bright core and a NORMALLY-blended halo (additive over a pale slab clips to white and the glow vanishes), neither tone-mapped, laid above the slab\'s top (y = 0, the floor)',
     /<RoundedBox args=\{\[half \* 2, SLAB\.thickness, half \* 2\]\}/.test(stageLook) && /castShadow receiveShadow/.test(stageLook) && !/AdditiveBlending/.test(stageLook) &&
@@ -1076,8 +1088,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       lum(PAL.STUDIO.zoneInk) > lum(PAL.STUDIO.ink) + 80 && lum(PAL.STUDIO.zoneInk) < 180 && lum('#3a404d') > lum(PAL.STUDIO.ink))
 
   // The shell takes the palette's colour as it is: a saturation push turns the white and graphite robots into colours.
-  ok('world.critic.shell.1 the robot\'s shell is its tint AS IS — no HSL push (which would make the white robot blue-grey and the graphite one mud) — and the robot, its desk screen and its legend dot all read the store\'s first-seen order',
-    /color: new THREE\.Color\(tint\), roughness: 0\.34/.test(robot) && !/setHSL/.test(robot) && /agentTint\(agentId, getAgentIds\(\)\)/.test(robot) && /agentTint\(station\.agentId, getAgentIds\(\)\)/.test(office))
+  ok('world.critic.shell.1 the shell is the one neutral, taken as is — no HSL push — and the chest light is the identity tint; the robot, its desk screen and its legend dot all read the store\'s first-seen order',
+    /color: new THREE\.Color\(SHELL\), roughness: 0\.34/.test(robot) && /emissive: new THREE\.Color\(tint\)/.test(robot) && !/setHSL/.test(robot) && /agentTint\(agentId, getAgentIds\(\)\)/.test(robot) && /agentTint\(station\.agentId, getAgentIds\(\)\)/.test(office))
 }
 
 // ── M420: the bloom ──────────────────────────────────────────────────────────
@@ -1119,8 +1131,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const near = (a, b, tol) => a.every((v, i) => Math.abs(v - b[i]) <= tol)
   const ground = BL.hexLinear(PAL.STUDIO.ground)
   const roundTrip = BL.acesToneMap(BL.acesPreimage(ground))
-  ok('world.bloom.preimage.1 the unlit ground painted as its ACES pre-image comes OUT as the ground (within a quarter of an 8-bit level) — painted raw it measured 239 -> ~226 with the composer on, which is half the frame visibly greyer',
-    near(roundTrip, ground, 0.25 / 255) && BL.acesToneMap(ground)[0] < ground[0] - 0.02, roundTrip.join())
+  ok('world.bloom.preimage.1 the unlit ground painted as its ACES pre-image comes OUT as the ground (within a quarter of an 8-bit level) — ACES must not lift it. The pale studio measured 239 -> ~226; the night ground compresses by less, so the old 0.02 floor no longer holds, and the round-trip is the pin',
+    near(roundTrip, ground, 0.25 / 255) && BL.acesToneMap(ground)[0] < ground[0], roundTrip.join())
   // The whiteboard's colours: what the scaled material and ACES make of the ink is the colour asked for.
   const boardColours = ['#f2f4f7', '#ffffff', '#7b8494', '#8a93a3', PAL.STUDIO.ink, '#e3e7ed']
   const boardErr = boardColours.map((hex) => {
@@ -1273,7 +1285,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /ctx\.approvals\.find\(\(a\) => a\.agentId === agentId\)/.test(card) && /\.world-card__actions \{[^}]*pointer-events: auto/.test(styles) && /\.world-view__cards \{[^}]*pointer-events: none/.test(styles) && /pointerEvents="none" portal=\{layer/.test(card))
   ok('world.request.2 the meeting table is the decision table: its line turns the app\'s amber while anyone waits at it, and a count over the room says how many and who has waited longest — a press picks that agent so its request stands full (M424: a sign in the scene sat on the waiting robots\' cards) — and says nothing when nobody waits',
     /<MeetingTable waiting=\{waiting > 0\} \/>/.test(office) && /hue: STUDIO\.amber/.test(office) && /waiting=\{waiting\.length\}/.test(view) && /\{waiting\.length > 0 \? \(\s*<button type="button" className="world-requests" onClick=\{\(\) => selectAgent\(waiting\[0\]!\)\}/.test(src('WorldChrome.tsx')) &&
-      /\.sort\(\(a, b\) => waitSince\(a\) - waitSince\(b\)\)/.test(roster) && !/TableSign/.test(view) && PAL.STUDIO.amber === '#ffb02e')
+      /\.sort\(\(a, b\) => waitSince\(a\) - waitSince\(b\)\)/.test(roster) && !/TableSign/.test(view) && PAL.STUDIO.amber === SP.STATE_PALETTE.dark['--state-needs'])
   ok('world.request.3 a click picks a robot and an orbit\'s release does not (fiber\'s drag delta against CLICK_SLOP_PX), a click on empty floor lets it go, and the picked robot wears a floor ring and a ringed pill',
     /if \(event\.delta > CLICK_SLOP_PX \|\| leftAtRef\.current !== null\) return/.test(robot) && /selectAgent\(picked \? null : agentId\)/.test(robot) && /onPointerMissed=\{\(event\) => \{ if \(event\.type === 'click'\) selectAgent\(null\) \}\}/.test(view) &&
       /\{picked \? <mesh geometry=\{k\.pick\}/.test(robot) && /\.world-tag\[data-picked\] \.world-pill/.test(styles))
@@ -1904,6 +1916,49 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     !THREE_DOOR_RE.test(mini) && !THREE_DOOR_RE.test(pure) && !/^import(?!.*type)/m.test(pure) && /camera\.current\?\.plan\(\)/.test(mini) && /camera\.current\?\.centre\(floor\.x, floor\.z\)/.test(mini) &&
       /window\.setInterval\(look, POLL_MS\)/.test(mini) && !/useFrame/.test(mini) && /selectAgent\(a\.agentId\)\s*camera\.current\?\.focus\(a\.agentId\)/.test(mini) &&
       /plan\(\): RoomPlan \| null/.test(src('world-set.ts')) && /centre\(x: number, z: number\): void/.test(src('world-set.ts')) && /<WorldMinimap camera=\{camera\} \/>/.test(src('WorldChrome.tsx')))
+}
+
+{
+  const { readdirSync, statSync } = require('node:fs')
+  const hexes = new Set(SP.stateHexes())
+  const walk = (dir) => readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n)
+    return statSync(p).isDirectory() ? walk(p) : [p]
+  })
+  const offenders = []
+  for (const file of walk(join(root, 'src', 'renderer', 'world'))) {
+    if (!/\.tsx?$/.test(file)) continue
+    const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    for (const m of text.matchAll(/#[0-9a-fA-F]{6}\b/g)) {
+      if (hexes.has(m[0].toLowerCase())) offenders.push(`${file.slice(root.length + 1)}:${m[0]}`)
+    }
+  }
+  ok('rd-world.parity.1 every state colour in world/ is read from state-palette; a literal state hex fails',
+    offenders.length === 0 &&
+      PAL.stateHexForAgent('waiting_approval') === SP.STATE_PALETTE.dark['--state-needs'] &&
+      PAL.stateHexForAgent('error') === SP.STATE_PALETTE.dark['--state-failed'] &&
+      PAL.stateHexForAgent('idle') === SP.STATE_PALETTE.dark['--state-idle'] &&
+      PAL.stateHexForAgent('thinking') === SP.STATE_PALETTE.dark['--state-working'] &&
+      PAL.NIGHT.amber === SP.STATE_PALETTE.dark['--state-needs'] &&
+      PAL.NIGHT.ground === '#0b0d12',
+    offenders.slice(0, 6).join(', ') || 'clean')
+  const srgbToLinear = (channel) => { const c = channel / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
+  const labOf = (hex) => {
+    const n = parseInt(hex.slice(1), 16)
+    const r = srgbToLinear((n >> 16) & 255), g = srgbToLinear((n >> 8) & 255), b = srgbToLinear(n & 255)
+    const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
+    const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
+    const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
+    const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116)
+    const fx = f(x / 0.95047), fy = f(y / 1), fz = f(z / 1.08883)
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+  }
+  const deltaE = (a, b) => { const A = labOf(a), B = labOf(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) }
+  const five = ['--state-working', '--state-needs', '--state-done', '--state-failed', '--state-idle'].map((token) => SP.STATE_PALETTE.dark[token])
+  const near = PAL.ROBOT_TINTS.map((hex) => ({ hex, min: Math.min(...five.map((s) => deltaE(hex, s))) })).filter((row) => row.min < 20)
+  ok('rd-world.identity.1 no chest-light hue is within Delta-E 20 of a state colour',
+    PAL.ROBOT_TINTS.length >= 2 && near.length === 0 && deltaE(PAL.SHELL, SP.STATE_PALETTE.dark['--state-idle']) >= 20,
+    near.map((row) => `${row.hex}:${row.min.toFixed(1)}`).join(', ') || 'clear')
 }
 
 const failures = results.filter((r) => !r.pass)

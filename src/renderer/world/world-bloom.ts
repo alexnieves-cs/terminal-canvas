@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react'
-import { STUDIO } from './world-palette'
 import { clampDpr, DPR_MIN } from './world-perf'
 
 /**
@@ -61,14 +60,25 @@ export function bloomDprCap(cssWidth: number, cssHeight: number, devicePixelRati
 }
 
 /**
- * The HDR luminance above which a pixel blooms: just over what the ground is
- * painted at. Derived from the palette so a changed ground colour moves the
- * threshold with it.
+ * The pale floor the bloom threshold was measured against (M420: ground 239).
+ * The room itself is now the night ground (`NIGHT.ground`), which sits far
+ * under this threshold and must not drag it down: a threshold derived from
+ * `#0b0d12` drops the whiteboard under `world.bloom.ink.1`'s 236 floor.
+ * Callers that pass a ground still move the threshold with that ground.
  */
-export function bloomThreshold(ground: string = STUDIO.ground): number {
+const BLOOM_FLOOR = '#eef0f3'
+
+/**
+ * The HDR luminance above which a pixel blooms: just over the pale reference
+ * floor, not the night ground. See `BLOOM_FLOOR`.
+ */
+export function bloomThreshold(ground: string = BLOOM_FLOOR): number {
   const [r, g, b] = acesPreimage(hexLinear(ground))
   return linearLuma(r, g, b) + BLOOM.groundMargin
 }
+
+/** Below this, a colour is a dim neutral (the night trim) and must not be boosted into the bloom. State colours sit above it. */
+const DIM_LUMA = 0.12
 
 /**
  * The multiplier for a glowing material's colour: 1 with bloom off (a value
@@ -78,6 +88,7 @@ export function bloomThreshold(ground: string = STUDIO.ground): number {
  */
 export function glowScale(hex: string, on: boolean): number {
   if (!on) return 1
+  if (hexLuma(hex) < DIM_LUMA) return 1
   return (bloomThreshold() + BLOOM.smoothing + BLOOM.glowOver) / hexLuma(hex)
 }
 

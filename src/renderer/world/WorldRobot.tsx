@@ -6,21 +6,24 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { getAgent, getAgentIds, replayAt, useAgentStatus, worldNow } from './agent-world-store'
 import { WorldCard } from './WorldCard'
+import { STATE_PALETTE } from '@shared/state-palette'
 import { glowScale } from './world-bloom'
 import { robotLod, type RobotLod } from './world-perf'
 import { useBloomRendered } from './world-quality'
 import { studioEnv } from './world-gloss'
 import { activityOf, openDelegations, poseOf, POSES, type Activity, type Pose } from './world-activity'
-import { agentTint, effectOf, goalOf, hopsOn, leanOf, type Station } from './world-scene'
+import { agentTint, effectOf, hopsOn, leanOf, type Station } from './world-scene'
+import { NIGHT, SHELL, TRIM, stateHexForAgent } from './world-palette'
 import { worldActions } from './world-context-store'
 import { CLICK_SLOP_PX, isRepeatClick, OPEN_HINT, openableFrom, selectAgent, useSelectedAgent } from './world-select'
 import { contactBlob, CONTACT, SHELL_RIM } from './world-set'
 import { ARRIVE_MS, easeInOutCubic, leavePose, popOf, type WorldTransition } from './world-transition'
 
 /**
- * One agent as a robot: a glossy capsule body in the agent's colour, a dark
- * visor with two lit eyes, walking between its desk and the meeting table, its
- * pose a function of the event store.
+ * One agent as a robot: a glossy neutral shell, a chest light in the agent's
+ * identity hue, a dark visor with two eyes in its state colour. It stands at
+ * its desk (M448: the meeting table is no longer a destination). Its pose is
+ * a function of the event store.
  *
  * Reached only through the lazily-loaded WorldView (CLAUDE.md's library table
  * says why: three.js is +2.2MB in the first chunk if anything static reaches it).
@@ -116,6 +119,12 @@ interface Kit {
   ring: THREE.BufferGeometry
   /** The floor ring under the robot a person picked. */
   pick: THREE.BufferGeometry
+  /** The state ring, always on: eyes, antenna and this ring are where status is drawn. */
+  stateRing: THREE.BufferGeometry
+  /** A short mast on the crown. Amber, and blooming, only while the agent is waiting. */
+  antenna: THREE.BufferGeometry
+  /** The chest light. Identity hue, not a state colour. */
+  chest: THREE.BufferGeometry
   /** The contact blob's quad, flat on the floor, and its soft round falloff (the richness pass). */
   blob: THREE.BufferGeometry
   blobTexture: THREE.Texture
@@ -126,8 +135,8 @@ interface Kit {
 }
 
 /** A soft elliptical falloff, drawn in code (the CSP takes no image from elsewhere, and this needs none). */
-/** The eyes' unlit colour, before any bloom boost. */
-const EYE_COLOR = '#7ff4ff'
+/** The eyes' unlit colour before any bloom boost: the working token, via the palette. Sub-agents share the kit material painted with this. */
+const EYE_COLOR = stateHexForAgent('thinking')
 
 function glowTexture(): THREE.Texture {
   const c = document.createElement('canvas')
@@ -235,28 +244,30 @@ function robotKit(): Kit {
     // A broken ring (three quarters of a torus), so its turning reads at any distance.
     ring: new THREE.TorusGeometry(0.26, 0.022, 8, 40, Math.PI * 1.5).rotateX(Math.PI / 2),
     pick: new THREE.RingGeometry(0.46, 0.53, 56).rotateX(-Math.PI / 2),
+    stateRing: new THREE.RingGeometry(0.58, 0.66, 56).rotateX(-Math.PI / 2),
+    antenna: new THREE.CylinderGeometry(0.018, 0.018, 0.22, 10),
+    chest: new THREE.SphereGeometry(0.07, 16, 12),
     blob: new THREE.PlaneGeometry(CONTACT.radius * 2, CONTACT.radius * 2).rotateX(-Math.PI / 2),
     blobTexture: contactTexture(),
-    visorMaterial: new THREE.MeshPhysicalMaterial({ color: '#07090d', roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.7 }),
+    visorMaterial: new THREE.MeshPhysicalMaterial({ color: '#07090d', roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.35 }),
     // Unlit and outside tone mapping: a glow that reads the same in a light or a dark room.
     eyeMaterial: new THREE.MeshBasicMaterial({ color: EYE_COLOR, toneMapped: false }),
-    haloMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', alphaMap: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
-    ringMaterial: new THREE.MeshBasicMaterial({ color: '#39e6ff', transparent: true, opacity: 0.9, toneMapped: false })
+    haloMaterial: new THREE.MeshBasicMaterial({ color: EYE_COLOR, alphaMap: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+    ringMaterial: new THREE.MeshBasicMaterial({ color: EYE_COLOR, transparent: true, opacity: 0.9, toneMapped: false })
   }
   return kit
 }
 
 /**
- * The shell, in the agent's tint as it is (`ROBOT_TINTS`, world-palette.ts):
- * the palette is already candy-bright and pre-darkened for ACES, and a
- * saturation push here — what M415 did to the presence hash — would turn the
- * white robot grey-blue and the graphite one a muddy colour.
+ * One neutral shell (`SHELL`). The identity hue is the chest light, not the
+ * body — a saturation push here would only recolour a colour that is no
+ * longer per agent. `envMapIntensity` is low on purpose: the generated room
+ * is bright, and a night shell at the old 0.4 reads as a second light.
  */
-function shellMaterial(tint: string, env: THREE.Texture): THREE.MeshPhysicalMaterial {
+function shellMaterial(env: THREE.Texture): THREE.MeshPhysicalMaterial {
   return new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(tint), roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
-    envMap: env, envMapIntensity: 0.4,
-    // The rim (SHELL_RIM, world-set.ts): a grazing-angle lobe, so the silhouette reads against the pale slab.
+    color: new THREE.Color(SHELL), roughness: 0.34, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.15,
+    envMap: env, envMapIntensity: 0.22,
     sheen: SHELL_RIM.sheen, sheenRoughness: SHELL_RIM.roughness, sheenColor: new THREE.Color(SHELL_RIM.color)
   })
 }
@@ -340,8 +351,17 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
   }, [k, bloom])
   // The first-seen order is append-only, so an agent's place in it — and its tint — never moves.
   const tint = agentTint(agentId, getAgentIds())
-  const shell = useMemo(() => shellMaterial(tint, env), [tint, env])
+  const shell = useMemo(() => shellMaterial(env), [env])
   useEffect(() => () => shell.dispose(), [shell])
+  // Per robot. The kit's eye material is shared, so one robot writing it would
+  // paint every other robot the same state.
+  const eyeMat = useMemo(() => new THREE.MeshBasicMaterial({ color: EYE_COLOR, toneMapped: false }), [])
+  const haloMat = useMemo(() => new THREE.MeshBasicMaterial({ color: EYE_COLOR, alphaMap: k.haloMaterial.alphaMap, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }), [k])
+  const floorMat = useMemo(() => new THREE.MeshBasicMaterial({ color: EYE_COLOR, transparent: true, opacity: 0.85, toneMapped: false }), [])
+  const antennaMat = useMemo(() => new THREE.MeshBasicMaterial({ color: TRIM, toneMapped: false }), [])
+  const pickMat = useMemo(() => new THREE.MeshBasicMaterial({ color: STATE_PALETTE.dark['--state-select'], transparent: true, opacity: 0.9, toneMapped: false }), [])
+  const chestMat = useMemo(() => new THREE.MeshStandardMaterial({ color: new THREE.Color(tint), emissive: new THREE.Color(tint), emissiveIntensity: 1.1, roughness: 0.45, metalness: 0 }), [tint])
+  useEffect(() => () => { eyeMat.dispose(); haloMat.dispose(); floorMat.dispose(); antennaMat.dispose(); pickMat.dispose(); chestMat.dispose() }, [eyeMat, haloMat, floorMat, antennaMat, pickMat, chestMat])
 
   // A string snapshot: re-renders on a status CHANGE only, which is when the
   // bug appears or goes. Everything finer-grained is read in the frame loop.
@@ -419,6 +439,14 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     const t = state.clock.elapsedTime
     const dt = Math.min(delta, 0.1)
     const rec = getAgent(agentId)
+    const status = rec?.status ?? 'idle'
+    const hex = stateHexForAgent(status)
+    const boost = glowScale(hex, bloom)
+    eyeMat.color.set(hex).multiplyScalar(boost)
+    haloMat.color.set(hex).multiplyScalar(boost)
+    floorMat.color.set(hex).multiplyScalar(boost)
+    if (status === 'waiting_approval') antennaMat.color.set(NIGHT.amber).multiplyScalar(glowScale(NIGHT.amber, bloom))
+    else antennaMat.color.set(TRIM)
 
     // ── M433: level of detail, from how large the robot is on screen ──
     const away = Math.max(0.1, camera.position.distanceTo(group.position))
@@ -474,8 +502,9 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
 
     // ── where to be, and getting there ───────────────────────────────────
     const here = latest.current
-    const goal = goalOf(rec?.status ?? 'idle', here.conductor)
-    const slot = goal === 'table' ? here.seat : (here.home ?? here.seat)
+    // M448. The desk is the place. A conductor has no home, so the seat (the
+    // only slot they have) is where they stand; nobody walks to the table.
+    const slot = here.home ?? here.seat
     const dx = slot.x - group.position.x
     const dz = slot.z - group.position.z
     const dist = Math.hypot(dx, dz)
@@ -516,8 +545,9 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     const shake = shakeU >= 0 && shakeU < 1 ? Math.sin(shakeU * 26) * 0.12 * (1 - shakeU) : 0
     const tap = p.tap * Math.max(0, Math.sin(t * 5.2 + phase))
 
+    const slump = status === 'error' ? 0.38 : 0
     if (lean.current) {
-      lean.current.rotation.x = st.lean
+      lean.current.rotation.x = st.lean + slump
       lean.current.rotation.z = shake + st.walkW * step * 0.07
     }
     const hop = pulse(t, st.hopAt, HOP_S)
@@ -560,7 +590,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
         up * (2.5 + (waveW > p.handUp ? Math.sin(t * 13) * 0.32 : Math.sin(t * 2.4) * 0.05))
     }
     if (head.current) {
-      head.current.rotation.x = st.nod
+      head.current.rotation.x = st.nod + slump * 0.6
       head.current.rotation.y = Math.sin(t * p.scanHz * 2 + phase) * p.scan * still
       head.current.rotation.z = (thinking ? Math.sin(t * 1.5) * 0.07 : 0) + 0.32 * pulse(t, st.tiltAt, TILT_S)
     }
@@ -621,7 +651,8 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
     >
       {/* Under the pick ring and the slab's trim (renderOrder 0, no depth write), a few mm over the floor paint. */}
       <mesh ref={blob} geometry={k.blob} material={blobMaterial} position-y={0.008} />
-      {picked ? <mesh geometry={k.pick} material={k.ringMaterial} position-y={0.02} /> : null}
+      <mesh geometry={k.stateRing} material={floorMat} position-y={0.016} />
+      {picked ? <mesh geometry={k.pick} material={pickMat} position-y={0.02} /> : null}
       <group ref={bob}>
         {subs > 0 ? (
           <group ref={orbit} position-y={SUB_Y}>
@@ -650,6 +681,7 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
             </group>
             <group ref={upper}>
               <mesh ref={cast} geometry={k.torso} material={shell} position-y={TORSO_Y} scale={[1.06, 1, 0.92]} castShadow />
+              <mesh geometry={k.chest} material={chestMat} position={[0, TORSO_Y + 0.05, 0.2]} />
               <group ref={armL} position={[-SHOULDER.x, SHOULDER.y, 0]}>
                 <mesh ref={cast} geometry={k.arm} material={shell} castShadow />
               </group>
@@ -658,10 +690,11 @@ function RobotBody({ agentId, station, cards, transition, delay, compact, reduce
               </group>
               <group ref={head} position-y={HEAD_Y}>
                 <mesh ref={cast} geometry={k.head} material={shell} scale={HEAD_SCALE} castShadow />
+                <mesh geometry={k.antenna} material={antennaMat} position-y={HEAD_R * HEAD_SCALE[1] + 0.12} />
                 <mesh geometry={k.visor} material={k.visorMaterial} />
                 <group ref={eyes} position-y={VISOR.y + 0.012}>
-                  <mesh ref={halo} geometry={k.halo} material={k.haloMaterial} />
-                  <mesh geometry={k.eyes} material={k.eyeMaterial} />
+                  <mesh ref={halo} geometry={k.halo} material={haloMat} />
+                  <mesh geometry={k.eyes} material={eyeMat} />
                 </group>
               </group>
             </group>

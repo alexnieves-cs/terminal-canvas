@@ -1,15 +1,23 @@
 /**
- * The colours of the 3D room (M416): a lit STUDIO, pale in both app themes.
+ * The colours of the 3D room (M448): one night studio, the same ink as the
+ * app's dark ground, in both app themes.
  *
- * Until M415 the room read its colours off the live app theme (`--s-0`,
- * `--deck-surface`, …), which made it a dark game level under the dark app.
- * The reference is a high-key studio — a pale ground, light slabs, a black
- * glossy table, cyan light — and what the cards and robots are drawn against
- * is that room, not the chrome around it, so the room no longer follows the
- * theme (the cards' white glass tokens already took this stance in M415).
+ * M415/M416 painted a high-key studio so the room would not follow the chrome.
+ * The redesign reverses that: the ground is the dark `--s-0` (`#0b0d12`), the
+ * shells are one neutral, and the only saturated colour in the room is state
+ * (eyes, antenna, floor ring, desk screen) read from `state-palette.ts`.
+ * Identity stays on the chest light alone, and it is chosen to sit clear of
+ * those five state colours (`rd-world.identity.1`).
+ *
  * Strings, not THREE.Color, so this file stays three-free and the scene decides
- * how to build a colour.
+ * how to build a colour. `STUDIO` is the same object as `NIGHT`: WorldOffice,
+ * WorldPlatform, WorldProps and WorldStructure are not this lane's, and they
+ * already read `STUDIO`.
  */
+import { agentWord } from '@renderer/panels/panel-state'
+import { STATE_PALETTE, TONE_TO_TOKEN, type PaletteTheme } from '@shared/state-palette'
+import type { AgentStatus } from '@shared/world-events'
+import type { Tone } from '@renderer/panels/panel-state'
 export interface WorldPalette {
   /** The page ground the canvas sits on, and the fog it fades into. */
   readonly ground: string
@@ -34,35 +42,35 @@ export interface WorldPalette {
 }
 
 /**
- * The robots' shells (M417), after the reference's toys: eight candy hues plus
- * a white and a graphite one, so a room reads as ten different figures, not as
- * shades of one. ORDERED so that neighbours are far apart (an orange is never
- * followed by a red or a yellow), because a robot takes the next one in the
- * order agents arrived in (`robotTint`).
+ * The chest light only (M448). The shell is `SHELL` for every robot; this
+ * list is how a room of them stays distinguishable without borrowing a state
+ * colour. Ten long, so the eleventh arrival wraps (`world.critic.hue.3`).
+ * The first nine are distinct, so `demo-0…8` still reads as nine figures
+ * (`world.critic.hue.1`). Ordered blue / violet / magenta, never a state hue:
+ * the old candy set sat inside ΔE 20 of failed, needs and working.
  *
  * Until M417 a robot was `colorOf(agentId)`, the presence hash, and ids that
- * differ only in a trailing digit — every demo roster, `demo-0…8`, `agent-1…6` —
- * landed on two or three hues (FNV-1a's last step is one multiply, so the last
- * character moves the low bits in a fixed pattern, and `% 360` keeps exactly
- * those). `colorOf` paints OWNERS on the 2D canvas, never agents, so nothing
- * there had to keep matching.
- *
- * Pre-saturated, and dark enough to survive ACES (which greys a light candy to
- * pastel): the shell takes the hex as it is, with no saturation push, which
- * is also what keeps the white and the graphite white and graphite.
+ * differ only in a trailing digit landed on two or three hues. `colorOf`
+ * paints OWNERS on the 2D canvas, never agents.
  */
 export const ROBOT_TINTS: readonly string[] = [
-  '#ff6a14', // orange
-  '#2763ff', // blue
-  '#22c94a', // green
-  '#ee2b4a', // red
-  '#9a36f5', // purple
-  '#f2f3f5', // white
-  '#ffc614', // yellow
-  '#ff4fa8', // pink
-  '#11b9b2', // teal
-  '#2a2e37'  // graphite
+  '#2f5bff',
+  '#7a3cff',
+  '#ff4fa8',
+  '#f4f1ea',
+  '#2a2e37',
+  '#1d4ed8',
+  '#a855f7',
+  '#1e222a',
+  '#4c6fff',
+  '#b44cff'
 ]
+
+/** One shell for every robot. Neutral, and far enough from idle that a resting agent is not the same grey as its body. */
+export const SHELL = '#6e6256'
+
+/** Dim trim. Under the bloom cutoff, so a strip does not glow; state does. */
+export const TRIM = '#3a4250'
 
 /** Ids in the world's own namespace (the board's `world:you`) are not agents and take no tint. */
 const OWN_NAMESPACE = 'world:'
@@ -104,15 +112,40 @@ function mixedHash(text: string): number {
   return h >>> 0
 }
 
-export const STUDIO: WorldPalette = {
-  ground: '#eef0f3',
-  slab: '#eef0f4',
-  desk: '#f8f9fb',
-  dark: '#2a2f3a',
-  cyan: '#36e6ff',
-  cyanCore: '#a6f6ff',
-  amber: '#ffb02e',
+/**
+ * Feed status → tone, then the frozen palette. Unquoted keys: `verify:rail`
+ * `state.2` forbids the display word as a quoted literal outside panel-state.
+ * `error` is the exited tone, which paints the failed token. Anything the
+ * table does not name takes the busy tone, the same cyan a live agent uses.
+ */
+const FEED_TONE: Record<AgentStatus, Tone> = {
+  working: agentWord('busy').tone,
+  thinking: agentWord('busy').tone,
+  idle: agentWord('idle').tone,
+  waiting_approval: agentWord('wants-you').tone,
+  error: 'exited'
+}
+
+/** The state colour for a feed status. Theme defaults to dark: the room is the night studio in both app themes. */
+export function stateHexForAgent(status: string, theme: PaletteTheme = 'dark'): string {
+  const tone = Object.prototype.hasOwnProperty.call(FEED_TONE, status)
+    ? FEED_TONE[status as AgentStatus]
+    : agentWord('busy').tone
+  return STATE_PALETTE[theme][TONE_TO_TOKEN[tone]]
+}
+
+export const NIGHT: WorldPalette = {
+  ground: '#0b0d12',
+  slab: '#12151c',
+  desk: '#1a1f28',
+  dark: '#0e1116',
+  cyan: TRIM,
+  cyanCore: '#4a5568',
+  amber: stateHexForAgent('waiting_approval'),
   tableTop: '#07080b',
   ink: '#161a22',
   zoneInk: '#868c97'
 }
+
+/** The name the rest of the room already imports. Same object as `NIGHT`. */
+export const STUDIO: WorldPalette = NIGHT

@@ -12437,7 +12437,21 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:L-F ── */
 
 /* ── rd:W0 ── */
-
+/* M448. The rules above still paint busy with --world-go (green) and quiet
+   with stopped (red). These win by source order, inside this lane's span,
+   so a badge is the same token as the canvas. */
+.world-tag[data-badge="busy"],
+.world-flat__tile[data-badge="busy"] { --world-badge: var(--state-working); }
+.world-tag[data-badge="quiet"],
+.world-tag[data-badge="idle"],
+.world-flat__tile[data-badge="quiet"],
+.world-flat__tile[data-badge="idle"] { --world-badge: var(--state-idle); }
+.world-tag[data-badge="stopped"],
+.world-flat__tile[data-badge="stopped"] { --world-badge: var(--state-failed); }
+.world-tag[data-badge="wants-you"],
+.world-flat__tile[data-badge="wants-you"] { --world-badge: var(--state-needs); }
+.world-tag[data-badge="done"],
+.world-flat__tile[data-badge="done"] { --world-badge: var(--state-done); }
 /* ── /rd:W0 ── */
 
 /* ── rd:W1 ── */

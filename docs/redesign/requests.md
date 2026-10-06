@@ -296,3 +296,17 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: `verify:meta` check 14 reads every `'word:word'` declaration in `ipc-contract.ts`, events included, and looks for it in that fence. `session:host` is declared. L-F owns `CLAUDE.md`, which already lists it (`claude-md.1` / `rd-l-f.channel.1`). The README is not in this lane. `boot:progress` is the same check and stays R-018; this request does not add it.
 - Smallest change: add `session:host` beside `session:live` in that fence. Check 14 stays red until R-018 lands as well.
 - Status: done: `2aaae4cd`
+
+### R-038 · Remove the world exemption from rd-tone.literal.1
+- Lane: W0
+- File: `scripts/verify-rd-f1.cjs` (the `if (rel.startsWith('src/renderer/world/')) continue` in `rd-tone.literal.1`)
+- Why the contract or the owner cannot absorb it: W0 does not own `verify-rd-f1.cjs`. `rd-world.parity.1` now fails a literal state hex anywhere under `src/renderer/world/`. The exemption is how a second cyan could return after this lane merges.
+- Smallest change: delete that `continue`. `verify:rd-f1` stays green if `world/` has no state hex. Do not assert the exemption is already gone from W0's suite: it is red until the lead lands this.
+- Status: open
+
+### R-039 · Night follow-through in WorldOffice
+- Lane: W0
+- File: `src/renderer/world/WorldOffice.tsx`
+- Why the contract or the owner cannot absorb it: W0 does not own WorldOffice. The desk screen's emissive is still `agentTint` (identity), not state. `MeetingTable` is still mounted. Robots no longer walk there (`WorldRobot` stands at `here.home ?? here.seat`).
+- Smallest change: screen emissive from `stateHexForAgent(status)` (exported from `world-palette.ts`). Do not mount `MeetingTable`. The plan whiteboard in WorldProps stays. A conductor still has only a table seat until a later lane gives them a desk.
+- Status: open

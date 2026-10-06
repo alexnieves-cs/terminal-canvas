@@ -15,9 +15,10 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
  * it is one of the three.js importers `verify:world world.door.1` pins.
  *
  * Load-bearing, and fails SILENTLY: set the result on the glossy MATERIALS only,
- * never as `scene.environment` — that would relight the whole office, and the
- * pale studio's slab, desks and cubes would pick up a reflection of a room
- * that is not there.
+ * never as `scene.environment` — that would relight the whole office.
+ * M448: the night shells turn `envMapIntensity` down on the robot material
+ * (WorldRobot) so this bright room does not read as a second light. The
+ * environment itself stays the one `RoomEnvironment` built here.
  */
 const envs = new WeakMap<THREE.WebGLRenderer, THREE.Texture>()
 
