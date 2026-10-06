@@ -2504,7 +2504,7 @@ export interface CanvasBridge {
   /** M407 follow-up. A FIELD: the preload's `os.homedir()`, the folder `~` expands to (terminal names fold it). */
   home: string
   /**
-   * M439. Optional until the preload subscribes (R-018). Absent means the
+   * M439. Optional until the preload subscribes (R-020). Absent means the
    * renderer has not been told about restore yet, which the splash says
    * in words rather than as a count.
    */

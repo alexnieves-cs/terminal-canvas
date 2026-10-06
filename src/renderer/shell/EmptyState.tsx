@@ -40,8 +40,8 @@ export function EmptyState({ id, glyph, onVerb, fill, attrs, children }: {
 /**
  * M441. The empty canvas. Quick spawns and starter layouts call back; they
  * do not start a process. The minimap sentence is `emptyState('minimap')`,
- * which L-B's overlay reads too (R-020). A double-click still places a
- * process step until R-022; the sentence is the mockup's.
+ * which L-B's overlay reads too (R-022). A double-click still places a
+ * process step until R-024; the sentence is the mockup's.
  */
 export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout }: {
   workspace: string

@@ -247,7 +247,7 @@ function drawField(ctx: CanvasRenderingContext2D, t: number, w: number, h: numbe
  * M439. The restore card. It leaves in the same effect that sees `settled`,
  * with no timer: a minimum display time would report progress that had
  * already finished. Option skips the remaining reattaches; the model marks
- * those panes asleep and the caller (the composition root, R-017) applies it.
+ * those panes asleep and the caller (the composition root, R-019) applies it.
  */
 export function RestoreSplash({ facts, rects, onDone, onSkip }: {
   facts: RestoreFacts
@@ -306,7 +306,7 @@ export function RestoreSplash({ facts, rects, onDone, onSkip }: {
 }
 
 /* The shot door. Canvas already imports this module, so the three screens
-   can paint before Canvas itself mounts them (R-019). Later milestones add
+   can paint before Canvas itself mounts them (R-021). Later milestones add
    keys; an unknown scene returns false rather than painting a stand-in. */
 const rdScenes: Record<string, (fixture: RdFixture) => JSX.Element> = {
   splash: (fixture) => <RestoreSplash facts={fixture.facts ?? {}} rects={fixture.rects} />,

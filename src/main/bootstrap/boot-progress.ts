@@ -6,7 +6,7 @@ import { IPC_EVENTS, type BootProgressEvent } from '../../shared/ipc-contract'
  * A send, not an invoke. verify:ipc walks `IPC` and counts handlers;
  * `FILE_CHANGED` records why a main → renderer fact does not join that
  * list. The composition root calls `publishBootProgress` as each fact is
- * measured (R-017). This module does not import electron and does not
+ * measured (R-019). This module does not import electron and does not
  * start a process.
  *
  * Option-skip: panes that have not reattached come up asleep. Their pids

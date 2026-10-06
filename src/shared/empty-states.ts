@@ -50,7 +50,7 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'orch-activity', sentence: `${NO_RECENT_EVENTS} \u2014 this feed is this run\u2019s; the durable record is the workbench\u2019s Timeline tab. Live is working panels plus the recent window; Historical is this session` },
   { id: 'orch-terminal', sentence: 'no recorded logs yet — select a panel to read its scrollback or last chat turn', verb: 'Show Canvas' },
   { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' },
-  /** M441. The minimap when the canvas has nothing on it. L-B's overlay reads the same sentence (R-020). */
+  /** M441. The minimap when the canvas has nothing on it. L-B's overlay reads the same sentence (R-022). */
   { id: 'minimap', sentence: 'Nothing placed yet' }
 ]
 
