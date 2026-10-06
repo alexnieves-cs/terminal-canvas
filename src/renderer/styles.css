@@ -12690,6 +12690,17 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 }
 .world-away-host > * { pointer-events: auto; }
 .world-away { border-radius: var(--r-lg); }
+/* The 2D minimap's camera wedge (R-050, R-060). Same iris as the view rectangle. */
+.minimap__wedge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.minimap__wedge polygon {
+  fill: var(--iris-dim);
+  stroke: var(--iris);
+  stroke-width: 1.5;
+}
 .world-camera {
   position: absolute;
   left: var(--sp-6);

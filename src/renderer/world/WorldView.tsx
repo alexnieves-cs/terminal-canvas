@@ -17,11 +17,14 @@ import { getAgent, getAgentIds } from './agent-world-store'
 import { hasArrival, selectAgent, selectedAgent, takeArrival } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
+import type { CameraPose } from '@shared/redesign-contracts'
 import { FLOOR_SCALE } from '@shared/world-space'
 import { arcFraming, dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
 import { dollyAt, LEAVE_MS, motionOf, popDelaysFromTarget, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
 import { paintPlanFloor } from './plan-floor'
-import { setWorldCameraTarget, worldCameraTarget } from './world-toggle'
+import { liveView } from './world-camera'
+import { setWorldCameraTarget, setWorldCameraWedge, setWorldLandingViewport, worldCameraTarget } from './world-toggle'
+import { WorldCameraPanel } from './WorldCameraPanel'
 
 /**
  * The 3D world view: every live agent in the event store as a robot at its own
@@ -284,10 +287,32 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
         // The whole rig slides: the camera keeps its side and its distance, only what it looks at moves.
         const dx = x - c.target.x, dz = z - c.target.z
         begin({ x: camera.position.x + dx, y: camera.position.y, z: camera.position.z + dz }, { x, y: c.target.y, z }, FIT_MS)
+      },
+      apply: (pose: CameraPose) => {
+        const c = controls.current
+        if (!c) return
+        // Floor point → scene point. The group is shifted so the frame centre
+        // sits on the origin; the pose's target is the unshifted floor point.
+        const look = {
+          x: pose.target.x + (shift?.[0] ?? 0),
+          y: ORBIT_TARGET.y,
+          z: pose.target.z + (shift?.[2] ?? 0)
+        }
+        const dx = camera.position.x - c.target.x
+        const dz = camera.position.z - c.target.z
+        const azimuth = Math.atan2(dx, dz)
+        const polar = Math.min(c.maxPolarAngle, Math.max(c.minPolarAngle, Math.PI / 2 - pose.pitch))
+        const distance = Math.min(c.maxDistance, Math.max(c.minDistance, pose.distance))
+        const s = Math.sin(polar)
+        begin({
+          x: look.x + distance * s * Math.sin(azimuth),
+          y: look.y + distance * Math.cos(polar),
+          z: look.z + distance * s * Math.cos(azimuth)
+        }, look, FIT_MS)
       }
     }
     return () => { api.current = null }
-  }, [api, camera, controls, stations])
+  }, [api, camera, controls, shift, stations])
 
   useFrame(() => {
     const c = controls.current
@@ -296,7 +321,14 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
     const motion = motionOf(s, reduced)
     const rise = terraces.current
     if (rise) rise.scale.set(1, motion.terrace, 1)
-    if (c) setWorldCameraTarget({ x: c.target.x - (shift?.[0] ?? 0), z: c.target.z - (shift?.[2] ?? 0) })
+    if (c) {
+      const floor = { x: c.target.x - (shift?.[0] ?? 0), z: c.target.z - (shift?.[2] ?? 0) }
+      setWorldCameraTarget(floor)
+      const box = typeof window === 'undefined' ? { width: 1, height: 1 } : { width: window.innerWidth, height: window.innerHeight }
+      const shown = liveView(floor, camera.position, c.target, box)
+      setWorldCameraWedge(shown.points)
+      setWorldLandingViewport(shown.viewport)
+    }
     const atRest = s.settled && s.target === 1
     // A glide belongs to the resting view; a move to or from the canvas ends it.
     if (!atRest) gliding.current = null
@@ -683,7 +715,9 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const framingArc = placement.frame === null ? null : arcFraming(placement.frame.half)
   // The orbit looks at the origin. Shift the stood-up canvas so its centre
   // lands there; terrace math stays canvasToFloor before the shift.
-  const shift = placement.frame === null ? null : ([-placement.frame.center.x, 0, -placement.frame.center.z] as const)
+  // One array for the life of the view. A fresh one each render would re-bind
+  // the camera api (the rig's effect depends on it) and drop a glide mid-way.
+  const shift = useMemo(() => placement.frame === null ? null : ([-placement.frame.center.x, 0, -placement.frame.center.z] as const), [placement.frame])
   const anchor = placement.frame === null || framingArc === null ? null : { x: placement.frame.center.x, z: placement.frame.center.z, arc: framingArc }
   // The camera's focus reads the room as it is at the press (M425's tour).
   const stationsRef = useRef<ReadonlyMap<string, Station>>(placed)
@@ -758,6 +792,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
       <div data-rd-mount="W1" hidden />
       {/* rd:W3 mount. useWorldCamera, the camera panel, the away card and peers. Props kept stable: camera, tier, following, onFollow. */}
       <div data-rd-mount="W3" hidden />
+      <WorldCameraPanel camera={camera} />
       <div className="world-view__stats" ref={stats} aria-hidden="true" data-on={statsShown ? '' : undefined} />
     </div>
   )

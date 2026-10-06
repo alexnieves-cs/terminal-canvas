@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
 import type { CameraPose, ZoomTier } from '@shared/redesign-contracts'
 import { shortcutById, matchShortcut, type ShortcutEvent } from '@shared/shortcuts'
 import { selectedAgent } from './world-select'
-import { setWorldOn } from './world-toggle'
+import { setWorldOn, worldCameraTarget } from './world-toggle'
 import type { CameraApi } from './world-set'
 import {
   backTo2d,
@@ -79,6 +79,10 @@ export function useWorldCamera(camera: RefObject<CameraApi | null>): WorldCamera
     return () => window.removeEventListener('resize', read)
   }, [])
 
+  // Until a pan or a zoom, a tier press keeps the room the orbit is already
+  // looking at. The opening pose is the floor origin, and the terraces are not.
+  const steered = useRef(false)
+
   const apply = (next: WorldCamera, fallback: 'fit' | 'none'): void => {
     camRef.current = next
     setCam(next)
@@ -88,23 +92,27 @@ export function useWorldCamera(camera: RefObject<CameraApi | null>): WorldCamera
   return {
     camera: cam,
     pose: toPose(cam),
-    setTier: (tier) => apply(tierPose(tier, camRef.current.target, sizeRef.current, camRef.current.azimuth), 'none'),
-    fit: () => apply(fitRoom(roomBounds(camera), sizeRef.current, 'map'), 'fit'),
+    setTier: (tier) => apply(tierPose(tier, steered.current ? camRef.current.target : worldCameraTarget(), sizeRef.current, camRef.current.azimuth), 'none'),
+    fit: () => { steered.current = true; apply(fitRoom(roomBounds(camera), sizeRef.current, 'map'), 'fit') },
     follow: () => {
       const id = selectedAgent()
       const at = id === null ? undefined : camera.current?.plan()?.agents.find((agent) => agent.agentId === id)?.at
-      if (at !== undefined) apply(followAgent(camRef.current, at, sizeRef.current), 'none')
+      if (at !== undefined) {
+        steered.current = true
+        apply(followAgent(camRef.current, at, sizeRef.current), 'none')
+        return
+      }
       if (id !== null) camera.current?.focus(id)
     },
     backTo2d: () => {
-      // The viewport to land on. The canvas applies it when R-064 lands;
-      // leaving the room is this button's own job.
+      // The rig publishes the viewport the orbit is actually framing. Leaving
+      // does not clear it: the canvas reads it when the move back settles.
       void backTo2d(camRef.current, sizeRef.current)
       setWorldOn(false)
     },
     orbit: (dx, dy) => apply(orbitBy(camRef.current, dx, dy), 'none'),
-    pan: (dx, dy) => apply(panBy(camRef.current, dx, dy, sizeRef.current), 'none'),
-    zoomAt: (cursor, factor) => apply(zoomToCursor(camRef.current, sizeRef.current, cursor, factor), 'none')
+    pan: (dx, dy) => { steered.current = true; apply(panBy(camRef.current, dx, dy, sizeRef.current), 'none') },
+    zoomAt: (cursor, factor) => { steered.current = true; apply(zoomToCursor(camRef.current, sizeRef.current, cursor, factor), 'none') }
   }
 }
 

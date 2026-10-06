@@ -288,7 +288,7 @@ import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { WorldStage } from '../world/WorldStage'
 import { WorldLens } from '../world/WorldLens'
 import { landingViewport } from '../world/plan-floor'
-import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
+import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn, worldLandingViewport } from '../world/world-toggle'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
 import { requestArrival } from '../world/world-select'
 import { useSelectedAgent } from '../world/world-select'
@@ -3992,7 +3992,8 @@ export function Canvas({
     const box = hostRef.current?.getBoundingClientRect()
     const width = box !== undefined && box.width > 0 ? box.width : window.innerWidth
     const height = box !== undefined && box.height > 0 ? box.height : window.innerHeight
-    restoreCamera(landingViewport(target, { width, height }, viewportRef.current.scale))
+    const posed = worldLandingViewport()
+    restoreCamera(posed ?? landingViewport(target, { width, height }, viewportRef.current.scale))
   })
   const canvasCovered = chrome.centerView !== 'canvas' || worldOn
   canvasCoveredRef.current = canvasCovered

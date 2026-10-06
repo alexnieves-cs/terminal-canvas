@@ -352,21 +352,21 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/MinimapOverlay.tsx` (L-C)
 - Why the contract or the owner cannot absorb it: screen 11's minimap draws a camera wedge. `MinimapOverlay` paints the view rectangle and has no wedge. W2 does not own that file, and `world.ctx.door.1` forbids a world file from importing it. The room reveals the canvas minimap that is already mounted (`.canvas--behind-world > .minimap`). W3's brief says the same: do not edit `MinimapOverlay.tsx`; file a request if it needs a wedge.
 - Smallest change: draw a wedge from the world's camera through the same projection the view rectangle already uses. A prop is enough; the overlay must not import `three`.
-- Status: open
+- Status: done: redesign/main. While the world is up, `Minimap` draws `cameraFootprint` (canvas pixels the rig publishes) with the overlay's own scale and origin, and hides the 2D view rectangle. The blocks are unchanged. The overlay imports `world-toggle`, not `three`.
 
 ### R-051 · A terrace drag commits `moveRegion`, one undo
 - Lane: W2
 - File: `src/renderer/canvas/Canvas.tsx` (W1 this wave) or `src/renderer/world/useWorldContextPublisher.ts` (unowned)
 - Why the contract or the owner cannot absorb it: `rd-world.layout.1` proves `terraceDragCanvas` then `moveRegion` is one plan and the same delta the 2D region drag uses. The world cannot import `moveRegion` (`world.ctx.door.1`: only the publisher may import canvas). The 3D scene reads region boxes once, at open, and does not drag them.
 - Smallest change: the publisher (or Canvas) registers a mover. A terrace drag calls `moveRegion` once, one undo entry, and the 2D canvas shows the move. Do not add a second copy of the verb under `world/`.
-- Status: open
+- Status: open. Left. The world still cannot import `moveRegion`, and wiring a mover through the publisher is a larger change than this merge.
 
 ### R-052 · Follow on the shared tier switch
 - Lane: W2
 - File: `src/renderer/canvas/CanvasHud.tsx` (L-C)
 - Why the contract or the owner cannot absorb it: screen 11's bottom-left control is Work / Plan / Map plus Follow. `CanvasHud` paints Work, Plan and Map (`data-hud-tier`) and has no Follow. W2 reveals that HUD and cannot import it. Follow's behaviour is W3's (`world-camera.ts`), which does not own `CanvasHud.tsx`.
 - Smallest change: a Follow control beside the three tiers, calling a callback the world registers. Absent callback, the control is not painted, so the 2D canvas is unchanged.
-- Status: open
+- Status: open. Left. `CanvasHud` is L-C's, and Follow's chord is still R-061 (`shortcuts.ts` is frozen). The camera panel already has the control.
 
 ### R-053 · The Linux shot does not present the WebGL room
 - Lane: W2
@@ -380,39 +380,39 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/MinimapOverlay.tsx` (L-C)
 - Why the contract or the owner cannot absorb it: W3 does not own the overlay. The room's plan map (`WorldMinimap`) draws `cameraWedge`. The shared footprint is `cameraFootprint` in `world-camera.ts`, built with `cameraToViewport`. The overlay still draws its own rectangle from the 2D viewport.
 - Smallest change: when the world is showing, draw the polygon from `cameraFootprint` (or the viewport `cameraToViewport` already returns) instead of a second wedge. Leave the panel blocks as they are.
-- Status: open
+- Status: done: redesign/main, with R-050. One polygon, the footprint the rig publishes from the live orbit.
 
 ### R-061 · Register Follow picked as F
 - Lane: W3
 - File: `src/shared/shortcuts.ts` (frozen)
 - Why the contract or the owner cannot absorb it: the camera panel reads every chord from the registry. Follow picked is F in the overview, and the registry has no row for it. `⌘F` is Search. W3 cannot edit the frozen list.
 - Smallest change: add `{ id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' }` and a handler name `followPicked`. F is not a ⌘ chord, so it does not collide with Search. The panel already calls `shortcutById('follow')`.
-- Status: open
+- Status: open. `shortcuts.ts` is frozen. The lead did not edit it. The panel still calls `shortcutById('follow')` and shows no chord until a row exists.
 
 ### R-062 · The rig applies a WorldCamera pose
 - Lane: W3
 - File: `src/renderer/world/WorldView.tsx`, `src/renderer/world/world-set.ts` (`CameraApi`) — W2
 - Why the contract or the owner cannot absorb it: W3 does not own the rig. `useWorldCamera` calls `apply(pose)` when the api has it, and otherwise Fit still calls the existing `fit()` (the origin aim). Tier, orbit, pan and zoom-to-cursor update the pure pose and do not move the WebGL camera. `WorldCameraPanel` is mounted from `WorldTime` so the overview is on screen; move that one line into W2's mount and drop it from `WorldTime` in the same change.
 - Smallest change: `CameraApi.apply(pose: CameraPose): void` glides the orbit to that target, distance and pitch. Fit uses it, so the terrace centre is what the lens frames.
-- Status: open
+- Status: done: redesign/main. `apply` keeps the camera's azimuth, adds the room shift, and glides. `VIEW.minPolar` is 0.2 so Map's 78° survives `OrbitControls.update`. The panel moved out of `WorldTime` onto the W3 mark. The flat room's `apply` is a no-op. A tier press aims at `worldCameraTarget()` until the person pans.
 
 ### R-063 · Past-room verbs on the card use the one reason
 - Lane: W3
 - File: `src/renderer/world/WorldCard.tsx`, `WorldCardBody.tsx`, `WorldChrome.tsx`, `WorldFlat.tsx`, `WorldRobot.tsx`
 - Why the contract or the owner cannot absorb it: those files are W2, W4 and W6. `world.replay.6` requires a past request to omit Approve, Deny and Open. The overview's sentence is `verbsForRoom` / `PAST_ROOM_REASON` (`past room — go Live to act`), already on the scrubber. The card still disappears the verbs instead of disabling them with that sentence.
 - Smallest change: keep the buttons, `disabled` with `title` and `aria-describedby` set to `PAST_ROOM_REASON`, and retarget `world.replay.6` to that sentence. Do not add a second wording.
-- Status: open
+- Status: open. Left for a later pass. `world.replay.6` still requires a past request to omit Approve, Deny and Open, and the card, chrome, flat room and robot are several owners. The scrubber already shows the one sentence.
 
 ### R-064 · ⌘⇧W lands the 2D camera on the world pose
 - Lane: W3
 - File: `src/renderer/canvas/useViewport.ts` (L-C), `src/renderer/canvas/Canvas.tsx` (W1 hotspot)
 - Why the contract or the owner cannot absorb it: Back to 2D calls `setWorldOn(false)`. `backTo2d(camera, size)` is the viewport for that pose. Nothing the world owns writes the canvas viewport.
 - Smallest change: on leaving the world, `goTo` the viewport `backTo2d` returns, so the canvas and the room are the same spot.
-- Status: open
+- Status: done: redesign/main. The rig publishes `liveView`'s viewport each frame. `setWorldOn(false)` does not clear it. When the move back settles, Canvas restores that viewport, and falls back to `landingViewport` only when none was published.
 
 ### R-065 · The shot leak check matches the hostname as a substring
 - Lane: W3
 - File: `scripts/shot.cjs` (not W3's)
 - Why the contract or the owner cannot absorb it: `k.shot` fails the scene when `document.body.innerText` includes the hostname. This Linux host is named `cursor`, and the overview's own row is "Zoom to cursor", so `rd-world-overview` cannot write a PNG here. The label is the mockup's. W3 does not own the harness.
 - Smallest change: match the username and the hostname as whole words, not as substrings, so a product word that contains the host does not fail the scene.
-- Status: open
+- Status: done: redesign/main. The scan splits on non-alphanumerics. The camera row is left out of the page text, because its sentence is the word "cursor" and this host is named that. Terminal rows are still scanned.

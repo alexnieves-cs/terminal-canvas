@@ -5,7 +5,6 @@ import { dismissAway, useAwaySince } from './world-away'
 import { prefersReducedMotion } from './world-perf'
 import { awayBeats, JOURNAL_MAX_AGE_MS, PAST_ROOM_REASON, tickTone, timelineMarks, tourOfferLabel, tourStep, TOUR_BEAT_MS, verbsForRoom, type Beat } from './world-replay'
 import type { CameraApi } from './world-set'
-import { WorldCameraPanel } from './WorldCameraPanel'
 
 /**
  * Time in the room (M425): a scrubber over the last hour the room saw, and —
@@ -175,7 +174,6 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
         </section>
       ) : null}
     </div>
-    <WorldCameraPanel camera={camera} />
     </>
   )
 }

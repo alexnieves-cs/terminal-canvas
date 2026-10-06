@@ -7,6 +7,7 @@ import { useChat } from '@renderer/chat/chat-store'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { emptyState } from '@shared/empty-states'
 import { minimapHeader } from './card-detail'
+import { useWorldCameraWedge, useWorldOn } from '@renderer/world/world-toggle'
 
 /**
  * M69. THE MINIMAP — the status board at thumbnail scale, in the canvas's
@@ -74,6 +75,8 @@ function MinimapAltRow({ row }: { row: MinimapRow }): JSX.Element {
 }
 
 export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds, flying, regions }: MinimapProps): JSX.Element | null {
+  const worldOn = useWorldOn()
+  const cameraWedge = useWorldCameraWedge()
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
   // The CANVAS's size, not the thumb's: the camera's rectangle is the canvas
@@ -254,8 +257,14 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
           return row === undefined ? null : <MinimapAltRow key={b.id} row={row} />
         })}
       </ul>
-      <div className={`minimap__view${ghost !== null ? ' minimap__view--dragging' : ''}`} data-minimap-view
-        style={{ left: viewBox.x, top: viewBox.y, width: Math.max(4, viewBox.w), height: Math.max(4, viewBox.h) }} />
+      {worldOn && cameraWedge !== null && cameraWedge.length >= 3 ? (
+        <svg className="minimap__wedge" data-minimap-wedge width={MINIMAP_W} height={MINIMAP_H} aria-hidden="true">
+          <polygon points={cameraWedge.map((p) => `${(p.x * projection.scale + projection.ox).toFixed(1)},${(p.y * projection.scale + projection.oy).toFixed(1)}`).join(' ')} />
+        </svg>
+      ) : (
+        <div className={`minimap__view${ghost !== null ? ' minimap__view--dragging' : ''}`} data-minimap-view
+          style={{ left: viewBox.x, top: viewBox.y, width: Math.max(4, viewBox.w), height: Math.max(4, viewBox.h) }} />
+      )}
       {/* M258. The legend is contextual: opacity 0 at rest, 1 on hover. */}
       <div className="minimap__legend" data-minimap-legend aria-hidden="true">
         {MINIMAP_LEGEND.map((l) => <span key={l.tone} className="minimap__legend-item"><span className="minimap__legend-swatch" data-tone={l.tone} />{l.word}</span>)}

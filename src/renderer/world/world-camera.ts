@@ -262,6 +262,33 @@ export function backTo2d(cam: WorldCamera, size: CanvasSize): CanvasViewport {
  * The four floor corners of the viewport, for a plan wedge. `MinimapOverlay`
  * does not draw this yet (R-060); the room's own map uses `cameraWedge`.
  */
+/**
+ * The footprint and the 2D viewport of the orbit that is actually showing.
+ * `floor` is the look point in floor space (the scene target with the room
+ * shift taken back off). Pitch is down from the horizon, so the height above
+ * the look point over the distance is its sine.
+ */
+export function liveView(
+  floor: FloorPoint,
+  eye: { x: number; y: number; z: number },
+  look: { x: number; y: number; z: number },
+  size: CanvasSize
+): { points: { x: number; y: number }[]; viewport: CanvasViewport } {
+  const dx = eye.x - look.x
+  const dy = eye.y - look.y
+  const dz = eye.z - look.z
+  const distance = Math.hypot(dx, dy, dz) || 1
+  const pitch = Math.asin(Math.min(1, Math.max(1e-3, dy / distance)))
+  const azimuth = Math.atan2(dx, dz)
+  const rough: CameraPose = { tier: 'plan', target: floor, distance, pitch }
+  const tier = tierAt(cameraToViewport(rough, finiteSize(size)).scale, 'plan')
+  const cam: WorldCamera = { target: floor, distance, pitch, azimuth, tier }
+  return {
+    points: cameraFootprint(cam, size).map(floorToCanvas),
+    viewport: backTo2d(cam, size)
+  }
+}
+
 export function cameraFootprint(cam: WorldCamera, size: CanvasSize): FloorPoint[] {
   const box = finiteSize(size)
   return [

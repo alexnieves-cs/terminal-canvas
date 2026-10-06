@@ -68,7 +68,9 @@ export function WorldFlat(): JSX.Element {
       },
       // M434: no floor to map — the chrome draws no minimap over the flat room — and nothing to centre on.
       plan: () => null,
-      centre: () => undefined
+      centre: () => undefined,
+      // No orbit to glide. The 3D rig is the one that frames a pose.
+      apply: () => undefined
     }
     return () => { camera.current = null }
   }, [])

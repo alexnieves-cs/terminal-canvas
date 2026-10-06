@@ -1,3 +1,4 @@
+import type { CameraPose } from '@shared/redesign-contracts'
 import type { AgentEvent, AgentRecord } from '@shared/world-events'
 import type { AgentStatus } from '@shared/world-events'
 import { agentTint, DESK_ARC, facingToward, type RosterEntry } from './world-scene'
@@ -210,7 +211,10 @@ export const ORBIT_TARGET: Vec3 = { x: 0, y: 0.6, z: 0 }
  * straight down at it; `max` is well short of the horizon so even a low orbit
  * stays above the slab, whose top is the floor.
  */
-export const VIEW = { azimuth: -0.62, polar: 0.98, minPolar: 0.3, maxPolar: 1.36, fov: 34, minDistance: 4 } as const
+// minPolar admits the Map tier (78° down, polar π/2 − that). A tighter floor
+// lets OrbitControls.update pull that pose back to the old limit the moment
+// the glide hands the camera back.
+export const VIEW = { azimuth: -0.62, polar: 0.98, minPolar: 0.2, maxPolar: 1.36, fov: 34, minDistance: 4 } as const
 
 /** How far the opening camera stands from the target: far enough for the whole slab, a touch of it bleeding past the frame. */
 export function viewDistance(arcRadius: number): number {
@@ -246,6 +250,12 @@ export interface CameraApi {
   plan(): RoomPlan | null
   /** M434: glide so the orbit looks at this point on the floor, from the same side and distance. */
   centre(x: number, z: number): void
+  /**
+   * Glide to a WorldCamera pose (R-062). `target` is a floor point, `distance`
+   * is world units, `pitch` is down from the horizon. The azimuth stays the
+   * side the camera is already on — a pose does not carry one.
+   */
+  apply(pose: CameraPose): void
 }
 
 /** How far a focus glide stands from its agent. */

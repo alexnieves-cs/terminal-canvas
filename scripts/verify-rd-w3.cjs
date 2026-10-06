@@ -201,11 +201,13 @@ const near = (a, b) => Math.abs(a - b) < 1e-6
 {
   const pure = read('src/renderer/world/world-minimap.ts')
   const shot = read('scripts/shot-scenes/rd-w3.cjs')
-  ok('rd-world.mount.1 the overview scene paints, the plan map stays free of value imports, and the panel is mounted from the time chrome',
+  ok('rd-world.mount.1 the overview scene paints, the plan map stays free of value imports, and the panel is mounted beside the W3 mark',
     /name: 'rd-world-overview'/.test(shot) && /run:/.test(shot) &&
     /14-world-overview\.png/.test(shot) &&
     !/^import(?!.*type)/m.test(pure) &&
-    /<WorldCameraPanel /.test(read('src/renderer/world/WorldTime.tsx')) &&
+    /<WorldCameraPanel /.test(read('src/renderer/world/WorldView.tsx')) &&
+    /data-rd-mount="W3"/.test(read('src/renderer/world/WorldView.tsx')) &&
+    !/<WorldCameraPanel /.test(read('src/renderer/world/WorldTime.tsx')) &&
     !/from ['"]three['"]|from ['"]@react-three/.test(pure),
     'mount')
 }
