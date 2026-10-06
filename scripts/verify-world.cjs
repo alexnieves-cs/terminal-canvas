@@ -1791,7 +1791,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.open.5 the card\'s Open is on the PICKED robot\'s card only, never in the past room, never for an agent with no panel, never twice on a waiting card (its request has one) — the shared act styling inside the one pointer-taking group — and the request\'s own Open hides for an agent with no panel too',
     /const openable = openableFrom\(agentId, past, actions\)/.test(card) && /const openHere = picked && !waiting && openable/.test(card) &&
       /\{openHere \|\| orchHere \? \(\s*<div className="world-card__actions"[^>]*>\s*\{openHere \? <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
-      /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card))
+      /\{actions !== null && !actions\.canOpen\(agentId\) \? null : <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card))
   const chrome = src('WorldChrome.tsx'), stage = src('WorldStage.tsx')
   // R-072. Bare Enter glides (`engageFocus`). The open is ⌘Enter, and the
   // `door!.open(id)` has to sit in that step-in handler — a file-wide match
