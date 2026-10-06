@@ -160,7 +160,7 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
             {away.more > 0 ? <li className="world-away__more">and {away.more} more</li> : null}
           </ul>
           <div className="world-away__acts">
-            <button type="button" className="world-away__go" onClick={() => setTour({ beats: away.beats, index: 0 })} data-world-tour>{tourOfferLabel()}</button>
+            <button type="button" className="world-away__go" aria-label={tourOfferLabel()} onClick={() => setTour({ beats: away.beats, index: 0 })} data-world-tour>{tourOfferLabel()}</button>
             <button type="button" onClick={() => dismissAway()}>Dismiss</button>
           </div>
         </section>

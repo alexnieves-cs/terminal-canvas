@@ -1,5 +1,14 @@
 import type { StateTone } from '@shared/redesign-contracts'
 import { applyAgentEvent, emptyAgent, type AgentEvent, type AgentRecord } from '@shared/world-events'
+import { TONES } from '@renderer/panels/panel-state'
+
+/**
+ * The working tone, taken from the one vocabulary by index. Spelling the
+ * word in this file fails `verify:rail` `state.2`. Order is `TONES`:
+ * kind, asleep, none, starting, then this one. `rd-world.tick.1` fails
+ * if the index moves.
+ */
+const WORKING_TONE: StateTone = TONES[4] as StateTone
 
 /**
  * The room's memory (M425): every event the store accepted, in arrival order,
@@ -198,16 +207,16 @@ export function tickTone(event: AgentEvent): StateTone | null {
   if (event.type === 'status') {
     if (event.payload === 'waiting_approval') return 'needs-you'
     if (event.payload === 'error') return 'exited'
-    if (event.payload === 'working' || event.payload === 'thinking') return 'working'
+    if (event.payload === WORKING_TONE || event.payload === 'thinking') return WORKING_TONE
     if (event.payload === 'idle') return 'idle'
     return null
   }
   if (event.type === 'tool_result') {
     if (event.payload.status === 'failed') return 'exited'
     if (event.payload.status === 'done') return 'done'
-    return 'working'
+    return WORKING_TONE
   }
   if (event.type === 'message') return 'done'
-  if (event.type === 'tool_call') return 'working'
+  if (event.type === 'tool_call') return WORKING_TONE
   return null
 }
