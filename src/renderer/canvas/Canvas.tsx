@@ -8844,6 +8844,14 @@ export function Canvas({
   const [onboardingDone, setOnboardingDone] = useState(() => {
     try { return window.localStorage.getItem('tc.onboarding.done') === '1' } catch { return false }
   })
+  // R-034. The crash card already keeps the panel id. Restart is the canvas door.
+  useEffect(() => {
+    const door = (window as unknown as { __rdLF?: { onRestart?: (id: string) => void } }).__rdLF
+    if (door === undefined) return
+    const previous = door.onRestart
+    door.onRestart = (id) => { paletteActionsRef.current?.restartPanel(id) }
+    return () => { door.onRestart = previous }
+  }, [])
   const showOnboarding = startup !== undefined && startup.harnessOff !== true && startup.lastVersion === null && !onboardingDone
   const finishOnboarding = (): void => {
     try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }

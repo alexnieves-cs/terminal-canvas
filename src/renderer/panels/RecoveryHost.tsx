@@ -59,13 +59,13 @@ export function RecoveryHost(): JSX.Element | null {
       {view.pill !== '' && <p className="recovery-pill" data-recovery-pill="">{view.pill}</p>}
       {view.bootIssue !== null && <p className="recovery-boot" data-boot-issue="" role="alert">{view.bootIssue}</p>}
       <div className="recovery-frames">
-        {view.paused.map((frame) => (
+        {view.paused.filter((frame) => !terminalPaints(frame.panelId)).map((frame) => (
           <article key={frame.panelId} className="recovery-frame" data-recovery-frame="paused" data-keys-blocked="" data-tone="needs-you">
             <p className="recovery-frame__line">{frame.line}</p>
             <p className="recovery-frame__keys">{frame.keys}</p>
           </article>
         ))}
-        {view.reattaching.map((frame) => (
+        {view.reattaching.filter((frame) => !terminalPaints(frame.panelId)).map((frame) => (
           <article key={frame.panelId} className="recovery-frame" data-recovery-frame="reattaching" data-recovery-skeleton="" data-tone="starting" aria-busy="true">
             <span className="recovery-skeleton" />
             <span className="recovery-skeleton" />
@@ -90,6 +90,12 @@ export function RecoveryHost(): JSX.Element | null {
       </div>
     </div>
   )
+}
+
+/** A terminal with this id paints its own paused or reattaching frame. The overlay stays for a catalog id that is not a panel. */
+function terminalPaints(panelId: string): boolean {
+  if (typeof document === 'undefined') return false
+  return document.querySelector(`[data-panel-id="${CSS.escape(panelId)}"][data-panel-kind="terminal"]`) !== null
 }
 
 function lastUpdatedOf(line: string): string {

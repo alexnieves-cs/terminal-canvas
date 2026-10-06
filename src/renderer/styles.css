@@ -12425,6 +12425,15 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   background: var(--line);
 }
 .recovery-boot { border-color: var(--state-failed); }
+/* On the well, not in its flow: a box here would refit xterm. */
+.panel__slot,
+.panel__card { position: relative; }
+.panel__slot > .recovery-frame,
+.panel__card > .recovery-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
 /* ── /rd:L-F ── */
 
 /* ── rd:W0 ── */

@@ -5,12 +5,14 @@
  */
 import {
   catalogView,
+  frameVariant,
   initialRecovery,
   offlineToast,
   reduceRecovery,
   viewOf,
   viewOn,
   type CatalogInput,
+  type FrameVariant,
   type OfflineToast,
   type RecoveryEvent,
   type RecoveryModel,
@@ -32,6 +34,16 @@ function emit(): void {
 
 export function getRecoveryView(): RecoveryView {
   return view
+}
+
+/** The frame this panel should paint. A string, so a subscriber compares it by value. */
+export function recoveryFrame(panelId: string): FrameVariant {
+  return frameVariant(model.host, panelId, model.crashes.map((crash) => crash.panelId))
+}
+
+/** The offline clock for one source, or null while that source is answering. */
+export function recoveryOffline(source: 'github' | 'jira'): string | null {
+  return model.offline[source]
 }
 
 export function subscribeRecovery(listener: Listener): () => void {
