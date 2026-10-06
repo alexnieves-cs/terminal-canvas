@@ -1159,6 +1159,8 @@ Linux gates after the landing: typecheck pass; `verify:world` 251/251; `verify:r
 
 W6 rebases with `git fetch origin && git rebase origin/redesign/main`.
 
+The lead re-shot of `rd-world-focus` is recorded under M454, with the flat-room shot. The first attempt on this host was the zoomed canvas and did not show the sheet. The retry is the PNG the critic judged.
+
 ## M454 · W6 WebGL fallback and the doors both ways
 
 Branch `rd/w6-doors`, cut from `redesign/main` at `rd-w3b` (`fa49bdd8`). Wave 3c, beside W4. W4 owns `WorldView.tsx` and `WorldCardBody.tsx` this wave. This lane does not.
@@ -1230,3 +1232,55 @@ The lane's "no rebase" line above is the record from before that update. R-081 w
 The lead then landed R-080 and R-083 in `d024f9e2`. `id: 'world.view'` is a literal in `commands.ts`. The verb `view-in-world` is in `VERBS` and `V9_DOORS`, and the executor runs `worldViewPaletteRow`, so the palette row and the verb share one body. `commands.ts` does not import the world modules. The pill publishes its attention sentence through `src/shared/attention-line.ts`; `WorldFlat` reads that and no longer scrapes the mounted pill. `attentionPillLine` stays in `command-pill.ts`.
 
 Left open: R-082 (report only; the probe is unchanged). R-070 and R-071 stay open from the W4 merge.
+
+### Lead gates
+
+Linux, after `d024f9e2`. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed. Frozen foundations were not edited.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass |
+| `verify:world` | 251/251 |
+| `verify:rd-w4` | 13/13 |
+| `verify:rd-w6` | 12/12 |
+| `verify:rd-w1` | 15/15 |
+| `verify:rd-w2` | 4/4 |
+| `verify:rd-w3` | 11/11 |
+| `npm run build` | exit 0. `WorldView` and `WorldFlat` are their own chunks. The entry chunk does not statically import three |
+| plain wave `npm run verify` | 65/67 in 31.5s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 96, goldens 79) and `verify:first-run` `revamp.create.1`. `verify:review` passed (31.0s), including `merge.1`. `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (15.9s). `verify:relay` passed (2.7s). `verify:flowchart` passed (1.3s). `verify:verbs` passed |
+
+World guard on the combined diff: BLOCKERS none. SHOULD-FIX none. No new three importer. `WorldFocusSheet`, `WorldCardBody` and `WorldFlat` import no three. `WorldStage` keeps the pure `lazy()` for `WorldView` and W6's second lazy for the same `WorldFlat`. No drei `Environment` was added. CSS stayed inside `rd:W4` and `rd:W6`.
+
+### Lead re-shot
+
+`rd-world-focus` and `rd-world-flat`, under xvfb, electron flags `--ignore-gpu-blocklist --enable-unsafe-swiftshader` only. The first focus capture was the zoomed canvas and did not show the sheet. The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The flat room wrote `out/shots/rd-world-flat.png` and `out/shots/rd-world-flat.vs-reference.png`. At the flat capture the probe log was `flat: true`, five terraces, ten tiles, `canvas--behind-world`, and the layer text started with the WebGL sentence.
+
+`rd-world-focus` against `12-world-focus.png`.
+
+VERDICT: does-not-read
+
+1. Silhouette — The capture is a flat light window: icon rail, file tree, and two text panes. The reference is a dark 3D room of rounded robots on a raised platform, with a tall dark sheet on the right. No robot, platform, or floating sheet appears anywhere in the capture.
+2. Material — The reference is a near-black night studio with glossy white robots and a dark raised sheet. The capture is white and pale gray panels with hairline borders across the whole window.
+3. Glow — The reference has a cyan trim around the platform and a bright core on the center robot, with amber on Approve. The capture has no edge glow, beacon, or halo; the only tint is a pale mint card in the left tree.
+4. Connectors — Dotted cyan arcs link the robots across the reference platform. The capture has no arcs or floor lines.
+5. Labels — The reference puts name pills and small signs in the room, plus a breadcrumb and an ask chip on the picked agent. The capture’s labels are a PANELS tree, a World pane title, and “Entering World · Esc cancel” on the empty right pane.
+6. Composition — The reference is a close camera on one agent: room on the left, focus sheet on the right. The capture is a three-column list (tree, checklist, empty pane), with the world as text in the middle.
+7. Chrome — The reference floor shows Work / Plan / Map and Following, plus a hint pill. The capture has a light title bar, a full left rail, a bottom composer with Send, and a zoom cluster; those floor controls are absent.
+8. STATE COLOUR — The reference uses cyan for the working trim and connectors, and amber for the needs-you Approve. The capture shows status as gray words on white, with flat Approve / Deny controls and no cyan, amber glow, green, red, or slate state mark.
+
+Disagreement: the WebGL layer reads back blank on this host (R-053). The brief says judge the DOM. This retry is still inside "Entering World" (the cancel chip and the filmstrip are up). OCR of the same PNG reads the sheet: "wants to edit ledger.ts", `export function streamCsv(rows)`, "Quoted fields round-trip Working", "on feature/csv-export", Open in Canvas, Sessions. The critic's own state-colour line sees Approve and Deny. The silhouette, material and glow misses are the blank room, which this host cannot paint. The lane's earlier critic of a settled sheet was close.
+
+`rd-world-flat` against `11-world-main.png`.
+
+VERDICT does-not-read
+
+1. Silhouette — The capture is a flat two-pane screen: a tall name list on the left and rectangular cards on a blank plane. The reference is one dark room of raised terrace slabs with standing robot figures. No robots, no slabs, no floor. Whole capture.
+2. Material — The capture is a light, near-white surface with pale cards. The reference is a near-black night studio, dark platforms, glossy white figures. Whole capture.
+3. Glow — The reference has tall amber columns rising off waiting figures, and that is the only glow. The capture has solid orange strokes on the lower-right cards and no columns, no halo. Lower-right card cluster.
+4. Composition — The reference spreads five terraces across one floor, with the map tucked at the bottom-right of the room and a pill centered on the bottom edge. The capture puts a list in the left third, clumps cards along the bottom of a mostly empty field, and parks the map at the top-right. Left list, lower card row, top-right inset.
+5. Connectors — The reference draws curved arcs between desks. The capture’s cards sit isolated, with no arcs. Card field.
+6. Chrome — The reference’s chrome is a thin dark dock, title-bar view switch, bottom attention pill, and a camera-wedge map. The capture adds a full panels tree, a light top bar, and a bottom zoom/selection bar, and the attention pill is absent. Left third and bottom edge.
+7. Labels — The reference puts short labels on the terraces, under the figures, on file tiles, and on a whiteboard. The capture puts sentences inside the cards and a long name tree in the side pane. Card bodies and left list.
+8. State colour — Working reads as green dots down the left list, and green also marks a done card, so working and done share a colour. Amber is an orange border on the lower-right cards, not a glow, and other cards carry coloured borders too. No red failed figure and no distinct slate idle. Left list and lower card row.
+
+Disagreement: the lane brief says judge 11 for the words, not the 3D picture. The capture is the flat fallback on purpose. OCR of the same PNG reads the no-WebGL sentence, Back to canvas, "needs you", "Waiting on you in its panel", Open in Canvas, PASSED, WORKING, "answer in its terminal", and Send. The silhouette, material and glow misses are the picture the brief said not to copy.
