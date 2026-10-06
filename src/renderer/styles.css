@@ -11257,3 +11257,71 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .world-route__note--action button:hover { border-color: var(--fg-3); }
 .world-route__note--action button:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
 .world-route__note--action button:disabled { color: var(--fg-3); cursor: default; }
+
+/* Redesign seams (M435). Empty on purpose. A lane writes only between its
+   own markers. F1 also owns the theme token blocks above. The blank line
+   between blocks is not part of any lane, so two lanes never share a hunk. */
+
+/* ── rd:F1 ── */
+
+/* ── /rd:F1 ── */
+
+/* ── rd:F2 ── */
+
+/* ── /rd:F2 ── */
+
+/* ── rd:F3 ── */
+
+/* ── /rd:F3 ── */
+
+/* ── rd:L-A ── */
+
+/* ── /rd:L-A ── */
+
+/* ── rd:L-B ── */
+
+/* ── /rd:L-B ── */
+
+/* ── rd:L-C ── */
+
+/* ── /rd:L-C ── */
+
+/* ── rd:L-D ── */
+
+/* ── /rd:L-D ── */
+
+/* ── rd:L-E ── */
+
+/* ── /rd:L-E ── */
+
+/* ── rd:L-F ── */
+
+/* ── /rd:L-F ── */
+
+/* ── rd:W0 ── */
+
+/* ── /rd:W0 ── */
+
+/* ── rd:W1 ── */
+
+/* ── /rd:W1 ── */
+
+/* ── rd:W2 ── */
+
+/* ── /rd:W2 ── */
+
+/* ── rd:W3 ── */
+
+/* ── /rd:W3 ── */
+
+/* ── rd:W4 ── */
+
+/* ── /rd:W4 ── */
+
+/* ── rd:W5 ── */
+
+/* ── /rd:W5 ── */
+
+/* ── rd:W6 ── */
+
+/* ── /rd:W6 ── */

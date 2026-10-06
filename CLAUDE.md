@@ -11,8 +11,9 @@ An index. Every rule in this repository exists because the obvious version fails
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
-| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md); and the canvas remade + flowcharts (M388–M396, by its [run prompt](docs/superpowers/specs/2026-09-29-canvas-revamp-flowchart-prompt-opus55.md)), ledger [m388-m396](docs/build-log/m388-m396-ledger.md); and the daily-loop run (M397–M410, by its [run prompt](docs/superpowers/specs/2026-09-30-ux-critique-run-prompt-gpt61-sol.md)), ledger [m397-m410](docs/build-log/m397-m410-ledger.md). Work numbered past a ledger's range is logged per milestone beside them in `docs/build-log/` (`ls` it; [milestone-history](docs/milestone-history.md) has the story). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
+| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md); and the canvas remade + flowcharts (M388–M396, by its [run prompt](docs/superpowers/specs/2026-09-29-canvas-revamp-flowchart-prompt-opus55.md)), ledger [m388-m396](docs/build-log/m388-m396-ledger.md); and the daily-loop run (M397–M410, by its [run prompt](docs/superpowers/specs/2026-09-30-ux-critique-run-prompt-gpt61-sol.md)), ledger [m397-m410](docs/build-log/m397-m410-ledger.md). Work numbered past a ledger's range is logged per milestone beside them in `docs/build-log/` (`ls` it; [milestone-history](docs/milestone-history.md) has the story). The redesign (M435–M456) is its own run, ledger [m435-m456](docs/build-log/m435-m456-ledger.md). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
 | [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
+| [docs/redesign/RUN.md](docs/redesign/RUN.md) | The redesign run (M435–M456): decisions, lane briefs, ownership. Open it before any redesign edit. |
 
 ## What this is
 
@@ -241,3 +242,18 @@ are easy to get subtly wrong in ways that are hard to self-review.
   critic is handed `<scene>.vs-reference.png` and the brief in
   [docs/product-rules.md](docs/product-rules.md) ("The critic and the reference"), which also
   lists the reference features deliberately not copied.
+
+## The redesign run (M435–M456)
+
+Spec: [docs/redesign/CONCEPT.md](docs/redesign/CONCEPT.md) and [docs/redesign/mockups/](docs/redesign/mockups/).
+Run book: [docs/redesign/RUN.md](docs/redesign/RUN.md).
+Decisions (binding): [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md).
+Ledger: [docs/build-log/m435-m456-ledger.md](docs/build-log/m435-m456-ledger.md).
+
+- You are in ONE lane. Your lane id is `$RD_LANE`; your brief is `docs/redesign/lanes/$RD_LANE.md`; the files you may edit are `docs/redesign/ownership.json` for that lane. A hook enforces this.
+- Foundations are frozen at tag `rd-foundations`: `src/shared/state-palette.ts`, `attention-queue.ts`, `world-space.ts`, `shortcuts.ts`, `redesign-contracts.ts`, `canvas/zoom-tier.ts`, `canvas/task-regions.ts`. The list moves into `ownership.json`'s `frozen` array when that tag is cut. Need a change? Append to `docs/redesign/requests.md` and stop; do not edit them.
+- State colour comes ONLY from the Tone in `panels/panel-state.ts`, drawn through `[data-tone]` and (once F1 lands it) `state-palette.ts`. Never write a state hex or a state word anywhere else (`verify:rail` `state.2`, `rd-tone.*`).
+- Write CSS inside your pre-cut seam only: `styles.css` `/* ── rd:<lane> ── */` blocks. F1 also owns the token blocks. Shot scenes live in `scripts/shot-scenes/rd-<lane>.cjs`. Checks live in `scripts/verify-rd-<lane>.cjs` (the npm key is the lane id lowercased).
+- Electron-tier verification ALWAYS through `scripts/redesign/with-electron-lock.sh`.
+- Never run `UPDATE_GOLDENS=1`. Goldens are written by the lead after a person has looked.
+- Before editing a module: `npm run lb -- <module>` (or ask the lb-scout subagent).

@@ -20,11 +20,15 @@ release/
 # every reviewer. Keep it locally, never in git.
 graphify-out/
 
-# Local Claude Code configuration and scratch, never source: settings.json
-# accumulates machine-specific permission grants with absolute home paths in
-# them, and worktrees under here are local working state whose commit would
-# put the whole tree in the repo a second time.
-.claude/
+# Local Claude Code scratch stays out of git: settings.local.json accumulates
+# machine-specific permission grants with absolute home paths, and worktrees
+# under here are local working state. The redesign kit is the exception — it
+# is the Phase 0 run book Claude Code sessions inherit, not a machine grant.
+.claude/*
+!.claude/agents/
+!.claude/commands/
+!.claude/hooks/
+!.claude/settings.json
 .superpowers/
 
 # M119. The ACP recordings under scripts/fixtures are FIXTURES a suite reads, not logs:
