@@ -163,6 +163,7 @@ import { shellQuote } from '@renderer/shell/file-tree-model'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
+import { NavigateTier } from '@renderer/palette/navigate-tier'
 import { ConnectedSpawnMenu } from '@renderer/palette/SpawnSheet'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
@@ -9400,6 +9401,18 @@ export function Canvas({
             : !merged && <TaskClusterLayer region clusters={clusterHulls.filter((c) => c.kind === 'task')} />}
           {!merged && <TaskRegionLayer regions={taskRegions} />}
           <TierLayer />
+          <NavigateTier
+            scale={viewport.scale}
+            panels={displayPanels}
+            railRows={railRows}
+            terminalPanels={terminalPanels}
+            focusedId={focusedId}
+            collapsedPanelIds={collapsedPanelIds}
+            releaseFocus={releaseFocusStable}
+            hostRef={hostRef}
+            onSelect={selectAndRaise}
+            merged={merged}
+          />
           {!merged && pendingApprovals.map((approval) => {
             const host = displayPanels.find((panel) => panel.rect.id === approval.id)
             if (host === undefined) return null

@@ -559,3 +559,67 @@ export function splitHighlight(text: string, query: string): HighlightSegment[] 
   }
   return out
 }
+
+/**
+ * M444. A visual band over the sections `SECTIONS` already orders.
+ * Files are path rows, which stay in Panels so that section header stays
+ * unique (verify:panels 48). The chip is how they are read as a group.
+ * Commands are the canvas, settings, credential and manage sections.
+ * Everything else is panels and tasks.
+ */
+export type PaletteKind = 'everything' | 'panels' | 'commands' | 'files'
+export type CommandBand = 'panels' | 'commands' | 'files'
+
+const COMMAND_GROUPS: ReadonlySet<string> = new Set(['canvas', 'setting', 'credential', 'manage'])
+
+export function cyclePaletteKind(kind: PaletteKind): PaletteKind {
+  if (kind === 'everything') return 'panels'
+  if (kind === 'panels') return 'commands'
+  if (kind === 'commands') return 'files'
+  return 'everything'
+}
+
+export function kindChipLabel(kind: PaletteKind): string {
+  if (kind === 'panels') return 'Panels & tasks'
+  if (kind === 'commands') return 'Commands'
+  if (kind === 'files') return 'Files'
+  return 'Everything'
+}
+
+export function commandBand(row: { group: string; pathText?: string }): CommandBand {
+  if (row.pathText !== undefined && row.pathText !== '') return 'files'
+  if (COMMAND_GROUPS.has(row.group)) return 'commands'
+  return 'panels'
+}
+
+export function filterByKind<T extends { group: string; pathText?: string }>(rows: readonly T[], kind: PaletteKind): T[] {
+  if (kind === 'everything') return [...rows]
+  return rows.filter((row) => commandBand(row) === kind)
+}
+
+/**
+ * A band header at this index, or null when the previous row is the same
+ * band. Files never open a header while Everything is showing: a path row
+ * between two panels must not restart "Panels & tasks", and it must not
+ * invent a third section header the panels check would count.
+ */
+export function bandHeaderAt(
+  rows: readonly { group: string; pathText?: string }[],
+  index: number,
+  kind: PaletteKind
+): string | null {
+  if (kind !== 'everything') return index === 0 ? kindChipLabel(kind) : null
+  const band = commandBand(rows[index])
+  if (band === 'files') return null
+  const prev = index === 0 ? null : commandBand(rows[index - 1])
+  if (band === 'panels') return prev === null || prev === 'commands' ? 'Panels & tasks' : null
+  return prev === 'commands' ? null : 'Commands'
+}
+
+/** The panel id behind `panel.goto.<id>`, or null for every other row. */
+export function panelIdOfGoto(row: { id: string }): string | null {
+  const prefix = 'panel.goto.'
+  if (!row.id.startsWith(prefix)) return null
+  const id = row.id.slice(prefix.length)
+  return id === '' ? null : id
+}

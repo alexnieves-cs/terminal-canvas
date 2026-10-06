@@ -23,7 +23,14 @@ import {
 import { minimapNeeded } from './minimap'
 import { LIVE_MIN_SCALE } from './lod'
 import { chromeObstacles, hostSize } from './safe-area'
-import { easeInOut, flightDuration, interpolateViewport } from './flight'
+import {
+  bindTierFlight, chordCode, currentSelectionCentre, currentTierPointer, easeInOut, easeOut,
+  flightDuration, interpolateViewport, runFitTask, runTidyAll, setTierPointer, tierAnchor,
+  tierFlightMs, viewportAtScale
+} from './flight'
+import { TIER_TARGET } from './zoom-tier'
+import type { ZoomTier } from '@shared/redesign-contracts'
+import { electronAccelerator, matchShortcut } from '@shared/shortcuts'
 import { canRedo, canUndo, createHistory, pushHistory, redoHistory, undoHistory, type History } from '@renderer/panels/history'
 import type { JumpDirection } from './attention'
 
@@ -214,7 +221,7 @@ export function useViewport(
    * Must be referentially stable: it sits in the wheel effect's dep array.
    */
   shouldYieldWheel?: (event: WheelEvent) => boolean,
-  /** The restored camera. Cmd+0 still returns to INITIAL, not to this. */
+  /** The restored camera. Reset zoom still returns to INITIAL; ⌘0 fits all. */
   initialViewport?: Viewport,
   /**
    * True while the command palette owns the keyboard. Every shortcut here is
@@ -323,6 +330,59 @@ export function useViewport(
     trailRef.current = h
     setTrail({ back: canUndo(h), forward: canRedo(h) })
   }, [])
+  /**
+   * M444. A tier chord. Ease-out over 220ms (one frame when reduced), keeping
+   * the world point under the anchor. `flyTo` is unchanged: bookmarks, fit
+   * and reset still ease in and out around the centre.
+   */
+  const flyToTier = useCallback((tier: ZoomTier) => {
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const size = { width: bounds.width, height: bounds.height }
+    const anchor = tierAnchor(size, currentTierPointer(), currentSelectionCentre())
+    const from = viewportRef.current
+    const target = viewportAtScale(from, TIER_TARGET[tier], anchor)
+    if (from.x === target.x && from.y === target.y && from.scale === target.scale) {
+      cancelFlight(true)
+      settle(true)
+      return
+    }
+    syncTrail(pushHistory({ ...trailRef.current, present: from }, target))
+    cancelFlight(true)
+    const duration = tierFlightMs(prefersReducedMotion())
+    if (duration === 0) { setViewport(target); settle(true); return }
+    const started = performance.now()
+    setFlying(true)
+    const step = (now: number): void => {
+      const t = Math.min(1, (now - started) / duration)
+      if (t >= 1) {
+        flightRef.current = null
+        setViewport(target)
+        setFlying(false)
+        settle(true)
+        return
+      }
+      setViewport(interpolateViewport(from, target, easeOut(t), anchor))
+      flightRef.current = requestAnimationFrame(step)
+    }
+    flightRef.current = requestAnimationFrame(step)
+  }, [cancelFlight, hostRef, settle, syncTrail])
+  useEffect(() => { bindTierFlight(flyToTier) }, [flyToTier])
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const onMove = (event: MouseEvent): void => {
+      const bounds = host.getBoundingClientRect()
+      const x = event.clientX - bounds.left
+      const y = event.clientY - bounds.top
+      if (x < 0 || y < 0 || x > bounds.width || y > bounds.height) setTierPointer(null)
+      else setTierPointer({ x, y })
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [hostRef])
+
   const jump = useCallback((target: Viewport) => {
     const here = viewportRef.current
     // Already there still counts as arriving: a person who asks to be taken
@@ -490,6 +550,26 @@ export function useViewport(
       // Cmd is required for every canvas shortcut. Agent TUIs claim essentially
       // every bare key, so from M3 a bare keystroke must always reach the PTY.
       if (!event.metaKey) return
+      const code = chordCode({ key: event.key, code: event.code })
+      const hit = matchShortcut({
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        code
+      })
+      // Tidy and its one-release alias sit above the Alt bail: ⌘⌥T is the
+      // alias, and returning on altKey first would leave it unbound. A focus
+      // lock or an open palette declines with no preventDefault, so the key
+      // still reaches whoever owns it.
+      if (hit?.id === 'tidy' || hit?.id === 'tidy-alias') {
+        if (shouldIgnoreKeys?.()) return
+        event.preventDefault()
+        if (event.repeat) return
+        void electronAccelerator(hit.id)
+        runTidyAll()
+        return
+      }
       if (event.ctrlKey || event.altKey) return
       if (shouldIgnoreKeys?.()) return
 
@@ -556,6 +636,23 @@ export function useViewport(
         else cameraForward()
         return
       }
+      // M444. Fit all, fit task, and the three tier flights. Read from the
+      // registry so a dropped chord throws here rather than silently doing
+      // the old job (reset on ⌘0, fit-all on ⌘1). Repeats are swallowed.
+      if (
+        hit?.id === 'fit-all' || hit?.id === 'fit-task' ||
+        hit?.id === 'tier-work' || hit?.id === 'tier-plan' || hit?.id === 'tier-map'
+      ) {
+        event.preventDefault()
+        if (event.repeat) return
+        void electronAccelerator(hit.id)
+        if (hit.id === 'fit-all') fitAll()
+        else if (hit.id === 'fit-task') runFitTask()
+        else if (hit.id === 'tier-work') flyToTier('work')
+        else if (hit.id === 'tier-plan') flyToTier('plan')
+        else flyToTier('map')
+        return
+      }
       if (event.repeat && !REPEATABLE_KEYS.has(event.key)) return
 
       const host = hostRef.current
@@ -564,20 +661,12 @@ export function useViewport(
       const centre = { x: bounds.width / 2, y: bounds.height / 2 }
 
       switch (event.key) {
-        case '0':
-          event.preventDefault()
-          resetViewport()
-          break
-        // These three call the named verbs rather than repeating the
-        // arithmetic, so the chord and the top bar's button are provably the
-        // same gesture. preventDefault still happens FIRST in each case: the
-        // verbs are ordinary functions with no knowledge of the event, and
-        // Cmd+= / Cmd+- are Chromium's own page-zoom accelerators, which is
-        // the thing being refused here.
-        case '1':
-          event.preventDefault()
-          fitAll()
-          break
+        // ⌘0 and ⌘1 left this switch (M444): they are fit-all and Work, matched
+        // above through the registry. Reset zoom stays the palette row.
+        // These call the named verbs rather than repeating the arithmetic, so
+        // the chord and the top bar's button are provably the same gesture.
+        // preventDefault still happens FIRST: Cmd+= / Cmd+- are Chromium's
+        // own page-zoom accelerators, which is the thing being refused here.
         case '=':
         case '+':
           event.preventDefault()
@@ -614,7 +703,7 @@ export function useViewport(
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, onStepWorkspace, onToggleMerged,
-    zoomBy, fitAll, resetViewport, cameraBack, cameraForward
+    zoomBy, fitAll, flyToTier, resetViewport, cameraBack, cameraForward
   ])
 
   // The SETTER stays private — nothing outside should move the camera — but a
