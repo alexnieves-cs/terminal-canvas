@@ -14,7 +14,7 @@ import { NIGHT } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
 import { getAgent, getAgentIds } from './agent-world-store'
-import { hasArrival, selectAgent, selectedAgent, takeArrival } from './world-select'
+import { hasArrival, selectAgent, selectedAgent, takeArrival, useFocusedAgent } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
 import type { CameraPose } from '@shared/redesign-contracts'
@@ -673,6 +673,7 @@ function PlanGround({ panels, regions }: { panels: readonly CanvasBox[]; regions
 }
 
 export function WorldView({ transition, reduced, onLost }: { transition: WorldTransition; reduced: boolean; onLost: () => void }): JSX.Element {
+  const focused = useFocusedAgent()
   const roster = useRoster()
   const waiting = useWaiting()
   // A pick is of a robot IN this room (M429 review): one that has left — gone idle and sunk, or
@@ -757,7 +758,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const limit = Math.max(half - 2, shift === null ? 0 : Math.hypot(placement.frame?.center.x ?? 0, placement.frame?.center.z ?? 0) + 4)
 
   return (
-    <div className="world-view" data-world-view data-quality={quality}>
+    <div className="world-view" data-world-view data-quality={quality} data-world-focus={focused !== null ? '' : undefined}>
       <Canvas
         shadows="percentage"
         dpr={dpr}

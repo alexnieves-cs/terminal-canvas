@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type JSX, type KeyboardEvent, type RefObject } from 'react'
+import { matchShortcut, type ShortcutEvent } from '@shared/shortcuts'
 import { KindChat, Minus, Plus, Send } from '@renderer/icons'
 import { getAgent, postTeamAsk, replayAt, useAgentIds, useReplayAt } from './agent-world-store'
-import { useWorldActions, worldActions } from './world-context-store'
-import { askTarget, CONTROL_SELECTOR, enterOpens, FIELD_SELECTOR, openableFrom, OVERLAY_SELECTOR, selectAgent, selectedAgent, useSelectedAgent } from './world-select'
+import { getWorldContext, useWorldActions, useWorldContext, worldActions } from './world-context-store'
+import { WorldFocusSheet } from './WorldFocusSheet'
+import { useWorldCamera } from './WorldCameraPanel'
+import { askTarget, clearFocus, CONTROL_SELECTOR, engageFocus, enterOpens, FIELD_SELECTOR, focusCrumb, focusedAgent, focusPreview, openableFrom, OVERLAY_SELECTOR, selectAgent, selectedAgent, setFocusPreview, useFocusedAgent, useFocusPreview, useSelectedAgent, type FocusPreview } from './world-select'
 import { isWorldOn } from './world-toggle'
 import { useRoster, useWaiting } from './world-roster'
 import { WorldMinimap } from './WorldMinimap'
@@ -52,7 +55,31 @@ export function WorldChrome({ camera, flat = false }: { camera: RefObject<Camera
   const order = useAgentIds()
   const legend = useMemo(() => legendEntries(roster, order), [roster, order])
   const picked = useSelectedAgent()
+  const focusedId = useFocusedAgent()
+  const ctx = useWorldContext()
+  const preview = useFocusPreview()
   const actions = useWorldActions()
+  const cam = useWorldCamera(camera)
+  const camRef = useRef(cam)
+  camRef.current = cam
+  // A pick glides in through W3's camera. Esc and ⌘Esc set `stepping` first so
+  // this effect does not fit() over the pose those keys just asked for.
+  const followed = useRef(false)
+  const stepping = useRef<'room' | 'plan' | null>(null)
+  useEffect(() => {
+    if (picked !== null) {
+      if (focusedAgent() !== picked) engageFocus(picked)
+      followed.current = true
+      camRef.current.follow()
+      return
+    }
+    if (!followed.current) return
+    followed.current = false
+    const step = stepping.current
+    stepping.current = null
+    if (step === 'plan' || step === 'room') return
+    camRef.current.fit()
+  }, [picked])
   const sendable = useMemo(() => roster.filter((a) => actions?.canSend(a.agentId) ?? false), [roster, actions])
   const inRoom = useRef<readonly string[]>([])
   inRoom.current = roster.map((a) => a.agentId)
@@ -117,10 +144,82 @@ export function WorldChrome({ camera, flat = false }: { camera: RefObject<Camera
       // Only a robot standing in the room (WorldView also lets a departed pick go; this is the keypress's own look).
       if (!inRoom.current.includes(id)) return
       event.preventDefault()
-      door!.open(id)
+      // M452. Bare Enter glides in. The panel open is ⌘Enter (`step-in`),
+      // through this same door, so a second path never grows. The effect
+      // follows when the pick changes; follow here only when it was already picked.
+      const wasPicked = selectedAgent() === id
+      const wasFocused = focusedAgent() === id
+      engageFocus(id)
+      if (wasPicked && !wasFocused) camRef.current.follow()
     }
     window.addEventListener('keydown', onEnter)
     return () => window.removeEventListener('keydown', onEnter)
+  }, [])
+  // Capture, so this runs before WorldStage's bubble Escape (that one leaves
+  // the world, and it ignores defaultPrevented). ⌘Esc is step-out: the plan
+  // tier. ⌘Enter is step-in: the same open door bare Enter used to call.
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (!isWorldOn()) return
+      const el = event.target instanceof HTMLElement ? event.target : null
+      const inField = el?.closest(FIELD_SELECTOR) != null
+      const chord = matchShortcut({
+        metaKey: event.metaKey || event.ctrlKey,
+        ctrlKey: false,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        code: event.code
+      } satisfies ShortcutEvent)
+      if (chord?.id === 'step-out') {
+        event.preventDefault()
+        event.stopPropagation()
+        stepping.current = 'plan'
+        clearFocus()
+        camRef.current.setTier('plan')
+        return
+      }
+      if (chord?.id === 'step-in') {
+        const id = selectedAgent()
+        const door = worldActions()
+        if (!openableFrom(id, replayAt() !== null, door)) return
+        if (!inRoom.current.includes(id)) return
+        event.preventDefault()
+        event.stopPropagation()
+        door!.open(id)
+        return
+      }
+      if (chord?.id === 'allow') {
+        const id = focusedAgent()
+        if (id === null) return
+        const shown = focusPreview()
+        const requestId = (shown !== null && shown.agentId === id ? shown.requestId : undefined)
+          ?? getWorldContext().approvals.find((item) => item.agentId === id)?.requestId
+        const door = worldActions()
+        if (requestId === undefined || requestId === '' || door === null || replayAt() !== null) return
+        event.preventDefault()
+        door.answer(id, requestId, true)
+        return
+      }
+      if (event.key !== 'Escape' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (inField || focusedAgent() === null) return
+      event.preventDefault()
+      event.stopPropagation()
+      stepping.current = 'room'
+      clearFocus()
+      camRef.current.fit()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+  // The focus shot names a robot and a request the fixture's world status
+  // does not put on the chat store. The app never calls it.
+  useEffect(() => {
+    const door = {
+      focus(agentId: string): void { selectAgent(agentId) },
+      show(next: FocusPreview): void { setFocusPreview(next) }
+    }
+    Object.defineProperty(window, '__rdW4', { configurable: true, value: door })
+    return () => { Reflect.deleteProperty(window, '__rdW4') }
   }, [])
   // M422/M424: the decision table's count, over the room — a sign in the scene sat on the waiting
   // robots' own cards. A press picks the agent that has waited longest, so its request card stands full.
@@ -129,9 +228,30 @@ export function WorldChrome({ camera, flat = false }: { camera: RefObject<Camera
   // M425: the past room takes no messages — the agent it shows may be somewhere else by now.
   const past = useReplayAt() !== null
   const placeholder = past ? 'Back to Live to ask' : sendable.length === 0 ? 'No agent here takes a message' : targetName !== null ? `Ask ${targetName}` : 'Ask your team'
+  const crumb = focusedId === null ? null : focusCrumb(
+    (preview !== null && preview.agentId === focusedId ? preview.taskTitle : null) ?? ctx.tasks.find((item) => item.members.includes(focusedId))?.title ?? null,
+    getAgent(focusedId)?.name ?? focusedId
+  )
+  const stepBack = (): void => {
+    stepping.current = 'room'
+    clearFocus()
+    camRef.current.fit()
+  }
 
   return (
     <div className="world-chrome" data-world-chrome data-flat={flat ? '' : undefined}>
+      {crumb === null ? null : (
+        <nav className="world-crumb" data-world-crumb aria-label="Where you are">
+          <button type="button" onClick={stepBack}>{crumb[0]}</button>
+          <span aria-hidden="true">›</span>
+          <span>{crumb[1]}</span>
+          <span aria-hidden="true">›</span>
+          <span>{crumb[2]}</span>
+          <span aria-hidden="true">·</span>
+          <kbd>Esc</kbd>
+        </nav>
+      )}
+      <WorldFocusSheet />
       <WorldTime camera={camera} />
       <WorldPeers camera={camera} />
       {/* M434: the minimap reads the 3D camera; the flat room has none. */}

@@ -12777,7 +12777,101 @@ div.world-camera__row { cursor: default; }
 /* ── /rd:W3 ── */
 
 /* ── rd:W4 ── */
-
+/* M452. The close-up. The sheet is 400px; the diff's code leaf is the one mono. */
+.world-crumb {
+  position: absolute; top: var(--sp-5); left: 50%; z-index: 3;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--glass-2); color: var(--fg);
+  box-shadow: var(--lift);
+  pointer-events: auto;
+  font-size: var(--t-sm);
+}
+.world-crumb button {
+  padding: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; cursor: pointer;
+}
+.world-crumb kbd { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+.world-focus {
+  position: absolute; top: var(--sp-5); left: var(--sp-5); bottom: var(--sp-5);
+  width: 400px; z-index: 4;
+  display: flex; flex-direction: column; gap: var(--sp-5);
+  padding: var(--sp-6);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--glass-2); color: var(--fg);
+  box-shadow: var(--lift);
+  pointer-events: auto;
+  overflow: auto;
+}
+.world-focus__label {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--fg-3);
+}
+.world-focus__question { margin: 0 0 var(--sp-4); font-size: var(--t-md); }
+.world-focus__diff {
+  margin: 0 0 var(--sp-4); padding: var(--sp-4);
+  border-radius: var(--r-md); background: var(--glass-3);
+  overflow: auto; max-height: 160px;
+}
+.world-focus__diff code {
+  font-family: var(--font-mono); font-size: var(--t-xs); white-space: pre;
+}
+.world-focus__verbs, .world-focus__foot {
+  display: flex; flex-wrap: wrap; gap: var(--sp-3);
+}
+.world-focus__act {
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: transparent; color: inherit;
+  font: inherit; font-size: var(--t-sm); cursor: pointer;
+}
+.world-focus__act[data-primary] {
+  background: var(--fg); color: var(--s-0); border-color: transparent;
+}
+.world-focus__act:disabled { cursor: default; }
+.world-focus__act kbd, .world-chip__approve kbd { font-family: var(--font-ui); font-size: var(--t-xs); }
+.world-focus__steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-3); }
+.world-focus__step { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--t-sm); }
+.world-focus__mark {
+  width: var(--sp-3); height: var(--sp-3); border-radius: var(--r-full);
+  background: var(--tone, var(--fg-3)); flex: none;
+}
+.world-focus__step-title { flex: 1; }
+.world-focus__step-word { color: var(--fg-3); font-size: var(--t-xs); }
+.world-focus__facts { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.world-focus__reply { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: auto; }
+.world-focus__composer {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--s-0); color: var(--fg);
+  font: inherit; font-size: var(--t-sm);
+}
+.world-focus__reason, .world-focus__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+.world-focus__reply button {
+  align-self: flex-end;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: transparent; color: inherit;
+  font: inherit; font-size: var(--t-sm); cursor: pointer;
+}
+.world-view[data-world-focus] .world-chip[data-focused] {
+  display: flex; align-items: center; gap: var(--sp-3);
+  max-width: 280px; overflow: visible; pointer-events: none;
+}
+.world-chip__text { overflow: hidden; text-overflow: ellipsis; }
+.world-chip__approve {
+  pointer-events: auto; flex: none;
+  padding: var(--sp-1) var(--sp-3);
+  border: 0; border-radius: var(--r-md);
+  background: var(--fg); color: var(--s-0);
+  font: inherit; font-size: var(--t-xs); font-weight: 600; cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .world-focus, .world-crumb { transition: none; }
+}
 /* ── /rd:W4 ── */
 
 /* ── rd:W5 ── */

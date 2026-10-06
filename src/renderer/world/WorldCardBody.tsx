@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { shortcutById } from '@shared/shortcuts'
 import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
 import type { CapHold } from '@shared/agent-session'
 import { getAgent, getAgentIds, useReplayAt } from './agent-world-store'
@@ -72,5 +73,23 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
         {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
       </div>
     </div>
+  )
+}
+
+/**
+ * The inline ask (M452). The same answer door as the request block, on the
+ * chip the close-up leaves visible. A past room has no verb, same as the block.
+ */
+export function AskApprove({ agentId }: { agentId: string }): JSX.Element | null {
+  const ctx = useWorldContext()
+  const actions = useWorldActions()
+  const past = useReplayAt() !== null
+  const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
+  if (asked === undefined || actions === null) return null
+  const chord = shortcutById('allow')?.chord
+  return (
+    <button type="button" className="world-chip__approve" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-ask-approve>
+      Approve{chord !== undefined && chord !== '' ? <> <kbd>{chord}</kbd></> : null}
+    </button>
   )
 }

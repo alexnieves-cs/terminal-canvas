@@ -416,3 +416,31 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: `k.shot` fails the scene when `document.body.innerText` includes the hostname. This Linux host is named `cursor`, and the overview's own row is "Zoom to cursor", so `rd-world-overview` cannot write a PNG here. The label is the mockup's. W3 does not own the harness.
 - Smallest change: match the username and the hostname as whole words, not as substrings, so a product word that contains the host does not fail the scene.
 - Status: done: redesign/main. The scan splits on non-alphanumerics. The camera row is left out of the page text, because its sentence is the word "cursor" and this host is named that. Terminal rows are still scanned.
+
+### R-070 · The room's answer should be the inspector's history row
+- Lane: W4
+- File: `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
+- Why the contract or the owner cannot absorb it: the sheet and the card call `actions.answer`. The publisher's `answer` is `answerRequest` in `ChatConversation.tsx`. The inspector history row is `answerApproval` in `palette-actions/presets.ts`, which also notes the outcome the queue shows. W4 does not own the publisher, and a second call beside `answerRequest` would be a second path.
+- Smallest change: point the room's `answer` at `answerApproval` (or have `answerRequest` record the same outcome), so a decision from the sheet is the row the inspector already shows for the palette.
+- Status: open
+
+### R-071 · A paste door for an agent terminal's reply
+- Lane: W4
+- File: `src/renderer/world/world-context-store.ts`, `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
+- Why the contract or the owner cannot absorb it: Reply for an agent terminal is paste, then an explicit submit. The room's door has `send` (`agentSession.send`) and no paste. A plain shell must stay closed with `answer in its terminal`. The sheet cannot tell an agent terminal from a plain shell, and it does not call `agentSession` itself (`world.door.1`).
+- Smallest change: `pasteReply(agentId, text)` on `WorldActions`, implemented as the terminal's paste plus one submit, and a `agentTerminal(agentId)` the sheet can pass to `replyRoute`. Leave plain shells on the one reason.
+- Status: open
+
+### R-072 · world.open.6 still says bare Enter opens the panel
+- Lane: W4
+- File: `scripts/verify-world.cjs` (not W4's)
+- Why the contract or the owner cannot absorb it: bare Enter on a picked robot now glides in (`engageFocus`). The panel open is ⌘Enter (`step-in`), through the same `door.open`. `world.open.6` still describes Enter as the open, and its regex only requires `door!.open(id)` somewhere in `WorldChrome.tsx`, which the step-in handler satisfies. W4 does not own the suite.
+- Smallest change: retarget the check's sentence to ⌘Enter (`step-in`), and require `door!.open(id)` in that handler. Leave the pure `enterOpens` guard on the bare-Enter listener.
+- Status: open
+
+### R-074 · Name the focus sheet in the plain-DOM sentence
+- Lane: W4
+- File: `src/renderer/CLAUDE.md` (not W4's)
+- Why the contract or the owner cannot absorb it: the library-door table says `WorldChrome.tsx` and its children are plain DOM and import no three. `WorldFocusSheet.tsx` is a new child of that chrome, plain DOM, and the table does not name it. W4 does not own the doc.
+- Smallest change: add `WorldFocusSheet.tsx` (M452, the close-up) to that plain-DOM sentence, beside `WorldCardBody.tsx`.
+- Status: open
