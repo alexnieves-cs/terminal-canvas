@@ -557,10 +557,11 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     ['shell__world', 'canvas--behind-world', 'world-view', 'world-view__cards', 'world-tag', 'world-pill', 'world-dot', 'world-card', 'world-card__title', 'world-card__badge', 'world-card__tools', 'world-route__note', 'shell__world-toggle', 'world-chrome', 'world-tools', 'world-ask', 'world-ask__field', 'world-legend', 'world-legend__dot'].every((c) => new RegExp(`\\.${c}\\b`).test(styles)))
 
   const topBar = readFileSync(join(root, 'src/renderer/shell/TopBar.tsx'), 'utf8')
-  ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and the top bar\'s button shows on the canvas view only (M427: no longer gated on DEV) — a hidden scene keeps a WebGL context drawing for nobody',
+  ok('world.door.9 the scene mounts ONLY while the view is on or leaving — the layer is rendered under `on || present` and nowhere else, present drops when the move back settles, and the 2D | World lens is the control (the top bar no longer paints a second World view button) — a hidden scene keeps a WebGL context drawing for nobody',
     /if \(!on && !present\) return null/.test(stage) && /if \(s\.target === 0\) setPresent\(false\)/.test(stage) &&
       /const worldOn = useWorldOn\(\)\n/.test(canvasSrc) &&
-      /worldView=\{\{ on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView \}\}/.test(canvasSrc) && /worldView !== undefined && centerView === 'canvas'/.test(topBar))
+      /<WorldLens on=\{worldOn\}/.test(canvasSrc) && /shell__world-toggle/.test(read('WorldLens.tsx')) &&
+      !/>World view</.test(topBar))
 
   ok('world.door.10 the 2D canvas is hidden, never unmounted or collapsed — the host stays rendered, takes a class + inert + aria-hidden from the same bit, and the move writes only opacity/transform/will-change on it and removes each at rest (a layout change refits every xterm and SIGWINCHes each agent; a stray inline style outlives the class)',
     /canvas--behind-world/.test(canvasSrc) && /inert=\{canvasCovered\}/.test(canvasSrc) && /canvasCoveredRef\.current = canvasCovered/.test(canvasSrc) &&
@@ -853,8 +854,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   ok('world.stage.3 below the desktop width the stage mounts NO scene (no lazy load, no WebGL context), says why, and offers the way back — live through a resize',
     /fits \? \(/.test(stage) && /worldFits\(window\.innerWidth\)/.test(stage) && /addEventListener\('resize'/.test(stage) && /The world view needs a wider window/.test(stage) &&
       /onClick=\{\(\) => setWorldOn\(false\)\}>Back to canvas/.test(stage) && /<WorldView /.test(stage.slice(stage.indexOf('fits ? ('), stage.indexOf(') : (', stage.indexOf('fits ? (')))))
-  ok('world.stage.4 prefers-reduced-motion skips the choreography, live: the move is a 0ms snap, the stagger is dropped and a robot that turns live appears at once',
-    /createWorldTransition\(on \? 1 : 0, reduced \? 0 : WORLD_TRANSITION_MS\)/.test(stage) && /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/.test(stage) && /addEventListener\('change'/.test(stage) &&
+  ok('world.stage.4 prefers-reduced-motion is a 120ms cross-fade, live: the stagger is dropped and a robot that turns live appears at once',
+    /createWorldTransition\(on \? 1 : 0, reduced \? REDUCED_TRANSITION_MS : WORLD_TRANSITION_MS, \{ reduced \}\)/.test(stage) && /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/.test(stage) && /addEventListener\('change'/.test(stage) &&
       /reduced \? 0 : pops\[i\]!/.test(view) && /reducedRef\.current \? 1 : easeInOutCubic/.test(robot))
   ok('world.perf.11 the scene draws at the ratio the quality governor reports (the Canvas\'s dpr PROP — M430), and ranks cards by the camera four times a second, as many as the tier allows — a far agent wears the pill alone (its dot carries the state) in the same Html element, except one waiting on a person or picked by one (M422), whose card is never a dot',
     /dpr=\{dpr\}/.test(view) && /<QualityGovernor onDpr=\{setDpr\} bloom=\{bloom\} \/>/.test(view) && /<CardBudget stations=\{live\} max=\{tierPlan\.cards\} /.test(view) && /t - last\.current < 0\.25/.test(view) &&

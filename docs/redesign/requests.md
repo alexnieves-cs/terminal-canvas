@@ -324,21 +324,21 @@ from: centerViewNow === 'focus'
 - File: `scripts/verify-world.cjs` (`world.stage.4`)
 - Why the contract or the owner cannot absorb it: W0 owns `scripts/verify-world.cjs`. The check still requires `createWorldTransition(on ? 1 : 0, reduced ? 0 : WORLD_TRANSITION_MS)` and calls that a 0ms snap. M449 passes `REDUCED_TRANSITION_MS` (120) with `{ reduced: true }`. `rd-w1.reduced.1` pins the cross-fade. A zero duration still snaps (`world.trans.4`).
 - Smallest change: match `reduced ? REDUCED_TRANSITION_MS : WORLD_TRANSITION_MS` and `{ reduced }`, and say the move is a 120ms cross-fade. Leave the WorldView and WorldRobot arms (`reduced ? 0 : pops`, `reducedRef.current ? 1`) as they are.
-- Status: open
+- Status: done: M449 on redesign/main. `world.stage.4` names the 120ms cross-fade. The WorldView and WorldRobot arms are unchanged.
 
 ### R-042 · Remove the TopBar World view button
 - Lane: W1
 - File: `src/renderer/shell/TopBar.tsx` (F3). `scripts/verify-world.cjs` `world.door.9` (W0) still requires the button's render condition.
 - Why the contract or the owner cannot absorb it: TopBar is frozen with F3. The 2D | World lens (`WorldLens`, class `shell__world-toggle`) is the control. Canvas still passes `worldView` so `world.door.9` stays green until this lands.
 - Smallest change: delete the World view button. Update `world.door.9` so it no longer requires `worldView !== undefined && centerView === 'canvas'` on that button. Keep `shell__world-toggle` in the stylesheet (`world.door.8`); the lens carries the class.
-- Status: open
+- Status: done: M449 on redesign/main. The top bar no longer paints the button. `WorldLens` keeps `shell__world-toggle`, and a click on that node still enters World so the shot selector finds it. `world.door.9` reads the lens.
 
 ### R-043 · Mount the transition curves in the scene
 - Lane: W1
 - File: `src/renderer/world/WorldView.tsx` (W0/W2), `src/renderer/world/WorldStructure.tsx` and the ground mesh in `WorldOffice.tsx` / `WorldPlatform.tsx` (W2)
 - Why the contract or the owner cannot absorb it: W1 does not own `WorldView.tsx`. The pure clock already exposes what the scene must read. Until this lands, robots still pop from the room origin and the floor is not the plan texture. Reduced motion already snaps `sample().eased` and `sample().raw`, so the existing dolly and pop do not play during the cross-fade.
 - Smallest change: call `popDelaysFromTarget(points, worldCameraTarget())` instead of `Math.hypot(at.x, at.z)`. Pass `motionOf(sample, reduced).dolly` to `dollyAt` and `.terrace` to the terrace scale. Call `setWorldCameraTarget` from the orbit target each frame. Paint the ground with `paintPlanFloor(canvas, layout)`, never a captured PNG.
-- Status: open
+- Status: done: M449 on redesign/main. The rig in `WorldView` does those four. `WorldLens` stays on the canvas, not a second copy in the mount slot. The `rd:W1 mount` marker stays so `rd-world.chrome.1` still sees it.
 
 ### R-044 · The Linux shot host blocklists WebGL
 - Lane: W1

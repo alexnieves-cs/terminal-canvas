@@ -12,7 +12,15 @@ import { warmWorldView } from './WorldStage'
 export function WorldLens({ on }: { on: boolean }): JSX.Element {
   const chord = shortcutById('world')?.chord ?? '⌘⇧W'
   return (
-    <div className="world-lens shell__world-toggle" role="group" aria-label="Canvas lens" data-world-lens>
+    <div
+      className="world-lens shell__world-toggle"
+      role="group"
+      aria-label="Canvas lens"
+      data-world-lens
+      // Shots and the old top-bar selector click this node. A click on a
+      // segment is that segment's; a click on the group itself enters World.
+      onClick={(event) => { if (event.target === event.currentTarget) setWorldOn(true) }}
+    >
       <button type="button" aria-pressed={!on} aria-label="2D canvas" onClick={() => setWorldOn(false)}>2D</button>
       <button type="button" aria-pressed={on} title={`World (${chord})`} onPointerEnter={() => warmWorldView()} onFocus={() => warmWorldView()} onClick={() => setWorldOn(true)}>
         World <kbd>{chord}</kbd>

@@ -17,8 +17,11 @@ import { getAgent, getAgentIds } from './agent-world-store'
 import { hasArrival, selectAgent, selectedAgent, takeArrival } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
+import { FLOOR_SCALE } from '@shared/world-space'
 import { arcFraming, dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
-import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
+import { dollyAt, LEAVE_MS, motionOf, popDelaysFromTarget, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
+import { paintPlanFloor } from './plan-floor'
+import { setWorldCameraTarget, worldCameraTarget } from './world-toggle'
 
 /**
  * The 3D world view: every live agent in the event store as a robot at its own
@@ -231,7 +234,7 @@ const mix = (a: Vec3, b: Vec3, k: number): Vec3 => ({ x: a.x + (b.x - a.x) * k, 
  * rig runs the overlay's camera buttons (`api`): a glide to the opening angle
  * for the room as it is now, or one step in or out along the line to the target.
  */
-function TransitionRig({ transition, start, controls, api, arcRadius, reduced, stations }: { transition: WorldTransition; start: Vec3; controls: RefObject<OrbitControlsRef | null>; api: RefObject<CameraApi | null>; arcRadius: number; reduced: boolean; stations: RefObject<ReadonlyMap<string, Station>> }): null {
+function TransitionRig({ transition, start, controls, api, arcRadius, reduced, stations, terraces, shift }: { transition: WorldTransition; start: Vec3; controls: RefObject<OrbitControlsRef | null>; api: RefObject<CameraApi | null>; arcRadius: number; reduced: boolean; stations: RefObject<ReadonlyMap<string, Station>>; terraces: RefObject<THREE.Group | null>; shift: readonly [number, number, number] | null }): null {
   const camera = useThree((s) => s.camera)
   const rest = useRef<Vec3>(start)
   const gliding = useRef<Glide | null>(null)
@@ -290,6 +293,10 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
     const c = controls.current
     const now = performance.now()
     const s = transition.sample(now)
+    const motion = motionOf(s, reduced)
+    const rise = terraces.current
+    if (rise) rise.scale.set(1, motion.terrace, 1)
+    if (c) setWorldCameraTarget({ x: c.target.x - (shift?.[0] ?? 0), z: c.target.z - (shift?.[2] ?? 0) })
     const atRest = s.settled && s.target === 1
     // A glide belongs to the resting view; a move to or from the canvas ends it.
     if (!atRest) gliding.current = null
@@ -330,7 +337,7 @@ function TransitionRig({ transition, start, controls, api, arcRadius, reduced, s
       return
     }
     if (c) c.enabled = false
-    const at = dollyAt(rest.current, ORBIT_TARGET, s.eased)
+    const at = dollyAt(rest.current, ORBIT_TARGET, motion.dolly)
     camera.position.set(at.x, at.y, at.z)
     camera.lookAt(ORBIT_TARGET.x, ORBIT_TARGET.y, ORBIT_TARGET.z)
   }, -2)
@@ -577,8 +584,8 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
  * layout: read their inline canvas pixels once, at open. A later drag is
  * R-051 — this lane cannot import `moveRegion` (`world.ctx.door.1`).
  */
-function readCanvasPlacement(): { panels: CanvasBox[]; floors: FloorTerrace[]; frame: ReturnType<typeof frameOf> } {
-  if (typeof document === 'undefined') return { panels: [], floors: [], frame: null }
+function readCanvasPlacement(): { panels: CanvasBox[]; regions: CanvasBox[]; floors: FloorTerrace[]; frame: ReturnType<typeof frameOf> } {
+  if (typeof document === 'undefined') return { panels: [], regions: [], floors: [], frame: null }
   const panels: CanvasBox[] = []
   for (const el of document.querySelectorAll<HTMLElement>('.panel[data-panel-id]')) {
     const id = el.getAttribute('data-panel-id')
@@ -586,16 +593,51 @@ function readCanvasPlacement(): { panels: CanvasBox[]; floors: FloorTerrace[]; f
     const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
     if (box !== null) panels.push(box)
   }
+  const regions: CanvasBox[] = []
   const floors: FloorTerrace[] = []
   for (const el of document.querySelectorAll<HTMLElement>('[data-task-region]')) {
     const id = el.getAttribute('data-task-region')
     if (id === null) continue
     const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
     if (box === null) continue
+    regions.push(box)
     const floor = terraceFloor(box)
     floors.push({ id, label: terraceSignFromChip(el.querySelector('.task-region__chip')?.textContent ?? id), center: floor.center, w: floor.w, d: floor.d })
   }
-  return { panels, floors, frame: frameOf(floors) }
+  return { panels, regions, floors, frame: frameOf(floors) }
+}
+
+/** The plan, painted once from the layout. Under the terraces, never a screenshot. */
+function PlanGround({ panels, regions }: { panels: readonly CanvasBox[]; regions: readonly CanvasBox[] }): JSX.Element | null {
+  const texture = useMemo(() => {
+    if (typeof document === 'undefined') return null
+    let maxX = 1
+    let maxY = 1
+    for (const rect of [...regions, ...panels]) {
+      maxX = Math.max(maxX, rect.x + rect.w)
+      maxY = Math.max(maxY, rect.y + rect.h)
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.min(2048, Math.max(1, Math.ceil(maxX)))
+    canvas.height = Math.min(2048, Math.max(1, Math.ceil(maxY)))
+    paintPlanFloor(canvas, {
+      regions: regions.map((rect) => ({ x: rect.x, y: rect.y, w: rect.w, h: rect.h })),
+      panels: panels.map((rect) => ({ x: rect.x, y: rect.y, w: rect.w, h: rect.h }))
+    })
+    const map = new THREE.CanvasTexture(canvas)
+    map.colorSpace = THREE.SRGBColorSpace
+    return { map, width: canvas.width, height: canvas.height }
+  }, [panels, regions])
+  useEffect(() => () => texture?.map.dispose(), [texture])
+  if (texture === null) return null
+  const w = texture.width / FLOOR_SCALE
+  const d = texture.height / FLOOR_SCALE
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, -0.04, d / 2]} receiveShadow>
+      <planeGeometry args={[w, d]} />
+      <meshBasicMaterial map={texture.map} toneMapped={false} />
+    </mesh>
+  )
 }
 
 export function WorldView({ transition, reduced, onLost }: { transition: WorldTransition; reduced: boolean; onLost: () => void }): JSX.Element {
@@ -651,20 +693,23 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const live = useMemo(() => stations.filter((station) => !leftAt.has(station.agentId)), [stations, leftAt])
   // Each robot's pop is delayed by how far it stands from the middle of the room.
   const delays = useMemo(() => {
-    const list = stations.map((station) => {
+    const centre = placement.frame?.center
+    if (centre !== undefined) setWorldCameraTarget({ x: centre.x, z: centre.z })
+    const points = stations.map((station) => {
       const at = station.home ?? station.seat
-      return Math.hypot(at.x, at.z)
+      return { x: at.x, z: at.z }
     })
-    const pops = popDelays(list)
+    const pops = popDelaysFromTarget(points, worldCameraTarget())
     // prefers-reduced-motion: every robot appears with the first, not in a wave.
     return new Map(stations.map((station, i) => [station.agentId, reduced ? 0 : pops[i]!]))
-  }, [stations, reduced])
+  }, [stations, reduced, placement])
   // Until the first ranking (a quarter second) every card is full, so the room never opens bare.
   const [full, setFull] = useState<ReadonlySet<string> | null>(null)
   const stats = useRef<HTMLDivElement>(null)
   const statsShown = useMemo(() => statsOn(), [])
   const cards = useRef<HTMLDivElement>(null)
   const controls = useRef<OrbitControlsRef>(null)
+  const terraces = useRef<THREE.Group>(null)
   // The overlay's "Fit room" and zoom buttons call this; TransitionRig fills it in.
   const camera = useRef<CameraApi | null>(null)
   // Framed for the room as it is when the view opens; "Fit room" re-frames it for the room as it is then.
@@ -690,14 +735,17 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
         <color attach="background" args={[ground]} />
         <Lights extent={half + 3} shadowMap={tierPlan.shadowMap} />
         <group position={shift ?? [0, 0, 0]}>
-          <WorldOffice stations={stations} leftAt={leftAt} arcRadius={anchor?.arc ?? plan.arcRadius} reduced={reduced} waiting={waiting.length} anchor={anchor} consoles={consoles} />
-          <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} floors={placement.floors} />
+          <PlanGround panels={placement.panels} regions={placement.regions} />
+          <group ref={terraces}>
+            <WorldOffice stations={stations} leftAt={leftAt} arcRadius={anchor?.arc ?? plan.arcRadius} reduced={reduced} waiting={waiting.length} anchor={anchor} consoles={consoles} />
+            <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} floors={placement.floors} />
+          </group>
           {stations.map((station) => (
             <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
           ))}
         </group>
         <Controls controls={controls} limit={limit} maxDistance={Math.max(80, half * 6)} />
-        <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} stations={stationsRef} />
+        <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} stations={stationsRef} terraces={terraces} shift={shift} />
         {bloom && <WorldBloom />}
         <StatsProbe target={stats} />
         <QualityGovernor onDpr={setDpr} bloom={bloom} />
@@ -706,7 +754,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
       </Canvas>
       <div className="world-view__cards" ref={cards} />
       <WorldChrome camera={camera} />
-      {/* rd:W1 mount. WorldLens fills this after W1 merges. Props kept stable: onPick ('canvas' | 'world'), chord. */}
+      {/* rd:W1 mount. WorldLens is on the canvas. The rig reads motionOf, popDelaysFromTarget, setWorldCameraTarget and paintPlanFloor. */}
       <div data-rd-mount="W1" hidden />
       {/* rd:W3 mount. useWorldCamera, the camera panel, the away card and peers. Props kept stable: camera, tier, following, onFollow. */}
       <div data-rd-mount="W3" hidden />

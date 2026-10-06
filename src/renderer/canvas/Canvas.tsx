@@ -285,7 +285,7 @@ import type { FocusSide } from '../focus/focus-model'
 import { planFactsOf } from '../focus/plan-facts'
 import { planSummary, planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
-import { WorldStage, warmWorldView } from '../world/WorldStage'
+import { WorldStage } from '../world/WorldStage'
 import { WorldLens } from '../world/WorldLens'
 import { landingViewport } from '../world/plan-floor'
 import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
@@ -9027,7 +9027,6 @@ export function Canvas({
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}
         onSetCenterView={setCenterView}
-        worldView={{ on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView }}
         running={inspectorSummary.running}
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
