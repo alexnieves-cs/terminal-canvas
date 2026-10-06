@@ -1389,3 +1389,22 @@ Deferred at rd-world, each left as it was: R-044 and R-053 (WebGL does not prese
 The blank `R-NNN` template stays a template.
 
 After that commit, typecheck passed, `verify:pill` 13/13, `verify:rd-w5` 11/11, `verify:world` 251/251, `verify:rd-w2` 4/4, and `npm run build` passed. The plain wave was 64/67. `verify:review` `merge.1` returned `merged.kind` `failed` with an empty detail in the concurrent wave, and alone it is 163/163. `panels-split.2`, `visual.1` and `revamp.create.1` are the same known reds.
+
+## Fix pass · rd/fix-must
+
+Cut from `redesign/main` at `9f390d90` (tag `rd-world` is `109d7e6b`). The owner approved the eight must-fix gaps and one frozen-file edit: a Follow row in `src/shared/shortcuts.ts`. No other frozen file changed. `UPDATE_GOLDENS` was not set.
+
+| Request | Commit | What a person sees |
+|---|---|---|
+| R-051 | `4587d7cf` | Dragging a terrace moves the 2D task region. One undo puts it back. |
+| R-070 | `f4bb5dff` | Approve in the World writes **Answered in this task**. A chat answer does not gain that row. |
+| R-094 | `4c0882fd` | Live Approve offers Undo when a review can revert that panel. Otherwise View diff. |
+| R-091 | `4fc157d6` | ⌘J in the World continues the canvas jump, and the pill's Jump uses the same cursor. |
+| R-063 | `2c8e2d35` | In a past room the card keeps Approve, Deny and Open, disabled, with `past room — go Live to act`. |
+| R-071 | `a968d951` | An agent terminal's reply can be sent from the focus sheet. A plain shell stays closed. |
+| R-061 | `31fbafed` | Follow picked is F. ⌘F remains Search. |
+| R-093 | `da29d8cf` | Snooze 10m hides a shell prompt from the World walk and from the canvas jump. |
+
+Checks: `rd-world.drag.1`, `rd-w4.history.1`, `rd-w5.undo.3`, `rd-w5.walk.3`, `world.replay.6`, `rd-w4.reply.2`, `rd-world.follow.1`, `rd-w5.snooze.1`.
+
+Still open: R-044 and R-053 (WebGL does not present on this host), R-052 (Follow on the shared HUD; the chord itself landed), R-082.

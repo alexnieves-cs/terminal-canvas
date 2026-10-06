@@ -359,14 +359,14 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/Canvas.tsx` (W1 this wave) or `src/renderer/world/useWorldContextPublisher.ts` (unowned)
 - Why the contract or the owner cannot absorb it: `rd-world.layout.1` proves `terraceDragCanvas` then `moveRegion` is one plan and the same delta the 2D region drag uses. The world cannot import `moveRegion` (`world.ctx.door.1`: only the publisher may import canvas). The 3D scene reads region boxes once, at open, and does not drag them.
 - Smallest change: the publisher (or Canvas) registers a mover. A terrace drag calls `moveRegion` once, one undo entry, and the 2D canvas shows the move. Do not add a second copy of the verb under `world/`.
-- Status: deferred at rd-world. The world still cannot import `moveRegion`, and wiring a mover through the publisher is a larger change than this merge. Canvas and the publisher are not this merge.
+- Status: done: `4587d7cf`. A terrace drag calls `moveRegion` once through the publisher. One history entry. The stood-up room follows the same canvas delta. The scene still does not import the verb.
 
 ### R-052 · Follow on the shared tier switch
 - Lane: W2
 - File: `src/renderer/canvas/CanvasHud.tsx` (L-C)
 - Why the contract or the owner cannot absorb it: screen 11's bottom-left control is Work / Plan / Map plus Follow. `CanvasHud` paints Work, Plan and Map (`data-hud-tier`) and has no Follow. W2 reveals that HUD and cannot import it. Follow's behaviour is W3's (`world-camera.ts`), which does not own `CanvasHud.tsx`.
 - Smallest change: a Follow control beside the three tiers, calling a callback the world registers. Absent callback, the control is not painted, so the 2D canvas is unchanged.
-- Status: deferred at rd-world. `CanvasHud` is L-C's, and Follow's chord is still R-061 (`shortcuts.ts` is frozen). The camera panel already has the control.
+- Status: deferred. `CanvasHud` is L-C's. The Follow chord landed with R-061 (`31fbafed`); the HUD still has no Follow beside Work / Plan / Map. The camera panel already has the control.
 
 ### R-053 · The Linux shot does not present the WebGL room
 - Lane: W2
@@ -387,7 +387,7 @@ from: centerViewNow === 'focus'
 - File: `src/shared/shortcuts.ts` (frozen)
 - Why the contract or the owner cannot absorb it: the camera panel reads every chord from the registry. Follow picked is F in the overview, and the registry has no row for it. `⌘F` is Search. W3 cannot edit the frozen list.
 - Smallest change: add `{ id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' }` and a handler name `followPicked`. F is not a ⌘ chord, so it does not collide with Search. The panel already calls `shortcutById('follow')`.
-- Status: deferred at rd-world. `shortcuts.ts` is frozen. The lead did not edit it. The panel still calls `shortcutById('follow')` and shows no chord until a row exists.
+- Status: done: `31fbafed`. Follow picked is `F`, handler `followPicked`. The overview panel shows the chord and consumes the key. `⌘F` stays Search. No other frozen file changed.
 
 ### R-062 · The rig applies a WorldCamera pose
 - Lane: W3
@@ -401,7 +401,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/WorldCard.tsx`, `WorldCardBody.tsx`, `WorldChrome.tsx`, `WorldFlat.tsx`, `WorldRobot.tsx`
 - Why the contract or the owner cannot absorb it: those files are W2, W4 and W6. `world.replay.6` requires a past request to omit Approve, Deny and Open. The overview's sentence is `verbsForRoom` / `PAST_ROOM_REASON` (`past room — go Live to act`), already on the scrubber. The card still disappears the verbs instead of disabling them with that sentence.
 - Smallest change: keep the buttons, `disabled` with `title` and `aria-describedby` set to `PAST_ROOM_REASON`, and retarget `world.replay.6` to that sentence. Do not add a second wording.
-- Status: deferred at rd-world. `world.replay.6` still requires a past request to omit Approve, Deny and Open, and the card, chrome, flat room and robot are several owners. The scrubber already shows the one sentence.
+- Status: done: `2c8e2d35`. The card keeps Approve, Deny and Open, disabled, with `PAST_ROOM_REASON`. `world.replay.6` matches that sentence. Live answers are unchanged.
 
 ### R-064 · ⌘⇧W lands the 2D camera on the world pose
 - Lane: W3
@@ -422,14 +422,14 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
 - Why the contract or the owner cannot absorb it: the sheet and the card call `actions.answer`. The publisher's `answer` is `answerRequest` in `ChatConversation.tsx`. The inspector history row is `answerApproval` in `palette-actions/presets.ts`, which also notes the outcome the queue shows. W4 does not own the publisher, and a second call beside `answerRequest` would be a second path.
 - Smallest change: point the room's `answer` at `answerApproval` (or have `answerRequest` record the same outcome), so a decision from the sheet is the row the inspector already shows for the palette.
-- Status: deferred at rd-world. `world.ctx.door.2` still requires the room's `answer` to be `answerRequest`. `answerApproval` writes the inspector history only after main accepts, and it looks up the palette's approval list, which the chat door does not hold. Calling both does not record the row: `answerRequest` marks the request answered first, so `answerApproval` returns. Folding `recordOrchEvent` into `answerRequest` would change every chat answer, not only the sheet. The publisher, the palette slice and `ChatConversation.tsx` are three owners.
+- Status: done: `f4bb5dff`. The World's answer still calls `answerRequest`. A history argument files the permission row only when main accepts. Chat answers do not pass it. The palette uses the same writer.
 
 ### R-071 · A paste door for an agent terminal's reply
 - Lane: W4
 - File: `src/renderer/world/world-context-store.ts`, `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
 - Why the contract or the owner cannot absorb it: Reply for an agent terminal is paste, then an explicit submit. The room's door has `send` (`agentSession.send`) and no paste. A plain shell must stay closed with `answer in its terminal`. The sheet cannot tell an agent terminal from a plain shell, and it does not call `agentSession` itself (`world.door.1`).
 - Smallest change: `pasteReply(agentId, text)` on `WorldActions`, implemented as the terminal's paste plus one submit, and a `agentTerminal(agentId)` the sheet can pass to `replyRoute`. Leave plain shells on the one reason.
-- Status: deferred at rd-world. `replyControl` stays closed until a paste door exists, which is the safe default. The publisher has no terminal handle, and an explicit submit after paste has to stay off a plain shell. That wiring goes through Canvas's registry, which this merge does not take.
+- Status: done: `a968d951`. The sheet pastes an agent terminal's reply and submits it. A plain shell stays closed with `answer in its terminal`, and the shell card has no reply field.
 
 ### R-072 · world.open.6 still says bare Enter opens the panel
 - Lane: W4
@@ -493,7 +493,7 @@ useLayoutEffect(() => {
 - File: `src/renderer/canvas/Canvas.tsx` (`jumpAttentionImplRef`)
 - Why the contract or the owner cannot absorb it: each press uses `attentionStep` / `nextAttentionId`, and `rd-w5.walk.1` pins those two equal. The cursors are still two. While the world is up, `shouldIgnoreKeys` is true because the canvas is covered, so the same press is not handled twice. A jump on the canvas, then a jump in the world, starts the world from a null cursor and picks the first id again.
 - Smallest change: read and write `attentionCursor` / `setAttentionCursor` from `world-flight.ts` inside `jumpAttentionImplRef`, and step with that cursor. Do not edit `attention-queue.ts` or `shortcuts.ts`.
-- Status: deferred at rd-world. `jumpAttentionImplRef` is the panels jump, and sharing the cursor means editing Canvas. While the world is up the canvas ignores keys, so one press is not handled twice. A jump on the canvas and then one in the world still starts the world from a null cursor.
+- Status: done: `4fc157d6`. Canvas ⌘J, the pill's Jump and the World walk share `attentionCursor`. While the world is up the canvas ignores keys, so one press is still handled once.
 
 ### R-092 · Name the queue strip in the plain-DOM sentence
 - Lane: W5
@@ -507,11 +507,11 @@ useLayoutEffect(() => {
 - File: `src/renderer/shell/decision-inbox.ts`, `src/renderer/canvas/Canvas.tsx`
 - Why the contract or the owner cannot absorb it: Snooze 10m on the shell card calls `snoozePanel` in `world-flight.ts`, which hides that id from the world's walk only. The 2D jump still uses `jumpOrder` and the inbox. Ten minutes is not one of `SNOOZE_CHOICES`. Wiring the button to the inbox would edit the inbox and the jump, which this lane does not own.
 - Smallest change: one snooze store the inbox already has, and have `snoozePanel` write that. Leave the world's filter as a reader of it.
-- Status: deferred at rd-world. The inbox and Canvas's jump are not this merge. Ten minutes is not one of `SNOOZE_CHOICES`. The card's snooze hides the id from the world walk only.
+- Status: done: `da29d8cf`. Snooze 10m writes the inbox question key (`q:<panel>`). The World walk and the canvas jump both skip it. Ten minutes is not a menu choice.
 
 ### R-094 · Live Approve has no review discard offer
 - Lane: W5
 - File: `src/renderer/world/useWorldContextPublisher.ts` (not W5's) and the review model
 - Why the contract or the owner cannot absorb it: D9 puts Undo on the toast only when `discardReady` (root, baseline, subject, and at least one path). The sheet's Approve calls `actions.answer` and then `emitApproved` with `discard: null`, because the room does not hold those fields. The live toast is therefore View diff. The shot passes a discard offer so mockup 13's Undo is visible, and `rd-w5.undo.1` pins both arms. Inventing a discard from the question text would offer Undo for a change review discard cannot revert.
 - Smallest change: when the publisher answers an approval, attach that panel's review discard offer if it is ready, and pass it to `emitApproved`. Do not add a hold. Do not call `review.discard` from the world.
-- Status: deferred at rd-world. The publisher and the review model are not W5's, and a guessed discard would offer Undo for a change review cannot revert. Live Approve stays View diff.
+- Status: done: `4c0882fd`. A live Approve passes the review discard when one can revert that panel, so the toast shows Undo. The across sentinel is not an offer. When there is no offer, the toast stays View diff. ⌘Y sends the answer and does not toast.

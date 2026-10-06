@@ -95,11 +95,11 @@ Mockup `11-world-main.png`. Press ⌘2 if the camera panel's Plan row is not alr
   2. Leave the room and read the same three on the canvas.
   - **Expected.** They are the canvas components, revealed over the room. The pill is the canvas sentence: `N agents need you`, the first item's line, `Go ⌘J`, `+ New ⌘N`. An empty queue leaves the pill quiet. The minimap draws the camera wedge and hides the 2D view rectangle. Work / Plan / Map is the canvas HUD. The room's own ask pill, legend, and fit button stay in the DOM and are clipped out of sight. **Known gap R-052:** Follow is not on that HUD. It lives on the camera panel (screen 14).
 
-- [ ] **Dragging a terrace moves the 2D region, one undo.** **Known gap R-051.**
-  1. Enter the room and try to drag the Ledger CSV export terrace to a new spot.
+- [ ] **Dragging a terrace moves the 2D region, one undo.**
+  1. Enter the room and drag the Ledger CSV export terrace to a new spot.
   2. Leave with ⌘⇧W and look at that region.
   3. Press ⌘Z.
-  - **Expected today.** The drag does not commit. The scene reads region boxes once, at open, and the world cannot call `moveRegion`. The 2D region stays where it was, and there is no new undo entry. **When R-051 lands:** the terrace drag is the same region move as on the canvas, the region has moved when you return, and one ⌘Z puts it back.
+  - **Expected.** The terrace drag is the same region move as on the canvas. The region has moved when you return, and one ⌘Z puts it back.
 
 - [ ] **Twenty agents stay inside the frame budget.**
   1. The fixture holds 10 agent panels. Add agents until the room shows 20 (further panels on the canvas, then re-enter).
@@ -121,17 +121,17 @@ Mockup `12-world-focus.png`. A click picks the robot, which opens the close-up. 
   5. Click it again, then press ⌘↵. (Double-click does this open too.)
   - **Expected.** The camera glides in and Follow is on. The breadcrumb reads `World › <task> › <agent> · Esc`. The sheet is the 400px dialog: Request (the question, a folded diff, Approve ⌘Y filled when a request is pending, Deny, Full diff), What it's doing (step words with tones), the fact line (model, context, branch, spend against cap — omitted when the agent has no meter), a reply composer, and Open in Canvas ⌘↵ plus Sessions. With nothing pending, Open in Canvas is the filled control. Esc steps back to the room (Fit) and stays in World. ⌘Esc returns to Plan. ⌘↵ leaves the room and lands the 2D camera on that panel, selected. Sessions switches to the Sessions segment.
 
-- [ ] **Approve with ⌘Y shows in the 2D history.** **Known gap R-070.**
+- [ ] **Approve with ⌘Y shows in the 2D history.**
   1. Focus a chat agent that is waiting on a permission. Press ⌘Y. Also try the sheet's Approve button on a second request, if you have one.
   2. Leave the room (⌘⇧W, or Open in Canvas).
   3. In the dock's queue for that task, expand **Answered in this task**. On the task's focus page the same list is **Answered · N**.
-  - **Expected today.** The approval is sent immediately through the chat answer. The durable row a palette Allow writes (`Allowed <tool> — <argument>`) is missing from that list. A short acknowledgment (`Allowed <tool> once for <agent>`) can still flash for about two seconds, because the chat door notes it. **When R-070 lands:** the same row the palette writes is in **Answered in this task** after you return. ⌘Y sends the answer. The sheet's Approve button is the control that also raises the toast in screen 13.
+  - **Expected.** The approval is sent immediately. The row the palette writes (`Allowed <tool> — <argument>`) is in **Answered in this task** after you return. A chat answer that is not from the room does not gain that row from this path. A short acknowledgment can still flash. ⌘Y sends the answer. The sheet's Approve button is the control that also raises the toast in screen 13.
 
-- [ ] **Reply follows the kind of session.** **Known gap R-071** for an agent terminal.
+- [ ] **Reply follows the kind of session.**
   1. Focus a chat agent. Type in the reply box and send.
   2. Focus a plain shell (vitest watch, or shell — infra when it is not the console card in screen 13).
   3. Focus an agent that is a terminal with a reply, if you have one.
-  - **Expected.** A chat's composer is open and Send delivers. A plain shell's Reply box is disabled, and its placeholder reads `answer in its terminal`. **Known gap R-071:** an agent terminal gets that same disabled box. The sheet has no paste door. Open in Canvas is how you answer it.
+  - **Expected.** A chat's composer is open and Send delivers. A plain shell's Reply box is disabled, and its placeholder reads `answer in its terminal`. An agent terminal's reply can be sent from the sheet: it is pasted and then submitted. The shell console card in screen 13 still has no reply field.
 
 ---
 
@@ -139,12 +139,12 @@ Mockup `12-world-focus.png`. A click picks the robot, which opens the close-up. 
 
 Mockup `13-world-attention.png`. The room steps the same queue the pill publishes. With an empty queue the strip is absent and ⌘J does nothing.
 
-- [ ] **⌘J picks the same next item.** **Known gap R-091.**
+- [ ] **⌘J picks the same next item.**
   1. On the canvas, with two or more items that need you, press ⌘J and note which panel becomes current.
   2. Press ⌘J once more and note the second panel.
   3. Press ⌘⇧W, then ⌘J. Read the strip and which robot the camera sits on.
   4. Press ⌘J again, then ⌘⇧J.
-  - **Expected today.** Inside the room, ⌘J walks the pill's queue in order and ⌘⇧J walks back. One press is handled once. The strip reads `NEEDS YOU · n of N`, with a done chip, an amber current chip, and a hollow next chip, plus the ⌘J and ⌘⇧J marks. **Known gap R-091:** the world keeps its own cursor. After a jump on the canvas, the first ⌘J in the room starts from the front of the queue and picks the first id again. **When R-091 lands:** that press continues from the canvas's cursor and lands on the same panel the next canvas ⌘J would have.
+  - **Expected.** Inside the room, ⌘J walks the pill's queue in order and ⌘⇧J walks back. One press is handled once. The strip reads `NEEDS YOU · n of N`, with a done chip, an amber current chip, and a hollow next chip, plus the ⌘J and ⌘⇧J marks. The world and the canvas share one cursor. After a jump on the canvas, the first ⌘J in the room continues from that cursor and lands on the same panel the next canvas ⌘J would have.
 
 - [ ] **The flight is visible, and reduced motion cuts it.**
   1. With Reduce motion off, press ⌘J between two waiting agents and watch the floor.
@@ -154,13 +154,13 @@ Mockup `13-world-attention.png`. The room steps the same queue the pill publishe
 - [ ] **The shell console card has no reply field.**
   1. Walk with ⌘J until the current item is a shell prompt (the shot's is shell — infra, "Do you want to perform these actions?").
   2. Read the card at the lower right.
-  - **Expected.** The card is titled as a shell console. It shows the prompt, the command, and the sentence `A shell prompt is answered in its terminal, never from the room.` The buttons are Open in Canvas ⌘↵, Snooze 10m, and Next. A textarea or a Reply field on this card is a fail. Next walks the queue the same way ⌘J does. **Known gap R-093:** Snooze 10m hides that id from the world's walk only. Leave the room and press ⌘J: the canvas jump still offers it. The inbox's own Snooze choices are a different list.
+  - **Expected.** The card is titled as a shell console. It shows the prompt, the command, and the sentence `A shell prompt is answered in its terminal, never from the room.` The buttons are Open in Canvas ⌘↵, Snooze 10m, and Next. A textarea or a Reply field on this card is a fail. Next walks the queue the same way ⌘J does. Snooze 10m hides that prompt from the world's walk and from the canvas jump. The inbox's own Snooze menu is still 15 min, 1 hour and 4 hours.
 
-- [ ] **D9 Undo.** **Known gap R-094.**
+- [ ] **D9 Undo.**
   1. Focus a chat with a pending edit and click **Approve** on the sheet. That click raises the toast. ⌘Y sends the answer on its own.
   2. Read the toast the moment it appears.
   3. If you have a panel whose review discard is ready (a root, a baseline, a subject, and at least one path), approve that one too.
-  - **Expected.** The sentence is `Approved <agent>'s edit to <file>`, immediately. There is no hold. D9 Option B: when review discard can revert that panel, the toast's action is Undo, and Undo discards the review. When that offer is absent, the action is View diff. Nothing un-tells an agent that already received yes. **Known gap R-094:** the live button always passes an empty discard, so the toast is View diff even when a review discard is ready. Undo on a live Approve is the gap closing. Undo on an approval review cannot revert is a new bug.
+  - **Expected.** The sentence is `Approved <agent>'s edit to <file>`, immediately. There is no hold. D9 Option B: when review discard can revert that panel, the toast's action is Undo, and Undo discards the review. When that offer is absent, including an across review, the action is View diff. A live Approve passes the real offer. Nothing un-tells an agent that already received yes.
 
 ---
 
@@ -173,7 +173,7 @@ Mockup `14-world-overview.png`. The camera panel is the lower-left group labelle
   2. Drag to orbit, Shift-drag to pan, scroll to zoom on the cursor. A pinch is a wheel with ctrl held.
   3. Press ⌘1, ⌘2, ⌘3, and click Work, Plan, Map.
   4. Click **Follow picked** with a robot selected. Press F.
-  - **Expected.** Orbit, pan, and zoom-to-cursor behave as the rows say, and the floor point under the cursor stays put while you zoom. ⌘1 is close (the focus distance), ⌘2 is the room, ⌘3 is near top-down and Map is pressed. The rows show the registry chords, including ⌘0 on Fit room and ⌘⇧W on Back to 2D. **Known gap R-061:** Follow picked shows no chord. F does nothing, because `shortcuts.ts` has no Follow row (⌘F remains Search). The click still follows. **Known gap R-052:** the bottom Work / Plan / Map switch has no Follow beside it.
+  - **Expected.** Orbit, pan, and zoom-to-cursor behave as the rows say, and the floor point under the cursor stays put while you zoom. ⌘1 is close (the focus distance), ⌘2 is the room, ⌘3 is near top-down and Map is pressed. The rows show the registry chords, including ⌘0 on Fit room, ⌘⇧W on Back to 2D, and F on Follow picked. F follows the picked robot. ⌘F remains Search. **Known gap R-052:** the bottom Work / Plan / Map switch has no Follow beside it.
 
 - [ ] **Fit room is centred.**
   1. Orbit and pan until the floor sits in a corner of the window.
@@ -184,12 +184,12 @@ Mockup `14-world-overview.png`. The camera panel is the lower-left group labelle
   1. Press ⌘3.
   - **Expected.** The camera pitches toward top-down. The terraces read as the canvas layout. You can still tell working, waiting, failed, and idle apart by ring colour. Amber is still the only column.
 
-- [ ] **Replay disables the verbs and says why.** **Known gap R-063.**
+- [ ] **Replay disables the verbs and says why.**
   1. Click **Replay · last hour** so the scrubber opens. If the journal is empty, generate a little live activity first (a status change) and reopen.
   2. Drag the scrubber off Live, onto an earlier moment.
   3. Look at the scrubber, then at a robot's card.
   4. Click **Live**.
-  - **Expected.** The scrubber title is `Replay · last hour`. Ticks use the state colours (working cyan, needs-you amber, done green, failed red, idle slate). Off Live, the scrubber says `past room — go Live to act`, and Ask, Open, and Approve on that bar are disabled with that sentence as their reason. Time controls (play, the range, Live) stay usable. **Known gap R-063:** the card omits Approve, Deny, and Open instead of disabling them with the same sentence. The scrubber is the place the reason shows today. **When R-063 lands:** those buttons stay, disabled, with `past room — go Live to act`. Live returns the room to now and the verbs work again.
+  - **Expected.** The scrubber title is `Replay · last hour`. Ticks use the state colours (working cyan, needs-you amber, done green, failed red, idle slate). Off Live, the scrubber says `past room — go Live to act`, and Ask, Open, and Approve on that bar are disabled with that sentence as their reason. The card keeps Approve, Deny, and Open visible, disabled, with the same sentence. Time controls (play, the range, Live) stay usable. Live returns the room to now and the verbs work again.
 
 - [ ] **While you were away.**
   1. With events in the last hour, read the card on the right.
@@ -254,13 +254,13 @@ Both directions. Each door also has a palette row (`View in World`).
 
 ## Must fix before release
 
-Open requests a person will hit on this Mac. R-044 and R-053 stay with the Linux shot host; a Mac that presents WebGL does not show that blank field.
+The eight items below landed on `rd/fix-must`. R-044 and R-053 stay with the Linux shot host; a Mac that presents WebGL does not show that blank field. R-052 (Follow on the shared tier switch) and R-082 stay open.
 
-- **R-051** — Dragging a terrace does not move the task, so arranging the room does nothing on the canvas and there is nothing to undo.
-- **R-070** — Approve in the room never writes the task history row, so "Answered in this task" stays empty for a decision the person just made.
-- **R-094** — Live Approve always toasts View diff, so Undo never appears even when review discard could revert the change.
-- **R-091** — ⌘J in the World starts over at the first item after a jump on the canvas, so the two views disagree on what is next.
-- **R-063** — In a past room the card drops Approve, Deny, and Open, so the robot the person is looking at never says the room is read-only.
-- **R-071** — An agent terminal's reply cannot be sent from the focus sheet, so answering it means leaving the room.
-- **R-061** — Follow picked has no key, so F does nothing on the control the overview teaches.
-- **R-093** — Snooze 10m hides a shell prompt from the world's walk only, so the canvas jump still lands on it.
+- **R-051** — done, `4587d7cf`. Dragging a terrace commits `moveRegion` as one undo, and the 2D region moves with it.
+- **R-070** — done, `f4bb5dff`. Approve in the room writes the task history row (`Allowed <tool> — <argument>`). A chat answer does not.
+- **R-094** — done, `4c0882fd`. Live Approve offers Undo when review discard can revert that panel. Otherwise View diff.
+- **R-091** — done, `4fc157d6`. ⌘J in the World and on the canvas share one cursor.
+- **R-063** — done, `2c8e2d35`. In a past room the card keeps Approve, Deny, and Open, disabled, with `past room — go Live to act`.
+- **R-071** — done, `a968d951`. An agent terminal's reply can be sent from the focus sheet. A plain shell stays closed.
+- **R-061** — done, `31fbafed`. Follow picked is F. ⌘F remains Search.
+- **R-093** — done, `da29d8cf`. Snooze 10m hides a shell prompt from the world's walk and from the canvas jump.
