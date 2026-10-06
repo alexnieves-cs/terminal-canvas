@@ -31,12 +31,17 @@ buildSync({
       import { classifyBinaryProbe, versionWords, probeWithin, BINARY_PROBE_TIMEOUT_MS } from '../src/shared/env-report'
       import { discoverBinary } from '../src/main/env-report'
       import { presetsFromEnabledAgents } from '../src/main/presets'
+      import { blankCanvasTitle, repoChipLabel, GHOST_TARGET, BLANK_CANVAS_PURPOSE } from '../src/shared/empty-states'
+      import { EMPTY_CANVAS_GESTURES } from '../src/renderer/canvas/hints'
+      import { STARTER_LAYOUTS, starterLayoutAction } from '../src/shared/lineups'
+      import { blankTaskVerb } from '../src/renderer/palette/start-work'
       export {
         restoreLines, splashShouldLeave, ghostLayout, skipRemaining, publishBootProgress,
         readyLabel, agentRows, installCommand, sessionsPersistence, FIRST_TASK_HANDOFF, ONBOARDING_FOOTER, AGENTS_STEP_TITLE,
-        classifyBinaryProbe, versionWords, probeWithin, BINARY_PROBE_TIMEOUT_MS, discoverBinary, presetsFromEnabledAgents
+        classifyBinaryProbe, versionWords, probeWithin, BINARY_PROBE_TIMEOUT_MS, discoverBinary, presetsFromEnabledAgents,
+        blankCanvasTitle, repoChipLabel, GHOST_TARGET, BLANK_CANVAS_PURPOSE, EMPTY_CANVAS_GESTURES, STARTER_LAYOUTS, starterLayoutAction, blankTaskVerb
       }
-      export const keep = { readyLabel, agentRows, installCommand, sessionsPersistence, FIRST_TASK_HANDOFF, ONBOARDING_FOOTER, AGENTS_STEP_TITLE, classifyBinaryProbe, versionWords, probeWithin, BINARY_PROBE_TIMEOUT_MS, discoverBinary, presetsFromEnabledAgents }
+      export const keep = { readyLabel, agentRows, installCommand, sessionsPersistence, FIRST_TASK_HANDOFF, ONBOARDING_FOOTER, AGENTS_STEP_TITLE, classifyBinaryProbe, versionWords, probeWithin, BINARY_PROBE_TIMEOUT_MS, discoverBinary, presetsFromEnabledAgents, blankCanvasTitle, repoChipLabel, GHOST_TARGET, BLANK_CANVAS_PURPOSE, EMPTY_CANVAS_GESTURES, STARTER_LAYOUTS, starterLayoutAction, blankTaskVerb }
     `,
     resolveDir: __dirname,
     sourcefile: 'rd-l-a-entry.ts',
@@ -46,7 +51,11 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  logLevel: 'silent'
+  logLevel: 'silent',
+  alias: {
+    '@shared': join(ROOT, 'src/shared'),
+    '@renderer': join(ROOT, 'src/renderer')
+  }
 })
 const M = require(OUT)
 
@@ -179,6 +188,49 @@ const M = require(OUT)
       held.persist === true && /survive quit/.test(held.sentence) &&
       absent.persist === false && /until tmux is installed/.test(absent.sentence),
     JSON.stringify({ unknown, held, absent, handoff: M.FIRST_TASK_HANDOFF }))
+}
+
+{
+  const layouts = M.STARTER_LAYOUTS.map((row) => row.id).join(',')
+  const idle = M.starterLayoutAction('pair-tests', false)
+  const clicked = M.starterLayoutAction('pair-tests', true)
+  ok('rd-empty.layouts.1 three starter layouts stay inert until clicked, and they are not the lineup ids',
+    layouts === 'pair-tests,two-agent,solo-shell' &&
+      M.STARTER_LAYOUTS.every((row) => typeof row.sentence === 'string' && row.sentence.length > 12) &&
+      idle.places === false && clicked.places === true &&
+      M.starterLayoutAction('nope', true).places === false,
+    JSON.stringify({ layouts, idle, clicked }))
+}
+
+{
+  const hints = M.EMPTY_CANVAS_GESTURES.map((row) => row.text).join('|')
+  ok('rd-empty.hints.1 the empty canvas says space-drag to pan and command-scroll to zoom, and the ghost target names a double-click',
+    hints === 'Space + drag to pan|⌘ + scroll to zoom' && M.GHOST_TARGET === 'Double-click to place a terminal',
+    hints)
+}
+
+{
+  const named = M.blankCanvasTitle('steward')
+  const unnamed = M.blankCanvasTitle('  ')
+  const emptyVerb = M.blankTaskVerb('')
+  const readyVerb = M.blankTaskVerb('Explain the deploy')
+  ok('rd-empty.title.1 the title names the workspace when there is one, the purpose is one sentence, and an empty task cannot start',
+    named === 'A blank canvas for steward' && unnamed === 'A blank canvas' &&
+      M.BLANK_CANVAS_PURPOSE === 'Describe a task and an agent will take it from here — or start something smaller.' &&
+      M.repoChipLabel('') === 'no repository chosen' && M.repoChipLabel('steward') === 'steward' &&
+      emptyVerb.enabled === false && emptyVerb.label === 'Start task' && emptyVerb.reason === 'Describe the task first' &&
+      readyVerb.enabled === true && readyVerb.reason === undefined,
+    JSON.stringify({ named, unnamed, emptyVerb, readyVerb }))
+}
+
+{
+  const emptySrc = readFileSync(join(ROOT, 'src', 'renderer', 'shell', 'EmptyState.tsx'), 'utf8')
+  const states = readFileSync(join(ROOT, 'src', 'shared', 'empty-states.ts'), 'utf8')
+  ok('rd-empty.verb.1 the minimap sentence is Nothing placed yet and the blank canvas reads it by name; quick spawns are buttons, not a pty',
+    /id: 'minimap', sentence: 'Nothing placed yet'/.test(states) && emptySrc.includes("emptyState('minimap')") &&
+      /Claude Code/.test(emptySrc) && /Import a layout/.test(emptySrc) &&
+      !/child_process|pty:create|\bspawn\s*\(/.test(emptySrc),
+    'minimap sentence rendered from emptyState')
 }
 
 {

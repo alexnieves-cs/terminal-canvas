@@ -12,6 +12,7 @@ import {
   type GhostRect, type RestoreFacts
 } from './splash'
 import { Onboarding, type OnboardingProps } from '../onboarding/Onboarding'
+import { BlankCanvas } from '../shell/EmptyState'
 
 /* The startup splash: one <canvas>, one rAF loop, gone in under three seconds.
 
@@ -309,7 +310,8 @@ export function RestoreSplash({ facts, rects, onDone, onSkip }: {
    keys; an unknown scene returns false rather than painting a stand-in. */
 const rdScenes: Record<string, (fixture: RdFixture) => JSX.Element> = {
   splash: (fixture) => <RestoreSplash facts={fixture.facts ?? {}} rects={fixture.rects} />,
-  onboarding: (fixture) => <Onboarding {...(fixture.onboard ?? {})} />
+  onboarding: (fixture) => <Onboarding {...(fixture.onboard ?? {})} />,
+  empty: (fixture) => <BlankCanvas workspace={fixture.empty?.workspace ?? ''} repo={fixture.empty?.repo} />
 }
 
 let shotRoot: Root | null = null
@@ -318,6 +320,7 @@ export interface RdFixture {
   facts?: RestoreFacts
   rects?: GhostRect[]
   onboard?: OnboardingProps
+  empty?: { workspace: string; repo?: string | null }
 }
 
 export function mountRdScene(scene: string, fixture: RdFixture): boolean {

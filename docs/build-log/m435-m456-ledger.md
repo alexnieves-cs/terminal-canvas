@@ -275,3 +275,18 @@ Watched red: esbuild of `import { readyLabel } from onboarding.ts` exited 1, `No
 | `npm run verify:onboarding` | 23/23 pass |
 | `npm run verify:rail` | 266/266 pass (`state.2`, `hints.1`, `empty.2`) |
 | `shot` / Electron | not run. The scripts still call `Electron.app/Contents/MacOS/Electron`. `rd-onboarding` now has `run`, so `visual.1` will also list that golden as missing. `UPDATE_GOLDENS` was not set. |
+
+## M441 · Empty canvas
+
+`BlankCanvas` in `EmptyState.tsx`. The title is `A blank canvas for <workspace>`, or `A blank canvas` when the name is empty. The purpose sentence is the mockup's. The task field's verb is `Start task`, disabled with `Describe the task first` until there is a sentence. The repo chip is the name, or `no repository chosen`. Quick spawns are buttons labelled Claude Code, Shell and Import a layout…; the chords come from `shortcutById` (`⌘N`, `⌘T`). They call back and do not spawn. `STARTER_LAYOUTS` is a separate list from `LINEUPS` (`lineup.1` still sees solo, pair, workbench, swarm). `starterLayoutAction` places nothing until `clicked` is true. `EMPTY_CANVAS_GESTURES` is separate from `HINTS` (`hints.1` ids are unchanged). The ghost line is `Double-click to place a terminal`. The minimap sentence is `emptyState('minimap')` — `Nothing placed yet` — rendered in `BlankCanvas`. L-B's overlay does not read it yet (R-020). Canvas's double-click still places a process step (R-022). `Launcher.tsx` was not edited, so `onboarding.markup.*` still reads the same buttons.
+
+### Checks
+
+Watched red: `verify:rd-l-a` exited 1 with `ReferenceError: blankCanvasTitle is not defined` before the functions existed.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 15/15 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:rail` | 266/266 pass. `empty.2` sees the minimap id rendered. `hints.1` ids unchanged. |

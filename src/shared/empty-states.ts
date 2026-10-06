@@ -49,11 +49,29 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'orch-task', sentence: 'no task is in progress or in review — start work from the board', verb: 'Show Canvas' },
   { id: 'orch-activity', sentence: `${NO_RECENT_EVENTS} \u2014 this feed is this run\u2019s; the durable record is the workbench\u2019s Timeline tab. Live is working panels plus the recent window; Historical is this session` },
   { id: 'orch-terminal', sentence: 'no recorded logs yet — select a panel to read its scrollback or last chat turn', verb: 'Show Canvas' },
-  { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' }
+  { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' },
+  /** M441. The minimap when the canvas has nothing on it. L-B's overlay reads the same sentence (R-020). */
+  { id: 'minimap', sentence: 'Nothing placed yet' }
 ]
 
 export function emptyState(id: string): EmptyState {
   const found = EMPTY_STATES.find((e) => e.id === id)
   if (found === undefined) throw new Error(`no empty state named ${id}`)
   return found
+}
+
+/** M441. The empty canvas's title. An unnamed workspace does not invent a name. */
+export function blankCanvasTitle(workspace: string): string {
+  const name = workspace.trim()
+  return name === '' ? 'A blank canvas' : `A blank canvas for ${name}`
+}
+
+export const BLANK_CANVAS_PURPOSE = 'Describe a task and an agent will take it from here — or start something smaller.'
+
+export const GHOST_TARGET = 'Double-click to place a terminal'
+
+/** The mono chip. An empty repository says so, rather than a blank or a zero. */
+export function repoChipLabel(repo: string | null | undefined): string {
+  const name = (repo ?? '').trim()
+  return name === '' ? 'no repository chosen' : name
 }

@@ -46,5 +46,14 @@ module.exports = [
       await k.shot('rd-onboarding')
     }
   },
-  { name: 'rd-empty', reference: ['docs/redesign/mockups/03-empty-state.png'], intent: 'The empty canvas: one primary verb, quick spawns, three inert starter layouts.' },
+  { name: 'rd-empty', reference: ['docs/redesign/mockups/03-empty-state.png'], intent: 'The empty canvas: one primary verb, quick spawns, three inert starter layouts.',
+    size: [1600, 1000],
+    run: async (k) => {
+      await k.theme('dark')
+      const fixture = { empty: { workspace: 'steward', repo: 'steward' } }
+      const ok = await k.js(`Boolean(window.__rdLA && window.__rdLA.mount('empty', ${JSON.stringify(fixture)}))`)
+      if (ok !== true) throw new Error('rd-empty: window.__rdLA.mount is absent (StartupSplash registers it)')
+      await k.shot('rd-empty')
+    }
+  },
 ]
