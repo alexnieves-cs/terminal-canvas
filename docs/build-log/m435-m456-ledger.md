@@ -205,3 +205,29 @@ Tag `rd-foundations` is on `7af404f1` (the F3 merge). `ownership.json` now lists
 R-011 stays open. L-C owns `useViewport` and its brief is the tier flights; the request says the retarget happens when that lane rebinds. `shortcuts.ts` was not edited.
 
 The rest of the open list is closed on this branch: D1 in the material bullet, high-contrast dark glass, the two terminal cursors, the dock's spoken count (the queue, with snooze and team asks only when that queue is empty), `subscribeLiveSessions`, `shouldIgnoreKeys` and the palette's ⌘K yielding under the focus lock, the center-view enum, Sessions and Review mounted from Canvas, `dock.dup.1` measuring the View menu row, `TC_FIXTURE=rd-steward` shared by dev and shot, and the palette title `Show Orchestrate`. Canvas still passes `attentionCount` into `pillRestState` until L-C.
+
+## M446 · L-E Settings › Keyboard
+
+Branch `rd/l-e-keyboard`. Screen 08. Decisions D4 and D5. `shortcuts.ts` stays frozen.
+
+### Plan
+
+PLAN CHECK, before any edit under `src/`:
+
+- `shortcut-overrides.ts` is pure and is checked before the Settings UI. `shortcuts.ts` is not edited. The merge, the canvas-scope ⌘ rule, duplicate detection within a scope, and the `tidy-alias` chord (⌘⌥T) live in that module. `matchEffective` and `acceleratorFor` are the same merge: one for a key event, one for the menu string. With an empty override list, `acceleratorFor` is `electronAccelerator`, so tidy-alias stays `CmdOrCtrl+Alt+T`.
+- Rendered rows come from `keyboardSections`, which walks `SHORTCUTS`. `rd-keys.settings.1` compares that walk to the registry (every id, registry labels, group order of the non-alias rows). `KeyboardPane.tsx` maps the function; it does not carry a second list of labels or group ids.
+- R-010 is done on this branch (`shell.centerView` is `canvas | orchestration | sessions | review`). It is not in this change.
+
+Then the page. `keyboard.overrides` is a list setting (tab-separated `id` + chord) because `SettingValue` has no record and `parsePreferences` already checks a list of strings. The Keyboard page hosts the registry. The other six nav pages are thin hosts over the schema rows in their categories, each with a purpose sentence. The "Open Settings" verb is `OPEN_SETTINGS_ROW` in `palette-actions/settings.ts`; the command list and the dock callback are other lanes (R-017). The menu rebuild on `settings:changed` already exists; the accelerator it paints still comes from the frozen registry (R-016).
+
+Shot: `rd-settings-keys` records Step in, reference 08. A `run` makes `verify:meta` `visual.1` list a missing golden. That red is expected until Phase 4. `UPDATE_GOLDENS` is not set.
+
+### What landed
+
+`shortcut-overrides.ts` merges a list of `id<TAB>chord` over `SHORTCUTS`. Canvas scope without ⌘ is refused by the shortcut's name. A duplicate inside one scope is refused and names the other row; nothing is returned to store. `tidy-alias` stays ⌘⌥T until that id is overridden, and moving Tidy onto ⌘⌥T clashes with the alias. Putting a chord back to the registry value drops the override. `acceleratorFor([])` is `electronAccelerator`, so the seven historical menu strings stay byte-for-byte. `matchEffective([])` agrees with `matchShortcut`. The frozen parser only knows the registry's keys, so a letter it has never seen (P, for one) is refused rather than stored as a chord nothing can match.
+
+`keyboard.overrides` is a list, default `[]`, not plan-writable. The Keyboard page maps `keyboardSections`. The other six pages host the schema rows for their categories and each says what it is for. List settings stay off those pages. The page mounts from a second root installed when `palette-actions/settings.ts` loads, because Canvas is not this lane's file. `OPEN_SETTINGS_ROW` calls `openSettingsPage`. The dock and the command list do not, yet (R-017). The menu still paints `electronAccelerator` (R-016).
+
+The shot records Step in (`⌘↵`), not the mockup's combined "Step into / out of panel". Those are two registry rows, and `rd-keys.settings.1` forbids folding them by hand. Aliases fold onto their target: Tidy's note is "was ⌘⌥T · kept for one release".
+
+Checks were 1/15 (only `rd-l-e.0`) before the modules existed. `shortcuts.ts` was not edited. R-010 was already done and was not repeated.
