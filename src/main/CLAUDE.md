@@ -1,8 +1,5 @@
 # src/main — the composition root
 
-(Moved from the root CLAUDE.md; loads when working under this directory.)
-
-
 **`main/index.ts` is a COMPOSITION ROOT, and `main/bootstrap/` is the wiring it composes.**
 `index.ts` keeps the single-instance lock, the `open-url` door, the `whenReady` sequence, the
 one `registerIpcHandlers` call and the quit sequence — the ORDER, which is the load-bearing

@@ -32,8 +32,8 @@ just be a second copy to forget to update.
 What's actually specific to running as Codex in this repo:
 
 - **Never push to `origin`, never create a remote object, never modify anything outside this
-  repository.** The user's answers to this run's setup make those the fixed boundary — this
-  is a Codex sandbox constraint, not a rule CLAUDE.md states for "any engineer."
+  repository.** This is a Codex sandbox constraint, not a rule CLAUDE.md states for "any
+  engineer."
 - **Minimal changes.** Targeted fixes over comprehensive rewrites; no unrelated cleanup. The
   repository answers questions about itself; read its docs before searching the web.
 

@@ -84,7 +84,7 @@ branch's changes reach — derived from each suite's script, entries and `src`'s
 changed file no suite reads printed as UNMAPPED — and says on every run that it is not the
 gate; `--list` shows the selection without running it.
 
-Outside the chain, all real Electron: `npm run shot` (23 PNGs of the real renderer for a
+Outside the chain, all real Electron: `npm run shot` (a PNG per scene of the real renderer for a
 fresh-context critic), `verify:visual` (those scenes against committed goldens;
 `UPDATE_GOLDENS=1` only after LOOKING), `verify:packaged` (a pre-release gate).
 
@@ -252,8 +252,8 @@ Ledger: [docs/build-log/m435-m456-ledger.md](docs/build-log/m435-m456-ledger.md)
 
 - You are in ONE lane. Your lane id is `$RD_LANE`; your brief is `docs/redesign/lanes/$RD_LANE.md`; the files you may edit are `docs/redesign/ownership.json` for that lane. A hook enforces this.
 - Foundations are frozen at tag `rd-foundations`: `src/shared/state-palette.ts`, `attention-queue.ts`, `world-space.ts`, `shortcuts.ts`, `redesign-contracts.ts`, `canvas/zoom-tier.ts`, `canvas/task-regions.ts`. The list moves into `ownership.json`'s `frozen` array when that tag is cut. Need a change? Append to `docs/redesign/requests.md` and stop; do not edit them.
-- State colour comes ONLY from the Tone in `panels/panel-state.ts`, drawn through `[data-tone]` and (once F1 lands it) `state-palette.ts`. Never write a state hex or a state word anywhere else (`verify:rail` `state.2`, `rd-tone.*`).
+- State colour comes ONLY from the Tone in `panels/panel-state.ts`, drawn through `[data-tone]` and `state-palette.ts`. Never write a state hex or a state word anywhere else (`verify:rail` `state.2`, `rd-tone.*`).
 - Write CSS inside your pre-cut seam only: `styles.css` `/* ── rd:<lane> ── */` blocks. F1 also owns the token blocks. Shot scenes live in `scripts/shot-scenes/rd-<lane>.cjs`. Checks live in `scripts/verify-rd-<lane>.cjs` (the npm key is the lane id lowercased).
-- Electron-tier verification ALWAYS through `scripts/redesign/with-electron-lock.sh`.
+- Run Electron-tier verification through `scripts/redesign/with-electron-lock.sh`: two worktrees running Electron suites at once corrupt each other's results.
 - Never run `UPDATE_GOLDENS=1`. Goldens are written by the lead after a person has looked.
 - Before editing a module: `npm run lb -- <module>` (or ask the lb-scout subagent).

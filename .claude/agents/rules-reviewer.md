@@ -22,4 +22,4 @@ Review `git diff origin/redesign/main...HEAD` (or the wave base if `redesign/mai
 - Files outside docs/redesign/ownership.json for this `RD_LANE`, including CSS written outside the lane's `rd:<lane>` markers.
 - D1–D8 followed, not re-decided.
 
-Output: BLOCKERS, SHOULD-FIX, NITS. No praise.
+Output: BLOCKERS, SHOULD-FIX, NITS — findings only.
