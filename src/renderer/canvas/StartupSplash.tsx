@@ -11,6 +11,7 @@ import {
   ghostLayout, restoreLines, splashShouldLeave, RESTORE_SKIP_HINT, RESTORE_TAGLINE,
   type GhostRect, type RestoreFacts
 } from './splash'
+import { Onboarding, type OnboardingProps } from '../onboarding/Onboarding'
 
 /* The startup splash: one <canvas>, one rAF loop, gone in under three seconds.
 
@@ -306,13 +307,20 @@ export function RestoreSplash({ facts, rects, onDone, onSkip }: {
 /* The shot door. Canvas already imports this module, so the three screens
    can paint before Canvas itself mounts them (R-019). Later milestones add
    keys; an unknown scene returns false rather than painting a stand-in. */
-const rdScenes: Record<string, (fixture: { facts?: RestoreFacts; rects?: GhostRect[] }) => JSX.Element> = {
-  splash: (fixture) => <RestoreSplash facts={fixture.facts ?? {}} rects={fixture.rects} />
+const rdScenes: Record<string, (fixture: RdFixture) => JSX.Element> = {
+  splash: (fixture) => <RestoreSplash facts={fixture.facts ?? {}} rects={fixture.rects} />,
+  onboarding: (fixture) => <Onboarding {...(fixture.onboard ?? {})} />
 }
 
 let shotRoot: Root | null = null
 
-export function mountRdScene(scene: string, fixture: { facts?: RestoreFacts; rects?: GhostRect[] }): boolean {
+export interface RdFixture {
+  facts?: RestoreFacts
+  rects?: GhostRect[]
+  onboard?: OnboardingProps
+}
+
+export function mountRdScene(scene: string, fixture: RdFixture): boolean {
   const render = rdScenes[scene]
   if (render === undefined || typeof document === 'undefined') return false
   let host = document.getElementById('rd-la-shot')

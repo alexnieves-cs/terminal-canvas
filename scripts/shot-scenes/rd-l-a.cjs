@@ -25,6 +25,26 @@ module.exports = [
       await k.shot('rd-splash')
     }
   },
-  { name: 'rd-onboarding', reference: ['docs/redesign/mockups/02-onboarding.png'], intent: 'Onboarding step 2, one agent found and one missing, with the state-colour preview.' },
+  { name: 'rd-onboarding', reference: ['docs/redesign/mockups/02-onboarding.png'], intent: 'Onboarding step 2, codex found and gemini missing, with the state-colour preview.',
+    size: [1600, 1000],
+    run: async (k) => {
+      await k.theme('dark')
+      const fixture = {
+        onboard: {
+          initialStep: 'agents',
+          workspaceName: 'steward',
+          probes: [
+            { id: 'claude', path: '/opt/homebrew/bin/claude', version: '2.1.19' },
+            { id: 'codex', path: '/opt/homebrew/bin/codex', version: '0.98.0' },
+            { id: 'gemini', path: null, timedOut: false }
+          ],
+          enabled: ['claude', 'codex']
+        }
+      }
+      const ok = await k.js(`Boolean(window.__rdLA && window.__rdLA.mount('onboarding', ${JSON.stringify(fixture)}))`)
+      if (ok !== true) throw new Error('rd-onboarding: window.__rdLA.mount is absent (StartupSplash registers it)')
+      await k.shot('rd-onboarding')
+    }
+  },
   { name: 'rd-empty', reference: ['docs/redesign/mockups/03-empty-state.png'], intent: 'The empty canvas: one primary verb, quick spawns, three inert starter layouts.' },
 ]

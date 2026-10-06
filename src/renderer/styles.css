@@ -11598,6 +11598,77 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   .rd-splash__mark { animation: none; }
 }
 
+.rd-onboard {
+  position: fixed; inset: 0; z-index: 70;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--s-0) 72%, transparent);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.rd-onboard__card {
+  width: min(960px, calc(100% - var(--sp-8)));
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--s-0) 55%, transparent);
+}
+.rd-onboard__main { display: flex; flex-direction: column; min-width: 0; padding: var(--sp-6); }
+.rd-onboard__brand { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--t-sm); font-weight: 600; }
+.rd-onboard__body { display: grid; grid-template-columns: 140px 1fr; gap: var(--sp-6); margin-top: var(--sp-5); }
+.rd-onboard__rail { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.rd-onboard__rail li { display: flex; align-items: center; gap: var(--sp-4); color: var(--fg-4); font-size: var(--t-sm); }
+.rd-onboard__rail li[data-current="true"] { color: var(--fg); }
+.rd-onboard__rail-index {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono); font-size: var(--t-sm);
+}
+.rd-onboard__rail li[data-current="true"] .rd-onboard__rail-index { border-color: var(--iris); color: var(--iris); }
+.rd-onboard__count { margin: 0; color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__title { margin: var(--sp-4) 0; font-size: var(--t-lg); font-weight: 600; letter-spacing: -.01em; }
+.rd-onboard__lead { margin: 0 0 var(--sp-5); color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.rd-onboard__rows li { display: flex; justify-content: space-between; gap: var(--sp-4); align-items: center; }
+.rd-onboard__agent { display: block; font-size: var(--t-md); }
+.rd-onboard__status { display: block; color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__mono { display: block; font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3); }
+.rd-onboard__rows button, .rd-onboard__custom {
+  background: transparent; color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: var(--sp-2) var(--sp-4); font: inherit; cursor: pointer;
+}
+.rd-onboard__custom { margin-top: var(--sp-4); }
+.rd-onboard__ready { margin: var(--sp-4) 0 0; font-size: var(--t-sm); }
+.rd-onboard__field { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--t-sm); }
+.rd-onboard__field input {
+  font: inherit; font-family: var(--font-ui); color: var(--fg); background: var(--s-0);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4);
+}
+.rd-onboard__foot {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
+  margin-top: var(--sp-6); color: var(--fg-3); font-size: var(--t-sm);
+}
+.rd-onboard__foot p { margin: 0; max-width: 42ch; }
+.rd-onboard__continue {
+  background: var(--iris); color: var(--on-iris); border: 0; border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-5); font: inherit; font-weight: 600; cursor: pointer;
+}
+.rd-onboard__continue:disabled { background: var(--s-3); color: var(--fg-4); cursor: default; }
+.rd-onboard__preview {
+  padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4);
+  border-left: 1px solid var(--line); background: var(--s-0);
+}
+.rd-onboard__frame {
+  border: 1px solid var(--tone, var(--line)); border-radius: var(--r-lg);
+  padding: var(--sp-4); background: var(--s-1); min-height: 72px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: var(--sp-2);
+}
+.rd-onboard__frame-kicker { color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__frame-word { font-size: var(--t-md); }
+.rd-onboard__caption { margin: 0; color: var(--fg-3); font-size: var(--t-sm); }
+
 /* ── /rd:L-A ── */
 
 /* ── rd:L-B ── */

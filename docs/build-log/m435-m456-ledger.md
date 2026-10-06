@@ -254,3 +254,24 @@ Linux, Node v22. Electron's Linux binary is present under `node_modules/electron
 - The channel is a send, not the invoke the kickoff's "main handler" sentence describes. Direction is main→renderer. An invoke would edit files outside the lane.
 - `tmux-probe.ts` and `resume-summary.ts` are unchanged.
 - The shot scene has `run`. `visual.1` lists `rd-splash` as missing a golden. That red stays until the lead writes it.
+
+## M440 · Onboarding
+
+Four steps on `ONBOARDING_RAIL`: Workspace, Agents, Sessions, First task. Step 2's title is `Which agents live on your canvas?`. A row is `found` only with a path. A null path that answered is `not installed` and offers the install string. A timeout is `discovery did not answer`, and `sessionsPersistence(undefined)` does not say tmux is installed. Plain shell is locked on and is not in the ready count. `readyLabel(0)` is `Turn one on to continue`. The footer is the mockup's sentence. `FIRST_TASK_HANDOFF` is `{ sheet: 'start-work', spawns: false }`. `presetsFromEnabledAgents` makes the first enabled id the ⌘N default and leaves `shell` when none are on. Gemini's preset has no `agent` field. `discoverBinary` takes `which` and `versionOf`; it does not import `child_process`.
+
+`Onboarding.tsx` is the card. Copy calls `installCommand` and `clipboard.writeText`. The preview frames take their word and `data-tone` from `panelState`. Nothing in `src/renderer/onboarding/` spawns.
+
+The shot fixture is the mockup's frozen probe (claude and codex found at the paths and versions drawn on `02-onboarding.png`, gemini missing), not a measurement of this machine.
+
+### Checks
+
+Watched red: esbuild of `import { readyLabel } from onboarding.ts` exited 1, `No matching export`. A bare `export { missing }` in the suite entry was tree-shaken without that error, so the entry also assigns `keep`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 11/11 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rail` | 266/266 pass (`state.2`, `hints.1`, `empty.2`) |
+| `shot` / Electron | not run. The scripts still call `Electron.app/Contents/MacOS/Electron`. `rd-onboarding` now has `run`, so `visual.1` will also list that golden as missing. `UPDATE_GOLDENS` was not set. |
