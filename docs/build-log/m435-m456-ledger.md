@@ -118,7 +118,7 @@ After the merge, `verify:rail` `board.1` still expected a done work item to be t
 
 ### Deviations
 
-- Product-rules sentence, `board.1`, high-contrast glass and the terminal cursor are requests R-001–R-004. Those files are not F1's.
+- Product-rules sentence, high-contrast glass and the terminal cursor are requests R-001, R-003 and R-004. Those files are not F1's. R-002 is closed: `board.1` expects the done tone.
 - `--fg-4` is not the concept's `#5B6375`. `--fg-2` exists because check 11 still measures it.
 - `--violet` is not `--external`.
 - `--well` and the world tokens did not move.
