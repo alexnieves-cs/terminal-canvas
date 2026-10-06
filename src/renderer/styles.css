@@ -11551,7 +11551,214 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:L-C ── */
 
 /* ── rd:L-D ── */
-
+/* F3's bar is one row. This page adds the spend and the primary, so the
+   same class wraps. Later rule, same specificity. */
+.sessions-host__bar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.sessions-host__title { font-size: var(--t-lg); letter-spacing: -0.01em; }
+.sessions-host__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+}
+.sessions-spend {
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-sm);
+}
+.sessions-new {
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--blue);
+  color: var(--on-iris);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  padding: var(--sp-2) var(--sp-4);
+  cursor: pointer;
+}
+.sessions-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.sessions-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.sessions-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-5) var(--sp-3);
+}
+.sessions-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--t-sm);
+}
+.sessions-tool select,
+.sessions-move,
+.sessions-reply input,
+.sessions-card button,
+.sessions-detail button,
+.sessions-bulk button {
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  color: var(--fg);
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-3);
+}
+.sessions-tool select:disabled,
+.sessions-move:disabled,
+.sessions-bulk button:disabled,
+.sessions-detail button:disabled,
+.sessions-reply button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.sessions-cards {
+  display: flex;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-5) var(--sp-4);
+  overflow-x: auto;
+}
+.sessions-card {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 360px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--tone-dim);
+  padding: var(--sp-3) var(--sp-4);
+}
+.sessions-card__sentence { margin: 0 0 var(--sp-2); color: var(--fg); }
+.sessions-card__name { margin: 0 0 var(--sp-3); color: var(--fg-2); font-size: var(--t-xs); }
+.sessions-card__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.sessions-table-wrap { padding: 0 var(--sp-5) var(--sp-5); }
+.sessions-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.sessions-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.sessions-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.sessions-table tr[data-selected] { background: color-mix(in srgb, var(--state-select) 16%, transparent); }
+.sessions-table tr[data-open] { box-shadow: inset 2px 0 0 var(--blue); }
+.sessions-group td {
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+.sessions-check-col {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+.sessions-name {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.sessions-path,
+.sessions-line,
+.sessions-tail {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.sessions-line {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sessions-state {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-full);
+  background: var(--tone-dim);
+  color: var(--tone);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  padding: 1px var(--sp-2);
+}
+.sessions-cost { font-variant-numeric: tabular-nums; }
+.sessions-empty { margin: var(--sp-5); color: var(--fg-2); }
+.sessions-bulk {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.sessions-detail {
+  width: 360px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  padding: var(--sp-4);
+  border-left: 1px solid var(--line);
+  background: var(--s-1);
+  overflow: auto;
+}
+.sessions-detail__name { margin: 0; font-size: var(--t-md); }
+.sessions-detail__meta,
+.sessions-detail__cost,
+.sessions-reply__reason { margin: 0; color: var(--fg-2); font-size: var(--t-xs); }
+.sessions-tail {
+  flex: 1;
+  min-height: 120px;
+  margin: 0;
+  padding: var(--sp-3);
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--bg);
+  border-radius: var(--r-sm);
+  color: var(--fg);
+}
+.sessions-reply { display: flex; flex-direction: column; gap: var(--sp-2); }
+.sessions-reply__label { font-size: var(--t-xs); color: var(--fg-2); }
+.sessions-facts { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-1) var(--sp-3); margin: 0; font-size: var(--t-xs); }
+.sessions-facts dt { color: var(--muted); }
+.sessions-facts dd { margin: 0; }
+.sessions-detail__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.sessions-show { align-self: flex-start; }
 /* ── /rd:L-D ── */
 
 /* ── rd:L-E ── */

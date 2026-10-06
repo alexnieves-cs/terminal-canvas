@@ -205,3 +205,59 @@ Tag `rd-foundations` is on `7af404f1` (the F3 merge). `ownership.json` now lists
 R-011 stays open. L-C owns `useViewport` and its brief is the tier flights; the request says the retarget happens when that lane rebinds. `shortcuts.ts` was not edited.
 
 The rest of the open list is closed on this branch: D1 in the material bullet, high-contrast dark glass, the two terminal cursors, the dock's spoken count (the queue, with snooze and team asks only when that queue is empty), `subscribeLiveSessions`, `shouldIgnoreKeys` and the palette's ⌘K yielding under the focus lock, the center-view enum, Sessions and Review mounted from Canvas, `dock.dup.1` measuring the View menu row, `TC_FIXTURE=rd-steward` shared by dev and shot, and the palette title `Show Orchestrate`. Canvas still passes `attentionCount` into `pillRestState` until L-C.
+
+## M445 · L-D Sessions
+
+Branch `rd/l-d-sessions`, cut from `redesign/main`. Screen 07. D3. The page is a peer of the canvas: it reads the same words and the same queue, and the actions it cannot perform are callbacks.
+
+### Plan
+
+The pure half is `sessions-model.ts`: the header, the task groups, the bulk bar, the card verbs, the reply box, the sparkline path. Checks in `scripts/verify-rd-l-d.cjs` call that module through esbuild, the same shape as `verify-rd-f2`. The view is new files under `src/renderer/sessions/`, mounted from F3's `SessionsHost`. CSS stays inside the `rd:L-D` markers. The shot is `rd-sessions` on `TC_FIXTURE=rd-steward`.
+
+PLAN CHECK:
+
+1. Product code is new under `src/renderer/sessions/`, including the host F3 left. No store is edited. Holds.
+2. The reply box's delivery is paste and Send is a button. Enter does not submit. A shell-prompt card has Open on canvas and Snooze 10m, and no field. Holds.
+3. `metrics.1` is amended by R-016, not by an edit to `scripts/verify-styles.cjs`. Holds.
+
+### What the page does
+
+- Header is `sessionsTitle`. A zero live count and a zero dormant count are dropped, so an empty canvas is "Sessions" and a dormant-only canvas does not say "0 live". Spend is `headerSpend` in its own span. It is a dollar amount with no "today". The title bar is untouched.
+- Group is Task. All states filters on the row's own word. "+ New session" is the one primary. Orchestrate stays the header link F3 added (`data-sessions-orchestrate`). ⌘⇧S is not bound again: `shortcuts.ts` has the chord and `useShellChrome` toggles the page.
+- Cards are `useAttentionQueue(useAttentionCensus())`, in that order, with `item.sentence`. Approval is Allow / Diff / Deny. A shell prompt is Open on canvas / Snooze 10m. A failure is Restart / Read log. Snooze is local (ten minutes) and hides that card. This file does not call `buildQueue`.
+- The table groups by the work item's single `panelId`. A panel named by two tasks is unassigned, in one trailing group. Columns are Session, Agent, Folder, Branch, State (`data-tone`), Activity, Run, Cost, Last line. The sparkline is an inline SVG. Its stroke is `STATE_PALETTE`, because a presentation attribute does not resolve `var()`. Recharts stays on the two shell charts. Last line and paths are mono. The state pill is `--tone`. Cost is `.sessions-cost`. There is no `data-machine-cost`.
+- The bulk bar is "N selected" plus Pause, Restart, Move to task…, End. Pause is off when every selected row is asleep, exited, done or none. End calls `endAsk` and then `confirmEnd`. If Canvas has not passed `confirmEnd`, End does not end. No `window.confirm`, no `pty.kill`.
+- Detail tails `scrollback.tail` and `pty.onData`. "Send to this session…" is disabled, with its reason, for a shell and for an agent this page cannot paste into. A chat with no `onSend` uses `agentSession.send`. A terminal paste waits for R-017. Facts (Started, Survives "reload and quit (tmux)", Tokens, Changes) render only when the reader has them. Show on canvas calls `onShowOnCanvas`.
+
+### What this page cannot know yet
+
+`session-registry.ts` is a factory Canvas owns. There is no module-level reader, and this lane does not bump `registry.version()`. The live reader therefore reports every session as not dormant, `survives` and `startedAt` and `changes` as unknown, and a terminal's `canPaste` as false until `onSend` is passed. The header drops the dormant clause because the count is zero, which is what the rest rule says to do with the data in hand. R-017 asks Canvas to pass the registry facts and the verbs. R-018 asks the steward loader to stamp folder, engine and branch; until then the shot hands the cast through `tc-sessions-feed`. A malformed feed is ignored.
+
+The census `taskId` is null (CommandPill). Grouping uses work items. One member per task, plus a loose group, is what `layout.load` can say today.
+
+F3's `.sessions-host__bar` is a single row. The L-D span sets `justify-content` and `flex-wrap` on the same class, later in the file, so the spend and the primary fit. Recorded here because the override is outside F3's markers on purpose: L-D may not edit that span.
+
+Sample names and dollar amounts live in `scripts/fixtures/rd-steward/workspace.json` and in the shot's feed. They are not product copy.
+
+### Shot
+
+`rd-sessions` requires `TC_FIXTURE=rd-steward`, loads that layout, sends `agent:state` `wants-you` for three cast panels (the queue then says shell-prompt, because those panels are terminals and the inbox has no approval), dispatches `tc-sessions-feed` built from the fixture, selects `claude-ledger`, `vitest-ledger` and `codex-plaid`, and opens `claude-ledger`. The feed sets `canPaste` on agent rows so the open detail shows the send box. The live page does not. Giving the scene a `run` makes `verify:meta` `visual.1` list `rd-sessions` as a missing golden. That red is expected until the lead writes the golden. This lane does not set `UPDATE_GOLDENS` and does not write under `verify/visual/goldens/`.
+
+### Checks
+
+Linux, Node v22, `npm ci --ignore-scripts` (no Electron binary, no `pty.node`). The first `verify:rd-l-d` threw `MODULE_NOT_FOUND` for esbuild because `node_modules` was absent. That is recorded at the top of the suite. After install the suite is the checks below.
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass |
+| `npm run verify:rd-l-d` | 18/18 pass |
+| `npm run affected` | not yet this section |
+| Plain-node wave | not yet this section |
+| Electron tier, `shot`, `verify:visual` | not yet this section |
+
+### Deviations
+
+- Sentences are `panelState`'s words, via the queue and the reader. The mockup's prose is not a second vocabulary.
+- Attention cards on the steward shot are shell prompts. Approval and failure cards render when the queue says so. This fixture's census cannot say so: a terminal in `wants-you` is a shell prompt, and failure needs an exited status or `failed` on the census, which CommandPill does not set from `agent:state` alone.
+- The Changes panel (`engine: review`) is not a session row. The feed skips it.
+- The fixture's moment is not "7 live · 2 dormant". No row is asleep, so the dormant clause drops. Inventing two dormant rows would be a second cast.
