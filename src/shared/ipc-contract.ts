@@ -1014,11 +1014,12 @@ export const IPC = {
   /** Asks main to rebuild the world feed and say every agent's status again; answers the connection that results. Never rejects. */
   WORLD_RETRY: 'world:retry'
   /**
-   * M435. Reserved channel NAMES, not channels. A key in this object would
-   * need a main handler (verify:ipc) and a line in CLAUDE.md's diagram
-   * (claude-md.1) in the same change, so Phase 0 only writes the names down.
-   * Lanes add the real key beside this comment when they implement it:
-   *   boot:progress — L-A, restore lines, main → renderer.
+   * M439. `boot:progress` is a send (main → renderer), so it lives on
+   * IPC_EVENTS rather than here. An invoke would need an ipcMain.handle
+   * and a new verify:ipc count, and the direction would be wrong: the
+   * renderer does not ask, main tells it how far restore has got.
+   * `FILE_CHANGED` is the same boundary. The sender is
+   * `publishBootProgress` in `bootstrap/boot-progress.ts`.
    */
 } as const
 
@@ -1091,6 +1092,18 @@ export type PoolEvent =
   | { kind: 'refused'; why: string }
   | { kind: 'stopped'; why: 'empty' | 'budget' | 'by-hand' }
 export interface PoolCallerEvent { templateId: string; key: string; event: PoolEvent }
+
+/** M439. One measured restore step. Absent fields have not been measured. */
+export interface BootProgressEvent {
+  step: 'workspace' | 'layout' | 'tmux' | 'agents'
+  workspace?: { name: string; path: string }
+  layout?: { tasks: number; objects: number }
+  tmux?: { done: number; total: number }
+  agentsPlanned?: readonly string[]
+  agentsFound?: readonly string[]
+  failed?: { step: 'workspace' | 'layout' | 'tmux' | 'agents'; sentence: string }
+  optionHeld?: boolean
+}
 
 export const IPC_EVENTS = {
   PTY_DATA: 'pty:data',
@@ -1298,7 +1311,15 @@ export const IPC_EVENTS = {
   /** M138. Main asks the renderer to mint one pool worker; the reply channel rides in the envelope. */
   POOL_MINT: 'pool:mint',
   /** M138. A pool event, addressed by template and block. */
-  POOL_EVENT: 'pool:event'
+  POOL_EVENT: 'pool:event',
+  /**
+   * M439. Restore progress. Main → renderer, one event per measured step.
+   * Not an invoke: the renderer cannot ask main how far a boot has got
+   * any earlier than main already knows, and a poll would show a spinner
+   * for a fact that had not changed. A failed step carries its sentence;
+   * the splash stops, and the 09 surface is the reader of that sentence.
+   */
+  BOOT_PROGRESS: 'boot:progress'
 } as const
 
 export interface FileReadRequest {
@@ -2482,6 +2503,14 @@ export interface CanvasBridge {
   appVersion: string
   /** M407 follow-up. A FIELD: the preload's `os.homedir()`, the folder `~` expands to (terminal names fold it). */
   home: string
+  /**
+   * M439. Optional until the preload subscribes (R-018). Absent means the
+   * renderer has not been told about restore yet, which the splash says
+   * in words rather than as a count.
+   */
+  boot?: {
+    onProgress(listener: (event: BootProgressEvent) => void): () => void
+  }
 }
 
 // ---- the pty relay (main/relay/relay-client.ts) --------------------------------

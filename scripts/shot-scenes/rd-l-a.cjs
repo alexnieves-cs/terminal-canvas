@@ -1,9 +1,30 @@
-/* Planned redesign scenes for lane L-A.
-   No `run` yet: scripts/shot.cjs paints a scene only once the lane supplies
-   one, so verify:meta visual.1 does not demand a golden for this seam.
-   reference paths are repo paths (critic.reference.1). */
+/* Redesign scenes for lane L-A. A scene paints only once it has `run`.
+   visual.1 then lists it as missing a golden until the lead writes one.
+   Never set UPDATE_GOLDENS. reference paths are repo paths (critic.reference.1). */
 module.exports = [
-  { name: 'rd-splash', reference: ['docs/redesign/mockups/01-splash.png'], intent: 'Launch restore frozen at reattaching tmux 3 of 5, over the ghosted layout.' },
+  { name: 'rd-splash', reference: ['docs/redesign/mockups/01-splash.png'], intent: 'Launch restore frozen at reattaching tmux 3 of 5, over the ghosted layout.',
+    size: [1600, 1000],
+    run: async (k) => {
+      await k.theme('dark')
+      const fixture = {
+        facts: {
+          workspace: { name: 'steward', path: '~/code/steward' },
+          layout: { tasks: 2, objects: 9 },
+          tmux: { done: 3, total: 5 },
+          agentsPlanned: ['claude', 'codex']
+        },
+        rects: [
+          { x: 40, y: 80, w: 280, h: 160 },
+          { x: 360, y: 60, w: 300, h: 180 },
+          { x: 80, y: 280, w: 240, h: 140 },
+          { x: 400, y: 300, w: 260, h: 150 }
+        ]
+      }
+      const ok = await k.js(`Boolean(window.__rdLA && window.__rdLA.mount('splash', ${JSON.stringify(fixture)}))`)
+      if (ok !== true) throw new Error('rd-splash: window.__rdLA.mount is absent (StartupSplash registers it)')
+      await k.shot('rd-splash')
+    }
+  },
   { name: 'rd-onboarding', reference: ['docs/redesign/mockups/02-onboarding.png'], intent: 'Onboarding step 2, one agent found and one missing, with the state-colour preview.' },
   { name: 'rd-empty', reference: ['docs/redesign/mockups/03-empty-state.png'], intent: 'The empty canvas: one primary verb, quick spawns, three inert starter layouts.' },
 ]

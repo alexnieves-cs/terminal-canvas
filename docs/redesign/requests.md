@@ -143,3 +143,52 @@ from: centerViewNow === 'focus'
 - Smallest change: rename the row's visible title to `Show Orchestrate`. Leave the command id.
 - Status: done: the title is `Show Orchestrate`. The id stays `canvas.orchestration`.
 - Filed on the F3 branch as R-009.
+
+### R-016 · Name `boot:progress` in the README architecture fence
+- Lane: L-A
+- File: `README.md` (the fence that contains `--invoke-->`)
+- Why the contract or the owner cannot absorb it: `boot:progress` is `IPC_EVENTS.BOOT_PROGRESS`, a main→renderer send. `verify:meta` 14 reads every `IPC` and `IPC_EVENTS` channel string and requires it inside that fence. L-A owns `ipc-contract.ts` and `CLAUDE.md` for the channel edit, and not the README. `CLAUDE.md` already names the channel (`claude-md.1` is green).
+- Smallest change: on the `renderer <--send---` list, add `boot:progress` beside `pool:mint / pool:event`.
+- Status: open
+
+### R-017 · Publish restore progress from the composition root
+- Lane: L-A
+- File: `src/main/index.ts` (and the window bootstrap that owns the reattach loop)
+- Why the contract or the owner cannot absorb it: L-A may add `src/main/bootstrap/boot-progress.ts` and must leave the rest of `src/main/bootstrap/` and the composition root alone. `publishBootProgress` and `skipRemaining` are pure; nothing calls them yet, so the splash's four lines stay pending until a caller measures them.
+- Smallest change: call `publishBootProgress` when the workspace opens (name and path), when the layout restores (task count and object count), on each tmux reattach (`done` of `total`), and when the agent probe answers. When Option is held, call `skipRemaining` and bring the unfinished panes up asleep. Do not kill them.
+- Status: open
+
+### R-018 · Subscribe the renderer to `boot:progress`
+- Lane: L-A
+- File: `src/preload/index.ts`
+- Why the contract or the owner cannot absorb it: the preload is not in L-A's list. `CanvasBridge.boot.onProgress` is already optional on the contract, so typecheck stays green without this file. The splash cannot hear a live event until the bridge forwards `IPC_EVENTS.BOOT_PROGRESS`.
+- Smallest change: `ipcRenderer.on(IPC_EVENTS.BOOT_PROGRESS, …)` and expose `canvas.boot.onProgress(listener)` returning the unsubscribe.
+- Status: open
+
+### R-019 · Mount the three L-A screens from Canvas
+- Lane: L-A
+- File: `src/renderer/canvas/Canvas.tsx`
+- Why the contract or the owner cannot absorb it: Canvas is L-B's in this wave. The shot door is `window.__rdLA.mount` on `StartupSplash`, which Canvas already imports, so the scenes can paint before the product mounts them. The APEX splash stays off under the harness (`tc-splash=off`); the restore card is a second surface.
+- Smallest change: mount `RestoreSplash` while restore is unsettled, even when `splashMode` is `'none'`. On first run, show `Onboarding` without removing the `data-onboarding-*` attributes `verify:onboarding` reads off `Launcher`'s own render. After onboarding, an empty workspace shows `BlankCanvas`.
+- Status: open
+
+### R-020 · Minimap reads the empty sentence
+- Lane: L-A
+- File: `src/renderer/canvas/MinimapOverlay.tsx`
+- Why the contract or the owner cannot absorb it: L-B owns the overlay. The sentence `Nothing placed yet` is `emptyState('minimap')` in `empty-states.ts`. A second sentence in the overlay would drift from `empty.2`.
+- Smallest change: when the canvas has no panels, render `emptyState('minimap').sentence` and no numeric zero.
+- Status: open
+
+### R-021 · A failed restore is the 09 surface's sentence
+- Lane: L-A
+- File: L-F's 09 states (M447)
+- Why the contract or the owner cannot absorb it: the 09 screen is L-F. The splash already stops on a failed step and calls `noteBootIssue` through `noteRestoreFailure`. `shell/ReopenNotice.tsx` already reads that list. An error card inside the splash would be a second 09.
+- Smallest change: the 09 surface shows the boot-issue sentence when restore failed. Do not invent another error card in L-A.
+- Status: open
+
+### R-022 · Empty-canvas double-click still places a process step
+- Lane: L-A
+- File: `src/renderer/canvas/Canvas.tsx` (`onCanvasDoubleClick`)
+- Why the contract or the owner cannot absorb it: M388's double-click places a process step. The empty canvas copy, from the mockup, says "Double-click to place a terminal". L-A does not own Canvas, and retargeting the gesture would change a pinned behavior (`attemptOf` already refuses to teach ⌘N after that double-click).
+- Smallest change: when the canvas is empty, a double-click places a terminal, or the copy changes to name the process step. Leave the gesture as it is until the owner decides.
+- Status: open
