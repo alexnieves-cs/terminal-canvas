@@ -3,8 +3,8 @@
  *
  * `attention-queue.ts` is the pure list. This hook is how a surface gets it:
  * subscribed to the agent-state store (who is waiting, and every transition),
- * the live-session store (sampled; a canvas-wide listener is not exported
- * yet), and the decision inbox's permission list (`useApprovals` — the same
+ * the live-session store (`subscribeLiveSessions`), and the decision inbox's
+ * permission list (`useApprovals` — the same
  * requests the inbox builds from). The sentence is `panelState`'s word for
  * those facts, so the queue cannot grow a wording of its own.
  *
@@ -47,29 +47,21 @@ export interface AttentionCensus {
 
 let revision = 0
 
-type LiveSubscribe = (listener: () => void) => () => void
-
 /**
- * `live-session-store` notifies per panel and does not export a canvas-wide
- * listener. When it does (`subscribeLiveSessions`), this picks it up and the
- * queue moves on a cwd tick without waiting for an agent transition.
+ * Agent transitions and any panel's cwd or command. The command is also
+ * sampled into `liveKey` below, so a render that already happened still
+ * sees the new line.
  */
 function subscribe(onStoreChange: () => void): () => void {
-  const offAgent = onAgentTransition(() => {
+  const bump = (): void => {
     revision += 1
     onStoreChange()
-  })
-  // Present once live-session-store exports a canvas-wide listener. Until
-  // then the command is sampled when an agent transition or an approval
-  // already re-renders this hook (requests.md).
-  const subscribeLive = (liveSessionStore as { subscribeLiveSessions?: LiveSubscribe }).subscribeLiveSessions
-  const offLive = subscribeLive?.(() => {
-    revision += 1
-    onStoreChange()
-  })
+  }
+  const offAgent = onAgentTransition(bump)
+  const offLive = liveSessionStore.subscribeLiveSessions(bump)
   return () => {
     offAgent()
-    offLive?.()
+    offLive()
   }
 }
 

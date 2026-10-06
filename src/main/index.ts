@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { writeFileSync, chmodSync } from 'node:fs'
+import { writeFileSync, chmodSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { app } from 'electron'
 import { registerIpcHandlers } from './ipc'
 import { createBrowserHandlers } from './browser-read'
@@ -97,6 +98,16 @@ if (!hasInstanceLock) {
       'to run a second one deliberately.'
   )
   app.quit()
+}
+
+// R-014. A demo cast, not the person's canvas. createStores captures
+// userData at construction, so the throwaway directory is chosen first.
+// A packaged build ignores the switch: it has no fixture beside it, and
+// must not retarget the real store.
+if (process.env.TC_FIXTURE === 'rd-steward' && !app.isPackaged) {
+  const dir = mkdtempSync(join(tmpdir(), 'tc-rd-steward-'))
+  app.setPath('userData', dir)
+  console.log(`[fixture] TC_FIXTURE=rd-steward userData=${dir}`)
 }
 
 const stores = createStores(state)
@@ -241,6 +252,15 @@ app.whenReady().then(async () => {
   // Load before the menu and window exist: Task 10 gives the menu the restore
   // settings, and the renderer's first act is layout:load, which needs a
   // resolved store to answer from.
+  if (process.env.TC_FIXTURE === 'rd-steward' && !app.isPackaged) {
+    // Runtime require: the loader is a script outside the bundle. A static
+    // import would try to pack scripts/ into the asar, and this branch is
+    // already unreachable in a packaged build.
+    const { writeStewardLayout } = require(join(process.cwd(), 'scripts/fixtures/rd-steward/load.cjs')) as {
+      writeStewardLayout: (layoutPath: string, cwd: string, root?: string) => void
+    }
+    writeStewardLayout(join(app.getPath('userData'), 'layout.json'), process.cwd())
+  }
   stores.layoutStore.load()
 
   // AFTER the store loads (the setting lives there) and BEFORE the window

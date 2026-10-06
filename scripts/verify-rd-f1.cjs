@@ -159,6 +159,12 @@ const norm = (v) => String(v || '').replace(/\s+/g, '').toLowerCase()
     if (rel === 'src/renderer/styles.css') {
       text = text.replace(lightBody, '').replace(darkBody, '')
     }
+    // R-004. The xterm cursor is the working cyan as a hex, because ITheme
+    // cannot read a stylesheet token. Only that property is exempt; an ANSI
+    // entry that picked up a state hex would still fail here.
+    if (rel === 'src/renderer/terminal/themes.ts') {
+      text = text.replace(/cursor:\s*'#[0-9a-fA-F]{6}'/g, '')
+    }
     for (const m of text.matchAll(/#[0-9a-fA-F]{6}\b/g)) {
       if (hexes.has(m[0].toLowerCase())) offenders.push(`${rel}:${m[0]}`)
     }

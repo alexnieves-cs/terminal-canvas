@@ -63,9 +63,12 @@ and 5.0 did not spend them.
   row (verb, target, state) that expands on click. The composer is a rounded well with one
   filled primary control. A chat is never a terminal wearing a header.
 - **Material comes from the Obsidian brief and is sharpened, not replaced**
-  (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`): dark flagship, cyan accent,
-  glass over blur, 12px corners, system SF, one filled primary control per surface, one
-  resting shadow. A new NAME is declared in both theme blocks (`verify:styles theme.1`); a
+  (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`): dark flagship, cyan as both
+  the working state and the accent, glass over blur, 12px corners, system SF, one filled
+  primary control per surface, one resting shadow. Selection is a 2px ring and a 6px halo
+  in `--state-select` (`#A6F6FF` on dark), lighter than working, so a selected working panel
+  is two facts. The M63 rule "selection is cyan; work is blue" ends; idle is slate and green
+  means finished OK. A new NAME is declared in both theme blocks (`verify:styles theme.1`); a
   RE-VALUATION of an existing token is one theme's, recorded in the run's ledger with its
   finding; `--well` stays the xterm background and `--amber` a literal. No styling
   dependency is added — no Tailwind, no component library, no icon font; `icons.tsx` grows.

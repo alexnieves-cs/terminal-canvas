@@ -1362,8 +1362,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M268. Center-page doors — same verbs as the TopBar / dock toggles.
   out.push({
     id: 'canvas.orchestration',
-    // M404 (C1). The place's one name — the segment's "Orchestrate".
-    title: 'Open Orchestrate',
+    // D2 (R-015). The door a person uses is "Show Orchestrate", the same
+    // title as the View menu row and the Sessions header. The id stays.
+    title: 'Show Orchestrate',
     searchText: 'orchestration orchestrate dashboard overview ops agents activity',
     group: 'canvas',
     run: () => actions.setCenterView('orchestration')

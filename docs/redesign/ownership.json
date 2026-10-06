@@ -3,8 +3,7 @@
     "docs/build-log/m435-m456-ledger.md",
     "docs/redesign/requests.md"
   ],
-  "frozen": [],
-  "frozen_after_foundations": [
+  "frozen": [
     "src/shared/state-palette.ts",
     "src/shared/attention-queue.ts",
     "src/shared/world-space.ts",
@@ -13,6 +12,7 @@
     "src/renderer/canvas/zoom-tier.ts",
     "src/renderer/canvas/task-regions.ts"
   ],
+  "frozen_after_foundations": [],
   "css_sections": {
     "src/renderer/styles.css": "F1 may edit the whole file (token blocks and rd:F1). Every other lane may edit only the span between its own rd:<lane> markers. The blank line between blocks is no lane's."
   },

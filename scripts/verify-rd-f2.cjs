@@ -374,6 +374,65 @@ const running = { kind: 'running', pid: 1, command: '', cwd: '', reattached: fal
     JSON.stringify({ labels: regions.map((r) => M.regionLabel(r)), tally, kinds: [...kinds] }))
 }
 
+// ── live sessions and the steward loader ────────────────────────────────────
+
+{
+  const liveOut = join(ROOT, 'out', 'verify', 'rd-f2-live.cjs')
+  buildSync({
+    stdin: {
+      contents: `
+        export { subscribeLiveSessions, applyLiveSession, clearLiveSession } from '../src/renderer/session/live-session-store'
+        export { parseLayout } from '../src/shared/layout-schema'
+      `,
+      resolveDir: __dirname,
+      sourcefile: 'rd-f2-live.ts',
+      loader: 'ts'
+    },
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    outfile: liveOut,
+    alias: {
+      '@shared': join(ROOT, 'src', 'shared'),
+      '@renderer': join(ROOT, 'src', 'renderer')
+    },
+    logLevel: 'silent'
+  })
+  const L = require(liveOut)
+  let n = 0
+  const off = L.subscribeLiveSessions(() => { n += 1 })
+  L.applyLiveSession('p', '/a', 'ls')
+  L.applyLiveSession('p', '/a', 'ls')
+  L.applyLiveSession('p', '/b', 'ls')
+  L.clearLiveSession('p')
+  const during = n
+  off()
+  L.applyLiveSession('p', '/c', 'pwd')
+  L.clearLiveSession('p')
+  ok('rd-live.sub.1 subscribeLiveSessions fires when a cwd or command changes, not on a repeat, and not after unsubscribe',
+    during === 3 && n === 3,
+    JSON.stringify({ during, n }))
+
+  const { readWorkspace, stewardLayout } = require('./fixtures/rd-steward/load.cjs')
+  const workspace = readWorkspace(ROOT)
+  const wanted = workspace.tasks.flatMap((task) => task.panels.map((panel) => panel.id))
+  const parsed = L.parseLayout(JSON.stringify(stewardLayout(workspace, '/tmp/steward')))
+  const got = new Set((parsed.snapshot.workspaces[0]?.panels ?? []).map((panel) => panel.id))
+  const missing = wanted.filter((id) => !got.has(id))
+  const dropped = parsed.warnings.filter((w) => /dropped a panel|dropped work item/.test(w))
+  const indexSrc = read('src/main/index.ts') || ''
+  const shotSrc = read('scripts/shot.cjs') || ''
+  const hook = read('src/renderer/session/useAttentionQueue.ts') || ''
+  ok('rd-steward.load.1 the shared loader keeps every fixture panel, and dev and shot both take TC_FIXTURE=rd-steward',
+    missing.length === 0 && dropped.length === 0 && wanted.length === got.size &&
+    /subscribeLiveSessions/.test(hook) &&
+    /TC_FIXTURE === 'rd-steward'/.test(indexSrc) && /setPath\('userData'/.test(indexSrc) &&
+    /!app\.isPackaged/.test(indexSrc) && /writeStewardLayout/.test(indexSrc) &&
+    /TC_FIXTURE === 'rd-steward'/.test(shotSrc) && /writeStewardLayout/.test(shotSrc) &&
+    /writeFixtureLayout\(\)/.test(shotSrc),
+    JSON.stringify({ missing, dropped, wanted: wanted.length, got: got.size, warnings: parsed.warnings }))
+}
+
 // ── purity ───────────────────────────────────────────────────────────────────
 
 {

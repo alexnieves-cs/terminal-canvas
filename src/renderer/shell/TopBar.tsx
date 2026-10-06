@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type JSX } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
@@ -11,8 +10,6 @@ import { initialsOf } from '../account/account-model'
 import type { Accounts } from '../account/useAccounts'
 import { sessionCountLabel, sessionsBadgeLabel, useAttentionCensus } from '@renderer/canvas/command-pill'
 import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
-import { SessionsHost } from '@renderer/sessions/SessionsHost'
-import { ReviewHost } from '@renderer/review/ReviewHost'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -59,9 +56,9 @@ export interface TopBarProps {
   running: number
   waiting: number
   /**
-   * M438. How many sessions the bar names. Absent: the bar counts terminal
-   * and chat panels itself, until Canvas passes the number (that mount is
-   * another lane's file). A non-positive count draws nothing.
+   * M438. How many sessions the bar names. Canvas passes the terminal and
+   * chat count. Absent: the bar counts those panels itself, on a slow tick.
+   * A non-positive count draws nothing.
    */
   sessionCount?: number
   onJumpWaiting: () => void
@@ -115,18 +112,6 @@ export function TopBar({
   const badge = sessionsBadgeLabel(attentionQueue.length)
   const observed = useObservedSessionCount(sessionCount)
   const sessionsLabel = sessionCountLabel(observed)
-  const [shellEl, setShellEl] = useState<HTMLElement | null>(null)
-  useLayoutEffect(() => {
-    const el = document.querySelector('.shell')
-    setShellEl(el instanceof HTMLElement ? el : null)
-  }, [])
-  const page = centerView === 'sessions' || centerView === 'review' ? (
-    <div className="shell__page" data-center-view={centerView}>
-      {centerView === 'sessions'
-        ? <SessionsHost onShowOrchestrate={() => onSetCenterView('orchestration')} />
-        : <ReviewHost />}
-    </div>
-  ) : null
 
   return (
     <header className="shell__top" aria-label="Toolbar">
@@ -289,6 +274,7 @@ export function TopBar({
               <MenuCheckboxItem checked={centerView === 'orchestration'}
                 onSelect={() => onSetCenterView(centerView === 'orchestration' ? 'canvas' : 'orchestration')}
                 title="Show Orchestrate"
+                data-view-orchestrate
               >
                 <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
                 Orchestrate
@@ -303,7 +289,6 @@ export function TopBar({
         <span key={session.githubLogin} className="shell__avatar" aria-hidden="true" title={session.githubLogin}>{initialsOf(session.githubLogin)}</span>
       ))}
       {accounts !== undefined && <AccountMenu accounts={accounts} />}
-      {page !== null && shellEl !== null && createPortal(page, shellEl)}
     </header>
   )
 }

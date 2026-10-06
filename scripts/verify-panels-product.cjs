@@ -6749,17 +6749,25 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       rows.length >= 6 && disagree.length === 0, JSON.stringify({ disagree, palette }))
 
     // dock.dup.1. The dock holds no door the top bar already holds: no
-    // Orchestrate (the center segment's), no Workspaces (the crumb's). Both
-    // stay reachable — the segment and crumb are PAINTED, and their ⌘K rows
-    // are found by search — and ⌘\ is claimed by the pane's Hide alone.
+    // Orchestrate, no Workspaces (the crumb's). D2 clips the Orchestrate
+    // segment, so the painted door is the View menu row (R-013). The crumb
+    // stays painted, both ⌘K rows are found by search, and ⌘\ is claimed
+    // by the pane's Hide alone. The menu is closed again so a later check
+    // does not inherit an open View menu.
+    await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.focus(), true`)
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+    await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.shell__view-menu:not(.shell__account-menu)'); return m !== null && !m.hidden })()`), 3000)
     const dup = await wc.executeJavaScript(`(() => {
       const painted = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit !== null && el.contains(hit) }
       const dock = [...document.querySelectorAll('.shell__dock [data-dock]')].map((b) => b.dataset.dock)
       const claims = [...document.querySelectorAll('.shell__dock [aria-keyshortcuts], .shell__dock [title]')].filter((e) => { const t = (e.getAttribute('aria-keyshortcuts') || '') + ' ' + (e.getAttribute('title') || ''); return t.includes(String.fromCharCode(8984, 92)) || t.includes('Meta+' + String.fromCharCode(92)) }).map((e) => e.getAttribute('aria-label'))
-      return { dock, seg: painted(document.querySelector('[data-seg="orchestration"]')), crumb: painted(document.querySelector('[data-crumb="workspace"]')),
+      const menu = document.querySelector('.shell__view-menu:not(.shell__account-menu)')
+      return { dock, orch: menu !== null && !menu.hidden && painted(document.querySelector('[data-view-orchestrate]')), crumb: painted(document.querySelector('[data-crumb="workspace"]')),
         chevron: !!document.querySelector('[data-crumb="workspace"] svg'), dockClaims: claims } })()`)
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+    await settle()
     const found = {}
-    for (const [q, want] of [['Open Orchestrate', 'Open Orchestrate'], ['Manage workspaces', 'Manage workspaces…']]) {
+    for (const [q, want] of [['Show Orchestrate', 'Show Orchestrate'], ['Manage workspaces', 'Manage workspaces…']]) {
       await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
       await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(q)}); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
@@ -6768,8 +6776,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })()`)
       await settle()
     }
-    ok('dock.dup.1 the dock has no Orchestrate or Workspaces button; the top bar\'s segment and switcher crumb are painted, their palette rows are found, and no dock button claims ⌘\\',
-      !dup.dock.includes('orchestration') && !dup.dock.includes('workspaces') && dup.seg && dup.crumb && dup.chevron && dup.dockClaims.length === 0 && found['Open Orchestrate'] && found['Manage workspaces'],
+    ok('dock.dup.1 the dock has no Orchestrate or Workspaces button; the View menu\'s Orchestrate row and the switcher crumb are painted, their palette rows are found, and no dock button claims ⌘\\',
+      !dup.dock.includes('orchestration') && !dup.dock.includes('workspaces') && dup.orch && dup.crumb && dup.chevron && dup.dockClaims.length === 0 && found['Show Orchestrate'] && found['Manage workspaces'],
       JSON.stringify({ dup, found }))
 
     // team.segment.1 (signed-out half). No People segment at rest; the

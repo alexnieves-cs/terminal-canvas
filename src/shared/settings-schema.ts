@@ -412,17 +412,18 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
-    // M268. The center column's page: the infinite canvas, or the Orchestration
-    // HUD that aggregates agents/tasks/workflows. The canvas stays mounted when
-    // orchestration is showing — this enum only chooses which sibling is
-    // visible. Auto-collapsing the rail/inspector while here is a VIEW rule in
-    // useShellChrome, not a write to shell.railOpen / shell.inspectorOpen.
+    // M268. The center column's page. The canvas stays mounted when another
+    // page is showing — this enum only chooses which sibling is visible.
+    // Sessions and Review persist (R-010). Focus and People stay in memory:
+    // layout-store drops a value that is not in this list. Auto-collapsing
+    // the rail/inspector is a VIEW rule in useShellChrome, not a write to
+    // shell.railOpen / shell.inspectorOpen.
     id: 'shell.centerView',
     label: 'Center view',
-    description: 'show the canvas or the Orchestration overview in the center column',
-    keywords: ['orchestration', 'orchestrate', 'dashboard', 'overview', 'ops', 'agents', 'center', 'view', 'canvas', 'shell'],
+    description: 'show the canvas, Sessions, Review, or the Orchestration overview in the center column',
+    keywords: ['orchestration', 'orchestrate', 'dashboard', 'overview', 'ops', 'agents', 'center', 'view', 'canvas', 'shell', 'sessions', 'review'],
     type: 'enum',
-    values: ['canvas', 'orchestration'],
+    values: ['canvas', 'orchestration', 'sessions', 'review'],
     default: 'canvas',
     category: SHELL_CATEGORY
   },
