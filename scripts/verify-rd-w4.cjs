@@ -126,6 +126,20 @@ SEL.setFocusPreview(preview)
 ok('rd-w4.preview.1 the shot preview is a slot on the same store, cleared by null, and not persisted',
   SEL.focusPreview().question === 'from the shot' && (SEL.setFocusPreview(null), SEL.focusPreview() === null))
 
+const chat = read('src/renderer/chat/ChatConversation.tsx')
+const chatNode = read('src/renderer/chat/ChatNode.tsx')
+const presets = read('src/renderer/canvas/palette-actions/presets.ts')
+const publisher = read('src/renderer/world/useWorldContextPublisher.ts')
+const answerFn = chat.slice(chat.indexOf('export function answerRequest'), chat.indexOf('export function ChatConversation'))
+const chatCall = 'answerRequest(id, snapshot, props.teammateName ?? BACKENDS[backend].label, requestId, allow, scope)'
+ok('rd-w4.history.1 a World answer files the permission row only when it names the tool; a chat answer does not, and the palette uses the same writer',
+  /recordPermissionAnswer\(/.test(answerFn) && /accepted === true && history !== undefined/.test(answerFn) &&
+  /answerRequest\(agentId, getChat\(agentId\)\.snapshot/.test(publisher) &&
+  /toolName: asked\.toolName/.test(publisher) && /argument: asked\.argument/.test(publisher) &&
+  /recordPermissionAnswer\(/.test(presets) && !/recordOrchEvent\(/.test(presets) &&
+  chat.includes(chatCall) && chatNode.includes(chatCall) && !chatNode.includes('history'),
+  'history')
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1

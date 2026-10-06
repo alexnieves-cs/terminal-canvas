@@ -181,8 +181,17 @@ export function useWorldContextPublisher(input: PublisherInput): void {
     const byId = (id: string): Panel | undefined => panels.find((p) => p.rect.id === id)
     setWorldActions({
       answer: (agentId, requestId, allow) => {
-        const panel = byId(agentId)
-        answerRequest(agentId, getChat(agentId).snapshot, panel?.title ?? 'Agent', requestId, allow)
+        // R-070. The chat door stays the answer. History is opt-in: only this
+        // call names the tool and the task, so a chat answer does not grow a row.
+        const now = latest.current
+        const panel = now.panels.find((p) => p.rect.id === agentId)
+        const asked = now.approvals.find((a) => a.id === agentId && a.requestId === requestId)
+        const itemId = now.tasks().find((task) => task.members.includes(agentId))?.id
+        answerRequest(agentId, getChat(agentId).snapshot, panel?.title ?? 'Agent', requestId, allow, undefined, asked === undefined ? undefined : {
+          toolName: asked.toolName,
+          argument: asked.argument,
+          ...(itemId === undefined ? {} : { itemId })
+        })
       },
       send: async (agentId, text) => {
         try {
