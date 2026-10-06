@@ -322,8 +322,11 @@ app.whenReady().then(() => {
   // export:flowchart / flowchart:read (206) — the flowchart's file doors: a
   // diagram's Mermaid or SVG TEXT out through the outward gate (an SVG with
   // script, a link or an embedded picture is refused), and a Mermaid file in.
-  // dialog:confirm (207) — main's Cancel-default confirm, for Sessions End.
-  const EXPECTED_CHANNELS = 207
+  // Recomputed from Object.values(IPC), not from the 206 tally above.
+  // That tally omitted world:status and world:retry, already on the
+  // integration branch. dialog:confirm is main's Cancel-default confirm,
+  // for Sessions End.
+  const EXPECTED_CHANNELS = 209
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
