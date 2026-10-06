@@ -4,6 +4,8 @@ module.exports = [
   { name: 'rd-settings-keys', reference: ['docs/redesign/mockups/08-settings-keyboard.png'], intent: 'Settings Keyboard while a shortcut is being re-recorded, with the Cmd-K conflict banner.',
     run: async (kit) => {
       await kit.loadMain()
+      // The harness preference is light. The mockup is the dark shortcut map.
+      await kit.theme('dark')
       const opened = await kit.js(`(() => { if (typeof window.__tcOpenSettings !== 'function') return false; window.__tcOpenSettings('keyboard'); return true })()`)
       if (!opened) throw new Error('settings host did not install')
       await kit.js('new Promise((resolve) => setTimeout(resolve, 300))')

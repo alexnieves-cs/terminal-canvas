@@ -7,12 +7,12 @@ to look, then run `UPDATE_GOLDENS`.
 Checked lanes come from `docs/redesign/ownership.json`. "Lead" means the
 integration branch, not a lane's private glob.
 
-## Land on this VM
+## Landed on this VM
 
 | Item | Lane | Files | Acceptance |
 |---|---|---|---|
-| Shot scenes paint the harness default, which is light, against dark mockups. `rd-workspace`, `rd-arrange`, `rd-settings-keys`, and the World scenes other than `rd-world-transition` never call `theme('dark')`. Measured center luminance: workspace 241, settings 245, flat room 249, while splash, sessions, plan, and the transition (which does call `theme('dark')`) sit under 35. | L-B, L-E, W0, W2, W3, W4, W5, W6 | `scripts/shot-scenes/rd-l-b.cjs`, `rd-l-e.cjs`, `rd-w0.cjs`, `rd-w2.cjs`, `rd-w3.cjs`, `rd-w4.cjs`, `rd-w5.cjs`, `rd-w6.cjs` | Each of those `run` functions calls `theme('dark')` before `shot`. A re-shot of `rd-workspace` and `rd-settings-keys` has a dark field. |
-| `rd-workspace` and `rd-arrange` never call `loadMain`, so a filtered shot captures whatever was already on screen (the light "api" canvas), not the steward Work tier. | L-B | `scripts/shot-scenes/rd-l-b.cjs` | `rd-workspace` calls `loadMain` when `TC_FIXTURE=rd-steward`, then opens the inspector, then captures. |
+| Shot scenes paint the harness default, which is light, against dark mockups. `rd-workspace`, `rd-arrange`, `rd-settings-keys`, and the World scenes other than `rd-world-transition` never called `theme('dark')`. Before the fix, center luminance was workspace 241, settings 245, flat room 249. | L-B, L-E, W0, W2, W3, W4, W5, W6 | `scripts/shot-scenes/rd-l-b.cjs`, `rd-l-e.cjs`, `rd-w0.cjs`, `rd-w2.cjs`, `rd-w3.cjs`, `rd-w4.cjs`, `rd-w5.cjs`, `rd-w6.cjs` | Landed. Each of those `run` functions calls `theme('dark')` before `shot`. Re-shot: `rd-workspace` and `rd-settings-keys` center luminance 20.9 (center `#10131a`). `rd-world-flat` center `#24272b` (was a white field, luminance 249). |
+| `rd-workspace` and `rd-arrange` never called `loadMain`, so a filtered shot captured whatever was already on screen. | L-B | `scripts/shot-scenes/rd-l-b.cjs` | Landed for the load. Both call `loadMain` then `theme('dark')`. The arrange drag, guides, and marquee toolbar are still not driven. That row stays under "Left for a Mac". |
 
 ## Left for a Mac, or a product look
 

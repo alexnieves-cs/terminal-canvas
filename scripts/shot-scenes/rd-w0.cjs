@@ -11,6 +11,8 @@ module.exports = [
     run: async (k) => {
       process.env.TC_FIXTURE = 'rd-steward'
       await k.loadMain()
+      // The harness preference is light. The night studio is the dark concept.
+      await k.theme('dark')
       await k.zoom(0.34)
       const cast = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'rd-steward', 'workspace.json'), 'utf8'))
       const now = Date.now()

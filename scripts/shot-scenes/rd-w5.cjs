@@ -10,6 +10,8 @@ module.exports = [
     run: async (k) => {
       process.env.TC_FIXTURE = 'rd-steward'
       await k.loadMain()
+      // The harness preference is light. The strip and the card are judged on the dark concept.
+      await k.theme('dark')
       await k.zoom(0.18)
       for (let i = 0; i < 20; i++) {
         const clicked = await k.click('.shell__world-toggle')

@@ -1464,3 +1464,7 @@ Not closed as F1: `zoomed-out-dark`, `orchestration-dark`, `orchestration-workin
 
 Diff `7556aeec` (`pre-redesign`) to `db186caf`. No `.panel__*` or `*-node__*` selector removed. No `.shell__*` selector removed; four added. Version still 5.0.0. `verify:world` 251/251. Entry chunk `index-CptrJXFM.js` (7.3MB) has no static import of another script and does not contain `WebGLRenderer`. `WorldView` loads through `__vitePreload(() => import("./WorldView-….js"))`, and that chunk depends on three's `index-DoTOJlhU.js` (2.2MB). BLOCKERS: none found on this pass.
 
+### Fix pass
+
+The two safe rows on the fix list landed in the shot scenes: `theme('dark')` on L-B, L-E, and W0–W6 except W1 (which already set it), and `loadMain` on `rd-workspace` and `rd-arrange`. The arrange drag is still not scripted. Re-shot under xvfb: `rd-workspace` and `rd-settings-keys` center luminance 20.9. `rd-world-flat` center is `#24272b` (the field was white before). Gates after the edit: typecheck pass, `verify:rd-l-b`, `verify:rd-l-e`, `verify:rd-w0` through `verify:rd-w6`, `verify:world` 251/251, `npm run build` pass, plain wave 65/67 with the same three known check failures.
+

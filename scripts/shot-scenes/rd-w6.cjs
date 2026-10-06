@@ -12,6 +12,8 @@ module.exports = [
     run: async (k) => {
       process.env.TC_FIXTURE = 'rd-steward'
       await k.loadMain()
+      // The harness preference is light. The flat room's words are judged on the dark concept.
+      await k.theme('dark')
       // A context that does not present still makes the probe say yes (R-082).
       // Returning null for the GL types is the probe's own "no", so the flat
       // room mounts. 2D contexts the terminals already hold are left alone.
