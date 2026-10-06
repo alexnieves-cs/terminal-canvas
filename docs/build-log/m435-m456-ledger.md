@@ -1095,4 +1095,6 @@ New rules only, inside `/* ── rd:W4 ── */`. The sheet is 400px. The diff
 
 R-070 open: point the room's `answer` at `answerApproval` so the sheet's decision is the inspector's history row. R-071 open: a paste door for agent terminals. R-072 open: `world.open.6`'s sentence still says bare Enter opens; the reachable open is ⌘Enter. R-074 open: name `WorldFocusSheet` in the plain-DOM sentence of `src/renderer/CLAUDE.md`.
 
-R-063 stays open. It wants past-room verbs disabled with one sentence, and `world.replay.6` still requires those buttons omitted. Landing it would edit `verify-world.cjs`, `WorldFlat.tsx`, and `WorldRobot.tsx`, which this lane does not own. No W6 request against `WorldCardBody.tsx` was open at the plan.
+R-063 stays open. It wants past-room verbs disabled with one sentence, and `world.replay.6` still requires those buttons omitted. Landing it would edit `verify-world.cjs`, `WorldFlat.tsx`, and `WorldRobot.tsx`, which this lane does not own.
+
+R-081 landed. W6 filed it on `rd/w6-doors` against `WorldCardBody.tsx`: RequestBlock's open button now reads Open in Canvas, and `data-world-answer="open"` stays. No other W6 request was taken.

@@ -444,3 +444,10 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: the library-door table says `WorldChrome.tsx` and its children are plain DOM and import no three. `WorldFocusSheet.tsx` is a new child of that chrome, plain DOM, and the table does not name it. W4 does not own the doc.
 - Smallest change: add `WorldFocusSheet.tsx` (M452, the close-up) to that plain-DOM sentence, beside `WorldCardBody.tsx`.
 - Status: open
+
+### R-081 · RequestBlock says Open, the flat door says Open in Canvas
+- Lane: W6
+- File: `src/renderer/world/WorldCardBody.tsx` (W4 this wave)
+- Why the contract or the owner cannot absorb it: W4 owns the file. A waiting tile uses RequestBlock, whose open button says Open. The redesign word, already on the flat room's own picked-tile button, is Open in Canvas.
+- Smallest change: the open button text becomes Open in Canvas. Keep `data-world-answer="open"`. Do not add a second wording.
+- Status: done: RequestBlock's open button reads Open in Canvas. `data-world-answer="open"` is unchanged. Landed on `rd/w4-focus` before G2. No other W6 request was taken.

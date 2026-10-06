@@ -70,7 +70,7 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
           </>
         ) : null}
         {/* M429: no Open for an agent with no panel to land on (the simulator's, a teammate's elsewhere) — it would close the room onto nothing. */}
-        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
+        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open in Canvas</button>}
       </div>
     </div>
   )
