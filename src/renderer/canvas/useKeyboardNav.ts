@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
 import type { Viewport, WorldRect } from './viewport'
 import { nearestInDirection, orderPanels, type Direction } from './spatial-order'
+import { getFocusLock, matchShortcut, subscribeFocusLock, toggleFocusLock, yieldsToTerminal } from '@shared/shortcuts'
 
 /**
  * M44 — a keyboard-first canvas. Every shortcut is Cmd-gated because agent
@@ -56,18 +57,44 @@ export function useKeyboardNav(deps: KeyboardNavDeps): void {
     lastFocusedAtRef, hostRef, goToPanel, focusPanel, releaseFocus, openPill
   } = deps
 
+  // M438. The lock mark is a stylesheet hook on the focused panel. PanelFrame
+  // is another lane's, so the attribute is stamped from here.
+  const lockedId = useSyncExternalStore(subscribeFocusLock, getFocusLock, getFocusLock)
+  useEffect(() => {
+    for (const el of document.querySelectorAll('[data-focus-lock]')) el.removeAttribute('data-focus-lock')
+    if (lockedId === null) return
+    document.querySelector(`[data-panel-id="${CSS.escape(lockedId)}"]`)?.setAttribute('data-focus-lock', '')
+  }, [lockedId])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // M249. The one Shift chord here, tested BEFORE the no-Shift gate below.
-      // `code`, not `key`: with Shift held `key` is still ' ', but a layout
-      // may remap it, and the palette's Cmd+K rule reads the physical key too.
-      if (openPill !== undefined && event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey && event.code === 'Space') {
+      if (!event.metaKey || event.ctrlKey || event.altKey) return
+      const chord = { metaKey: event.metaKey, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey, code: event.code }
+      const hit = matchShortcut(chord)
+      // ⌘⇧L toggles the lock on the focused panel. It is the one canvas chord
+      // that still fires while locked (D4), so it is handled before the yield.
+      if (hit?.id === 'focus-lock') {
+        const id = focusedIdRef.current
+        if (id === null) return
+        event.preventDefault()
+        if (!event.repeat) toggleFocusLock(id)
+        return
+      }
+      // While locked, a canvas chord is the terminal's. Returning without
+      // preventDefault is the yield — stopping the event would keep it from
+      // the PTY as surely as handling it.
+      if (yieldsToTerminal(chord)) return
+      // M249. Cmd+Shift+Space, before the no-Shift gate below. `code`, not
+      // `key`: with Shift held a layout may remap `key`, and the palette's
+      // Cmd+K rule reads the physical key too.
+      if (hit?.id === 'pill') {
+        if (openPill === undefined) return
         if (shouldIgnoreKeys()) return
         event.preventDefault()
         if (!event.repeat) openPill()
         return
       }
-      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (event.shiftKey) return
       const dir = ARROWS[event.code]
       const isEnter = event.code === 'Enter'
       const isEscape = event.code === 'Escape'

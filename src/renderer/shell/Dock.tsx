@@ -6,6 +6,7 @@ import { agentWord } from '@renderer/panels/panel-state'
 import { Bell, ChevronLeft, ChevronRight, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Link, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 import { needsYouCount } from '@shared/attention-words'
+import { ATTENTION_QUEUE_WIRED, useAttentionQueue } from '@renderer/canvas/command-pill'
 import { useAttentionOsSettings } from './useAttentionOsSettings'
 import { ApprovalAcks, ApprovalDetail } from './ApprovalDetail'
 import { useApprovalOutcomes } from './approval-outcome'
@@ -250,7 +251,11 @@ function DockImpl({
   // M378. The team's asks wait on this person too — on anyone who may edit
   // the canvas — so the badge counts them beside the panels waiting here.
   const team = useTeamAsks()
+  // M438. F2's queue is the badge's source once it is wired. Until then the
+  // snooze-aware count stays, so a Mac badge check still sees today's number.
+  const attentionQueue = useAttentionQueue()
   const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length + team.length
+  const badgeCount = ATTENTION_QUEUE_WIRED ? attentionQueue.length : waiting
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const [historyOpen, setHistoryOpen] = useState<string | null>(null)
@@ -513,8 +518,8 @@ function DockImpl({
             nothing. */}
         {/* M308. The badge counts what is NOT snoozed — putting a decision
             off is the point of a snooze — and the popover still lists both. */}
-        <span className="dock__badge" data-dock-badge data-attention-new={waiting > 0 ? '' : undefined} aria-live="polite" hidden={waiting === 0}>
-          {waiting === 0 ? '' : String(waiting)}
+        <span className="dock__badge" data-dock-badge data-attention-new={badgeCount > 0 ? '' : undefined} aria-live="polite" hidden={badgeCount === 0}>
+          {badgeCount === 0 ? '' : String(badgeCount)}
         </span>
         {/* M318. Back from the evidence to the decision you left. */}
         {!attentionOpen && returnTo !== null && queue !== undefined && order.includes(returnTo) && (

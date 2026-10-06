@@ -49,3 +49,49 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | Wave | Into | Tag | Notes |
 |---|---|---|---|
 | P0 | main (this PR) | `rd-p0` after merge | kit only |
+
+## M438 · F3 shell frame
+
+Branch `cursor/f3-frame-13d9`, cut from `rd-p0`. Merges last, after F1 then F2, and rebases onto F2 before that merge. `package.json` stays 5.0.0 (D8).
+
+### What landed
+
+- Top nav is Canvas | Sessions | Review (D2). Orchestrate stays inside `.shell__center-toggle` so the panels harness can still `dispatchEvent` on `[data-seg="orchestration"]`, and the F3 stylesheet clips it out of the tab. The doors a person uses are the View menu row (title "Show Orchestrate"), the Sessions header link, and the existing palette row. People stays conditional.
+- `src/shared/shortcuts.ts` is the one list: every CONCEPT.md "Key interactions" chord plus today's chords, with `SHORTCUT_HANDLERS` beside the Phase 0 `ShortcutDef` (the contract has no handler field and was not edited). ⌘⌥T is `tidy-alias` (`aliasOf: 'tidy'`). The menu's seven accelerators come from `electronAccelerator`, byte-for-byte the strings they already showed, including Tidy's ⌘⌥T.
+- Focus lock is ⌘⇧L. `canvasChordStandsDown` is true for every canvas chord except that one while a panel is locked. `useKeyboardNav` and `useShellChrome` return before `preventDefault` when `yieldsToTerminal` is true, so their chords reach the terminal. The lock mark is `.panel[data-focus-lock]::after` in the F3 CSS span, stamped from `useKeyboardNav`. Canvas's `shouldIgnoreKeys` and the palette's ⌘K handler are other lanes' files — R-002 and R-003.
+- Title bar (D3): centred segments, session count that is silent at zero (`sessionCountLabel(7) === '7 sessions'`), search label "Find or run anything" with the old sentence kept as the title, no dollar amount. Sessions badge uses `waiting` until `ATTENTION_QUEUE_WIRED` flips.
+- The pill's new line is `attentionPillLine`. `pillRestState` still says "N panels need you", so `verify:pill` stays on that sentence. "+ New" calls `beginStartWork`. The queue import is a stub in `command-pill.ts` (`ATTENTION_QUEUE_WIRED = false`) until the rebase onto F2 swaps it for the real hook. The composite rest renders only when the queue is non-empty, so the existing `[data-pill-rest]` button stays the one the panels suite presses.
+- `SessionsHost` and `ReviewHost` are empty. TopBar portals them into `.shell` so Sessions is not a blank fade. R-006 asks Canvas to mount them.
+
+### Checks
+
+Watched red first: `verify:rd-f3` was 1/12 (only `rd-f3.0`) before `shortcuts.ts` and the hosts existed.
+
+| Check | Result |
+|---|---|
+| `npm run verify:rd-f3` | 12/12 |
+| `npx tsc -p tsconfig.node.json --noEmit` | pass |
+| `npx tsc -p tsconfig.web.json --noEmit` | fail, one error: `Canvas.tsx:4074` `from` is `'canvas' \| 'orchestration'` and `CenterView` now includes sessions and review. Not this lane's file. R-001. |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:pill` | 13/13 |
+| `npm run verify:world` | 249/249 |
+| `npm run verify:layout` | 286/286 |
+| `npm run verify:verbs` | 30/30 |
+| `npm run verify:orchestration` | 145/145 |
+| `npm run verify:toast` | 10/10 |
+| `npm run verify:account` | 61/61 |
+| `npm run verify:meta` | 51/53. `panels-split.2` is the pre-existing missing `pre-v7-run` tag. `visual.1` is this lane: `rd-f3-titlebar` and `rd-f3-pill` have `run` and no golden. Goldens are the lead's after a person has looked. `UPDATE_GOLDENS` was not set. |
+
+Not run (no Electron binary, `npm ci --ignore-scripts`, no `pty.node`): `verify:panels` (including the `.shell__center-toggle` / `.shell__merge` / View menu checks, and `dock.dup.1` which will see the clipped Orchestrate segment — R-007), `verify:canvas`, `verify:xterm`, `verify:window`, `npm run shot`, `verify:visual`, `verify:packaged`, `verify:tmux`. Known pre-existing and not re-counted as this lane: `verify:first-run` `revamp.create.1`, `verify:canvas-sync` and `verify:relay` WebSocket errors.
+
+### Deviations
+
+- Orchestrate remains a clipped segment inside the control. Removing the node would break the harness clicks. `dock.dup.1` wants that segment painted (`elementFromPoint`); R-007.
+- Sessions and Review do not persist. The settings enum is still `canvas | orchestration` (L-E). R-004.
+- ⌘0 / ⌘1 in `useViewport` were not retargeted. The registry names the concept chords. R-005. The menu still shows ⌘⌥T, not ⌘⇧T.
+- The pill line says "agents"; `pillRestState` still says "panels". Two sentences on purpose, so the redesign line and the existing checks do not share a wording.
+- Session count is observed from terminal and chat panels on a 1s tick unless `sessionCount` is passed. R-006.
+- Extra avatars are the other signed-in accounts' initials. The mockup's AN/MK are teammates; presence is not on this bar.
+- Live status, the world toggle and the View menu stay. The mockup crop does not show them. D6 keeps World as a lens, not a tab.
+- No `TC_FIXTURE`. R-008. Shot scenes call `loadMain()` only.
+- Hosts are portaled from TopBar, not mounted by Canvas. R-006.

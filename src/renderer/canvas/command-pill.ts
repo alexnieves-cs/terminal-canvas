@@ -13,6 +13,7 @@
  */
 
 import { isNeedsYouCount, needsYouCount } from '@shared/attention-words'
+import type { AttentionItem } from '@shared/redesign-contracts'
 
 export interface PillFacts {
   /** The attention set's size (the wants-you queue Cmd+J cycles). */
@@ -151,4 +152,47 @@ export function pillFocused(): boolean {
   if (typeof document === 'undefined') return false
   const active = document.activeElement
   return active !== null && active.closest('[data-command-pill-input]') !== null
+}
+
+/**
+ * M438. F2 owns the real queue (`useAttentionQueue` in session/). This stub
+ * keeps the import sites — the pill, the dock badge, the Sessions count —
+ * on one function so that lane's check can require them without a second
+ * counter. `ATTENTION_QUEUE_WIRED` is false until the rebase swaps this for
+ * the real hook; until then the pill's existing rest sentence stays.
+ */
+export const ATTENTION_QUEUE_WIRED = false
+
+export function useAttentionQueue(): readonly AttentionItem[] {
+  return []
+}
+
+/** Rest layer: a missing or non-positive count is silence, never "0 sessions". */
+export function sessionCountLabel(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return ''
+  const k = Math.floor(n)
+  return k === 1 ? '1 session' : `${k} sessions`
+}
+
+/** The Sessions segment's badge. Null is "don't draw it" — a zero badge is a zero-value statement. */
+export function sessionsBadgeLabel(n: number): string | null {
+  if (!Number.isFinite(n) || n <= 0) return null
+  return String(Math.floor(n))
+}
+
+/**
+ * The pill's attention line (mockup 04). Queue order, not a re-sort: the
+ * first item's sentence, then Go and New. `pillRestState` keeps its own
+ * wording ("panels") so the existing pill checks stay on that sentence;
+ * this line is the redesign's, and it is empty when nothing is waiting.
+ */
+export function attentionPillLine(items: readonly { sentence: string }[] | null | undefined): string {
+  if (items == null || items.length === 0) return ''
+  const n = items.length
+  const count = n === 1 ? '1 agent needs you' : `${n} agents need you`
+  const sentence = (items[0]?.sentence ?? '').trim()
+  const parts = [count]
+  if (sentence !== '') parts.push(sentence)
+  parts.push('Go ⌘J', '+ New ⌘N')
+  return parts.join(' · ')
 }

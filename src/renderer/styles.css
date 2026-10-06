@@ -11353,6 +11353,134 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:F2 ── */
 
 /* ── rd:F3 ── */
+/* M438. The title bar's centre is the page switch. Orchestrate stays in the
+   control for the panels harness and is clipped out of the tab (D2). The
+   spawn button stays in the DOM — "+ New task" is still its text — and the
+   pill carries + New. A locked panel's mark is absolutely positioned so it
+   never refits xterm. */
+.shell__top { position: relative; }
+.shell__center-toggle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+.shell__center-purpose { display: none; }
+.shell__center-toggle [data-seg="orchestration"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.shell__top .shell__spawn {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.shell__nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: var(--sp-2);
+  min-width: 1.1em;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-full);
+  background: var(--amber);
+  color: var(--s-0);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.shell__sessions {
+  margin-left: auto;
+  color: var(--fg-2);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+}
+.shell__top .shell__search {
+  flex: 0 1 280px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-3);
+}
+.shell__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: var(--sp-1);
+  border-radius: var(--r-full);
+  background: var(--s-4);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+}
+.shell__page {
+  position: absolute;
+  top: var(--shell-top-h);
+  left: calc(var(--shell-dock-w) + var(--shell-nav-w));
+  right: var(--shell-ctx-w);
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  font-family: var(--font-ui);
+}
+.sessions-host,
+.review-host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sessions-host__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+}
+.sessions-host__title { margin: 0; font-size: var(--t-md); font-weight: 600; }
+.sessions-host__orch { font-family: var(--font-ui); }
+.command-pill__rest--line { gap: var(--sp-2); padding-right: var(--sp-2); }
+.command-pill__rest--line .command-pill__line-main,
+.command-pill__rest--line [data-pill-go],
+.command-pill__rest--line [data-pill-new] {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.panel[data-focus-lock]::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 6px;
+  border: 1.5px solid var(--fg);
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px transparent, 0 -4px 0 -1.5px var(--fg), -2px -4px 0 -1.5px var(--fg), 2px -4px 0 -1.5px var(--fg);
+  pointer-events: none;
+  z-index: 5;
+}
 
 /* ── /rd:F3 ── */
 

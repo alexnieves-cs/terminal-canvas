@@ -5,7 +5,7 @@ import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
 import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
-import { pillRestState, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
+import { attentionPillLine, pillRestState, retiresJumpHint, runningAgents, showJumpHint, useAttentionQueue, type OrchestratorCandidate } from './command-pill'
 import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type SelectionVerbKey } from './object-verbs'
 
 /**
@@ -34,7 +34,7 @@ import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type
  * seventh button every milestone stops reading as "compact").
  */
 
-export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say' | 'alignObjects' | 'distributeObjects' | 'layoutFlowchart' | 'planFromChart'>
+export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say' | 'alignObjects' | 'distributeObjects' | 'layoutFlowchart' | 'planFromChart' | 'beginStartWork'>
 
 export interface CommandPillProps {
   actions: PillActions
@@ -101,6 +101,9 @@ function readJumpTaught(): boolean {
 
 export function CommandPill(props: CommandPillProps): JSX.Element {
   const { actions, panels, attentionCount, taskTitle, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
+  // M438. The redesign line reads F2's queue. Empty until that hook is wired,
+  // so the rest button below stays the one the panels suite presses.
+  const attentionLine = attentionPillLine(useAttentionQueue())
   const [expanded, setExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -497,6 +500,15 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
           </div>
         </div>
       )}
+      {attentionLine !== '' && note === null && !expanded ? (
+        <div className="command-pill__rest command-pill__rest--line" data-pill-rest="" data-pill-state="attention" role="group" aria-label={attentionLine}>
+          <button type="button" className="command-pill__line-main" {...shellControl(() => { focusOnOpenRef.current = false; setNote(null); setExpanded(true) })}>
+            <Bell /><span className="command-pill__text">{attentionLine.split(' · ').slice(0, -2).join(' · ')}</span>
+          </button>
+          <button type="button" data-pill-go="" {...shellControl(onJump)}>Go <kbd>⌘J</kbd></button>
+          <button type="button" data-pill-new="" {...shellControl(() => actions.beginStartWork())}>+ New <kbd>⌘N</kbd></button>
+        </div>
+      ) : (
       <button type="button" className="command-pill__rest" data-pill-rest="" data-pill-state={note !== null && !expanded ? 'result' : rest.kind}
         aria-expanded={expanded} aria-label={note !== null && !expanded ? note : rest.text === '' ? 'Canvas actions' : `Canvas actions — ${rest.text}`}
         {...shellControl(() => { if (expanded) collapse(true); else { focusOnOpenRef.current = false; setNote(null); setExpanded(true) } })}>
@@ -513,6 +525,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
             </>
           )}
       </button>
+      )}
     </div>
   )
 }
