@@ -11339,3 +11339,71 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* On a tile the verbs sit on light glass, not the 3D card's frosted one, so the quiet ones need a fill to read as buttons; none stretches alone. */
 .world-flat__tile .world-card__act { flex: 0 0 auto; padding: 0 var(--sp-5); background: var(--world-chrome-hover); }
 .world-flat__tile .world-card__act--go { background: var(--world-wait); }
+
+/* Redesign seams (M435). Empty on purpose. A lane writes only between its
+   own markers. F1 also owns the theme token blocks above. The blank line
+   between blocks is not part of any lane, so two lanes never share a hunk. */
+
+/* ── rd:F1 ── */
+
+/* ── /rd:F1 ── */
+
+/* ── rd:F2 ── */
+
+/* ── /rd:F2 ── */
+
+/* ── rd:F3 ── */
+
+/* ── /rd:F3 ── */
+
+/* ── rd:L-A ── */
+
+/* ── /rd:L-A ── */
+
+/* ── rd:L-B ── */
+
+/* ── /rd:L-B ── */
+
+/* ── rd:L-C ── */
+
+/* ── /rd:L-C ── */
+
+/* ── rd:L-D ── */
+
+/* ── /rd:L-D ── */
+
+/* ── rd:L-E ── */
+
+/* ── /rd:L-E ── */
+
+/* ── rd:L-F ── */
+
+/* ── /rd:L-F ── */
+
+/* ── rd:W0 ── */
+
+/* ── /rd:W0 ── */
+
+/* ── rd:W1 ── */
+
+/* ── /rd:W1 ── */
+
+/* ── rd:W2 ── */
+
+/* ── /rd:W2 ── */
+
+/* ── rd:W3 ── */
+
+/* ── /rd:W3 ── */
+
+/* ── rd:W4 ── */
+
+/* ── /rd:W4 ── */
+
+/* ── rd:W5 ── */
+
+/* ── /rd:W5 ── */
+
+/* ── rd:W6 ── */
+
+/* ── /rd:W6 ── */

@@ -121,21 +121,33 @@ const pkg = JSON.parse(read('package.json'))
 // 7. .claude/settings.json was tracked until this check existed, carrying the
 // author's absolute home path (/Users/<name>/.claude/plugins/cache/...) and
 // nine ad-hoc permission grants from development sessions — including perl
-// one-liners that rewrite Palette.tsx in place. It is local tool
-// configuration, not source: it means nothing to a contributor, and the home
-// path is personal information a public repository has no reason to carry.
-// Asserted against `git ls-files` rather than the filesystem, because the file
-// SHOULD still exist locally; what must not happen is it being tracked again.
+// one-liners that rewrite Palette.tsx in place. Local tool configuration is
+// not source. The redesign run (M435) is the exception, and it is a closed
+// shape: agents/, commands/ and hooks/, plus one settings.json that carries
+// no home path. Anything else tracked under .claude/ — a settings.local.json,
+// a worktree, a new grant file — is the old leak again. Asserted against
+// `git ls-files`, because the local scratch SHOULD still exist on disk.
 {
   const { execFileSync } = require('node:child_process')
   let tracked = ''
+  let gitOk = true
   try {
     tracked = execFileSync('git', ['ls-files', '.claude/'], { cwd: ROOT, encoding: 'utf8' })
   } catch {
     // Not a git checkout (a downloaded tarball). Nothing to assert.
-    tracked = ''
+    gitOk = false
   }
-  ok('7 no .claude/ file is tracked', tracked.trim() === '', tracked.trim() || 'none')
+  const files = tracked.split('\n').filter(Boolean)
+  const allowed = (f) => /^\.claude\/agents\/[\w.-]+\.md$/.test(f) ||
+    /^\.claude\/commands\/[\w.-]+\.md$/.test(f) ||
+    /^\.claude\/hooks\/[\w.-]+\.sh$/.test(f) ||
+    f === '.claude/settings.json'
+  const stray = files.filter((f) => !allowed(f))
+  const settings = read('.claude/settings.json') || ''
+  const personal = /\/Users\/|\/home\/[A-Za-z0-9._-]+\//.test(settings)
+  ok('7 no .claude/ file is tracked except the redesign kit, and settings.json carries no home path',
+    !gitOk || (stray.length === 0 && !personal && files.includes('.claude/settings.json')),
+    gitOk ? JSON.stringify({ stray, personal, tracked: files.length }) : 'not a git checkout')
 }
 
 // 8–13. The README's STRUCTURE, asserted as a set of required headings.
@@ -987,6 +999,23 @@ console.log('\n' + '='.repeat(60))
   // inside the reduced-motion scene and counted it as a scene with no golden.
   // M297: a scene may carry `reference: [...]` between its name and intent.
   const declared = [...shot.matchAll(/\{ name: '([a-z0-9-]+)', (?:reference: \[[^\]]*\], )?intent:/g)].map((m) => m[1])
+  // M435. A redesign scene is painted only once its shot-scenes file gives it
+  // a `run` key. Planned scenes (name + reference, no run) are seams and have
+  // no golden yet. A `run` without a golden is the hole visual.1 exists to catch.
+  {
+    const { readdirSync } = require('node:fs')
+    const sceneDir = join(ROOT, 'scripts', 'shot-scenes')
+    if (existsSync(sceneDir)) {
+      for (const file of readdirSync(sceneDir)) {
+        if (!/^rd-.*\.cjs$/.test(file)) continue
+        const text = read(`scripts/shot-scenes/${file}`) || ''
+        for (const block of text.split(/\{ name: '/).slice(1)) {
+          const name = /^([a-z0-9-]+)'/.exec(block)
+          if (name && /\brun\s*:/.test(block)) declared.push(name[1])
+        }
+      }
+    }
+  }
   const goldensDir = join(ROOT, 'verify', 'visual', 'goldens')
   const goldens = existsSync(goldensDir) ? readdirSync(goldensDir).filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')) : []
   const missing = declared.filter((n) => !goldens.includes(n))
@@ -1036,11 +1065,79 @@ console.log('\n' + '='.repeat(60))
     }
   }
   const brief = /^## The critic and the reference/m.test(rules) && /deliberately (NOT|not) copied/.test(rules) && /vs-reference\.png/.test(rules)
+  // M435. Redesign scenes are not in shot.cjs (that file's scene literals are
+  // what visual.1 counts, and a planned scene has no golden yet). They live in
+  // scripts/shot-scenes/rd-<lane>.cjs, one file per ownership.json lane. Each
+  // scene that names a reference must point at a tracked PNG. A lane file that
+  // goes missing is a seam a later session cannot find.
+  const { readdirSync: rdDir } = require('node:fs')
+  const ownPath = join(ROOT, 'docs', 'redesign', 'ownership.json')
+  const sceneDir = join(ROOT, 'scripts', 'shot-scenes')
+  let own = null
+  try { own = JSON.parse(read('docs/redesign/ownership.json') || '') } catch { own = null }
+  const laneIds = own && own.lanes ? Object.keys(own.lanes) : []
+  const missingSceneFiles = laneIds.filter((id) => !existsSync(join(sceneDir, `rd-${id.toLowerCase()}.cjs`)))
+  const rdTexts = existsSync(sceneDir) ? rdDir(sceneDir).filter((f) => /^rd-.*\.cjs$/.test(f)).map((f) => read(`scripts/shot-scenes/${f}`) || '') : []
+  const rdHeads = rdTexts.flatMap((text) => [...text.matchAll(/\{ name: '([a-z0-9-]+)', (?:reference: \[([^\]]*)\], )?intent:/g)])
+  for (const m of rdHeads) {
+    const refs = refsOf(m)
+    if (refs.length === 0) problems.push(`${m[1]}: no reference`)
+    for (const r of refs) {
+      if (!existsSync(join(ROOT, r))) problems.push(`${m[1]}: ${r} does not exist`)
+      else if (tracked && !tracked.includes(r)) problems.push(`${m[1]}: ${r} is not tracked`)
+    }
+  }
+  const shotFilter = /TC_SHOT_ONLY \|\| process\.env\.SHOT_ONLY/.test(shot) && /shot-scenes/.test(shot)
   ok('critic.reference.1 every orchestration* shot scene names a reference PNG that exists and is tracked, the harness writes the composite, and product-rules.md carries the critic brief with its excluded features',
     // Four since M304: the Watch lens is its own Orchestrate scene (orchestration-watch).
     orch.length === 4 && problems.length === 0 && tracked !== null && composite !== null &&
-      /require\('\.\/shot-composite\.cjs'\)/.test(shot) && /composeManifest\(OUT, manifest\)/.test(shot) && brief,
-    JSON.stringify({ orchestration: orch.map((m) => m[1]), problems, git: tracked !== null, composite: composite !== null, brief }))
+      /require\('\.\/shot-composite\.cjs'\)/.test(shot) && /composeManifest\(OUT, manifest\)/.test(shot) && brief &&
+      own !== null && missingSceneFiles.length === 0 && rdHeads.length > 0 && shotFilter,
+    JSON.stringify({ orchestration: orch.map((m) => m[1]), rd: rdHeads.map((m) => m[1]), missingSceneFiles, problems, git: tracked !== null, composite: composite !== null, brief, shotFilter }))
+}
+
+// M435 — rd-own.1. Same-wave lanes must not own the same file. The hook is
+// file-grained, so a double owner in one wave is a merge conflict waiting to
+// happen, and styles.css is the one exception because each lane's writes are
+// fenced by its own markers. redesign-contracts.ts is lead-only.
+{
+  const own = JSON.parse(read('docs/redesign/ownership.json') || 'null')
+  const lanes = own && own.lanes
+  const waves = own && own.waves
+  const norm = (g) => g.replace(/\/\*\*$/, '').replace(/\/\*$/, '')
+  const overlaps = (a, b) => {
+    if (a === b) return true
+    const na = norm(a)
+    const nb = norm(b)
+    if (na === nb) return true
+    if (a.endsWith('/**') && (b === na || b.startsWith(na + '/'))) return true
+    if (b.endsWith('/**') && (a === nb || a.startsWith(nb + '/'))) return true
+    return false
+  }
+  const allowed = new Set(['src/renderer/styles.css'])
+  const collisions = []
+  if (waves && lanes) {
+    for (const [wave, ids] of Object.entries(waves)) {
+      const globs = ids.flatMap((id) => (lanes[id] || []).map((g) => ({ id, g })))
+      for (let i = 0; i < globs.length; i++) {
+        for (let j = i + 1; j < globs.length; j++) {
+          if (globs[i].id === globs[j].id) continue
+          if (!overlaps(globs[i].g, globs[j].g)) continue
+          if (allowed.has(globs[i].g) && allowed.has(globs[j].g)) continue
+          collisions.push(`${wave}: ${globs[i].id} ${globs[i].g} ~ ${globs[j].id} ${globs[j].g}`)
+        }
+      }
+    }
+  }
+  const css = read('src/renderer/styles.css') || ''
+  const missingMarkers = lanes ? Object.keys(lanes).filter((id) => !css.includes(`/* ── rd:${id} ── */`) || !css.includes(`/* ── /rd:${id} ── */`)) : ['no lanes']
+  const contractsOwned = lanes ? Object.entries(lanes).filter(([, gs]) => gs.includes('src/shared/redesign-contracts.ts')).map(([id]) => id) : []
+  const pkgScripts = JSON.parse(read('package.json') || '{}').scripts || {}
+  const missingScripts = lanes ? Object.keys(lanes).filter((id) => typeof pkgScripts[`verify:rd-${id.toLowerCase()}`] !== 'string') : ['no lanes']
+  ok('rd-own.1 every redesign lane has markers, a verify script and a disjoint file set within its wave; the contracts file has no lane owner',
+    collisions.length === 0 && missingMarkers.length === 0 && contractsOwned.length === 0 && missingScripts.length === 0 &&
+      Array.isArray(own.frozen_after_foundations) && own.frozen_after_foundations.includes('src/shared/redesign-contracts.ts'),
+    JSON.stringify({ collisions, missingMarkers, contractsOwned, missingScripts }))
 }
 
 // M190 — guide.1. THE GUIDE IS CHECKED AS A FILE, and the check is about the

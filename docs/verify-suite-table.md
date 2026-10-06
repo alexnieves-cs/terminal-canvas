@@ -92,3 +92,14 @@ whether a given bundle needs an alias is to delete it and build** — reading th
 reasoning about which are `import type` has been wrong repeatedly, because a re-export chain or
 a value imported three hops down a bundle is easy to miss by eye.
 
+## Redesign seams (M435)
+
+`verify:rd-f1`, `verify:rd-f2`, `verify:rd-f3`, `verify:rd-l-a`, `verify:rd-l-b`,
+`verify:rd-l-c`, `verify:rd-l-d`, `verify:rd-l-e`, `verify:rd-l-f`, `verify:rd-w0`,
+`verify:rd-w1`, `verify:rd-w2`, `verify:rd-w3`, `verify:rd-w4`, `verify:rd-w5`,
+`verify:rd-w6` are plain-node stubs. Each asserts its CSS markers, the contracts
+file and its ownership entry (`rd-<lane>.0`). They are in the derived `npm run verify`
+chain because they are `verify:*` scripts. The lane replaces the body. `verify:meta`
+`rd-own.1` pins that every lane has a script, markers, and no same-wave file collision
+except `styles.css`.
+

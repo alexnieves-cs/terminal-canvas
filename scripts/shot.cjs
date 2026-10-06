@@ -2202,13 +2202,31 @@ app.whenReady().then(async () => {
   await sleep(1500)
 
   const manifest = []
+  // Redesign scenes live in scripts/shot-scenes/rd-*.cjs so a lane never edits
+  // this list. A scene is painted only once the lane has given it `run`.
+  // Until then it is a planned reference (verify:meta reads the file as text)
+  // and not a capture, so visual.1 does not demand a golden for a seam.
+  const rdScenes = []
+  {
+    const { readdirSync } = require('node:fs')
+    const dir = join(__dirname, 'shot-scenes')
+    if (existsSync(dir)) {
+      for (const name of readdirSync(dir).filter((n) => /^rd-.*\.cjs$/.test(n)).sort()) {
+        for (const scene of require(join(dir, name))) {
+          if (scene && typeof scene.run === 'function') rdScenes.push(scene)
+        }
+      }
+    }
+  }
+  const scenes = SCENES.concat(rdScenes)
   // SHOT_ONLY=a,b narrows the run to the named scenes, in SCENES order — for
-  // iterating on one surface. Scenes share a window and some lean on the one
+  // iterating on one surface. TC_SHOT_ONLY is the same filter under the name
+  // the redesign run book uses. Scenes share a window and some lean on the one
   // before (orchestration-dark needs orchestration to have opened the page), so
   // name the pair; a filter matching nothing is an error, not an empty success.
-  const only = (process.env.SHOT_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean)
-  if (only.length > 0 && !SCENES.some((s) => only.includes(s.name))) throw new Error(`SHOT_ONLY matched no scene: ${only.join(', ')}`)
-  for (const scene of SCENES) {
+  const only = (process.env.TC_SHOT_ONLY || process.env.SHOT_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (only.length > 0 && !scenes.some((s) => only.includes(s.name))) throw new Error(`SHOT_ONLY matched no scene: ${only.join(', ')}`)
+  for (const scene of scenes) {
     if (only.length > 0 && !only.includes(scene.name)) continue
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
     try {

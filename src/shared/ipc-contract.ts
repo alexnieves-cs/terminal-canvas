@@ -1013,6 +1013,13 @@ export const IPC = {
   WORLD_STATUS: 'world:status',
   /** Asks main to rebuild the world feed and say every agent's status again; answers the connection that results. Never rejects. */
   WORLD_RETRY: 'world:retry'
+  /**
+   * M435. Reserved channel NAMES, not channels. A key in this object would
+   * need a main handler (verify:ipc) and a line in CLAUDE.md's diagram
+   * (claude-md.1) in the same change, so Phase 0 only writes the names down.
+   * Lanes add the real key beside this comment when they implement it:
+   *   boot:progress — L-A, restore lines, main → renderer.
+   */
 } as const
 
 /**
