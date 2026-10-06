@@ -12,8 +12,9 @@
  * attention → task → running → selected → empty.
  */
 
+import { useSyncExternalStore } from 'react'
 import { isNeedsYouCount, needsYouCount } from '@shared/attention-words'
-import type { AttentionItem } from '@shared/redesign-contracts'
+import type { AttentionCensus } from '@renderer/session/useAttentionQueue'
 
 export interface PillFacts {
   /** The attention set's size (the wants-you queue Cmd+J cycles). */
@@ -155,16 +156,27 @@ export function pillFocused(): boolean {
 }
 
 /**
- * M438. F2 owns the real queue (`useAttentionQueue` in session/). This stub
- * keeps the import sites — the pill, the dock badge, the Sessions count —
- * on one function so that lane's check can require them without a second
- * counter. `ATTENTION_QUEUE_WIRED` is false until the rebase swaps this for
- * the real hook; until then the pill's existing rest sentence stays.
+ * M438. One census for every surface that reads F2's queue. The pill builds
+ * it (it holds the panel list) and publishes it; the dock, the Sessions
+ * badge and the Sessions host subscribe. A second list in any of those
+ * files is the drift the queue exists to stop. The snapshot is replaced
+ * whole, so a subscriber compares by identity.
  */
-export const ATTENTION_QUEUE_WIRED = false
+let censusSnapshot: readonly AttentionCensus[] = []
+const censusListeners = new Set<() => void>()
 
-export function useAttentionQueue(): readonly AttentionItem[] {
-  return []
+export function publishAttentionCensus(next: readonly AttentionCensus[]): void {
+  if (next === censusSnapshot) return
+  censusSnapshot = next
+  for (const listener of censusListeners) listener()
+}
+
+export function useAttentionCensus(): readonly AttentionCensus[] {
+  return useSyncExternalStore(
+    (cb) => { censusListeners.add(cb); return () => { censusListeners.delete(cb) } },
+    () => censusSnapshot,
+    () => censusSnapshot
+  )
 }
 
 /** Rest layer: a missing or non-positive count is silence, never "0 sessions". */

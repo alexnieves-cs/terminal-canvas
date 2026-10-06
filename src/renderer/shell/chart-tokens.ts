@@ -18,15 +18,17 @@
  * The five accents are DERIVED against `verify:styles` 11 for the non-text
  * 3:1 rule, which is exactly the rule a chart mark falls under (WCAG 1.4.11:
  * a line, a bar and a dot are non-text contrast). So a chart may spend them
- * freely, and must not invent a sixth.
+ * freely, and must not invent a sixth. M436: `--blue` and `--iris` are the
+ * working cyan, `--green` is finished OK, `--red` is failed. This file still
+ * reads the names. It does not learn the hexes.
  */
 import { useEffect, useState } from 'react'
 
 /**
  * The names a chart may spend. `--amber` is DELIBERATELY ABSENT: it is the
- * attention hue, the single most important signal in this app, and a cost
- * chart that happens to plot an amber series teaches a person to stop reading
- * amber as "this needs you".
+ * needs-you hue (`--state-needs`), the single most important signal in this
+ * app, and a cost chart that happens to plot an amber series teaches a person
+ * to stop reading amber as "this needs you".
  */
 const CHART_TOKENS = ['--blue', '--iris', '--violet', '--green', '--red', '--fg-3', '--fg-4', '--line', '--s-2'] as const
 

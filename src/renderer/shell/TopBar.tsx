@@ -9,7 +9,8 @@ import { LiveStatus } from './LiveStatus'
 import { AccountMenu } from '../account/AccountMenu'
 import { initialsOf } from '../account/account-model'
 import type { Accounts } from '../account/useAccounts'
-import { ATTENTION_QUEUE_WIRED, sessionCountLabel, sessionsBadgeLabel, useAttentionQueue } from '@renderer/canvas/command-pill'
+import { sessionCountLabel, sessionsBadgeLabel, useAttentionCensus } from '@renderer/canvas/command-pill'
+import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
 import { SessionsHost } from '@renderer/sessions/SessionsHost'
 import { ReviewHost } from '@renderer/review/ReviewHost'
 
@@ -110,8 +111,8 @@ export function TopBar({
   // the segment stays while the view is showing, so the pressed place never
   // vanishes from under the person looking at it.
   const showPeople = (accounts?.sessions.length ?? 0) > 0 || sharedWorkspace || centerView === 'team'
-  const attentionQueue = useAttentionQueue()
-  const badge = sessionsBadgeLabel(ATTENTION_QUEUE_WIRED ? attentionQueue.length : waiting)
+  const attentionQueue = useAttentionQueue(useAttentionCensus())
+  const badge = sessionsBadgeLabel(attentionQueue.length)
   const observed = useObservedSessionCount(sessionCount)
   const sessionsLabel = sessionCountLabel(observed)
   const [shellEl, setShellEl] = useState<HTMLElement | null>(null)

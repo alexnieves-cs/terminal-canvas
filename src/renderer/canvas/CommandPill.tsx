@@ -1,11 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, type JSX, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type MutableRefObject } from 'react'
 import type { PaletteActions } from '@renderer/palette/commands'
 import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
+import { chatStateInput } from '@renderer/chat/chat-model'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
+import { useAttentionQueue, type AttentionCensus } from '@renderer/session/useAttentionQueue'
+import type { StateInput } from '@renderer/panels/panel-state'
 import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
-import { attentionPillLine, pillRestState, retiresJumpHint, runningAgents, showJumpHint, useAttentionQueue, type OrchestratorCandidate } from './command-pill'
+import { attentionPillLine, pillRestState, publishAttentionCensus, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
 import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type SelectionVerbKey } from './object-verbs'
 
 /**
@@ -99,11 +102,46 @@ function readJumpTaught(): boolean {
   try { return window.localStorage.getItem(JUMP_TAUGHT_KEY) === 'true' } catch { return false }
 }
 
+/**
+ * The census F2's queue reads. Membership and the clock live on Canvas, so
+ * every row has a null task and one shared `since` (the id breaks the tie).
+ * A terminal whose agent the store has heard is passed as running: that is
+ * the only status on which the agent's own word is the sentence. Approvals
+ * attach inside the hook, by panel id, so this list does not carry them.
+ */
+function attentionCensus(panels: readonly Panel[]): AttentionCensus[] {
+  return panels.map((p): AttentionCensus => {
+    const id = p.rect.id
+    if (isChatPanel(p)) {
+      const chat = getChat(id)
+      const input = chatStateInput(chat.snapshot, chat.turns.length > 0)
+      const state: StateInput = { kind: 'chat', status: undefined, dormant: false, ...(input === undefined ? {} : { chat: input }) }
+      return { panelId: id, surface: 'chat', taskId: null, since: 0, state }
+    }
+    if (isTerminalPanel(p)) {
+      const agent = getAgentState(id)
+      const state: StateInput = {
+        kind: 'terminal',
+        dormant: false,
+        status: agent === undefined ? undefined : { kind: 'running', pid: 0, command: '', cwd: '', reattached: false }
+      }
+      return { panelId: id, surface: 'terminal', taskId: null, since: 0, state }
+    }
+    return { panelId: id, surface: 'other', taskId: null, since: 0, state: { kind: p.kind, status: undefined, dormant: false } }
+  })
+}
+
 export function CommandPill(props: CommandPillProps): JSX.Element {
   const { actions, panels, attentionCount, taskTitle, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
-  // M438. The redesign line reads F2's queue. Empty until that hook is wired,
-  // so the rest button below stays the one the panels suite presses.
-  const attentionLine = attentionPillLine(useAttentionQueue())
+  // M438. The redesign line reads F2's queue. The same census is published
+  // for the dock and the Sessions host. Empty, the rest button below stays
+  // the one the panels suite presses.
+  const chatsVersion = useChatsVersion()
+  const [agentTick, setAgentTick] = useState(0)
+  const census = useMemo(() => attentionCensus(panels), [panels, chatsVersion, agentTick])
+  useLayoutEffect(() => { publishAttentionCensus(census) }, [census])
+  useLayoutEffect(() => () => { publishAttentionCensus([]) }, [])
+  const attentionLine = attentionPillLine(useAttentionQueue(census))
   const [expanded, setExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -127,9 +165,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
 
   // Re-read chat status and agent state: chats through the store's version,
   // terminal agents through the transition fan-out (one bump per change).
-  useChatsVersion()
-  const [, setTick] = useState(0)
-  useEffect(() => onAgentTransition(() => setTick((n) => n + 1)), [])
+  useEffect(() => onAgentTransition(() => setAgentTick((n) => n + 1)), [])
 
   const running = runningAgents(panels.map((p) => (isChatPanel(p)
     ? { id: p.rect.id, kind: 'chat', chatStatus: getChat(p.rect.id).snapshot?.status }
@@ -502,7 +538,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
       )}
       {attentionLine !== '' && note === null && !expanded ? (
         <div className="command-pill__rest command-pill__rest--line" data-pill-rest="" data-pill-state="attention" role="group" aria-label={attentionLine}>
-          <button type="button" className="command-pill__line-main" {...shellControl(() => { focusOnOpenRef.current = false; setNote(null); setExpanded(true) })}>
+          <button type="button" className="command-pill__line-main" aria-label={attentionLine} {...shellControl(() => { focusOnOpenRef.current = false; setNote(null); setExpanded(true) })}>
             <Bell /><span className="command-pill__text">{attentionLine.split(' · ').slice(0, -2).join(' · ')}</span>
           </button>
           <button type="button" data-pill-go="" {...shellControl(onJump)}>Go <kbd>⌘J</kbd></button>

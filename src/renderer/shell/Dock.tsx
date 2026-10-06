@@ -6,7 +6,8 @@ import { agentWord } from '@renderer/panels/panel-state'
 import { Bell, ChevronLeft, ChevronRight, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Link, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 import { needsYouCount } from '@shared/attention-words'
-import { ATTENTION_QUEUE_WIRED, useAttentionQueue } from '@renderer/canvas/command-pill'
+import { useAttentionCensus } from '@renderer/canvas/command-pill'
+import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
 import { useAttentionOsSettings } from './useAttentionOsSettings'
 import { ApprovalAcks, ApprovalDetail } from './ApprovalDetail'
 import { useApprovalOutcomes } from './approval-outcome'
@@ -251,11 +252,12 @@ function DockImpl({
   // M378. The team's asks wait on this person too — on anyone who may edit
   // the canvas — so the badge counts them beside the panels waiting here.
   const team = useTeamAsks()
-  // M438. F2's queue is the badge's source once it is wired. Until then the
-  // snooze-aware count stays, so a Mac badge check still sees today's number.
-  const attentionQueue = useAttentionQueue()
+  // M438. The badge is F2's queue. The aria-label below still uses the
+  // snooze-aware count: the queue does not know snooze, and a team ask is
+  // not one of its kinds (requests.md R-005).
+  const attentionQueue = useAttentionQueue(useAttentionCensus())
   const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length + team.length
-  const badgeCount = ATTENTION_QUEUE_WIRED ? attentionQueue.length : waiting
+  const badgeCount = attentionQueue.length
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const [historyOpen, setHistoryOpen] = useState<string | null>(null)

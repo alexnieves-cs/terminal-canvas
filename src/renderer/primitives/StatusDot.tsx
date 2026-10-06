@@ -12,9 +12,10 @@ export interface StatusDotProps {
 /**
  * M279. THE ONE STATUS DOT, as a component. `.status-dot[data-tone]` is the
  * only rule set that colours it (styles.css: "ONE status dot"), so every
- * surface that adopts this reads the same hue for the same fact. It says
- * nothing a screen reader hears — the word beside it is the announcement —
- * so it is `aria-hidden`.
+ * surface that adopts this reads the same hue for the same fact. Working and
+ * starting breathe there; the colour is a `--state-*` token, never a hex in
+ * this file. It says nothing a screen reader hears — the word beside it is
+ * the announcement — so it is `aria-hidden`.
  */
 export function StatusDot({ tone, agentState, className, title }: StatusDotProps): JSX.Element {
   return <span className={`status-dot${className ? ` ${className}` : ''}`} data-tone={tone} data-agent-state={agentState} title={title} aria-hidden="true" />

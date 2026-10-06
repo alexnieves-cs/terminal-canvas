@@ -36,11 +36,12 @@
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
      is right. 50% and --r-full are SHAPES (a circle, a pill), not steps. */
-  /* M109. One step rounder each (Obsidian: round corners, 12px on the frame).
-     M328 (restrained system). Back down a step each: a working surface reads
-     as an instrument, and a 12px frame around 8px boxes around 5px controls
-     was the rounded-container look the brief named. Still decreasing inward. */
-  --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-full: 999px;
+  /* M436. The concept's shape scale: panels 12, controls 8, regions 20,
+     pills full. Still decreasing inward — a control inside a panel, a panel
+     inside a region. M328 had stepped the frame down to 8px; the redesign's
+     material table puts the 12px frame back, and --r-region is the territory
+     F2 draws so the step has one home. */
+  --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-region: 20px; --r-full: 999px;
 
   /* Type. A six-step scale at a 1.2 ratio, 11 to 24. --t-xs is legal below
      the 12px floor ONLY because every user of it is a one- or two-word
@@ -81,6 +82,8 @@
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
   --dur-1: 90ms; --dur-2: 160ms; --dur-spring: 520ms; --dur-flow: 900ms;
+  /* M436. Camera flights. 220ms, paired with --ease (already an ease-out). */
+  --dur-flight: 220ms;
   /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
   --dur-breath: 1.2s;
   --dur-bob: 2.8s;     /* M275: a busy cube's Y-bob and top-face breath — slower than a pulse, never a heartbeat */
@@ -124,10 +127,11 @@
      second selector binding a hue. A glow is a box-shadow, never a filter:
      it composites for free on forty panels where a drop-shadow filter would
      not. */
-  /* M328. No spill: selection is the 1px accent ring, and a state's edge is
-     its colour — a glow was carrying a fact the edge and the word already
-     say. Kept as tokens (every site reads them) with the spill at zero. */
-  --glow-iris: 0 0 0 1px var(--iris);
+  /* M436 (D1). Selection is a 2px ring plus a 6px halo in --state-select,
+     a higher-luminance cyan than working, so a selected working panel still
+     reads as two facts. The state's own edge does not wear this: needs-you
+     is the only tone that glows, and that glow is --tone-glow. */
+  --glow-iris: 0 0 0 2px var(--state-select), 0 0 6px var(--state-select);
   --glow-tone: 0 0 0 0 transparent;
   /* M258. The editorial measure a file or note page reads at — tighter than
      --measure, which is the assistant's prose — and its face: the system's
@@ -143,6 +147,8 @@
   --nav-hud-h: 34px;
   /* M258. The graph-paper pitch on a workflow's surface. */
   --grid-pitch: 16px;
+  /* M436. The canvas dot grid's pitch. The colour is --canvas-grid, a theme's. */
+  --grid-canvas: 24px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -214,19 +220,34 @@
      .panel--agent-wants-you MUST keep `border-color: var(--amber)`
      un-transformed: verify:panels 62 and 97 compare the two by RESOLVED
      value. The -dim tints are the same hues at low alpha over the surface. */
-  --blue:  #2f6bd8;  --blue-dim:  rgba(47, 107, 216, .12);
-  --green: #3f8b3f;  --green-dim: rgba(63, 139, 63, .12);
-  --amber: #a06c08;  --amber-dim: rgba(160, 108, 8, .14);
-  --red:   #cc3344;  --red-dim:   rgba(204, 51, 68, .11);
+  /* M436. Light accents are the concept hues darkened until check 11's 3:1
+     floor holds on --s-1 and --s-4, and white ink on the working cyan clears
+     4.5. They are not the dark hexes. --blue and --iris are the working
+     token: accent and working are one colour (D1). */
+  --blue:  #348184;  --blue-dim:  rgba(52, 129, 132, .12);
+  --green: #3c8c62;  --green-dim: rgba(60, 140, 98, .12);
+  --amber: #9f762c;  --amber-dim: rgba(159, 118, 44, .14);
+  --red:   #cd5656;  --red-dim:   rgba(205, 86, 86, .11);
 
-  /* App identity, never agent state. Iris answers an interaction with the
-     interface itself: selection in the palette and rail, links, focus. */
-  --iris: #0b7f97;  --iris-dim: rgba(11, 127, 151, .12);
+  /* App identity is the working cyan. Selection is --state-select, a step
+     lighter, so focus and a selected frame are not the same mark. */
+  --iris: #348184;  --iris-dim: rgba(52, 129, 132, .12);
   /* M279. The FAMILY accent: a workflow's blocks, a pool, the orchestration
      page's structure — things the app composes, never a state and never the
      interface's own selection. Restrained by the same 3:1 floor as the
      others (check 11 measures it). */
   --violet: #6a4fc4;  --violet-dim: rgba(106, 79, 196, .12);
+  /* M436. The closed state set, plus the two marks that are not tones.
+     Hexes match src/shared/state-palette.ts (rd-tone.parity.1). */
+  --state-working: #348184;
+  --state-needs: #9f762c;
+  --state-done: #3c8c62;
+  --state-failed: #cd5656;
+  --state-idle: #777b83;
+  --external: #7d64c4;
+  --guide: #c44778;
+  --state-select: #668084;
+  --canvas-grid: #c3c9d4;
   --focus: var(--iris);
   /* M258. The navigation cluster's moat — a ring of the ground colour that
      parts the minimap from panels passing under it — and the graph-paper and
@@ -270,8 +291,8 @@
   /* M229. The ground's two ACTIVITY lights. Not new hues: the same working
      blue and needs-you amber every panel edge already uses, at the aura's own
      low alpha. A third colour here would be a third vocabulary. */
-  --aura-working:   rgba(47, 107, 216, 0);
-  --aura-needs-you: rgba(160, 108, 8, 0);
+  --aura-working:   rgba(52, 129, 132, 0);
+  --aura-needs-you: rgba(159, 118, 44, 0);
   --on-iris:    #ffffff;
   /* Presence: the ink on a person's own colour (shared/presence.ts colorOf,
      a mid-lightness hue), the same in both themes because the hue is. */
@@ -366,8 +387,10 @@
      than grey. Every value re-derived against check 11. */
   --deck-violet: #b59af8;
   --deck-steel: #8fb2d6;
-  --deck-ground: #0b0d11;
-  --deck-surface: #161a21;
+  /* M436. The concept's ink and the raised surface. The diorama's ground
+     follows the canvas so the room and the window are one material. */
+  --deck-ground: #0b0d12;
+  --deck-surface: #161a23;
   /* M279. NAVY, not black. The ramp keeps M109's twenty-point span and moves
      every step a few degrees toward blue, so the ground reads as a deep
      material rather than an absence — the dark theme was measured at
@@ -379,39 +402,56 @@
      Neutrals keep a few degrees of cool bias toward --iris so they read as
      chosen, and the two auras drop to a whisper — the canvas is lit by its
      panels now, not by the ground. Re-derived against check 11. */
-  --s-0: #0b0d11;
-  --s-1: #161a21;
-  --s-2: #111419;
-  --s-3: #1d222b;
-  --s-4: #262c36;
-  --s-5: #303743;
+  /* M436. CONCEPT.md's ramp. Ink (#08090D) is the chrome, darker than the
+     canvas (#0B0D12). Surfaces step up: panel, header, control. --s-4 is the
+     control/hover ground check 11 measures text on; --s-5 is pressed only. */
+  --s-0: #0b0d12;
+  --s-1: #11141b;
+  --s-2: #08090d;
+  --s-3: #161a23;
+  --s-4: #1c2130;
+  --s-5: #262c38;
 
   /* terminal/themes.ts's dark `background`: a half-step below the glass so
      the well reads as a screen set into the frame. The sixteen ANSI colours
      did not move (they are the agent's, not the app's). */
   --well: #0a0c10;
 
-  --fg:   #e7e9ee;
-  --fg-2: #b3b9c4;
-  --fg-3: #959cab;
-  --fg-4: #7b8292;
+  /* M436. Three text levels from the concept, plus --fg-2 which check 11
+     still measures at 4.5. The concept's faint #5B6375 is 2.66:1 on --s-4,
+     under the 3:1 floor for disabled text, so --fg-4 is #677084 — the same
+     cool bias, the first value that clears 3:1 on every measured ground.
+     --fg-3 is the concept's muted, and it is also --state-idle. */
+  --fg:   #e7eaf0;
+  --fg-2: #a8b0be;
+  --fg-3: #8c94a5;
+  --fg-4: #677084;
 
-  /* Hairlines carry a little of the ground's blue so a boundary reads as
-     part of the material rather than a grey ruled over it. */
-  --line:        #252a33;
-  --line-strong: #363d49;
+  /* Hairlines. White at the concept's two alphas, so a line is light on the
+     ink rather than a second grey. */
+  --line:        rgba(255, 255, 255, .07);
+  --line-strong: rgba(255, 255, 255, .12);
   --frame-line: var(--line-strong);
 
-  /* M279. Electric blue for work, mint for idle: the working hue is the one
-     the eye meets most, so it sits nearest the identity cyan without
-     becoming it (selection is cyan; work is blue — M63's rule survives). */
-  --blue:  #7aa7e8;  --blue-dim:  rgba(122, 167, 232, .14);
-  --green: #6fcf8a;  --green-dim: rgba(111, 207, 138, .14);
-  --amber: #e8b44c;  --amber-dim: rgba(232, 180, 76, .16);
-  --red:   #ef7a7a;  --red-dim:   rgba(239, 122, 122, .14);
+  /* M436 (D1, D7). Cyan is working and the accent. Green is finished OK.
+     Amber is needs-you. Red is failed. Idle is the slate, not the green —
+     the M415 inversion ends here. Selection is --state-select, not --iris. */
+  --blue:  #5be1e6;  --blue-dim:  rgba(91, 225, 230, .14);
+  --green: #5edc9a;  --green-dim: rgba(94, 220, 154, .14);
+  --amber: #f5b544;  --amber-dim: rgba(245, 181, 68, .16);
+  --red:   #ff6b6b;  --red-dim:   rgba(255, 107, 107, .14);
 
-  --iris: #5ec4d4;  --iris-dim: rgba(94, 196, 212, .14);
+  --iris: #5be1e6;  --iris-dim: rgba(91, 225, 230, .14);
   --violet: #a894f0;  --violet-dim: rgba(168, 148, 240, .14);
+  --state-working: #5be1e6;
+  --state-needs: #f5b544;
+  --state-done: #5edc9a;
+  --state-failed: #ff6b6b;
+  --state-idle: #8c94a5;
+  --external: #a78bfa;
+  --guide: #ff5fa2;
+  --state-select: #a6f6ff;
+  --canvas-grid: #1b202a;
   --focus: var(--iris);
   --nav-moat: var(--s-0);
   --grid-line: rgba(231, 233, 238, .045);
@@ -427,8 +467,9 @@
      from --s-0, the chrome a half-step darker than the panel). The lit edge
      is CYAN-TINTED white now rather than white: the top light on every
      surface says, quietly, what colour the room's light is. */
-  --glass-1:    rgba(22, 26, 33, .90);
-  --glass-2:    rgba(17, 20, 25, .86);
+  /* M436. The glass is the new ramp, same alphas: panel #11141B, chrome the ink. */
+  --glass-1:    rgba(17, 20, 27, .90);
+  --glass-2:    rgba(8, 9, 13, .86);
   --edge-light: rgba(255, 255, 255, .09);
   --bezel:      rgba(0, 0, 0, .45);
   --lift:       0 24px 48px -20px rgba(0, 0, 0, .8); /* M163: the lift present, not implied; was 0 20px 40px -22px .75 */
@@ -437,11 +478,12 @@
      indigo and teal. */
   --aura-1:     rgba(94, 196, 212, 0);
   --aura-2:     rgba(140, 150, 175, 0);
-  --aura-working:   rgba(122, 167, 232, 0);
-  --aura-needs-you: rgba(232, 180, 76, 0);
-  --on-iris:    #06222a;
+  --aura-working:   rgba(91, 225, 230, 0);
+  --aura-needs-you: rgba(245, 181, 68, 0);
+  /* Ink on the working cyan. #08090D on #5BE1E6 clears 12:1. */
+  --on-iris:    #08090d;
   --on-peer:    #10131a;
-  --bubble:     #1f242d;
+  --bubble:     #1a1f2a;
   --blur:       blur(14px) saturate(140%);
 
   /* M227. The depth tokens, DARK. --glass-0 sits BELOW --s-0 in lightness so a
@@ -455,8 +497,8 @@
      eye finds. This is M163's --edge-light finding (.06 was invisible at the
      golden's scale, .11 was not) met a second time, and answered before the
      milestone shipped rather than two versions later. */
-  --glass-0:    rgba(9, 11, 14, .92);
-  --glass-3:    rgba(32, 37, 46, .95);
+  --glass-0:    rgba(6, 7, 10, .92);
+  --glass-3:    rgba(28, 33, 48, .95);
   --rim-inner:  inset 0 2px 3px rgba(0, 0, 0, .9);
 
   --text:      var(--fg);
@@ -574,7 +616,12 @@ body {
   /* M109. A stacking context of its own, so the aura at z-index -1 sits
      under every region and never under the body. */
   isolation: isolate;
-  background: var(--s-0);
+  /* M436. The canvas element stays transparent (ground.1) so a click on the
+     ground still clears selection. The dot grid lives on the shell, which is
+     what shows through. 24px is --grid-canvas; the dot is --canvas-grid. */
+  background-color: var(--s-0);
+  background-image: radial-gradient(circle, var(--canvas-grid) 1px, transparent 1px);
+  background-size: var(--grid-canvas) var(--grid-canvas);
   display: grid;
   height: 100%;
   grid-template-columns: var(--shell-dock-w) var(--shell-nav-w) 1fr var(--shell-ctx-w);
@@ -1352,29 +1399,23 @@ body {
    this block binds --blue/--amber/--green/--red to a data-tone or an agent
    state, and if a tone panel-state.ts can produce has no rule here.
    ───────────────────────────────────────────────────────────────────────── */
-[data-tone] { --tone: var(--fg-4); --tone-dim: var(--s-4); --tone-glow: var(--glow-tone); }
-[data-tone="kind"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
-/* asleep is the heavier grey (it has a history); not-started and starting
-   the lighter. The critic found a dashed asleep edge invisible at 100% and
-   gone at 22%: a solid edge in a darker grey says the same thing legibly. */
-[data-tone="asleep"] { --tone: var(--line-strong); --tone-dim: var(--s-2); }
-/* M67. Not started is a grey edge a person can see, not the frame's own
-   hairline colour (the critic found asleep and not-started frames with no
-   edge at all). */
-[data-tone="none"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
-[data-tone="starting"] { --tone: var(--line); --tone-dim: var(--s-4); }
-/* M279. The two ACTIVE tones spill wider: a working edge and a waiting edge
-   are the facts a glance across the canvas is for, and the glow is how a
-   node at 40% still says which it is. Geometry only — the hue is the same
-   --tone-dim the narrow default reads. */
-/* #12. The working shimmer's rim is iris, never amber: amber is reserved for something that needs the person, and a working node does not. */
-[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--iris); }
-[data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
-[data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
-/* Backlog #90. A clean exit is FINISHED, not failed: the settled neutral of a
-   closed thing, so the red keeps meaning something went wrong. */
-[data-tone="done"] { --tone: var(--muted); --tone-dim: var(--s-4); }
-[data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
+/* M436. Every tone reads a --state-* token and nothing else (rd-tone.bind.1).
+   starting breathes in the working cyan. kind, asleep, none and idle are the
+   one slate. needs-you is the only tone with a glow. */
+[data-tone] { --tone: var(--state-idle); --tone-dim: color-mix(in srgb, var(--state-idle) 16%, transparent); --tone-glow: 0 0 0 0 transparent; }
+[data-tone="kind"] { --tone: var(--state-idle); --tone-dim: color-mix(in srgb, var(--state-idle) 14%, transparent); }
+/* Asleep keeps the slate and, below, the dashed left edge. The edge is a
+   line style, not a second colour. */
+[data-tone="asleep"] { --tone: var(--state-idle); --tone-dim: color-mix(in srgb, var(--state-idle) 14%, transparent); }
+[data-tone="none"] { --tone: var(--state-idle); --tone-dim: color-mix(in srgb, var(--state-idle) 14%, transparent); }
+[data-tone="starting"] { --tone: var(--state-working); --tone-dim: color-mix(in srgb, var(--state-working) 14%, transparent); }
+[data-tone="working"] { --tone: var(--state-working); --tone-dim: color-mix(in srgb, var(--state-working) 14%, transparent); --orch-rim: var(--state-working); }
+[data-tone="needs-you"] { --tone: var(--state-needs); --tone-dim: color-mix(in srgb, var(--state-needs) 16%, transparent); --tone-glow: 0 0 12px color-mix(in srgb, var(--state-needs) 45%, transparent); }
+[data-tone="idle"] { --tone: var(--state-idle); --tone-dim: color-mix(in srgb, var(--state-idle) 14%, transparent); }
+/* D7. Green is finished OK. It is no longer the idle colour, and it is not
+   the muted grey a clean exit used to wear. */
+[data-tone="done"] { --tone: var(--state-done); --tone-dim: color-mix(in srgb, var(--state-done) 14%, transparent); }
+[data-tone="exited"] { --tone: var(--state-failed); --tone-dim: color-mix(in srgb, var(--state-failed) 14%, transparent); }
 
 /* M91. THE FAR VIEW'S HAIRLINE. The frame border is a world-space pixel, so
    at the summary tier (below 26%) it paints a quarter of a device pixel and
@@ -1415,11 +1456,11 @@ body {
 }
 .rail-row__kind svg { width: 12px; height: 12px; }
 /* M63. The word column reads in its tone; `asleep` and `not started` stay
-   muted so a quiet canvas is a quiet rail. */
+   muted so a quiet canvas is a quiet rail. `starting` does not: it is the
+   working cyan (M436), and muting it made a process that had begun look idle. */
 .rail-row__tail[data-tone] { color: var(--tone); }
 .rail-row__tail[data-tone="asleep"],
 .rail-row__tail[data-tone="none"],
-.rail-row__tail[data-tone="starting"],
 .rail-row__tail[data-tone="kind"] { color: var(--muted); }
 /* M68. A section's first-arm line and the navigator's provenance. */
 .inspector__arm { margin: 0 0 var(--sp-3); color: var(--fg-3); font-size: var(--t-xs); }
@@ -1722,8 +1763,8 @@ body {
    frame's `.pf__state` all carry `.status-dot`, and this is the only rule
    set keyed on data-agent-state — the same colours the panel border and the
    card stripe use, so a glance at the rail and a glance at the canvas cannot
-   disagree about what a panel is doing. `starting` and `idle` keep the
-   neutral default: neither is asking for anything. */
+   disagree about what a panel is doing. `starting` paints the working cyan
+   and breathes with it (M436). The quiet tones stay on the slate. */
 .status-dot {
   background: var(--line-strong);
   transition: background var(--dur-1) var(--ease);
@@ -1732,10 +1773,19 @@ body {
    tones keep the neutral default, and a kind's dot keeps the kind accent the
    .pf__state--kind rules give it. */
 .status-dot[data-tone="working"],
+.status-dot[data-tone="starting"],
 .status-dot[data-tone="needs-you"],
 .status-dot[data-tone="idle"],
 .status-dot[data-tone="done"],
 .status-dot[data-tone="exited"] { background: var(--tone); }
+/* The working dot breathes. A scale, not a glow: needs-you is the only tone
+   that spills light. Reduced motion collapses this in the global block. */
+@keyframes state-breath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(.72); }
+}
+.status-dot[data-tone="working"],
+.status-dot[data-tone="starting"] { animation: state-breath var(--dur-breath) var(--ease) infinite; }
 
 /* M256 (spec §19). Visually hidden but still in the accessibility tree: text
    alternatives (the minimap's per-panel list) and polite live-region
@@ -3061,7 +3111,9 @@ body {
    token both themes already carry at full strength; still transient (cleared
    on release). `verify:styles revamp.snap.css.1`. */
 .snap-guides { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 4000; pointer-events: none; }
-.snap-guide { position: absolute; background: var(--iris); pointer-events: none; }
+/* M436. Guides are --guide, and only while arranging: this layer is cleared
+   on release, so the pink is never a resting mark. */
+.snap-guide { position: absolute; background: var(--guide); pointer-events: none; }
 .snap-guide--x { width: calc(2px * var(--chrome-scale, 1)); margin-left: calc(-1px * var(--chrome-scale, 1)); }
 .snap-guide--y { height: calc(2px * var(--chrome-scale, 1)); margin-top: calc(-1px * var(--chrome-scale, 1)); }
 
@@ -3184,9 +3236,11 @@ body {
   box-shadow: 0 0 20px 5px var(--iris);
   transition: box-shadow var(--dur-2) var(--ease);
 }
-/* At the far tiers the glow doubles, so a wall of blocks reads as lights. */
-.world[data-detail="summary"] .pf::before,
-.world[data-detail="block"] .pf::before { box-shadow: 0 0 24px 6px var(--tone-dim); }
+/* At the far tiers the needs-you glow doubles, so a waiting block still
+   reads across the map. Every other tone stays dark: amber is the only
+   colour that glows (rd-tone.glow.1). */
+.world[data-detail="summary"] .pf[data-tone="needs-you"]::before,
+.world[data-detail="block"] .pf[data-tone="needs-you"]::before { box-shadow: 0 0 24px 6px color-mix(in srgb, var(--state-needs) 55%, transparent); }
 
 /* M47. THE FRAME. `.pf` is the box (`.panel` stays as its alias, for the
    ~200 checks that select on it); `.pf__chrome`, `.pf__title`, `.pf__close`,
@@ -3310,11 +3364,13 @@ body {
   animation: panel-enter var(--dur-2) var(--ease) both;
 }
 
-/* M63. IRIS, not blue: blue is now only ever "working", and the interface's
-   own accent answers selection everywhere (brief, principle 5). */
+/* M436 (D1). Cyan is working and the accent. Selection is --state-select, a
+   lighter cyan, so a selected working panel is two facts: the left edge and
+   the ring. The M63 rule ("selection cyan, work blue") ends here. */
 .panel--selected {
-  border-color: var(--iris);
-  /* M67. A ring. M109: and the lift restated, or a click drops the panel. */
+  border-color: var(--state-select);
+  /* M67. A ring. M109: and the lift restated, or a click drops the panel.
+     M436: the ring is --state-select, lighter than the working edge. */
   box-shadow: var(--glow-iris), var(--lift), var(--rim-top);
 }
 
@@ -3397,10 +3453,9 @@ body {
 .panel--selected.panel--agent-busy,
 .panel--selected.panel--agent-idle,
 .panel--selected.panel--agent-exited {
-  /* M63: IRIS. The first cut changed only the base .panel--selected rule and
-     this later, equal-specificity one kept painting the ring blue — the
-     critic sampled it. Blue is now only ever "working". */
-  border-color: var(--iris);
+  /* M436 (D1). Selection is --state-select. Working stays --state-working on
+     the left edge, which this rule does not paint. */
+  border-color: var(--state-select);
   /* The ring, restated: this rule is the LATER one at equal specificity and
      would otherwise drop it — and the lift with it (M109), and the rim with
      that (M228). */
@@ -3412,11 +3467,11 @@ body {
    landing on a panel selects it while it is still waiting. If selection
    painted over the amber here, the jump key would take you to a panel and
    hide the very reason it took you there. */
-/* M69: iris like every other selection. M6d kept this amber so a jump would
+/* M436: --state-select like every other selection. M6d kept this amber so a jump would
    not hide the reason it landed here; the reason is the LEFT EDGE now, which
    selection never paints over. */
 .panel--selected.panel--agent-wants-you {
-  border-color: var(--iris);
+  border-color: var(--state-select);
   box-shadow: var(--glow-iris), var(--lift), var(--rim-top);
 }
 
@@ -3660,7 +3715,7 @@ body {
 .panel__card--summary { justify-content: center; gap: var(--sp-3); font-family: var(--font-ui); }
 .panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); align-self: flex-start; padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--tone-dim); }
-.panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
+.panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"] { color: var(--fg-2); }
 /* M395 (the critic's P1 #3). READING FROM AFAR. At the summary tier a card's
    name was set in world units — 24px at 0.22 is 5px on screen — and clipped
    at its end, so four agents read `claude — …` while the margin labels beside
@@ -3730,10 +3785,10 @@ body {
    — and nothing else. The last line of scrollback went with M105's rail; the
    machine figure with M163's inspector. */
 .panel__card-summary[data-tone] { background: color-mix(in srgb, var(--tone) 26%, var(--s-1)); border-radius: var(--r-md); padding: var(--sp-5); }
-.panel__card-summary[data-tone="asleep"], .panel__card-summary[data-tone="none"], .panel__card-summary[data-tone="starting"], .panel__card-summary[data-tone="kind"] { background: var(--s-4); }
+.panel__card-summary[data-tone="asleep"], .panel__card-summary[data-tone="none"], .panel__card-summary[data-tone="kind"] { background: var(--s-4); }
 .panel__card-summary-glyph { display: inline-flex; width: 32px; height: 32px; color: var(--tone); }
 .panel__card-summary-glyph svg { width: 100%; height: 100%; }
-.panel__card-summary[data-tone="asleep"] .panel__card-summary-glyph, .panel__card-summary[data-tone="none"] .panel__card-summary-glyph, .panel__card-summary[data-tone="starting"] .panel__card-summary-glyph, .panel__card-summary[data-tone="kind"] .panel__card-summary-glyph { color: var(--fg-2); }
+.panel__card-summary[data-tone="asleep"] .panel__card-summary-glyph, .panel__card-summary[data-tone="none"] .panel__card-summary-glyph, .panel__card-summary[data-tone="kind"] .panel__card-summary-glyph { color: var(--fg-2); }
 .panel__card--block { padding: 0; }
 .panel__card-block {
   flex: 1;
@@ -3749,7 +3804,7 @@ body {
    16%-alpha --tone-dim vanished on a dark ground at 8% — and the minimap
    below draws the SAME expression (verify:styles far.1 compares them). */
 .panel__card-block[data-tone] { background: color-mix(in srgb, var(--tone) 26%, var(--s-1)); color: var(--tone); }
-.panel__card-block[data-tone="asleep"], .panel__card-block[data-tone="none"], .panel__card-block[data-tone="starting"] { background: var(--s-4); color: var(--fg); }
+.panel__card-block[data-tone="asleep"], .panel__card-block[data-tone="none"] { background: var(--s-4); color: var(--fg); }
 
 .panel__card-line {
   font-family: var(--font-mono); /* M162. Terminal bytes: the one leaf of the card that is cells */
@@ -3810,8 +3865,7 @@ body {
    muted ink so a quiet panel has a quiet pill. */
 .pf__word[data-tone] { color: var(--tone); border-color: var(--tone-dim); }
 .pf__word[data-tone="asleep"],
-.pf__word[data-tone="none"],
-.pf__word[data-tone="starting"] { color: var(--muted); border-color: var(--border); }
+.pf__word[data-tone="none"] { color: var(--muted); border-color: var(--border); }
 
 /* M69. THE MINIMAP: the status board at thumbnail scale, top-right, outside
    .world. A hairline frame on --s-2 (line, not shadow); blocks in their
@@ -3878,7 +3932,7 @@ body {
   border: 1px solid var(--tone);
   background: color-mix(in srgb, var(--tone) 26%, var(--s-1));
 }
-.minimap__block[data-tone="none"], .minimap__block[data-tone="starting"] { border-color: var(--line-strong); background: var(--s-4); }
+.minimap__block[data-tone="none"] { border-color: var(--line-strong); background: var(--s-4); }
 /* Asleep is DASHED and empty; a sessionless kind is a hairline and empty;
    a grey FILL means exactly not-started (M69's critic). */
 .minimap__block[data-tone="asleep"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
@@ -5258,7 +5312,7 @@ body {
   font-family: var(--font-ui);
   color: var(--tone);
 }
-.palette__state[data-tone="asleep"], .palette__state[data-tone="none"], .palette__state[data-tone="starting"], .palette__state[data-tone="kind"] { color: var(--fg-3); }
+.palette__state[data-tone="asleep"], .palette__state[data-tone="none"], .palette__state[data-tone="kind"] { color: var(--fg-3); }
 
 .palette__hint {
   flex: none;
@@ -6982,7 +7036,7 @@ body {
 /* M175. PALETTE AND SHEETS: one material. The palette's state is a dot in its
    tone; the word is clipped beside it (data-state-word and the title keep it). */
 .palette__state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: var(--sp-3); }
-.palette__state-dot[data-tone="asleep"], .palette__state-dot[data-tone="none"], .palette__state-dot[data-tone="starting"] { background: var(--fg-4); }
+.palette__state-dot[data-tone="asleep"], .palette__state-dot[data-tone="none"] { background: var(--fg-4); }
 .palette__state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* M177. EMPTY STATES AS PLACES: one shape — the kind's glyph, one sentence
@@ -7957,9 +8011,9 @@ body {
   border-radius: var(--r-full); background: var(--tone-dim); color: var(--tone);
   font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
 }
-.github-item__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="starting"], [data-tone="asleep"]),
-.jira-node__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="starting"], [data-tone="asleep"]),
-.board-row__remote:is([data-tone="kind"], [data-tone="none"], [data-tone="starting"], [data-tone="asleep"]) { color: var(--fg-2); }
+.github-item__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="asleep"]),
+.jira-node__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="asleep"]),
+.board-row__remote:is([data-tone="kind"], [data-tone="none"], [data-tone="asleep"]) { color: var(--fg-2); }
 /* A move Jira has not confirmed yet: the target, marked pending — never dressed as Jira's answer. */
 .jira-node__pill[data-pending] { background: transparent; border: 1px dashed var(--iris); color: var(--iris); }
 
@@ -10857,7 +10911,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
    word. The rest layer's "one meaningful state"; nothing else is added. */
 .shape__live-ring { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .shape__live-ring path { fill: none; stroke: var(--tone); stroke-width: 3; stroke-linejoin: round; }
-.shape__live-ring[data-tone="asleep"] path, .shape__live-ring[data-tone="none"] path, .shape__live-ring[data-tone="starting"] path { stroke-dasharray: 6 5; stroke-width: 2; }
+.shape__live-ring[data-tone="asleep"] path, .shape__live-ring[data-tone="none"] path { stroke-dasharray: 6 5; stroke-width: 2; }
 /* M396 (the critic: "the bold idle chip is larger than the label it
    annotates"). The chip IS the header's state word — a .badge (dot + word in
    the tone, hairline capsule) — so the shape and the rail and the panel say
@@ -10875,7 +10929,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   pointer-events: none;
 }
 .shape__live[data-tone] { color: var(--tone); border-color: var(--tone-dim); }
-.shape__live[data-tone="asleep"], .shape__live[data-tone="none"], .shape__live[data-tone="starting"] { color: var(--muted); border-color: var(--border); }
+.shape__live[data-tone="asleep"], .shape__live[data-tone="none"] { color: var(--muted); border-color: var(--border); }
 .world[data-detail="block"] .shape__live, .world[data-detail="cluster"] .shape__live { visibility: hidden; }
 .world[data-detail="summary"] .shape__live-ring path { stroke-width: 6; }
 .world[data-detail="block"] .shape__live-ring path, .world[data-detail="cluster"] .shape__live-ring path { stroke-width: 12; }
@@ -11349,7 +11403,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:F1 ── */
 
 /* ── rd:F2 ── */
-
+/* The shared model has no chrome. Regions, tiers and the queue are drawn by the lanes that mount them. */
 /* ── /rd:F2 ── */
 
 /* ── rd:F3 ── */

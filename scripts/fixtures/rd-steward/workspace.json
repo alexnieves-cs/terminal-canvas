@@ -1,0 +1,200 @@
+{
+  "workspace": "Steward",
+  "note": "Demo cast from the redesign mockups (04, 06, 07, 11, 14). Fixture copy only. Not product copy. The frame is the World room: three waiting, one failed, four working. Screen 07 shows Claude on the Plaid task as exited 1; here that agent needs you, and the failure is Codex on pricing.",
+  "tasks": [
+    {
+      "id": "ledger-csv",
+      "ticket": "SW-412",
+      "title": "Ledger CSV export",
+      "criteriaDone": 2,
+      "criteriaTotal": 4,
+      "criteria": [
+        { "text": "Export matches the ledger schema", "done": true },
+        { "text": "Filename includes the date", "done": true },
+        { "text": "Totals row is present", "done": false },
+        { "text": "Quoted fields round-trip", "done": false }
+      ],
+      "panels": [
+        {
+          "id": "claude-ledger",
+          "agent": true,
+          "name": "Claude — ledger-export",
+          "engine": "claude",
+          "folder": "ledger-export",
+          "branch": "feature/csv-export",
+          "model": "Opus 4.8",
+          "state": "working",
+          "line": "Writing tests for streamCsv",
+          "world": "working",
+          "attention": null,
+          "rect": { "x": 264, "y": 216, "w": 480, "h": 288 }
+        },
+        {
+          "id": "codex-ledger",
+          "agent": true,
+          "name": "Codex — ledger-export",
+          "engine": "codex",
+          "folder": "ledger-export",
+          "branch": "feature/csv-export",
+          "state": "needs-you",
+          "line": "wants to edit ledger.ts",
+          "world": "waiting_approval",
+          "attention": "approval",
+          "rect": { "x": 792, "y": 216, "w": 480, "h": 288 }
+        },
+        {
+          "id": "vitest-ledger",
+          "agent": true,
+          "name": "vitest watch",
+          "engine": "shell",
+          "folder": "ledger-export",
+          "branch": "feature/csv-export",
+          "state": "passed",
+          "line": "passed",
+          "world": "idle",
+          "attention": null,
+          "rect": { "x": 264, "y": 552, "w": 480, "h": 240 }
+        },
+        {
+          "id": "changes-ledger",
+          "agent": false,
+          "name": "Changes",
+          "engine": "review",
+          "folder": "ledger-export",
+          "branch": "feature/csv-export",
+          "state": "review",
+          "line": "4 files · +128 −34",
+          "attention": null,
+          "rect": { "x": 792, "y": 552, "w": 480, "h": 240 }
+        }
+      ]
+    },
+    {
+      "id": "plaid",
+      "ticket": "SW-398",
+      "title": "Plaid webhook retry",
+      "criteriaDone": 0,
+      "criteriaTotal": 0,
+      "panels": [
+        {
+          "id": "claude-plaid",
+          "agent": true,
+          "name": "Claude — plaid-webhook",
+          "engine": "claude",
+          "folder": "plaid-webhook",
+          "branch": "fix/webhook-retry",
+          "state": "needs-you",
+          "line": "Which events should retry?",
+          "world": "waiting_approval",
+          "attention": "question",
+          "rect": { "x": 264, "y": 1008, "w": 480, "h": 288 }
+        },
+        {
+          "id": "codex-plaid",
+          "agent": true,
+          "name": "Codex — plaid-webhook",
+          "engine": "codex",
+          "folder": "plaid-webhook",
+          "branch": "fix/webhook-retry",
+          "state": "idle",
+          "line": "Waiting on the failing test",
+          "world": "idle",
+          "attention": null,
+          "rect": { "x": 792, "y": 1008, "w": 480, "h": 288 }
+        }
+      ]
+    },
+    {
+      "id": "infra",
+      "ticket": null,
+      "title": "Infra",
+      "criteriaDone": 0,
+      "criteriaTotal": 0,
+      "panels": [
+        {
+          "id": "shell-infra",
+          "agent": true,
+          "name": "shell — infra",
+          "engine": "shell",
+          "folder": "infra",
+          "branch": "main",
+          "state": "needs-you",
+          "line": "Do you want to perform these actions? terraform apply",
+          "world": "waiting_approval",
+          "attention": "shell-prompt",
+          "rect": { "x": 1560, "y": 216, "w": 480, "h": 288 }
+        },
+        {
+          "id": "claude-infra",
+          "agent": true,
+          "name": "Claude — infra",
+          "engine": "claude",
+          "folder": "infra",
+          "branch": "main",
+          "state": "working",
+          "line": "Reading the plan",
+          "world": "working",
+          "attention": null,
+          "rect": { "x": 2088, "y": 216, "w": 480, "h": 288 }
+        }
+      ]
+    },
+    {
+      "id": "pricing",
+      "ticket": null,
+      "title": "Steward web · pricing",
+      "criteriaDone": 0,
+      "criteriaTotal": 0,
+      "panels": [
+        {
+          "id": "claude-pricing",
+          "agent": true,
+          "name": "Claude — pricing",
+          "engine": "claude",
+          "folder": "steward-web",
+          "branch": "pricing",
+          "state": "working",
+          "line": "Updating the pricing page",
+          "world": "working",
+          "attention": null,
+          "rect": { "x": 1560, "y": 1008, "w": 480, "h": 288 }
+        },
+        {
+          "id": "codex-pricing",
+          "agent": true,
+          "name": "Codex — pricing",
+          "engine": "codex",
+          "folder": "steward-web",
+          "branch": "pricing",
+          "state": "failed",
+          "line": "exited 1",
+          "world": "error",
+          "attention": "failed",
+          "rect": { "x": 2088, "y": 1008, "w": 480, "h": 288 }
+        }
+      ]
+    },
+    {
+      "id": "mobile",
+      "ticket": "SW-421",
+      "title": "Steward mobile · onboarding crash",
+      "criteriaDone": 0,
+      "criteriaTotal": 0,
+      "panels": [
+        {
+          "id": "codex-mobile",
+          "agent": true,
+          "name": "Codex — mobile",
+          "engine": "codex",
+          "folder": "steward-mobile",
+          "branch": "fix/onboarding-crash",
+          "state": "working",
+          "line": "Fixing the onboarding crash",
+          "world": "working",
+          "attention": null,
+          "rect": { "x": 2784, "y": 216, "w": 480, "h": 288 }
+        }
+      ]
+    }
+  ]
+}
