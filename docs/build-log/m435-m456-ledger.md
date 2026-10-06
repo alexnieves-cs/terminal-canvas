@@ -1284,3 +1284,96 @@ VERDICT does-not-read
 8. State colour — Working reads as green dots down the left list, and green also marks a done card, so working and done share a colour. Amber is an orange border on the lower-right cards, not a glow, and other cards carry coloured borders too. No red failed figure and no distinct slate idle. Left list and lower card row.
 
 Disagreement: the lane brief says judge 11 for the words, not the 3D picture. The capture is the flat fallback on purpose. OCR of the same PNG reads the no-WebGL sentence, Back to canvas, "needs you", "Waiting on you in its panel", Open in Canvas, PASSED, WORKING, "answer in its terminal", and Send. The silhouette, material and glow misses are the picture the brief said not to copy.
+
+## M453 · W5 Attention flight
+
+Branch `rd/w5-flight` from `redesign/main` at `edef9282` (tag `rd-w3c` plus D9). Wave 3d, the last World lane. One milestone. Mockup 13.
+
+### Plan
+
+Pure model in `world/world-flight.ts`, then the strip, the shell card and the toast.
+
+1. `world-flight.ts` is pure: no three, no React, no DOM. An arc is a quadratic bow on the floor between two points. Duration is distance times 80 ms per metre, clamped to 600–1200 ms. Reduced motion is a cut: duration 0, no dotted path. `attentionStep` is the same cursor rule as `nextAttentionId` (empty, stale, wrap, one element, both directions). The room does not sort and does not build a census.
+2. ⌘J / ⌘⇧J call `walkAttention`, which steps the published queue with `attentionStep`. The published order is `useAttentionQueue`'s once the pill writes it (R-090). There is no second ordering. The camera follows the arc with the orbit controls off, the same rule as the existing glide. A held arc is how the shot shows the path without catching the enter transition.
+3. D9 Option B. `approvalToast` sends nothing itself. Approve calls `actions.answer` first, then the toast. The sentence is `Approved <agent>'s edit to <file>`. Undo is on the toast only when `discardReady` (root, baseline, subject, and at least one path). Otherwise the action is View diff and there is no Undo. No hold, no delay. An agent that already received `y` is not un-told.
+4. A shell-prompt focus is `ShellConsoleCard`: the prompt, the room sentence "A shell prompt is answered in its terminal, never from the room.", Open in Canvas ⌘↵, Snooze 10m, Next. No reply field, no textarea. Snooze hides that id from the walk for ten minutes. Next is the same `walkAttention(1)`.
+
+Shot `rd-world-attention`, reference 13. Captured after the enter chip hides, not during the 1000 ms move. The WebGL layer is blank on this host (R-053). The strip, the card and the toast are the DOM the critic judges. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `world-flight.ts` is pure and checked first. The suite loads it in plain node. It imports no three, React, or DOM.
+- [x] ⌘J reuses the 2D queue walk. `attentionStep` is pinned equal to `nextAttentionId` on the same queue, cursor and direction. The room steps `publishFlightQueue` and does not sort. It does not build a second census. The pill publishing that queue is R-090, because `world.ctx.door.1` blocks a world file from importing the pill.
+- [x] Undo implements D9 exactly. Approvals go out immediately through `actions.answer`. The toast offers Undo only when review discard can revert that panel. Otherwise it reads `Approved <agent>'s edit to <file>` with View diff and no Undo. The shell console has no reply field.
+
+### CSS
+
+New rules only, inside `/* ── rd:W5 ── */`. Two overrides of rules that live outside the span, both recorded here:
+
+- `.world-focus[data-world-shell-card]` moves the shell card to the lower right at 360px. W4's sheet stays top-left at 400px. The attribute is the only thing that moves it.
+- `body:has([data-world-on]) [data-sonner-toaster]` sets `--offset: 88px` so the approval toast clears the strip. The toaster's own rule is unchanged on the canvas.
+
+Mono is only on the shell command's `code` leaf. Chips take colour from `[data-tone]`. No state hex.
+
+### Exports
+
+`publishFlightQueue`, `attentionStep`, `emitApproved` / `subscribeApproved`, `holdFlight`. The shot door is `window.__rdW5` (`pose`, `approve`). The pill publishing the live queue is R-090.
+
+### Requests
+
+R-090 open: the pill publishes `publishFlightQueue` beside `publishAttentionLine`. R-091 open: the 2D jump and the world jump still keep two cursors. R-092 open: name `WorldQueueStrip.tsx` in the plain-DOM sentence of `src/renderer/CLAUDE.md`. R-093 open: Snooze 10m hides the id from the world walk only. R-094 open: live Approve passes `discard: null`, so the live toast is View diff until a review offer exists.
+
+### Gates
+
+Linux, Node. `node node_modules/electron/install.js`, then `npm rebuild node-pty` and `npx electron-rebuild -f -w node-pty`. Shots use `node_modules/electron/dist/electron` under `xvfb-run` with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on that command only. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+`world.rig.1` failed once: the flight path had turned `if (!atRest) gliding.current = null` into a block, and the hand-back snaps the camera whenever the controls are off. The one-liner is restored. The path is cleared on the next line.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`) |
+| `verify:rd-w5` | 11/11 |
+| `verify:world` | 251/251 after the rig one-liner |
+| `verify:rd-w1` | 15/15 |
+| `verify:rd-w2` | 4/4 |
+| `verify:rd-w3` | 11/11 |
+| `verify:rd-w4` | 13/13 |
+| `verify:rd-w6` | 12/12 |
+| `verify:toast` | 10/10 |
+| `verify:styles` | 97/97 |
+| `npm run affected -- --base redesign/main` | 43/45 plain suites, 31.2s, stopped after the plain tier. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 97, goldens 79, missing names start at `rd-splash`; `rd-world-attention` is past the first eight) and `verify:first-run` `revamp.create.1` |
+| plain wave (`npm run verify`) | 65/67 in 31.2s, stopped after wave 1. Same two suites. `verify:tmux` passed. `verify:rd-l-f` `kill.1` did not fail. `verify:review` `merge.1` did not fail. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. Wave 2 and the Electron tier did not start |
+| `npm run build` | pass. `WorldView` stays its own chunk |
+
+### Rules review
+
+BLOCKERS: none. SHOULD-FIX: none.
+
+NITS: the shell card's `bottom: 72px` and the 14px chips are raw lengths beside the spacing scale. `verify:styles` does not flag them. The 360px width is the mockup card, the same kind of number as W4's 400px sheet. `Next</button>` is one source line so `rd-w5.shell.1` can see the label.
+
+Face: mono only on the command's `code`. Tones come from `[data-tone]` (`done`, `needs-you`). No state hex in the W5 span. No new tokens. No DOM alias renamed. `.pf__body` untouched. Sonner stays behind `toast.ts` (`toast.door.1`). D9 is followed, not re-decided. The diff is inside W5's ownership plus the shared ledger and `requests.md`. CSS edits start at the `rd:W5` marker.
+
+### World guard
+
+BLOCKERS: none. SHOULD-FIX: none.
+
+`FlightDots` lives in `WorldView.tsx`, which is already a scene importer. `world-flight.ts` and `WorldQueueStrip.tsx` import no three. `WorldStage` still has the one `/* @__PURE__ */ lazy()`. No drei `Environment`. Amber is `NIGHT.amber`. Reduced motion is a cut (`flightDuration` 0, no dots). The flat room, the card body and the minimap are unchanged. `verify:world` is 251/251, including `world.door.1` and `world.door.11`. The build keeps `WorldView` in its own chunk. `verify:orchestration` passed, which is the check that three stays out of the first chunk.
+
+### Critic · rd-world-attention
+
+Verdict: **close**.
+
+Shot under xvfb after the enter chip hid. `out/shots/rd-world-attention.png` and `out/shots/rd-world-attention.vs-reference.png`. The WebGL layer is the light field. That is R-053. The strip, the card and the toast are what this verdict judges.
+
+VERDICT close
+
+1. Silhouette — The reference is a night room with a dotted arc across the floor and a robot at the end of it. The capture is a light field with the canvas chrome still up. The card, the strip and the toast have the reference's own shapes: a lower-right panel, a bottom-centre capsule, a toast just above it. Lower right, bottom centre.
+2. Material — The reference is blue-black glass. The capture's field is the light shell ground. The card and the toast are light glass on that ground. Whole frame.
+3. Glow — The reference's only glow is the amber dotted path and the waiting beacon. The capture draws neither, because the path is in the WebGL layer. The current chip is a filled amber dot and the done chip is green. Bottom centre.
+4. Connectors — The reference's connector is the amber dotted flight. The capture has no arc. Floor.
+5. Labels — The strip reads NEEDS YOU · 2 OF 3 with ⌘J and ⌘⇧J. The card reads terraform plan, Infra, SHELL CONSOLE, "Do you want to perform these actions?", the terraform command, "A shell prompt is answered in its terminal, never from the room.", Open in Canvas ⌘↵, Snooze 10m, Next. The toast reads Approved Codex's edit to ledger.ts with Undo. No reply field. Lower right and bottom centre.
+6. Composition — The reference fills the window with the room and parks the card lower right and the strip on the bottom edge. The capture parks those three in the same places and leaves the room empty, with a panels tree on the left and a zoom bar along the bottom. Left third and bottom edge.
+7. Chrome — The reference's chrome is the strip, the card and the toast. The capture adds the title bar, the panels tree, the camera panel, the replay scrubber, an away card and the minimap. Those sit where the earlier world lanes left them. Left edge, top edge, lower left.
+8. State colour — Done is green and the current chip is amber. The hollow next chip is an outline. Needs-you is not a second green. The empty field has no working cyan, no failed red and no idle slate, because the figures are not in the capture. Bottom centre.
+
+Disagreement: the lane brief says judge the queue strip, the card and the toast, and not to debug the 3D layer. The capture is the light field on purpose (R-053). The silhouette, material, glow and connector misses are that field. The three DOM objects read as mockup 13, including Undo, which is on the toast because the shot passed a discard offer. A live Approve with no offer says View diff and shows no Undo (D9, R-094).
