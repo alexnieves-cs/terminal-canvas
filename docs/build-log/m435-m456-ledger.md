@@ -1171,3 +1171,51 @@ Branch `rd/w6-doors`, cut from `redesign/main` at `rd-w3b` (`fa49bdd8`). Wave 3c
 Files: `WorldFlat.tsx`, `WorldStage.tsx`, `sessions/**`, `object-verbs.ts`, `palette-actions/objects.ts`, `scripts/verify-rd-w6.cjs`, `scripts/shot-scenes/rd-w6.cjs`, CSS inside `rd:W6`. Shot: `rd-world-flat`, probe forced off in the scene (not in `webgl-probe.ts`), reference 11 for words.
 
 Pure model first: `roomKind`, `worldDoor`, `flatTerraceLayout`, `urgentFace`. Then the UI. `webgl-probe.ts` is read, not edited.
+
+The flat room's column (`flex-direction: column` inside `rd:W6`) overrides the earlier row on `.world-flat`. The terrace plan sits over the agent grid. State colour is `[data-tone]` and `var(--tone)` / `var(--tone-glow)`. The Sessions row verb rests at opacity 0 and comes in on hover, focus-within and its own focus, on `--dur-1`.
+
+`world.ctx.door.1` refuses a world file importing `@renderer/canvas/`. The flat room quotes the mounted command pill's attention `aria-label` instead of importing `attentionPillLine`. That is R-083.
+
+### Probe
+
+`webglAvailable` is getContext webgl2 or webgl, then `WEBGL_lose_context`. On this xvfb host getContext succeeds and the world canvas reads back blank (R-053). The probe cannot see a context that does not present. A presenting check would be a clear and a readPixels of a known colour, which would change the answer for Orchestrate too. This lane does not change the probe. The shot stubs `HTMLCanvasElement.prototype.getContext` for the GL types only, so the probe's own "no" mounts the flat room. R-082.
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| typecheck | pass |
+| `verify:world` | 251/251 |
+| `verify:rd-w6` | 12/12 |
+| `npm run affected -- --base redesign/main` | failed on `verify:styles` `--fg-0` (fixed; `verify:styles` 97/97 after), plus the known `verify:meta` and `verify:first-run` |
+| `npm run build` | pass. `WorldFlat` is its own chunk. The entry does not statically import three (`orch-zoom.3` in the plain wave). |
+| plain wave `npm run verify` | 65/67 in 31.3s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — the check prints the first eight missing names) and `verify:first-run` `revamp.create.1`. `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. `verify:verbs` passed (`closure.v9.1` stays green because the palette literal was not half-added). |
+
+`origin/redesign/main` was still `fa49bdd8`. No rebase.
+
+### Shot
+
+`rd-world-flat` wrote `out/shots/rd-world-flat.png` and `.vs-reference.png`. At capture the layer was on, the note was `none`, five terraces and ten tiles were in the DOM, the canvas carried `canvas--behind-world`, and the layer's text started with the WebGL sentence, the terrace names, "needs you" and Open. `UPDATE_GOLDENS` was not set.
+
+### Critic
+
+`rd-world-flat` against `11-world-main.png`.
+
+VERDICT: does-not-read
+
+1. Silhouette. The reference is a night studio of five terrace slabs and robots. The capture is a light page: a banner, then cards. No robots, no floor.
+2. Material. Light glass and white cards. The reference is a dark room.
+3. Glow. No amber beacon. The only strong mark in the capture is the ordinary UI, not a needs-you glow.
+4. Connectors. None in the capture. The reference has none that read as wires either; this is not the miss.
+5. Labels. The capture does say the WebGL sentence, "Back to canvas", the task names, "needs you" and Open. It does not show the reference's bottom pill "3 need you · Go ⌘J" as the thing the room is.
+6. Composition. A document stacked down the page, not a floor plan.
+7. Chrome. Top bar, dock and the flat-room banner. The reference's chrome is the room's own pill and queue.
+8. STATE COLOUR. The capture does not read as cyan working, amber needs-you, green done, red failed, slate idle. "needs you" is a word on a light card.
+
+Disagreement: the lane brief says judge 11 for the words, not the 3D picture. The capture is the flat fallback on purpose. The words that are there — the no-WebGL sentence, the terrace names, "needs you", Open, Back to canvas — are the door the brief asked to be able to see on this host. The silhouette, material and glow misses are the picture the brief said not to copy.
+
+### Reviews
+
+Rules review: no blockers. Face is `--font-ui` inside `rd:W6`. The Sessions verb is opacity 0 to 1 on `--dur-1`, and reduced motion drops the transition. State words come from `agentWord`. No state hex in the span. CSS stays inside the markers. `verify:styles` face.1 and rest.1 passed.
+
+World guard: no blockers. `verify:world` 251/251 and the build. One lazy `WorldFlat`, one lazy `WorldView`. The flat room is the same file, not a second room. `WorldCardBody` was not edited. Context loss still only sets `lost`. The entry chunk does not statically import three.

@@ -37,7 +37,7 @@ module.exports = [
       }
       k.wc.send(k.shared.events.WORLD_EVENTS, events)
       for (let i = 0; i < 20; i++) {
-        const clicked = await k.click('.shell__world-toggle')
+        const clicked = await k.click('[data-world-lens] button[title]')
         if (clicked) break
         await sleep(150)
       }
@@ -46,6 +46,24 @@ module.exports = [
         if (ready) break
         await sleep(150)
       }
+      const probe = await k.js(`(() => {
+        const layer = document.querySelector('[data-world-layer]')
+        const flat = document.querySelector('[data-world-flat]')
+        const note = document.querySelector('[data-world-no-webgl]')
+        const worldBtn = document.querySelector('[data-world-lens] button[title]')
+        return JSON.stringify({
+          layer: layer !== null,
+          on: layer ? layer.getAttribute('data-world-on') : null,
+          flat: flat !== null,
+          terraces: document.querySelectorAll('[data-world-flat-terrace]').length,
+          tiles: document.querySelectorAll('[data-world-flat-tile]').length,
+          note: note ? note.getAttribute('data-world-no-webgl') : null,
+          pressed: worldBtn ? worldBtn.getAttribute('aria-pressed') : null,
+          behind: document.querySelector('.canvas--behind-world') !== null,
+          text: (layer && layer.innerText ? layer.innerText : '').slice(0, 280)
+        })
+      })()`)
+      console.log('[rd-world-flat]', probe)
       // A non-waiting tile, so Open in Canvas is on screen with the terraces.
       await k.click('[data-world-flat-tile][data-status="idle"] .world-flat__pick, [data-world-flat-tile][data-status="working"] .world-flat__pick')
       // The host fade is WORLD_TRANSITION_MS (1000).
