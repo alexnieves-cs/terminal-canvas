@@ -56,6 +56,7 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | P3b W1 | redesign/main | `rd-w3b` | the transition, after W2, `aa0b55a5`. The mount is `2a24f561`. R-041, R-042 and R-043 landed with it. |
 | P3b W3 | redesign/main | `rd-w3b` | the overview, after W1, `613d72b9`. The camera apply is `252fc68c`. |
 | P3c W4 | redesign/main | `rd-w3c` | focus and act, `92479a7a`. R-072 and R-074 are `59e80eba`. |
+| P3c W6 | redesign/main | `rd-w3c` | flat room and the doors, `b274e8f8`, rebased onto the W4 merge. R-080 and R-083 are `d024f9e2`. |
 
 ## M438 · F3 shell frame
 
@@ -1219,3 +1220,13 @@ Disagreement: the lane brief says judge 11 for the words, not the 3D picture. Th
 Rules review: no blockers. Face is `--font-ui` inside `rd:W6`. The Sessions verb is opacity 0 to 1 on `--dur-1`, and reduced motion drops the transition. State words come from `agentWord`. No state hex in the span. CSS stays inside the markers. `verify:styles` face.1 and rest.1 passed.
 
 World guard: no blockers. `verify:world` 251/251 and the build. One lazy `WorldFlat`, one lazy `WorldView`. The flat room is the same file, not a second room. `WorldCardBody` was not edited. Context loss still only sets `lost`. The entry chunk does not statically import three.
+
+### Merge
+
+Merged to `redesign/main` as `b274e8f8` (`--no-ff`), after W4. `rd/w6-doors` was rebased onto the W4 merge (`92479a7a`, then `59e80eba` and `6c78906c`) and force-updated; the branch was not deleted. Conflicts on the rebase were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W4` and `rd:W6`.
+
+The lane's "no rebase" line above is the record from before that update. R-081 was already done on W4 (`ab85b75f`); both request entries now say so.
+
+The lead then landed R-080 and R-083 in `d024f9e2`. `id: 'world.view'` is a literal in `commands.ts`. The verb `view-in-world` is in `VERBS` and `V9_DOORS`, and the executor runs `worldViewPaletteRow`, so the palette row and the verb share one body. `commands.ts` does not import the world modules. The pill publishes its attention sentence through `src/shared/attention-line.ts`; `WorldFlat` reads that and no longer scrapes the mounted pill. `attentionPillLine` stays in `command-pill.ts`.
+
+Left open: R-082 (report only; the probe is unchanged). R-070 and R-071 stay open from the W4 merge.

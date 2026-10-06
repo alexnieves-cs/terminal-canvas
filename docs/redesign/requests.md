@@ -450,7 +450,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/palette/commands.ts`, `src/shared/verb-table.ts`
 - Why the contract or the owner cannot absorb it: neither file is W6's. `closure.v9.1` reads `commands.ts` for a literal palette id and `verb-table.ts` for the agent line and the workflow door. The canvas gesture and the Sessions row already call `viewInWorld` / `stageWorldDoor`. The palette action body is `worldViewPaletteRow` in `palette-actions/objects.ts`. Adding the verb only in `verb-table.ts` would turn `closure.v9.1` red until the literal lands, so this lane does not add the row there.
 - Smallest change: in `buildCommands`, a literal `id: 'world.view'` whose run is `worldViewPaletteRow` (title View in World). A `V9_DOORS` key with palette `world.view`, the canvas gesture the ⋯ menu and Sessions “Show in World”, the agent line, and a workflow action node with the same line.
-- Status: open
+- Status: done: `d024f9e2`. `commands.ts` spells `id: 'world.view'` and calls `viewInWorld`. The verb `view-in-world` is in `VERBS` and `V9_DOORS`, and the executor runs the same `worldViewPaletteRow`. `commands.ts` does not import the world modules. `closure.v9.1` stays green.
 
 ### R-081 · RequestBlock says Open, the flat door says Open in Canvas
 - Lane: W6
@@ -471,4 +471,4 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/command-pill.ts` (not W6's), or a module the world is allowed to import
 - Why the contract or the owner cannot absorb it: `world.ctx.door.1` refuses a world file importing `@renderer/canvas/`. `attentionPillLine` and `useAttentionCensus` live there. The flat room quotes the mounted pill's `aria-label` (`[data-pill-state="attention"]`) because the canvas stays mounted under the room. That is the same sentence only while the pill is in the document and in its attention rest. The room's own requests count stays on `WorldChrome`.
 - Smallest change: publish the attention line from a module the world may import, and have the flat room read that. Do not give the world a second queue.
-- Status: open
+- Status: done: `d024f9e2`. `attentionPillLine` stays in `command-pill.ts`. The pill publishes that sentence through `src/shared/attention-line.ts`, and `WorldFlat` reads it. The room does not import `@renderer/canvas/`, and it does not keep a second queue. Empty is silence.
