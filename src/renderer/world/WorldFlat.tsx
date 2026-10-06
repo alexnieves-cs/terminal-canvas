@@ -1,4 +1,5 @@
-import { Fragment, memo, useCallback, useEffect, useReducer, useRef, useState, type JSX, type MouseEvent } from 'react'
+import { Fragment, memo, useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore, type JSX, type MouseEvent } from 'react'
+import { attentionLine, subscribeAttentionLine } from '@shared/attention-line'
 import type { AgentState } from '@shared/types'
 import type { AgentStatus } from '@shared/world-events'
 import { agentWord, type Tone } from '@renderer/panels/panel-state'
@@ -98,16 +99,6 @@ function samePlaces(a: readonly PlacedTerrace[], b: readonly PlacedTerrace[]): b
   })
 }
 
-/**
- * The command pill's attention sentence. The world may not import that
- * module (`world.ctx.door.1`); the canvas stays mounted under the room, and
- * this is that pill's own label, not a second queue.
- */
-function mountedAttention(): string {
-  if (typeof document === 'undefined') return ''
-  return document.querySelector('[data-command-pill] [data-pill-state="attention"]')?.getAttribute('aria-label') ?? ''
-}
-
 /** The member the terrace wears: the queue's own order, via `urgentFace`. */
 function terraceFace(members: readonly string[]): { tone: Tone; word: string } | null {
   const faces: { tone: Tone; word: string }[] = []
@@ -120,6 +111,8 @@ function terraceFace(members: readonly string[]): { tone: Tone; word: string } |
 
 export function WorldFlat(): JSX.Element {
   const roster = useRoster()
+  // R-083. The pill publishes this sentence. The room does not import the pill, and it does not keep a second queue.
+  const line = useSyncExternalStore(subscribeAttentionLine, attentionLine, attentionLine)
   // First-seen order: a tile's swatch is the colour its robot would have been.
   const order = useAgentIds()
   const picked = useSelectedAgent()
@@ -187,7 +180,6 @@ export function WorldFlat(): JSX.Element {
     return () => observer.disconnect()
   }, [roster])
 
-  const line = mountedAttention()
   const now = worldNow()
   return (
     <div className="world-flat" data-world-flat>

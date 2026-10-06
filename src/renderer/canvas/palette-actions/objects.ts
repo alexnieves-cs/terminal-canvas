@@ -60,6 +60,7 @@ export type ObjectsActions = Pick<PaletteActions,
   | 'startDevServer'
   | 'prepareFeedback'
   | 'say'
+  | 'viewInWorld'
 >
 
 export function objectsActions(ctx: ActionCtx): ObjectsActions {
@@ -219,13 +220,15 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     //
     // The attention suppression moves INTO `notify`, unchanged, so there is
     // one table and not two.
-    say: (sentence: string) => { notify({ sentence }) }
+    say: (sentence: string) => { notify({ sentence }) },
+    // R-080. One body: the palette row and the verb both run this.
+    viewInWorld: (panelId) => { worldViewPaletteRow(panelId, (sentence) => notify({ sentence })).run() }
   })
 }
 
 /**
- * M454. The palette row's body. `commands.ts` is not this lane's, so the
- * literal `id: 'world.view'` is R-080. This is the function that row runs.
+ * M454. The palette row's body. `commands.ts` spells `id: 'world.view'` and
+ * calls `viewInWorld`, which runs this, so the row and the verb share one body.
  */
 export function worldViewPaletteRow(panelId: string | undefined, say: (sentence: string) => void): { id: string; title: string; subtitle: string; searchText: string; run: () => void } {
   return {

@@ -111,6 +111,8 @@ export interface PaletteActions {
   deletePreset(id: string): void
   setDefaultPreset(id: string): void
   goToPanel(id: string): void
+  /** M454, R-080. Open the World on this panel, or say so when none is selected. The body is `worldViewPaletteRow`. */
+  viewInWorld(panelId?: string): void
   insertPrompt(id: string): void
   /** M76. Answer a chat's pending permission request from anywhere. M98: `scope: 'session'` also grants the tool. */
   answerApproval(id: string, requestId: string, allow: boolean, scope?: 'session'): void
@@ -2339,6 +2341,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // never makes.
   // M336–M337. The account and sharing rows. The three sharing rows open the
   // share dialog; the dialog is where anything is shared, opened or changed.
+  // R-080. The literal id is what closure.v9.1 reads. The body stays worldViewPaletteRow, reached through viewInWorld, so this file does not import the world modules.
+  out.push({ id: 'world.view', title: 'View in World', subtitle: 'Open the World on this panel, or on its task when it has one', group: 'panel', searchText: 'world view show in world camera floor task panel', run: () => actions.viewInWorld(ctx.selectedIds[0]) })
   out.push({ id: 'account.sign-in', title: 'Account: sign in with GitHub…', subtitle: 'to share workspaces and see who in your organization is working', group: 'canvas', searchText: 'account sign in login github supabase add another switch', run: () => { void actions.signIn() } })
   out.push({ id: 'share.workspace', title: 'Share this workspace…', subtitle: 'put it in one of your organizations — teammates see cards, never commands or transcripts', group: 'canvas', searchText: 'share workspace team organization collaborate invite members', run: () => { void actions.shareWorkspace() } })
   out.push({ id: 'share.open', title: 'Open a shared workspace…', subtitle: 'the workspaces your teammates shared with you', group: 'canvas', searchText: 'open shared workspace team join room', run: () => { void actions.openSharedWorkspace() } })

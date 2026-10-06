@@ -250,6 +250,8 @@ export const VERBS: readonly VerbDef[] = [
   // second reviewer can object on the line without speaking for the person.
   { id: 'review-comment', label: 'Review: comment on a line', args: [{ name: 'panel', kind: 'panel' }, { name: 'place', kind: 'value' }, { name: 'comment', kind: 'text', rest: true }], destructive: false, actions: ['reviewComment'], target: 'panel', hint: 'path:line (path:line:old for a removed line), then the comment — from an agent or a workflow it is a proposal the person keeps or discards' },
   { id: 'review-task', label: 'Task: review the lane', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['reviewTask'], target: 'panel', hint: 'open the review for a work card\'s lane, beside the task and its conversation' },
+  // M454, R-080. The canvas gesture and the Sessions row already call viewInWorld. This is the verb those doors name.
+  { id: 'view-in-world', label: 'View in World', args: [panel()], destructive: false, actions: ['viewInWorld'], target: 'panel', hint: 'open the World on this panel, or on its task when it has one' },
   { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
   { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
   { id: 'workflow-run', label: 'Workflow: run', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['runWorkflowNow'], target: 'canvas', hint: 'run the shape on the diagram — the draft when there is one' },
@@ -564,5 +566,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   // agent line and the action node's line bind to the same verb and reach the
   // same executor, so an arrangement cannot behave one way when a person
   // starts it and another when a workflow does.
-  swarm: { canvas: 'Swarm… on a work card, then one of the four arrangements', palette: 'work.swarm.explore', agent: 'tc plan swarm wk1 ada explore', workflow: 'an action node whose line is: swarm wk1 ada explore' }
+  swarm: { canvas: 'Swarm… on a work card, then one of the four arrangements', palette: 'work.swarm.explore', agent: 'tc plan swarm wk1 ada explore', workflow: 'an action node whose line is: swarm wk1 ada explore' },
+  // M454, R-080. The ⋯ menu and Sessions already call the same door. The palette id is a literal in commands.ts.
+  'view-in-world': { canvas: 'View in World in a panel\'s ⋯ menu, and Show in World on a Sessions row', palette: 'world.view', agent: 'tc plan view-in-world ch1', workflow: 'an action node whose line is: view-in-world ch1' }
 }
