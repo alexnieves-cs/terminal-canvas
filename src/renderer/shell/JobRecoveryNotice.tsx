@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState, type JSX } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore, type JSX } from 'react'
 import type { JobAccount, RecoveryChoice } from '@shared/job-journal'
 import type { InterruptedRun } from '@renderer/canvas/run-model'
+import { RecoveryHost } from '@renderer/panels/RecoveryHost'
+import { getRecoveryView, recoveryVisible, subscribeRecovery } from '@renderer/panels/recovery-store'
 import { shellControl } from './shell-control'
 
 /**
@@ -33,9 +35,12 @@ export interface JobRecoveryModel {
   leaveRun: (runId: string) => void
   /** Clear the last answer once everything is dealt with. */
   dismiss: () => void
+  /** M447. The 09 surface has something to say. The job list may still be empty. */
+  surface: boolean
 }
 
 export function useJobRecovery(deps: { runs: InterruptedRun[]; continueRun: (runId: string) => string }): JobRecoveryModel | null {
+  const view = useSyncExternalStore(subscribeRecovery, getRecoveryView, getRecoveryView)
   const { runs, continueRun } = deps
   const [jobs, setJobs] = useState<JobAccount[]>([])
   const [sentence, setSentence] = useState<string | null>(null)
@@ -63,7 +68,8 @@ export function useJobRecovery(deps: { runs: InterruptedRun[]; continueRun: (run
   const visibleRuns = runs.filter((r) => !leftRuns.has(r.id))
   const visibleJobs = jobs.filter((j) => !handled.has(j.id))
   const leave = (runId: string): void => setLeftRuns((cur) => new Set([...cur, runId]))
-  if (visibleJobs.length === 0 && visibleRuns.length === 0 && sentence === null) return null
+  const surface = recoveryVisible(view)
+  if (visibleJobs.length === 0 && visibleRuns.length === 0 && sentence === null && !surface) return null
   return {
     jobs: visibleJobs,
     runs: visibleRuns,
@@ -71,7 +77,8 @@ export function useJobRecovery(deps: { runs: InterruptedRun[]; continueRun: (run
     choose,
     continueRun: (runId) => { setSentence(continueRun(runId)); leave(runId) },
     leaveRun: leave,
-    dismiss: () => setSentence(null)
+    dismiss: () => setSentence(null),
+    surface
   }
 }
 
@@ -130,6 +137,16 @@ function JobRow({ job, choose }: { job: JobAccount; choose: JobRecoveryModel['ch
 }
 
 export function JobRecoveryNotice({ model }: { model: JobRecoveryModel }): JSX.Element {
+  const jobs = model.jobs.length > 0 || model.runs.length > 0 || model.sentence !== null
+  return (
+    <>
+      {model.surface ? <RecoveryHost /> : null}
+      {jobs ? <JobRecoveryList model={model} /> : null}
+    </>
+  )
+}
+
+function JobRecoveryList({ model }: { model: JobRecoveryModel }): JSX.Element {
   return (
     <aside className="reopen-notice" data-job-recovery role="status" aria-label="Unfinished work">
       <span className="reopen-notice__kicker">Unfinished work</span>

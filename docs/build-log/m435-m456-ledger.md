@@ -485,3 +485,62 @@ Two reds from the first affected run were this lane and are fixed: `verify:style
 - The fixture's moment is not "7 live · 2 dormant". No row is asleep, so the dormant clause drops. Inventing two dormant rows would be a second cast.
 - Disabled controls are `--muted`, not a fractional opacity. Check 3 allows 0 and 1 only.
 - The detail's tail is scrubbed with `outward` at the read. The terminal's own buffer is unchanged.
+
+## L-F · M447
+
+Branch `rd/l-f-recovery` off tag `rd-wave2a` (`877c71c2`, redesign/main at the wave 2a merge). Lane `RD_LANE=L-F`. R-006 is already done: `subscribeLiveSessions` fires from `notify()` and `useAttentionQueue` subscribes. It is not reopened. R-023 is done on this branch (commit recorded below, after the hash exists).
+
+### Plan
+
+The pure half is `src/shared/exit-explain.ts`. The reducer lives in that file because main samples it from the existing `list()` tick and the renderer paints it, and a second shared module is outside this lane's ownership. Checks in `scripts/verify-rd-l-f.cjs` bundle it with esbuild. The view is `RecoveryHost`, `recovery-store.ts` and `offline-mark.tsx` under `src/renderer/panels/`. It mounts from `JobRecoveryNotice`, which Canvas already renders inside `data-recovery-slot`. `Canvas.tsx` is not edited. CSS stays inside `/* ── rd:L-F ── */`. The shot is `rd-recovery`, reference `docs/redesign/mockups/09-error-disconnected.png`.
+
+PLAN CHECK:
+
+- [x] `exit-explain.ts` and the reducer come first, with checks. The suite was watched red before the module existed: esbuild reported it could not resolve `src/shared/exit-explain.ts` and the process status was 1. That sentence is at the top of `scripts/verify-rd-l-f.cjs`. `reduceHost` and `reduceRecovery` are in the module. `rd-l-f.exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1` and `pause.1` call them.
+- [x] No new polling loop. Host detection rides `createTmuxBackend().list()`, which `pollLive` already calls every `LIVE_TICK_MS`. `session-backend.ts` has no `setInterval` (`rd-l-f.mount.1`). The kill-server test uses `verifySocket('terminal-canvas-verify-l-f')` and holds `scripts/redesign/with-electron-lock.sh`. The socket is `terminal-canvas-verify-l-f`. It is not `terminal-canvas`, `terminal-canvas-app`, empty, or a path (`rd-l-f.socket.1`).
+- [x] The offline marker for GitHub and Jira is `OfflineCachedMark` plus R-032. `GithubNode.tsx` and `JiraNode.tsx` are not edited.
+
+### What the surface does
+
+- Twenty seconds of unanswered `list-panes` pauses the panes the last answer named. One missed sample sets `silentSince` and stays live. Exit 0 is an answer, including an empty pane list. A timeout (`exitCode` null) is not. stderr matching `no server running`, `error connecting`, `lost server`, or `no such file or directory` is not. Any other non-zero is a complaint that was heard, so the host is not treated as gone.
+- The banner is `hostBanner`: "Session host stopped responding. tmux server on this Mac didn't answer for 20s. N sessions are paused, not lost — their output is buffered." Retry is `Retrying in Ns`, from `retryAt = at + 8_000`. While already paused, a sample at or after `retryAt` resets the countdown. There is no renderer timer. Reconnect now and Details are the verbs. Reconnect sets phase `reattaching` and the next `list()` is the sample.
+- A paused frame says "paused · output kept" and "nothing you type is lost or sent twice", with `data-keys-blocked`. `keystrokesBlocked` is true only for `paused`. A reattaching frame is three skeleton rows (`data-recovery-skeleton`, `aria-busy`), never an empty well.
+- A survivor is the same `panelId` and the same pid. A missing pane, or a different pid, is `ended`, with the sample's exit code or null. Phase stays `paused` while any paused pane remains.
+- A crash card says "This session ended unexpectedly", `explainExit` (137 is "killed, usually by memory pressure"), and "The pending edit was not applied". Primary is "Restart with last prompt". Then "Read log". Restart calls `restartKeepsPanel`, which returns the same id. Cmd+Enter (meta+Enter, skipped on an input or textarea) restarts the first crash card. The card does not call `paletteActions.restartPanel`; that wiring is R-031, because `TerminalPanel` is not owned. Checks 90 and 92 stay in `scripts/verify-panels-shell.cjs`.
+- Offline copy is "offline · cached · last updated <time>". The toast fires only when a source flips offline, through `notify` in `toast.ts`. The sentence is "GitHub is offline" (or Jira). The detail is "The canvas, terminals and notes keep working. Cached data stays marked until the connection returns." Host loss is not a toast. `isAttentionQueueRestatement` matches needs-you counts, and `rd-l-f.offline.1` asserts the toast does not.
+- `recoveryPillLine(2, 4)` is "2 sessions need recovery · 4 paused · Review". The 09 surface paints it as `data-recovery-pill`. The real command pill is R-033: `AttentionItem` is frozen and has no paused count, and a non-zero exit is `failed` before `recovery`.
+- A failed restore shows through `ReopenNotice`. Issue lines carry `data-boot-issue`. `bootIssueSentence` is the first non-empty issue. RecoveryHost does not also read `bootIssues()`, so the reopen notice is not duplicated.
+
+### Mount
+
+`useJobRecovery` subscribes to the recovery store with `useSyncExternalStore` as its first call, so Canvas's hook order is unchanged. The model gains `surface`. `JobRecoveryNotice` renders `RecoveryHost` when the view is on, and the unfinished-work list only when jobs, runs or a sentence exist. `.recovery-host` is `position: fixed` so it is not a box inside the bottom-left stack. `.recovery-slot { display: contents; }` is L-B's rule and is not edited.
+
+`session:host` is an event (`IPC_EVENTS.SESSION_HOST`). `verify:ipc` counts invokes, so `EXPECTED_CHANNELS` stays 206. The name is in the CLAUDE.md channel diagram (`rd-l-f.channel.1`). Direct backend `hostReport()` stays `initialHost()` and `reconnectHost` is a no-op. Publishing the event from `pollLive`, and subscribing in preload, is R-030.
+
+### Shot
+
+`rd-recovery` has a `run`, size 1440×900, reference mockup 09. It calls `window.__rdLF.mount` with a catalog: four paused panes, one reattaching skeleton, exit 137 ("ship the ledger") plus a second crash, GitHub last updated 7:22 PM, retry 8s. `catalogView` paints those states together. One reducer phase is `paused` or `reattaching`, not both. Giving the scene a `run` makes `verify:meta` `visual.1` list `rd-recovery` as a missing golden. That red is expected until the lead writes the golden. This lane does not set `UPDATE_GOLDENS` and does not write under `verify/visual/goldens/`.
+
+### Checks
+
+Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebuilds/linux-x64`). The first `verify:rd-l-f`, before `node_modules` existed, threw `MODULE_NOT_FOUND` for esbuild. The second, before `exit-explain.ts` existed, threw because esbuild could not resolve that entry. Both are the watched red. SIGSTOP of the tmux client hung the probe (the client pid, not a server that still answers). It was continued and the leftover verify server was killed. The kill test does not stop the process.
+
+`rd-l-f.kill.1` creates two panes on `terminal-canvas-verify-l-f`, records their pids, `kill-server` through the electron lock, and asserts `list-panes` is unanswered. Two virtual silence samples then pause those pids. A new session after `start-server` has a new pid, and both original pids are in `ended`. Same-pid survival is `rd-l-f.host.2`, because a real kill-server destroys every pane.
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass (web, after dropping an unused `RecoveryView` import; the later CSS comment edit does not change TypeScript) |
+| `npm run verify:rd-l-f` | 17/17 pass (`rd-l-f.0`, `exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1`, `pause.1`, `pill.1`, `offline.1`, `catalog.1`, `boot.1`, `well.1`, `mount.1`, `channel.1`, `shot.1`, `socket.1`, `kill.1`) |
+| `npm run verify:styles` | 97/97 pass |
+
+G2 (affected, the plain-node wave, the Electron shot) is recorded after that run.
+
+### Deviations
+
+- The mockup shows paused panels, a crash card and a skeleton at once. The shot uses `catalogView`. Transitions stay in `reduceHost`.
+- Paused and crash frames, and the pill sentence, render inside `RecoveryHost`. They are not yet on `.panel` or in `CommandPill`. R-031 and R-033.
+- "paused · output kept" is overlay copy. It is not a `panelState` word. `state.1` pins that vocabulary in `scripts/verify-rail.cjs`, which this lane does not own.
+- Tones are `needs-you`, `starting`, `exited` and `idle` through `[data-tone]`. No state hex, no new `@keyframes`, no `--lift` off `.panel`.
+- The L-F CSS comment does not name `.panel__slot` or `.xterm`. `rd-l-f.well.1` walks from the lane span and a comment that named those classes matched the next `height:`.
+- Restart in place keeps the id in the reducer. Calling `restartPanel` is R-031.
+- `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-030.

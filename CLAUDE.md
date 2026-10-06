@@ -132,7 +132,7 @@ board:lane board:lane-status board:open-pr board:comment-pr
 board:repositories update:check image:read starter:prepare docx:import flowchart:read pty:data pty:exit edit:copy
 edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset preset:spawn
 preset:default preset:capture agent:state attention:jump settings:changed spawn:open-sheet
-agent:event watcher:state vault:changed session:live session:recover subagent:state
+agent:event watcher:state vault:changed session:live session:host session:recover subagent:state
 file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip board:add
 canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine:integrate combine:receipts setup:read setup:save
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge

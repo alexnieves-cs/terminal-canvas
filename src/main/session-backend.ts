@@ -1,6 +1,13 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, rmSync, unlinkSync } from 'node:fs'
 import * as pty from 'node-pty'
+import {
+  initialHost,
+  listAnswered,
+  reduceHost,
+  type HostState
+} from '../shared/exit-explain'
+import { IPC_EVENTS } from '../shared/ipc-contract'
 import type { PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
 import {
   buildHasSessionArgs,
@@ -71,6 +78,34 @@ export interface SessionBackend {
    * the server deliberately outlives the app.
    */
   shutdown(): void
+
+  /**
+   * M447. The host-loss report. Direct has no tmux server to lose, so this
+   * stays live. The tmux backend updates it from `list()`, which `pollLive`
+   * already calls. There is no second timer.
+   */
+  hostReport(): HostState
+
+  /** Ask again now. The sample is `list()` itself. */
+  reconnectHost(): void
+}
+
+/**
+ * Main → renderer. An event, not an invoke: verify:ipc counts handlers for
+ * `IPC` only. The sender is whoever already calls `list()` (`pollLive`);
+ * this function is the send, and it does not poll.
+ */
+export function sendHostReport(send: (channel: string, payload: HostState) => void, state: HostState): void {
+  send(IPC_EVENTS.SESSION_HOST, state)
+}
+
+function copyHost(state: HostState): HostState {
+  return {
+    ...state,
+    lastPanes: state.lastPanes.map((pane) => ({ ...pane })),
+    paused: state.paused.map((pane) => ({ ...pane })),
+    ended: state.ended.map((pane) => ({ ...pane }))
+  }
 }
 
 /**
@@ -104,7 +139,9 @@ export function createDirectBackend(reason: string): SessionBackend {
     // The process IS the session here, so PtyManager's own kill is the whole
     // story and there is nothing extra to destroy or shut down.
     destroy: () => {},
-    shutdown: () => {}
+    shutdown: () => {},
+    hostReport: () => initialHost(),
+    reconnectHost: () => {}
   }
 }
 
@@ -128,6 +165,8 @@ export function createTmuxBackend(o: {
   confPath: string
   reason: string
   socket?: TmuxSocket
+  /** Called when the host report changes. Absent until the live tick sends it. */
+  onHost?: (state: HostState) => void
 }): SessionBackend {
   const socket = o.socket ?? TMUX_SOCKET
   /**
@@ -136,15 +175,28 @@ export function createTmuxBackend(o: {
    * non-zero, and that is the normal first-run state — so this returns '' and
    * lets the caller decide, instead of throwing into a quit handler.
    */
-  const cli = (args: string[]): string => {
+  const cliRaw = (args: string[]): { stdout: string; exitCode: number | null; stderr: string } => {
     try {
-      return execFileSync(o.tmuxPath, args, { encoding: 'utf8', timeout: 5000 })
-    } catch {
-      return ''
+      return { stdout: execFileSync(o.tmuxPath, args, { encoding: 'utf8', timeout: 5000 }), exitCode: 0, stderr: '' }
+    } catch (error) {
+      const failed = error as { status?: number; stdout?: string; stderr?: string; killed?: boolean }
+      return {
+        stdout: typeof failed.stdout === 'string' ? failed.stdout : '',
+        stderr: typeof failed.stderr === 'string' ? failed.stderr : '',
+        exitCode: failed.killed === true || typeof failed.status !== 'number' ? null : failed.status
+      }
     }
   }
+  const cli = (args: string[]): string => cliRaw(args).stdout
+  let host = initialHost()
+  const sample = (answered: boolean, panes: { panelId: string; pid: number }[]): void => {
+    const next = reduceHost(host, { type: 'sample', at: Date.now(), answered, panes })
+    const changed = next.phase !== host.phase || next.paused.length !== host.paused.length || next.ended.length !== host.ended.length
+    host = next
+    if (changed) o.onHost?.(copyHost(host))
+  }
 
-  return {
+  const api: SessionBackend = {
     kind: 'tmux',
     reason: o.reason,
 
@@ -178,7 +230,13 @@ export function createTmuxBackend(o: {
       // parseListOutput drops dead panes. See its comment: under
       // remain-on-exit on, a finished session still exists until the hook
       // kills it, and reporting it live would attach a client to a corpse.
-      return parseListOutput(cli(buildListArgs(socket))).map((e) => ({
+      // The host sample rides this same call. pollLive already makes it, so
+      // a silent server is noticed without a second loop.
+      const raw = cliRaw(buildListArgs(socket))
+      const heard = listAnswered(raw.exitCode, raw.stderr)
+      const entries = heard ? parseListOutput(raw.stdout) : []
+      sample(heard, entries.map((e) => ({ panelId: e.panelId, pid: e.pid })))
+      return entries.map((e) => ({
         panelId: e.panelId,
         pid: e.pid,
         command: e.command,
@@ -256,6 +314,15 @@ export function createTmuxBackend(o: {
       } catch {
         /* a leftover temp dir is not worth failing a quit over */
       }
+    },
+
+    hostReport: () => copyHost(host),
+
+    reconnectHost(): void {
+      host = reduceHost(host, { type: 'reconnect', at: Date.now() })
+      o.onHost?.(copyHost(host))
+      api.list()
     }
   }
+  return api
 }

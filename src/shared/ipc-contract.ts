@@ -1238,6 +1238,13 @@ export const IPC_EVENTS = {
    */
   SESSION_LIVE: 'session:live',
   /**
+   * M447. The tmux host answered, or it has not. Main → renderer, and only
+   * when the report changes. Not an invoke: the renderer cannot ask more
+   * often than `list()` already runs, and a second poll would be a second
+   * loop. `verify:ipc` counts `IPC`, not this.
+   */
+  SESSION_HOST: 'session:host',
+  /**
    * M55. Sent once after the user answered Restore to the boot dialog: the
    * orphan sessions the renderer should adopt as panels under their own ids.
    * Never sent silently — no dialog, no send.
