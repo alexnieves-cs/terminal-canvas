@@ -73,7 +73,8 @@ ok('rd-w4.ask.1 the question is the approval, else the ask line, and a shot prev
   SEL.focusPrimary(pending.requestId !== null) === 'approve' &&
   quiet.requestId === null && quiet.question === 'Waiting on you' && SEL.focusPrimary(false) === 'open' &&
   SEL.focusQuestion(preview, 'a', undefined, null).question === 'from the shot' &&
-  SEL.focusQuestion(preview, 'b', { argument: 'x', requestId: 'r' }, null).requestId === 'r')
+  SEL.focusQuestion(preview, 'b', { argument: 'x', requestId: 'r' }, null).requestId === 'r' &&
+  SEL.focusQuestion(null, 'a', { argument: 'rm -rf build', requestId: 'r2' }, 'Waiting on you').question === 'Waiting on you')
 
 const many = Array.from({ length: 10 }, (_, i) => `line ${i}`).join('\n')
 ok('rd-w4.diff.1 Full diff is the whole argument; the folded view keeps the first lines',
@@ -84,10 +85,10 @@ ok('rd-w4.crumb.1 the breadcrumb is World, the task, then the agent, and a missi
   SEL.focusCrumb('Ledger CSV export', 'Codex').join(' › ') === 'World › Ledger CSV export › Codex' &&
   SEL.focusCrumb(null, 'Codex')[1] === 'Room' && SEL.focusCrumb('  ', 'Codex')[1] === 'Room')
 
-const steps = [{ id: '1', title: 'Read the schema', word: 'Finished', tone: 'done' }]
+const steps = [{ id: '1', title: 'Read the schema', word: 'Finished — not verified', tone: 'done' }]
 ok('rd-w4.steps.1 plan steps come from the task, and the shot preview replaces them for that robot',
   SEL.focusSteps(null, 'a', steps).length === 1 && SEL.focusSteps(null, 'a', steps)[0].tone === 'done' &&
-  SEL.focusSteps({ ...preview, steps: [{ id: 's', title: 'Shot', word: 'Now', tone: 'kind' }] }, 'a', steps)[0].title === 'Shot' &&
+  SEL.focusSteps({ ...preview, steps: [{ id: 's', title: 'Shot', word: 'Working', tone: 'kind' }] }, 'a', steps)[0].title === 'Shot' &&
   SEL.focusSteps(preview, 'b', steps)[0].title === 'Read the schema')
 
 ok('rd-w4.sheet.1 the sheet is 400px of plain DOM: no three, no bridge, and the width is the one constant',

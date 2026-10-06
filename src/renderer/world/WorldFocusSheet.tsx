@@ -85,39 +85,41 @@ export function WorldFocusSheet(): JSX.Element | null {
 
   return (
     <aside className="world-focus" role="dialog" aria-modal="false" aria-label="Focus" data-world-focus-sheet data-primary={primary}>
-      <section className="world-focus__section" aria-label="Request">
-        <h2 className="world-focus__label">Request</h2>
-        {asked.question !== '' ? <p className="world-focus__question">{asked.question}</p> : null}
-        {asked.diff !== '' ? (
-          <pre className="world-focus__diff" data-world-focus-diff={full ? 'full' : 'folded'}><code>{diffPreview(asked.diff, full)}</code></pre>
-        ) : null}
-        {pending ? (
-          <div className="world-focus__verbs" role="group" aria-label="Answer the request">
-            <button type="button" className="world-focus__act" data-primary={primary === 'approve' ? '' : undefined} data-world-focus-approve onClick={() => answer(true)}>
-              Approve <Kbd chord={allowChord} />
-            </button>
-            <button type="button" className="world-focus__act" onClick={() => answer(false)} data-world-focus-deny>Deny</button>
-            <button type="button" className="world-focus__act" aria-expanded={full} onClick={() => setFull((open) => !open)} data-world-focus-diff-toggle>
-              {full ? 'Hide diff' : 'Full diff'}
-            </button>
-          </div>
-        ) : null}
-      </section>
+      {asked.question !== '' || asked.diff !== '' || pending ? (
+        <section className="world-focus__section" aria-label="Request">
+          <h2 className="world-focus__label">Request</h2>
+          {asked.question !== '' ? <p className="world-focus__question">{asked.question}</p> : null}
+          {asked.diff !== '' ? (
+            <pre className="world-focus__diff" data-world-focus-diff={full ? 'full' : 'folded'}><code>{diffPreview(asked.diff, full)}</code></pre>
+          ) : null}
+          {pending ? (
+            <div className="world-focus__verbs" role="group" aria-label="Answer the request">
+              <button type="button" className="world-focus__act" data-primary={primary === 'approve' ? '' : undefined} data-world-focus-approve onClick={() => answer(true)}>
+                Approve <Kbd chord={allowChord} />
+              </button>
+              <button type="button" className="world-focus__act" onClick={() => answer(false)} data-world-focus-deny>Deny</button>
+              <button type="button" className="world-focus__act" aria-expanded={full} onClick={() => setFull((open) => !open)} data-world-focus-diff-toggle>
+                {full ? 'Hide diff' : 'Full diff'}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
-      <section className="world-focus__section" aria-label="What it's doing">
-        <h2 className="world-focus__label">What it's doing</h2>
-        {steps.length > 0 ? (
+      {steps.length > 0 ? (
+        <section className="world-focus__section" aria-label="What it's doing">
+          <h2 className="world-focus__label">What it's doing</h2>
           <ol className="world-focus__steps">
             {steps.map((step) => (
-              <li key={step.id} className="world-focus__step" data-tone={step.tone === 'none' ? undefined : step.tone}>
+              <li key={step.id} className="world-focus__step" data-tone={step.tone}>
                 <span className="world-focus__mark" aria-hidden="true" />
                 <span className="world-focus__step-title">{step.title}</span>
                 <span className="world-focus__step-word">{step.word}</span>
               </li>
             ))}
           </ol>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
       {parts.length > 0 ? (
         <p className="world-focus__facts" data-world-focus-facts>

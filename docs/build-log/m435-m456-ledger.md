@@ -1120,26 +1120,27 @@ Linux, Node. `node node_modules/electron/install.js`, then `npm rebuild node-pty
 
 Verdict: **close**.
 
-Shot under xvfb. The first attempt produced no PNG before a 180s kill (stdout was block-buffered). The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The WebGL layer is the light field `--s-0`. That is R-053. The DOM is what this verdict judges.
+Shot under xvfb. The first attempt produced no PNG before a 180s kill (stdout was block-buffered). The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The sentence below is the capture after the rules-review rebuild. The WebGL layer is the light field `--s-0`. That is R-053. The DOM is what this verdict judges.
 
-The sheet is the close-up: breadcrumb `World › Ledger CSV export › Codex — ledger-export · Esc`, REQUEST with the fixture's ask, a folded diff, Approve `⌘Y` filled, Deny, Full diff, What it's doing with green done and cyan working marks, facts `Opus 4.8 · on feature/csv-export`, a reply composer, Open in Canvas `⌘↵`, Sessions. The camera panel, replay scrubber and away card are the room's existing chrome.
+The sheet is the close-up: breadcrumb `World › Ledger CSV export › Codex — ledger-export · Esc`, REQUEST "wants to edit ledger.ts", a mono diff of `export function streamCsv(rows)`, Approve `⌘Y` filled, Deny, Full diff, What it's doing with **Finished — not verified** (green) and **Working** (cyan), facts `Opus 4.8 · on feature/csv-export`, a reply composer, Open in Canvas `⌘↵`, Sessions. The camera panel, replay scrubber and away card are the room's existing chrome.
 
-1. Silhouette. The mockup's robot and floor are not in the capture. The host reads the world canvas back blank (R-053). The sheet's own silhouette matches: a left panel over the room.
-2. Composition. No ask chip sits on a robot, because the card is drawn in the blank layer. The sheet carries the same Approve.
-3. Chrome. The fixture's question and steps are the cast's line and criteria, not the mockup's longer paragraph. Sample copy. Spend and context are absent because the fixture has no meter. The reply field is open: this Codex is a chat the room can send to.
+1. Silhouette. The mockup's robot and floor are absent from the capture. The host reads the world canvas back blank (R-053). The sheet's own silhouette matches: a left panel over the room.
+2. Composition. The ask chip sits in the blank layer, so it does not appear on a robot. The sheet carries the same Approve.
+3. Chrome. The question is the fixture's line. The diff is the `streamCsv` function, and the step words are the plan's. Spend and context are absent because the fixture has no meter. The reply field is open: this Codex is a chat the room can send to.
 
 State colour: the step marks are green and cyan from `[data-tone]`. No state hex in the W4 span.
 
 ### Rules review
 
-BLOCKERS: none.
+The first pass named two blockers. Both are fixed in this lane.
 
-SHOULD-FIX: none left in this lane. R-070, R-071, R-072 and R-074 are requests against files W4 does not own. R-081 is done.
+- Step words in the shot and the check are the plan's (`Working`, `Finished — not verified`). `FocusStep.tone` is `Tone`. A `none` step still wears `[data-tone="none"]`.
+- One filled primary. The sheet's Approve is the fill. The chip's Approve stays in the box at opacity 0 and comes to 1 while focused, and it is not filled. The card's request keeps its text and drops its own verbs while the sheet is open.
 
-NITS: the sheet has no resting shadow, because `shadow.1` keeps `--lift` on the frame and the launcher.
+A command with no description stays the diff, not the question. The shot's diff is a function, not criteria sentences. Empty Request and What it's doing sections are omitted. An agent terminal still sees the plain-shell sentence until R-071. `verify:rd-w4` 13/13, `verify:world` 251/251, `verify:styles` 97/97, web typecheck clean after that.
+
+NITS left: the sheet has no resting shadow, because `shadow.1` keeps `--lift` on the frame and the launcher. Sessions presses the existing segment.
 
 ### World guard
 
-BLOCKERS: none. `WorldFocusSheet.tsx` imports no three, fiber, drei, or postprocessing. `WorldStage.tsx`'s one lazy import is unchanged. `world-select.ts` imports no three. Reduced motion clears transitions on `.world-focus` and `.world-crumb`. `verify:world` is 251/251, including `world.door.1` and `rd-world.parity.1`. The built entry does not statically import three (`WorldView` is its own chunk).
-
-SHOULD-FIX: name the sheet in the plain-DOM sentence of `src/renderer/CLAUDE.md`. That file is not W4's. R-074.
+BLOCKERS: none. SHOULD-FIX: none in the files this lane owns. `WorldFocusSheet.tsx` imports no three, fiber, drei, or postprocessing. `WorldStage.tsx`'s one lazy import is unchanged. `world-select.ts` imports no three. The chip's reveal drops its transition under reduced motion; the glide still collapses in `CameraApi.apply`. `verify:world` is 251/251, including `world.door.1` and `rd-world.parity.1`. The built entry does not statically import three. R-074 still asks the lead to name the sheet in `src/renderer/CLAUDE.md`.

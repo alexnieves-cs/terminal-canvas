@@ -196,11 +196,11 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
               </span>
             ) : null}
           </div>
-          {/* Ask chips only for a waiting agent who is not the picked card. */}
+          {/* The chip stays for a waiting agent who is not the picked card, and also while that robot is in focus. Approve is in the box either way; the sheet is the filled one. */}
           {ask !== null && (!picked || focused) ? (
             <div className="world-chip" data-ask="" data-focused={focused ? '' : undefined} data-lead={headline.tone}>
               <span className="world-chip__text">{ask}</span>
-              {focused ? <AskApprove agentId={agentId} /> : null}
+              <AskApprove agentId={agentId} />
             </div>
           ) : null}
           {!full ? null : (picked ? (

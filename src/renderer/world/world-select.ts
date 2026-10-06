@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { Tone } from '@renderer/panels/panel-state'
 import type { WorldAgentFacts } from './world-context-store'
 
 /**
@@ -124,8 +125,9 @@ export interface FocusPreview {
 export interface FocusStep {
   id: string
   title: string
+  /** A plan word (`Working`, `Finished — not verified`), not a word this room invents. */
   word: string
-  tone: string
+  tone: Tone
 }
 
 /** What the sheet says the agent asked, and the request id Approve answers. */
@@ -138,7 +140,8 @@ export interface FocusQuestion {
 /**
  * The shot may publish a preview for one robot (the steward cast has a world
  * status and no chat approval). A real approval wins for every other robot.
- * Absent description falls through to the argument, then to the ask line.
+ * Absent description falls through to the ask line. The argument is the diff,
+ * which is the one mono leaf, so a command never becomes the question's UI text.
  */
 export function focusQuestion(
   preview: FocusPreview | null,
@@ -150,7 +153,8 @@ export function focusQuestion(
     return { question: preview.question, diff: preview.diff, requestId: preview.requestId === '' ? null : preview.requestId }
   }
   if (approval !== undefined) {
-    return { question: approval.description ?? approval.argument, diff: approval.argument, requestId: approval.requestId }
+    const described = approval.description?.trim()
+    return { question: described !== undefined && described !== '' ? described : (ask ?? ''), diff: approval.argument, requestId: approval.requestId }
   }
   return { question: ask ?? '', diff: '', requestId: null }
 }
