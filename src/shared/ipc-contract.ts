@@ -295,6 +295,8 @@ export const IPC = {
    * to run the flow it already has instead of growing a second one.
    */
   CANVAS_REQUEST_RESET: 'canvas:request-reset',
+  /** R-028. Main's confirm(), Cancel-default. The renderer does not use window.confirm. */
+  DIALOG_CONFIRM: 'dialog:confirm',
   /**
    * The merged prompt list: the saved store plus .claude/commands under the
    * cwd of the panel the palette captured. Takes a cwd because the project
@@ -1881,6 +1883,10 @@ export interface CanvasBridge {
     onFeedback(listener: () => void): () => void
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>
+  }
+  /** R-028. Main's two-button confirm. True only when the verb button is chosen. */
+  dialog: {
+    confirm(ask: { message: string; detail?: string; verb: string }): Promise<boolean>
   }
   preset: {
     /** A menu pick: spawn one panel from this template, now. */

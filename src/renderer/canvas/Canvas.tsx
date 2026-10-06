@@ -8850,6 +8850,33 @@ export function Canvas({
     setOnboardingDone(true)
   }
 
+  // R-028. A work item names one conversation. That slot is filled only while
+  // it is empty — writing over it would replace the lane's chat. Every moved
+  // panel is also linked to the task's work card, the same one-hop make-task
+  // already uses. There is no second membership list.
+  const moveSessionsToTask = (ids: readonly string[], taskId: string): void => {
+    if (ids.length === 0) return
+    const item = workItemsRef.current.find((row) => row.id === taskId)
+    if (item === undefined) return
+    const first = ids[0]
+    if (item.panelId === undefined && first !== undefined) {
+      setWorkItems((current) => current.map((row) => (
+        row.id === taskId && row.panelId === undefined
+          ? carryWorkItem({ ...row, panelId: first, updatedAt: Date.now() })
+          : row
+      )))
+    }
+    const card = panelsRef.current.find((panel) => workCardItemId(panel) === taskId)
+    if (card === undefined) return
+    setPanels((current) => {
+      let next = current
+      for (const id of ids) next = addLink(next, id, card.rect.id)
+      if (next === current) return current
+      commitHistory(next)
+      return next
+    })
+  }
+
   return (
     <div
       ref={shellRef}
@@ -9304,7 +9331,48 @@ export function Canvas({
       {(chrome.centerView === 'sessions' || chrome.centerView === 'review') && (
         <div className="shell__page" data-center-view={chrome.centerView}>
           {chrome.centerView === 'sessions'
-            ? <SessionsHost onShowOrchestrate={() => setCenterView('orchestration')} />
+            ? <SessionsHost
+                onShowOrchestrate={() => setCenterView('orchestration')}
+                confirmEnd={(ask) => window.canvas.dialog.confirm(ask)}
+                onEnd={(ids) => { for (const id of ids) paletteActions.closePanel(id) }}
+                onPause={(ids) => { for (const id of ids) void window.canvas.agentSession.interrupt(id) }}
+                onRestart={(ids) => { for (const id of ids) paletteActions.restartPanel(id) }}
+                onMove={moveSessionsToTask}
+                onNewSession={() => paletteActions.beginSpawnSheet()}
+                onShowOnCanvas={(id) => { setCenterView('canvas'); paletteActions.goToPanel(id) }}
+                onSend={(id, text) => {
+                  const panel = panelsRef.current.find((candidate) => candidate.rect.id === id)
+                  // paste(), never pty.write. A chat has no terminal handle, so the
+                  // callback the host now always receives still has to send it.
+                  if (panel !== undefined && isTerminalPanel(panel)) {
+                    registry.get(id)?.handle.paste(text)
+                    return
+                  }
+                  void window.canvas.agentSession.send(id, text, [])
+                }}
+                onDetach={(id) => registry.detachSlot(id)}
+                onAllow={(panelId) => {
+                  const approval = pendingApprovals.find((row) => row.id === panelId)
+                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, true)
+                }}
+                onDeny={(panelId) => {
+                  const approval = pendingApprovals.find((row) => row.id === panelId)
+                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, false)
+                }}
+                onDiff={(panelId) => paletteActions.openReview(panelId)}
+                live={{
+                  dormant: (id) => registry.get(id)?.dormant === true,
+                  // lastFocusedAt is the last click, not a start. The Run column stays empty.
+                  startedAt: () => null,
+                  survives: (id) => {
+                    const session = registry.get(id)
+                    if (session === undefined || session.status.kind !== 'running') return null
+                    return backendInfo?.kind === 'tmux' ? true : null
+                  },
+                  // The session stores no diff stat. Asking git once per row would invent one.
+                  changes: () => null
+                }}
+              />
             : <ReviewHost />}
         </div>
       )}

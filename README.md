@@ -361,7 +361,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        template:list / template:save / template:delete
                        preset:template
                        settings:list / settings:set
-                       canvas:request-reset
+                       canvas:request-reset / dialog:confirm
                        agent:acknowledge
                        workspace:list / workspace:create / workspace:rename
                        workspace:delete / workspace:activate

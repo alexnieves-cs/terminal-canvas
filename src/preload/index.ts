@@ -117,6 +117,9 @@ const bridge: CanvasBridge = {
     load: () => ipcRenderer.invoke(IPC.LAYOUT_LOAD),
     save: (state: CanvasState, meta?: SharedSaveMeta) => ipcRenderer.invoke(IPC.LAYOUT_SAVE, state, meta)
   },
+  dialog: {
+    confirm: (ask: { message: string; detail?: string; verb: string }) => ipcRenderer.invoke(IPC.DIALOG_CONFIRM, ask)
+  },
   canvas: {
     // canvas:counts is a main -> renderer REQUEST, not an invoke: main sends a
     // one-shot reply channel name, and the renderer answers on it directly
