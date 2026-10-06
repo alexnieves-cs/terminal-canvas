@@ -62,8 +62,10 @@ import {
   EMPTY_SELECTION, NO_GUIDES, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport, prefersReducedMotion } from './useViewport'
-import { StartupSplash } from './StartupSplash'
-import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, type SplashMode, type StartupInput } from './splash'
+import { RestoreSplash, StartupSplash } from './StartupSplash'
+import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, restoreLines, type RestoreFacts, type SplashMode, type StartupInput } from './splash'
+import { Onboarding } from '@renderer/onboarding/Onboarding'
+import { BlankCanvas } from '@renderer/shell/EmptyState'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advanced-doors'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
@@ -8816,6 +8818,38 @@ export function Canvas({
     return criteriaChecklist(item.criteria, item.criteriaMet ?? [])
   })()
 
+  // R-021. New hooks sit here, immediately before the return, so nothing
+  // above them changes order. The APEX splash stays on splashMode. The
+  // restore card is a second surface and stays up while a live boot is
+  // unsettled, including when that mode is 'none'.
+  const [restoreFacts, setRestoreFacts] = useState<RestoreFacts | null>(null)
+  const [restoreLeft, setRestoreLeft] = useState(false)
+  useEffect(() => {
+    const boot = window.canvas.boot
+    if (boot === undefined) return
+    return boot.onProgress((event) => {
+      setRestoreFacts((prev) => ({
+        ...(prev ?? {}),
+        ...(event.workspace !== undefined ? { workspace: event.workspace } : {}),
+        ...(event.layout !== undefined ? { layout: event.layout } : {}),
+        ...(event.tmux !== undefined ? { tmux: event.tmux } : {}),
+        ...(event.agentsPlanned !== undefined ? { agentsPlanned: event.agentsPlanned } : {}),
+        ...(event.agentsFound !== undefined ? { agentsFound: [...event.agentsFound] } : {}),
+        ...(event.failed !== undefined ? { failed: event.failed } : {}),
+        ...(event.optionHeld === true ? { optionHeld: true } : {})
+      }))
+    })
+  }, [])
+  const restoreOpen = restoreFacts !== null && !restoreLeft && !restoreLines(restoreFacts).settled
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return window.localStorage.getItem('tc.onboarding.done') === '1' } catch { return false }
+  })
+  const showOnboarding = startup !== undefined && startup.harnessOff !== true && startup.lastVersion === null && !onboardingDone
+  const finishOnboarding = (): void => {
+    try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }
+    setOnboardingDone(true)
+  }
+
   return (
     <div
       ref={shellRef}
@@ -10084,6 +10118,19 @@ export function Canvas({
         />
         {splash !== 'none' && !merged && (
           <StartupSplash mode={splash} rects={rects} viewport={viewport} onDone={() => setSplash('none')} />
+        )}
+        {restoreOpen && restoreFacts !== null && !merged && (
+          <RestoreSplash
+            facts={restoreFacts}
+            rects={panels.map((panel) => ({ x: panel.rect.x, y: panel.rect.y, w: panel.rect.w, h: panel.rect.h }))}
+            onDone={() => setRestoreLeft(true)}
+          />
+        )}
+        {showOnboarding && !merged && (
+          <Onboarding workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''} onHandoff={finishOnboarding} />
+        )}
+        {onboardingDone && panels.length === 0 && !merged && (
+          <BlankCanvas workspace={workspaceRows.find((w) => w.active)?.name ?? ''} />
         )}
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
