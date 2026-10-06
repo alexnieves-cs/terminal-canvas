@@ -43,8 +43,6 @@ export interface CommandPillProps {
   actions: PillActions
   /** The active workspace's panels (the orchestrator and running agents live here). */
   panels: readonly Panel[]
-  /** The REACHABLE attention queue's size — Cmd+J's. */
-  attentionCount: number
   /** M264. Lit task's title when the related lens is on; absent means no task sentence. */
   taskTitle?: string
   selectedIds: readonly string[]
@@ -132,7 +130,7 @@ function attentionCensus(panels: readonly Panel[]): AttentionCensus[] {
 }
 
 export function CommandPill(props: CommandPillProps): JSX.Element {
-  const { actions, panels, attentionCount, taskTitle, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
+  const { actions, panels, taskTitle, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
   // M438. The redesign line reads F2's queue. The same census is published
   // for the dock and the Sessions host. Empty, the rest button below stays
   // the one the panels suite presses.
@@ -141,7 +139,10 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   const census = useMemo(() => attentionCensus(panels), [panels, chatsVersion, agentTick])
   useLayoutEffect(() => { publishAttentionCensus(census) }, [census])
   useLayoutEffect(() => () => { publishAttentionCensus([]) }, [])
-  const attentionLine = attentionPillLine(useAttentionQueue(census))
+  const queue = useAttentionQueue(census)
+  const attentionLine = attentionPillLine(queue)
+  // R-030. The rest sentence reads the queue this pill already subscribes to.
+  const queueCount = queue.length
   const [expanded, setExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -172,7 +173,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     : isTerminalPanel(p)
       ? { id: p.rect.id, kind: 'terminal', agent: p.spec.agent !== undefined, agentState: getAgentState(p.rect.id) }
       : { id: p.rect.id, kind: p.kind })))
-  const rest = pillRestState({ attention: attentionCount, running: running.length, selected: selectedIds.length, ...(taskTitle !== undefined ? { taskTitle } : {}) })
+  const rest = pillRestState({ attention: queueCount, running: running.length, selected: selectedIds.length, ...(taskTitle !== undefined ? { taskTitle } : {}) })
 
   // 4.3. Teach Cmd+J once, beside the first attention sentence; retire it when
   // that queue empties, so it is seen for a whole episode rather than a blink.
@@ -488,12 +489,12 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
           {/* Zone 2 — attention/running. Rows, not a toggle: what is waiting or
               in flight is worth seeing without an extra click, and a zero of
               either simply removes the zone rather than saying so. */}
-          {(attentionCount > 0 || running.length > 0) && (
+          {(queueCount > 0 || running.length > 0) && (
             <div className="command-pill__zone command-pill__zone--status">
-              {/* attentionCount > 0 always puts pillRestState into its 'attention'
+              {/* A non-empty queue puts pillRestState into its 'attention'
                   arm first (see command-pill.ts's priority order), so rest.text
                   is always the right sentence here. */}
-              {attentionCount > 0 && (
+              {queueCount > 0 && (
                 <button type="button" className="command-pill__status-row command-pill__status-row--attention" data-pill-action="jump"
                   aria-label={rest.text} {...shellControl(onJump)}>
                   <Bell /><span>{rest.text}</span>
