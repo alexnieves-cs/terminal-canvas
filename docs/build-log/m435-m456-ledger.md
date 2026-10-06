@@ -423,3 +423,65 @@ Rebase onto `origin/redesign/main` (`6bffde9f`): already based there. No commits
 | Goldens | `UPDATE_GOLDENS` was not set. `visual.1` lists `rd-settings-keys` as the one missing golden (declared 80, goldens 79). |
 
 Known reds left as they are: `panels-split.2`, `revamp.create.1`, missing `pty.node`. `verify:canvas-sync` and `verify:relay` were green on this run.
+
+## M445 · L-D Sessions
+
+Branch `rd/l-d-sessions`, cut from `redesign/main`. Screen 07. D3. The page is a peer of the canvas: it reads the same words and the same queue, and the actions it cannot perform are callbacks.
+
+### Plan
+
+The pure half is `sessions-model.ts`: the header, the task groups, the bulk bar, the card verbs, the reply box, the sparkline path. Checks in `scripts/verify-rd-l-d.cjs` call that module through esbuild, the same shape as `verify-rd-f2`. The view is new files under `src/renderer/sessions/`, mounted from F3's `SessionsHost`. CSS stays inside the `rd:L-D` markers. The shot is `rd-sessions` on `TC_FIXTURE=rd-steward`.
+
+PLAN CHECK:
+
+1. Product code is new under `src/renderer/sessions/`, including the host F3 left. No store is edited. Holds.
+2. The reply box's delivery is paste and Send is a button. Enter does not submit. A shell-prompt card has Open on canvas and Snooze 10m, and no field. Holds.
+3. `metrics.1` is amended by R-027, not by an edit to `scripts/verify-styles.cjs`. Holds.
+
+### What the page does
+
+- Header is `sessionsTitle`. A zero live count and a zero dormant count are dropped, so an empty canvas is "Sessions" and a dormant-only canvas does not say "0 live". Spend is `headerSpend` in its own span. It is a dollar amount with no "today". The title bar is untouched.
+- Group is Task. All states filters on the row's own word. "+ New session" is the one primary. Orchestrate stays the header link F3 added (`data-sessions-orchestrate`). ⌘⇧S is not bound again: `shortcuts.ts` has the chord and `useShellChrome` toggles the page.
+- Cards are `useAttentionQueue(useAttentionCensus())`, in that order, with `item.sentence`. Approval is Allow / Diff / Deny. A shell prompt is Open on canvas / Snooze 10m. A failure is Restart / Read log. Snooze is local (ten minutes) and hides that card. This file does not call `buildQueue`.
+- The table groups by the work item's single `panelId`. A panel named by two tasks is unassigned, in one trailing group. Columns are Session, Agent, Folder, Branch, State (`data-tone`), Activity, Run, Cost, Last line. The sparkline is an inline SVG. Its stroke is `STATE_PALETTE`, because a presentation attribute does not resolve `var()`. Recharts stays on the two shell charts. Last line and paths are mono. The state pill is `--tone`. Cost is `.sessions-cost`. There is no `data-machine-cost`.
+- The bulk bar is "N selected" plus Pause, Restart, Move to task…, End. Pause is off when every selected row is asleep, exited, done or none. End calls `endAsk` and then `confirmEnd`. If Canvas has not passed `confirmEnd`, End does not end. No `window.confirm`, no `pty.kill`.
+- Detail tails `scrollback.tail` and `pty.onData`. "Send to this session…" is disabled, with its reason, for a shell and for an agent this page cannot paste into. A chat with no `onSend` uses `agentSession.send`. A terminal paste waits for R-028. Facts (Started, Survives "reload and quit (tmux)", Tokens, Changes) render only when the reader has them. Show on canvas calls `onShowOnCanvas`.
+
+### What this page cannot know yet
+
+`session-registry.ts` is a factory Canvas owns. There is no module-level reader, and this lane does not bump `registry.version()`. The live reader therefore reports every session as not dormant, `survives` and `startedAt` and `changes` as unknown, and a terminal's `canPaste` as false until `onSend` is passed. The header drops the dormant clause because the count is zero, which is what the rest rule says to do with the data in hand. R-028 asks Canvas to pass the registry facts and the verbs. R-029 asks the steward loader to stamp folder, engine and branch; until then the shot hands the cast through `tc-sessions-feed`. A malformed feed is ignored.
+
+The census `taskId` is null (CommandPill). Grouping uses work items. One member per task, plus a loose group, is what `layout.load` can say today.
+
+F3's `.sessions-host__bar` is a single row. The L-D span sets `justify-content` and `flex-wrap` on the same class, later in the file, so the spend and the primary fit. Recorded here because the override is outside F3's markers on purpose: L-D may not edit that span.
+
+Sample names and dollar amounts live in `scripts/fixtures/rd-steward/workspace.json` and in the shot's feed. They are not product copy.
+
+### Shot
+
+`rd-sessions` requires `TC_FIXTURE=rd-steward`, loads that layout, sends `agent:state` `wants-you` for three cast panels (the queue then says shell-prompt, because those panels are terminals and the inbox has no approval), dispatches `tc-sessions-feed` built from the fixture, selects `claude-ledger`, `vitest-ledger` and `codex-plaid`, and opens `claude-ledger`. The feed sets `canPaste` on agent rows so the open detail shows the send box. The live page does not. Giving the scene a `run` makes `verify:meta` `visual.1` list `rd-sessions` as a missing golden. That red is expected until the lead writes the golden. This lane does not set `UPDATE_GOLDENS` and does not write under `verify/visual/goldens/`.
+
+### Checks
+
+Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebuilds/linux-x64`). Requiring `electron` later downloaded the Linux binary (`v43.4.1`); the Mac path `npm run shot` uses (`Electron.app/Contents/MacOS/Electron`) is not on disk. The first `verify:rd-l-d` threw `MODULE_NOT_FOUND` for esbuild because `node_modules` was absent. That is recorded at the top of the suite.
+
+Two reds from the first affected run were this lane and are fixed: `verify:styles` check 3 (a disabled control used `opacity: 0.45`; it now uses `--muted`), and `verify:verbs` `gate.2` (the detail reads `scrollback.tail` and scrubs it with `outward` before the line is shown on this page).
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass |
+| `npm run verify:rd-l-d` | 18/18 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:verbs` | 30/30 pass |
+| `npm run affected -- --base redesign/main` | 43/45, stopped after the plain tier. `verify:meta` (`panels-split.2`, and `visual.1` missing `rd-sessions`) and `verify:first-run` `revamp.create.1`. `docs/redesign/requests.md` is UNMAPPED. Build and the Electron suites were not started. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, stopped after wave 1. Failures: `verify:meta` (`panels-split.2` — tag `pre-v7-run` is not in this clone; `visual.1` — `rd-sessions` has a `run` and no golden, declared 80 / goldens 79), `verify:tmux` (`pty.node` for `linux-x64` missing), `verify:first-run` `revamp.create.1`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` did not spike. |
+| Electron tier, `npm run shot`, `verify:visual` | not run by the gate, because wave 1 was already red. A direct attempt, `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-sessions` and `TC_FIXTURE=rd-steward`, booted Electron and then threw `Cannot find module './prebuilds/linux-x64/pty.node'` from `shot-entry.cjs`. The process did not exit; the probe was stopped at 75s (exit 124). No PNG was written. `UPDATE_GOLDENS` was not set. |
+
+### Deviations
+
+- Sentences are `panelState`'s words, via the queue and the reader. The mockup's prose is not a second vocabulary.
+- Attention cards on the steward shot are shell prompts. Approval and failure cards render when the queue says so. This fixture's census cannot say so: a terminal in `wants-you` is a shell prompt, and failure needs an exited status or `failed` on the census, which CommandPill does not set from `agent:state` alone.
+- The Changes panel (`engine: review`) is not a session row. The feed skips it.
+- The fixture's moment is not "7 live · 2 dormant". No row is asleep, so the dormant clause drops. Inventing two dormant rows would be a second cast.
+- Disabled controls are `--muted`, not a fractional opacity. Check 3 allows 0 and 1 only.
+- The detail's tail is scrubbed with `outward` at the read. The terminal's own buffer is unchanged.

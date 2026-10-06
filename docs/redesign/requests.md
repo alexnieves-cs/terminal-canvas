@@ -220,3 +220,24 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: the row and the verb are `OPEN_SETTINGS_ROW` / `openSettingsPage` in `palette-actions/settings.ts`. The command list and the dock's Settings callback are other lanes. Nothing a person can click reaches the page. The shot calls `window.__tcOpenSettings`, which is the same function the row's `run` calls.
 - Smallest change: add a command whose `run` imports `openSettingsPage` from `@renderer/settings/open` (a new `PaletteActions` key would re-partition the slices). Point the dock's `onSettings` at `openSettingsPage()`. Leave `Manage settings…` as the palette drill-in.
 - Status: open
+
+### R-027 · Scope metrics.1 to canvas surfaces
+- Lane: L-D
+- File: `scripts/verify-styles.cjs`
+- Why the contract or the owner cannot absorb it: D3 says amend `metrics.1` so canvas surfaces stay metric-free when Sessions lands its Run and Cost columns. F1 owns `scripts/verify-styles.cjs`. L-D's suite asserts the sessions files have no `data-machine-cost` and the L-D CSS span has `.sessions-cost` and not `.panel__machine-cost`. That does not change `metrics.1` itself.
+- Smallest change: skip `src/renderer/sessions/` in the `metrics.1` walk, and retitle the check so it says canvas surfaces. Do not add `data-machine-cost` to Sessions. The inspector CPU readout stays in `shell/Inspector.tsx`.
+- Status: open
+
+### R-028 · Wire Sessions actions through Canvas and main's confirm
+- Lane: L-D
+- File: `src/renderer/canvas/Canvas.tsx`, and a confirm channel from `src/main/bootstrap/dialogs.ts`
+- Why the contract or the owner cannot absorb it: Sessions reads layout, the last line, usage and the queue. It does not hold the registry, so it cannot paste, and it cannot see dormant, started-at, tmux survival or the diff stat. `window.canvas` has no generic confirm. `canvas.requestReset` confirms and then resets. `window.confirm` is not main's dialog. The camera flight is `goToPanel` / the viewport, which this lane does not own.
+- Smallest change: pass optional callbacks into `SessionsHost`. `confirmEnd` invokes main's `confirm()` and resolves the boolean. `onSend` for a terminal is `handle.paste`, never `pty.write`. A chat with no callback already calls `agentSession.send`. `onShowOnCanvas` sets the center view back to canvas and flies to the panel. `onPause`, `onRestart`, `onEnd`, `onMove`, `onNewSession`, `onAllow`, `onDeny`, `onDiff` and `onDetach` are the same doors the canvas already has. Also pass the facts the registry knows (dormant, started, survives, changes) so the header can drop a real zero and the detail can say "reload and quit (tmux)". Census `taskId` stays null until the pill's owner fills it; grouping uses work items.
+- Status: open
+
+### R-029 · Steward layout does not carry the Sessions columns
+- Lane: L-D
+- File: `scripts/fixtures/rd-steward/load.cjs`
+- Why the contract or the owner cannot absorb it: F2 owns the fixture. `load.cjs` writes one shared cwd, the cast name as the title, and `workItems.panelId` for the first panel of each task only. Engine, folder, branch and state stay in `workspace.json`. The live Sessions page therefore cannot match screen 07 from `layout.load` alone. The shot paints the cast through `tc-sessions-feed`, which the page already validates (`parseFeed` refuses a bad payload). That feed is the scene's door. It is not a second layout.
+- Smallest change: stamp each panel's cwd, agent and branch (or its task membership) so `taskMemberships` can group every cast panel, and a terminal with an agent is not stored as a shell. Leave the shot feed in place until that lands.
+- Status: open
