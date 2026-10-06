@@ -438,7 +438,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        image:read / starter:prepare
                        docx:import / flowchart:read / world:status / world:retry
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
-                       agent:state / session:live / subagent:state
+                       agent:state / session:live / session:host / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
