@@ -57,6 +57,11 @@ export function minimapProjection(input: {
   }
 }
 
+/** A world box in thumb pixels. Regions and the camera share this projection. */
+export function projectBox(box: { x: number; y: number; w: number; h: number }, pr: MinimapProjection): { x: number; y: number; w: number; h: number } {
+  return { x: box.x * pr.scale + pr.ox, y: box.y * pr.scale + pr.oy, w: box.w * pr.scale, h: box.h * pr.scale }
+}
+
 /** A point on the thumb, back in the world. */
 export function minimapToWorld(p: Point, pr: MinimapProjection): Point {
   return { x: (p.x - pr.ox) / pr.scale, y: (p.y - pr.oy) / pr.scale }

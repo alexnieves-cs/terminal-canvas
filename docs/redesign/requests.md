@@ -143,3 +143,17 @@ from: centerViewNow === 'focus'
 - Smallest change: rename the row's visible title to `Show Orchestrate`. Leave the command id.
 - Status: done: the title is `Show Orchestrate`. The id stays `canvas.orchestration`.
 - Filed on the F3 branch as R-009.
+
+### R-016 · Header path, branch and state duration
+- Lane: L-B
+- File: `src/renderer/components/PanelFrame.tsx`, `src/renderer/components/TerminalPanel.tsx`
+- Why the contract or the owner cannot absorb it: M442's frame shows a faint path, the branch and a duration beside the state word (`working · 12m`). L-B does not own those two components. The state word stays the one word from `panel-state.ts` (D7). A duration is a separate fact, and painting it by changing `shown.word` would move every check that pins that word.
+- Smallest change: in the header chrome, render the panel path, the branch when one is known, and `statePill(word, elapsedMs)` from `src/renderer/panels/header-rest.ts` beside `[data-state-word]`. Leave the word itself alone.
+- Status: open
+
+### R-017 · The painted settle is a second `panel-settle`
+- Lane: L-B
+- File: `scripts/verify-styles.cjs`
+- Why the contract or the owner cannot absorb it: M443's settle overshoots (0, then -3px, then 1px, then 0). `motion.2` rejects a new keyframe name, and F1 owns this suite, so the lane redeclares `@keyframes panel-settle` inside `rd:L-B`. That later definition is the one that paints. `revamp.motion.1` reads only the first `@keyframes panel-settle`, which is still the dip and has no negative translate, so the check stays green while the painted motion overshoots.
+- Smallest change: point `honest('panel-settle')` at the last `@keyframes panel-settle`, and allow this overshoot as the lane's settle. Leave the first definition in place.
+- Status: open

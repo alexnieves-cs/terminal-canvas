@@ -1,6 +1,6 @@
 import type { PersistedTeammate } from '@shared/teammates'
 import { LINEUPS, LINEUP_IDS, lineupPlan } from '@shared/lineups'
-import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode, AGENT_CAPABILITIES, AGENT_KINDS, type AgentKind } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId, modelChoices, rowCapabilitySentence, PRESET_KIND_BY_BACKEND, parseEnvLines, CHAT_WHAT_ID } from './spawn-sheet'
@@ -456,6 +456,42 @@ export function SheetHeader({ current, onTask, onPanel, ask }: { current: 'task'
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * M443. "New object connected to <source>". Rendered by the canvas when a
+ * port drag ends on empty ground. It does not spawn: the canvas arms the
+ * handoff and calls onSpawn.
+ */
+export function ConnectedSpawnMenu({
+  title, agents, presets, foot, onAgent, onPreset, onClose, style
+}: {
+  title: string
+  agents: readonly { id: string; label: string; chord: string }[]
+  presets: readonly { id: string; name: string }[]
+  foot: string
+  onAgent: (id: 'claude' | 'codex' | 'shell') => void
+  onPreset: (id: string) => void
+  onClose: () => void
+  style?: CSSProperties
+}): JSX.Element {
+  return (
+    <div className="connected-spawn" data-connected-spawn="" data-screen-control="" role="dialog" aria-label={title} style={style} onMouseDown={(event) => event.stopPropagation()}>
+      <div className="connected-spawn__title">{title}</div>
+      <button type="button" className="connected-spawn__close" aria-label="Close" onClick={onClose}>Close</button>
+      <div className="connected-spawn__group">Agents</div>
+      {agents.map((agent) => (
+        <button key={agent.id} type="button" className="connected-spawn__row" data-connected-agent={agent.id} onClick={() => onAgent(agent.id as 'claude' | 'codex' | 'shell')}>
+          {agent.label}{agent.chord === '' ? '' : ` ${agent.chord}`}
+        </button>
+      ))}
+      {presets.length > 0 && <div className="connected-spawn__group">Presets</div>}
+      {presets.map((preset) => (
+        <button key={preset.id} type="button" className="connected-spawn__row" data-connected-preset={preset.id} onClick={() => onPreset(preset.id)}>{preset.name}</button>
+      ))}
+      <p className="connected-spawn__foot">{foot}</p>
     </div>
   )
 }
