@@ -774,3 +774,5 @@ Known reds, not this diff: `verify:meta` 51/53 (`panels-split.2` tag `pre-v7-run
 Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62eed4`). `rd-canvas` was not moved. `rd/w0-night` was not deleted.
 
 R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
+
+The shot loop is recorded on R-040, after the tag, and the tag was not moved. The setter is `setResumeSummary` (`Canvas.tsx` resume effect), not `useSyncExternalStore`. The same `records ?? []` and the same effect are on `rd-canvas` (`5cf60839`). Opening the world is what turned the spin into #185.
