@@ -55,6 +55,7 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | P3b W2 | redesign/main | `rd-w3b` | the room, `695a71da`. The mount marks stay. W1 and W3 are wired beside them. |
 | P3b W1 | redesign/main | `rd-w3b` | the transition, after W2, `aa0b55a5`. The mount is `2a24f561`. R-041, R-042 and R-043 landed with it. |
 | P3b W3 | redesign/main | `rd-w3b` | the overview, after W1, `613d72b9`. The camera apply is `252fc68c`. |
+| P3c W4 | redesign/main | `rd-w3c` | focus and act, `92479a7a`. R-072 and R-074 are `59e80eba`. |
 
 ## M438 · F3 shell frame
 
@@ -1144,3 +1145,15 @@ NITS left: the sheet has no resting shadow, because `shadow.1` keeps `--lift` on
 ### World guard
 
 BLOCKERS: none. SHOULD-FIX: none in the files this lane owns. `WorldFocusSheet.tsx` imports no three, fiber, drei, or postprocessing. `WorldStage.tsx`'s one lazy import is unchanged. `world-select.ts` imports no three. The chip's reveal drops its transition under reduced motion; the glide still collapses in `CameraApi.apply`. `verify:world` is 251/251, including `world.door.1` and `rd-world.parity.1`. The built entry does not statically import three. R-074 still asks the lead to name the sheet in `src/renderer/CLAUDE.md`.
+
+### Merge
+
+Merged to `redesign/main` as `92479a7a` (`--no-ff`), first in wave 3c. `rd/w4-focus` was not deleted. No conflicts: the branch was cut from `fa49bdd8`.
+
+The lead then landed R-072 and R-074 in `59e80eba`. `world.open.6` names ⌘Enter (`step-in`) and requires `door!.open(id)` in that handler. The bare-Enter listener still asks `enterOpens` and calls `engageFocus`. The plain-DOM sentence in `src/renderer/CLAUDE.md` names `WorldFocusSheet.tsx` beside `WorldCardBody.tsx`.
+
+Left open: R-070 (`world.ctx.door.2` still requires `answerRequest`; `answerApproval`'s history row is a different write, and calling both does not record it), R-071 (a paste-then-submit door needs a terminal handle the publisher does not have; `replyControl` stays closed). R-081 was already done on the lane (`ab85b75f`).
+
+Linux gates after the landing: typecheck pass; `verify:world` 251/251; `verify:rd-w4` 13/13; `verify:rd-w1` 15/15; `verify:rd-w2` 4/4; `verify:rd-w3` 11/11; `verify:rd-w6` still the seam stub (1/1); `npm run build` exit 0 (`WorldView` is its own chunk). Plain wave 65/67 in 31.2s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 95, goldens 79), `verify:first-run` `revamp.create.1`. `verify:review` `merge.1` passed (30.8s). `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (14.6s). `verify:relay` passed (2.4s). `verify:flowchart` passed (1.0s). `UPDATE_GOLDENS` was not set.
+
+W6 rebases with `git fetch origin && git rebase origin/redesign/main`.

@@ -422,28 +422,28 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
 - Why the contract or the owner cannot absorb it: the sheet and the card call `actions.answer`. The publisher's `answer` is `answerRequest` in `ChatConversation.tsx`. The inspector history row is `answerApproval` in `palette-actions/presets.ts`, which also notes the outcome the queue shows. W4 does not own the publisher, and a second call beside `answerRequest` would be a second path.
 - Smallest change: point the room's `answer` at `answerApproval` (or have `answerRequest` record the same outcome), so a decision from the sheet is the row the inspector already shows for the palette.
-- Status: open
+- Status: open. Left at the W4 merge. `world.ctx.door.2` still requires the room's `answer` to be `answerRequest`. `answerApproval` writes the inspector history only after main accepts, and it looks up the palette's approval list, which the chat door does not hold. Calling both does not record the row: `answerRequest` marks the request answered first, so `answerApproval` returns. Folding `recordOrchEvent` into `answerRequest` would change every chat answer, not only the sheet. The publisher, the palette slice and `ChatConversation.tsx` are three owners.
 
 ### R-071 · A paste door for an agent terminal's reply
 - Lane: W4
 - File: `src/renderer/world/world-context-store.ts`, `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
 - Why the contract or the owner cannot absorb it: Reply for an agent terminal is paste, then an explicit submit. The room's door has `send` (`agentSession.send`) and no paste. A plain shell must stay closed with `answer in its terminal`. The sheet cannot tell an agent terminal from a plain shell, and it does not call `agentSession` itself (`world.door.1`).
 - Smallest change: `pasteReply(agentId, text)` on `WorldActions`, implemented as the terminal's paste plus one submit, and a `agentTerminal(agentId)` the sheet can pass to `replyRoute`. Leave plain shells on the one reason.
-- Status: open
+- Status: open. Left at the W4 merge. `replyControl` stays closed until a paste door exists, which is the safe default. The publisher has no terminal handle, and an explicit submit after paste has to stay off a plain shell. That wiring goes through Canvas's registry, which this merge does not take.
 
 ### R-072 · world.open.6 still says bare Enter opens the panel
 - Lane: W4
 - File: `scripts/verify-world.cjs` (not W4's)
 - Why the contract or the owner cannot absorb it: bare Enter on a picked robot now glides in (`engageFocus`). The panel open is ⌘Enter (`step-in`), through the same `door.open`. `world.open.6` still describes Enter as the open, and its regex only requires `door!.open(id)` somewhere in `WorldChrome.tsx`, which the step-in handler satisfies. W4 does not own the suite.
 - Smallest change: retarget the check's sentence to ⌘Enter (`step-in`), and require `door!.open(id)` in that handler. Leave the pure `enterOpens` guard on the bare-Enter listener.
-- Status: open
+- Status: done: `59e80eba`. `world.open.6` names ⌘Enter (`step-in`) and requires `door!.open(id)` in that handler. The bare-Enter listener still asks `enterOpens` and calls `engageFocus`, and it does not call `open`.
 
 ### R-074 · Name the focus sheet in the plain-DOM sentence
 - Lane: W4
 - File: `src/renderer/CLAUDE.md` (not W4's)
 - Why the contract or the owner cannot absorb it: the library-door table says `WorldChrome.tsx` and its children are plain DOM and import no three. `WorldFocusSheet.tsx` is a new child of that chrome, plain DOM, and the table does not name it. W4 does not own the doc.
 - Smallest change: add `WorldFocusSheet.tsx` (M452, the close-up) to that plain-DOM sentence, beside `WorldCardBody.tsx`.
-- Status: open
+- Status: done: `59e80eba`. The three-door sentence names `WorldFocusSheet.tsx` (M452, the close-up) beside `WorldCardBody.tsx`. The sheet still imports no three.
 
 ### R-081 · RequestBlock says Open, the flat door says Open in Canvas
 - Lane: W6
