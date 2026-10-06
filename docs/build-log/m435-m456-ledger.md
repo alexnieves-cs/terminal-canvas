@@ -730,4 +730,41 @@ Inside `/* ── rd:W0 ── */`, badge rules that follow the earlier `.world-
 
 ### Requests
 
-R-038 open: drop `src/renderer/world/` from `rd-tone.literal.1`'s exemption in `scripts/verify-rd-f1.cjs` (lead, after merge). R-039 open: WorldOffice desk screen reads `stateHexForAgent`, and `MeetingTable` unmounts.
+R-038 open: drop `src/renderer/world/` from `rd-tone.literal.1`'s exemption in `scripts/verify-rd-f1.cjs` (lead, after merge). R-039 open: WorldOffice desk screen reads `stateHexForAgent`, and `MeetingTable` unmounts. R-040 done in `6dd3cad6`: an unread worktree list is one module-level array, so the resume summary does not rebuild every render. W0 does not own `useTaskHandoffs.ts`. The lead landed it on this branch before the night shot, because opening the world during that loop threw React's nested-update limit and unmounted the tree.
+
+### G2
+
+Shot `rd-world-night` (Plan tier, `TC_FIXTURE=rd-steward`, swiftshader under xvfb, Linux Electron `node_modules/electron/dist/electron`). `UPDATE_GOLDENS` was not set. Nothing was written under `verify/visual/goldens/`. `visual.1` stays red: the scene has `run`, and its golden is missing until Phase 4.
+
+World-guard: no blockers. `three` / fiber / drei / `postprocessing` stay on the existing doors. WorldStage still has one `/* @__PURE__ */ lazy()` for WorldView and the flat room's existing second lazy. `world-palette.ts` does not import three. No drei `<Environment>`. `useGLTF` still passes both decoders off. The built entry loads the WorldView chunk with `import()`, not a static three import. Reduced motion and context-loss fallback were already in WorldStage and were not edited.
+
+### Critic · rd-world-night
+
+Composite `out/shots/rd-world-night.vs-reference.png` (reference on top, capture below). Verdict: **does-not-read**.
+
+1. Silhouette. The reference is five terraces stepping back. The capture is one dark slab with desks in a loose ring. W2 owns screen 11's layout. W0 does not build terraces. Recorded disagreement.
+2. Material. The reference paints saturated candy bodies. The capture's shells are one warm neutral (`SHELL` `#6e6256`); identity is the chest light. The kickoff overrides the mockup's colored bodies. Recorded disagreement.
+3. Glow. Eyes, floor rings and the waiting antenna carry the light. The reference's tall amber beacon columns are not in this shot.
+4. Connectors. No handoff arcs between robots.
+5. Labels. The reference puts a name card on every robot. The capture does not read those cards at this framing.
+6. Composition. The capture is a closer orbit of one cluster. The reference is a wide establishing shot with a plan whiteboard behind the room. The whiteboard stays in the scene (WorldProps); it is not the subject of this frame.
+7. Chrome. The capture shows the app top bar (World view pressed, Sessions, Review, Orchestrate). The reference's bottom pill and 2D minimap are absent. Those are shared chrome, not this lane's room.
+8. STATE COLOUR. Last and smallest. Working reads cyan, needs-you amber, done green, failed red, idle slate, on the eyes and floor rings. The failed agent is in the room. Amber is the waiting beacon, not a second body colour.
+
+Ignored, per the critic brief: sample copy (Steward, ledger-export) and the 1600×1000 mockup versus the 1440×865 shot.
+
+### Gates (Linux, before merge)
+
+| Step | Result |
+|---|---|
+| typecheck | pass (`tsc --noEmit` web and node) |
+| `verify:rd-w0` | 4/4 (`rd-w0.0`, `parity.1`, `identity.1`, `night.1`) |
+| `verify:world` | 251/251 |
+| `verify:rd-f1` | 7/7 (exemption still in place; R-038 lands after merge) |
+| `verify:styles` | 97/97 |
+| `verify:rail` | 266/266 |
+| lane suites | `rd-l-a` 15/15, `rd-l-b` 14/14, `rd-l-c` 11/11, `rd-l-d` 18/18, `rd-l-e` 15/15, `rd-l-f` 17/17 alone, `rd-w1`–`rd-w6` pass |
+| plain wave | `npm run verify` 64/67 in 49.4s, stopped after wave 1. `verify:rd-l-f` `kill.1` failed in the concurrent wave (`killed: null`) and is 17/17 alone. `verify:canvas-sync` passed (15.1s). `verify:relay` passed (2.4s). `verify:flowchart` passed (1.0s). `verify:tmux` passed (0.1s; the node ABI of `pty.node` is present). |
+| Electron tier | did not start; wave 1 stopped. The night shot ran separately under xvfb and swiftshader and wrote the composite. |
+
+Known reds, not this diff: `verify:meta` 51/53 (`panels-split.2` tag `pre-v7-run` absent; `visual.1` declared 90 / goldens 79, missing redesign goldens including `rd-world-night`). `verify:first-run` 28/29 (`revamp.create.1`). `UPDATE_GOLDENS` was not set.

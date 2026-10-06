@@ -310,3 +310,10 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: W0 does not own WorldOffice. The desk screen's emissive is still `agentTint` (identity), not state. `MeetingTable` is still mounted. Robots no longer walk there (`WorldRobot` stands at `here.home ?? here.seat`).
 - Smallest change: screen emissive from `stateHexForAgent(status)` (exported from `world-palette.ts`). Do not mount `MeetingTable`. The plan whiteboard in WorldProps stays. A conductor still has only a table seat until a later lane gives them a desk.
 - Status: open
+
+### R-040 · Unread worktree list must stay one array
+- Lane: W0
+- File: `src/renderer/canvas/useTaskHandoffs.ts`
+- Why the contract or the owner cannot absorb it: W0 does not own the file. `records ?? []` built a new array on every render while the list was unread. That rebuilt `lanes`, then `handoffsVersion`, then the resume summary, so the canvas re-rendered with no field changing. Mounting the world view in that loop nested layout updates until React stopped the tree.
+- Smallest change: a module-level empty list, used only as the memo key. `records === null` still means the list has not been read.
+- Status: done: 6dd3cad6. The lead landed it on `rd/w0-night` before the night shot, because the room cannot open while the loop runs.
