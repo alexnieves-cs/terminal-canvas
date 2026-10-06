@@ -1789,8 +1789,18 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /\{openHere \|\| orchHere \? \(\s*<div className="world-card__actions"[^>]*>\s*\{openHere \? <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card) &&
       /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act" onClick=\{\(\) => actions\?\.open\(agentId\)\}/.test(card))
   const chrome = src('WorldChrome.tsx'), stage = src('WorldStage.tsx')
-  ok('world.open.6 Enter opens the picked robot from the chrome\'s one window listener — the pure guard, the room ON (the chrome outlives it through the move back), the same gate and the same door — and Escape and Enter ask the SAME field and overlay selectors',
-    /if \(!enterOpens\(facts\) \|\| !isWorldOn\(\)\) return/.test(chrome) && /const id = selectedAgent\(\)/.test(chrome) && /if \(!openableFrom\(id, replayAt\(\) !== null, door\)\) return/.test(chrome) && /door!\.open\(id\)/.test(chrome) &&
+  // R-072. Bare Enter glides (`engageFocus`). The open is ⌘Enter, and the
+  // `door!.open(id)` has to sit in that step-in handler — a file-wide match
+  // stayed green after the glide took the bare-Enter listener.
+  const enterAt = chrome.indexOf('const onEnter =')
+  const enterEnd = chrome.indexOf("window.addEventListener('keydown', onEnter)")
+  const bareEnter = enterAt >= 0 && enterEnd > enterAt ? chrome.slice(enterAt, enterEnd) : ''
+  const stepAt = chrome.indexOf("if (chord?.id === 'step-in')")
+  const allowAt = chrome.indexOf("if (chord?.id === 'allow')")
+  const stepIn = stepAt >= 0 && allowAt > stepAt ? chrome.slice(stepAt, allowAt) : ''
+  ok('world.open.6 ⌘Enter (step-in) opens the picked robot — the same gate and the same door — while bare Enter still asks enterOpens and glides in, and Escape and Enter ask the SAME field and overlay selectors',
+    /if \(!enterOpens\(facts\) \|\| !isWorldOn\(\)\) return/.test(bareEnter) && /const id = selectedAgent\(\)/.test(bareEnter) && /engageFocus\(id\)/.test(bareEnter) && !/door!\.open\(id\)/.test(bareEnter) &&
+      /if \(!openableFrom\(id, replayAt\(\) !== null, door\)\) return/.test(stepIn) && /const id = selectedAgent\(\)/.test(stepIn) && /door!\.open\(id\)/.test(stepIn) &&
       /inField: el\?\.closest\(FIELD_SELECTOR\) != null/.test(chrome) && /overlayOpen: document\.querySelector\(OVERLAY_SELECTOR\) !== null/.test(chrome) &&
       /target\.closest\(FIELD_SELECTOR\) !== null\) return/.test(stage) && /document\.querySelector\(OVERLAY_SELECTOR\) !== null\) return/.test(stage) && !/window\.canvas/.test(chrome))
   ok('world.open.7 the way there is discoverable: the robot\'s hover tooltip (the canvas element\'s title — the card layer is deaf to the pointer, so a title there never shows), the tag\'s label and the button\'s title say it, short, and only when it can open',

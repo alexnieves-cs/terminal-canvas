@@ -126,9 +126,9 @@ export function WorldChrome({ camera, flat = false }: { camera: RefObject<Camera
     setDraft('')
     field.current?.blur()
   }
-  // M429. Enter opens the PICKED robot's panel — the keyboard's door to what a
-  // double-click does, through the same `open` and the same gate
-  // (`openableFrom`). Never Enter that belongs elsewhere (`enterOpens`): in a
+  // M429, retargeted at M452 (R-072). Bare Enter glides in (`engageFocus`).
+  // The panel open is ⌘Enter (`step-in`), through the same `open` and the same
+  // gate (`openableFrom`). Never Enter that belongs elsewhere (`enterOpens`): in a
   // field (the Ask pill sends on Enter), on a focused button (its own
   // activation — the card's Approve is a button), in an open menu or dialog,
   // a chord, an IME composing, a held key repeating. Read from the stores at
