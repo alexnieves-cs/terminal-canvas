@@ -253,6 +253,11 @@ ok('rd-l-b.slot.1 tier layer and recovery slot',
     JSON.stringify({ absent, noted, sized, fallback }))
 }
 
+ok('rd-l-b.rest.1 the skill count and the auto dismiss stay at rest after the seam re-hides chrome verbs',
+  span.indexOf('.pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }') >
+    span.lastIndexOf('.pf__chrome button, .pf__chrome .pf__verb'),
+  'exemption follows the later opacity 0')
+
 ok('rd-l-b.settle.1 settle overshoots and reduced motion drops it',
   /translateY\(-3px\)/.test(span) &&
   /prefers-reduced-motion:\s*reduce/.test(span) &&

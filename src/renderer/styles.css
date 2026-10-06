@@ -11772,6 +11772,11 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .pf:hover .pf__chrome button, .pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close,
 .pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,
 .panel--selected .pf__chrome button, .panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close { opacity: 1; }
+/* The rest rule's exemptions win only by source order (the comment above the
+   first hide rule). This seam repeats that hide later in the file, so the
+   skill count and the auto dismiss would drop back to 0 unless restated here.
+   The trail is a .pf__verb; the dismiss is a button. Equal specificity, later wins. */
+.pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }
 
 .review-node { border-radius: var(--r-lg); }
 

@@ -43,4 +43,29 @@ from that pass.
 
 `rd-world.parity.1` is the suite's rule. Furniture hexes that predate the
 redesign and are not in the diff (a whiteboard `TONE` table in
-`WorldProps.tsx`) are outside this list: the check calls the tree clean.
+`WorldProps.tsx`, and the same amber on a conflict label in
+`WorldStructure.tsx`) are outside this list: the check calls the tree clean.
+A later world-guard pass agreed: no blocker, and those two lines are
+unchanged since `7556aeec`.
+
+## From the later rules pass
+
+One regression landed with this note. The rest stay, because a check pins
+the current words or the change is a look.
+
+| Item | Lane | Files | Acceptance | Why it stays |
+|---|---|---|---|---|
+| L-B's later `.pf__chrome .pf__verb { opacity: 0 }` beat the rest-rule exemptions, so the skill count and the auto dismiss hid at rest. | L-B | `src/renderer/styles.css`, `scripts/verify-rd-l-b.cjs` | Landed. The exemption is restated after that rule. `rd-l-b.rest.1`. | |
+| Splash name and detail are mono. The name is a workspace label. The detail is sometimes a path and sometimes a sentence ("left asleep", "none found", "2 tasks, 3 objects"). `face.1` does not name these classes. | L-A | `src/renderer/styles.css` (`.rd-splash__name`, `.rd-splash__detail`) | A path leaf stays mono. A sentence is `--font-ui`. | Goldens are the check `face.1` names for an unlisted class. Not changed blind. |
+| The empty-canvas chip is mono, including "no repository chosen". A real repository name is a path. The helper's comment calls the chip mono. | L-A | `src/renderer/styles.css`, `src/shared/empty-states.ts` | The empty sentence is the UI face. A repository name may stay mono. | The shared comment is the author's choice. A look, not a silent edit. |
+| Sessions' empty line is a hardcoded sentence, not `EmptyState` over `empty-states.ts`. | L-D | `src/renderer/sessions/SessionsTable.tsx` | The sentence comes from `empty-states.ts`. | Not a one-line face change. |
+| "No shortcut matches that search." is not an `empty-states.ts` sentence. | L-E | `src/renderer/settings/KeyboardPane.tsx` | Same. | Same. |
+| "version unknown" sits inside the mono path span. | L-A | `src/renderer/onboarding/Onboarding.tsx` | The path stays mono. The version sentence does not. | Small, left so the path leaf is not split blind. |
+
+Not filed. The reviewer named them; a check or the lane brief already chose the words:
+
+- Sessions says "2 dormant". `rd-sessions.header.1` requires that string. The state word elsewhere is "asleep".
+- The world queue says "NEEDS YOU". `rd-w5.queue.1` requires it.
+- A duration sits beside the state word. `rd-l-b.header.1` and the L-B brief call that age allowed. D3's text is about Sessions columns and the title-bar dollar, which is why the reviewer disagreed.
+- The zoom percent stays at opacity 1 when the readout is `rest`. The seam comment is that decision.
+- F1 revalued the canvas grid, the selection border, and a card tone outside the empty `rd:F1` span (`2591c7df`). Moving those rules would change cascade order. Left where they are.

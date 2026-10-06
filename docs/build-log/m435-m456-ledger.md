@@ -1472,3 +1472,32 @@ The two safe rows on the fix list landed in the shot scenes: `theme('dark')` on 
 
 [docs/redesign/perf-6.0.0.md](../redesign/perf-6.0.0.md). First load 7919 KB at `pre-redesign` and 8203 KB here (+284 KB, 3.6%). `WorldView` stays a lazy chunk (297 KB → 318 KB). The three chunk is 2152 KB on both and is not in the entry. Worst-case WebGL contexts: `LIVE_BUDGET` 8 plus one world. `world-perf.ts` caps full cards at 3 (`world.perf.7`). A room of twenty desks is the reason the desks are one instanced draw, not an agent cap. No row was added to the fix list.
 
+### Later reviews
+
+World guard, after the budget note: no blocker. Same WebGL count (8 live terminals plus one world canvas, flat room when the context stays lost). `verify:world` 251/251. three stays out of `index-CptrJXFM.js`. Two should-fix hexes, both unchanged since `pre-redesign`: the whiteboard step colors in `WorldProps.tsx` and the conflict label in `WorldStructure.tsx`. `rd-world.parity.1` does not count them. They stay off the fix list.
+
+Rules review named six blockers. One was real and is fixed: the L-B seam repeats `.pf__chrome .pf__verb { opacity: 0 }` after the rest-rule exemptions, and the skill count (a `.pf__verb`) and the auto dismiss (a button) hid at rest. The exemption is restated after that rule (`rd-l-b.rest.1`). The face-rule rows (splash mono, the empty chip's "no repository chosen", the Sessions and Keyboard empty sentences, "version unknown" inside a mono path) are on the fix list and were not edited. Disagreed, and not filed: "2 dormant" and "NEEDS YOU" are what `rd-sessions.header.1` and `rd-w5.queue.1` require; the header duration is what `rd-l-b.header.1` and the L-B brief allow; the zoom percent staying visible is the seam's own comment.
+
+Fresh-context critics, one line each, against the composites that existed when they ran (workspace, arrange, settings, and the world field were still the light harness theme). The disagreement is next to them: center luminance of the capture, not the composite, is what the first table used, and the theme fix re-shot workspace and settings to luminance 20.9. These sentences were not a reason to reopen the shot scenes.
+
+- `rd-splash` does-not-read. Center is a first-run form in a rail, where the reference is a restore checklist on ghost panels.
+- `rd-onboarding` does-not-read. Center is a small checklist card, where the reference is a two-column agent setup.
+- `rd-empty` does-not-read. Center is that agent-setup card, where the reference is a blank-canvas prompt.
+- `rd-workspace` does-not-read. Light empty form, where the reference is a dark Work canvas. Disagree: this is the pre-fix capture.
+- `rd-arrange` does-not-read. Same light form, no guides. Disagree: theme is fixed; the drag is still the open row.
+- `rd-plan-palette` close. Finder is a full-height column, where the reference palette floats.
+- `rd-map` does-not-read. Pale dots, no dashed territories.
+- `rd-sessions` does-not-read. The window is the canvas, not the Sessions table.
+- `rd-settings-keys` does-not-read. Light shortcut list. Disagree: pre-fix; the re-shot is dark.
+- `rd-recovery` does-not-read. The window is the Keyboard list, not the crash card.
+- `rd-world-transition` does-not-read. No cancel chip, flat flowchart. R-053.
+- `rd-world-transition-rm` does-not-read. Sparse floor, not terrace cards.
+- `rd-world-night` does-not-read. Empty light field.
+- `rd-world-room` does-not-read. Light cards, no beacons.
+- `rd-world-focus` does-not-read. Focus sheet missing.
+- `rd-world-attention` does-not-read. Queue strip and toast missing.
+- `rd-world-overview` does-not-read. Camera panel and scrubber missing.
+- `rd-world-flat` close. Flat cards; the attention pill is absent.
+
+A Mac still has to look. These lines are the critic's sentences for that look. They do not by themselves add a code row beyond the fix list.
+
