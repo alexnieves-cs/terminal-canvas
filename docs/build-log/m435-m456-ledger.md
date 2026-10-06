@@ -854,6 +854,8 @@ The last-golden half is a blank field labeled NO IMAGE. The capture beside it is
 
 No disagreement. R-053 stays open. The flags that presented a room on the previous host did not present one here.
 
+Follow-up, same host, overview only. On `rd-w3b` the world opens and stays open: the lens has World pressed (`2D canvas=false`), `.world-view canvas` is 1092×809, visibility visible, parent opacity 1, and there is no `.world-route__note`. The renderer console is the `THREE.Clock` deprecation and nothing else. No React error #185, no maximum-update-depth loop, no error boundary, no failed lazy chunk. `drawImage` of that canvas reads `[0, 0, 0, 0]`. The world layer's background is `rgb(227, 231, 238)`, which is the PNG's centre. The same shot on `rd/w3-overview` (`10c1806a`), same electron flags, is the same field: centre `(227, 231, 238)`, dark pixels 0%. The furnished office that lane's critic saw does not reproduce on this xvfb host. The merge did not crash the room closed. No app code changed.
+
 ## M449 · W1 Canvas → World transition
 
 Branch `rd/w1-transition` from `redesign/main` (rd-w0 plus the R-040 render-loop fix). Wave 3b. Merges after W2. `WorldView.tsx` is not edited.
