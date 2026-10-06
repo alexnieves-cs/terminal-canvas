@@ -72,7 +72,7 @@ import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { taskClusters, type TaskCluster } from './task-clusters'
 import { TaskClusterLayer, TaskRegionLayer, TierLayer } from './TaskClusterLayer'
-import { regionsFromMemberships } from './task-regions'
+import { moveRegion, regionsFromMemberships } from './task-regions'
 import { InlineApproval } from '@renderer/shell/ApprovalDetail'
 import { allowPendingTarget } from '@renderer/palette/commands/approval-row'
 import { waitingSince } from '@renderer/panels/header-rest'
@@ -8703,6 +8703,34 @@ export function Canvas({
     return <FirstTaskHint strip panelId={panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }} {...facts} />
   }
 
+  // R-051. One terrace drag is one `moveRegion` plan and one history entry.
+  // The scene cannot import the verb; it calls this through the publisher,
+  // which reads the latest input, so this stays a fresh closure rather than
+  // a memo that would freeze the first render's memberships. `commitHistory`
+  // sits inside the updater, once — not once per member.
+  const moveTaskRegion = (regionId: string, dx: number, dy: number): readonly string[] => {
+    if (dx === 0 && dy === 0) return []
+    const membership = taskMemberships(panelsRef.current, workItemsRef.current).find((m) => m.itemId === regionId)
+    if (membership === undefined) return []
+    const byId = new Map(panelsRef.current.map((p) => [p.rect.id, p]))
+    const members = membership.members.flatMap((member) => {
+      const panel = byId.get(member.panelId)
+      if (panel === undefined) return []
+      return [{ id: panel.rect.id, x: panel.rect.x, y: panel.rect.y, w: panel.rect.w, h: panel.rect.h }]
+    })
+    if (members.length === 0) return []
+    const plan = moveRegion(members, dx, dy)
+    const ids = new Set(plan.rects.map((rect) => rect.id))
+    setPanels((current) => {
+      let next = current
+      for (const rect of plan.rects) next = setPanelRect(next, rect.id, rect)
+      next = next.map((p) => (ids.has(p.rect.id) && p.maximised !== undefined ? (({ maximised: _m, ...rest }) => rest as Panel)(p) : p))
+      commitHistory(next)
+      return next
+    })
+    return plan.rects.map((rect) => rect.id)
+  }
+
   // M421. The world's half of the work — tasks and their plans, waiting
   // requests, handoffs, who else is here — and the doors its buttons call.
   // Derived only while the room is up (the hook's own `on`).
@@ -8737,6 +8765,7 @@ export function Canvas({
       return branch === undefined || branch === '' ? undefined : branch
     },
     teammateNameOf,
+    moveRegion: moveTaskRegion,
     tasks: () => workItems.filter((item) => item.state !== 'done').map((item) => {
       const members = taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
       const views = planViewsFor(item.id) ?? []

@@ -192,6 +192,27 @@ export interface WorldActions {
 let actions: WorldActions | null = null
 const actionListeners = new Set<() => void>()
 
+/**
+ * R-051. A terrace drag's one commit. The scene cannot import `moveRegion`
+ * (`world.ctx.door.1`); Canvas registers the mover, and the drag calls it
+ * once on release. Null is a drag that moved no member — no history entry.
+ */
+export interface RegionMoveCommit {
+  ids: readonly string[]
+}
+
+type RegionMover = (regionId: string, dx: number, dy: number) => RegionMoveCommit | null
+
+let regionMover: RegionMover | null = null
+
+export function setRegionMover(next: RegionMover | null): void {
+  regionMover = next
+}
+
+export function commitRegionMove(regionId: string, dx: number, dy: number): RegionMoveCommit | null {
+  return regionMover?.(regionId, dx, dy) ?? null
+}
+
 /** Canvas registers its doors while it is mounted; null takes them away. */
 export function setWorldActions(next: WorldActions | null): void {
   actions = next

@@ -23,10 +23,10 @@ const OUT = join(ROOT, 'out', 'verify', 'rd-w2.cjs')
 buildSync({
   stdin: {
     contents: `
-      import { askChip, boxFromStyle, failedLine, frameOf, panelFloor, placeStations, terraceDragCanvas, terraceFloor, terraceSignFromChip } from '../src/renderer/world/world-structure'
+      import { askChip, boxFromStyle, failedLine, frameOf, panelFloor, placeStations, shiftPlacement, terraceDragCanvas, terraceFloor, terraceSignFromChip } from '../src/renderer/world/world-structure'
       import { canvasToFloor, FLOOR_SCALE } from '../src/shared/world-space'
       import { moveRegion } from '../src/renderer/canvas/task-regions'
-      export { askChip, boxFromStyle, failedLine, frameOf, panelFloor, placeStations, terraceDragCanvas, terraceFloor, terraceSignFromChip, canvasToFloor, FLOOR_SCALE, moveRegion }
+      export { askChip, boxFromStyle, failedLine, frameOf, panelFloor, placeStations, shiftPlacement, terraceDragCanvas, terraceFloor, terraceSignFromChip, canvasToFloor, FLOOR_SCALE, moveRegion }
     `,
     resolveDir: __dirname,
     sourcefile: 'rd-w2-entry.ts',
@@ -76,6 +76,45 @@ const M = require(OUT)
       M.terraceSignFromChip('Ledger CSV export · SW-412 · 4 agents · 2 of 4 criteria') === 'Ledger CSV export · SW-412 · 2/4' &&
       M.boxFromStyle('a', '10px', '20px', '0', '4') === null,
     `floor=${JSON.stringify(floor)} delta=${JSON.stringify(delta)}`)
+}
+
+// rd-world.drag.1. The scene commits one terrace drag through the publisher.
+// It never imports moveRegion. Canvas's mover calls the verb once and writes
+// one history entry inside the panels updater, not once per member. The
+// stood-up room follows that same canvas delta.
+{
+  const structure = readFileSync(join(ROOT, 'src', 'renderer', 'world', 'WorldStructure.tsx'), 'utf8')
+  const publisher = readFileSync(join(ROOT, 'src', 'renderer', 'world', 'useWorldContextPublisher.ts'), 'utf8')
+  const canvas = readFileSync(join(ROOT, 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  const moverAt = canvas.indexOf('const moveTaskRegion')
+  const mover = canvas.slice(moverAt, canvas.indexOf('useWorldContextPublisher({', moverAt))
+  const commits = (mover.match(/commitHistory\(/g) ?? []).length
+  const shifted = M.shiftPlacement(
+    [{ id: 'a', x: 10, y: 20, w: 100, h: 80 }],
+    [{ id: 'task', x: 0, y: 0, w: 400, h: 300 }, { id: 'other', x: 8, y: 8, w: 40, h: 40 }],
+    [{ id: 'task', label: 'T', center: { x: 2, z: 1.5 }, w: 4, d: 3 }],
+    'task',
+    ['a'],
+    100,
+    -50
+  )
+  const panel = shifted.panels[0]
+  const region = shifted.regions[0]
+  const other = shifted.regions[1]
+  const floor = shifted.floors[0]
+  ok('rd-world.drag.1 a terrace drag commits moveRegion once through the publisher, and the stood-up room follows that one canvas delta',
+    /commitRegionMove\(terrace\.id, delta\.dx, delta\.dy\)/.test(structure) &&
+      /terraceDragCanvas\(/.test(structure) &&
+      !/from '@renderer\/canvas\//.test(structure) &&
+      /setRegionMover\(/.test(publisher) &&
+      /latest\.current\.moveRegion\(regionId, dx, dy\)/.test(publisher) &&
+      /moveRegion\(members, dx, dy\)/.test(mover) &&
+      commits === 1 &&
+      /setPanels\(\(current\) => \{[\s\S]*commitHistory\(next\)/.test(mover) &&
+      panel.x === 110 && panel.y === -30 && region.x === 100 && region.y === -50 &&
+      other.x === 8 && other.y === 8 &&
+      floor.center.x === 3 && floor.center.z === 1,
+    `commits=${commits} panel=${panel.x},${panel.y} floor=${floor.center.x},${floor.center.z}`)
 }
 
 // rd-world.chrome.1. Watched red before the host override: the span did not

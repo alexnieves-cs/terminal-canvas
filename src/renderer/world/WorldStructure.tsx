@@ -1,15 +1,16 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } from 'react'
+import type { ThreeEvent } from '@react-three/fiber'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getAgent, getAgentIds, subscribeAgentWorld, worldNow } from './agent-world-store'
 import { glowScale } from './world-bloom'
 import { useBloomRendered } from './world-quality'
-import { useWorldContext, type WorldTask } from './world-context-store'
+import { commitRegionMove, useWorldContext, type WorldTask } from './world-context-store'
 import { STUDIO } from './world-palette'
 import { agentTint, goalOf, isLiveStatus, ROBOT_HEAD_Y, type Station, type Zone } from './world-scene'
 import { roundedRectPath } from './world-set'
 import {
-  fileTiles, handoffArcs, terraceLine, terraceOutline, terraceSignSpot, tileSpots, TERRACE, TILE_FRESH_MS,
+  fileTiles, handoffArcs, setTerraceOrbit, terraceDragCanvas, terraceLine, terraceOutline, terraceSignSpot, tileSpots, TERRACE, TILE_FRESH_MS,
   type FileTile, type FloorTerrace, type HandoffArc, type TileSpot
 } from './world-structure'
 
@@ -331,8 +332,72 @@ function Arc({ arc, reduced }: { arc: HandoffArc; reduced: boolean }): JSX.Eleme
 
 // ── the structure ────────────────────────────────────────────────────────────
 
-/** A canvas region stood up: a dark slab at `terraceFloor`, labelled with the chip. */
-function FloorTerraceMesh({ terrace, index }: { terrace: FloorTerrace; index: number }): JSX.Element {
+/** Under this many canvas pixels the press was a click, and it commits nothing. */
+const TERRACE_DRAG_SLOP = 4
+
+/**
+ * A canvas region stood up: a dark slab at `terraceFloor`, labelled with the chip.
+ * A drag commits `moveRegion` once, on release — the same plan the 2D region
+ * drag uses. The mesh follows the pointer while the button is down; the
+ * commit is the release, so one undo puts the task back.
+ */
+function FloorTerraceMesh({ terrace, index, onMoved }: {
+  terrace: FloorTerrace
+  index: number
+  onMoved: (regionId: string, memberIds: readonly string[], dx: number, dy: number) => void
+}): JSX.Element {
+  const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
+  const raycaster = useMemo(() => new THREE.Raycaster(), [])
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
+  const drag = useRef<{ x: number; z: number; pointer: number } | null>(null)
+  const [offset, setOffset] = useState({ x: 0, z: 0 })
+  const pointAt = (clientX: number, clientY: number): { x: number; z: number } | null => {
+    const bounds = gl.domElement.getBoundingClientRect()
+    const ndc = new THREE.Vector2(
+      ((clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1,
+      -((clientY - bounds.top) / Math.max(1, bounds.height)) * 2 + 1
+    )
+    raycaster.setFromCamera(ndc, camera)
+    const hit = new THREE.Vector3()
+    if (raycaster.ray.intersectPlane(plane, hit) === null) return null
+    return { x: hit.x, z: hit.z }
+  }
+  useEffect(() => () => {
+    if (drag.current !== null) setTerraceOrbit(true)
+    drag.current = null
+  }, [])
+  const onPointerDown = (event: ThreeEvent<PointerEvent>): void => {
+    if (event.button !== 0 || drag.current !== null) return
+    event.stopPropagation()
+    const start = { x: event.point.x, z: event.point.z }
+    drag.current = { x: start.x, z: start.z, pointer: event.pointerId }
+    setTerraceOrbit(false)
+    const move = (ev: PointerEvent): void => {
+      const held = drag.current
+      if (held === null || ev.pointerId !== held.pointer) return
+      const at = pointAt(ev.clientX, ev.clientY)
+      if (at === null) return
+      setOffset({ x: at.x - held.x, z: at.z - held.z })
+    }
+    const up = (ev: PointerEvent): void => {
+      const held = drag.current
+      if (held === null || ev.pointerId !== held.pointer) return
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      drag.current = null
+      setTerraceOrbit(true)
+      setOffset({ x: 0, z: 0 })
+      const at = pointAt(ev.clientX, ev.clientY) ?? { x: held.x, z: held.z }
+      const delta = terraceDragCanvas({ x: held.x, z: held.z }, at)
+      if (Math.hypot(delta.dx, delta.dy) < TERRACE_DRAG_SLOP) return
+      const moved = commitRegionMove(terrace.id, delta.dx, delta.dy)
+      if (moved === null) return
+      onMoved(terrace.id, moved.ids, delta.dx, delta.dy)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const geometry = useMemo(() => {
     const shape = new THREE.Shape()
     const radius = Math.min(0.45, terrace.w / 8, terrace.d / 8)
@@ -367,7 +432,7 @@ function FloorTerraceMesh({ terrace, index }: { terrace: FloorTerrace; index: nu
     return () => { live = false }
   }, [texture, terrace.label])
   return (
-    <group>
+    <group position={[offset.x, 0, offset.z]} onPointerDown={onPointerDown}>
       <mesh geometry={geometry} receiveShadow castShadow>
         <meshStandardMaterial color={color} roughness={0.72} metalness={0.04} />
       </mesh>
@@ -378,13 +443,15 @@ function FloorTerraceMesh({ terrace, index }: { terrace: FloorTerrace; index: nu
   )
 }
 
-export const WorldStructure = memo(function WorldStructure({ stations, zones, arcRadius, reduced, floors = [] }: {
+export const WorldStructure = memo(function WorldStructure({ stations, zones, arcRadius, reduced, floors = [], onRegionMoved }: {
   stations: readonly Station[]
   zones: readonly Zone[]
   arcRadius: number
   reduced: boolean
   /** M450. Canvas regions, already converted. When present they replace the ring terraces. */
   floors?: readonly FloorTerrace[]
+  /** R-051. The stood-up room follows a committed terrace drag. */
+  onRegionMoved?: (regionId: string, memberIds: readonly string[], dx: number, dy: number) => void
 }): JSX.Element {
   const ctx = useWorldContext()
   const byId = useMemo(() => new Map(stations.map((s) => [s.agentId, s])), [stations])
@@ -393,7 +460,7 @@ export const WorldStructure = memo(function WorldStructure({ stations, zones, ar
   return (
     <group>
       {floors.length > 0
-        ? floors.map((terrace, i) => <FloorTerraceMesh key={terrace.id} terrace={terrace} index={i} />)
+        ? floors.map((terrace, i) => <FloorTerraceMesh key={terrace.id} terrace={terrace} index={i} onMoved={onRegionMoved ?? (() => {})} />)
         : zones.map((zone, i) => <Terrace key={zone.groupId} zone={zone} task={tasks.get(zone.groupId)} arcRadius={arcRadius} index={i} />)}
       {arcs.map((arc) => <Arc key={`${arc.from}>${arc.to}`} arc={arc} reduced={reduced} />)}
       <FileSky stations={byId} reduced={reduced} />

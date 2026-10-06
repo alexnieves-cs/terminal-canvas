@@ -9,7 +9,7 @@ import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
 import { WorldStructure } from './WorldStructure'
 import { useWorldContext } from './world-context-store'
-import { boxFromStyle, consoleBoxes, frameOf, placeStations, taskOfAgent, terraceFloor, terraceSignFromChip, type CanvasBox, type FloorTerrace } from './world-structure'
+import { bindTerraceOrbit, boxFromStyle, consoleBoxes, frameOf, placeStations, shiftPlacement, taskOfAgent, terraceFloor, terraceSignFromChip, type CanvasBox, type FloorTerrace } from './world-structure'
 import { NIGHT } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
@@ -206,6 +206,14 @@ function useRoomClamp(controls: RefObject<OrbitControlsRef | null>, limit: numbe
 
 function Controls({ controls, limit, maxDistance }: { controls: RefObject<OrbitControlsRef | null>; limit: number; maxDistance: number }): JSX.Element {
   const clamp = useRoomClamp(controls, limit)
+  // A terrace drag disables orbit for the gesture. The controls listen on the
+  // canvas element, so the mesh's own stopPropagation never reaches them.
+  useEffect(() => {
+    bindTerraceOrbit((enabled) => {
+      if (controls.current) controls.current.enabled = enabled
+    })
+    return () => bindTerraceOrbit(null)
+  }, [controls])
   return (
     <OrbitControls
       ref={controls}
@@ -702,8 +710,10 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
 
 /**
  * The canvas is still mounted under the room. Its regions and panels are the
- * layout: read their inline canvas pixels once, at open. A later drag is
- * R-051 — this lane cannot import `moveRegion` (`world.ctx.door.1`).
+ * layout: read their inline canvas pixels at open. A terrace drag commits
+ * through `commitRegionMove` and then shifts this snapshot, so the room
+ * and the 2D region are the same move. The scene still does not import
+ * `moveRegion` (`world.ctx.door.1`).
  */
 function readCanvasPlacement(): { panels: CanvasBox[]; regions: CanvasBox[]; floors: FloorTerrace[]; frame: ReturnType<typeof frameOf> } {
   if (typeof document === 'undefined') return { panels: [], regions: [], floors: [], frame: null }
@@ -796,7 +806,13 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const plan = useMemo(() => stationPlan(held, (id) => groups.get(id) ?? null), [held, groupKey])
   // M450. The canvas boxes, once. Empty when the 2D layer has not painted
   // regions — the ring room is unchanged then.
-  const [placement] = useState(readCanvasPlacement)
+  const [placement, setPlacement] = useState(readCanvasPlacement)
+  const onRegionMoved = useCallback((regionId: string, memberIds: readonly string[], dx: number, dy: number) => {
+    setPlacement((current) => {
+      const next = shiftPlacement(current.panels, current.regions, current.floors, regionId, memberIds, dx, dy)
+      return { ...current, ...next }
+    })
+  }, [])
   const placed = useMemo(() => placeStations(plan.stations, placement.panels), [plan, placement])
   // Every station in the room, the leaving included: ONE array, because React
   // scopes keys to an array and a robot moved between two would be a remount.
@@ -926,7 +942,7 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
           <PlanGround panels={placement.panels} regions={placement.regions} />
           <group ref={terraces}>
             <WorldOffice stations={stations} leftAt={leftAt} arcRadius={anchor?.arc ?? plan.arcRadius} reduced={reduced} waiting={waiting.length} anchor={anchor} consoles={consoles} />
-            <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} floors={placement.floors} />
+            <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} floors={placement.floors} onRegionMoved={onRegionMoved} />
           </group>
           {stations.map((station) => (
             <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />

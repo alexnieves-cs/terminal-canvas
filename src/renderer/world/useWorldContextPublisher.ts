@@ -8,7 +8,7 @@ import { latestRoster, onRoster } from '@renderer/presence/presence-store'
 import { backendOf } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import type { PresenceRoster } from '@shared/presence'
-import { getWorldContext, publishWorldContext, setWorldActions, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
+import { getWorldContext, publishWorldContext, setRegionMover, setWorldActions, type RegionMoveCommit, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
 import { agentFacts } from './world-facts'
 
 /**
@@ -62,6 +62,12 @@ export interface PublisherInput {
   branchOf: (panel: Panel) => string | undefined
   /** M428. A teammate's display name, the rail's own resolution. */
   teammateNameOf: (teammateId: string) => string | undefined
+  /**
+   * R-051. Canvas's `moveRegion`, once, as one history entry. The ids are the
+   * members that moved, so the stood-up room can follow them. Empty is a
+   * region with nothing to move — the drag commits nothing.
+   */
+  moveRegion: (regionId: string, dx: number, dy: number) => readonly string[]
 }
 
 /** Whose facts the room keeps: the panels that can be an agent in it. */
@@ -209,4 +215,14 @@ export function useWorldContextPublisher(input: PublisherInput): void {
   }, [panels, jump, canJump, closeWorld, orchestrate])
 
   useEffect(() => () => setWorldActions(null), [])
+
+  // R-051. The scene calls `commitRegionMove` once, on release. This is the
+  // only world file that may reach `moveRegion`, and it does not copy it.
+  useEffect(() => {
+    setRegionMover((regionId, dx, dy): RegionMoveCommit | null => {
+      const ids = latest.current.moveRegion(regionId, dx, dy)
+      return ids.length === 0 ? null : { ids }
+    })
+    return () => setRegionMover(null)
+  }, [])
 }

@@ -214,6 +214,48 @@ export function terraceDragCanvas(from: FloorPoint, to: FloorPoint): { dx: numbe
 }
 
 /**
+ * Where the stood-up room sits after one committed terrace drag. The frame
+ * stays: recomputing it would slide the whole room to keep the new centre
+ * under the camera. Members and the terrace move by the canvas delta; the
+ * floor centre is that delta through `canvasToFloor`, the same conversion
+ * the terrace was stood up with.
+ */
+export function shiftPlacement(
+  panels: readonly CanvasBox[],
+  regions: readonly CanvasBox[],
+  floors: readonly FloorTerrace[],
+  regionId: string,
+  memberIds: readonly string[],
+  dx: number,
+  dy: number
+): { panels: CanvasBox[]; regions: CanvasBox[]; floors: FloorTerrace[] } {
+  const ids = new Set(memberIds)
+  const floor = canvasToFloor({ x: dx, y: dy })
+  return {
+    panels: panels.map((box) => (ids.has(box.id) ? { ...box, x: box.x + dx, y: box.y + dy } : box)),
+    regions: regions.map((box) => (box.id === regionId ? { ...box, x: box.x + dx, y: box.y + dy } : box)),
+    floors: floors.map((terrace) => (terrace.id === regionId
+      ? { ...terrace, center: { x: terrace.center.x + floor.x, z: terrace.center.z + floor.z } }
+      : terrace))
+  }
+}
+
+/**
+ * Orbit stays off while a terrace drag owns the pointer. OrbitControls
+ * listens on the canvas element itself, so a raycast `stopPropagation`
+ * does not reach it — the rig binds the switch.
+ */
+let terraceOrbit: ((enabled: boolean) => void) | null = null
+
+export function bindTerraceOrbit(next: ((enabled: boolean) => void) | null): void {
+  terraceOrbit = next
+}
+
+export function setTerraceOrbit(enabled: boolean): void {
+  terraceOrbit?.(enabled)
+}
+
+/**
  * The sign the mockup paints: title, ticket, then criteria as `done/total`.
  * The 2D chip (`regionLabel`) says "2 of 4 criteria" and an agent count;
  * the terrace drops the zero-value count and keeps the fraction. A chip
