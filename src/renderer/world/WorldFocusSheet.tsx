@@ -123,13 +123,13 @@ export function WorldFocusSheet(): JSX.Element | null {
   const answer = (allow: boolean): void => {
     if (asked.requestId === null || actions === null || past) return
     // D9. The approval goes out now. The toast cannot un-tell an agent that already received y.
-    actions.answer(id, asked.requestId, allow)
+    const discard = actions.answer(id, asked.requestId, allow)
     if (!allow) return
     emitApproved({
       agent: agentShort(record?.name ?? ''),
       file: fileOf(asked.question, asked.diff),
       panelId: id,
-      discard: null
+      discard
     })
   }
   const submit = (event: FormEvent): void => {

@@ -8,7 +8,9 @@ import { latestRoster, onRoster } from '@renderer/presence/presence-store'
 import { backendOf } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import type { PresenceRoster } from '@shared/presence'
+import { readyDiscardFor } from '@renderer/review/discard-offer'
 import { getWorldContext, publishWorldContext, setRegionMover, setWorldActions, type RegionMoveCommit, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
+import type { DiscardOffer } from './world-flight'
 import { agentFacts } from './world-facts'
 
 /**
@@ -180,7 +182,7 @@ export function useWorldContextPublisher(input: PublisherInput): void {
   useEffect(() => {
     const byId = (id: string): Panel | undefined => panels.find((p) => p.rect.id === id)
     setWorldActions({
-      answer: (agentId, requestId, allow) => {
+      answer: (agentId, requestId, allow): DiscardOffer | null => {
         // R-070. The chat door stays the answer. History is opt-in: only this
         // call names the tool and the task, so a chat answer does not grow a row.
         const now = latest.current
@@ -192,6 +194,9 @@ export function useWorldContextPublisher(input: PublisherInput): void {
           argument: asked.argument,
           ...(itemId === undefined ? {} : { itemId })
         })
+        // R-094. Undo only when a review can revert this panel. Deny has no toast.
+        if (!allow) return null
+        return readyDiscardFor(agentId)
       },
       send: async (agentId, text) => {
         try {

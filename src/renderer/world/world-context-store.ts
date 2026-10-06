@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { CapHold } from '@shared/agent-session'
+import type { DiscardOffer } from './world-flight'
 import type { PlanStepView } from '@shared/task-plan'
 import type { WorkItemState } from '@shared/work-items'
 
@@ -164,8 +165,12 @@ export function useWorldContext(): WorldContext {
 export type SendOutcome = string | null
 
 export interface WorldActions {
-  /** A pending request, answered through the chat card's own door. */
-  answer(agentId: string, requestId: string, allow: boolean): void
+  /**
+   * A pending request, answered through the chat card's own door.
+   * On allow, the discard a live review can run for this panel, or null
+   * when Undo would not be a real revert. Deny returns null.
+   */
+  answer(agentId: string, requestId: string, allow: boolean): DiscardOffer | null
   /** A person's words to a running agent — the composer's send. */
   send(agentId: string, text: string): Promise<SendOutcome>
   /** Leave the room and land on the agent's panel (or its request). */

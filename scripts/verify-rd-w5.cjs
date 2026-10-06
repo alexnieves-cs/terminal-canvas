@@ -36,6 +36,7 @@ buildSync({
         attentionStep, queueStrip, approvalToast, discardReady, shellCard, SHELL_ROOM_SENTENCE,
         fileOf, agentShort
       } from '../src/renderer/world/world-flight'
+      export { offerFromReview } from '../src/renderer/review/discard-offer'
     `,
     resolveDir: __dirname,
     sourcefile: 'rd-w5-entry.ts'
@@ -130,6 +131,21 @@ const toast = read('src/renderer/shell/toast.ts')
 ok('rd-w5.undo.2 the sonner action is Undo only on that decision, and View diff is the other arm',
   /decision\.undo[\s\S]{0,160}label: 'Undo'[\s\S]{0,200}label: 'View diff'/.test(toast) &&
   /from 'sonner'/.test(toast))
+
+const across = F.offerFromReview({ root: '/repo', baseline: 'across', subjectId: 'codex', acrossBaseline: 'across', discard: { kind: 'ready', paths: ['ledger.ts'] } })
+const realOffer = F.offerFromReview({ root: '/repo', baseline: 'abc123', subjectId: 'codex', acrossBaseline: 'across', discard: { kind: 'ready', paths: ['ledger.ts'] } })
+const blockedOffer = F.offerFromReview({ root: '/repo', baseline: 'abc123', subjectId: 'codex', acrossBaseline: 'across', discard: { kind: 'blocked' } })
+const sheetSrc = read('src/renderer/world/WorldFocusSheet.tsx')
+const reviewNode = read('src/renderer/review/ReviewNode.tsx')
+const pubSrc = read('src/renderer/world/useWorldContextPublisher.ts')
+const chromeSrc = read('src/renderer/world/WorldChrome.tsx')
+ok('rd-w5.undo.3 a live Approve passes the review discard when one can revert that panel, and the across sentinel is not an Undo',
+  across === null && blockedOffer === null && realOffer !== null && realOffer.paths[0] === 'ledger.ts' && realOffer.baseline === 'abc123' &&
+  /const discard = actions\.answer\(id, asked\.requestId, allow\)/.test(sheetSrc) && /discard,?\s*$/m.test(sheetSrc) &&
+  !/discard:\s*null/.test(sheetSrc) && !/review\.discard/.test(sheetSrc) &&
+  /publishReadyDiscard\(/.test(reviewNode) && /offerFromReview\(/.test(reviewNode) && /ACROSS_BASELINE/.test(reviewNode) &&
+  /return readyDiscardFor\(agentId\)/.test(pubSrc) &&
+  /door\.answer\(id, requestId, true\)/.test(chromeSrc) && !/emitApproved/.test(chromeSrc))
 
 const sheet = read('src/renderer/world/WorldFocusSheet.tsx')
 const shellStart = sheet.indexOf('function ShellConsoleCard')
