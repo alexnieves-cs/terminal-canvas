@@ -44,6 +44,15 @@ import { ASK_MAX, askText, legendEntries, type CameraApi } from './world-set'
 /** How long the "Sent" line stays. */
 const POSTED_MS = 2600
 
+/** The breadcrumb's separator. A path, so the chevron is not a text glyph. */
+function CrumbSep(): JSX.Element {
+  return (
+    <svg className="world-crumb__sep" width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+      <path d="M2.2 1.2 L5.6 4 L2.2 6.8" fill="none" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  )
+}
+
 /**
  * `flat` (M431): the chrome over the flat room (`WorldFlat`, no WebGL), which
  * has no camera to fit or zoom — those buttons are left out rather than shown
@@ -242,10 +251,10 @@ export function WorldChrome({ camera, flat = false }: { camera: RefObject<Camera
     <div className="world-chrome" data-world-chrome data-flat={flat ? '' : undefined}>
       {crumb === null ? null : (
         <nav className="world-crumb" data-world-crumb aria-label="Where you are">
-          <button type="button" onClick={stepBack}>{crumb[0]}</button>
-          <span aria-hidden="true">›</span>
+          <button type="button" onClick={stepBack} aria-label="World">{crumb[0]}</button>
+          <CrumbSep />
           <span>{crumb[1]}</span>
-          <span aria-hidden="true">›</span>
+          <CrumbSep />
           <span>{crumb[2]}</span>
           <span aria-hidden="true">·</span>
           <kbd>Esc</kbd>

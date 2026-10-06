@@ -12785,10 +12785,10 @@ div.world-camera__row { cursor: default; }
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-full);
   background: var(--glass-2); color: var(--fg);
-  box-shadow: var(--lift);
   pointer-events: auto;
   font-size: var(--t-sm);
 }
+.world-crumb__sep { color: var(--fg-3); flex: none; }
 .world-crumb button {
   padding: 0; border: 0; background: transparent; color: inherit;
   font: inherit; cursor: pointer;
@@ -12801,7 +12801,6 @@ div.world-camera__row { cursor: default; }
   padding: var(--sp-6);
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--glass-2); color: var(--fg);
-  box-shadow: var(--lift);
   pointer-events: auto;
   overflow: auto;
 }
