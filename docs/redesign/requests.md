@@ -345,7 +345,7 @@ from: centerViewNow === 'focus'
 - File: none in this repo. The shot is `scripts/shot-scenes/rd-w1.cjs`, run as `xvfb-run -a node_modules/electron/dist/electron --no-sandbox scripts/shot.cjs`.
 - Why the contract or the owner cannot absorb it: Electron on this host logs `ContextResult::kFatalFailure: WebGL2 blocklisted` (and WebGL1). `--disable-gpu` paints the same empty field. The scene's DOM checks passed (the cancel chip is shown, the canvas stays mounted, reduced motion does not write `rotateX`). The room itself is not in the PNG, so the capture cannot be judged against mockup 10. W1 does not own the Electron binary path in `package.json`.
 - Smallest change: re-shot `rd-world-transition` and `rd-world-transition-rm` on a machine where WebGL is allowed. Do not set `UPDATE_GOLDENS` until that capture has been looked at. The terraces in the mockup are still R-043.
-- Status: open. Re-shot on this host with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only (`package.json` unchanged). The captures are the dark-theme canvas, not the tilted plan. Critic: does-not-read. `UPDATE_GOLDENS` was not set.
+- Status: deferred at rd-world. Re-shot on this host with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only (`package.json` unchanged). The captures are the dark-theme canvas, not the tilted plan. Critic: does-not-read. `UPDATE_GOLDENS` was not set. Phase 4 re-shots on a Mac where WebGL presents.
 
 ### R-050 · The 2D minimap needs the world's camera wedge
 - Lane: W2
@@ -359,21 +359,21 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/Canvas.tsx` (W1 this wave) or `src/renderer/world/useWorldContextPublisher.ts` (unowned)
 - Why the contract or the owner cannot absorb it: `rd-world.layout.1` proves `terraceDragCanvas` then `moveRegion` is one plan and the same delta the 2D region drag uses. The world cannot import `moveRegion` (`world.ctx.door.1`: only the publisher may import canvas). The 3D scene reads region boxes once, at open, and does not drag them.
 - Smallest change: the publisher (or Canvas) registers a mover. A terrace drag calls `moveRegion` once, one undo entry, and the 2D canvas shows the move. Do not add a second copy of the verb under `world/`.
-- Status: open. Left. The world still cannot import `moveRegion`, and wiring a mover through the publisher is a larger change than this merge.
+- Status: deferred at rd-world. The world still cannot import `moveRegion`, and wiring a mover through the publisher is a larger change than this merge. Canvas and the publisher are not this merge.
 
 ### R-052 · Follow on the shared tier switch
 - Lane: W2
 - File: `src/renderer/canvas/CanvasHud.tsx` (L-C)
 - Why the contract or the owner cannot absorb it: screen 11's bottom-left control is Work / Plan / Map plus Follow. `CanvasHud` paints Work, Plan and Map (`data-hud-tier`) and has no Follow. W2 reveals that HUD and cannot import it. Follow's behaviour is W3's (`world-camera.ts`), which does not own `CanvasHud.tsx`.
 - Smallest change: a Follow control beside the three tiers, calling a callback the world registers. Absent callback, the control is not painted, so the 2D canvas is unchanged.
-- Status: open. Left. `CanvasHud` is L-C's, and Follow's chord is still R-061 (`shortcuts.ts` is frozen). The camera panel already has the control.
+- Status: deferred at rd-world. `CanvasHud` is L-C's, and Follow's chord is still R-061 (`shortcuts.ts` is frozen). The camera panel already has the control.
 
 ### R-053 · The Linux shot does not present the WebGL room
 - Lane: W2
 - File: `scripts/shot.cjs` (the capture) and the WorldView renderer (`alpha: false` is already set)
 - Why the contract or the owner cannot absorb it: `rd-world-room` mounts. The DOM has five `[data-task-region]` boxes, eleven panels, a sized `.world-view canvas`, and the shared pill. The context is not lost and there is no `.world-route__note`. `capturePage` still paints the shell ground (`--s-0`, centre about 227, 231, 238). A CSS outline on that canvas is captured; the bitmap is not. `drawImage` of the WebGL canvas read back `[0, 0, 0, 0]` with `preserveDrawingBuffer` on. W0's night shot on this host was dark, so the capture can present a GL frame. This lane's timebox on the shot is spent.
 - Smallest change: find why swiftshader under xvfb presents an empty buffer for this scene (clear colour, bloom, or the canvas host stacked over `.shell__world`) and make `out/shots/rd-world-room.png` show the night room. Do not set `UPDATE_GOLDENS`.
-- Status: open. The merge does not crash the room closed. On `rd-w3b` the overview shot leaves World pressed, with a 1092×809 `.world-view canvas` and no error boundary, no React #185, and no lazy-chunk failure. `drawImage` of that canvas is `[0, 0, 0, 0]`, and `capturePage` shows the layer background `--s-0` (227, 231, 238). The same shot on `rd/w3-overview` (`10c1806a`) on this host is the same light field. The furnished office that lane saw is not reproduced here. Harness and host, not a regression in the merged tree. `UPDATE_GOLDENS` was not set.
+- Status: deferred at rd-world. The merge does not crash the room closed. On `rd-w3b` the overview shot leaves World pressed, with a 1092×809 `.world-view canvas` and no error boundary, no React #185, and no lazy-chunk failure. `drawImage` of that canvas is `[0, 0, 0, 0]`, and `capturePage` shows the layer background `--s-0` (227, 231, 238). The same shot on `rd/w3-overview` (`10c1806a`) on this host is the same light field. The furnished office that lane saw is not reproduced here. Harness and host, not a regression in the merged tree. `UPDATE_GOLDENS` was not set.
 
 ### R-060 · The 2D minimap draws the world camera wedge
 - Lane: W3
@@ -387,7 +387,7 @@ from: centerViewNow === 'focus'
 - File: `src/shared/shortcuts.ts` (frozen)
 - Why the contract or the owner cannot absorb it: the camera panel reads every chord from the registry. Follow picked is F in the overview, and the registry has no row for it. `⌘F` is Search. W3 cannot edit the frozen list.
 - Smallest change: add `{ id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' }` and a handler name `followPicked`. F is not a ⌘ chord, so it does not collide with Search. The panel already calls `shortcutById('follow')`.
-- Status: open. `shortcuts.ts` is frozen. The lead did not edit it. The panel still calls `shortcutById('follow')` and shows no chord until a row exists.
+- Status: deferred at rd-world. `shortcuts.ts` is frozen. The lead did not edit it. The panel still calls `shortcutById('follow')` and shows no chord until a row exists.
 
 ### R-062 · The rig applies a WorldCamera pose
 - Lane: W3
@@ -401,7 +401,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/WorldCard.tsx`, `WorldCardBody.tsx`, `WorldChrome.tsx`, `WorldFlat.tsx`, `WorldRobot.tsx`
 - Why the contract or the owner cannot absorb it: those files are W2, W4 and W6. `world.replay.6` requires a past request to omit Approve, Deny and Open. The overview's sentence is `verbsForRoom` / `PAST_ROOM_REASON` (`past room — go Live to act`), already on the scrubber. The card still disappears the verbs instead of disabling them with that sentence.
 - Smallest change: keep the buttons, `disabled` with `title` and `aria-describedby` set to `PAST_ROOM_REASON`, and retarget `world.replay.6` to that sentence. Do not add a second wording.
-- Status: open. Left for a later pass. `world.replay.6` still requires a past request to omit Approve, Deny and Open, and the card, chrome, flat room and robot are several owners. The scrubber already shows the one sentence.
+- Status: deferred at rd-world. `world.replay.6` still requires a past request to omit Approve, Deny and Open, and the card, chrome, flat room and robot are several owners. The scrubber already shows the one sentence.
 
 ### R-064 · ⌘⇧W lands the 2D camera on the world pose
 - Lane: W3
@@ -422,14 +422,14 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
 - Why the contract or the owner cannot absorb it: the sheet and the card call `actions.answer`. The publisher's `answer` is `answerRequest` in `ChatConversation.tsx`. The inspector history row is `answerApproval` in `palette-actions/presets.ts`, which also notes the outcome the queue shows. W4 does not own the publisher, and a second call beside `answerRequest` would be a second path.
 - Smallest change: point the room's `answer` at `answerApproval` (or have `answerRequest` record the same outcome), so a decision from the sheet is the row the inspector already shows for the palette.
-- Status: open. Left at the W4 merge. `world.ctx.door.2` still requires the room's `answer` to be `answerRequest`. `answerApproval` writes the inspector history only after main accepts, and it looks up the palette's approval list, which the chat door does not hold. Calling both does not record the row: `answerRequest` marks the request answered first, so `answerApproval` returns. Folding `recordOrchEvent` into `answerRequest` would change every chat answer, not only the sheet. The publisher, the palette slice and `ChatConversation.tsx` are three owners.
+- Status: deferred at rd-world. `world.ctx.door.2` still requires the room's `answer` to be `answerRequest`. `answerApproval` writes the inspector history only after main accepts, and it looks up the palette's approval list, which the chat door does not hold. Calling both does not record the row: `answerRequest` marks the request answered first, so `answerApproval` returns. Folding `recordOrchEvent` into `answerRequest` would change every chat answer, not only the sheet. The publisher, the palette slice and `ChatConversation.tsx` are three owners.
 
 ### R-071 · A paste door for an agent terminal's reply
 - Lane: W4
 - File: `src/renderer/world/world-context-store.ts`, `src/renderer/world/useWorldContextPublisher.ts` (not W4's)
 - Why the contract or the owner cannot absorb it: Reply for an agent terminal is paste, then an explicit submit. The room's door has `send` (`agentSession.send`) and no paste. A plain shell must stay closed with `answer in its terminal`. The sheet cannot tell an agent terminal from a plain shell, and it does not call `agentSession` itself (`world.door.1`).
 - Smallest change: `pasteReply(agentId, text)` on `WorldActions`, implemented as the terminal's paste plus one submit, and a `agentTerminal(agentId)` the sheet can pass to `replyRoute`. Leave plain shells on the one reason.
-- Status: open. Left at the W4 merge. `replyControl` stays closed until a paste door exists, which is the safe default. The publisher has no terminal handle, and an explicit submit after paste has to stay off a plain shell. That wiring goes through Canvas's registry, which this merge does not take.
+- Status: deferred at rd-world. `replyControl` stays closed until a paste door exists, which is the safe default. The publisher has no terminal handle, and an explicit submit after paste has to stay off a plain shell. That wiring goes through Canvas's registry, which this merge does not take.
 
 ### R-072 · world.open.6 still says bare Enter opens the panel
 - Lane: W4
@@ -464,7 +464,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/webgl-probe.ts` (shared with Orchestrate; this lane does not edit it)
 - Why the contract or the owner cannot absorb it: `webglAvailable` is getContext webgl2 or webgl, then `WEBGL_lose_context`. On this xvfb host getContext succeeds (SwiftShader) and the world canvas reads back `[0, 0, 0, 0]` (R-053). A presenting check would be a clear and a readPixels of a known colour. That would change the answer for every caller, including Orchestrate. This lane forces the flat room in the shot by stubbing getContext, and leaves the probe as it is.
 - Smallest change: none in this lane. Report only.
-- Status: open
+- Status: deferred at rd-world. A presenting check would change `webglAvailable` for Orchestrate as well as the room. The probe stays as it is.
 
 ### R-083 · The flat room cannot import the attention line
 - Lane: W6
@@ -486,32 +486,32 @@ useLayoutEffect(() => {
 ```
 
 `publishFlightQueue` is from `src/renderer/world/world-flight.ts`. It does not import three. Do not sort. Do not build a second census.
-- Status: open
+- Status: done: the pill publishes that map beside `publishAttentionLine`, and clears it on unmount. The room still does not import the pill.
 
 ### R-091 · The 2D jump and the world jump share one cursor
 - Lane: W5
 - File: `src/renderer/canvas/Canvas.tsx` (`jumpAttentionImplRef`)
 - Why the contract or the owner cannot absorb it: each press uses `attentionStep` / `nextAttentionId`, and `rd-w5.walk.1` pins those two equal. The cursors are still two. While the world is up, `shouldIgnoreKeys` is true because the canvas is covered, so the same press is not handled twice. A jump on the canvas, then a jump in the world, starts the world from a null cursor and picks the first id again.
 - Smallest change: read and write `attentionCursor` / `setAttentionCursor` from `world-flight.ts` inside `jumpAttentionImplRef`, and step with that cursor. Do not edit `attention-queue.ts` or `shortcuts.ts`.
-- Status: open
+- Status: deferred at rd-world. `jumpAttentionImplRef` is the panels jump, and sharing the cursor means editing Canvas. While the world is up the canvas ignores keys, so one press is not handled twice. A jump on the canvas and then one in the world still starts the world from a null cursor.
 
 ### R-092 · Name the queue strip in the plain-DOM sentence
 - Lane: W5
 - File: `src/renderer/CLAUDE.md`
 - Why the contract or the owner cannot absorb it: `WorldQueueStrip.tsx` is plain DOM and imports no three. The library table's plain-DOM sentence names `WorldChrome` and `WorldFocusSheet` and does not name the strip. W5 does not own `CLAUDE.md`.
 - Smallest change: name `WorldQueueStrip.tsx` (M453, the queue strip) beside `WorldFocusSheet.tsx` in that sentence.
-- Status: open
+- Status: done: the plain-DOM sentence names `WorldQueueStrip.tsx` (M453, the queue strip) beside the focus sheet. The strip still imports no three.
 
 ### R-093 · The room's ten-minute snooze is not the inbox snooze
 - Lane: W5
 - File: `src/renderer/shell/decision-inbox.ts`, `src/renderer/canvas/Canvas.tsx`
 - Why the contract or the owner cannot absorb it: Snooze 10m on the shell card calls `snoozePanel` in `world-flight.ts`, which hides that id from the world's walk only. The 2D jump still uses `jumpOrder` and the inbox. Ten minutes is not one of `SNOOZE_CHOICES`. Wiring the button to the inbox would edit the inbox and the jump, which this lane does not own.
 - Smallest change: one snooze store the inbox already has, and have `snoozePanel` write that. Leave the world's filter as a reader of it.
-- Status: open
+- Status: deferred at rd-world. The inbox and Canvas's jump are not this merge. Ten minutes is not one of `SNOOZE_CHOICES`. The card's snooze hides the id from the world walk only.
 
 ### R-094 · Live Approve has no review discard offer
 - Lane: W5
 - File: `src/renderer/world/useWorldContextPublisher.ts` (not W5's) and the review model
 - Why the contract or the owner cannot absorb it: D9 puts Undo on the toast only when `discardReady` (root, baseline, subject, and at least one path). The sheet's Approve calls `actions.answer` and then `emitApproved` with `discard: null`, because the room does not hold those fields. The live toast is therefore View diff. The shot passes a discard offer so mockup 13's Undo is visible, and `rd-w5.undo.1` pins both arms. Inventing a discard from the question text would offer Undo for a change review discard cannot revert.
 - Smallest change: when the publisher answers an approval, attach that panel's review discard offer if it is ready, and pass it to `emitApproved`. Do not add a hold. Do not call `review.discard` from the world.
-- Status: open
+- Status: deferred at rd-world. The publisher and the review model are not W5's, and a guessed discard would offer Undo for a change review cannot revert. Live Approve stays View diff.

@@ -1377,3 +1377,13 @@ VERDICT close
 8. State colour — Done is green and the current chip is amber. The hollow next chip is an outline. Needs-you is not a second green. The empty field has no working cyan, no failed red and no idle slate, because the figures are not in the capture. Bottom centre.
 
 Disagreement: the lane brief says judge the queue strip, the card and the toast, and not to debug the 3D layer. The capture is the light field on purpose (R-053). The silhouette, material, glow and connector misses are that field. The three DOM objects read as mockup 13, including Undo, which is on the toast because the shot passed a discard offer. A live Approve with no offer says View diff and shows no Undo (D9, R-094).
+
+### Merge
+
+`rd/w5-flight` merged into `redesign/main`. No foundation conflict. This is the last World lane, so there is no rebase command to print.
+
+Landed on the merge: R-090 (`CommandPill` publishes `publishFlightQueue` and clears it on unmount) and R-092 (the plain-DOM sentence names `WorldQueueStrip.tsx`).
+
+Deferred at rd-world, each left as it was: R-044 and R-053 (WebGL does not present on this host; Phase 4 re-shots on a Mac), R-051 (terrace drag through the publisher), R-052 and R-061 (`shortcuts.ts` is frozen; Follow stays on the camera panel), R-063 (past-room verbs are several owners), R-070 (folding the inspector history into `answerRequest` changes every chat answer), R-071 (paste-then-submit goes through Canvas's registry), R-082 (a presenting probe would change Orchestrate), R-091 (one jump cursor means editing Canvas's load-bearing jump), R-093 (the inbox snooze is not this card's ten minutes), R-094 (live Undo waits for a real discard offer).
+
+The blank `R-NNN` template stays a template.

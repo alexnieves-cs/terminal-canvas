@@ -10,6 +10,7 @@ import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
 import { getRecoveryView, subscribeRecovery } from '@renderer/panels/recovery-store'
 import { publishAttentionLine } from '@shared/attention-line'
+import { publishFlightQueue } from '../world/world-flight'
 import { attentionPillLine, pillRestState, publishAttentionCensus, recoveryPillFace, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
 import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type SelectionVerbKey } from './object-verbs'
 
@@ -146,6 +147,12 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   // R-083. The flat room reads this sentence. It cannot import this module.
   useLayoutEffect(() => { publishAttentionLine(attentionLine) }, [attentionLine])
   useLayoutEffect(() => () => { publishAttentionLine('') }, [])
+  // R-090. The room steps this queue and cannot import this module. The order
+  // is the queue's; nothing here sorts or builds a second census.
+  useLayoutEffect(() => {
+    publishFlightQueue(queue.map((item) => ({ panelId: item.panelId, kind: item.kind, label: item.sentence })))
+  }, [queue])
+  useLayoutEffect(() => () => { publishFlightQueue([]) }, [])
   // R-030. The rest sentence reads the queue this pill already subscribes to.
   const queueCount = queue.length
   // R-036. The recovery sentence, paused count included, from the store.
