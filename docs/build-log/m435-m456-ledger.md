@@ -1097,4 +1097,49 @@ R-070 open: point the room's `answer` at `answerApproval` so the sheet's decisio
 
 R-063 stays open. It wants past-room verbs disabled with one sentence, and `world.replay.6` still requires those buttons omitted. Landing it would edit `verify-world.cjs`, `WorldFlat.tsx`, and `WorldRobot.tsx`, which this lane does not own.
 
-R-081 landed. W6 filed it on `rd/w6-doors` against `WorldCardBody.tsx`: RequestBlock's open button now reads Open in Canvas, and `data-world-answer="open"` stays. No other W6 request was taken.
+R-081 landed in `ab85b75f`. W6 filed it on `rd/w6-doors` against `WorldCardBody.tsx`: RequestBlock's open button now reads Open in Canvas, and `data-world-answer="open"` stays. No other W6 request was taken.
+
+The crumb and the sheet do not wear `--lift`. `shadow.1` allows that shadow on the panel frame and the launcher only. The sheet keeps its hairline.
+
+### Gates
+
+Linux, Node. `node node_modules/electron/install.js`, then `npm rebuild node-pty` and `npx electron-rebuild -f -w node-pty`. Shots use `node_modules/electron/dist/electron` under `xvfb-run` with `--ignore-gpu-blocklist --enable-unsafe-swiftshader`. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`) |
+| `verify:rd-w4` | 13/13. Watched red: `rd-w4.sheet.1` failed while the sheet's comment named the session bridge; the comment no longer does |
+| `verify:world` | 251/251, including after the Open in Canvas label |
+| `verify:styles` | 97/97 after the crumb's glyph became a path and `--lift` left the W4 span. The first affected run failed `icons.1` and `shadow.1` |
+| `verify:rail` | 266/266 after the World button gained `aria-label="World"`. The first affected run failed `labels.1` |
+| `npm run affected -- --base redesign/main` | 40/45 plain suites, 31.7s, stopped after the plain tier, before the label fixes. Failed: `verify:rail` `labels.1`, `verify:styles` `icons.1` and `shadow.1`, `verify:flowchart` `flowchart.geometry.21` (max 27ms, a spike), `verify:meta` (`panels-split.2`, `visual.1`), `verify:first-run` `revamp.create.1`. Re-ran `verify:styles` and `verify:rail` alone after the fix: both green |
+| plain wave (`npm run verify`) | 64/67 in 31.3s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 95, goldens 79, `rd-world-focus` is past the first eight missing names), `verify:first-run` `revamp.create.1`, `verify:review` `merge.1` (`merged.kind` `failed`, `detail` empty). Alone, `verify:review` is 163/163. `verify:rd-w4` passed. `verify:tmux` passed. `verify:canvas-sync` and `verify:relay` passed. Wave 2 and the Electron tier did not start |
+| `npm run build` | pass, twice. The second build is the one the shot paints. `WorldView` stays its own chunk |
+
+### Critic · rd-world-focus
+
+Verdict: **close**.
+
+Shot under xvfb. The first attempt produced no PNG before a 180s kill (stdout was block-buffered). The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The WebGL layer is the light field `--s-0`. That is R-053. The DOM is what this verdict judges.
+
+The sheet is the close-up: breadcrumb `World › Ledger CSV export › Codex — ledger-export · Esc`, REQUEST with the fixture's ask, a folded diff, Approve `⌘Y` filled, Deny, Full diff, What it's doing with green done and cyan working marks, facts `Opus 4.8 · on feature/csv-export`, a reply composer, Open in Canvas `⌘↵`, Sessions. The camera panel, replay scrubber and away card are the room's existing chrome.
+
+1. Silhouette. The mockup's robot and floor are not in the capture. The host reads the world canvas back blank (R-053). The sheet's own silhouette matches: a left panel over the room.
+2. Composition. No ask chip sits on a robot, because the card is drawn in the blank layer. The sheet carries the same Approve.
+3. Chrome. The fixture's question and steps are the cast's line and criteria, not the mockup's longer paragraph. Sample copy. Spend and context are absent because the fixture has no meter. The reply field is open: this Codex is a chat the room can send to.
+
+State colour: the step marks are green and cyan from `[data-tone]`. No state hex in the W4 span.
+
+### Rules review
+
+BLOCKERS: none.
+
+SHOULD-FIX: none left in this lane. R-070, R-071, R-072 and R-074 are requests against files W4 does not own. R-081 is done.
+
+NITS: the sheet has no resting shadow, because `shadow.1` keeps `--lift` on the frame and the launcher.
+
+### World guard
+
+BLOCKERS: none. `WorldFocusSheet.tsx` imports no three, fiber, drei, or postprocessing. `WorldStage.tsx`'s one lazy import is unchanged. `world-select.ts` imports no three. Reduced motion clears transitions on `.world-focus` and `.world-crumb`. `verify:world` is 251/251, including `world.door.1` and `rd-world.parity.1`. The built entry does not statically import three (`WorldView` is its own chunk).
+
+SHOULD-FIX: name the sheet in the plain-DOM sentence of `src/renderer/CLAUDE.md`. That file is not W4's. R-074.

@@ -450,4 +450,4 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/WorldCardBody.tsx` (W4 this wave)
 - Why the contract or the owner cannot absorb it: W4 owns the file. A waiting tile uses RequestBlock, whose open button says Open. The redesign word, already on the flat room's own picked-tile button, is Open in Canvas.
 - Smallest change: the open button text becomes Open in Canvas. Keep `data-world-answer="open"`. Do not add a second wording.
-- Status: done: RequestBlock's open button reads Open in Canvas. `data-world-answer="open"` is unchanged. Landed on `rd/w4-focus` before G2. No other W6 request was taken.
+- Status: done: `ab85b75f` on `rd/w4-focus`. RequestBlock's open button reads Open in Canvas. `data-world-answer="open"` is unchanged. No other W6 request was taken.
