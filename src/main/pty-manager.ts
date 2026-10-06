@@ -793,6 +793,9 @@ export class PtyManager {
     // is missing, so a probe taken afterwards answers true unconditionally and
     // every panel — including one on a cold start — claims to have reattached.
     const reattached = this.getBackend().hasSession(spec.panelId)
+    if (reattached && this.onBootReattach !== null) {
+      try { this.onBootReattach() } catch { /* the splash reports its own failures */ }
+    }
 
     const proc = this.getBackend().spawn({ ...spec, args }, command, cwd, spawnEnv)
 
@@ -1653,6 +1656,12 @@ export class PtyManager {
    * `ownerOf`; the default sees nothing, which is every harness.
    */
   onAgentState: ((update: AgentStateUpdate, agent: AgentKind | undefined) => void) | null = null
+
+  /**
+   * R-019. A reattach (hasSession was true before spawn). The composition
+   * root publishes boot progress from this. Null in every harness.
+   */
+  onBootReattach: (() => void) | null = null
 
   private send(channel: string, payload: unknown): void {
     if (channel === IPC_EVENTS.AGENT_STATE) {
