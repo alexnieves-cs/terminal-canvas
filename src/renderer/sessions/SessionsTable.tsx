@@ -13,13 +13,14 @@ function samplesOf(id: string, activity: readonly number[]): readonly number[] {
   return activity
 }
 
-function Row({ row, theme, selected, open, onToggle, onOpen }: {
+function Row({ row, theme, selected, open, onToggle, onOpen, onShowInWorld }: {
   row: SessionFact
   theme: PaletteTheme
   selected: boolean
   open: boolean
   onToggle: (id: string) => void
   onOpen: (id: string) => void
+  onShowInWorld: (id: string) => void
 }): JSX.Element {
   const samples = samplesOf(row.id, row.activity)
   const cost = row.costUsd !== null && row.costUsd > 0 ? formatUsd(row.costUsd) : ''
@@ -35,7 +36,20 @@ function Row({ row, theme, selected, open, onToggle, onOpen }: {
           onChange={() => onToggle(row.id)}
         />
       </td>
-      <td><button type="button" className="sessions-name" data-session-open={row.id} {...shellControl(() => onOpen(row.id))}>{row.name}</button></td>
+      <td>
+        <button type="button" className="sessions-name" data-session-open={row.id} {...shellControl(() => onOpen(row.id))}>{row.name}</button>
+        <button
+          type="button"
+          className="sessions-world"
+          data-session-world={row.id}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onShowInWorld(row.id)
+          }}
+        >Show in World</button>
+      </td>
       <td>{row.agent}</td>
       <td className="sessions-path">{row.folder}</td>
       <td className="sessions-path">{row.branch}</td>
@@ -48,13 +62,14 @@ function Row({ row, theme, selected, open, onToggle, onOpen }: {
   )
 }
 
-function Group({ group, theme, selected, openId, onToggle, onOpen }: {
+function Group({ group, theme, selected, openId, onToggle, onOpen, onShowInWorld }: {
   group: SessionGroup
   theme: PaletteTheme
   selected: ReadonlySet<string>
   openId: string | null
   onToggle: (id: string) => void
   onOpen: (id: string) => void
+  onShowInWorld: (id: string) => void
 }): JSX.Element {
   const heading = groupHeading(group)
   return (
@@ -65,13 +80,13 @@ function Group({ group, theme, selected, openId, onToggle, onOpen }: {
         </tr>
       )}
       {group.rows.map((row) => (
-        <Row key={row.id} row={row} theme={theme} selected={selected.has(row.id)} open={openId === row.id} onToggle={onToggle} onOpen={onOpen} />
+        <Row key={row.id} row={row} theme={theme} selected={selected.has(row.id)} open={openId === row.id} onToggle={onToggle} onOpen={onOpen} onShowInWorld={onShowInWorld} />
       ))}
     </>
   )
 }
 
-export function SessionsTable({ facts, theme, selected, openId, tasks, onToggle, onOpen, onPause, onRestart, onMove, onEnd }: {
+export function SessionsTable({ facts, theme, selected, openId, tasks, onToggle, onOpen, onPause, onRestart, onMove, onEnd, onShowInWorld }: {
   facts: readonly SessionFact[]
   theme: PaletteTheme
   selected: ReadonlySet<string>
@@ -83,6 +98,7 @@ export function SessionsTable({ facts, theme, selected, openId, tasks, onToggle,
   onRestart: (ids: readonly string[]) => void
   onMove: (ids: readonly string[], taskId: string) => void
   onEnd: (ids: readonly string[]) => void
+  onShowInWorld: (id: string) => void
 }): JSX.Element {
   const groups = groupRows(facts)
   const ids = [...selected]
@@ -103,7 +119,7 @@ export function SessionsTable({ facts, theme, selected, openId, tasks, onToggle,
           </thead>
           <tbody>
             {groups.map((group) => (
-              <Group key={group.id === '' ? 'loose' : group.id} group={group} theme={theme} selected={selected} openId={openId} onToggle={onToggle} onOpen={onOpen} />
+              <Group key={group.id === '' ? 'loose' : group.id} group={group} theme={theme} selected={selected} openId={openId} onToggle={onToggle} onOpen={onOpen} onShowInWorld={onShowInWorld} />
             ))}
           </tbody>
         </table>

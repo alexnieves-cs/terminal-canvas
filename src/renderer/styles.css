@@ -12881,5 +12881,54 @@ div.world-camera__row { cursor: default; }
 /* ── /rd:W5 ── */
 
 /* ── rd:W6 ── */
-
+/* M454. The flat room stacks the terrace plan over the agent grid. The rule
+   above this span lays `.world-flat` out as a row; the column is the plan
+   the doors land on, and it stays inside this span.
+   The Sessions row verb is rest: present, opacity 0 until the row is the
+   thing under the pointer. It is never removed from the box. */
+.world-flat { flex-direction: column; gap: var(--sp-4); }
+.world-flat__pill {
+  margin: 0;
+  align-self: flex-start;
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: 999px;
+  background: var(--s-2);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+}
+.world-flat__plan {
+  position: relative;
+  flex: 1 1 46%;
+  min-height: 240px;
+}
+.world-flat__terrace {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: var(--sp-3);
+  border: 1px solid var(--tone);
+  border-radius: var(--r-md);
+  background: var(--tone-dim);
+  box-shadow: var(--tone-glow);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.world-flat__terrace-label { display: block; font-weight: 600; }
+.world-flat__terrace-word { color: var(--tone); }
+.world-flat__tile[data-tone] { border-color: var(--tone); }
+.world-flat__grid { flex: 1 1 40%; }
+.sessions-world {
+  margin-left: var(--sp-3);
+  opacity: 0;
+  transition: opacity var(--dur-1);
+  font-family: var(--font-ui);
+}
+tr[data-session-row]:hover .sessions-world,
+tr[data-session-row]:focus-within .sessions-world,
+.sessions-detail .sessions-world,
+.sessions-world:focus-visible { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .sessions-world { transition: none; }
+}
 /* ── /rd:W6 ── */
