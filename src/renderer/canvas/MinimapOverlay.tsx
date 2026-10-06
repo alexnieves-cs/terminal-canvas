@@ -5,6 +5,8 @@ import { useAgentState } from '@renderer/session/agent-state-store'
 import { MINIMAP_LEGEND, panelState, type StateInput } from '@renderer/panels/panel-state'
 import { useChat } from '@renderer/chat/chat-store'
 import { chatStateInput } from '@renderer/chat/chat-model'
+import { emptyState } from '@shared/empty-states'
+import { minimapHeader } from './card-detail'
 
 /**
  * M69. THE MINIMAP — the status board at thumbnail scale, in the canvas's
@@ -196,9 +198,16 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
   }, [])
 
   const viewBox = ghost === null ? projection.view : { ...projection.view, x: ghost.x, y: ghost.y }
-  // An empty canvas has no board to show: nothing, rather than an iris box
-  // beside the launcher with no purpose a person could name.
-  if (rects.length === 0) return null
+  // An empty canvas has no board. The sentence is the shared empty state,
+  // and it carries no digit — a zero here would be a count of nothing.
+  if (rects.length === 0) {
+    const sentence = emptyState('minimap').sentence
+    return (
+      <div ref={hostRef} className="minimap minimap--empty" data-screen-control="" data-minimap role="img" aria-label={sentence}>
+        <p className="minimap__empty">{sentence}</p>
+      </div>
+    )
+  }
   const cover = (projection.view.w * projection.view.h) / ((MINIMAP_W - 2 * 6) * (MINIMAP_H - 2 * 6))
   return (
     <div
@@ -216,6 +225,7 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
       style={{ width: MINIMAP_W, height: MINIMAP_H }}
       onMouseDown={onMouseDown}
     >
+      <p className="minimap__header">{minimapHeader(regions?.length ?? 0)}</p>
       {(regions ?? []).map((region, i) => {
         const box = projectBox(region, projection)
         return <div key={`region-${i}`} className="minimap__region" data-minimap-region style={{ left: box.x, top: box.y, width: Math.max(2, box.w), height: Math.max(2, box.h) }} />

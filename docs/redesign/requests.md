@@ -108,8 +108,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/useViewport.ts`
 - Why the contract or the owner cannot absorb it: L-C owns the file. The registry names ⌘0 as Fit all and ⌘1 as Work (D5). Today ⌘0 resets the viewport and ⌘1 fits all. F3 did not retarget them, because changing those chords would change behavior this lane was told to keep. ⌘⇧T (tidy) is registered and not bound; the menu still shows the one-release alias ⌘⌥T.
 - Smallest change: when L-C rebinds, read `matchShortcut` / `electronAccelerator` and move the old meanings off those chords in the same change. Bind tidy to ⌘⇧T beside the alias.
-- Status: open
-- Lead note: left for L-C (M444). That lane owns `useViewport`, and its brief is the ⌘1/2/3 tier flights and ⌘0 fit-all. The registry already names Fit all and Work. Retargeting ⌘1 to Work now would call a flight that does not exist, and this request says the move happens when L-C rebinds, with ⌘⇧T bound from the registry in the same change. The menu still shows the tidy alias ⌘⌥T. `shortcuts.ts` is frozen and was not edited.
+- Status: done in feat(m444): `useViewport` matches `fit-all`, `tier-work`, `tier-plan`, `tier-map`, `fit-task`, `tidy` and `tidy-alias` through `matchShortcut` / `electronAccelerator`. ⌘0 fits all, ⌘1/⌘2/⌘3 fly to the tier targets, ⌘⇧0 fits the task, ⌘⇧T tidies. The menu still shows tidy-alias. `shortcuts.ts` was not edited.
 - Filed on the F3 branch as R-005.
 
 ### R-012 · Mount Sessions and Review from Canvas, and pass the session count
@@ -191,7 +190,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/MinimapOverlay.tsx`
 - Why the contract or the owner cannot absorb it: L-B owns the overlay. The sentence `Nothing placed yet` is `emptyState('minimap')` in `empty-states.ts`. A second sentence in the overlay would drift from `empty.2`.
 - Smallest change: when the canvas has no panels, render `emptyState('minimap').sentence` and no numeric zero.
-- Status: open
+- Status: done in feat(m444): an empty canvas renders `emptyState('minimap').sentence` ("Nothing placed yet") and `minimapHeader(0)` is `MAP` with no digit.
 
 ### R-023 · A failed restore is the 09 surface's sentence
 - Lane: L-A
@@ -219,7 +218,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/palette/commands.ts`, `src/renderer/canvas/Canvas.tsx` (`openSettingsScope`)
 - Why the contract or the owner cannot absorb it: the row and the verb are `OPEN_SETTINGS_ROW` / `openSettingsPage` in `palette-actions/settings.ts`. The command list and the dock's Settings callback are other lanes. Nothing a person can click reaches the page. The shot calls `window.__tcOpenSettings`, which is the same function the row's `run` calls.
 - Smallest change: add a command whose `run` imports `openSettingsPage` from `@renderer/settings/open` (a new `PaletteActions` key would re-partition the slices). Point the dock's `onSettings` at `openSettingsPage()`. Leave `Manage settings…` as the palette drill-in.
-- Status: open
+- Status: palette half done in feat(m444): `canvas.settings` ("Open Settings") calls `openSettingsPage`. Dock half still open: Canvas `openSettingsScope` still opens the palette settings scope, and that call is outside the TierLayer slot.
 
 ### R-027 · Scope metrics.1 to canvas surfaces
 - Lane: L-D
@@ -240,4 +239,25 @@ from: centerViewNow === 'focus'
 - File: `scripts/fixtures/rd-steward/load.cjs`
 - Why the contract or the owner cannot absorb it: F2 owns the fixture. `load.cjs` writes one shared cwd, the cast name as the title, and `workItems.panelId` for the first panel of each task only. Engine, folder, branch and state stay in `workspace.json`. The live Sessions page therefore cannot match screen 07 from `layout.load` alone. The shot paints the cast through `tc-sessions-feed`, which the page already validates (`parseFeed` refuses a bad payload). That feed is the scene's door. It is not a second layout.
 - Smallest change: stamp each panel's cwd, agent and branch (or its task membership) so `taskMemberships` can group every cast panel, and a terminal with an agent is not stored as a shell. Leave the shot feed in place until that lands.
+- Status: open
+
+### R-030 · The pill should read the queue, so Canvas can drop `attentionCount`
+- Lane: L-C
+- File: `src/renderer/canvas/CommandPill.tsx` (`pillRestState`), `src/renderer/canvas/Canvas.tsx` (the `attentionCount` prop beside `CommandPill`)
+- Why the contract or the owner cannot absorb it: R-005 asked L-C to stop passing `reachableQueue(...).length`. `CommandPill` already calls `useAttentionQueue` for the line, and still requires the `attentionCount` prop. The prop sits outside the TierLayer slot, and `CommandPill.tsx` is not in L-C's files. Dropping the argument without the pill reading the queue is a type error.
+- Smallest change: `pillRestState` uses the queue length it already subscribes to, and Canvas stops passing `attentionCount`.
+- Status: open
+
+### R-031 · Electron zoom chords still expect the old ⌘0 and ⌘1
+- Lane: L-C
+- File: `scripts/panels-harness.cjs` (`zoomTo`), `scripts/verify-panels-core.cjs`, `scripts/verify-panels-kinds.cjs`, `scripts/verify-panels-agents.cjs`, `scripts/verify-panels-shell.cjs`
+- Why the contract or the owner cannot absorb it: those suites are not L-C's. `zoomTo` dispatches `key` with an empty `code`. After R-011, that `0` is Fit all and that `1` is Work. Checks that reset to INITIAL `{x:120,y:120,scale:1}` via `zoomTo(wc, '0')`, or fit via `zoomTo(wc, '1')`, will go red on macOS. Pinch zoom (`zoomToScale`) is unchanged. Reset zoom remains the palette row `canvas.fit`.
+- Smallest change: a reset in those checks runs the palette's Reset zoom row (or `resetViewport`), and a fit runs Fit all (`⌘0` / `zoomTo(wc, '0')`). Do not point `zoomTo(wc, '1')` at fit.
+- Status: open
+
+### R-032 · `verify:palette` 48 still pins ⌘0 on Reset zoom
+- Lane: L-C
+- File: `scripts/verify-palette.cjs` (check 48), `src/renderer/palette/commands.ts` (`canvas.fit`)
+- Why the contract or the owner cannot absorb it: check 48 requires the shortcut set `canvas.fit=⌘0` exactly. ⌘0 is Fit all now. The Reset zoom row still wears that chip so the check stays green. Adding a chip to Go to Work or Fit all would fail the same check. The suite is not L-C's.
+- Smallest change: move the ⌘0 chip from `canvas.fit` to the Fit all row, and retarget check 48's expected string. Leave Reset zoom with no chord.
 - Status: open

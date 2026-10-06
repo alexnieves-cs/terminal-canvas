@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type JSX } from 'react'
 import type { Viewport } from './viewport'
 import { zoomReadoutShown } from './minimap'
 import { shellControl } from '@renderer/shell/shell-control'
 import { Maximize, Minus, Plus } from '@renderer/icons'
 import { NewObjectRow } from './NewObjectRow'
+import { requestTier } from './flight'
+import { getShownTier, subscribeShownTier } from './card-detail'
+import { shortcutById } from '@shared/shortcuts'
+import type { ZoomTier } from '@shared/redesign-contracts'
 
 export interface CanvasHudProps {
   viewport: Viewport
@@ -73,6 +77,12 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
     return () => clearTimeout(t)
   }, [viewport.scale])
   const readoutShown = zoomReadoutShown(viewport.scale, zooming)
+  const shownTier = useSyncExternalStore(subscribeShownTier, getShownTier, getShownTier)
+  const fitAllChord = shortcutById('fit-all')?.chord ?? ''
+  const tierChord = (tier: ZoomTier): string => {
+    const id = tier === 'work' ? 'tier-work' : tier === 'plan' ? 'tier-plan' : 'tier-map'
+    return shortcutById(id)?.chord ?? ''
+  }
   return (
     <div className="canvas-hud" data-screen-control="">
       {/* M395 (the critic's P1 #2). CREATE LIVES HERE, on the HUD's own
@@ -104,9 +114,24 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
             {...shellControl(() => { if (fitTask.disabledReason === undefined) fitTask.run() })}><FitTaskGlyph /><span className="canvas-hud__fit-label">Fit task</span></button>
         )}
         {empty !== true && (
-          <button type="button" className="icon-button" data-hud-fit title="Fit all — every panel in view (⌘1)"
+          <button type="button" className="icon-button" data-hud-fit title={`Fit all — every panel in view (${fitAllChord})`}
             aria-label="Fit all" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">Fit all</span></button>
         )}
+        <span className="canvas-hud__tiers" role="group" aria-label="Zoom tier">
+          {(['work', 'plan', 'map'] as const).map((tier) => (
+            <button
+              key={tier}
+              type="button"
+              className="canvas-hud__tier"
+              data-hud-tier={tier}
+              aria-pressed={shownTier === tier}
+              title={`${tier === 'work' ? 'Work' : tier === 'plan' ? 'Plan' : 'Map'} (${tierChord(tier)})`}
+              {...shellControl(() => requestTier(tier))}
+            >
+              {tier === 'work' ? 'Work' : tier === 'plan' ? 'Plan' : 'Map'}
+            </button>
+          ))}
+        </span>
         {/* M247. Inside the zoom cluster, the HUD's one pointer surface, so it
             inherits that cluster's wheel yielding rather than needing its own. */}
         {agentLinks !== undefined && (

@@ -21,6 +21,7 @@ import { allRecipes } from '@shared/recipes'
 import { recipeUse } from '@shared/recipe-portability'
 import { isWorkPanel, isChatPanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
+import { bindFitTask } from '@renderer/canvas/flight'
 import type { ActionCtx } from './types'
 
 /**
@@ -80,6 +81,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     beginNewNote, setPanels, setInputMode, teammatesRef, chooseNavigator, workItemsRef,
     setWorkItems, boardVerbsRef, self
   } = ctx
+  bindFitTask(() => { void boardVerbsRef.current?.fitTask?.() })
   return ({
     // M202 (D07). ONE action, four doors — the card's verb, the palette row,
     // the agent line and an action node all land here, the way M197 made

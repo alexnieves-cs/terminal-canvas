@@ -11,10 +11,11 @@
  */
 
 import { tidyPanels } from '../placement'
+import { bindSelectionCentre, bindTidyAll, selectionCentre } from '../flight'
 import { removeLink, setLinkLabel } from '@renderer/panels/panels'
 import { expandGroup, removeGroup, toggleGroup } from '@renderer/groups/groups'
 import { GROUP_COLOURS } from '@shared/groups'
-import { viewSizeAround, zoomTarget } from '../viewport'
+import { viewSizeAround, worldToScreen, zoomTarget } from '../viewport'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
 
@@ -51,7 +52,12 @@ export function arrangementActions(ctx: ActionCtx): ArrangementActions {
     toggleMerged, setPanels, setGroups, setInputMode, setBroadcastInput, setCenterView,
     toggleFlip, undoCanvas, redoCanvas
   } = ctx
-  return ({
+  bindSelectionCentre(() => {
+    const world = selectionCentre(panelsRef.current.map((panel) => panel.rect), selectedIdsRef.current)
+    if (world === null) return null
+    return worldToScreen(world, viewportRef.current)
+  })
+  const actions: ArrangementActions = ({
     // M146. TWO verbs, two names (backlog #23): `Reset zoom` is Cmd+0's
     // INITIAL; `Zoom to fit` frames the SELECTION when there is one and every
     // panel otherwise, as a flight, moving nothing but the camera. An empty
@@ -231,4 +237,6 @@ export function arrangementActions(ctx: ActionCtx): ArrangementActions {
       setBroadcastInput((active) => !active)
     }
   })
+  bindTidyAll(() => actions.tidyPanels(panelsRef.current.map((panel) => panel.rect.id)))
+  return actions
 }
