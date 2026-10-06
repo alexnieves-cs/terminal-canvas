@@ -139,8 +139,9 @@ const norm = (v) => String(v || '').replace(/\s+/g, '').toLowerCase()
 // rd-tone.literal.1. Watched red twice. Before the theme blocks moved, the
 // detail was "no palette hex in either theme block". After they moved, a
 // stray `#5BE1E6` in StatusDot.tsx (outside a comment) failed this id on
-// that file, and was removed. World files stay exempt until W0. Theme
-// blocks may carry the hexes.
+// that file, and was removed. W0 (R-038) dropped the world/ exemption:
+// a state hex in the room fails here the same way it fails anywhere else.
+// Theme blocks may carry the hexes.
 {
   const hexes = new Set(palette.stateHexes())
   const themeBodies = lightBody + '\n' + darkBody
@@ -153,7 +154,6 @@ const norm = (v) => String(v || '').replace(/\s+/g, '').toLowerCase()
   const offenders = []
   for (const file of walk(renderer)) {
     const rel = file.slice(ROOT.length + 1).split('\\').join('/')
-    if (rel.startsWith('src/renderer/world/')) continue
     if (!/\.(tsx?|css|js)$/.test(rel)) continue
     let text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
     if (rel === 'src/renderer/styles.css') {
@@ -170,7 +170,7 @@ const norm = (v) => String(v || '').replace(/\s+/g, '').toLowerCase()
     }
   }
   const inTheme = themeHas.filter((h) => hexes.has(h))
-  ok('rd-tone.literal.1 no state hex in src/renderer outside the theme blocks; world/ is exempt until W0',
+  ok('rd-tone.literal.1 no state hex in src/renderer outside the theme blocks',
     offenders.length === 0 && inTheme.length > 0,
     offenders.length ? offenders.slice(0, 8).join(', ') : `theme carries ${inTheme.length} palette hexes`)
 }

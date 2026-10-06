@@ -768,3 +768,9 @@ Ignored, per the critic brief: sample copy (Steward, ledger-export) and the 1600
 | Electron tier | did not start; wave 1 stopped. The night shot ran separately under xvfb and swiftshader and wrote the composite. |
 
 Known reds, not this diff: `verify:meta` 51/53 (`panels-split.2` tag `pre-v7-run` absent; `visual.1` declared 90 / goldens 79, missing redesign goldens including `rd-world-night`). `verify:first-run` 28/29 (`revamp.create.1`). `UPDATE_GOLDENS` was not set.
+
+### Merge
+
+Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62eed4`). `rd-canvas` was not moved. `rd/w0-night` was not deleted.
+
+R-038 landed on `redesign/main` after the merge: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
