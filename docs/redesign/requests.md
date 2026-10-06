@@ -204,7 +204,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/Canvas.tsx` (`onCanvasDoubleClick`)
 - Why the contract or the owner cannot absorb it: M388's double-click places a process step. The empty canvas copy, from the mockup, says "Double-click to place a terminal". L-A does not own Canvas, and retargeting the gesture would change a pinned behavior (`attemptOf` already refuses to teach ⌘N after that double-click).
 - Smallest change: when the canvas is empty, a double-click places a terminal, or the copy changes to name the process step. Leave the gesture as it is until the owner decides.
-- Status: open. The gesture is unchanged: `onCanvasDoubleClick` still places a flowchart process step. D1–D8 do not choose between placing a terminal and changing the empty-canvas copy. Needs the owner.
+- Status: done: `ea1a5fca`. Owner chose on Oct 6, 2026 to keep the gesture. `onCanvasDoubleClick` still places a flowchart process step. `GHOST_TARGET` is `Double-click to place a flowchart step`. `rd-empty.hints.1` pins it. The L-A and L-B briefs name the same step.
 
 ### R-025 · Menu accelerators read keyboard overrides
 - Lane: L-E

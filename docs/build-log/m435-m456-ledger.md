@@ -678,7 +678,7 @@ The Linux ELF is `node_modules/electron/dist/electron` (`v43.4.1`), from `node n
 
 ## R-024 · Empty-canvas hint
 
-Owner chose on Oct 6, 2026: keep M388. `onCanvasDoubleClick` still places a flowchart process step. The ghost hint is now `Double-click to place a flowchart step` (`GHOST_TARGET`). `rd-empty.hints.1` pins that sentence. L-A's brief and L-B's "spawns the default agent" line name the same step. `hints.ts` already refused to teach ⌘N after the double-click; the comment now points at the ghost. No shot scene hardcoded the old sentence. `rd-canvas` was not moved.
+Owner chose on Oct 6, 2026: keep M388. `onCanvasDoubleClick` still places a flowchart process step. The ghost hint is now `Double-click to place a flowchart step` (`GHOST_TARGET`). `rd-empty.hints.1` pins that sentence. L-A's brief and L-B's "spawns the default agent" line name the same step. `hints.ts` already refused to teach ⌘N after the double-click; the comment now points at the ghost. No shot scene hardcoded the old sentence. `rd-canvas` was not moved. Landed in `ea1a5fca`.
 
 ### Gates
 
