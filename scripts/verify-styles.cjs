@@ -980,20 +980,22 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 }
 
 // M163 — metrics.1. THE METRICS RULE: CPU and RAM belong in the inspector.
-// `data-machine-cost` (the per-panel readout) appears under src/renderer in
+// `data-machine-cost` (the per-panel readout) appears on canvas surfaces in
 // the inspector alone — never on a header, a card tier or the rail — and the
-// stylesheet has no rule for a header or card cost. The HUD's TOTAL
-// (`data-machine-cost-total`) is M173's, matched apart by its suffix.
+// stylesheet has no rule for a header or card cost. Sessions (R-027) is not
+// a canvas surface; its columns stay `.sessions-cost` and do not grow this
+// attribute. The HUD's TOTAL (`data-machine-cost-total`) is M173's, matched
+// apart by its suffix.
 {
   const root = path.join(__dirname, '..', 'src', 'renderer')
   const files = []
-  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.tsx?$/.test(e.name)) files.push(f) } }
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) { if (path.relative(root, f) === 'sessions') continue; walk(f) } else if (/\.tsx?$/.test(e.name)) files.push(f) } }
   walk(root)
   const sites = files.filter((f) => /data-machine-cost(?!-total)/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(root, f))
   const allowed = new Set(['shell/Inspector.tsx'])
   const stray = sites.filter((f) => !allowed.has(f))
   const rules = all.filter((r) => /\.panel__machine-cost|\.panel__card-cost|\.panel__card-summary-cost/.test(r.sel)).map((r) => r.sel.slice(0, 40))
-  ok('metrics.1', 'the per-panel CPU/RAM readout lives in the inspector only (no header, card or rail site) and the stylesheet has no header/card cost rule',
+  ok('metrics.1', 'on canvas surfaces the per-panel CPU/RAM readout lives in the inspector only (no header, card or rail site) and the stylesheet has no header/card cost rule',
     sites.length >= 1 && stray.length === 0 && rules.length === 0, JSON.stringify({ sites, stray, rules }))
 }
 
