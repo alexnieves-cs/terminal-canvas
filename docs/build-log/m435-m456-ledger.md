@@ -533,7 +533,19 @@ Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebu
 | `npm run verify:rd-l-f` | 17/17 pass (`rd-l-f.0`, `exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1`, `pause.1`, `pill.1`, `offline.1`, `catalog.1`, `boot.1`, `well.1`, `mount.1`, `channel.1`, `shot.1`, `socket.1`, `kill.1`) |
 | `npm run verify:styles` | 97/97 pass |
 
-G2 (affected, the plain-node wave, the Electron shot) is recorded after that run.
+G2, after the labels fix below. Local ref `redesign/main` is absent; the base is `origin/redesign/main` at `877c71c2`.
+
+The first affected run failed `verify:rail` `labels.1`: the four recovery verbs have children `{view.reconnect}`, `{view.details}`, `{frame.restart}` and `{frame.log}`, and that check does not treat those expressions as visible text. Each button now has `aria-label` of the same string. `verify:rail` is 266/266 after that. The numbers below are the re-run.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-f` | 17/17 pass, including `kill.1` on socket `terminal-canvas-verify-l-f` |
+| `npm run affected -- --base origin/redesign/main` | 52/55 plain suites, 31.2s, stopped after the plain tier. 14 files since `877c71c2`. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta`, `verify:tmux`, `verify:first-run`. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`) did not start. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.3s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.8s). `verify:relay` passed (2.8s). `verify:flowchart` passed (1.0s) and did not spike. No WebSocket error on this host. |
+| Electron tier, `npm run shot`, `verify:visual` | not reached by the gate, because wave 1 was already red. A direct attempt downloaded the Linux Electron binary (`v43.4.1`, `node_modules/electron/dist/electron`, ELF x86-64) via `node node_modules/electron/install.js`. `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-recovery` and `TC_FIXTURE=rd-steward` booted Electron and threw `Cannot find module './prebuilds/linux-x64//pty.node'` from `shot-entry.cjs`. `node-pty` prebuilds on disk are `darwin-arm64`, `darwin-x64`, `win32-arm64`, `win32-x64`. The Mac path `Electron.app/Contents/MacOS/Electron` is absent. The process did not exit; `timeout 90` stopped it (exit 124). No PNG under `out/shots/`. `UPDATE_GOLDENS` was not set. Mockup-critic and the rules reviewer were not run: there is no `out/shots/rd-recovery.vs-reference.png`. |
+
+`verify:meta` failures, reported and not fixed: check 14 missing `session:host` and `boot:progress` (the second is R-018; the first is R-034, because the README fence is not owned); `panels-split.2` (`git show pre-v7-run:scripts/verify-panels.cjs` fails); `visual.1` missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-sessions`, `rd-settings-keys`, `rd-recovery` (declared 87 / goldens 79). `verify:tmux` throws on `pty.node` for `linux-x64`. `verify:first-run` `revamp.create.1` wants `/^<div class="canvas-hud">/` and `CanvasHud` renders `data-screen-control`. `CanvasHud.tsx` is not in this diff.
 
 ### Deviations
 
@@ -544,3 +556,5 @@ G2 (affected, the plain-node wave, the Electron shot) is recorded after that run
 - The L-F CSS comment does not name `.panel__slot` or `.xterm`. `rd-l-f.well.1` walks from the lane span and a comment that named those classes matched the next `height:`.
 - Restart in place keeps the id in the reducer. Calling `restartPanel` is R-031.
 - `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-030.
+- The README architecture fence does not list `session:host`. Check 14 already misses `boot:progress` (R-018). R-034 asks for `session:host` only. The README is not edited.
+- Recovery verbs carry `aria-label`. `labels.1` strips a child expression unless it looks like a name, a label or a title, so `{view.reconnect}` alone was an unlabelled button.

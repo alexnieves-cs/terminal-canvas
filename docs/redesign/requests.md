@@ -269,3 +269,10 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: the pill is F3. `attentionPillLine` is "N agents need you · sentence · Go ⌘J · + New ⌘N". `recoveryPillLine(need, paused)` is the 09 sentence ("2 sessions need recovery · 4 paused · Review"). `AttentionItem` is frozen and has no paused count. `kindOf` returns `failed` before `recovery` when `failed` is set, and `useAttentionQueue` ors `failedState` for a non-zero exit, so a crash is `failed` and the paused count never reaches the pill.
 - Smallest change: when `recoveryPillLine` from the recovery store is non-empty, that is the rest line and the verb is Review (`ATTENTION_VERB.recovery`). Read the paused count from the store. Do not add a field to `AttentionItem`. The 09 surface already paints `data-recovery-pill`; drop that copy once the pill shows the sentence.
 - Status: open
+
+### R-034 · The README diagram lists `session:host`
+- Lane: L-F
+- File: `README.md` (the fence that contains `--invoke-->`, on the line with `session:live`)
+- Why the contract or the owner cannot absorb it: `verify:meta` check 14 reads every `'word:word'` declaration in `ipc-contract.ts`, events included, and looks for it in that fence. `session:host` is declared. L-F owns `CLAUDE.md`, which already lists it (`claude-md.1` / `rd-l-f.channel.1`). The README is not in this lane. `boot:progress` is the same check and stays R-018; this request does not add it.
+- Smallest change: add `session:host` beside `session:live` in that fence. Check 14 stays red until R-018 lands as well.
+- Status: open

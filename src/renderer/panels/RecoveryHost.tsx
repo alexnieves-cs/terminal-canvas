@@ -11,7 +11,8 @@ import { applyRecovery, getRecoveryView, recoveryVisible, subscribeRecovery, tak
  * work notice already renders inside it). The banner is the host. A crash
  * card is one restart. A reattaching panel is skeleton rows, never an empty
  * well. Outstanding recovery stays here; the toast is only the offline
- * transition, which has already finished.
+ * transition, which has already finished. Each verb carries aria-label
+ * because labels.1 does not read a `{view.reconnect}` child as text.
  */
 export function RecoveryHost(): JSX.Element | null {
   const view = useSyncExternalStore(subscribeRecovery, getRecoveryView, getRecoveryView)
@@ -43,8 +44,8 @@ export function RecoveryHost(): JSX.Element | null {
           <p className="recovery-banner__copy">{view.banner}</p>
           <div className="recovery-banner__verbs">
             {view.retry !== null && <span className="recovery-banner__retry" data-recovery-retry="">{view.retry}</span>}
-            <button type="button" className="pf__verb pf__verb--word" data-recovery-reconnect="" {...shellControl(() => applyRecovery({ type: 'reconnect', at: Date.now() }))}>{view.reconnect}</button>
-            <button type="button" className="pf__verb pf__verb--word" data-recovery-details="" {...shellControl(() => applyRecovery({ type: 'toggle-details' }))}>{view.details}</button>
+            <button type="button" className="pf__verb pf__verb--word" data-recovery-reconnect="" aria-label={view.reconnect} {...shellControl(() => applyRecovery({ type: 'reconnect', at: Date.now() }))}>{view.reconnect}</button>
+            <button type="button" className="pf__verb pf__verb--word" data-recovery-details="" aria-label={view.details} {...shellControl(() => applyRecovery({ type: 'toggle-details' }))}>{view.details}</button>
           </div>
           {view.detailsOpen && (
             <ul className="recovery-banner__list" data-recovery-detail="">
@@ -78,8 +79,8 @@ export function RecoveryHost(): JSX.Element | null {
             <p className="recovery-frame__kept">{frame.kept}</p>
             {frame.prompt !== null && <p className="recovery-frame__prompt" data-recovery-prompt="">{frame.prompt}</p>}
             <div className="recovery-frame__verbs">
-              <button type="button" className="pf__verb pf__verb--word recovery-frame__primary" data-recovery-restart={frame.panelId} {...shellControl(() => restart(frame.panelId))}>{frame.restart}</button>
-              <button type="button" className="pf__verb pf__verb--word" data-recovery-log={frame.panelId} {...shellControl(() => readLog(frame.panelId))}>{frame.log}</button>
+              <button type="button" className="pf__verb pf__verb--word recovery-frame__primary" data-recovery-restart={frame.panelId} aria-label={frame.restart} {...shellControl(() => restart(frame.panelId))}>{frame.restart}</button>
+              <button type="button" className="pf__verb pf__verb--word" data-recovery-log={frame.panelId} aria-label={frame.log} {...shellControl(() => readLog(frame.panelId))}>{frame.log}</button>
             </div>
           </article>
         ))}
