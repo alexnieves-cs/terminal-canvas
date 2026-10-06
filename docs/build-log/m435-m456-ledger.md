@@ -114,6 +114,8 @@ account-menu, across, approval, attention, auto, board, browser, chat, chat-copi
 
 `rd-f1-tones` has a reference (`docs/redesign/mockups/04-main-workspace.png`) and an intent, and no `run`. `visual.1` does not demand a golden until a `run` exists. The critic's "reads-as" against 04 is a macOS `shot` plus a fresh-context pass. It is not invented here.
 
+After the merge, `verify:rail` `board.1` still expected a done work item to be tone `idle`. The owner asked for that check to follow D7, so it now expects `done`. The word stays `done`. R-002 is closed by that edit.
+
 ### Deviations
 
 - Product-rules sentence, `board.1`, high-contrast glass and the terminal cursor are requests R-001–R-004. Those files are not F1's.
