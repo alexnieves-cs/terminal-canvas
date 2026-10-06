@@ -245,15 +245,19 @@ Sample names and dollar amounts live in `scripts/fixtures/rd-steward/workspace.j
 
 ### Checks
 
-Linux, Node v22, `npm ci --ignore-scripts` (no Electron binary, no `pty.node`). The first `verify:rd-l-d` threw `MODULE_NOT_FOUND` for esbuild because `node_modules` was absent. That is recorded at the top of the suite. After install the suite is the checks below.
+Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebuilds/linux-x64`). Requiring `electron` later downloaded the Linux binary (`v43.4.1`); the Mac path `npm run shot` uses (`Electron.app/Contents/MacOS/Electron`) is not on disk. The first `verify:rd-l-d` threw `MODULE_NOT_FOUND` for esbuild because `node_modules` was absent. That is recorded at the top of the suite.
+
+Two reds from the first affected run were this lane and are fixed: `verify:styles` check 3 (a disabled control used `opacity: 0.45`; it now uses `--muted`), and `verify:verbs` `gate.2` (the detail reads `scrollback.tail` and scrubs it with `outward` before the line is shown on this page).
 
 | Check | Result |
 |---|---|
 | `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass |
 | `npm run verify:rd-l-d` | 18/18 pass |
-| `npm run affected` | not yet this section |
-| Plain-node wave | not yet this section |
-| Electron tier, `shot`, `verify:visual` | not yet this section |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:verbs` | 30/30 pass |
+| `npm run affected -- --base redesign/main` | 43/45, stopped after the plain tier. `verify:meta` (`panels-split.2`, and `visual.1` missing `rd-sessions`) and `verify:first-run` `revamp.create.1`. `docs/redesign/requests.md` is UNMAPPED. Build and the Electron suites were not started. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, stopped after wave 1. Failures: `verify:meta` (`panels-split.2` — tag `pre-v7-run` is not in this clone; `visual.1` — `rd-sessions` has a `run` and no golden, declared 80 / goldens 79), `verify:tmux` (`pty.node` for `linux-x64` missing), `verify:first-run` `revamp.create.1`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` did not spike. |
+| Electron tier, `npm run shot`, `verify:visual` | not run by the gate, because wave 1 was already red. A direct attempt, `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-sessions` and `TC_FIXTURE=rd-steward`, booted Electron and then threw `Cannot find module './prebuilds/linux-x64/pty.node'` from `shot-entry.cjs`. The process did not exit; the probe was stopped at 75s (exit 124). No PNG was written. `UPDATE_GOLDENS` was not set. |
 
 ### Deviations
 
@@ -261,3 +265,5 @@ Linux, Node v22, `npm ci --ignore-scripts` (no Electron binary, no `pty.node`). 
 - Attention cards on the steward shot are shell prompts. Approval and failure cards render when the queue says so. This fixture's census cannot say so: a terminal in `wants-you` is a shell prompt, and failure needs an exited status or `failed` on the census, which CommandPill does not set from `agent:state` alone.
 - The Changes panel (`engine: review`) is not a session row. The feed skips it.
 - The fixture's moment is not "7 live · 2 dormant". No row is asleep, so the dormant clause drops. Inventing two dormant rows would be a second cast.
+- Disabled controls are `--muted`, not a fractional opacity. Check 3 allows 0 and 1 only.
+- The detail's tail is scrubbed with `outward` at the read. The terminal's own buffer is unchanged.

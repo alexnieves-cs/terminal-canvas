@@ -1,10 +1,15 @@
 import { useEffect, useState, type JSX } from 'react'
+import { outward } from '@shared/outward'
 import type { PaletteTheme } from '@shared/state-palette'
 import { shellControl } from '@renderer/shell/shell-control'
 import { appendTail, formatRun, formatTokens, formatUsd, replyBox, startedFact, stripAnsi, survivesFact, type SessionFact } from './sessions-model'
 import { Sparkline } from './Sparkline'
 
 const TAIL_CAP = 80
+
+function scrub(text: string, id: string): string {
+  return outward(text, `panel ${id}`).text
+}
 
 /**
  * M445. The live tail is the scrollback plus the pty subscription. Send is a
@@ -30,12 +35,15 @@ export function SessionDetail({ fact, theme, samples, onPause, onDetach, onEnd, 
     let live = true
     setLines([])
     void window.canvas.scrollback.tail({ panelId: fact.id, lines: TAIL_CAP }).then(
-      (got) => { if (live) setLines(got.slice(-TAIL_CAP)) },
+      (got) => { if (live) setLines(got.slice(-TAIL_CAP).map((line) => scrub(line, fact.id))) },
       () => { if (live) setLines([]) }
     )
     const off = window.canvas.pty.onData((chunk) => {
       if (chunk.panelId !== fact.id) return
-      setLines((prev) => appendTail(prev, stripAnsi(chunk.data), TAIL_CAP))
+      // The tail is leaving the terminal for this page. Scrub it at the
+      // read, the same way a line handed to another surface is scrubbed
+      // (verify:verbs gate.2). The terminal itself still shows the bytes.
+      setLines((prev) => appendTail(prev, scrub(stripAnsi(chunk.data), fact.id), TAIL_CAP))
     })
     return () => { live = false; off() }
   }, [fact.id])

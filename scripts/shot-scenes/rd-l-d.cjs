@@ -52,10 +52,7 @@ function factsFromCast(cast, now) {
 }
 
 module.exports = [
-  {
-    name: 'rd-sessions',
-    reference: ['docs/redesign/mockups/07-sessions.png'],
-    intent: 'Sessions triage: attention cards, a table grouped by task, three rows selected, Claude on ledger-export open.',
+  { name: 'rd-sessions', reference: ['docs/redesign/mockups/07-sessions.png'], intent: 'Sessions triage: attention cards, a table grouped by task, three rows selected, Claude on ledger-export open.',
     run: async (k) => {
       if (process.env.TC_FIXTURE !== 'rd-steward') {
         throw new Error('rd-sessions requires TC_FIXTURE=rd-steward')

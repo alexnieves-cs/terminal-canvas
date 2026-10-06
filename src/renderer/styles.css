@@ -11625,7 +11625,7 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .sessions-bulk button:disabled,
 .sessions-detail button:disabled,
 .sessions-reply button:disabled {
-  opacity: 0.45;
+  color: var(--muted);
   cursor: default;
 }
 .sessions-cards {
