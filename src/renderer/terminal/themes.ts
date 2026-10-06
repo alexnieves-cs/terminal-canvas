@@ -27,7 +27,8 @@ export const DARK_TERMINAL_THEME: ITheme = {
   // M109. The Obsidian well: a half-step below the glass, --well in styles.css.
   background: '#0a0c10',
   foreground: '#d8dae5',
-  cursor: '#5ec4d4',
+  // F1's working cyan (R-004). The sixteen ANSI entries below stay the agent's palette.
+  cursor: '#5BE1E6',
   cursorAccent: '#0a0c10',
   selectionBackground: '#27414a',
   black: '#15161e',
@@ -51,7 +52,8 @@ export const DARK_TERMINAL_THEME: ITheme = {
 export const LIGHT_TERMINAL_THEME: ITheme = {
   background: '#ffffff',
   foreground: '#1f2430',
-  cursor: '#2f6bd8',
+  // The light working cyan (R-004). `blue` below keeps the old cursor hex: that sixteen is the agent's palette.
+  cursor: '#348184',
   cursorAccent: '#ffffff',
   selectionBackground: '#cfdcf7',
   black: '#1f2430',

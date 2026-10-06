@@ -87,7 +87,7 @@ export interface DockProps {
  *
  * M268. Orchestrate is a CENTER PAGE, not a navigator pane. M404 (C2) took
  * its dock button out: the top bar's center segment is its one chrome door
- * (and ⌘K's "Open Orchestrate"). `centerView` is still read here so Panels
+ * (and ⌘K's "Show Orchestrate"). `centerView` is still read here so Panels
  * is pressed only while the canvas shows.
  *
  * Attention is NOT a pane. It is a count badge on its icon, always visible —
@@ -218,7 +218,7 @@ function DockImpl({
       { id: 'panels', label: 'Panels', icon: <Grid /> },
       // M404 (C2). Workspaces and Orchestrate are gone from the dock: the top
       // bar's workspace crumb (a switcher) and its center segment are their
-      // doors, and "Manage workspaces…" / "Open Orchestrate" stay in ⌘K. A
+      // doors, and "Manage workspaces…" / "Show Orchestrate" stay in ⌘K. A
       // second button for the same place is a second thing to learn.
       // M404 (C1). "Board", the pane's own title: "Tasks" is the noun of
       // New task and of Orchestrate's list, and this pane is the GitHub/Jira board.
@@ -247,17 +247,22 @@ function DockImpl({
     moreFromPanel: 0, blocker: '', since: 0, unblocks: 0
   }))
   const snoozed = inbox?.snoozed ?? []
-  // Members, not items: a grouped decision is still that many panels waiting.
-  const snoozedPanels = new Set(snoozed.flatMap((i) => i.members.map((m) => m.panelId)))
   // M378. The team's asks wait on this person too — on anyone who may edit
-  // the canvas — so the badge counts them beside the panels waiting here.
+  // the canvas. They are not a queue kind.
   const team = useTeamAsks()
-  // M438. The badge is F2's queue. The aria-label below still uses the
-  // snooze-aware count: the queue does not know snooze, and a team ask is
-  // not one of its kinds (requests.md R-005).
+  // R-005. The badge and the spoken count are the queue. Snooze and a team
+  // ask have no kind on the frozen queue, so they are spoken only when the
+  // queue itself is empty — otherwise the button would say nothing is
+  // waiting while the popover still lists them.
   const attentionQueue = useAttentionQueue(useAttentionCensus())
-  const waiting = attention.filter((r) => !snoozedPanels.has(r.id)).length + team.length
   const badgeCount = attentionQueue.length
+  const notificationsLabel = badgeCount > 0
+    ? `Notifications: ${needsYouCount(badgeCount)}`
+    : snoozed.length > 0
+      ? `Notifications: ${snoozed.length} snoozed`
+      : team.length > 0
+        ? `Notifications: ${needsYouCount(team.length)}`
+        : 'Notifications: nothing waiting'
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
   const [historyOpen, setHistoryOpen] = useState<string | null>(null)
@@ -507,7 +512,7 @@ function DockImpl({
           className={`dock__button icon-button${attentionOpen ? ' dock__button--on' : ''}`}
           data-dock="attention"
           aria-pressed={attentionOpen}
-          aria-label={waiting === 0 ? (attention.length === 0 ? 'Notifications: nothing waiting' : `Notifications: ${attention.length} snoozed`) : `Notifications: ${needsYouCount(waiting)}`}
+          aria-label={notificationsLabel}
           aria-keyshortcuts="Meta+J"
           title="Notifications: panels that need you (⌘J)"
           {...shellControl(onToggleAttention)}

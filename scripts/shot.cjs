@@ -2089,7 +2089,15 @@ app.whenReady().then(async () => {
       await js(`window.__m56ReducedMotion(true)`)
     },
     loadMain: async () => {
-      writeFixtureLayout()
+      // R-014. One switch, shared with npm run dev. The default fixture
+      // stays the shot scenes' layout. The steward cast has no live/twin
+      // cards, so those clicks would miss and are skipped.
+      if (process.env.TC_FIXTURE === 'rd-steward') {
+        const { writeStewardLayout } = require('./fixtures/rd-steward/load.cjs')
+        writeStewardLayout(layoutPath, REPO, join(__dirname, '..'))
+      } else {
+        writeFixtureLayout()
+      }
       layoutStore.load()
       const first = new Promise((resolve) => wc.once('did-finish-load', resolve))
       wc.reload(); await first
@@ -2097,10 +2105,12 @@ app.whenReady().then(async () => {
       // Wake the live panel and the twin by clicking their cards at the
       // centre: a mousedown with no coordinates hit-tests world (0,0) and
       // misses (verify:panels' own lesson).
-      for (const id of ['live', 'twin']) {
-        await js(`(() => { const card = document.querySelector('.panel[data-panel-id="${id}"] .panel__card'); if (!card) return false
-          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
-        await sleep(400)
+      if (process.env.TC_FIXTURE !== 'rd-steward') {
+        for (const id of ['live', 'twin']) {
+          await js(`(() => { const card = document.querySelector('.panel[data-panel-id="${id}"] .panel__card'); if (!card) return false
+            const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+          await sleep(400)
+        }
       }
       await sleep(2500)
       await js(`window.__m56ReducedMotion(true)`)

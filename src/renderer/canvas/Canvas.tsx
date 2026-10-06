@@ -263,6 +263,9 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
+import { focusLocked } from '@shared/shortcuts'
+import { SessionsHost } from '@renderer/sessions/SessionsHost'
+import { ReviewHost } from '@renderer/review/ReviewHost'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { FocusTask } from '../focus/FocusTask'
 import type { FocusSide } from '../focus/focus-model'
@@ -1591,7 +1594,11 @@ export function Canvas({
     // M283. The Orchestrate page covering the canvas is the same situation at page scale:
     // `focusedId` still names a terminal the user cannot see, and the four edit:* chords
     // are MENU IPC — `inert` on the host stops keydown, never them (orch-page.3).
-    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
+    // D4 (R-008). A focus-locked panel owns the canvas chords. useViewport bails
+    // before preventDefault only when this predicate is true, so ⌘N and ⌘J
+    // reach the terminal. focusLocked() is a module read, so the callback
+    // stays stable and that listener is not torn down on every mousemove.
+    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused() || focusLocked(),
     [palette.isOpen]
   )
 
@@ -8835,6 +8842,7 @@ export function Canvas({
         onJumpWaiting={jumpToWaiting}
         accounts={accounts}
         sharedWorkspace={shared.view !== null}
+        sessionCount={panels.filter((p) => isTerminalPanel(p) || isChatPanel(p)).length}
       />
       <ShareDialog accounts={accounts} workspaces={workspaceRows}
         onOpened={(id) => { void switchWorkspace(id) }} onWorkspacesChanged={reloadWorkspaces} />
@@ -9151,6 +9159,17 @@ export function Canvas({
           </div>
         )
       })()}
+      {/* R-012. Sessions and Review sit in the canvas cell, the same way
+          Orchestrate does. `.shell__page` is absolutely positioned against
+          `.shell`, so the hosts are direct children of it. TopBar used to
+          portal them; that stand-in is gone. */}
+      {(chrome.centerView === 'sessions' || chrome.centerView === 'review') && (
+        <div className="shell__page" data-center-view={chrome.centerView}>
+          {chrome.centerView === 'sessions'
+            ? <SessionsHost onShowOrchestrate={() => setCenterView('orchestration')} />
+            : <ReviewHost />}
+        </div>
+      )}
       <div
         // `panning` is real React state (flips only at drag begin/end, so no
         // 60Hz cost); spaceHeld.isHeld() reads a ref and is therefore

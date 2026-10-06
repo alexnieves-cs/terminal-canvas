@@ -163,9 +163,8 @@ export function useShellChrome(deps: {
           const suppress = bootRef.current
           bootRef.current = false
           // M324. A settings re-read never pulls a person out of a focus view.
-          // Sessions and Review are not in the settings enum yet (L-E). A stored
-          // value of either is dropped by the store, so this branch is live
-          // only after that enum grows. In memory, setCenterView still shows them.
+          // Sessions and Review persist (R-010). Focus and People are not enum
+          // values, so a stored read cannot name them.
           setCenterViewState((cur) => {
             if (cur === 'focus') return cur
             const value = center.value

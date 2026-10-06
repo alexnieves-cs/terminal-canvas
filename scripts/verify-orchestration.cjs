@@ -113,9 +113,9 @@ ok('orch.activity.6 a push replaces the snapshot identity',
 
 // Settings schema pins the centerView enum
 const schema = readFileSync(join(root, 'src/shared/settings-schema.ts'), 'utf8')
-ok('orch.settings.1 shell.centerView enum is canvas | orchestration with default canvas',
+ok('orch.settings.1 shell.centerView enum is canvas | orchestration | sessions | review with default canvas',
   /id:\s*'shell\.centerView'/.test(schema) &&
-  /values:\s*\['canvas',\s*'orchestration'\]/.test(schema) &&
+  /values:\s*\['canvas',\s*'orchestration',\s*'sessions',\s*'review'\]/.test(schema) &&
   /default:\s*'canvas'/.test(schema.split("id: 'shell.centerView'")[1] ?? ''))
 
 const linked = build({

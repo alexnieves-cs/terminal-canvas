@@ -206,6 +206,30 @@ ok('rd-keys.lockmark.1 a locked panel can show a lock mark from the F3 styleshee
   /\.panel\[data-focus-lock\]/.test(f3css) && /data-focus-lock/.test(nav),
   'css + stamp')
 
+const canvasSrc = read('src/renderer/canvas/Canvas.tsx')
+const ignoreAt = canvasSrc.indexOf('const shouldIgnoreKeys = useCallback')
+const ignoreBody = ignoreAt >= 0 ? canvasSrc.slice(ignoreAt, ignoreAt + 1600) : ''
+const paletteSrc = read('src/renderer/palette/usePalette.ts')
+const kAt = paletteSrc.indexOf("event.key !== 'k'")
+const kBody = kAt >= 0 ? paletteSrc.slice(kAt, kAt + 500) : ''
+ok('rd-keys.yield.1 shouldIgnoreKeys and the palette stand down while focus is locked, before ⌘K is swallowed',
+  /focusLocked\(\)/.test(ignoreBody) && /from '@shared\/shortcuts'/.test(canvasSrc) &&
+  /if \(focusLocked\(\)\) return/.test(kBody) &&
+  kBody.indexOf('focusLocked()') < kBody.indexOf('preventDefault'),
+  'canvas predicate and palette branch')
+
+ok('rd-host.mount.1 Canvas mounts Sessions and Review and passes the session count; TopBar does not portal them',
+  /SessionsHost/.test(canvasSrc) && /ReviewHost/.test(canvasSrc) && /sessionCount=/.test(canvasSrc) &&
+  /shell__page/.test(canvasSrc) && !/createPortal/.test(top),
+  'mount sites')
+
+const commands = read('src/renderer/palette/commands.ts')
+const doorAt = commands.indexOf("id: 'canvas.orchestration'")
+const door = doorAt >= 0 ? commands.slice(doorAt, doorAt + 280) : ''
+ok('rd-door.orch.1 the palette row says Show Orchestrate and keeps its id',
+  /title: 'Show Orchestrate'/.test(door) && /data-view-orchestrate/.test(top),
+  door.slice(0, 160))
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1

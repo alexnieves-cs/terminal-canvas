@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { focusLocked } from '@shared/shortcuts'
 import type { PaletteScope } from './palette-model'
 
 /**
@@ -203,6 +204,10 @@ export function usePalette(deps: {
         return
       }
       if (event.key !== 'k' && event.key !== 'K') return
+      // D4 (R-009). While a panel is focus-locked, ⌘K is the terminal's Clear.
+      // Returning before preventDefault lets the key reach xterm. Swallowing
+      // it here would clear nothing and open nothing.
+      if (focusLocked()) return
       event.preventDefault()
       // preventDefault FIRST, then stand down: a held Cmd+K is still ours to
       // swallow even on the repeats we refuse to act on, or the tail of the

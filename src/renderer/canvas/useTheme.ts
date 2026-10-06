@@ -46,11 +46,12 @@ const HIGH_CONTRAST: Record<ResolvedTheme, Record<string, string>> = {
     '--frame-line': '#858c9a',
     '--fg-4': '#aab0bc',
     '--blur': 'none',
-    // M303: the opaque stand-ins follow the graphite ramp (--s-0/--s-1/--s-2/--s-3).
-    '--glass-0': '#0b0d11',
-    '--glass-1': '#161a21',
-    '--glass-2': '#111419',
-    '--glass-3': '#1d222b'
+    // R-003. The opaque stand-ins follow F1's ramp. glass-0 and glass-2 are
+    // both the ink: a high-contrast well is solid, not the old graphite.
+    '--glass-0': '#08090d',
+    '--glass-1': '#11141b',
+    '--glass-2': '#08090d',
+    '--glass-3': '#161a23'
   }
 }
 

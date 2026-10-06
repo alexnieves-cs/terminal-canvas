@@ -1134,10 +1134,20 @@ console.log('\n' + '='.repeat(60))
   const contractsOwned = lanes ? Object.entries(lanes).filter(([, gs]) => gs.includes('src/shared/redesign-contracts.ts')).map(([id]) => id) : []
   const pkgScripts = JSON.parse(read('package.json') || '{}').scripts || {}
   const missingScripts = lanes ? Object.keys(lanes).filter((id) => typeof pkgScripts[`verify:rd-${id.toLowerCase()}`] !== 'string') : ['no lanes']
+  const foundations = [
+    'src/shared/state-palette.ts',
+    'src/shared/attention-queue.ts',
+    'src/shared/world-space.ts',
+    'src/shared/shortcuts.ts',
+    'src/shared/redesign-contracts.ts',
+    'src/renderer/canvas/zoom-tier.ts',
+    'src/renderer/canvas/task-regions.ts'
+  ]
+  const frozenNow = Array.isArray(own.frozen) && foundations.every((p) => own.frozen.includes(p)) &&
+    Array.isArray(own.frozen_after_foundations) && own.frozen_after_foundations.length === 0
   ok('rd-own.1 every redesign lane has markers, a verify script and a disjoint file set within its wave; the contracts file has no lane owner',
-    collisions.length === 0 && missingMarkers.length === 0 && contractsOwned.length === 0 && missingScripts.length === 0 &&
-      Array.isArray(own.frozen_after_foundations) && own.frozen_after_foundations.includes('src/shared/redesign-contracts.ts'),
-    JSON.stringify({ collisions, missingMarkers, contractsOwned, missingScripts }))
+    collisions.length === 0 && missingMarkers.length === 0 && contractsOwned.length === 0 && missingScripts.length === 0 && frozenNow,
+    JSON.stringify({ collisions, missingMarkers, contractsOwned, missingScripts, frozen: own && own.frozen, pending: own && own.frozen_after_foundations }))
 }
 
 // M190 — guide.1. THE GUIDE IS CHECKED AS A FILE, and the check is about the

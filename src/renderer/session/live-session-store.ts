@@ -22,11 +22,21 @@ export interface LiveSession {
 
 const live = new Map<PanelId, LiveSession>()
 const listeners = new Map<PanelId, Set<() => void>>()
+// Canvas-wide. useAttentionQueue cannot subscribe per id in a loop whose
+// length is the census. Fired only from notify(), which apply and clear
+// call after a real cwd or command change.
+const anyListeners = new Set<() => void>()
 
 function notify(panelId: PanelId): void {
   const set = listeners.get(panelId)
-  if (!set) return
-  for (const listener of set) listener()
+  if (set) for (const listener of set) listener()
+  for (const listener of anyListeners) listener()
+}
+
+/** Fires when any panel's cwd or command changes. The return unsubscribes. */
+export function subscribeLiveSessions(listener: () => void): () => void {
+  anyListeners.add(listener)
+  return () => { anyListeners.delete(listener) }
 }
 
 /**
