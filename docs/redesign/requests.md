@@ -472,3 +472,46 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: `world.ctx.door.1` refuses a world file importing `@renderer/canvas/`. `attentionPillLine` and `useAttentionCensus` live there. The flat room quotes the mounted pill's `aria-label` (`[data-pill-state="attention"]`) because the canvas stays mounted under the room. That is the same sentence only while the pill is in the document and in its attention rest. The room's own requests count stays on `WorldChrome`.
 - Smallest change: publish the attention line from a module the world may import, and have the flat room read that. Do not give the world a second queue.
 - Status: done: `d024f9e2`. `attentionPillLine` stays in `command-pill.ts`. The pill publishes that sentence through `src/shared/attention-line.ts`, and `WorldFlat` reads it. The room does not import `@renderer/canvas/`, and it does not keep a second queue. Empty is silence.
+
+### R-090 · The pill publishes the attention queue the room steps
+- Lane: W5
+- File: `src/renderer/canvas/CommandPill.tsx`
+- Why the contract or the owner cannot absorb it: World ⌘J steps `publishFlightQueue` with `attentionStep` (the same rule as `nextAttentionId`). `world.ctx.door.1` forbids a world file importing `@renderer/canvas/`, so the room cannot call `useAttentionQueue` itself. Until the pill writes the queue it already built, a live room's strip is empty and ⌘J does nothing. The shot publishes its own three items.
+- Smallest change: in `CommandPill`, next to `publishAttentionLine`,
+
+```tsx
+useLayoutEffect(() => {
+  publishFlightQueue(queue.map((item) => ({ panelId: item.panelId, kind: item.kind, label: item.sentence })))
+}, [queue])
+```
+
+`publishFlightQueue` is from `src/renderer/world/world-flight.ts`. It does not import three. Do not sort. Do not build a second census.
+- Status: open
+
+### R-091 · The 2D jump and the world jump share one cursor
+- Lane: W5
+- File: `src/renderer/canvas/Canvas.tsx` (`jumpAttentionImplRef`)
+- Why the contract or the owner cannot absorb it: each press uses `attentionStep` / `nextAttentionId`, and `rd-w5.walk.1` pins those two equal. The cursors are still two. While the world is up, `shouldIgnoreKeys` is true because the canvas is covered, so the same press is not handled twice. A jump on the canvas, then a jump in the world, starts the world from a null cursor and picks the first id again.
+- Smallest change: read and write `attentionCursor` / `setAttentionCursor` from `world-flight.ts` inside `jumpAttentionImplRef`, and step with that cursor. Do not edit `attention-queue.ts` or `shortcuts.ts`.
+- Status: open
+
+### R-092 · Name the queue strip in the plain-DOM sentence
+- Lane: W5
+- File: `src/renderer/CLAUDE.md`
+- Why the contract or the owner cannot absorb it: `WorldQueueStrip.tsx` is plain DOM and imports no three. The library table's plain-DOM sentence names `WorldChrome` and `WorldFocusSheet` and does not name the strip. W5 does not own `CLAUDE.md`.
+- Smallest change: name `WorldQueueStrip.tsx` (M453, the queue strip) beside `WorldFocusSheet.tsx` in that sentence.
+- Status: open
+
+### R-093 · The room's ten-minute snooze is not the inbox snooze
+- Lane: W5
+- File: `src/renderer/shell/decision-inbox.ts`, `src/renderer/canvas/Canvas.tsx`
+- Why the contract or the owner cannot absorb it: Snooze 10m on the shell card calls `snoozePanel` in `world-flight.ts`, which hides that id from the world's walk only. The 2D jump still uses `jumpOrder` and the inbox. Ten minutes is not one of `SNOOZE_CHOICES`. Wiring the button to the inbox would edit the inbox and the jump, which this lane does not own.
+- Smallest change: one snooze store the inbox already has, and have `snoozePanel` write that. Leave the world's filter as a reader of it.
+- Status: open
+
+### R-094 · Live Approve has no review discard offer
+- Lane: W5
+- File: `src/renderer/world/useWorldContextPublisher.ts` (not W5's) and the review model
+- Why the contract or the owner cannot absorb it: D9 puts Undo on the toast only when `discardReady` (root, baseline, subject, and at least one path). The sheet's Approve calls `actions.answer` and then `emitApproved` with `discard: null`, because the room does not hold those fields. The live toast is therefore View diff. The shot passes a discard offer so mockup 13's Undo is visible, and `rd-w5.undo.1` pins both arms. Inventing a discard from the question text would offer Undo for a change review discard cannot revert.
+- Smallest change: when the publisher answers an approval, attach that panel's review discard offer if it is ready, and pass it to `emitApproved`. Do not add a hold. Do not call `review.discard` from the world.
+- Status: open

@@ -12877,7 +12877,87 @@ div.world-camera__row { cursor: default; }
 /* ── /rd:W4 ── */
 
 /* ── rd:W5 ── */
-
+/* M453. The queue strip, and the shell card's place. W4's sheet stays
+   top-left at 400px. The shell attribute overrides that place so the
+   terraform card sits lower right, which is where mockup 13 puts it.
+   The toaster's offset lifts the approval toast clear of the strip while
+   the world is up; the toaster's own rule is unchanged for the canvas. */
+.world-queue {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-6);
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--glass-2);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: auto;
+}
+.world-queue__chips { display: flex; align-items: center; gap: var(--sp-2); }
+.world-queue__chip {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--s-0);
+}
+.world-queue__chip[data-tone] { background: var(--tone); border-color: var(--tone); }
+.world-queue__chip svg { width: 10px; height: 10px; }
+.world-queue kbd {
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--fg-3);
+}
+.world-focus[data-world-shell-card] {
+  top: auto;
+  left: auto;
+  right: var(--sp-5);
+  bottom: 72px;
+  width: 360px;
+}
+.world-focus__shell-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-family: var(--font-ui);
+}
+.world-focus__shell-head .world-focus__question { margin: 0; }
+.world-focus__shell-place { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); }
+.world-focus__shell-kind {
+  margin-left: auto;
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.world-focus__shell-prompt { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); }
+.world-focus__shell-command { margin: 0; }
+.world-focus__shell-command code {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  white-space: pre-wrap;
+}
+.world-focus__shell-note { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); }
+body:has([data-world-on]) [data-sonner-toaster] { --offset: 88px; }
+@media (prefers-reduced-motion: reduce) {
+  .world-queue { transition: none; }
+}
 /* ── /rd:W5 ── */
 
 /* ── rd:W6 ── */
