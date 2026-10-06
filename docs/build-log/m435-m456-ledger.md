@@ -773,4 +773,4 @@ Known reds, not this diff: `verify:meta` 51/53 (`panels-split.2` tag `pre-v7-run
 
 Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62eed4`). `rd-canvas` was not moved. `rd/w0-night` was not deleted.
 
-R-038 landed on `redesign/main` after the merge: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
+R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.

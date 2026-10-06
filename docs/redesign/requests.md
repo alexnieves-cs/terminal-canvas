@@ -302,7 +302,7 @@ from: centerViewNow === 'focus'
 - File: `scripts/verify-rd-f1.cjs` (the `if (rel.startsWith('src/renderer/world/')) continue` in `rd-tone.literal.1`)
 - Why the contract or the owner cannot absorb it: W0 does not own `verify-rd-f1.cjs`. `rd-world.parity.1` now fails a literal state hex anywhere under `src/renderer/world/`. The exemption is how a second cyan could return after this lane merges.
 - Smallest change: delete that `continue`. `verify:rd-f1` stays green if `world/` has no state hex. Do not assert the exemption is already gone from W0's suite: it is red until the lead lands this.
-- Status: done: the world continue is gone. `verify:rd-f1` is 7/7, including `rd-tone.literal.1`.
+- Status: done: 2f630a7f. The world continue is gone. `verify:rd-f1` is 7/7, including `rd-tone.literal.1`.
 
 ### R-039 · Night follow-through in WorldOffice
 - Lane: W0
