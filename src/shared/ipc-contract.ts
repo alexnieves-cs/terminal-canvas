@@ -16,6 +16,7 @@ import type { ReviewIdentity } from './review-identity'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult, QueueEditRequest, CorrectionAnswer } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
+import type { HostState } from './exit-explain'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
 import type { FlowchartExportRequest, FlowchartExportResult, FlowchartReadRequest, FlowchartReadResult } from './flowchart-files'
@@ -2196,6 +2197,8 @@ export interface CanvasBridge {
     onSubagents(listener: (update: SubagentUpdate) => void): () => void
     /** What this panel's agent has spent. Fires only on a change. */
     onUsage(listener: (payload: { panelId: PanelId; usage: PanelUsage }) => void): () => void
+    /** R-033. Host loss, from the live tick. Each subscribe returns its unsubscribe. */
+    onHost(listener: (state: HostState) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>

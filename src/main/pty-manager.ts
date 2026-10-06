@@ -35,7 +35,7 @@ import type {
 import { initialDetector, nextState, scanChunk, type AgentEvent, type Detector } from './agent-state'
 import { shellIntegrationFor } from './shell-integration'
 import type { RunLedger } from './run-ledger'
-import type { SessionBackend } from './session-backend'
+import { sendHostReport, type SessionBackend } from './session-backend'
 import { SubagentWatch, type WatchDeps } from './subagent-watch'
 import { isClaudeSession } from './subagent-scan'
 import { isHomeDir } from './home-dir'
@@ -396,6 +396,8 @@ export class PtyManager {
    * real send.
    */
   private lastLive = new Map<PanelId, string>()
+  /** R-033. The last host report sent, so a quiet tick does not repeat it. */
+  private lastHost: string | null = null
   /**
    * Timestamps of every IPC_EVENTS send in the last second, for backlog #75's
    * diagnostics overlay. `send()` is the ONE choke point every push in this
@@ -1221,7 +1223,18 @@ export class PtyManager {
    * CLAUDE.md), not an edge case.
    */
   private pollLive(): void {
-    const entries = this.getBackend().list()
+    const backend = this.getBackend()
+    const entries = backend.list()
+    // R-033. The same list() is the host sample. Send only when the report
+    // changed. No second timer, and the socket stays the one the backend
+    // was constructed with.
+    const report = backend.hostReport()
+    const packed = JSON.stringify(report)
+    if (packed !== this.lastHost) {
+      this.lastHost = packed
+      const target = this.getTarget()
+      if (target && !target.isDestroyed()) sendHostReport(target.send.bind(target), report)
+    }
     // Every live cwd this tick has an answer for, regardless of whether that
     // answer changed — used below as the subagent half's live-cwd source, so
     // that half need not re-derive it from lastLive's packed dedupe string.

@@ -38,6 +38,7 @@ import type {
 import type { CanvasState } from '../shared/layout-schema'
 import type { PanelTextExportRequest } from '../shared/export'
 import type { OrphanRow } from '../shared/orphans'
+import type { HostState } from '../shared/exit-explain'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
 import type { EventRow, TimelineFilter } from '../shared/run-ledger'
@@ -342,7 +343,8 @@ const bridge: CanvasBridge = {
     onRecover: (listener) => subscribe<OrphanRow[]>(IPC_EVENTS.SESSION_RECOVER, listener),
     onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener),
     onUsage: (listener) =>
-      subscribe<{ panelId: PanelId; usage: PanelUsage }>(IPC_EVENTS.USAGE_PANEL, listener)
+      subscribe<{ panelId: PanelId; usage: PanelUsage }>(IPC_EVENTS.USAGE_PANEL, listener),
+    onHost: (listener) => subscribe<HostState>(IPC_EVENTS.SESSION_HOST, listener)
   },
   settings: {
     list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),
