@@ -258,10 +258,13 @@ function Whiteboard({ half }: { half: number }): JSX.Element {
   )
 }
 
-export const WorldProps = memo(function WorldProps({ half }: { half: number }): JSX.Element {
+export const WorldProps = memo(function WorldProps({ half, plan = false }: { half: number; plan?: boolean }): JSX.Element {
+  // A canvas of terraces has no meeting ring for stools to sit around. The
+  // whiteboard stays: it is the plan, at the slab's corner. The stool meshes
+  // remain in this file (`world.studio.3` reads them).
   return (
     <group>
-      <Stools half={half} />
+      {plan ? null : <Stools half={half} />}
       <Whiteboard half={half} />
     </group>
   )

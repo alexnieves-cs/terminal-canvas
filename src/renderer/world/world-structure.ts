@@ -1,5 +1,7 @@
 import type { CapHold } from '@shared/agent-session'
+import type { FloorPoint } from '@shared/redesign-contracts'
 import type { AgentRecord } from '@shared/world-events'
+import { canvasToFloor, FLOOR_SCALE, floorToCanvas } from '@shared/world-space'
 import { isEditTool, openCalls } from './world-activity'
 import { holdLead } from './world-facts'
 import type { WorldHandoff, WorldStep, WorldTask } from './world-context-store'
@@ -162,6 +164,169 @@ export function terraceLine(task: Pick<WorldTask, 'title' | 'steps'> | undefined
   if (task === undefined) return { title: fallback, progress: null }
   const done = task.steps.filter((s) => s.tone === 'done' || /^Verified$|^Finished/.test(s.word)).length
   return { title: task.title, progress: task.steps.length > 0 ? `${done}/${task.steps.length} steps` : null }
+}
+
+/**
+ * A canvas box stood up (M450). The centre is `canvasToFloor` of the box's
+ * centre, and the size is the box divided by the same scale — one conversion,
+ * so a terrace and its region cannot be fitted twice. A desk or a console
+ * uses the panel's centre the same way.
+ */
+export interface CanvasBox {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface FloorTerrace {
+  id: string
+  /** The chip, already the one sentence the terrace sign paints. */
+  label: string
+  center: FloorPoint
+  w: number
+  d: number
+}
+
+export function terraceFloor(box: Pick<CanvasBox, 'x' | 'y' | 'w' | 'h'>): { center: FloorPoint; w: number; d: number } {
+  return {
+    center: canvasToFloor({ x: box.x + box.w / 2, y: box.y + box.h / 2 }),
+    w: box.w / FLOOR_SCALE,
+    d: box.h / FLOOR_SCALE
+  }
+}
+
+export function panelFloor(box: Pick<CanvasBox, 'x' | 'y' | 'w' | 'h'>): FloorPoint {
+  return canvasToFloor({ x: box.x + box.w / 2, y: box.y + box.h / 2 })
+}
+
+/**
+ * The canvas delta of a drag between two floor points. The caller commits it
+ * with `moveRegion` — one plan, one undo — the same verb the 2D region drag
+ * uses. This module does not import that verb: `world.ctx.door.1` keeps
+ * every world file but the publisher out of the canvas.
+ */
+export function terraceDragCanvas(from: FloorPoint, to: FloorPoint): { dx: number; dy: number } {
+  const a = floorToCanvas(from)
+  const b = floorToCanvas(to)
+  return { dx: b.x - a.x, dy: b.y - a.y }
+}
+
+/**
+ * The sign the mockup paints: title, ticket, then criteria as `done/total`.
+ * The 2D chip (`regionLabel`) says "2 of 4 criteria" and an agent count;
+ * the terrace drops the zero-value count and keeps the fraction. A chip
+ * with no criteria is the title and the ticket.
+ */
+export function terraceSignFromChip(chip: string): string {
+  const parts = chip.split(' · ').map((part) => part.trim()).filter((part) => part !== '')
+  const title = parts[0] ?? chip
+  const ticket = parts.find((part) => /^[A-Z]+-\d+$/.test(part))
+  const criteria = parts.map((part) => /^(\d+) of (\d+) criteria$/.exec(part)).find((match) => match !== null)
+  const out = [title]
+  if (ticket !== undefined) out.push(ticket)
+  if (criteria != null) out.push(`${criteria[1]}/${criteria[2]}`)
+  return out.join(' · ')
+}
+
+export interface FloorFrame {
+  center: FloorPoint
+  /** Half the longer side, plus a lip, so the slab holds every terrace. */
+  half: number
+}
+
+export function frameOf(terraces: readonly Pick<FloorTerrace, 'center' | 'w' | 'd'>[]): FloorFrame | null {
+  if (terraces.length === 0) return null
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const terrace of terraces) {
+    minX = Math.min(minX, terrace.center.x - terrace.w / 2)
+    maxX = Math.max(maxX, terrace.center.x + terrace.w / 2)
+    minZ = Math.min(minZ, terrace.center.z - terrace.d / 2)
+    maxZ = Math.max(maxZ, terrace.center.z + terrace.d / 2)
+  }
+  return {
+    center: { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 },
+    half: Math.max(maxX - minX, maxZ - minZ) / 2 + 1.6
+  }
+}
+
+/** A placed box whose inline style is canvas pixels (`left` / `top` / `width` / `height`). */
+export function boxFromStyle(id: string, left: string, top: string, width: string, height: string): CanvasBox | null {
+  const x = Number.parseFloat(left)
+  const y = Number.parseFloat(top)
+  const w = Number.parseFloat(width)
+  const h = Number.parseFloat(height)
+  if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null
+  return { id, x, y, w, h }
+}
+
+const STAND_BEHIND = 0.85
+
+/**
+ * Desks and homes move onto the panel's floor point. A station with no desk
+ * (the conductor) stays at its seat. Facing is toward the desk from the
+ * camera's side (+z): the robot stands just this side of the panel.
+ */
+export function placeStations<T extends Station>(stations: ReadonlyMap<string, T>, panels: readonly CanvasBox[]): Map<string, T> {
+  if (panels.length === 0) return new Map(stations)
+  const byId = new Map(panels.map((panel) => [panel.id, panel]))
+  const out = new Map<string, T>()
+  for (const [id, station] of stations) {
+    const box = byId.get(id)
+    if (box === undefined || station.desk === undefined) {
+      out.set(id, station)
+      continue
+    }
+    const at = panelFloor(box)
+    out.set(id, {
+      ...station,
+      desk: { x: at.x, z: at.z, facing: 0 },
+      home: { x: at.x, z: at.z + STAND_BEHIND, facing: Math.PI }
+    })
+  }
+  return out
+}
+
+/** Panels the roster did not take a desk for: plain shells, drawn as consoles. */
+export function consoleBoxes(panels: readonly CanvasBox[], deskIds: ReadonlySet<string>): CanvasBox[] {
+  return panels.filter((panel) => !deskIds.has(panel.id))
+}
+
+/**
+ * The ask chip. Only a waiting agent wears one; the words are its latest
+ * message (the fixture's "wants to edit ledger.ts"), else a short ask.
+ */
+export function askChip(record: Pick<AgentRecord, 'status' | 'events'>): string | null {
+  if (record.status !== 'waiting_approval') return null
+  for (let i = record.events.length - 1; i >= 0; i--) {
+    const event = record.events[i]!
+    if (event.type === 'message') {
+      const text = event.payload.text.trim()
+      if (text !== '') return text
+    }
+  }
+  return 'Waiting on you'
+}
+
+/**
+ * The failed pill. The feed's own words ("exited 1"), not a hardcoded lint
+ * sentence. Absent unless the agent has stopped.
+ */
+export function failedLine(record: Pick<AgentRecord, 'status' | 'events'>): string | null {
+  if (record.status !== 'error') return null
+  for (let i = record.events.length - 1; i >= 0; i--) {
+    const event = record.events[i]!
+    if (event.type === 'message') {
+      const text = event.payload.text.trim()
+      if (text !== '') return text
+    }
+    if (event.type === 'error' && event.payload.message.trim() !== '') return event.payload.message.trim()
+  }
+  return 'Exited'
 }
 
 /** Which task each agent sits with: the first task (in the board's order) that lists it. */

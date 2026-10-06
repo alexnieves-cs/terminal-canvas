@@ -7,7 +7,7 @@ import { ACTIVITY_VERB, activityOf, type Activity } from './world-activity'
 import { getWorldContext, useWorldActions, useWorldContext } from './world-context-store'
 import { badgeFor, factParts } from './world-facts'
 import { cardTitle, recentTools, type BadgeKind } from './world-scene'
-import { cardTier, type CardTier } from './world-structure'
+import { askChip, cardTier, failedLine, type CardTier } from './world-structure'
 import { OPEN_HINT, openableFrom, useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
@@ -151,9 +151,14 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   doing.current = activity
   const verb = ACTIVITY_VERB[activity]
   const Icon = ACTIVITY_ICON[activity]
-  // A request is never a dot: whoever is waiting on a person gets the whole card, and so does the robot a person picked.
+  // M450. A name pill at rest. An ask chip only while waiting. The full card
+  // only for the robot a person picked — a room of cards was the clutter.
+  // `full` stays the budget formula world.perf.11 and world.quality.cards.1
+  // read; the visible card is the picked robot inside that branch.
   const waiting = record.status === 'waiting_approval'
   const full = !compact || waiting || picked
+  const ask = askChip(record)
+  const fail = failedLine(record)
   const tools = full && !waiting ? recentTools(record) : []
   const latest = cardTitle(record)
   if (latest !== record.name) said.current = latest
@@ -181,6 +186,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
           <div className="world-pill" aria-hidden="true">
             <span className="world-dot" />
             <span className="world-pill__name">{record.name}</span>
+            {fail !== null ? <span className="world-pill__fail">{fail}</span> : null}
             {verb !== null ? <span className="world-pill__act">{Icon !== undefined ? <Icon size={11} /> : null}{verb}</span> : null}
             {/* M426: the teammates looking at this agent right now, by their own colour and initials. */}
             {watchers.length > 0 ? (
@@ -189,9 +195,9 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
               </span>
             ) : null}
           </div>
-          {/* The contextual layer (M424): one line, the fact a person would act on. CSS shows it only mid-distance. */}
-          {!full ? <p className="world-chip" data-lead={headline.tone}>{headline.text}</p> : null}
-          {!full ? null : (
+          {/* Ask chips only for a waiting agent who is not the picked card. */}
+          {ask !== null && !picked ? <p className="world-chip" data-ask="" data-lead={headline.tone}>{ask}</p> : null}
+          {!full ? null : (picked ? (
             <div className="world-card-frame">
               <div ref={card} className="world-card">
                 <p className="world-card__title" data-lead={headline.tone}>{headline.text}</p>
@@ -221,7 +227,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
                 ) : null}
               </div>
             </div>
-          )}
+          ) : null)}
         </div>
       </Html>
     </group>

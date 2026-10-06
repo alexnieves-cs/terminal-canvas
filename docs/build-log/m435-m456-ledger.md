@@ -776,3 +776,35 @@ Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62
 R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
 
 The shot loop is recorded on R-040, after the tag, and the tag was not moved. The setter is `setResumeSummary` (`Canvas.tsx` resume effect), not `useSyncExternalStore`. The same `records ?? []` and the same effect are on `rd-canvas` (`5cf60839`). Opening the world is what turned the spin into #185.
+
+## M450 · W2 the room
+
+Branch `rd/w2-room` from `redesign/main` at `38644eed` (R-040's resume-loop note is on that commit). W1 and W3 are in parallel. This lane does not edit them. New requests are R-050 through R-052 only.
+
+### Plan
+
+Five terraces at the canvas regions. `terraceFloor` is `canvasToFloor` of the region centre, and the size is the box divided by `FLOOR_SCALE`. `panelFloor` is the same conversion for a panel: a desk when the roster has that agent, a console when it does not. `placeStations` moves the desk and the home onto that point; `stationPlan` and `goalOf` stay the ring, so `world.zone.1`–`4` stay green. The scene group subtracts the frame centre, so the frozen orbit, the lights and `TransitionRig` still look at the origin. Terrace math is `canvasToFloor` before that shift.
+
+`terraceDragCanvas` is the canvas delta of two floor points. `moveRegion` is the commit, one plan, one undo. The world does not import it (`world.ctx.door.1`). The check calls both. The scene reads the live region and panel boxes once, at open. The drag itself is R-051.
+
+State. Working and thinking breathe on the eyes, the halo and the floor ring. A waiting agent raises `NeedsBeacon`, a vertical column in `stateHexForAgent('waiting_approval')`, and no other status does. The failed pill is `failedLine` (the feed's own words). The ask chip is `askChip`, only while waiting. The visible card is the picked robot. The budget formula `const full = !compact || waiting || picked` stays, because `world.perf.11` and `world.quality.cards.1` read that line; the card branch is `picked` inside it.
+
+Shared chrome. `WorldChrome` keeps its ask pill, legend, Fit room, request count and room map in the DOM (`world.chrome.1`, `world.request.2`, `world.map.2`). The W2 span clips them. The canvas host, which was opacity 0, is raised transparent (`z-index: 3`, pointer events none) and `.command-pill`, `.minimap` and `.canvas-hud` take the pointer. Those are the 2D components, revealed, not reimplemented. The title bar was already outside the canvas. The camera wedge is R-050. Follow on the tier switch is R-052. Empty mounts: `data-rd-mount="W1"` and `"W3"`, marked `rd:W1 mount` and `rd:W3 mount`.
+
+R-039. The desk screen emissive is `stateHexForAgent(status)`. `MeetingTable` returns an empty group (`drawTable` is false). The plate stays in the function so W0's suite, which this lane does not own, still sees it. `agentTint` is still read and does not paint the screen.
+
+### PLAN CHECK
+
+- [x] Two empty marked mount blocks for W1 and W3 in `WorldView.tsx` (`rd:W1 mount`, `rd:W3 mount`, `data-rd-mount`).
+- [x] `rd-world.layout.1` and `rd-world.chrome.1` are in `scripts/verify-rd-w2.cjs`. `rd-w2.0` stays.
+- [x] No literal state hex in the new world code. Screens, the beacon, the fail pill and the ask chip read `stateHexForAgent` or `var(--state-failed)` / `var(--state-needs)`. `rd-world.parity.1` is clean.
+
+`rd-world.layout.1` fails closed: the suite's esbuild imports `terraceFloor`, and a missing export does not resolve. `rd-world.chrome.1` fails if the W2 span does not name `.command-pill`, `.minimap` and `.canvas-hud`.
+
+### CSS override
+
+Inside `/* ── rd:W2 ── */` only. Later than `.canvas--behind-world { opacity: 0 }`, so the host paints. `.world`, `.canvas__aura` and `.edge-indicators` are `visibility: hidden` (inline `left` / `top` stay readable). The room's own ask, legend, tools, requests, room map and replay column are clipped, not deleted. An ask chip shows at any distance: `.world-tag .world-chip[data-ask]` follows the tier rule that hides every chip except up close.
+
+### Gates
+
+Filled after the shot. Typecheck passed (web and node). `verify:rd-w2` 4/4. `verify:world` 251/251.

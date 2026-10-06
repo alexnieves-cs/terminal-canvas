@@ -217,6 +217,17 @@ export function viewDistance(arcRadius: number): number {
   return slabHalf(arcRadius) * 2.75
 }
 
+/**
+ * An arc whose opening pose frames a floor of this half-extent (M450). The
+ * ring's own radius is the floor: a canvas of terraces is wider than the
+ * meeting ring, and the same `isoPose` has to hold all of them.
+ */
+export function arcFraming(half: number): number {
+  const pad = slabHalf(0)
+  const distance = Math.max(viewDistance(DESK_ARC.radius), half * 4.2)
+  return Math.max(DESK_ARC.radius, distance / 2.75 - pad)
+}
+
 export function isoPose(arcRadius: number, target: Vec3 = ORBIT_TARGET): Vec3 {
   const d = viewDistance(arcRadius)
   const s = Math.sin(VIEW.polar)

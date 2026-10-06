@@ -9,7 +9,7 @@ import { WorldOffice } from './WorldOffice'
 import { WorldRobot } from './WorldRobot'
 import { WorldStructure } from './WorldStructure'
 import { useWorldContext } from './world-context-store'
-import { taskOfAgent } from './world-structure'
+import { boxFromStyle, consoleBoxes, frameOf, placeStations, taskOfAgent, terraceFloor, terraceSignFromChip, type CanvasBox, type FloorTerrace } from './world-structure'
 import { NIGHT } from './world-palette'
 import { cardTiers, clampDpr, statsOn, type CardCandidate } from './world-perf'
 import { bloomRenders, createQualityGovernor, getWorldQuality, pinWorldQuality, qualityPlan, readQualityPin, sessionDpr, sessionQuality, SETTLE_WINDOWS, stepSessionDpr, stepWorldQuality, useBloomRendered, useWorldQuality, worldDpr, type QualityGovernor as Governor } from './world-quality'
@@ -17,7 +17,7 @@ import { getAgent, getAgentIds } from './agent-world-store'
 import { hasArrival, selectAgent, selectedAgent, takeArrival } from './world-select'
 import { useRoster, useWaiting } from './world-roster'
 import { goalOf, stationPlan, type RosterEntry, type Station } from './world-scene'
-import { dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
+import { arcFraming, dollyBy, focusPose, glide, isoPose, ORBIT_TARGET, slabHalf, VIEW, ZOOM_STEP, type CameraApi } from './world-set'
 import { dollyAt, LEAVE_MS, popDelays, settleLeavers, type Leaver, type Vec3, type WorldTransition } from './world-transition'
 
 /**
@@ -572,6 +572,32 @@ function heldRoster(roster: readonly RosterEntry[], leaving: ReadonlyMap<string,
   return getAgentIds().filter((id) => byId.has(id)).map((id) => byId.get(id)!)
 }
 
+/**
+ * The canvas is still mounted under the room. Its regions and panels are the
+ * layout: read their inline canvas pixels once, at open. A later drag is
+ * R-051 — this lane cannot import `moveRegion` (`world.ctx.door.1`).
+ */
+function readCanvasPlacement(): { panels: CanvasBox[]; floors: FloorTerrace[]; frame: ReturnType<typeof frameOf> } {
+  if (typeof document === 'undefined') return { panels: [], floors: [], frame: null }
+  const panels: CanvasBox[] = []
+  for (const el of document.querySelectorAll<HTMLElement>('.panel[data-panel-id]')) {
+    const id = el.getAttribute('data-panel-id')
+    if (id === null) continue
+    const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
+    if (box !== null) panels.push(box)
+  }
+  const floors: FloorTerrace[] = []
+  for (const el of document.querySelectorAll<HTMLElement>('[data-task-region]')) {
+    const id = el.getAttribute('data-task-region')
+    if (id === null) continue
+    const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
+    if (box === null) continue
+    const floor = terraceFloor(box)
+    floors.push({ id, label: terraceSignFromChip(el.querySelector('.task-region__chip')?.textContent ?? id), center: floor.center, w: floor.w, d: floor.d })
+  }
+  return { panels, floors, frame: frameOf(floors) }
+}
+
 export function WorldView({ transition, reduced, onLost }: { transition: WorldTransition; reduced: boolean; onLost: () => void }): JSX.Element {
   const roster = useRoster()
   const waiting = useWaiting()
@@ -604,12 +630,22 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   const groups = useMemo(() => taskOfAgent(ctx.tasks), [ctx.tasks])
   const groupKey = useMemo(() => held.map((a) => `${a.agentId}=${groups.get(a.agentId) ?? ''}`).join(','), [held, groups])
   const plan = useMemo(() => stationPlan(held, (id) => groups.get(id) ?? null), [held, groupKey])
+  // M450. The canvas boxes, once. Empty when the 2D layer has not painted
+  // regions — the ring room is unchanged then.
+  const [placement] = useState(readCanvasPlacement)
+  const placed = useMemo(() => placeStations(plan.stations, placement.panels), [plan, placement])
   // Every station in the room, the leaving included: ONE array, because React
   // scopes keys to an array and a robot moved between two would be a remount.
-  const stations = useMemo(() => [...plan.stations.values()], [plan])
+  const stations = useMemo(() => [...placed.values()], [placed])
+  const consoles = useMemo(() => consoleBoxes(placement.panels, new Set(placed.keys())), [placement, placed])
+  const framingArc = placement.frame === null ? null : arcFraming(placement.frame.half)
+  // The orbit looks at the origin. Shift the stood-up canvas so its centre
+  // lands there; terrace math stays canvasToFloor before the shift.
+  const shift = placement.frame === null ? null : ([-placement.frame.center.x, 0, -placement.frame.center.z] as const)
+  const anchor = placement.frame === null || framingArc === null ? null : { x: placement.frame.center.x, z: placement.frame.center.z, arc: framingArc }
   // The camera's focus reads the room as it is at the press (M425's tour).
-  const stationsRef = useRef<ReadonlyMap<string, Station>>(plan.stations)
-  stationsRef.current = plan.stations
+  const stationsRef = useRef<ReadonlyMap<string, Station>>(placed)
+  stationsRef.current = placed
   const leftAt = useMemo(() => new Map([...leavers].map(([id, l]) => [id, l.at])), [leavers])
   // The card ranking is for the live: a leaver keeps the card it had (WorldRobot) and takes no one's.
   const live = useMemo(() => stations.filter((station) => !leftAt.has(station.agentId)), [stations, leftAt])
@@ -632,33 +668,35 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
   // The overlay's "Fit room" and zoom buttons call this; TransitionRig fills it in.
   const camera = useRef<CameraApi | null>(null)
   // Framed for the room as it is when the view opens; "Fit room" re-frames it for the room as it is then.
-  const start = useMemo((): Vec3 => isoPose(plan.arcRadius), [])
+  const start = useMemo((): Vec3 => isoPose(framingArc ?? plan.arcRadius), [])
   // The ground is unlit, and the bloom's tone map would darken it; paint the value that comes out right.
   const ground = useMemo(() => {
     const c = new THREE.Color(NIGHT.ground)
     return bloom ? c.setRGB(...acesPreimage([c.r, c.g, c.b])) : c
   }, [bloom])
-  const half = slabHalf(plan.arcRadius)
-  const limit = half - 2
+  const half = slabHalf(framingArc ?? plan.arcRadius)
+  const limit = Math.max(half - 2, shift === null ? 0 : Math.hypot(placement.frame?.center.x ?? 0, placement.frame?.center.z ?? 0) + 4)
 
   return (
     <div className="world-view" data-world-view data-quality={quality}>
       <Canvas
         shadows="percentage"
         dpr={dpr}
-        camera={{ position: [start.x, start.y, start.z], fov: VIEW.fov, near: 0.1, far: 220 }}
+        camera={{ position: [start.x, start.y, start.z], fov: VIEW.fov, near: 0.1, far: 480 }}
         // A click on empty floor lets the picked robot go (an orbit's release is not a click: fiber measures the drag).
         onPointerMissed={(event) => { if (event.type === 'click') selectAgent(null) }}
         gl={{ antialias: true, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <color attach="background" args={[ground]} />
         <Lights extent={half + 3} shadowMap={tierPlan.shadowMap} />
-        <WorldOffice stations={stations} leftAt={leftAt} arcRadius={plan.arcRadius} reduced={reduced} waiting={waiting.length} />
-        <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} />
-        {stations.map((station) => (
-          <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
-        ))}
-        <Controls controls={controls} limit={limit} maxDistance={Math.max(40, half * 4)} />
+        <group position={shift ?? [0, 0, 0]}>
+          <WorldOffice stations={stations} leftAt={leftAt} arcRadius={anchor?.arc ?? plan.arcRadius} reduced={reduced} waiting={waiting.length} anchor={anchor} consoles={consoles} />
+          <WorldStructure stations={stations} zones={plan.zones} arcRadius={plan.arcRadius} reduced={reduced} floors={placement.floors} />
+          {stations.map((station) => (
+            <WorldRobot key={station.agentId} agentId={station.agentId} station={station} cards={cards} transition={transition} delay={delays.get(station.agentId) ?? 0} compact={leftAt.has(station.agentId) || (full !== null && !full.has(station.agentId))} reduced={reduced} leftAt={leftAt.get(station.agentId) ?? null} />
+          ))}
+        </group>
+        <Controls controls={controls} limit={limit} maxDistance={Math.max(80, half * 6)} />
         <TransitionRig transition={transition} start={start} controls={controls} api={camera} arcRadius={plan.arcRadius} reduced={reduced} stations={stationsRef} />
         {bloom && <WorldBloom />}
         <StatsProbe target={stats} />
@@ -668,6 +706,10 @@ export function WorldView({ transition, reduced, onLost }: { transition: WorldTr
       </Canvas>
       <div className="world-view__cards" ref={cards} />
       <WorldChrome camera={camera} />
+      {/* rd:W1 mount. WorldLens fills this after W1 merges. Props kept stable: onPick ('canvas' | 'world'), chord. */}
+      <div data-rd-mount="W1" hidden />
+      {/* rd:W3 mount. useWorldCamera, the camera panel, the away card and peers. Props kept stable: camera, tier, following, onFollow. */}
+      <div data-rd-mount="W3" hidden />
       <div className="world-view__stats" ref={stats} aria-hidden="true" data-on={statsShown ? '' : undefined} />
     </div>
   )

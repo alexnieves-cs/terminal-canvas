@@ -309,7 +309,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/world/WorldOffice.tsx`
 - Why the contract or the owner cannot absorb it: W0 does not own WorldOffice. The desk screen's emissive is still `agentTint` (identity), not state. `MeetingTable` is still mounted. Robots no longer walk there (`WorldRobot` stands at `here.home ?? here.seat`).
 - Smallest change: screen emissive from `stateHexForAgent(status)` (exported from `world-palette.ts`). Do not mount `MeetingTable`. The plan whiteboard in WorldProps stays. A conductor still has only a table seat until a later lane gives them a desk.
-- Status: open
+- Status: done: M450 on `rd/w2-room`. The desk screen's emissive is `stateHexForAgent(status)`. `MeetingTable` still has its call site (`world.request.2`, `world.studio.4`, `world.lod.3` read this file and W2 does not own that suite): `drawTable` is false, so it returns an empty group and the plate is not drawn. `agentTint` is still read beside the screen (`world.critic.shell.1`) and does not paint it.
 
 ### R-040 · Unread worktree list must stay one array
 - Lane: W0
@@ -318,3 +318,24 @@ from: centerViewNow === 'focus'
 - Smallest change: a module-level empty list, used only as the memo key. `records === null` still means the list has not been read.
 - Status: done: 6dd3cad6. The lead landed it on `rd/w0-night` before the night shot, because the room cannot open while the loop runs.
 - Finding (filed after the merge; no probe was committed): the looping setter is `setResumeSummary` in `src/renderer/canvas/Canvas.tsx`, the resume effect that calls `buildResumeSummary` (line 4281 on `redesign/main` and on `rd-canvas`). It is `useState`. `useSyncExternalStore` snapshots stayed the same object through the storm. Radix menu `setTextContent` fired thousands of times because the parent re-rendered, not because a menu store changed. The driver is `useTaskHandoffs`: while `records` is `null`, `records ?? []` was a new array every render, so the `lanes` memo rebuilt `built`, returned as `handoffsVersion`. The resume effect depends on that object and, when a subject has `createdAt < APP_OPENED_AT`, calls `setResumeSummary` with a new object. Viewport, panel count, registry version, and the world toggle were unchanged. It reproduces on `rd-canvas` (`5cf60839`) without W0: `useTaskHandoffs.ts:120` is `const worktreeRows = records ?? []`, and `Canvas.tsx:4268–4281` is the same effect. W0 did not add the loop. Opening the world only made the passive loop throw React's maximum update depth (#185) and unmount the tree; with the world closed the canvas spins and does not throw. Reproduce: load a workspace with a resume subject created before the window opened (the steward fixture does), and leave `records` null (no item names a worktree, so `worktree.list` is never called, or the invoke has not returned). The canvas re-renders continuously. Click `.shell__world-toggle` and the view throws #185. Dismiss Resume (`.resume-banner__dismiss`) and the effect calls `setResumeSummary(null)`, which React bails on once it is already null, so the setState stops even while `handoffsVersion` is still a new object. The fix is the module-level `NO_WORKTREES` constant; `records === null` still means unread.
+
+### R-050 · The 2D minimap needs the world's camera wedge
+- Lane: W2
+- File: `src/renderer/canvas/MinimapOverlay.tsx` (L-C)
+- Why the contract or the owner cannot absorb it: screen 11's minimap draws a camera wedge. `MinimapOverlay` paints the view rectangle and has no wedge. W2 does not own that file, and `world.ctx.door.1` forbids a world file from importing it. The room reveals the canvas minimap that is already mounted (`.canvas--behind-world > .minimap`). W3's brief says the same: do not edit `MinimapOverlay.tsx`; file a request if it needs a wedge.
+- Smallest change: draw a wedge from the world's camera through the same projection the view rectangle already uses. A prop is enough; the overlay must not import `three`.
+- Status: open
+
+### R-051 · A terrace drag commits `moveRegion`, one undo
+- Lane: W2
+- File: `src/renderer/canvas/Canvas.tsx` (W1 this wave) or `src/renderer/world/useWorldContextPublisher.ts` (unowned)
+- Why the contract or the owner cannot absorb it: `rd-world.layout.1` proves `terraceDragCanvas` then `moveRegion` is one plan and the same delta the 2D region drag uses. The world cannot import `moveRegion` (`world.ctx.door.1`: only the publisher may import canvas). The 3D scene reads region boxes once, at open, and does not drag them.
+- Smallest change: the publisher (or Canvas) registers a mover. A terrace drag calls `moveRegion` once, one undo entry, and the 2D canvas shows the move. Do not add a second copy of the verb under `world/`.
+- Status: open
+
+### R-052 · Follow on the shared tier switch
+- Lane: W2
+- File: `src/renderer/canvas/CanvasHud.tsx` (L-C)
+- Why the contract or the owner cannot absorb it: screen 11's bottom-left control is Work / Plan / Map plus Follow. `CanvasHud` paints Work, Plan and Map (`data-hud-tier`) and has no Follow. W2 reveals that HUD and cannot import it. Follow's behaviour is W3's (`world-camera.ts`), which does not own `CanvasHud.tsx`.
+- Smallest change: a Follow control beside the three tiers, calling a callback the world registers. Absent callback, the control is not painted, so the 2D canvas is unchanged.
+- Status: open

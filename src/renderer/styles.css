@@ -12459,7 +12459,55 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 /* ── /rd:W1 ── */
 
 /* ── rd:W2 ── */
-
+/* The world is a lens inside Canvas. The shared pill, the 2D minimap and the
+   Work / Plan / Map switch live in the canvas host, which is opacity 0 while
+   the room is up — a child cannot paint through that. Raise the host, keep
+   it transparent, hide the panel layer, and let the pointer fall through to
+   the room except on that chrome. The room's own ask pill, legend, fit
+   controls and room-map stay in the DOM (verify:world reads them) and are
+   clipped out of sight. */
+.canvas--behind-world {
+  opacity: 1;
+  z-index: 3;
+  pointer-events: none;
+  background: transparent;
+}
+.canvas--behind-world > .world,
+.canvas--behind-world > .canvas__aura,
+.canvas--behind-world > .edge-indicators {
+  visibility: hidden;
+}
+.canvas--behind-world > .command-pill,
+.canvas--behind-world > .minimap,
+.canvas--behind-world > .canvas-hud {
+  pointer-events: auto;
+}
+.world-chrome .world-ask,
+.world-chrome .world-legend,
+.world-chrome .world-tools,
+.world-chrome .world-requests,
+.world-chrome .world-minimap,
+.world-chrome .world-time-col {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.world-pill__fail {
+  color: var(--state-failed);
+  font-size: var(--t-xs);
+}
+/* An ask is contextual at any distance: the tier rule hides every chip
+   except up close, and a waiting agent's ask is the one line the room shows. */
+.world-tag .world-chip[data-ask] {
+  display: block;
+  color: var(--state-needs);
+}
 /* ── /rd:W2 ── */
 
 /* ── rd:W3 ── */
