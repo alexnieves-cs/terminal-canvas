@@ -913,6 +913,6 @@ World guard: no blockers. `plan-floor.ts`, `WorldLens.tsx`, `world-transition.ts
 
 ### Merge
 
-Merged to `redesign/main` after W2. `rd/w1-transition` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W1`.
+Merged to `redesign/main` as `aa0b55a5` (`--no-ff`) after W2. The mount is `2a24f561`. `rd/w1-transition` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W1`.
 
 The lead then mounted the curves in `WorldView`: `popDelaysFromTarget` from the camera target, `motionOf().dolly` into `dollyAt`, `motionOf().terrace` as the scale of the office and the terraces, `setWorldCameraTarget` from the orbit each frame, and `paintPlanFloor` on a ground under the terraces. `WorldLens` stays the canvas control. The top-bar World view button is gone (R-042). `world.stage.4` names the 120ms cross-fade (R-041). R-044 stays open until the swiftshader shot. W3 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w3-overview`.
