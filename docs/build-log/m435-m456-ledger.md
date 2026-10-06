@@ -488,7 +488,7 @@ Two reds from the first affected run were this lane and are fixed: `verify:style
 
 ## L-F · M447
 
-Branch `rd/l-f-recovery` off tag `rd-wave2a` (`877c71c2`, redesign/main at the wave 2a merge). Lane `RD_LANE=L-F`. R-006 is already done: `subscribeLiveSessions` fires from `notify()` and `useAttentionQueue` subscribes. It is not reopened. R-023 is done on this branch (commit recorded below, after the hash exists).
+Branch `rd/l-f-recovery` off tag `rd-wave2a` (`877c71c2`, redesign/main at the wave 2a merge). Lane `RD_LANE=L-F`. R-006 is already done: `subscribeLiveSessions` fires from `notify()` and `useAttentionQueue` subscribes. It is not reopened. R-023 is done in `5fe2abdf`: issue lines on `ReopenNotice` carry `data-boot-issue`, and `bootIssueSentence` is that sentence.
 
 ### Plan
 

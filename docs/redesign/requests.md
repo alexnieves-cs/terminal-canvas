@@ -198,7 +198,7 @@ from: centerViewNow === 'focus'
 - File: L-F's 09 states (M447)
 - Why the contract or the owner cannot absorb it: the 09 screen is L-F. The splash already stops on a failed step and calls `noteBootIssue` through `noteRestoreFailure`. `shell/ReopenNotice.tsx` already reads that list. An error card inside the splash would be a second 09.
 - Smallest change: the 09 surface shows the boot-issue sentence when restore failed. Do not invent another error card in L-A.
-- Status: done: `ReopenNotice` marks a reopen line whose group is `issue` with `data-boot-issue`, and that line is already `bootIssues()` via `reopenLines`. `bootIssueSentence` is the same sentence on the recovery view. The commit hash is recorded in the L-F ledger section.
+- Status: done: `5fe2abdf`. `ReopenNotice` marks a reopen line whose group is `issue` with `data-boot-issue`, and that line is already `bootIssues()` via `reopenLines`. `bootIssueSentence` is the same sentence on the recovery view.
 
 ### R-024 · Empty-canvas double-click still places a process step
 - Lane: L-A
