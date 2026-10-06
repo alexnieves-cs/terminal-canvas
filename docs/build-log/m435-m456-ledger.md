@@ -1412,3 +1412,55 @@ Still open: R-044 and R-053 (WebGL does not present on this host), R-052 (Follow
 `orch-timeline.6` names `ChatConversation.tsx` as an importer of the one history door. That is the opt-in permission row. A chat answer that does not pass the history argument still files nothing.
 
 Gates on this branch: typecheck passed. `verify:world` 251/251. `verify:rd-l-a` through `verify:rd-l-f`, `verify:rd-w0` through `verify:rd-w6`, `verify:rd-f1` through `verify:rd-f3`, `verify:toast`, `verify:styles` and `verify:verbs` passed. `npm run build` passed. The plain wave was 65/67. `verify:meta` `panels-split.2` and `visual.1`, and `verify:first-run` `revamp.create.1`, are the known reds. `verify:tmux` passed after `npm rebuild node-pty`. `kill.1` and `merge.1` did not fail.
+
+## Phase 4 · integration (Linux)
+
+Lead pass on `db186caf`. No `UPDATE_GOLDENS`. No DMG. No tag. Draft notes: [docs/release-notes/6.0.0.md](../release-notes/6.0.0.md). Fix list: [docs/redesign/fix-list.md](../redesign/fix-list.md).
+
+### Clean clone
+
+`/tmp/tc-rd-clean` at `db186caf`. `npm ci`, `electron-rebuild` for `node-pty`, `node node_modules/electron/install.js` (the package does not download the binary on its own), typecheck, build. Plain wave of `npm run verify` twice (`/tmp/rd-v1.log`, `/tmp/rd-v2.log`). Both: 65/67 in about 31s, stopped after wave 1. The only check-level FAILs, in both runs: `panels-split.2`, `visual.1` (declared 97, goldens 79, missing names start at `rd-splash`), `revamp.create.1`. No `kill.1`, `merge.1`, canvas-sync, relay, or flowchart failure. The Electron tier was not entered: those scripts still point at `Electron.app`.
+
+### Shots
+
+Eighteen `rd-*` scenes have `run`. Shot under xvfb with `node_modules/electron/dist/electron --no-sandbox --ignore-gpu-blocklist --enable-unsafe-swiftshader`. This VM's hostname is `cursor`, which the harness treats as a private word, so `rd-settings-keys` and `rd-recovery` failed until the hostname was `tc-shot`. `rd-plan-palette`, `rd-map`, and `rd-sessions` need `TC_FIXTURE=rd-steward`. Composites written for all eighteen. No `run`, so not shot: `rd-f1-tones`, `rd-steward-work`, `rd-steward-plan`, `rd-steward-world`, `rd-f3-titlebar`, `rd-f3-pill`.
+
+### Critic
+
+Judged the capture, not the composite's reference half. Material checked by center luminance, because a first description pass swapped light and dark. WebGL stays R-053.
+
+| Scene | Mockup | Verdict | Top divergence |
+|---|---|---|---|
+| `rd-splash` | 01 | close | Checklist and tagline read. The ghosted canvas behind the card is faint. |
+| `rd-onboarding` | 02 | close | Dark card, agents step. |
+| `rd-empty` | 03 | close | Dark empty canvas, one primary verb. |
+| `rd-workspace` | 04 | does-not-read | Light "api" canvas. The scene never loads the steward fixture or sets dark. |
+| `rd-arrange` | 05 | does-not-read | Same light canvas. No drag, guides, or marquee toolbar. |
+| `rd-plan-palette` | 06 | close | Dark plan tier, palette open. |
+| `rd-map` | 06 | close | Dark map tier. Judge the tier, not the palette. |
+| `rd-sessions` | 07 | close | Dark triage table and detail. The count is the fixture's. |
+| `rd-settings-keys` | 08 | does-not-read | Light settings. The mockup is the dark shortcut map. The scene never calls `theme('dark')`. |
+| `rd-recovery` | 09 | close | Dark. The scene does call `theme('dark')`. |
+| `rd-world-transition` | 10 | does-not-read | Dark canvas, not the tilted plan. R-053. The scene does set dark. |
+| `rd-world-transition-rm` | 10 | does-not-read | Mid cross-fade on a dark field. No dolly, which is the reduced-motion rule. The room is still not the mockup's plan. |
+| `rd-world-night` | 11 | does-not-read | Light field. WebGL blank, and the shot leaves the harness theme light. |
+| `rd-world-room` | 11 | does-not-read | Same light field. |
+| `rd-world-focus` | 12 | does-not-read | Light field. Judge the sheet, which is DOM, once the theme is dark. |
+| `rd-world-attention` | 13 | does-not-read | Light field. The strip, card, and toast are the DOM. |
+| `rd-world-overview` | 14 | does-not-read | Light field. Camera panel and scrubber are DOM. |
+| `rd-world-flat` | 11 | does-not-read | The flat room is up (no-WebGL sentence, needs you, Open in Canvas) on the light theme. The mockup's robots are not the brief. The white field is the missed `theme('dark')`. |
+
+does-not-read from a missing `theme('dark')` or a missing `loadMain` is on the fix list and is safe to land here. does-not-read from a blank WebGL room stays R-053.
+
+### Goldens
+
+`npm run verify:visual` was started without `UPDATE_GOLDENS`, on a 3840×2400 xvfb, with `--force-device-scale-factor=2` so the suite's 2x display check could pass. A wrapper at `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron` (not committed) pointed `npm run shot` at the Linux binary. The suite's own watchdog fired at 395s, before the comparison. The shot had written 77 of 79 goldens' captures (`flowchart` and `flowchart-dark` were still ahead of it). Those 77 were compared with the suite's budgets (channel 24, pixel 0.005, tile 0.35, golden scale 0.5). 77/77 FAIL. 0 pass. Sizes matched after halving (fresh 2880×1730, golden 1440×865).
+
+Same-theme scenes (mean luminance moved less than 15) differ because F1 revalued surfaces, radii, accents, and the selection ring, and F3's title bar (Canvas | Sessions | Review, "Find or run anything", no dollar amount) is on every shell scene. D1 and D7 move working to cyan and finished-OK to green. That group is: account-menu, across, approval, attention, auto, board, browser, chat, compact, composer, edge-firing, edge-waiting, file-missing, flip, flowchart-far, github, graph, group, group-collapsed, header, ink, the inspector scenes, integrations, kinds, kinds-dark, launcher, lineup, memory, merged, the navigator scenes, orchestration, orchestration-watch, overview, palette-dark, palette-query, plan-approval, queue-hold, reduced-motion, relay, replay, routine, runs, search-empty, share-members, shared-canvas, skills, start-work, starter, subagents, team-ask, teammate, tool-objects, trail, vault, watcher, wide, workflow, workflow-edit, zoomed-out.
+
+Not closed as F1: `zoomed-out-dark`, `orchestration-dark`, `orchestration-working` (dark goldens, light captures), and the overlays whose luminance jumped more than 40 points (`verbs`, `share-dialog`, `search`, `templates`, `supervisor`, `chat-copilot`, `spawn-sheet`, `palette`, `shared-offline`). Detail is the fix list.
+
+### Rules and world
+
+Diff `7556aeec` (`pre-redesign`) to `db186caf`. No `.panel__*` or `*-node__*` selector removed. No `.shell__*` selector removed; four added. Version still 5.0.0. `verify:world` 251/251. Entry chunk `index-CptrJXFM.js` (7.3MB) has no static import of another script and does not contain `WebGLRenderer`. `WorldView` loads through `__vitePreload(() => import("./WorldView-….js"))`, and that chunk depends on three's `index-DoTOJlhU.js` (2.2MB). BLOCKERS: none found on this pass.
+
