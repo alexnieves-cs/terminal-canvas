@@ -479,11 +479,12 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 }
 
 // M67 — ground.1 / shadow.1 / hairline.1. THE FRAME, SECOND PASS. The brief
-// overrules three beta decisions in one sentence each: the ground is flat
-// (no dot grid, no vignette), nothing at rest carries a shadow (`--line` is
-// the boundary; `--e-3`/`--e-4` are for overlays only), and a dark-theme
-// frame has a hairline a person can see. Each fails silently if undone: a
-// shadow creeps back on one selector and the frame reads "raised" again.
+// overrules three beta decisions in one sentence each: the canvas stays
+// transparent (no gradient, no --dot token — M436's 24px grid is on .shell),
+// nothing at rest carries a shadow (`--line` is the boundary; `--e-3`/`--e-4`
+// are for overlays only), and a dark-theme frame has a hairline a person can
+// see. Each fails silently if undone: a shadow creeps back on one selector
+// and the frame reads "raised" again.
 {
   // EVERY `.canvas {` rule, not the first: the first is the grid-area
   // one-liner, and a gradient reinstated in the real rule would have passed
@@ -498,13 +499,22 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // beside .world, following the camera), never on .canvas itself, which is
   // transparent so the shell's light shows through. Both take no pointer:
   // a layer over the world that hit-tests would swallow the background
-  // mousedown that clears selection. Still no dot grid.
+  // mousedown that clears selection. M436: the 24px dot grid lives on .shell
+  // (what shows through the transparent canvas), from --canvas-grid and
+  // --grid-canvas. It is not a --dot token and not a gradient on .canvas —
+  // both of those were the silent ways a grid used to fail this check.
   const auraShell = bodyRules.find((r) => r.sel === '.shell__aura')
   const auraCanvas = bodyRules.find((r) => r.sel === '.canvas__aura')
   const auraOk = (r) => r !== undefined && /gradient/.test(r.body) && /pointer-events:\s*none/.test(r.body) && /var\(--aura-1\)/.test(r.body)
-  ok('ground.1', 'the canvas is transparent and flat; the light is on the two aura layers, each a gradient from the aura tokens that takes no pointer; no --dot token',
-    canvas !== null && !/gradient/.test(canvasBg) && /background:\s*transparent/.test(canvasBg) && dotUses === 0 && dotDeclared === 0 && auraOk(auraShell) && auraOk(auraCanvas),
-    JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined }))
+  const shell = bodyRules.find((r) => r.sel === '.shell')
+  const gridPitch = /--grid-canvas:\s*24px/.test(bare)
+  const shellGrid = shell !== undefined
+    && /background-color:\s*var\(--s-0\)/.test(shell.body)
+    && /background-image:\s*radial-gradient\(circle,\s*var\(--canvas-grid\)\s+1px,\s*transparent\s+1px\)/.test(shell.body)
+    && /background-size:\s*var\(--grid-canvas\)\s+var\(--grid-canvas\)/.test(shell.body)
+  ok('ground.1', 'the canvas is transparent and flat; the 24px dot grid is on .shell from --canvas-grid and --grid-canvas; the light is on the two aura layers, each a gradient from the aura tokens that takes no pointer; no --dot token',
+    canvas !== null && !/gradient/.test(canvasBg) && /background:\s*transparent/.test(canvasBg) && dotUses === 0 && dotDeclared === 0 && auraOk(auraShell) && auraOk(auraCanvas) && gridPitch && shellGrid,
+    JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined, gridPitch, shellGrid }))
 
   const restingUses = bodyRules.filter((r) => /var\(--e-[12]\)/.test(r.body)).map((r) => r.sel)
   // M258. The navigation cluster — the minimap and the zoom HUD — floats over
@@ -1310,7 +1320,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // which clipped every sheet by half its width. first-arrive: the first
   // task's guide arrives ONCE beside its conversation's cluster-arrive, the
   // same fade and 6px rise — quieter than panel-enter's spring, never a scale.
-  const allowed = ['first-arrive', 'sheet-enter', 'activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-live-type', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'tier-in', 'tier-out', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  // state-breath: M436. The working and starting status dots breathe on a
+  // scale. A glow would make working the second tone that spills light
+  // (rd-tone.glow.1); a fractional opacity is what check 3 rejects.
+  const allowed = ['first-arrive', 'sheet-enter', 'activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-live-type', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'state-breath', 'tier-in', 'tier-out', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a decelerating rise on --dur-2 (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
@@ -1661,15 +1674,18 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     rootRule !== undefined && parts.length === 0, JSON.stringify({ root: rootRule ? rootRule.sel : null, missing: parts }))
   // revamp.snap.css.1 — the guide paints ABOVE the panels (a panel's z is a
   // small integer; the annotation layer's 5000 stays above it) and is a
-  // counter-scaled 2px line, never one world pixel.
+  // counter-scaled 2px line, never one world pixel. M436: the colour is
+  // --guide, not --iris. Guides appear only while arranging, and --iris is
+  // now the working accent (D1), so a snap line in that token would read as
+  // a working panel.
   const guides = all.find((r) => /^\.snap-guides$/.test(r.sel))
   const gz = guides ? Number((/z-index:\s*(\d+)/.exec(guides.body) || [])[1]) : NaN
   const layerZ = Number((/z-index:\s*(\d+)/.exec((all.find((r) => /^\.annotation-layer$/.test(r.sel)) || { body: '' }).body) || [])[1])
   const gx = all.find((r) => /^\.snap-guide--x$/.test(r.sel))
   const gy = all.find((r) => /^\.snap-guide--y$/.test(r.sel))
   const thick = (r, prop) => r !== undefined && new RegExp(`(^|;)\\s*${prop}:\\s*calc\\(2px \\* var\\(--chrome-scale`).test(r.body)
-  ok('revamp.snap.css.1', 'the snap guide paints above every panel and under the annotation layer, 2px counter-scaled by --chrome-scale on both axes, in the iris token',
-    gz >= 1000 && gz < layerZ && thick(gx, 'width') && thick(gy, 'height') && all.some((r) => /^\.snap-guide$/.test(r.sel) && /background:\s*var\(--iris\)/.test(r.body)),
+  ok('revamp.snap.css.1', 'the snap guide paints above every panel and under the annotation layer, 2px counter-scaled by --chrome-scale on both axes, in the guide token',
+    gz >= 1000 && gz < layerZ && thick(gx, 'width') && thick(gy, 'height') && all.some((r) => /^\.snap-guide$/.test(r.sel) && /background:\s*var\(--guide\)/.test(r.body)),
     JSON.stringify({ gz, layerZ, gx: gx && gx.body, gy: gy && gy.body }))
   // revamp.annotate.css.1 — the annotate strip takes the pointer (its tools
   // with it), where the link banner it borrows its shape from does not.
