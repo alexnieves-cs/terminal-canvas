@@ -12,6 +12,7 @@ import { UsageChart } from './UsageChart'
 import type { CapsField, InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import type { InspectorContextBand, TaskChainStep } from './inspector-context'
 import { agentStateLabel, formatRateLimitGauge, formatRateLimitReset, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
+import { sessionFacts } from '@renderer/panels/session-facts'
 import type { Tone } from '@renderer/panels/panel-state'
 import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
@@ -118,6 +119,12 @@ export interface InspectorProps {
   /** M352. `cap-agent` from the Work tab's Caps fields (a person's door); absent leaves the fields read-only. */
   onCap?: CapVerb
   onOpenReview: (id: string) => void
+  /** M442. Criteria of the task this panel belongs to. Absent when it belongs to none. */
+  taskCriteria?: { label: string; rows: { label: string; met: boolean }[] } | null
+  /** M442. Pause the selected agent. The same interrupt the palette uses. */
+  onPausePanel?: (id: string) => void
+  /** M442. Arm a handoff from this panel. */
+  onHandOffPanel?: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
@@ -262,7 +269,7 @@ function CapsSection({ id, caps, onCap }: { id: string; caps: CapsField; onCap?:
 
 function InspectorImpl({
   onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, selectedConnector, onPatchConnector, onRemoveConnector, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown, onStyleShape, onShapeChart,
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, selectedConnector, onPatchConnector, onRemoveConnector, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown, onStyleShape, onShapeChart, taskCriteria, onPausePanel, onHandOffPanel,
   contextBand, onShowRelated, onShowTask, onChainStep, onGoToPanel
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -319,6 +326,9 @@ function InspectorImpl({
             onSetRestartOnExit={onSetRestartOnExit}
             automationResults={automationResults}
             onSetLinkAutomation={onSetLinkAutomation}
+            taskCriteria={taskCriteria}
+            onPausePanel={onPausePanel}
+            onHandOffPanel={onHandOffPanel}
           />}
     </aside>
   )
@@ -578,7 +588,7 @@ function InspectorEmpty({ summary, onGoToPanel }: { summary: InspectorSummary; o
 function InspectorPanel({
   tab: savedTab, onSelectTab, automations, templateOf, onTestNode,
   model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onChainStep, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onReviewApproval, onRevokeGrants, onCap, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
-  onLink, onRemoveLink, onRelabelLink, onStyleShape, onShapeChart, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
+  onLink, onRemoveLink, onRelabelLink, onStyleShape, onShapeChart, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository, taskCriteria, onPausePanel, onHandOffPanel
 }: {
   onStyleShape?: (id: string, patch: ShapeStylePatch) => void
   /** M391. Lay out or export the chart the inspected shape belongs to. */
@@ -594,6 +604,9 @@ function InspectorPanel({
   /** M86. See InspectorProps.branchLine. */
   branchLine: string | null
   repository: string | null
+  taskCriteria?: { label: string; rows: { label: string; met: boolean }[] } | null
+  onPausePanel?: (id: string) => void
+  onHandOffPanel?: (id: string) => void
   toolbox: ToolboxFieldModel | null
   onOpenToolbox: (id: string) => void
   contextBand?: InspectorContextBand
@@ -676,7 +689,7 @@ function InspectorPanel({
   const pid = model.fields.find((f) => f.key === 'pid')?.value
   // M279. Activity: what the object has DONE — the fourth question.
   const TABS: Array<{ id: ContextTab; label: string }> = [
-    { id: 'detail', label: 'Detail' }, { id: 'work', label: 'Work' }, { id: 'tools', label: 'Tools' }, { id: 'activity', label: 'Activity' }
+    { id: 'detail', label: 'Overview' }, { id: 'work', label: 'Changes' }, { id: 'tools', label: 'Tools' }, { id: 'activity', label: 'Log' }
   ]
   return (
     <div className="context">
@@ -854,6 +867,54 @@ function InspectorPanel({
         )
       })()}
       </dl>
+      {/* M442. Session facts. Spend is a row here (D3), never on the header. */}
+      {(() => {
+        const shown = panelState(model.state, state)
+        const folder = model.fields.find((field) => field.key === 'cwd')?.value
+        const facts = sessionFacts({
+          state: shown.word,
+          ...(folder === undefined ? {} : { folder }),
+          ...(branchLine !== null && branchLine !== '' ? { branch: branchLine } : {}),
+          ...(model.reattached ? { host: 'tmux · survives quit' } : {}),
+          ...(model.usage.hidden || model.usage.costLabel === undefined ? {} : { usage: model.usage.costLabel })
+        })
+        const changed = review !== null && !review.hidden ? review.files.length + review.more : 0
+        return (
+          <section className="inspector__session" data-inspector-session>
+            <h3 className="inspector__section-heading">Session</h3>
+            <dl className="inspector__fields">
+              {facts.map((fact) => (
+                <div className="inspector__field" key={fact.label} data-inspector-session-fact={fact.label}>
+                  <dt className="inspector__label">{fact.label}</dt>
+                  <dd className="inspector__value">{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+            {taskCriteria !== undefined && taskCriteria !== null && taskCriteria.rows.length > 0 && (
+              <div data-inspector-criteria>
+                <h3 className="inspector__section-heading">Task criteria</h3>
+                <p>{taskCriteria.label}</p>
+                <ul>
+                  {taskCriteria.rows.map((row) => (
+                    <li key={row.label} data-criteria-met={row.met ? '' : undefined}>{row.label}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {changed > 0 && (
+              <button type="button" className="inspector__action" data-rd-primary {...shellControl(() => onOpenReview(model.id))}>
+                Review {changed} changed file{changed === 1 ? '' : 's'}
+              </button>
+            )}
+            {onPausePanel !== undefined && (
+              <button type="button" className="inspector__action inspector__action--secondary" data-rd-pause {...shellControl(() => onPausePanel(model.id))}>Pause</button>
+            )}
+            {onHandOffPanel !== undefined && (
+              <button type="button" className="inspector__action inspector__action--secondary" data-rd-handoff {...shellControl(() => onHandOffPanel(model.id))}>Hand off…</button>
+            )}
+          </section>
+        )
+      })()}
       {/* M163. THE MACHINE SECTION (the brief's metrics rule): the per-panel
           CPU · RAM figure's one home, moved here from every header and card
           tier. Three arms, never a blank: a reading; a live panel main has

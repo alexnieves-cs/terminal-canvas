@@ -209,7 +209,7 @@ function overlapsAnyOnAxis(row: readonly WorldRect[], at: number, size: number, 
  * through R. Smallest |delta| within the threshold wins; on a tie the
  * centred candidate (found first) does.
  */
-function spacingPlan(rect: WorldRect, others: readonly WorldRect[], threshold: number, ax: Ax): SpacingPlan | null {
+function spacingPlan(rect: WorldRect, others: readonly WorldRect[], threshold: number, ax: Ax, gapGrid?: number): SpacingPlan | null {
   const row: WorldRect[] = []
   for (const o of others) if (o.id !== rect.id && crossOverlap(o, rect, ax) > 0) row.push(o)
   if (row.length === 0) return null
@@ -245,6 +245,12 @@ function spacingPlan(rect: WorldRect, others: readonly WorldRect[], threshold: n
       if (hasL) consider(lEnd + p.gap, p.gap)
       if (hasR) consider(rStart - p.gap - size, p.gap)
     }
+  }
+  // M443. A 24px gap to the nearest neighbour, competing by the same
+  // smallest-|delta| rule. Far from that gap it loses to the threshold.
+  if (gapGrid !== undefined && gapGrid > 0) {
+    if (hasL) consider(lEnd + gapGrid, gapGrid)
+    if (hasR) consider(rStart - gapGrid - size, gapGrid)
   }
   let best: { delta: number; gap: number } | null = null
   for (const c of cands) if (best === null || Math.abs(c.delta) < Math.abs(best.delta)) best = c
@@ -355,6 +361,12 @@ export interface SmartSnapOptions {
   grid?: number | null
   /** Equal-spacing guides on a move. On unless it is `false`. */
   spacing?: boolean
+  /**
+   * M443. A gap of this many world units is a candidate, beside the centred
+   * and rhythm gaps. Absent leaves those two families alone, so a caller
+   * that never asked (the flowchart) does not start snapping to 24.
+   */
+  gapGrid?: number | null
   /** The floor for a resize; the panel floor unless a shape passes a smaller one. */
   min?: { w: number; h: number }
   /**
@@ -450,8 +462,9 @@ export function smartSnap(rect: WorldRect, others: readonly WorldRect[], thresho
   const grid = opts.grid !== undefined && opts.grid !== null && opts.grid > 0 ? opts.grid : null
   const align = alignCandidates(rect, others, threshold, resize, min, opts.rimOf)
   const useSpacing = !resize && opts.spacing !== false
-  const px = useSpacing ? spacingPlan(rect, others, threshold, AX_X) : null
-  const py = useSpacing ? spacingPlan(rect, others, threshold, AX_Y) : null
+  const gapGrid = opts.gapGrid !== undefined && opts.gapGrid !== null && opts.gapGrid > 0 ? opts.gapGrid : undefined
+  const px = useSpacing ? spacingPlan(rect, others, threshold, AX_X, gapGrid) : null
+  const py = useSpacing ? spacingPlan(rect, others, threshold, AX_Y, gapGrid) : null
   const spaceX = px !== null && (align.x === null || Math.abs(px.delta) < Math.abs(align.x.delta))
   const spaceY = py !== null && (align.y === null || Math.abs(py.delta) < Math.abs(align.y.delta))
 

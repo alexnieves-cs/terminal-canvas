@@ -134,7 +134,7 @@ export function ReopenNotice({ model, onStart, onGo }: {
       <span className="reopen-notice__kicker">Reopened</span>
       <ul className="reopen-notice__lines">
         {lines.map((l) => (
-          <li key={l.group + l.text} className="reopen-notice__line" data-reopen-group={l.group} data-reopen-task={l.outcome} data-reopen-problem={l.tone === 'problem' ? 'true' : undefined}>
+          <li key={l.group + l.text} className="reopen-notice__line" data-reopen-group={l.group} data-reopen-task={l.outcome} data-reopen-problem={l.tone === 'problem' ? 'true' : undefined} data-boot-issue={l.group === 'issue' ? '' : undefined}>
             <span className="reopen-notice__text">{l.text}</span>
             {l.group === 'ended' && (
               <span className="reopen-notice__verbs">

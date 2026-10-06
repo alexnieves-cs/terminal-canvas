@@ -52,6 +52,52 @@ export function probeOutcome(report: EnvReport): ProbeOutcome {
 }
 
 /** For harnesses that register the handler without a real probe behind it. */
+/**
+ * M440. One binary, three answers. A timeout is `unknown` — discovery did not
+ * answer — and is never reported as missing. `versionWords` says so when the
+ * binary was found and printed no version.
+ */
+export const BINARY_PROBE_TIMEOUT_MS = 5000
+
+export type BinaryProbeClass = 'found' | 'missing' | 'unknown'
+
+export function classifyBinaryProbe(probe: { path: string | null; timedOut?: boolean }): BinaryProbeClass {
+  if (probe.timedOut === true) return 'unknown'
+  if (probe.path === null || probe.path === '') return 'missing'
+  return 'found'
+}
+
+export function versionWords(version: string | null | undefined): string {
+  if (version === undefined || version === null || version.trim() === '') return 'version unknown'
+  return version.trim()
+}
+
+export function probeWithin<T>(
+  work: Promise<T>,
+  ms: number,
+  timer: { set(fn: () => void, ms: number): unknown; clear(id: unknown): void }
+): Promise<T | { timedOut: true }> {
+  return new Promise((resolve) => {
+    let settled = false
+    const id = timer.set(() => {
+      if (settled) return
+      settled = true
+      resolve({ timedOut: true })
+    }, ms)
+    work.then((value) => {
+      if (settled) return
+      settled = true
+      timer.clear(id)
+      resolve(value)
+    }, () => {
+      if (settled) return
+      settled = true
+      timer.clear(id)
+      resolve({ timedOut: true })
+    })
+  })
+}
+
 export const INERT_ENV_REPORT: EnvReport = {
   probedAt: 0,
   shell: { path: '', ok: true },

@@ -16,6 +16,7 @@ import type { ReviewIdentity } from './review-identity'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult, QueueEditRequest, CorrectionAnswer } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
+import type { HostState } from './exit-explain'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
 import type { FlowchartExportRequest, FlowchartExportResult, FlowchartReadRequest, FlowchartReadResult } from './flowchart-files'
@@ -294,6 +295,8 @@ export const IPC = {
    * to run the flow it already has instead of growing a second one.
    */
   CANVAS_REQUEST_RESET: 'canvas:request-reset',
+  /** R-028. Main's confirm(), Cancel-default. The renderer does not use window.confirm. */
+  DIALOG_CONFIRM: 'dialog:confirm',
   /**
    * The merged prompt list: the saved store plus .claude/commands under the
    * cwd of the panel the palette captured. Takes a cwd because the project
@@ -1014,11 +1017,12 @@ export const IPC = {
   /** Asks main to rebuild the world feed and say every agent's status again; answers the connection that results. Never rejects. */
   WORLD_RETRY: 'world:retry'
   /**
-   * M435. Reserved channel NAMES, not channels. A key in this object would
-   * need a main handler (verify:ipc) and a line in CLAUDE.md's diagram
-   * (claude-md.1) in the same change, so Phase 0 only writes the names down.
-   * Lanes add the real key beside this comment when they implement it:
-   *   boot:progress — L-A, restore lines, main → renderer.
+   * M439. `boot:progress` is a send (main → renderer), so it lives on
+   * IPC_EVENTS rather than here. An invoke would need an ipcMain.handle
+   * and a new verify:ipc count, and the direction would be wrong: the
+   * renderer does not ask, main tells it how far restore has got.
+   * `FILE_CHANGED` is the same boundary. The sender is
+   * `publishBootProgress` in `bootstrap/boot-progress.ts`.
    */
 } as const
 
@@ -1091,6 +1095,18 @@ export type PoolEvent =
   | { kind: 'refused'; why: string }
   | { kind: 'stopped'; why: 'empty' | 'budget' | 'by-hand' }
 export interface PoolCallerEvent { templateId: string; key: string; event: PoolEvent }
+
+/** M439. One measured restore step. Absent fields have not been measured. */
+export interface BootProgressEvent {
+  step: 'workspace' | 'layout' | 'tmux' | 'agents'
+  workspace?: { name: string; path: string }
+  layout?: { tasks: number; objects: number }
+  tmux?: { done: number; total: number }
+  agentsPlanned?: readonly string[]
+  agentsFound?: readonly string[]
+  failed?: { step: 'workspace' | 'layout' | 'tmux' | 'agents'; sentence: string }
+  optionHeld?: boolean
+}
 
 export const IPC_EVENTS = {
   PTY_DATA: 'pty:data',
@@ -1225,6 +1241,13 @@ export const IPC_EVENTS = {
    */
   SESSION_LIVE: 'session:live',
   /**
+   * M447. The tmux host answered, or it has not. Main → renderer, and only
+   * when the report changes. Not an invoke: the renderer cannot ask more
+   * often than `list()` already runs, and a second poll would be a second
+   * loop. `verify:ipc` counts `IPC`, not this.
+   */
+  SESSION_HOST: 'session:host',
+  /**
    * M55. Sent once after the user answered Restore to the boot dialog: the
    * orphan sessions the renderer should adopt as panels under their own ids.
    * Never sent silently — no dialog, no send.
@@ -1298,7 +1321,15 @@ export const IPC_EVENTS = {
   /** M138. Main asks the renderer to mint one pool worker; the reply channel rides in the envelope. */
   POOL_MINT: 'pool:mint',
   /** M138. A pool event, addressed by template and block. */
-  POOL_EVENT: 'pool:event'
+  POOL_EVENT: 'pool:event',
+  /**
+   * M439. Restore progress. Main → renderer, one event per measured step.
+   * Not an invoke: the renderer cannot ask main how far a boot has got
+   * any earlier than main already knows, and a poll would show a spinner
+   * for a fact that had not changed. A failed step carries its sentence;
+   * the splash stops, and the 09 surface is the reader of that sentence.
+   */
+  BOOT_PROGRESS: 'boot:progress'
 } as const
 
 export interface FileReadRequest {
@@ -1853,6 +1884,10 @@ export interface CanvasBridge {
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>
   }
+  /** R-028. Main's two-button confirm. True only when the verb button is chosen. */
+  dialog: {
+    confirm(ask: { message: string; detail?: string; verb: string }): Promise<boolean>
+  }
   preset: {
     /** A menu pick: spawn one panel from this template, now. */
     onSpawn(listener: (template: PresetTemplate) => void): () => void
@@ -2168,6 +2203,8 @@ export interface CanvasBridge {
     onSubagents(listener: (update: SubagentUpdate) => void): () => void
     /** What this panel's agent has spent. Fires only on a change. */
     onUsage(listener: (payload: { panelId: PanelId; usage: PanelUsage }) => void): () => void
+    /** R-033. Host loss, from the live tick. Each subscribe returns its unsubscribe. */
+    onHost(listener: (state: HostState) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>
@@ -2482,6 +2519,14 @@ export interface CanvasBridge {
   appVersion: string
   /** M407 follow-up. A FIELD: the preload's `os.homedir()`, the folder `~` expands to (terminal names fold it). */
   home: string
+  /**
+   * M439. Optional until the preload subscribes (R-020). Absent means the
+   * renderer has not been told about restore yet, which the splash says
+   * in words rather than as a count.
+   */
+  boot?: {
+    onProgress(listener: (event: BootProgressEvent) => void): () => void
+  }
 }
 
 // ---- the pty relay (main/relay/relay-client.ts) --------------------------------

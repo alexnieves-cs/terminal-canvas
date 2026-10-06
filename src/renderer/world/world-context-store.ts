@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { CapHold } from '@shared/agent-session'
+import type { DiscardOffer } from './world-flight'
 import type { PlanStepView } from '@shared/task-plan'
 import type { WorkItemState } from '@shared/work-items'
 
@@ -164,14 +165,22 @@ export function useWorldContext(): WorldContext {
 export type SendOutcome = string | null
 
 export interface WorldActions {
-  /** A pending request, answered through the chat card's own door. */
-  answer(agentId: string, requestId: string, allow: boolean): void
+  /**
+   * A pending request, answered through the chat card's own door.
+   * On allow, the discard a live review can run for this panel, or null
+   * when Undo would not be a real revert. Deny returns null.
+   */
+  answer(agentId: string, requestId: string, allow: boolean): DiscardOffer | null
   /** A person's words to a running agent — the composer's send. */
   send(agentId: string, text: string): Promise<SendOutcome>
   /** Leave the room and land on the agent's panel (or its request). */
   open(agentId: string): void
   /** Whether a message can be sent to this agent from the room (a chat agent, not a terminal). */
   canSend(agentId: string): boolean
+  /** R-071. A terminal that is an agent, so a reply may be pasted and submitted. A plain shell is not. */
+  agentTerminal(agentId: string): boolean
+  /** Paste into that agent's terminal and submit once. A plain shell is refused. */
+  pasteReply(agentId: string, text: string): Promise<SendOutcome>
   /**
    * M429. Whether `open` has a panel to land on: one on this canvas, or in
    * another workspace the jump can switch to. The simulator's agents and a
@@ -191,6 +200,27 @@ export interface WorldActions {
 
 let actions: WorldActions | null = null
 const actionListeners = new Set<() => void>()
+
+/**
+ * R-051. A terrace drag's one commit. The scene cannot import `moveRegion`
+ * (`world.ctx.door.1`); Canvas registers the mover, and the drag calls it
+ * once on release. Null is a drag that moved no member — no history entry.
+ */
+export interface RegionMoveCommit {
+  ids: readonly string[]
+}
+
+type RegionMover = (regionId: string, dx: number, dy: number) => RegionMoveCommit | null
+
+let regionMover: RegionMover | null = null
+
+export function setRegionMover(next: RegionMover | null): void {
+  regionMover = next
+}
+
+export function commitRegionMove(regionId: string, dx: number, dy: number): RegionMoveCommit | null {
+  return regionMover?.(regionId, dx, dy) ?? null
+}
 
 /** Canvas registers its doors while it is mounted; null takes them away. */
 export function setWorldActions(next: WorldActions | null): void {

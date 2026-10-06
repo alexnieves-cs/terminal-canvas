@@ -47,6 +47,33 @@ export function fromMap(x: number, y: number, half: number, size: number = MINIM
   return { x: clamp((x - size / 2) / k), z: clamp((y - size / 2) / k) }
 }
 
+/**
+ * The camera's wedge on the plan: where it stands, and two points ahead of
+ * what it looks at, spread so the wedge reads as a view and not a line.
+ * No `cameraToViewport` here — this file takes no value import (`world.map.2`).
+ * The viewport footprint that the 2D minimap would draw is `cameraFootprint`.
+ */
+export function cameraWedge(camera: FloorPoint, target: FloorPoint, spread = 0.42): [FloorPoint, FloorPoint, FloorPoint] {
+  const dx = target.x - camera.x
+  const dz = target.z - camera.z
+  const len = Math.hypot(dx, dz) || 1
+  const ux = dx / len
+  const uz = dz / len
+  const px = -uz
+  const pz = ux
+  const reach = Math.max(len, 1)
+  return [
+    camera,
+    { x: camera.x + ux * reach + px * reach * spread, z: camera.z + uz * reach + pz * reach * spread },
+    { x: camera.x + ux * reach - px * reach * spread, z: camera.z + uz * reach - pz * reach * spread }
+  ]
+}
+
+/** The teammates whose eyes are on this agent. Initials come from the peer; a sample name is not a person. */
+export function watchersOn<T extends { panelId: string | null }>(peers: readonly T[], agentId: string): T[] {
+  return peers.filter((peer) => peer.panelId === agentId)
+}
+
 /** A cheap identity for a plan, rounded to what the map can show, so a still room re-renders nothing. */
 export function planKey(plan: RoomPlan | null, size: number = MINIMAP_SIZE): string {
   if (plan === null) return ''

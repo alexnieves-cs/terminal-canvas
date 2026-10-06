@@ -8,7 +8,20 @@
 
 An Electron app for macOS: an infinite canvas of authored objects — agents, terminals, files,
 previews, workflows, pictures and notes — each of which a person arranges, edits and keeps.
-**This is 5.0 (M192); the v10 run opened at M193.** The tenth run, M180 to M192 (v9), was unattended in goal mode and made
+**This is 6.0, the redesign (M435–M456).** The visual language changed and the chords that moved
+keep their previous binding as a hidden alias for this release. Phase 0 (M435) is the kit.
+Foundations are one state colour (M436), the shared queue, territories and tiers (M437), and the
+shell — Canvas, Sessions and Review, one shortcut registry, focus lock (M438). Screens 01–09 are
+launch and restore (M439), first run (M440), the empty canvas (M441), the Work tier (M442),
+create and arrange (M443), Plan and Map (M444), Sessions (M445), Settings › Keyboard (M446) and
+a host that says paused (M447). The World is a lens on that same canvas: night studio (M448),
+the tilt from the plan (M449), the room (M450), overview and replay (M451), the focus sheet
+(M452), one attention walk (M453), and the flat room when WebGL is absent (M454). Phase 4
+(M455) is the Linux integration — the fix list, the notes draft, the dark shots, the renderer
+budget, and the header rest rule — and it does not rewrite goldens. M456 is this version.
+Selectors a suite already used (`.panel__*`, `*-node__*`, `.shell__*`) still work. The state
+is [the ledger](docs/build-log/m435-m456-ledger.md); the rows are
+[m435-m456-redesign.md](docs/build-log/m435-m456-redesign.md). Before it, **5.0 (M192); the v10 run opened at M193.** The tenth run, M180 to M192 (v9), was unattended in goal mode and made
 the canvas a surface a person AUTHORS on rather than one they only start sessions from: Act I
 the first conversation (readiness as a table where installed never means signed in, the bounded
 `tc plan` door, the four-door closure as data) and the captioned starter canvas with the image

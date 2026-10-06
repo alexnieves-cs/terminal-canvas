@@ -162,3 +162,27 @@ export function permissionRecordTitle(allow: boolean, scope: 'session' | undefin
   const clipped = arg.length > 80 ? `${arg.slice(0, 79)}…` : arg
   return `${verb} ${asked.toolName}${clipped === '' ? '' : ` — ${clipped}`}`
 }
+
+/**
+ * The durable "Answered in this task" row. One writer, so the palette and a
+ * caller that opts in (the World's Approve) file the same sentence. A chat
+ * answer does not call this: its flash stays `noteApprovalOutcome`.
+ */
+export function recordPermissionAnswer(input: {
+  panelId: string
+  requestId: string
+  allow: boolean
+  scope?: 'session'
+  itemId?: string
+  asked?: { toolName: string; argument: string }
+}): void {
+  const { panelId, requestId, allow, scope, itemId, asked } = input
+  void recordOrchEvent({
+    runId: adoptedRunId(panelId), panelId, event: 'permission', source: 'person',
+    ...(itemId === undefined ? {} : { itemId }),
+    // The inbox's own key, so a history row matches the decision it closed.
+    key: `p:${requestId}`,
+    title: permissionRecordTitle(allow, scope, asked),
+    detail: `${requestId}${scope === undefined ? '' : ` · for this ${scope}`}`
+  })
+}

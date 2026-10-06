@@ -44,7 +44,7 @@ Files. `src/renderer/shell/EmptyState.tsx`, `src/shared/empty-states.ts`, `canva
 
 - Title "A blank canvas for <workspace>" and one sentence of purpose. The task field has a repo chip in mono and the single filled Start task ↵.
 - Quick spawns: Claude Code ⌘N · Shell ⌘T · Import a layout…. Three starter layouts (Pair + tests, Two-agent review, Solo shell), each one sentence and inert until clicked.
-- The ghost target reads "Double-click to place a terminal". The hints read "Space + drag to pan" and "⌘ + scroll to zoom" (from `hints.ts`). The minimap reads "Nothing placed yet". No bare zeros anywhere (`empty.1`, `verify:rail` `empty.2`).
+- The ghost target reads "Double-click to place a flowchart step". The hints read "Space + drag to pan" and "⌘ + scroll to zoom" (from `hints.ts`). The minimap reads "Nothing placed yet". No bare zeros anywhere (`empty.1`, `verify:rail` `empty.2`). The owner kept M388's gesture (Oct 6, 2026): a double-click places a flowchart process step, and the hint names that step.
 
 ## Prompt
 

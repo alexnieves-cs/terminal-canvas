@@ -16,6 +16,7 @@ import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
+import { confirm } from './bootstrap/dialogs'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage, QueueEditRequest, CorrectionAnswer } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
@@ -1183,6 +1184,15 @@ export function registerIpcHandlers(
     palette.savePanel(captured)
   })
   ipcMain.handle(IPC.CANVAS_REQUEST_RESET, () => palette.requestReset())
+  ipcMain.handle(IPC.DIALOG_CONFIRM, async (_event, ask: { message?: string; detail?: string; verb?: string }) => {
+    if (typeof ask?.message !== 'string' || typeof ask.verb !== 'string' || ask.message === '' || ask.verb === '') return false
+    const win = getWindow()
+    return confirm(win !== null && !win.isDestroyed() ? win : null, {
+      message: ask.message,
+      verb: ask.verb,
+      ...(typeof ask.detail === 'string' ? { detail: ask.detail } : {})
+    })
+  })
 
   ipcMain.handle(IPC.PROMPT_LIST, (_event, cwd: string | null) => palette.listPrompts(cwd))
   ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))

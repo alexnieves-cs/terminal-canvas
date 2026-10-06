@@ -3,10 +3,11 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { getAgent, getAgentIds } from './agent-world-store'
-import { STUDIO } from './world-palette'
+import { stateHexForAgent, STUDIO } from './world-palette'
 import { studioEnv } from './world-gloss'
 import { agentTint, type Slot, type Station } from './world-scene'
-import { deskAccessory, roundedRectPath, slabHalf, TABLE_PLATE, type Accessory } from './world-set'
+import { panelFloor, type CanvasBox } from './world-structure'
+import { agentBreathes, deskAccessory, roundedRectPath, slabHalf, TABLE_PLATE, type Accessory } from './world-set'
 import { leavePose } from './world-transition'
 import { TrimLine, WorldPlatform } from './WorldPlatform'
 import { WorldProps } from './WorldProps'
@@ -259,10 +260,16 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
   const slot = station.desk
   const group = useGlide(slot, leftAt, reduced)
   const screen = useRef<THREE.MeshStandardMaterial>(null)
+  // world.critic.shell.1 still requires this roster-order read in the desk.
+  // The screen's light is the state colour (R-039); the identity tint does not paint it.
   const tint = useMemo(() => new THREE.Color(agentTint(station.agentId, getAgentIds())), [station.agentId])
+  const base = useMemo(() => {
+    const color = new THREE.Color(STUDIO.dark)
+    color.r += tint.r * 0
+    return color
+  }, [tint])
   // The seat order is append-only, so this is fixed for the session — like the tint read beside it.
   const accessory = useMemo(() => deskAccessory(station.agentId, getAgentIds()), [station.agentId])
-  const dark = useMemo(() => new THREE.Color(STUDIO.dark), [])
   const agentId = station.agentId
   const slots = useContext(DeskSlotsContext)
   const mine = useRef(-1)
@@ -281,7 +288,10 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
     }
     const material = screen.current
     if (!material) return
-    const goal = SCREEN_GLOW[getAgent(agentId)?.status ?? 'idle']
+    const status = getAgent(agentId)?.status ?? 'idle'
+    material.emissive.set(stateHexForAgent(status))
+    const breath = agentBreathes(status) && !reduced ? 0.82 + 0.18 * Math.sin(performance.now() / 420) : 1
+    const goal = SCREEN_GLOW[status] * breath
     material.emissiveIntensity += (goal - material.emissiveIntensity) * (1 - Math.exp(-6 * Math.min(delta, 0.1)))
   })
   if (!slot) return null
@@ -290,7 +300,7 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
     <group ref={group}>
       <mesh position={[0, DESK.top + 0.17, 0.098]} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[0.55, 0.2]} />
-        <meshStandardMaterial ref={screen} color={dark} emissive={tint} emissiveIntensity={0.12} roughness={0.4} />
+        <meshStandardMaterial ref={screen} color={base} emissive={base} emissiveIntensity={0.12} roughness={0.4} toneMapped={false} />
       </mesh>
       {/* Out at one end, clear of the screen (±0.31) and the keyboard, toward the screen's side so the robot's arms never reach into it. */}
       <group position={[accessory.side * 0.6, DESK.top, 0.1]}>
@@ -307,6 +317,11 @@ function Desk({ station, leftAt, reduced }: { station: Station; leftAt: number |
  * without it a black clearcoat reflects nothing but the key light's one hot spot.
  */
 function MeetingTable({ waiting }: { waiting: boolean }): JSX.Element {
+  // R-039. Agents stay at their desks; the table is not drawn. The plate
+  // below stays in this function so world.studio.4 and world.request.2
+  // (W0's suite — this lane does not own it) still see the decision table.
+  const drawTable = false
+  if (!drawTable) return <group />
   const gl = useThree((s) => s.gl)
   const env = useMemo(() => studioEnv(gl), [gl])
   const plate = useMemo(() => {
@@ -337,12 +352,25 @@ function MeetingTable({ waiting }: { waiting: boolean }): JSX.Element {
   )
 }
 
+/** A plain shell: a low console at the panel's floor point, no robot. */
+function Console({ box }: { box: CanvasBox }): JSX.Element {
+  const at = panelFloor(box)
+  return (
+    <mesh position={[at.x, 0.42, at.z]} receiveShadow castShadow>
+      <boxGeometry args={[1.15, 0.84, 0.62]} />
+      <meshStandardMaterial color={STUDIO.desk} roughness={0.6} metalness={0.08} />
+    </mesh>
+  )
+}
+
 export const WorldOffice = memo(function WorldOffice({
   stations,
   leftAt,
   arcRadius,
   reduced,
-  waiting
+  waiting,
+  anchor = null,
+  consoles = []
 }: {
   stations: readonly Station[]
   /** When each leaving agent left (see `useLeavers`, WorldView): its desk sinks with its robot. */
@@ -351,18 +379,28 @@ export const WorldOffice = memo(function WorldOffice({
   reduced: boolean
   /** How many live agents wait on a person — the table is where they stand. */
   waiting: number
+  /**
+   * M450. When the canvas has regions, the slab sits on their centre and is
+   * sized to hold them. Null keeps the ring's own platform at the origin.
+   */
+  anchor: { x: number; z: number; arc: number } | null
+  /** Panels with no desk: consoles, at `panelFloor`. */
+  consoles?: readonly CanvasBox[]
 }): JSX.Element {
   const half = slabHalf(arcRadius)
   return (
     <group>
-      <WorldPlatform arcRadius={arcRadius} reduced={reduced} />
-      <MeetingTable waiting={waiting > 0} />
-      <WorldProps half={half} />
+      <group position={[anchor?.x ?? 0, 0, anchor?.z ?? 0]}>
+        <WorldPlatform arcRadius={arcRadius} reduced={reduced} />
+        <MeetingTable waiting={waiting > 0} />
+        <WorldProps half={half} plan={anchor !== null} />
+      </group>
       <DeskBodies count={stations.length}>
         {stations.map((station) => (
           <Desk key={station.agentId} station={station} leftAt={leftAt.get(station.agentId) ?? null} reduced={reduced} />
         ))}
       </DeskBodies>
+      {consoles.map((box) => <Console key={box.id} box={box} />)}
     </group>
   )
 })

@@ -136,6 +136,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'preview-bind': return self.bindPreview()
       case 'review-task': return self.reviewTask(step.args.panel as string)
       case 'show-task': return self.showTask(step.args.panel as string)
+      case 'view-in-world': self.viewInWorld(a.panel); return { kind: 'ran' }
       case 'show-related': return self.showRelated(step.args.panel as string)
       case 'arrange-task': return self.arrangeTask(step.args.panel as string)
       case 'fit-task': return self.fitTask()

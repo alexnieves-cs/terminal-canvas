@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, t
 import { Close, History, Play, Stop } from '@renderer/icons'
 import { getAgent, getJournal, replayAt, setReplayAt, subscribeJournal, useReplayAt } from './agent-world-store'
 import { dismissAway, useAwaySince } from './world-away'
-import { awayBeats, JOURNAL_MAX_AGE_MS, timelineMarks, TOUR_BEAT_MS, type Beat } from './world-replay'
+import { prefersReducedMotion } from './world-perf'
+import { awayBeats, JOURNAL_MAX_AGE_MS, PAST_ROOM_REASON, tickTone, timelineMarks, tourOfferLabel, tourStep, TOUR_BEAT_MS, verbsForRoom, type Beat } from './world-replay'
 import type { CameraApi } from './world-set'
 
 /**
@@ -85,7 +86,14 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
     // A stop takes the agent out of the room; show the moment before it, when it was still at its desk.
     setReplayAt(beat.kind === 'stopped' ? beat.at - 1 : beat.at)
     // The fold lands this frame; the robot's station is there on the next.
-    const raf = requestAnimationFrame(() => { if (camera.current?.focus(beat.agentId) !== true) camera.current?.fit() })
+    // Reduced motion cuts: the same focus, and the rig's glide span is already 0.
+    const raf = requestAnimationFrame(() => {
+      if (tourStep(prefersReducedMotion()) === 'cut') {
+        if (camera.current?.focus(beat.agentId) !== true) camera.current?.fit()
+        return
+      }
+      if (camera.current?.focus(beat.agentId) !== true) camera.current?.fit()
+    })
     const timer = window.setTimeout(() => setTour((t) => (t === null ? t : { ...t, index: t.index + 1 })), TOUR_BEAT_MS)
     return () => { cancelAnimationFrame(raf); window.clearTimeout(timer) }
   }, [tour, camera])
@@ -93,11 +101,19 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
   const live = at === null
   const showBar = open || !live
   const stopTour = (): void => { setTour(null); setReplayAt(null); camera.current?.fit() }
+  // The room's verbs, refused together. Time controls (play, the range, Live) stay: they are how you look.
+  const roomVerbs = verbsForRoom(!live, [
+    { id: 'ask', label: 'Ask' },
+    { id: 'open', label: 'Open' },
+    { id: 'approve', label: 'Approve' }
+  ])
 
   return (
+    <>
     <div className="world-time-col">
       {showBar ? (
-        <div className="world-time" role="group" aria-label="Replay the last hour" data-world-time data-live={live ? '' : undefined}>
+        <div className="world-time" role="group" aria-label="Replay · last hour" data-world-time data-live={live ? '' : undefined}>
+          <span className="world-time__title">Replay · last hour</span>
           <button type="button" className="world-time__btn" aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play from here'}
             onClick={() => { if (live) setReplayAt(Math.max(from, now - 5 * 60_000)); setPlaying((p) => !p) }}>
             {playing ? <Stop size={12} /> : <Play size={12} />}
@@ -106,9 +122,10 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
             <div className="world-time__density" aria-hidden="true">
               {marks.density.map((n, i) => <span key={i} style={{ height: `${Math.min(100, 12 + n * 9)}%` }} />)}
             </div>
-            {marks.points.map((p, i) => (
-              <span key={i} className="world-time__mark" data-kind={p.kind} style={{ left: `${((p.at - from) / Math.max(1, now - from)) * 100}%` }} aria-hidden="true" />
-            ))}
+            {marks.points.map((p, i) => {
+              const tone = p.kind === 'wait' ? tickTone({ agentId: '', seq: 0, ts: p.at, type: 'status', payload: 'waiting_approval' }) : tickTone({ agentId: '', seq: 0, ts: p.at, type: 'error', payload: { message: '' } })
+              return <span key={i} className="world-time__mark" data-kind={p.kind} data-tone={tone ?? undefined} style={{ left: `${((p.at - from) / Math.max(1, now - from)) * 100}%` }} aria-hidden="true" />
+            })}
             <input
               type="range" className="world-time__range" aria-label="Moment shown"
               min={from} max={now} step={1000} value={at ?? now}
@@ -119,20 +136,30 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
           {live ? null : <span className="world-time__when" aria-live="polite">{`${clock(at)} · ${ago(now - at)}`}</span>}
           <button type="button" className="world-time__live" disabled={live} onClick={() => { setPlaying(false); setTour(null); setReplayAt(null) }}>Live</button>
           {live ? <button type="button" className="world-time__btn" aria-label="Close replay" title="Close" onClick={() => setOpen(false)}><Close size={12} /></button> : null}
+          {live ? null : (
+            <div className="world-time__past" role="status" data-past-reason>
+              {PAST_ROOM_REASON}
+              {roomVerbs.map((verb) => (
+                <button key={verb.id} type="button" className="world-time__verb" disabled={verb.disabled} title={verb.reason ?? undefined} data-room-verb={verb.id}>{verb.label}</button>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
-        <button type="button" className="world-time__open" onClick={() => setOpen(true)} data-world-time-open><History size={14} /> Replay</button>
+        <button type="button" className="world-time__open" onClick={() => setOpen(true)} data-world-time-open><History size={14} /> Replay · last hour</button>
       )}
+    </div>
 
+    <div className="world-away-host">
       {away !== null && away.beats.length > 0 && tour === null ? (
         <section className="world-away" aria-label="While you were away" data-world-away>
-          <h3>While you were away <span>{ago(now - since!).replace(' ago', '')}</span></h3>
+          <h3>While you were away · <span>{ago(now - since!).replace(' ago', '')}</span></h3>
           <ul>
             {away.beats.map((b) => <li key={`${b.agentId}:${b.kind}`} data-kind={b.kind}>{b.text}</li>)}
             {away.more > 0 ? <li className="world-away__more">and {away.more} more</li> : null}
           </ul>
           <div className="world-away__acts">
-            <button type="button" className="world-away__go" onClick={() => setTour({ beats: away.beats, index: 0 })} data-world-tour>Show me</button>
+            <button type="button" className="world-away__go" aria-label={tourOfferLabel()} onClick={() => setTour({ beats: away.beats, index: 0 })} data-world-tour>{tourOfferLabel()}</button>
             <button type="button" onClick={() => dismissAway()}>Dismiss</button>
           </div>
         </section>
@@ -147,5 +174,6 @@ export function WorldTime({ camera }: { camera: RefObject<CameraApi | null> }): 
         </section>
       ) : null}
     </div>
+    </>
   )
 }

@@ -7,6 +7,13 @@ import type { RunLiveFact } from '@shared/run-outcome'
 import { projectSession } from '@shared/run-outcome'
 import { laneSection, reviewHandoff, type ReviewHandoff } from '@shared/review-readiness'
 
+// Module-level so `records ?? NO_WORKTREES` is the same array while the list
+// is unread. A fresh `[]` each render rebuilt `lanes`, then `handoffsVersion`,
+// then the resume summary, and the canvas re-rendered without a field changing.
+// Opening the world in that loop nested layout updates until React stopped it.
+// `records === null` is still "not read yet"; this constant is only the memo key.
+const NO_WORKTREES: readonly WorktreeListRow[] = []
+
 /**
  * M202 (D07). THE CARD'S REVIEW READINESS, read once per REPOSITORY.
  *
@@ -117,7 +124,7 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
     // Re-read when a card names a record this list does not hold — a fresh
     // dispatch — and on the same token the diffs are re-read on.
   }, [wanted, unknown, token])
-  const worktreeRows = records ?? []
+  const worktreeRows = records ?? NO_WORKTREES
 
   // The lane every dispatched card sits in, and the repository it forks. A
   // card whose worktree record is gone contributes NO root: it must not drag

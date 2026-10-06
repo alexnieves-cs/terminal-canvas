@@ -812,13 +812,11 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   const rows = P.buildCommands(ctx({ presets: [SHELL, MINE] }))
   const withHint = rows.filter((r) => r.shortcut !== undefined).map((r) => r.id + '=' + r.shortcut)
   // M65: the sheet's row carries its own chord (⌘⇧N), a different key.
-  // M146/M149: `Zoom to fit` carries NO chord hint — ⌘1 runs useViewport's
-  // fitAll (every panel), not the selection-aware verb, and a hint naming it
-  // lied when a selection existed (the Act II critic); still one ⌘N.
+  // R-032: ⌘0 is Fit all (`canvas.zoom-fit`). Reset zoom has no chord.
   // M313: Open in editor carries its own chord (⌘⇧E), a different key again.
   // M409: Undo and Redo carry the menu's ⌘Z / ⌘⇧Z — different keys again.
   ok('48 only the default preset advertises Cmd+N',
-    withHint.sort().join(',') === 'canvas.fit=\u23180,canvas.redo=\u2318\u21e7Z,canvas.undo=\u2318Z,editor.open=\u2318\u21e7E,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
+    withHint.sort().join(',') === 'canvas.redo=\u2318\u21e7Z,canvas.undo=\u2318Z,canvas.zoom-fit=\u23180,editor.open=\u2318\u21e7E,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
     withHint.join(','))
 }
 

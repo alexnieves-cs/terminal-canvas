@@ -25,6 +25,8 @@ import { waitingCount } from '@renderer/shell/rail-sections'
 import type { AgentBackend } from '@shared/agent-session'
 import { BACKENDS, BACKEND_IDS } from '@shared/agent-backends'
 import { pinRefusal } from '@renderer/canvas/lod'
+import { requestTier } from '@renderer/canvas/flight'
+import { openSettingsPage } from '@renderer/settings/open'
 import { displayPath, displayLabel } from '@shared/display-path' // M178 (F.2): a verb row's target never prints a raw path
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
 // of credential-holding services, and credential-schema.ts imports nothing —
@@ -109,6 +111,8 @@ export interface PaletteActions {
   deletePreset(id: string): void
   setDefaultPreset(id: string): void
   goToPanel(id: string): void
+  /** M454, R-080. Open the World on this panel, or say so when none is selected. The body is `worldViewPaletteRow`. */
+  viewInWorld(panelId?: string): void
   insertPrompt(id: string): void
   /** M76. Answer a chat's pending permission request from anywhere. M98: `scope: 'session'` also grants the tool. */
   answerApproval(id: string, requestId: string, allow: boolean, scope?: 'session'): void
@@ -1302,14 +1306,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // --- Canvas --------------------------------------------------------------
 
   out.push({
-    // M146. TWO rows, two names (backlog #23's rule): `Reset zoom` is Cmd+0's
-    // INITIAL camera; `Zoom to fit` frames the selection when there is one and
-    // every panel otherwise (Cmd+1's fitAll, reached as a named verb at last).
-    // The `canvas.fit` id is kept for the row that has always run the reset.
+    // M146. TWO rows, two names. `Reset zoom` returns to INITIAL. ⌘0 is Fit
+    // all (R-032); this row has no chord.
     id: 'canvas.fit',
     title: 'Reset zoom',
     group: 'canvas',
-    shortcut: '⌘0',
     run: () => actions.resetZoom()
   })
   out.push({
@@ -1323,13 +1324,47 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // where the verb resets, and Reset zoom is the row — rests in search.
     title: ctx.selectedIds.some((id) => ctx.panels.some((p) => p.id === id)) ? 'Fit selection' : 'Fit all',
     ...hiddenAtRestIf(ctx.panels.length === 0),
-    // No ⌘1 hint: that chord runs useViewport's fitAll (every panel), not
-    // this selection-aware verb — a hint naming it lied when a selection
-    // existed (the Act II critic). The row is the verb's one door.
+    // R-032. ⌘0 is Fit all. The chip moves here from Reset zoom. Check 48
+    // counts every row with a shortcut, including one hidden at rest.
+    shortcut: '⌘0',
     subtitle: 'the selected panels, or every panel',
     searchText: 'fit all selection zoom to fit frame view',
     group: 'canvas',
     run: () => actions.zoomToFit()
+  })
+  // M444. The tier flights and the settings page. No shortcut field: check 48
+  // counts every chip, and these chords already live on the HUD.
+  out.push({
+    id: 'canvas.tier.work',
+    title: 'Go to Work',
+    subtitle: 'live terminals',
+    searchText: 'go to work tier zoom',
+    group: 'canvas',
+    run: () => requestTier('work')
+  })
+  out.push({
+    id: 'canvas.tier.plan',
+    title: 'Go to Plan',
+    subtitle: 'cards, one sentence each',
+    searchText: 'go to plan tier zoom cards',
+    group: 'canvas',
+    run: () => requestTier('plan')
+  })
+  out.push({
+    id: 'canvas.tier.map',
+    title: 'Go to Map',
+    subtitle: 'territories and state dots',
+    searchText: 'go to map tier zoom overview',
+    group: 'canvas',
+    run: () => requestTier('map')
+  })
+  out.push({
+    id: 'canvas.settings',
+    title: 'Open Settings',
+    subtitle: 'keyboard, appearance, the page',
+    searchText: 'open settings page keyboard',
+    group: 'canvas',
+    run: () => { openSettingsPage() }
   })
   // M409 (C5). Undo and Redo, which ⌘K did not have ("undo" matched 123 rows
   // and selected a usage-window setting). The shortcut chips are the menu's.
@@ -2306,6 +2341,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // never makes.
   // M336–M337. The account and sharing rows. The three sharing rows open the
   // share dialog; the dialog is where anything is shared, opened or changed.
+  // R-080. The literal id is what closure.v9.1 reads. The body stays worldViewPaletteRow, reached through viewInWorld, so this file does not import the world modules.
+  out.push({ id: 'world.view', title: 'View in World', subtitle: 'Open the World on this panel, or on its task when it has one', group: 'panel', searchText: 'world view show in world camera floor task panel', run: () => actions.viewInWorld(ctx.selectedIds[0]) })
   out.push({ id: 'account.sign-in', title: 'Account: sign in with GitHub…', subtitle: 'to share workspaces and see who in your organization is working', group: 'canvas', searchText: 'account sign in login github supabase add another switch', run: () => { void actions.signIn() } })
   out.push({ id: 'share.workspace', title: 'Share this workspace…', subtitle: 'put it in one of your organizations — teammates see cards, never commands or transcripts', group: 'canvas', searchText: 'share workspace team organization collaborate invite members', run: () => { void actions.shareWorkspace() } })
   out.push({ id: 'share.open', title: 'Open a shared workspace…', subtitle: 'the workspaces your teammates shared with you', group: 'canvas', searchText: 'open shared workspace team join room', run: () => { void actions.openSharedWorkspace() } })

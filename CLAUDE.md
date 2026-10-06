@@ -19,7 +19,7 @@ An index. Every rule in this repository exists because the obvious version fails
 
 An Electron app for macOS: an infinite canvas of authored objects — agents, terminals, files,
 previews, workflows, pictures and notes — each of which a person arranges, edits and keeps.
-A terminal is ONE thing a panel can be. **This is 5.0 (M192); the v10 run opened at M193.**
+A terminal is ONE thing a panel can be. **This is 6.0, the redesign (M435–M456). 5.0 was M192; the v10 run opened at M193.**
 
 The core job: move a meaningful task from intention to reviewed result while the person keeps
 control and understanding. *A workspace holds your work; tasks connect agents, tools and
@@ -108,7 +108,7 @@ pty:create pty:write pty:resize pty:kill pty:list machine:sample layout:load lay
 session:backend preset:list preset:rename preset:delete preset:set-default
 preset:spawn-by-id preset:template preset:save-panel preset:set-worktree worktree:list
 worktree:remove worktree:reveal scrollback:tail scrollback:clear scrollback:search
-canvas:request-reset prompt:list prompt:save prompt:delete template:list template:save
+canvas:request-reset dialog:confirm prompt:list prompt:save prompt:delete template:list template:save
 template:delete vault:read snapshot:list snapshot:restore memory:list memory:add
 watcher:create watcher:run watcher:stop watcher:dispose watcher:list settings:list
 settings:set agent:acknowledge workspace:list workspace:activate workspace:create
@@ -132,7 +132,7 @@ board:lane board:lane-status board:open-pr board:comment-pr
 board:repositories update:check image:read starter:prepare docx:import flowchart:read pty:data pty:exit edit:copy
 edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset preset:spawn
 preset:default preset:capture agent:state attention:jump settings:changed spawn:open-sheet
-agent:event watcher:state vault:changed session:live session:recover subagent:state
+agent:event watcher:state vault:changed session:live session:host session:recover subagent:state
 file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip board:add
 canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine:integrate combine:receipts setup:read setup:save
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge
@@ -143,7 +143,7 @@ team:list team:observe team:observed team:asks team:ask-answer team:asks-changed
 workspace:share workspace:shares workspace:open-share workspace:share-member workspace:share-members
 text:open text:close text:update text:remote
 relay:spawn relay:attach relay:detach relay:input relay:resize relay:control relay:kill
-relay:list relay:view relay:data relay:state world:events world:connection world:status world:retry
+relay:list relay:view relay:data relay:state world:events world:connection world:status world:retry boot:progress
 ```
 
 Direction is meaning, not convention. `preset:*` are main → renderer because the *menu* is

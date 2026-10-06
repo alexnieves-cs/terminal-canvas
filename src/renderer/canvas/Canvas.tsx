@@ -34,7 +34,7 @@ import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
-import { smartSnap, type SpacingGuide } from './arrange'
+import { alignRects, smartSnap, type SpacingGuide } from './arrange'
 import { SNAP_PX, type SnapGuide } from './placement'
 import { attemptOf, contextualHint, hintsLeft, STARTER_HINT, type HintId } from './hints'
 import { FirstTaskHint } from './FirstTaskHint'
@@ -62,14 +62,24 @@ import {
   EMPTY_SELECTION, NO_GUIDES, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport, prefersReducedMotion } from './useViewport'
-import { StartupSplash } from './StartupSplash'
-import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, type SplashMode, type StartupInput } from './splash'
+import { RestoreSplash, StartupSplash } from './StartupSplash'
+import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, restoreLines, type RestoreFacts, type SplashMode, type StartupInput } from './splash'
+import { Onboarding } from '@renderer/onboarding/Onboarding'
+import { BlankCanvas } from '@renderer/shell/EmptyState'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advanced-doors'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { taskClusters, type TaskCluster } from './task-clusters'
-import { TaskClusterLayer } from './TaskClusterLayer'
+import { TaskClusterLayer, TaskRegionLayer, TierLayer } from './TaskClusterLayer'
+import { moveRegion, regionsFromMemberships } from './task-regions'
+import { InlineApproval } from '@renderer/shell/ApprovalDetail'
+import { allowPendingTarget } from '@renderer/palette/commands/approval-row'
+import { waitingSince } from '@renderer/panels/header-rest'
+import { criteriaChecklist } from '@renderer/panels/session-facts'
+import { applyMakeTask } from '@renderer/panels/make-task'
+import { connectedSpawnMenu } from '@renderer/panels/connected-spawn'
+import { armConnectedSpawn, clearArmedSpawn, noteSpawnCursor, openConnectedSpawn, setConnectedOpener, spawnCursor, spawnSize, takeArmedSpawn, type ConnectedRequest } from '@renderer/panels/spawn-cursor'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
@@ -155,6 +165,8 @@ import { shellQuote } from '@renderer/shell/file-tree-model'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
+import { NavigateTier } from '@renderer/palette/navigate-tier'
+import { ConnectedSpawnMenu } from '@renderer/palette/SpawnSheet'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
@@ -263,8 +275,9 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
-import { focusLocked } from '@shared/shortcuts'
+import { focusLocked, matchShortcut } from '@shared/shortcuts'
 import { SessionsHost } from '@renderer/sessions/SessionsHost'
+import { openSettingsPage } from '@renderer/settings/open'
 import { ReviewHost } from '@renderer/review/ReviewHost'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { FocusTask } from '../focus/FocusTask'
@@ -272,8 +285,11 @@ import type { FocusSide } from '../focus/focus-model'
 import { planFactsOf } from '../focus/plan-facts'
 import { planSummary, planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
-import { WorldStage, warmWorldView } from '../world/WorldStage'
-import { setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
+import { WorldStage } from '../world/WorldStage'
+import { WorldLens } from '../world/WorldLens'
+import { landingViewport } from '../world/plan-floor'
+import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn, worldLandingViewport } from '../world/world-toggle'
+import { attentionCursor, setAttentionCursor } from '../world/world-flight'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
 import { requestArrival } from '../world/world-select'
 import { useSelectedAgent } from '../world/world-select'
@@ -824,13 +840,25 @@ export function Canvas({
     }
   }, [])
   const onSpawn = useCallback(
-    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true }) => {
+    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true; atCursor?: true }) => {
+      // M443. A connected drop is exact: the panel lands on the release and
+      // links back with a handoff-on-exit. A bare Cmd+N (no template, no
+      // opening) uses the cursor when the mouse has moved, and still runs
+      // place() so two presses with no further move keep cascading.
+      const armed = takeArmedSpawn()
+      const bare = template === undefined && opening === undefined
+      const cursorPoint = bare ? spawnCursor() : null
+      const asked = armed?.at ?? cursorPoint ?? centre
+      const atCursor = opening?.atCursor === true || cursorPoint !== null || armed !== null
       const chosen = template ?? defaultTemplateRef.current
+      const presetSized = chosen?.w !== undefined || chosen?.h !== undefined
+      const size = atCursor && !presetSized ? spawnSize(panelsRef.current, selectedIdsRef.current) : (chosen ? { w: chosen.w, h: chosen.h } : undefined)
       const id = `n${nextIdRef.current++}`
       if (opening?.focus) setPendingFocusId(id)
       setEnteringPanelIds((current) => new Set(current).add(id))
       // M402. The one placement rule (placer, above) unless the caller gave an EXACT point.
-      const place = opening?.exact ? null : placer()
+      // An armed connected spawn is exact too: the person dropped on that point.
+      const place = opening?.exact === true || armed !== null ? null : placer()
       setPanels((current) => {
         // Where the panel ACTUALLY goes. Without this, N presses at an
         // unmoved camera produce N byte-identical rects and the canvas looks
@@ -851,7 +879,7 @@ export function Canvas({
         // could not place the panel somewhere else.
         const made: Panel = { ...makePanel(
             id,
-            centre,
+            asked,
             nextZ(current),
             chosen
               ? {
@@ -877,9 +905,12 @@ export function Canvas({
                   ...(chosen.env !== undefined ? { env: { ...chosen.env } } : {})
                 }
               : undefined,
-            chosen ? { w: chosen.w, h: chosen.h } : undefined
+            size
           ), ...(opening?.title === undefined ? {} : { title: opening.title }) }
-        const next = [...current, place === null ? made : place(current, made)]
+        let next = [...current, place === null ? made : place(current, made)]
+        if (armed !== null) {
+          next = setLinkAutomation(addLink(next, armed.from, id), armed.from, id, { kind: 'handoff', enabled: true, trigger: 'exit' })
+        }
         commitHistory(next)
         return next
       })
@@ -2322,7 +2353,16 @@ export function Canvas({
     // Before, the release cancelled silently.
     onDropEmpty: (from, cursor) => {
       if (mergedRef.current) return
-      connectorsRef.current?.extend(from, null, cursor)
+      // A shape still quick-connects a process step (flowchart.app.1's door
+      // is the double-click; this one is the port). A panel opens the
+      // connected-object menu instead of minting a shape.
+      const source = panelsRef.current.find((panel) => panel.rect.id === from)
+      if (source !== undefined && isShapePanel(source)) {
+        connectorsRef.current?.extend(from, null, cursor)
+        return
+      }
+      const name = source === undefined ? from : panelName(source)
+      openConnectedSpawn(from, cursor, name)
     },
     onCommit: (from, to) => {
       // The VERB refuses, not only the affordance. This repo's standing rule,
@@ -2537,7 +2577,7 @@ export function Canvas({
       const top = Math.min(...members.map((p) => p.rect.y))
       return Math.max(0, ...members.filter((p) => p.rect.y === top).map((p) => p.rect.y - occupiedRect(p, rim).y))
     }
-    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, rimOf })
+    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, gapGrid: 24, rimOf })
     setSnapGuides(out.guides, out.spacing)
     return out.rect
   }, [setSnapGuides])
@@ -2905,10 +2945,6 @@ export function Canvas({
     if (docFocusId !== null && (!selectedIds.has(docFocusId) || selectedIds.size !== 1)) setDocFocusId(null)
   }, [docFocusId, selectedIds])
 
-  // Which panel the jump key last visited. A ref, not state: it is a cursor
-  // for a keydown handler and nothing renders from it, so putting it in state
-  // would re-render the canvas on every press for no visible reason.
-  const jumpCursorRef = useRef<string | null>(null)
   // M308. Assigned below, where the inbox is built; read at press time.
   const inboxRef = useRef<Inbox | null>(null)
 
@@ -2948,7 +2984,10 @@ export function Canvas({
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
     // M308. The inbox's order — most unblocked first, snoozed skipped.
     const queue = jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current)
-    const id = nextAttentionId(queue, jumpCursorRef.current, direction)
+    // R-091. The same cursor the World's walk writes, so ⌘J here and ⌘J in
+    // the room are one cycle. The world covers the canvas, so one press is
+    // not handled twice.
+    const id = nextAttentionId(queue, attentionCursor(), direction)
     // Nothing is waiting: the key does nothing at all. Moving the camera
     // "somewhere" would be worse than silence — the user asked to be taken to
     // a panel that wants them, and there isn't one.
@@ -2958,23 +2997,22 @@ export function Canvas({
     // this lookup in principle. It must never be the ONLY thing standing
     // between the user and a working key, which is why the filter exists.
     if (!panel) return
-    jumpCursorRef.current = id
+    setAttentionCursor(id)
     landingTargetRef.current = id
     centreOn(panel.rect)
     selectAndRaise(id)
     openRequestOfRef.current(id)
   }
 
-  // M249. The command pill's Jump: Cmd+J's own queue and its own cursor — so
-  // a pill press and a Cmd+J press advance ONE cycle rather than two that
-  // disagree about which waiting panel is next — landing through
+  // M249. The command pill's Jump: Cmd+J's queue and the same cursor, so a
+  // pill press, a canvas ⌘J and a World ⌘J advance ONE cycle. Lands through
   // jumpToAttention, the notification click's function. Nothing waiting
   // does nothing, for Cmd+J's reason.
   const pillJump = useCallback(() => {
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
-    const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), jumpCursorRef.current, 1)
+    const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), attentionCursor(), 1)
     if (id === null) return
-    jumpCursorRef.current = id
+    setAttentionCursor(id)
     // #16. jumpToAttention opens the request itself (a permission in the queue).
     jumpToAttention(id)
   }, [jumpToAttention])
@@ -3947,6 +3985,15 @@ export function Canvas({
   // longer dev-only — the packaged renderer was measured loading the room under file://.
   const worldOn = useWorldOn()
   const closeWorldView = useCallback(() => setWorldOn(false), [])
+  // M449. Assigned during render, not a hook: Canvas's hook order is load-bearing.
+  // The stage calls this once the move back has settled and the inline transform is gone.
+  setWorldLanding((target) => {
+    const box = hostRef.current?.getBoundingClientRect()
+    const width = box !== undefined && box.width > 0 ? box.width : window.innerWidth
+    const height = box !== undefined && box.height > 0 ? box.height : window.innerHeight
+    const posed = worldLandingViewport()
+    restoreCamera(posed ?? landingViewport(target, { width, height }, viewportRef.current.scale))
+  })
   const canvasCovered = chrome.centerView !== 'canvas' || worldOn
   canvasCoveredRef.current = canvasCovered
   // M283. The element that last had focus INSIDE the canvas host, kept so a return from
@@ -7847,28 +7894,13 @@ export function Canvas({
     event.stopPropagation()
   }, [])
 
-  /**
-   * The top bar's ⚙. It opens the palette straight into the settings
-   * drill-in through the controller's own scope — the SAME authority the
-   * `Manage settings…` row's `entersScope: 'settings'` reaches, not a second
-   * door. The scope is what makes the button honest: every setting row is
-   * hiddenAtRest, so merely opening the palette would land the user on a list
-   * with no settings visible at all, which reads as a feature that was never
-   * built.
-   */
   // M68. The Jira panel's Connect verb: the palette's Credentials scope.
   const openCredentials = useCallback(() => palette.openPalette('credentials'), [palette.openPalette])
+  // R-026. The dock's Settings opens the page. Manage settings… stays the
+  // palette drill-in (entersScope: 'settings' on that row).
   const openSettingsScope = useCallback(() => {
-    palette.openPalette('settings')
-    // A useCallback for consistency with its sibling verbs, not for a
-    // load-bearing reason. An earlier comment here claimed an unstable
-    // identity would re-render TopBar on every mousemove over the canvas;
-    // that is false. TopBar is not memo-wrapped, so it re-renders whenever
-    // Canvas does — which a mousemove's setCursor already makes it do —
-    // whatever this prop's identity is. The parallel note in useViewport.ts
-    // IS true and load-bearing (those callbacks sit in a keydown effect's dep
-    // array); don't read this one as saying the same thing.
-  }, [palette.openPalette])
+    openSettingsPage()
+  }, [])
 
   // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
   // declared earlier in this component — see that ref's own comment for why
@@ -8670,6 +8702,34 @@ export function Canvas({
     return <FirstTaskHint strip panelId={panelId} sent={firstTask.sent} onDismiss={() => { markHint('first-task'); setFirstTask(null) }} {...facts} />
   }
 
+  // R-051. One terrace drag is one `moveRegion` plan and one history entry.
+  // The scene cannot import the verb; it calls this through the publisher,
+  // which reads the latest input, so this stays a fresh closure rather than
+  // a memo that would freeze the first render's memberships. `commitHistory`
+  // sits inside the updater, once — not once per member.
+  const moveTaskRegion = (regionId: string, dx: number, dy: number): readonly string[] => {
+    if (dx === 0 && dy === 0) return []
+    const membership = taskMemberships(panelsRef.current, workItemsRef.current).find((m) => m.itemId === regionId)
+    if (membership === undefined) return []
+    const byId = new Map(panelsRef.current.map((p) => [p.rect.id, p]))
+    const members = membership.members.flatMap((member) => {
+      const panel = byId.get(member.panelId)
+      if (panel === undefined) return []
+      return [{ id: panel.rect.id, x: panel.rect.x, y: panel.rect.y, w: panel.rect.w, h: panel.rect.h }]
+    })
+    if (members.length === 0) return []
+    const plan = moveRegion(members, dx, dy)
+    const ids = new Set(plan.rects.map((rect) => rect.id))
+    setPanels((current) => {
+      let next = current
+      for (const rect of plan.rects) next = setPanelRect(next, rect.id, rect)
+      next = next.map((p) => (ids.has(p.rect.id) && p.maximised !== undefined ? (({ maximised: _m, ...rest }) => rest as Panel)(p) : p))
+      commitHistory(next)
+      return next
+    })
+    return plan.rects.map((rect) => rect.id)
+  }
+
   // M421. The world's half of the work — tasks and their plans, waiting
   // requests, handoffs, who else is here — and the doors its buttons call.
   // Derived only while the room is up (the hook's own `on`).
@@ -8704,6 +8764,16 @@ export function Canvas({
       return branch === undefined || branch === '' ? undefined : branch
     },
     teammateNameOf,
+    moveRegion: moveTaskRegion,
+    // R-071. An agent terminal's reply: bracketed paste, then one explicit submit.
+    // The publisher refuses a plain shell before this runs.
+    pasteTerminal: async (agentId, text) => {
+      const handle = registry.get(agentId)?.handle
+      if (handle === undefined) return 'answer in its terminal'
+      handle.paste(text)
+      handle.write('\r')
+      return null
+    },
     tasks: () => workItems.filter((item) => item.state !== 'done').map((item) => {
       const members = taskMemberships(displayPanels, [item])[0]?.members.map((m) => m.panelId) ?? (item.panelId === undefined ? [] : [item.panelId])
       const views = planViewsFor(item.id) ?? []
@@ -8711,6 +8781,165 @@ export function Canvas({
       return { id: item.id, title: item.title, state: item.state, members, steps }
     })
   })
+
+  // M442. Appended hooks. Nothing above this point moves: a hook inserted
+  // earlier would shift every later hook's state for the life of the canvas.
+  const laneChordRef = useRef({ approvals: pendingApprovals, waiting: waitingIds })
+  laneChordRef.current = { approvals: pendingApprovals, waiting: waitingIds }
+  const onPausePanel = useCallback((id: string) => { void window.canvas.agentSession.interrupt(id) }, [])
+  const onHandOffPanel = useCallback((id: string) => { paletteActionsRef.current?.beginLink(id) }, [])
+  const makeTaskRef = useRef<() => void>(() => {})
+  makeTaskRef.current = () => {
+    if (mergedRef.current) return
+    const selected = [...selectedIdsRef.current]
+    if (selected.length === 0) return
+    const cardId = `n${nextIdRef.current++}`
+    const itemId = `w${nextIdRef.current++}`
+    const now = Date.now()
+    const named = panelsRef.current.find((panel) => panel.rect.id === selected[0])
+    const title = named !== undefined && named.title !== undefined && named.title !== '' ? named.title : 'Task'
+    const item = { id: itemId, source: 'typed' as const, title, state: WORK_ITEM_STATES[1], createdAt: now, updatedAt: now }
+    setWorkItems((items) => items.some((row) => row.id === item.id) ? items : [...items, item])
+    setPanels((current) => {
+      const result = applyMakeTask({ panels: current, selectedIds: selected, cardId, itemId, now, title })
+      if (result === null) return current
+      commitHistory(result.panels)
+      return result.panels
+    })
+  }
+  const [connectedSpawn, setConnectedSpawn] = useState<ConnectedRequest | null>(null)
+  useEffect(() => {
+    setConnectedOpener(setConnectedSpawn)
+    return () => setConnectedOpener(null)
+  }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const hit = matchShortcut({ metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, code: event.code })
+      // ⌘⇧W is the registry's `world` chord. It is handled before shouldIgnoreKeys
+      // so it still fires while the world covers the canvas; a locked panel keeps the key.
+      if (hit?.id === 'world') {
+        if (focusLocked()) return
+        event.preventDefault()
+        if (!event.repeat) toggleWorld()
+        return
+      }
+      if (shouldIgnoreKeys()) return
+      if (hit?.id === 'allow') {
+        event.preventDefault()
+        const selected = selectedIdsRef.current
+        const target = allowPendingTarget({
+          selectionEmpty: selected.size === 0,
+          selectedId: selected.size === 1 ? [...selected][0] ?? null : null,
+          approvals: laneChordRef.current.approvals,
+          queueHeadId: laneChordRef.current.waiting[0] ?? null
+        })
+        if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
+        return
+      }
+      if (hit?.id === 'make-task') {
+        event.preventDefault()
+        makeTaskRef.current()
+        return
+      }
+      if (hit?.id === 'new-shell') {
+        event.preventDefault()
+        const selected = selectedIdsRef.current
+        const only = selected.size === 1 ? panelsRef.current.find((panel) => panel.rect.id === [...selected][0]) : undefined
+        const cwd = only !== undefined && isTerminalPanel(only) ? only.spec.cwd : only !== undefined && isChatPanel(only) ? only.chat.cwd : '~'
+        onSpawn(spawnCursor() ?? worldCentre(), { cwd, args: [] }, { focus: true, atCursor: true })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [shouldIgnoreKeys, onSpawn, worldCentre])
+
+  const taskRegions = regionsFromMemberships(
+    taskMemberships(displayPanels, workItems),
+    displayPanels.map((panel) => ({
+      panelId: panel.rect.id,
+      rect: panel.rect,
+      agent: isChatPanel(panel) || (isTerminalPanel(panel) && panel.spec.agent !== undefined)
+    })),
+    Object.fromEntries(workItems.map((item) => [item.id, {
+      ticket: item.key ?? null,
+      title: item.title,
+      criteriaDone: item.criteriaMet?.length ?? 0,
+      criteriaTotal: item.criteria?.length ?? 0
+    }]))
+  )
+  const taskCriteria = inspectorModel === null ? null : (() => {
+    const itemId = taskMemberships(displayPanels, workItems).find((membership) => membership.members.some((member) => member.panelId === inspectorModel.id))?.itemId
+    const item = itemId === undefined ? undefined : workItems.find((candidate) => candidate.id === itemId)
+    if (item?.criteria === undefined || item.criteria.length === 0) return null
+    return criteriaChecklist(item.criteria, item.criteriaMet ?? [])
+  })()
+
+  // R-021. New hooks sit here, immediately before the return, so nothing
+  // above them changes order. The APEX splash stays on splashMode. The
+  // restore card is a second surface and stays up while a live boot is
+  // unsettled, including when that mode is 'none'.
+  const [restoreFacts, setRestoreFacts] = useState<RestoreFacts | null>(null)
+  const [restoreLeft, setRestoreLeft] = useState(false)
+  useEffect(() => {
+    const boot = window.canvas.boot
+    if (boot === undefined) return
+    return boot.onProgress((event) => {
+      setRestoreFacts((prev) => ({
+        ...(prev ?? {}),
+        ...(event.workspace !== undefined ? { workspace: event.workspace } : {}),
+        ...(event.layout !== undefined ? { layout: event.layout } : {}),
+        ...(event.tmux !== undefined ? { tmux: event.tmux } : {}),
+        ...(event.agentsPlanned !== undefined ? { agentsPlanned: event.agentsPlanned } : {}),
+        ...(event.agentsFound !== undefined ? { agentsFound: [...event.agentsFound] } : {}),
+        ...(event.failed !== undefined ? { failed: event.failed } : {}),
+        ...(event.optionHeld === true ? { optionHeld: true } : {})
+      }))
+    })
+  }, [])
+  const restoreOpen = restoreFacts !== null && !restoreLeft && !restoreLines(restoreFacts).settled
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return window.localStorage.getItem('tc.onboarding.done') === '1' } catch { return false }
+  })
+  // R-034. The crash card already keeps the panel id. Restart is the canvas door.
+  useEffect(() => {
+    const door = (window as unknown as { __rdLF?: { onRestart?: (id: string) => void } }).__rdLF
+    if (door === undefined) return
+    const previous = door.onRestart
+    door.onRestart = (id) => { paletteActionsRef.current?.restartPanel(id) }
+    return () => { door.onRestart = previous }
+  }, [])
+  const showOnboarding = startup !== undefined && startup.harnessOff !== true && startup.lastVersion === null && !onboardingDone
+  const finishOnboarding = (): void => {
+    try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }
+    setOnboardingDone(true)
+  }
+
+  // R-028. A work item names one conversation. That slot is filled only while
+  // it is empty — writing over it would replace the lane's chat. Every moved
+  // panel is also linked to the task's work card, the same one-hop make-task
+  // already uses. There is no second membership list.
+  const moveSessionsToTask = (ids: readonly string[], taskId: string): void => {
+    if (ids.length === 0) return
+    const item = workItemsRef.current.find((row) => row.id === taskId)
+    if (item === undefined) return
+    const first = ids[0]
+    if (item.panelId === undefined && first !== undefined) {
+      setWorkItems((current) => current.map((row) => (
+        row.id === taskId && row.panelId === undefined
+          ? carryWorkItem({ ...row, panelId: first, updatedAt: Date.now() })
+          : row
+      )))
+    }
+    const card = panelsRef.current.find((panel) => workCardItemId(panel) === taskId)
+    if (card === undefined) return
+    setPanels((current) => {
+      let next = current
+      for (const id of ids) next = addLink(next, id, card.rect.id)
+      if (next === current) return current
+      commitHistory(next)
+      return next
+    })
+  }
 
   return (
     <div
@@ -8836,7 +9065,6 @@ export function Canvas({
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}
         onSetCenterView={setCenterView}
-        worldView={{ on: worldOn, onToggle: toggleWorld, onWarm: warmWorldView }}
         running={inspectorSummary.running}
         waiting={inspectorSummary.waiting}
         onJumpWaiting={jumpToWaiting}
@@ -8921,6 +9149,7 @@ export function Canvas({
       {/* M268/M272. Orchestration shares the canvas grid cell; the canvas host
           stays mounted (visually behind, never unmounted) so PTYs and agents
           keep running. The overlay animates in; prefers-reduced-motion snaps. */}
+      {chrome.centerView === 'canvas' && <WorldLens on={worldOn} />}
       {/* M413. The 3D world view's layer, over a host that stays mounted (dev only; see WorldStage). */}
       <WorldStage on={worldOn} hostRef={hostRef} />
       {chrome.centerView === 'orchestration' && (
@@ -9166,7 +9395,48 @@ export function Canvas({
       {(chrome.centerView === 'sessions' || chrome.centerView === 'review') && (
         <div className="shell__page" data-center-view={chrome.centerView}>
           {chrome.centerView === 'sessions'
-            ? <SessionsHost onShowOrchestrate={() => setCenterView('orchestration')} />
+            ? <SessionsHost
+                onShowOrchestrate={() => setCenterView('orchestration')}
+                confirmEnd={(ask) => window.canvas.dialog.confirm(ask)}
+                onEnd={(ids) => { for (const id of ids) paletteActions.closePanel(id) }}
+                onPause={(ids) => { for (const id of ids) void window.canvas.agentSession.interrupt(id) }}
+                onRestart={(ids) => { for (const id of ids) paletteActions.restartPanel(id) }}
+                onMove={moveSessionsToTask}
+                onNewSession={() => paletteActions.beginSpawnSheet()}
+                onShowOnCanvas={(id) => { setCenterView('canvas'); paletteActions.goToPanel(id) }}
+                onSend={(id, text) => {
+                  const panel = panelsRef.current.find((candidate) => candidate.rect.id === id)
+                  // paste(), never pty.write. A chat has no terminal handle, so the
+                  // callback the host now always receives still has to send it.
+                  if (panel !== undefined && isTerminalPanel(panel)) {
+                    registry.get(id)?.handle.paste(text)
+                    return
+                  }
+                  void window.canvas.agentSession.send(id, text, [])
+                }}
+                onDetach={(id) => registry.detachSlot(id)}
+                onAllow={(panelId) => {
+                  const approval = pendingApprovals.find((row) => row.id === panelId)
+                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, true)
+                }}
+                onDeny={(panelId) => {
+                  const approval = pendingApprovals.find((row) => row.id === panelId)
+                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, false)
+                }}
+                onDiff={(panelId) => paletteActions.openReview(panelId)}
+                live={{
+                  dormant: (id) => registry.get(id)?.dormant === true,
+                  // lastFocusedAt is the last click, not a start. The Run column stays empty.
+                  startedAt: () => null,
+                  survives: (id) => {
+                    const session = registry.get(id)
+                    if (session === undefined || session.status.kind !== 'running') return null
+                    return backendInfo?.kind === 'tmux' ? true : null
+                  },
+                  // The session stores no diff stat. Asking git once per row would invent one.
+                  changes: () => null
+                }}
+              />
             : <ReviewHost />}
         </div>
       )}
@@ -9200,7 +9470,14 @@ export function Canvas({
         onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
         onContextMenu={contextMenu.onContextMenu}
-        onMouseMove={onMouseMove}
+        onMouseMove={(event) => {
+          const host = hostRef.current
+          if (host !== null) {
+            const box = host.getBoundingClientRect()
+            noteSpawnCursor(screenToWorld({ x: event.clientX - box.left, y: event.clientY - box.top }, viewportRef.current))
+          }
+          onMouseMove(event)
+        }}
         onDoubleClick={onCanvasDoubleClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -9216,10 +9493,8 @@ export function Canvas({
         {/* M249. A SIBLING of .world, never inside it: outside the transformed
             layer it cannot change a panel's size, and it is absolutely
             positioned so expanding it pushes nothing (pill.rects.1). The
-            attention count is the REACHABLE queue, Cmd+J's, so the pill never
-            says "1 chat needs you" about a phantom it cannot jump to. */}
+            pill reads its own queue (R-030). */}
         <CommandPill actions={paletteActions} panels={panels}
-          attentionCount={reachableQueue(waitingIds, new Set(displayPanels.map((p) => p.rect.id))).length}
           {...(lens !== null ? { taskTitle: workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId } : {})}
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
           engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
@@ -9274,6 +9549,35 @@ export function Canvas({
           {cardDetail === 'cluster'
             ? <TaskClusterLayer clusters={clusterHulls} />
             : !merged && <TaskClusterLayer region clusters={clusterHulls.filter((c) => c.kind === 'task')} />}
+          {!merged && <TaskRegionLayer regions={taskRegions} />}
+          <TierLayer />
+          <NavigateTier
+            scale={viewport.scale}
+            panels={displayPanels}
+            railRows={railRows}
+            terminalPanels={terminalPanels}
+            focusedId={focusedId}
+            collapsedPanelIds={collapsedPanelIds}
+            releaseFocus={releaseFocusStable}
+            hostRef={hostRef}
+            onSelect={selectAndRaise}
+            merged={merged}
+          />
+          {!merged && pendingApprovals.map((approval) => {
+            const host = displayPanels.find((panel) => panel.rect.id === approval.id)
+            if (host === undefined) return null
+            return (
+              <div key={approval.requestId} className="inline-approval-host" style={{ position: 'absolute', left: host.rect.x + 16, top: host.rect.y + host.rect.h - 132, width: Math.max(160, Math.min(420, host.rect.w - 32)), zIndex: host.z + 2 }}>
+                <InlineApproval
+                  approval={approval}
+                  waiting={waitingSince(approval.requestId, Date.now())}
+                  onAllow={() => paletteActions.answerApproval(approval.id, approval.requestId, true)}
+                  onDeny={() => paletteActions.answerApproval(approval.id, approval.requestId, false)}
+                  onViewDiff={() => paletteActions.openReview(approval.id)}
+                />
+              </div>
+            )
+          })}
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels. The LAYER itself still takes
@@ -9798,7 +10102,7 @@ export function Canvas({
         </PanelMarksContext.Provider>
         </CardDetailContext.Provider>
         {pipsEnabled && (
-          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p, undefined, { defaultName: terminalNameOf.get(id) }) }} />
+          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} onFly={goToPanelStable} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p, undefined, { defaultName: terminalNameOf.get(id) }) }} />
         )}
         {/* M69. The overview: outside .world like the pips, in the top-right
             corner, hidden while merged (the merged view's geometry is not this
@@ -9806,7 +10110,7 @@ export function Canvas({
         {/* An overview of nothing is noise beside the launcher: it appears
             with the first object. */}
         {minimapEnabled && !merged && panels.length > 0 && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} flying={flying} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} flying={flying} regions={taskRegions.map((region) => region.bounds)} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view
@@ -9829,7 +10133,61 @@ export function Canvas({
         {/* Beside the pips and outside .world for the same reason — see
             Marquee.tsx. It renders null at rest, so there is no "no marquee"
             element for anything to find. */}
-        <Marquee rect={marquee} />
+        <Marquee
+          rect={marquee}
+          selectionCount={selectedIds.size}
+          onAlign={() => {
+            setPanels((prev) => {
+              const wanted = selectedIdsRef.current
+              const chosen = prev.filter((panel) => wanted.has(panel.rect.id) && panel.locked !== true)
+              if (chosen.length < 2) return prev
+              const positions = alignRects(chosen.map((panel) => panel.rect), 'left')
+              const next = prev.map((panel) => {
+                const at = positions.get(panel.rect.id)
+                return at === undefined ? panel : { ...panel, rect: { ...panel.rect, x: at.x, y: at.y } }
+              })
+              if (next.every((panel, index) => panel === prev[index])) return prev
+              commitHistory(next)
+              return next
+            })
+          }}
+          onTidy={() => paletteActions.tidyPanels([...selectedIds])}
+          onMakeTask={() => makeTaskRef.current()}
+          onPauseAll={() => { for (const id of selectedIds) void window.canvas.agentSession.interrupt(id) }}
+        />
+        {connectedSpawn !== null && (() => {
+          const at = worldToScreen(connectedSpawn.at, viewport)
+          const model = connectedSpawnMenu(connectedSpawn.name, presetRows)
+          const from = connectedSpawn.from
+          const point = connectedSpawn.at
+          const cwdOf = (): string => {
+            const source = panels.find((panel) => panel.rect.id === from)
+            if (source !== undefined && isTerminalPanel(source)) return source.spec.cwd
+            if (source !== undefined && isChatPanel(source)) return source.chat.cwd
+            return '~'
+          }
+          return (
+            <ConnectedSpawnMenu
+              title={model.title}
+              agents={model.agents}
+              presets={model.presets}
+              foot={model.foot}
+              style={{ position: 'absolute', left: at.x, top: at.y, zIndex: 40 }}
+              onClose={() => { clearArmedSpawn(); setConnectedSpawn(null) }}
+              onAgent={(kind) => {
+                armConnectedSpawn({ from, at: point })
+                const cwd = cwdOf()
+                onSpawn(point, kind === 'shell' ? { cwd, args: [] } : { cwd, args: [], agent: kind === 'claude' ? 'claude-code' : 'codex' }, { focus: true })
+                setConnectedSpawn(null)
+              }}
+              onPreset={(id) => {
+                armConnectedSpawn({ from, at: point })
+                void window.canvas.preset.spawnById(id)
+                setConnectedSpawn(null)
+              }}
+            />
+          )
+        })()}
         {/* Presence: remote selections and cursors on their own 2D canvas, and
             the roster of who else is here. Siblings of .world like Marquee —
             screen-pinned, and a remote update repaints this layer only. */}
@@ -9893,6 +10251,19 @@ export function Canvas({
         {splash !== 'none' && !merged && (
           <StartupSplash mode={splash} rects={rects} viewport={viewport} onDone={() => setSplash('none')} />
         )}
+        {restoreOpen && restoreFacts !== null && !merged && (
+          <RestoreSplash
+            facts={restoreFacts}
+            rects={panels.map((panel) => ({ x: panel.rect.x, y: panel.rect.y, w: panel.rect.w, h: panel.rect.h }))}
+            onDone={() => setRestoreLeft(true)}
+          />
+        )}
+        {showOnboarding && !merged && (
+          <Onboarding workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''} onHandoff={finishOnboarding} />
+        )}
+        {onboardingDone && panels.length === 0 && !merged && (
+          <BlankCanvas workspace={workspaceRows.find((w) => w.active)?.name ?? ''} />
+        )}
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}
@@ -9952,18 +10323,20 @@ export function Canvas({
             navigator's Panels pane is not there to hold it. Resume alone
             never floats here any more — it is the strip (see resumeStrip). */}
         {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
-        {(reopen !== null || jobRecovery !== null) && (
-          <div className="reopen-stack" data-screen-control="">
-            {reopen !== null && (
-              <ReopenNotice
-                model={reopen}
-                onGo={paletteActions.goToPanel}
-                onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
-              />
-            )}
-            {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
-          </div>
-        )}
+        <div className="recovery-slot" data-recovery-slot="">
+          {(reopen !== null || jobRecovery !== null) && (
+            <div className="reopen-stack" data-screen-control="">
+              {reopen !== null && (
+                <ReopenNotice
+                  model={reopen}
+                  onGo={paletteActions.goToPanel}
+                  onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
+                />
+              )}
+              {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
+            </div>
+          )}
+        </div>
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner data-screen-control="" role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
@@ -10107,6 +10480,9 @@ export function Canvas({
         // M352. The Caps fields are a PERSON's door: raising a cap is theirs to do.
         onCap={(id, value) => paletteActions.capAgent(id, value, 'person')}
         onOpenReview={paletteActions.openReview}
+        taskCriteria={taskCriteria}
+        onPausePanel={onPausePanel}
+        onHandOffPanel={onHandOffPanel}
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}

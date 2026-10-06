@@ -2055,7 +2055,11 @@ app.whenReady().then(async () => {
       // `user@host ~ %` (flowchart-dark). Every terminal's rows and the
       // page's own text are read before the capture; a hit fails the scene
       // by name instead of writing the picture.
-      const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const text = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); return words.filter((w) => text.includes(w)) })()`)
+      // Whole tokens, not substrings (R-065): a product word that merely
+      // contains the host must not fail the scene. The camera row "Zoom to
+      // cursor" is that word on a host named cursor, so the row is left out
+      // of the page scan. A terminal row is still scanned.
+      const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const panel = document.querySelector('[data-world-camera]'); let page = document.body.innerText; if (panel && panel.innerText) page = page.split(panel.innerText).join(' '); const text = page + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const tokens = new Set(text.split(/[^A-Za-z0-9]+/).filter(Boolean)); return words.filter((w) => tokens.has(w)) })()`)
       if (leaks.length > 0) throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name`)
       const img = await wc.capturePage()
       const path = join(OUT, `${name}.png`)

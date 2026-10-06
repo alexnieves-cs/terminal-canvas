@@ -38,7 +38,7 @@ import type { CapturedPanel } from '@shared/ipc-contract'
 import { railLabel } from '../../shell/rail-rows'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
-import { adoptedRunId, permissionRecordTitle, recordOrchEvent } from '../../orchestration/orch-record'
+import { recordPermissionAnswer } from '../../orchestration/orch-record'
 
 export type PresetsActions = Pick<PaletteActions,
   | 'spawnPreset'
@@ -680,13 +680,11 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
           if (accepted === false) withdrawApprovalOutcome(requestId)
           if (accepted === false) return
           // The source is `person` because a person decided it here.
-          void recordOrchEvent({
-            runId: adoptedRunId(id), panelId: id, event: 'permission', source: 'person',
+          recordPermissionAnswer({
+            panelId: id, requestId, allow,
+            ...(scope === undefined ? {} : { scope }),
             ...(itemId === undefined ? {} : { itemId }),
-            // The inbox's own key, so a history row matches the decision it closed.
-            key: `p:${requestId}`,
-            title: permissionRecordTitle(allow, scope, asked),
-            detail: `${requestId}${scope === undefined ? '' : ` · for this ${scope}`}`
+            ...(asked === undefined ? {} : { asked: { toolName: asked.toolName, argument: asked.argument } })
           })
         })
     },

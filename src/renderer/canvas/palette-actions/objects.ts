@@ -21,6 +21,7 @@ import { deckExportSentence } from '@shared/deck-pptx'
 import type { GithubPublishRequest } from '@shared/ipc-contract'
 import { isFilePanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
+import { viewInWorld, worldViewPaletteId } from '@renderer/canvas/object-verbs'
 import type { ActionCtx } from './types'
 
 export type ObjectsActions = Pick<PaletteActions,
@@ -59,6 +60,7 @@ export type ObjectsActions = Pick<PaletteActions,
   | 'startDevServer'
   | 'prepareFeedback'
   | 'say'
+  | 'viewInWorld'
 >
 
 export function objectsActions(ctx: ActionCtx): ObjectsActions {
@@ -218,6 +220,25 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     //
     // The attention suppression moves INTO `notify`, unchanged, so there is
     // one table and not two.
-    say: (sentence: string) => { notify({ sentence }) }
+    say: (sentence: string) => { notify({ sentence }) },
+    // R-080. One body: the palette row and the verb both run this.
+    viewInWorld: (panelId) => { worldViewPaletteRow(panelId, (sentence) => notify({ sentence })).run() }
   })
+}
+
+/**
+ * M454. The palette row's body. `commands.ts` spells `id: 'world.view'` and
+ * calls `viewInWorld`, which runs this, so the row and the verb share one body.
+ */
+export function worldViewPaletteRow(panelId: string | undefined, say: (sentence: string) => void): { id: string; title: string; subtitle: string; searchText: string; run: () => void } {
+  return {
+    id: worldViewPaletteId(),
+    title: 'View in World',
+    subtitle: 'Open the World on this panel, or on its task when it has one',
+    searchText: 'world view show in world camera floor task panel',
+    run: () => {
+      if (panelId === undefined) say('select a panel first')
+      else viewInWorld(panelId, 'task')
+    }
+  }
 }

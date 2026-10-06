@@ -117,8 +117,13 @@ export function duplicateKey(a: PendingApproval): string {
   return `${a.toolName}\0${a.action ?? a.argument}\0${a.cwd ?? ''}`
 }
 
+/** A shell prompt's inbox key: there is no approval, so the question is the panel. */
+export function questionSnoozeKey(panelId: string): string {
+  return `q:${panelId}`
+}
+
 export function inboxKeyOf(row: { id: string; approval?: PendingApproval }): string {
-  return row.approval === undefined ? `q:${row.id}` : `p:${row.approval.requestId}`
+  return row.approval === undefined ? questionSnoozeKey(row.id) : `p:${row.approval.requestId}`
 }
 
 export function buildInbox(input: InboxInput): Inbox {

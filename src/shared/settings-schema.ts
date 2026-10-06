@@ -49,6 +49,12 @@ export const TERMINAL_CATEGORY = 'Terminal'
 export const TELEMETRY_CATEGORY = 'Privacy & telemetry'
 /** M123. Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const UPDATES_CATEGORY = 'Updates'
+/**
+ * M446. Named once, for the same anti-typo reason RESTORE_CATEGORY is.
+ * A list produces no palette row, so this category does not become a second
+ * settings surface beside the Keyboard page.
+ */
+export const KEYBOARD_CATEGORY = 'Keyboard'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -660,6 +666,18 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: false,
     category: UPDATES_CATEGORY
+  },
+  {
+    // M446. A list of `id<TAB>chord`, not a record: SettingValue has no object,
+    // and parsePreferences already checks a list of strings. The Keyboard page
+    // is the editor. A plan must not rebind the canvas out from under a person.
+    id: 'keyboard.overrides',
+    label: 'Keyboard shortcuts',
+    description: 'chords you re-recorded; a canvas chord still needs the Command key',
+    keywords: ['keyboard', 'shortcut', 'chord', 'hotkey', 'accelerator', 'rebind'],
+    type: 'list',
+    default: [],
+    category: KEYBOARD_CATEGORY
   }
 ]
 

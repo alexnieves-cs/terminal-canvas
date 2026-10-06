@@ -1,4 +1,4 @@
-# Redesign decisions (D1–D8)
+# Redesign decisions (D1–D9)
 
 Locked by the owner before any lane starts. These are the guide's recommended
 defaults from GUIDE.pdf §2.3, accepted exactly. Every lane brief points here.
@@ -80,3 +80,25 @@ inside `panel-state.ts` only.
 **Accepted default.** Ship as 6.0.0 (the visual language changes) with a
 migration note on chords. The bump is Phase 5 (M456), not this change.
 `package.json` stays `5.0.0` until that release.
+
+## D9 — Approval Undo
+
+Conflict: After Approve, mockup 13's toast offers Undo. An approval is sent
+immediately, and an agent that already received `y` cannot be un-told. A hold
+that delays the send, and an Undo that reverts only where a discard exists,
+are the two honest shapes. D1–D8 do not pick one.
+
+**Option B.** Approvals are sent immediately. The toast offers Undo only when
+a real revert exists, meaning the review layer can discard the approved change
+(review discard); otherwise the toast reads `Approved <agent>'s edit to <file>`
+with View diff and no Undo. Nothing un-tells an agent that already received `y`.
+
+W5 owns the work. The check: Undo is rendered only when review discard is
+available for that panel.
+
+## R-024 — Empty-canvas double-click
+
+Owner chose on Oct 6, 2026. Keep the existing gesture: a double-click on
+empty canvas still places a flowchart process step (`onCanvasDoubleClick`).
+The empty-canvas ghost hint names that step. The gesture is not retargeted
+to a terminal.

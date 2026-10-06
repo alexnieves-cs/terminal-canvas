@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { ReviewPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
-import type { ReviewAcross, ReviewDiff, ReviewResult } from '@shared/review'
+import { ACROSS_BASELINE, type ReviewAcross, type ReviewDiff, type ReviewResult } from '@shared/review'
 import type { ReviewIdentity } from '@shared/review-identity'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { NODE_FILE_CAP, buildReviewNodeModel, type ReviewNodeRow } from './review-node-model'
@@ -24,6 +24,7 @@ import type { LaneMergeResult } from '@shared/lane-merge'
 import { useLaneAccept, type AcceptUi } from './useLaneAccept'
 import type { PrEvidence } from '@shared/task-flow'
 import { REASON_WORKTREE_ATTACHED } from '@renderer/palette/commands/reasons'
+import { offerFromReview, publishReadyDiscard } from './discard-offer'
 
 const NO_WATCHERS: readonly LaneWatcher[] = []
 
@@ -920,6 +921,19 @@ function ReviewNodeImpl({
     () => buildReviewNodeModel({ subject, title: panel.title, result, expandedPath, touches: touchCounts }),
     [subject, panel.title, result, expandedPath, touchCounts]
   )
+  // R-094. A live Approve reads this. Only a discard the node can run is
+  // published; a read-only review and the across sentinel are not a revert.
+  useEffect(() => {
+    const offer = readOnly ? null : offerFromReview({
+      root: subject.repoRoot,
+      baseline: subject.baselineSha,
+      subjectId: subject.subjectId,
+      acrossBaseline: ACROSS_BASELINE,
+      discard: model.discard
+    })
+    publishReadyDiscard(subject.subjectId, offer)
+    return () => publishReadyDiscard(subject.subjectId, null)
+  }, [readOnly, subject.repoRoot, subject.baselineSha, subject.subjectId, model.discard])
   const { rect, z } = panel
 
   // M260. A list of one is not a list — the rail only earns its width when

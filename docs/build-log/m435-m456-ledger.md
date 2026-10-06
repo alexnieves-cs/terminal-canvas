@@ -51,6 +51,12 @@ Electron-tier suites (`verify:pty`, `verify:pty-manager`, `verify:window`, `veri
 | P0 | main (this PR) | `rd-p0` after merge | kit only |
 | P1 F1 | main | — | tokens and the one state colour. Merges before F2 and F3. |
 | P1 F3 | main (PR 6) | — | shell frame, after F1 and F2. |
+| P3a W0 | redesign/main | — | night studio, `5353e47f` |
+| P3b W2 | redesign/main | `rd-w3b` | the room, `695a71da`. The mount marks stay. W1 and W3 are wired beside them. |
+| P3b W1 | redesign/main | `rd-w3b` | the transition, after W2, `aa0b55a5`. The mount is `2a24f561`. R-041, R-042 and R-043 landed with it. |
+| P3b W3 | redesign/main | `rd-w3b` | the overview, after W1, `613d72b9`. The camera apply is `252fc68c`. |
+| P3c W4 | redesign/main | `rd-w3c` | focus and act, `92479a7a`. R-072 and R-074 are `59e80eba`. |
+| P3c W6 | redesign/main | `rd-w3c` | flat room and the doors, `b274e8f8`, rebased onto the W4 merge. R-080 and R-083 are `d024f9e2`. |
 
 ## M438 · F3 shell frame
 
@@ -205,3 +211,1299 @@ Tag `rd-foundations` is on `7af404f1` (the F3 merge). `ownership.json` now lists
 R-011 stays open. L-C owns `useViewport` and its brief is the tier flights; the request says the retarget happens when that lane rebinds. `shortcuts.ts` was not edited.
 
 The rest of the open list is closed on this branch: D1 in the material bullet, high-contrast dark glass, the two terminal cursors, the dock's spoken count (the queue, with snooze and team asks only when that queue is empty), `subscribeLiveSessions`, `shouldIgnoreKeys` and the palette's ⌘K yielding under the focus lock, the center-view enum, Sessions and Review mounted from Canvas, `dock.dup.1` measuring the View menu row, `TC_FIXTURE=rd-steward` shared by dev and shot, and the palette title `Show Orchestrate`. Canvas still passes `attentionCount` into `pillRestState` until L-C.
+
+## L-B · M442–M443
+
+Branch `rd/l-b-workspace` off `redesign/main`. Lane `RD_LANE=L-B`. R-008, R-012 and R-005 are done on this branch and are not reopened. Canvas still passes `attentionCount` into `pillRestState` until L-C (R-005). R-011 stays L-C's (`useViewport`).
+
+### Plan
+
+M442 paints the Work tier. M443 paints create-and-arrange. Pure modules land under `src/renderer/panels/` and the owned canvas modules. Checks live in `scripts/verify-rd-l-b.cjs`. CSS stays inside `/* ── rd:L-B ── */`.
+
+PLAN CHECK:
+
+- [x] No existing hook call in `Canvas.tsx` moves. `TierLayer` and the recovery slot are JSX, appended in the tree. New hooks (`connectedSpawn` state, the chord listener) sit immediately before `return`. `useJobRecovery` stays where it is. Cursor and the connected-spawn opener are module setters in `spawn-cursor.ts`, so `onDropEmpty` and `onSpawn` do not grow a hook.
+- [x] Restyles of existing panel rules are overrides inside `rd:L-B`, listed below. The base chromeless rule and `panel-settle` keyframes are not edited.
+- [x] `rd-l-b.well.1` is a pure check that the lane's hover rules do not set a box metric on `.panel__slot`, `.xterm`, `.pf__body` or `.pf__keep`, and that the chromeless `.pf__chrome` stays `position: absolute`. `rd-l-b.allow.1` proves ⌘Y calls `answerApproval` with `allowPendingTarget`, and that the palette Allow row's id is `approval.allow.${id}.${requestId}` and its `run` calls `answerApproval`.
+
+CSS overrides inside `rd:L-B` (M442): task region (1px dashed, `--r-region`, padding `--sp-7` which is 24px, chip); panel radius `--r-lg` and a resting shadow on `.panel` only; `.pf__word` as a pill; needs-you edge via `--state-needs`; selection restates `--glow-iris`; header verbs stay opacity 0 until hover, focus or selection (already true at `.pf__chrome button`; restated, no well metric); review card radius (the frame's own `--lift`, not a second one); edge pip as an amber pill with `pointer-events: auto` on the button only; HUD readout opacity 1; minimap region outline at `--r-sm`. (M443, same span): a second `@keyframes panel-settle` that overshoots, marquee toolbar, connected-spawn menu, snap-guide colour already `--guide`. The toolbar and the menu use a hairline. `shadow.1` keeps `--lift` on the frame.
+
+Slots. `TierLayer` is a zero-size absolute `data-tier-layer` inside `.world` for L-C. `data-recovery-slot` wraps the existing reopen stack for L-F and stays mounted when the stack is empty. Neither is a hook.
+
+Deviations. A double-click on empty ground still mints a flowchart process step (`flowchart.app.1`). ⌘N lands at the cursor only when the mouse has moved over the canvas and the call is the one-argument path; otherwise the view centre and `place()` cascade stay. ⌘T is a new listener, not a retarget of `useViewport`. Header path, branch and duration are R-016 (`PanelFrame` / `TerminalPanel` are not owned). `statePill` is ready and is not written into `shown.word`. Making a task commits one panel history entry; the work item is a second store and does not undo with ⌘Z. Handoff animation already runs only on `data-edge-activity="firing"`; M442 pins that rather than rewriting the gesture.
+
+Shot scenes `rd-workspace` and `rd-arrange` gain a `run`. `verify:meta` `visual.1` will ask for goldens. Those goldens are not written here.
+
+### M442
+
+Watched red: `verify:rd-l-b` exited 1 because esbuild could not resolve `header-rest.ts` and `session-facts.ts`. The comment at the top of `scripts/verify-rd-l-b.cjs` records that.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-b` | 9/9 pass (`rd-l-b.0`, `header.1`, `wait.1`, `allow.1`, `region.1`, `well.1`, `slot.1`, `handoff.1`, `inspector.1`) |
+
+R-016 is open for the header path, branch and duration. The pill helper is `statePill` in `header-rest.ts`.
+
+### M443
+
+| Check | Result |
+|---|---|
+| `npm run verify:rd-l-b` | 14/14 pass. Added `menu.1`, `gap.1`, `marquee.1`, `cursor.1`, `settle.1`. |
+
+`gapGrid: 24` is opt-in on the canvas's `smartSnap` call. Callers that omit it, including the flowchart, keep the previous candidates. A connected drop on a shape still calls `extend`. A panel drop opens the menu and the next `onSpawn` links with `trigger: 'exit'` in the same history entry. Ground double-click is unchanged.
+
+The first plain wave went red on checks this lane had caused. `verify:styles` 5 and 6 rejected literal padding, margin, gap and a 2px radius in the lane span. `shadow.1` rejected `--lift` on `.review-node`, the marquee toolbar and the connected menu. `motion.2` rejected the new name `rd-panel-settle`. `verify:rail` `state.2` rejected the spelled word in `make-task.ts` and `Canvas.tsx`. Spacing now uses the scale. The overshoot is a second `@keyframes panel-settle` (the name `motion.2` already allows); the first definition stays the dip. `revamp.motion.1` still reads that first definition, so it does not see the overshoot that paints. R-017 asks F1 to read the last one. The work item's state is `WORK_ITEM_STATES[1]`. After that: `verify:rd-l-b` 14/14, `verify:styles` green including `shadow.1`, `motion.2` and `revamp.motion.1`, `verify:rail` 266/266.
+
+### Gates
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:styles` | green, including checks 5 and 6, `shadow.1`, `motion.2`, `revamp.motion.1` |
+| `npm run verify:rail` | 266/266, including `state.2` |
+| Plain-node wave (67 suites, no build, no Electron) | 64/67 in 31.3s. Failed: `verify:meta`, `verify:tmux`, `verify:first-run` |
+| `npm run affected -- --list --base redesign/main` | 22 files on this branch. The plain suites in that list ran inside the wave. The Electron suites were not run. UNMAPPED: `docs/redesign/requests.md`. A `--list` with no `--base` compares with `fba024f2c8` and is not this branch's diff |
+
+`verify:meta` fails two checks. `panels-split.2` is the known red: `git show pre-v7-run:scripts/verify-panels.cjs` fails because the tag is absent. `visual.1` reports `declared` 81, `goldens` 79, `missing` `rd-workspace` and `rd-arrange`. That red is expected once a scene's `run` sits on the same line as `{ name:`. The goldens were not written. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+`verify:first-run` is 28/29. `revamp.create.1` still wants `/^<div class="canvas-hud">/`. The HUD renders `data-screen-control` on that element. Create still sits before the zoom cluster. The attribute was not removed.
+
+`verify:tmux` fails loading `prebuilds/linux-x64/pty.node`. `npm ci --ignore-scripts` never rebuilt it. Not fixed.
+
+`verify:flowchart` passed in 1.0s and did not spike. `verify:relay` passed in 2.9s. `verify:canvas-sync` passed in 14.9s. No WebSocket errors on this host.
+
+Electron. `npm run verify:panels:core` through `scripts/redesign/with-electron-lock.sh` exits 127: `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron` is not on this machine. `xvfb-run` is `/usr/bin/xvfb-run`, and `node_modules/electron/dist/electron` exists. Under xvfb that binary starts and then dies: `Cannot find module './prebuilds/linux-x64//pty.node'`. The same death stops `scripts/shot.cjs` (`TC_FIXTURE=rd-steward`, `TC_SHOT_ONLY=rd-workspace`). dbus logs `Failed to connect to the bus`. No PNG was written, no `out/shots/*.vs-reference.png`, no golden. `scripts/panels-entry.cjs` also warns `Duplicate key "credentialDir"`; that warning is not this lane's.
+
+G2's mockup critic and rules review were not run. There is no composite to hand them. `npm run build` was not run, because shots cannot paint. `verify:panels`, `verify:canvas`, `verify:xterm`, `verify:window`, `verify:visual` and `verify:packaged` did not run.
+
+## L-A · plan (M439–M441)
+
+Branch `rd/l-a-launch`. No separate approval step: the plan is this section, checked against the kickoff boxes, then built in order. `splashMode` stays the APEX field (`splash.1`). The restore card is a second surface. `Launcher` markup stays so `onboarding.markup.*` keeps reading the same buttons.
+
+PLAN CHECK:
+
+- 01 is the only main-process change. `boot:progress` is a send, so the key is `IPC_EVENTS.BOOT_PROGRESS`, not an invoke. An invoke would need `ipcMain.handle` in `src/main/ipc.ts` and a new `EXPECTED_CHANNELS`, and both files are outside this lane. `FILE_CHANGED`'s comment is the precedent: verify:ipc walks `IPC` only. The sender is `publishBootProgress` in the new `boot-progress.ts`. `CLAUDE.md`'s diagram gains the name in the same commit. README's diagram is R-018.
+- `src/renderer/onboarding/` is new. Its tree does not spawn, exec, or call a pty.
+- MinimapOverlay and CanvasHud are not edited. The minimap sentence is `emptyState('minimap')`. L-B reads it (R-022).
+
+| Milestone | Pure model first | Checks | UI | Shot |
+|---|---|---|---|---|
+| M439 | `restoreLines`, `splashShouldLeave`, `ghostLayout` in `splash.ts`; `skipRemaining` and `publishBootProgress` in `boot-progress.ts` | `rd-restore.lines.1`, `rd-restore.skip.1`, `rd-restore.leave.1`, `rd-restore.channel.1` | `RestoreSplash` in `StartupSplash.tsx`, CSS in `rd:L-A` | `rd-splash` run, frozen at 3 of 5 |
+| M440 | agent rows, ready label, install copy, preset default, handoff in `onboarding.ts` / `env-report.ts` / `presets.ts` | `rd-onboard.rows.1`, `rd-onboard.ready.1`, `rd-onboard.copy.1`, `rd-onboard.preset.1`, `rd-onboard.handoff.1` | `src/renderer/onboarding/Onboarding.tsx` | `rd-onboarding` run, step 2 |
+| M441 | blank title, repo chip, starter layouts, empty-canvas hints, start verb | `rd-empty.title.1`, `rd-empty.layouts.1`, `rd-empty.hints.1`, `rd-empty.verb.1` | `BlankCanvas` in `EmptyState.tsx` | `rd-empty` run |
+
+Mounting the three screens from `Canvas.tsx` is R-021. The shot door is `window.__rdLA.mount`, registered by `StartupSplash` because Canvas already imports that module. A failed restore stops the spinner and calls `noteBootIssue`; the 09 surface is L-F (R-023). `resume-summary.ts` and `tmux-probe.ts` stay as they are: the splash does not invent a resume narrative, and the probe's backend choice is not the reattach loop.
+
+## M439 · Launch and restore
+
+Four lines, each pending until a fact arrives. Workspace is done only when both the name and the path are present; the path is the mono detail. Layout says the measured counts in words (`2 tasks, 9 objects`; zero is `no tasks, no objects`). Tmux in flight is the active line and says `N of M`; zero done is `none of N yet`; nothing to reattach is `none to reattach`. Agents stay pending when only a planned catalog is known (`claude, codex` is a list, not a result). A found list sets `found`. Option held marks the tmux line skipped; `skipRemaining` sets `asleep` on panes not yet reattached, leaves reattached panes awake, and returns `killed: []` with the same pids. A failed step settles that line, leaves the later lines pending, and stops the breath. `splashShouldLeave` is true the moment `settled` is true, including at 0ms. Reduced motion and a settled view do not breathe. Ghost frames are the rects' own bbox, padded, and an absent list is empty.
+
+`RestoreSplash` is a second surface. `splashMode` is unchanged (`splash.1`–`splash.3` passed). The card leaves in the effect that sees settled. Option is `altKey`. A failure calls `noteRestoreFailure`, which is `noteBootIssue`. The APEX field component is the same component it was.
+
+`boot:progress` is `IPC_EVENTS.BOOT_PROGRESS`. `publishBootProgress` sends it. It is not an invoke: `verify:ipc` walks `IPC` only, and a handler would have to live in `src/main/ipc.ts` with a new `EXPECTED_CHANNELS`, neither of which this lane owns. `CLAUDE.md` names the channel. README does not (R-018). Nothing in the composition root calls the publisher yet (R-019). The preload does not subscribe (R-020). Canvas does not mount the card (R-021).
+
+The ghost fill is `color-mix` at 55%. A fractional `opacity` failed `verify:styles` check 3 and was removed. The breath reuses `state-breath` on `var(--dur-breath)`. Reduced motion sets `animation: none`.
+
+### Checks
+
+Linux, Node v22. Electron's Linux binary is present under `node_modules/electron/dist/electron` (ELF). The npm scripts still invoke `Electron.app/Contents/MacOS/Electron`, which is not on this machine. `pty.node` was not rebuilt (`npm ci --ignore-scripts`). Watched red first: `verify:rd-l-a` exited 1 because esbuild could not resolve `boot-progress.ts`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 5/5 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:viewport` | pass, including `splash.1`–`splash.3` |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rd-f1` | 7/7 pass |
+| `npm run affected -- --base redesign/main` | 53/55 plain suites passed in 31.4s, then stopped. Failed: `verify:meta` (`14` missing `boot:progress` in the README — R-018; `panels-split.2` tag `pre-v7-run` absent, known; `visual.1` missing golden `rd-splash`, expected until Phase 4) and `verify:first-run` (`revamp.create.1`, known, CanvasHud is L-B). Electron tier not reached. |
+| `shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window` | not run. Each script's binary path is the macOS app bundle. `UPDATE_GOLDENS` was not set. |
+
+### Deviations
+
+- The channel is a send, not the invoke the kickoff's "main handler" sentence describes. Direction is main→renderer. An invoke would edit files outside the lane.
+- `tmux-probe.ts` and `resume-summary.ts` are unchanged.
+- The shot scene has `run`. `visual.1` lists `rd-splash` as missing a golden. That red stays until the lead writes it.
+
+## M440 · Onboarding
+
+Four steps on `ONBOARDING_RAIL`: Workspace, Agents, Sessions, First task. Step 2's title is `Which agents live on your canvas?`. A row is `found` only with a path. A null path that answered is `not installed` and offers the install string. A timeout is `discovery did not answer`, and `sessionsPersistence(undefined)` does not say tmux is installed. Plain shell is locked on and is not in the ready count. `readyLabel(0)` is `Turn one on to continue`. The footer is the mockup's sentence. `FIRST_TASK_HANDOFF` is `{ sheet: 'start-work', spawns: false }`. `presetsFromEnabledAgents` makes the first enabled id the ⌘N default and leaves `shell` when none are on. Gemini's preset has no `agent` field. `discoverBinary` takes `which` and `versionOf`; it does not import `child_process`.
+
+`Onboarding.tsx` is the card. Copy calls `installCommand` and `clipboard.writeText`. The preview frames take their word and `data-tone` from `panelState`. Nothing in `src/renderer/onboarding/` spawns.
+
+The shot fixture is the mockup's frozen probe (claude and codex found at the paths and versions drawn on `02-onboarding.png`, gemini missing), not a measurement of this machine.
+
+### Checks
+
+Watched red: esbuild of `import { readyLabel } from onboarding.ts` exited 1, `No matching export`. A bare `export { missing }` in the suite entry was tree-shaken without that error, so the entry also assigns `keep`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 11/11 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:onboarding` | 23/23 pass |
+| `npm run verify:rail` | 266/266 pass (`state.2`, `hints.1`, `empty.2`) |
+| `shot` / Electron | not run. The scripts still call `Electron.app/Contents/MacOS/Electron`. `rd-onboarding` now has `run`, so `visual.1` will also list that golden as missing. `UPDATE_GOLDENS` was not set. |
+
+## M441 · Empty canvas
+
+`BlankCanvas` in `EmptyState.tsx`. The title is `A blank canvas for <workspace>`, or `A blank canvas` when the name is empty. The purpose sentence is the mockup's. The task field's verb is `Start task`, disabled with `Describe the task first` until there is a sentence. The repo chip is the name, or `no repository chosen`. Quick spawns are buttons labelled Claude Code, Shell and Import a layout…; the chords come from `shortcutById` (`⌘N`, `⌘T`). They call back and do not spawn. `STARTER_LAYOUTS` is a separate list from `LINEUPS` (`lineup.1` still sees solo, pair, workbench, swarm). `starterLayoutAction` places nothing until `clicked` is true. `EMPTY_CANVAS_GESTURES` is separate from `HINTS` (`hints.1` ids are unchanged). The ghost line is `Double-click to place a terminal`. The minimap sentence is `emptyState('minimap')` — `Nothing placed yet` — rendered in `BlankCanvas`. L-B's overlay does not read it yet (R-022). Canvas's double-click still places a process step (R-024). `Launcher.tsx` was not edited, so `onboarding.markup.*` still reads the same buttons.
+
+### Checks
+
+Watched red: `verify:rd-l-a` exited 1 with `ReferenceError: blankCanvasTitle is not defined` before the functions existed.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-a` | 15/15 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:rail` | 266/266 pass. `empty.2` sees the minimap id rendered. `hints.1` ids unchanged. |
+
+## L-A · G2
+
+Rebase onto `origin/redesign/main` at `6bffde9f` was a no-op: that commit is the branch point.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass, each milestone |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run affected -- --base redesign/main` | at M439, 53/55 plain suites, then stopped. Failures were `verify:meta` and `verify:first-run` only. Electron tier not reached. |
+| Full plain wave (67 suites, no build, no Electron) | 64/67 in 31.5s. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. |
+| `npm run shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window`, the panels parts | not painted. |
+
+Could not run on Linux:
+
+- `package.json` points every Electron suite and `shot` at `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`. That path does not exist. `scripts/redesign/with-electron-lock.sh` running it exits `No such file or directory`.
+- The Linux binary is present and answers `--version` (`v43.4.1`) under `xvfb-run`. Invoking `scripts/shot.cjs` with that binary dies in main: `Failed to load native module: pty.node` — `prebuilds/linux-x64/pty.node` is absent. The prebuilds on disk are darwin and win32. `verify:tmux` fails the same way in 0.2s.
+- No `out/shots/*.vs-reference.png`. No critic pass. `UPDATE_GOLDENS` was not set. `visual.1` is red on purpose: missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`.
+
+Other reds, not fixed: `verify:meta` `panels-split.2` (`pre-v7-run` absent), `verify:first-run` `revamp.create.1`, `verify:meta` 14 (`boot:progress` absent from the README — R-018).
+
+Requests open: R-018 README fence, R-019 composition root publishes progress, R-020 preload subscribes, R-021 Canvas mounts the three screens, R-022 minimap reads `emptyState('minimap')`, R-023 L-F's 09 surface shows the boot-issue sentence, R-024 empty-canvas double-click still places a process step.
+
+## M446 · L-E Settings › Keyboard
+
+Branch `rd/l-e-keyboard`. Screen 08. Decisions D4 and D5. `shortcuts.ts` stays frozen.
+
+### Plan
+
+PLAN CHECK, before any edit under `src/`:
+
+- `shortcut-overrides.ts` is pure and is checked before the Settings UI. `shortcuts.ts` is not edited. The merge, the canvas-scope ⌘ rule, duplicate detection within a scope, and the `tidy-alias` chord (⌘⌥T) live in that module. `matchEffective` and `acceleratorFor` are the same merge: one for a key event, one for the menu string. With an empty override list, `acceleratorFor` is `electronAccelerator`, so tidy-alias stays `CmdOrCtrl+Alt+T`.
+- Rendered rows come from `keyboardSections`, which walks `SHORTCUTS`. `rd-keys.settings.1` compares that walk to the registry (every id, registry labels, group order of the non-alias rows). `KeyboardPane.tsx` maps the function; it does not carry a second list of labels or group ids.
+- R-010 is done on this branch (`shell.centerView` is `canvas | orchestration | sessions | review`). It is not in this change.
+
+Then the page. `keyboard.overrides` is a list setting (tab-separated `id` + chord) because `SettingValue` has no record and `parsePreferences` already checks a list of strings. The Keyboard page hosts the registry. The other six nav pages are thin hosts over the schema rows in their categories, each with a purpose sentence. The "Open Settings" verb is `OPEN_SETTINGS_ROW` in `palette-actions/settings.ts`; the command list and the dock callback are other lanes (R-026). The menu rebuild on `settings:changed` already exists; the accelerator it paints still comes from the frozen registry (R-025).
+
+Shot: `rd-settings-keys` records Step in, reference 08. A `run` makes `verify:meta` `visual.1` list a missing golden. That red is expected until Phase 4. `UPDATE_GOLDENS` is not set.
+
+### What landed
+
+`shortcut-overrides.ts` merges a list of `id<TAB>chord` over `SHORTCUTS`. Canvas scope without ⌘ is refused by the shortcut's name. A duplicate inside one scope is refused and names the other row; nothing is returned to store. `tidy-alias` stays ⌘⌥T until that id is overridden, and moving Tidy onto ⌘⌥T clashes with the alias. Putting a chord back to the registry value drops the override. `acceleratorFor([])` is `electronAccelerator`, so the seven historical menu strings stay byte-for-byte. `matchEffective([])` agrees with `matchShortcut`. The frozen parser only knows the registry's keys, so a letter it has never seen (P, for one) is refused rather than stored as a chord nothing can match.
+
+`keyboard.overrides` is a list, default `[]`, not plan-writable. The Keyboard page maps `keyboardSections`. The other six pages host the schema rows for their categories and each says what it is for. List settings stay off those pages. The page mounts from a second root installed when `palette-actions/settings.ts` loads, because Canvas is not this lane's file. `OPEN_SETTINGS_ROW` calls `openSettingsPage`. The dock and the command list do not, yet (R-026). The menu still paints `electronAccelerator` (R-025).
+
+The shot records Step in (`⌘↵`), not the mockup's combined "Step into / out of panel". Those are two registry rows, and `rd-keys.settings.1` forbids folding them by hand. Aliases fold onto their target: Tidy's note is "was ⌘⌥T · kept for one release".
+
+Checks were 1/15 (only `rd-l-e.0`) before the modules existed. `shortcuts.ts` was not edited. R-010 was already done and was not repeated.
+
+Boolean and enum controls on the other pages carry `aria-label` of the setting name plus the current value. `labels.1` reads a button whose only child is a function call as unlabelled, and the first affected run failed `verify:rail` on those two buttons. After the labels, that suite is 266/266.
+
+### Checks (Linux, Node v22, `npm ci --ignore-scripts`)
+
+Rebase onto `origin/redesign/main` (`6bffde9f`): already based there. No commits to replay.
+
+| Step | Result |
+|---|---|
+| `npm run typecheck` | Pass. Node and web. The hand-run `npm run build` after the wave also typechecked and bundled (`electron-vite build`). |
+| `npm run verify:rd-l-e` | 15/15. Watched red first at 1/15. |
+| `npm run affected` | 56/58 plain suites, 31s, stopped after the plain tier. Base `fba024f2c8`, 45 files. Failures: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (`rd-settings-keys` has `run` and no golden — expected until Phase 4), and `verify:first-run` `revamp.create.1`. `verify:rail` `labels.1` is green. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, `verify:panels:*`) did not start. |
+| `npm run verify` | 63/67 of the plain wave (67 plain, 13 Electron), 31s, stopped after wave 1. Same `panels-split.2`, `visual.1`, and `revamp.create.1`. `verify:tmux` throws `Cannot find module './prebuilds/linux-x64//pty.node'` (`npm ci --ignore-scripts` never rebuilt node-pty). `verify:review` `merge.1` returned `{kind:'failed', detail:''}` once in the 4-wide wave; alone it is 163/163. The lane does not touch `lane-merge.ts`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` passed in 0.9s. `verify:styles` passed. |
+| Electron tier | Did not start. Wave 1 rejected the tree. |
+| `npm run shot` | Under `xvfb-run` and `scripts/redesign/with-electron-lock.sh`, `TC_SHOT_ONLY=rd-settings-keys`: exit 127. `package.json` launches `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`, and that path is absent. The Linux ELF is `node_modules/electron/dist/electron`. Invoking that ELF directly, the app reached `shot-entry` and then threw the same missing `pty.node`. No PNG was written. The process stayed up until it was killed at 75s. |
+| Critic | No `out/shots/rd-settings-keys.vs-reference.png`, so the mockup critic and the rules reviewer did not run. |
+| Goldens | `UPDATE_GOLDENS` was not set. `visual.1` lists `rd-settings-keys` as the one missing golden (declared 80, goldens 79). |
+
+Known reds left as they are: `panels-split.2`, `revamp.create.1`, missing `pty.node`. `verify:canvas-sync` and `verify:relay` were green on this run.
+
+## M445 · L-D Sessions
+
+Branch `rd/l-d-sessions`, cut from `redesign/main`. Screen 07. D3. The page is a peer of the canvas: it reads the same words and the same queue, and the actions it cannot perform are callbacks.
+
+### Plan
+
+The pure half is `sessions-model.ts`: the header, the task groups, the bulk bar, the card verbs, the reply box, the sparkline path. Checks in `scripts/verify-rd-l-d.cjs` call that module through esbuild, the same shape as `verify-rd-f2`. The view is new files under `src/renderer/sessions/`, mounted from F3's `SessionsHost`. CSS stays inside the `rd:L-D` markers. The shot is `rd-sessions` on `TC_FIXTURE=rd-steward`.
+
+PLAN CHECK:
+
+1. Product code is new under `src/renderer/sessions/`, including the host F3 left. No store is edited. Holds.
+2. The reply box's delivery is paste and Send is a button. Enter does not submit. A shell-prompt card has Open on canvas and Snooze 10m, and no field. Holds.
+3. `metrics.1` is amended by R-027, not by an edit to `scripts/verify-styles.cjs`. Holds.
+
+### What the page does
+
+- Header is `sessionsTitle`. A zero live count and a zero dormant count are dropped, so an empty canvas is "Sessions" and a dormant-only canvas does not say "0 live". Spend is `headerSpend` in its own span. It is a dollar amount with no "today". The title bar is untouched.
+- Group is Task. All states filters on the row's own word. "+ New session" is the one primary. Orchestrate stays the header link F3 added (`data-sessions-orchestrate`). ⌘⇧S is not bound again: `shortcuts.ts` has the chord and `useShellChrome` toggles the page.
+- Cards are `useAttentionQueue(useAttentionCensus())`, in that order, with `item.sentence`. Approval is Allow / Diff / Deny. A shell prompt is Open on canvas / Snooze 10m. A failure is Restart / Read log. Snooze is local (ten minutes) and hides that card. This file does not call `buildQueue`.
+- The table groups by the work item's single `panelId`. A panel named by two tasks is unassigned, in one trailing group. Columns are Session, Agent, Folder, Branch, State (`data-tone`), Activity, Run, Cost, Last line. The sparkline is an inline SVG. Its stroke is `STATE_PALETTE`, because a presentation attribute does not resolve `var()`. Recharts stays on the two shell charts. Last line and paths are mono. The state pill is `--tone`. Cost is `.sessions-cost`. There is no `data-machine-cost`.
+- The bulk bar is "N selected" plus Pause, Restart, Move to task…, End. Pause is off when every selected row is asleep, exited, done or none. End calls `endAsk` and then `confirmEnd`. If Canvas has not passed `confirmEnd`, End does not end. No `window.confirm`, no `pty.kill`.
+- Detail tails `scrollback.tail` and `pty.onData`. "Send to this session…" is disabled, with its reason, for a shell and for an agent this page cannot paste into. A chat with no `onSend` uses `agentSession.send`. A terminal paste waits for R-028. Facts (Started, Survives "reload and quit (tmux)", Tokens, Changes) render only when the reader has them. Show on canvas calls `onShowOnCanvas`.
+
+### What this page cannot know yet
+
+`session-registry.ts` is a factory Canvas owns. There is no module-level reader, and this lane does not bump `registry.version()`. The live reader therefore reports every session as not dormant, `survives` and `startedAt` and `changes` as unknown, and a terminal's `canPaste` as false until `onSend` is passed. The header drops the dormant clause because the count is zero, which is what the rest rule says to do with the data in hand. R-028 asks Canvas to pass the registry facts and the verbs. R-029 asks the steward loader to stamp folder, engine and branch; until then the shot hands the cast through `tc-sessions-feed`. A malformed feed is ignored.
+
+The census `taskId` is null (CommandPill). Grouping uses work items. One member per task, plus a loose group, is what `layout.load` can say today.
+
+F3's `.sessions-host__bar` is a single row. The L-D span sets `justify-content` and `flex-wrap` on the same class, later in the file, so the spend and the primary fit. Recorded here because the override is outside F3's markers on purpose: L-D may not edit that span.
+
+Sample names and dollar amounts live in `scripts/fixtures/rd-steward/workspace.json` and in the shot's feed. They are not product copy.
+
+### Shot
+
+`rd-sessions` requires `TC_FIXTURE=rd-steward`, loads that layout, sends `agent:state` `wants-you` for three cast panels (the queue then says shell-prompt, because those panels are terminals and the inbox has no approval), dispatches `tc-sessions-feed` built from the fixture, selects `claude-ledger`, `vitest-ledger` and `codex-plaid`, and opens `claude-ledger`. The feed sets `canPaste` on agent rows so the open detail shows the send box. The live page does not. Giving the scene a `run` makes `verify:meta` `visual.1` list `rd-sessions` as a missing golden. That red is expected until the lead writes the golden. This lane does not set `UPDATE_GOLDENS` and does not write under `verify/visual/goldens/`.
+
+### Checks
+
+Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebuilds/linux-x64`). Requiring `electron` later downloaded the Linux binary (`v43.4.1`); the Mac path `npm run shot` uses (`Electron.app/Contents/MacOS/Electron`) is not on disk. The first `verify:rd-l-d` threw `MODULE_NOT_FOUND` for esbuild because `node_modules` was absent. That is recorded at the top of the suite.
+
+Two reds from the first affected run were this lane and are fixed: `verify:styles` check 3 (a disabled control used `opacity: 0.45`; it now uses `--muted`), and `verify:verbs` `gate.2` (the detail reads `scrollback.tail` and scrubs it with `outward` before the line is shown on this page).
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass |
+| `npm run verify:rd-l-d` | 18/18 pass |
+| `npm run verify:styles` | 97/97 pass |
+| `npm run verify:verbs` | 30/30 pass |
+| `npm run affected -- --base redesign/main` | 43/45, stopped after the plain tier. `verify:meta` (`panels-split.2`, and `visual.1` missing `rd-sessions`) and `verify:first-run` `revamp.create.1`. `docs/redesign/requests.md` is UNMAPPED. Build and the Electron suites were not started. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, stopped after wave 1. Failures: `verify:meta` (`panels-split.2` — tag `pre-v7-run` is not in this clone; `visual.1` — `rd-sessions` has a `run` and no golden, declared 80 / goldens 79), `verify:tmux` (`pty.node` for `linux-x64` missing), `verify:first-run` `revamp.create.1`. `verify:canvas-sync` and `verify:relay` passed. `verify:flowchart` did not spike. |
+| Electron tier, `npm run shot`, `verify:visual` | not run by the gate, because wave 1 was already red. A direct attempt, `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-sessions` and `TC_FIXTURE=rd-steward`, booted Electron and then threw `Cannot find module './prebuilds/linux-x64/pty.node'` from `shot-entry.cjs`. The process did not exit; the probe was stopped at 75s (exit 124). No PNG was written. `UPDATE_GOLDENS` was not set. |
+
+### Deviations
+
+- Sentences are `panelState`'s words, via the queue and the reader. The mockup's prose is not a second vocabulary.
+- Attention cards on the steward shot are shell prompts. Approval and failure cards render when the queue says so. This fixture's census cannot say so: a terminal in `wants-you` is a shell prompt, and failure needs an exited status or `failed` on the census, which CommandPill does not set from `agent:state` alone.
+- The Changes panel (`engine: review`) is not a session row. The feed skips it.
+- The fixture's moment is not "7 live · 2 dormant". No row is asleep, so the dormant clause drops. Inventing two dormant rows would be a second cast.
+- Disabled controls are `--muted`, not a fractional opacity. Check 3 allows 0 and 1 only.
+- The detail's tail is scrubbed with `outward` at the read. The terminal's own buffer is unchanged.
+
+## L-C · M444 Navigate (Plan tier and ⌘K)
+
+Branch `rd/l-c-navigate` from tag `rd-wave2a` (`877c71c2`). `RD_LANE=L-C`.
+
+### Plan
+
+Presentation only. `NavigateTier` mounts beside `<TierLayer />` inside `.world`. It does not reorder Canvas hooks. The import of that component is the other Canvas edit. `cardIds` are stamped onto the existing `collapsedPanelIds` set from the child's `useLayoutEffect`, using `enterTier` on terminal ids, so `useTiering` (not owned) still passes that set and does not learn a new argument. Ids a collapsed group already held are not claimed, and are not removed on the way back to Work. Entering Plan or Map blurs, calls `releaseFocus` (`setFocusedId(null)`), and focuses the canvas host before the passive tier effect. `LIVE_BUDGET` and `LIVE_MIN_SCALE` stay 8 and 0.5. Dormancy still outranks focus. Flights to a tier are a new `flyToTier` (ease-out, 220ms, anchor at the cursor, else the selection, else the centre). `flyTo` stays ease-in-out for bookmarks, fit and reset. ⌘0 fits all, ⌘1/⌘2/⌘3 fly to Work/Plan/Map, ⌘⇧0 fits the task, ⌘⇧T tidies beside the ⌘⌥T alias. The palette keeps `.palette__section` and `SECTIONS`. Kind bands are extra `.palette__band` rows. A path stays in Panels so check 48 still sees one Panels header. The Files chip is how those rows are read. Shortcut chips stay the set `verify:palette` 48 pins (`canvas.fit` still wears ⌘0).
+
+PLAN CHECK:
+
+1. Canvas is touched only at the TierLayer slot, plus the `NavigateTier` import. `<TierLayer />` stays, so `rd-l-b.slot.1` still sees it and `data-tier-layer`. Hooks are not reordered. Holds.
+2. `LIVE_BUDGET` (8), `LIVE_MIN_SCALE` (0.5) and dormancy precedence are unchanged. `rd-l-c.pid.1` keeps pids 145 and 148 across Work, Plan and Map, and cards both terminals at scale 0.6 where the live floor would otherwise promote them. Holds.
+3. R-009 is already done (`focusLocked()` returns before ⌘K `preventDefault`). R-011 is this lane's chord retarget. R-015 is already done (`Show Orchestrate`). R-005's remainder cannot drop `attentionCount` without editing `CommandPill` (R-030). R-022 and the palette half of R-026 are in this change. Holds.
+
+### What landed
+
+`NavigateTier` (`src/renderer/palette/navigate-tier.tsx`) mounts on the line after `<TierLayer />`. The import is the other Canvas edit. Its `useLayoutEffect` stamps `enterTier().cardIds` for terminal ids onto `collapsedPanelIds`, the set `useTiering` already passes. Ids a collapsed group already held are not claimed, and stay when the tier leaves. Plan and Map blur, call `releaseFocus` (`setFocusedId(null)`), and focus the canvas host before the passive tier effect, then set `data-zoom-tier` on `.world`. A merged canvas skips the stamp and publishes Work. Plan cards show the name, a `data-tone` pill from `panelState`, and `planStatusSentence`. A card mousedown selects through `selectAndRaise`. Map draws a tone dot at each panel's centre. `LIVE_BUDGET` stays 8 and `LIVE_MIN_SCALE` stays 0.5. `lod.ts`, `useTiering.ts` and `zoom-tier.ts` are untouched.
+
+`flyToTier` is the tier flight. It still runs through `interpolateViewport` and sets `flying`. Duration is `tierFlightMs`: 0 when reduced motion is set, otherwise 220ms, ease-out. The anchor is the cursor, else the selection's screen centre, else the view centre. `flyTo` stays ease-in-out.
+
+`useViewport` matches `fit-all`, `tier-work`, `tier-plan`, `tier-map`, `fit-task`, `tidy` and `tidy-alias` with `matchShortcut` / `electronAccelerator`. `chordCode` fills an empty `code` from the key, so a harness event that only sets `key` still matches. The old `case '0'` and `case '1'` are gone. Reset zoom remains the palette row `canvas.fit`. The menu still shows tidy-alias (`CmdOrCtrl+Alt+T`); `menu.ts` is outside this lane.
+
+The palette keeps `SECTIONS` and `.palette__section`. A kind chip (Everything; Tab cycles at the top level) filters with `filterByKind`. Band headers are extra `.palette__band` rows. Path rows stay in Panels, so check 48 still sees one Panels header; the Files chip is how those rows are read. Enter still flies to the row. ⌘Enter on a `panel.goto.` row also fits the task. The placeholder is "Find or run anything". `canvas.settings` ("Open Settings") calls `openSettingsPage`. `Manage settings…` stays the drill-in. No new shortcut chips.
+
+The zoom HUD grows Work / Plan / Map (`requestTier`, `aria-pressed` from the shown tier). Fit all's title is the `fit-all` chord. The switch stays on an empty canvas. Fit stays gated by `empty !== true`.
+
+An empty minimap renders `emptyState('minimap').sentence` ("Nothing placed yet") and no digit. A populated one reads `minimapHeader`: `MAP`, `MAP · 1 TASK`, or `MAP · N TASKS`.
+
+Shots `rd-plan-palette` (zoom 0.34, palette open on "plaid") and `rd-map` (zoom 0.18) both require `TC_FIXTURE=rd-steward` and name `docs/redesign/mockups/06-navigate-palette.png`. `{ name:` sits on one line so `visual.1` sees `run`.
+
+### Checks (Linux, Node v22, `npm ci --ignore-scripts`)
+
+Rebase onto `origin/redesign/main` (`877c71c2`): this branch is that commit. No commits to replay.
+
+Watched red first: `verify:rd-l-c` passed `rd-l-c.0` and then threw `TypeError: M.planStatusSentence is not a function`. The suite's header records that. A later chord expectation said `CmdOrCtrl+Shift+0`; `electronAccelerator` emits `Shift+CmdOrCtrl+0` and `Shift+CmdOrCtrl+T`. The check now expects those strings. 11/11 after that.
+
+Two reds from the first neighbouring runs were this lane and are fixed. `verify:styles` check 6 rejected `gap: 2px` on `.canvas-hud__tiers`; the gap is `var(--sp-1)`. `verify:rail` `labels.1` rejected the kind chip because its only child is a function call; the chip carries `aria-label`. `useSyncExternalStore` in `CanvasHud` and `NavigateTier` takes `getShownTier` as the third argument. The first `verify:first-run` threw `Missing getServerSnapshot` (`renderToStaticMarkup`). After that argument, the suite is back to the known `revamp.create.1`.
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.web.json --noEmit` | pass |
+| `npm run verify:rd-l-c` | 11/11. Watched red first on `planStatusSentence`. |
+| `npm run verify:palette` | 182/182, including check 48 and `zoom.fit.1` |
+| `npm run verify:viewport` | 199/199 |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:verbs` | 30/30 |
+| `npm run verify:rail` | 266/266 |
+| `npm run verify:rd-l-b` | 14/14, including `rd-l-b.slot.1` |
+| `npm run verify:first-run` | 28/29. `revamp.create.1` still wants `/^<div class="canvas-hud">/`. The HUD renders `data-screen-control`. Fit verbs stay off an empty canvas. Known, left as it is. |
+| `npm run affected -- --base origin/redesign/main` | 44/46 plain suites, 31.0s, 17 files, stopped after the plain tier. Failures: `verify:meta` (check 14 missing `boot:progress` in the README — R-018; `panels-split.2` tag `pre-v7-run` absent; `visual.1`) and `verify:first-run` `revamp.create.1`. `docs/redesign/requests.md` is UNMAPPED. Electron suites it selected (`verify:window`, `verify:canvas`, `verify:xterm`, `verify:panels:*`) did not start. |
+| `npm run verify` | 64/67 of the plain wave, 50.1s, stopped after wave 1. Same `verify:meta` and `verify:first-run`, plus `verify:tmux` (`Cannot find module './prebuilds/linux-x64//pty.node'`). `verify:canvas-sync` passed (14.5s). `verify:relay` passed (2.2s). `verify:flowchart` passed in 0.9s. Wave 2 (build) and wave 3 (Electron) did not start. `verify:panels` did not run. |
+
+`visual.1` reports `declared` 88, `goldens` 79, `missing` `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-plan-palette`, `rd-map`, `rd-sessions`. The two new names are this lane. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+Shot. `npm run shot` launches `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`. That path is absent. The Linux ELF is `node_modules/electron/dist/electron` (present, executable). A direct attempt, `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-plan-palette` and `TC_FIXTURE=rd-steward`, booted Electron and then threw `Cannot find module './prebuilds/linux-x64//pty.node'` from `shot-entry.cjs`. Prebuilds on disk are `darwin-arm64`, `darwin-x64`, `win32-arm64`, `win32-x64`. The probe was stopped at about 80s. No PNG was written, and no `out/shots/*.vs-reference.png`. The mockup critic and the rules reviewer did not run. `UPDATE_GOLDENS` was not set.
+
+Known reds left as they are: `verify:meta` check 14 (R-018), `panels-split.2`, `visual.1` (the missing `rd-*` goldens, including this lane's two scenes), `verify:first-run` `revamp.create.1`, `verify:tmux` (no linux `pty.node`). `verify:canvas-sync` and `verify:relay` were green on this run. `verify:flowchart` did not spike.
+
+### Deviations
+
+- Commands stay query-filtered. A command list that stays on screen while the query is "plaid" would fail the palette's filter checks. The Files chip, not a third `.palette__section`, is how path rows are read.
+- `canvas.fit` still wears the ⌘0 chip. Check 48 pins `canvas.fit=⌘0` exactly. Fit all has the chord and no chip (R-032). Reset zoom remains that row (`zoom.fit.1`).
+- `flyToTier` has its own duration and ease-out. Bookmarks, fit and reset still use `flyTo`. Both paths call `interpolateViewport` and set `flying`.
+- The minimap header is positioned from the L-C span (`.minimap` overflow visible, header above the map). `minimap.ts` is L-B's and was not edited.
+- Placeholder and footer copy changed. Palette goldens that paint the old "Type a command…" bar will differ. The lead rebaselines those. This lane writes none.
+- R-009 and R-015 were already done on this base and were not repeated. `rd-l-c.lock.1` pins the ⌘K return before `preventDefault`.
+- R-005's remainder is R-030. Canvas still passes `attentionCount`. `CommandPill.tsx` is outside the slot and outside this lane.
+- The dock half of R-026 stays open. `openSettingsScope` still opens the palette settings scope, and that call sits outside the TierLayer slot.
+- `chordCode` makes a key-only `0` Fit all and a key-only `1` Work. Electron suites that still reset with `zoomTo(wc, '0')` or fit with `zoomTo(wc, '1')` are R-031. They did not run on this machine. Pinch `zoomToScale` is unchanged.
+
+## L-F · M447
+
+Branch `rd/l-f-recovery` off tag `rd-wave2a` (`877c71c2`, redesign/main at the wave 2a merge). Lane `RD_LANE=L-F`. R-006 is already done: `subscribeLiveSessions` fires from `notify()` and `useAttentionQueue` subscribes. It is not reopened. R-023 is done in `5fe2abdf`: issue lines on `ReopenNotice` carry `data-boot-issue`, and `bootIssueSentence` is that sentence.
+
+Merged `origin/redesign/main` at `ddf8363f` (L-C, PR #14). L-C keeps R-030, R-031 and R-032. This lane's requests moved up: publishing `session:host` is R-033, terminal frames are R-034, the offline mark is R-035, the pill sentence is R-036, and the README fence is R-037.
+
+
+### Plan
+
+The pure half is `src/shared/exit-explain.ts`. The reducer lives in that file because main samples it from the existing `list()` tick and the renderer paints it, and a second shared module is outside this lane's ownership. Checks in `scripts/verify-rd-l-f.cjs` bundle it with esbuild. The view is `RecoveryHost`, `recovery-store.ts` and `offline-mark.tsx` under `src/renderer/panels/`. It mounts from `JobRecoveryNotice`, which Canvas already renders inside `data-recovery-slot`. `Canvas.tsx` is not edited. CSS stays inside `/* ── rd:L-F ── */`. The shot is `rd-recovery`, reference `docs/redesign/mockups/09-error-disconnected.png`.
+
+PLAN CHECK:
+
+- [x] `exit-explain.ts` and the reducer come first, with checks. The suite was watched red before the module existed: esbuild reported it could not resolve `src/shared/exit-explain.ts` and the process status was 1. That sentence is at the top of `scripts/verify-rd-l-f.cjs`. `reduceHost` and `reduceRecovery` are in the module. `rd-l-f.exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1` and `pause.1` call them.
+- [x] No new polling loop. Host detection rides `createTmuxBackend().list()`, which `pollLive` already calls every `LIVE_TICK_MS`. `session-backend.ts` has no `setInterval` (`rd-l-f.mount.1`). The kill-server test uses `verifySocket('terminal-canvas-verify-l-f')` and holds `scripts/redesign/with-electron-lock.sh`. The socket is `terminal-canvas-verify-l-f`. It is not `terminal-canvas`, `terminal-canvas-app`, empty, or a path (`rd-l-f.socket.1`).
+- [x] The offline marker for GitHub and Jira is `OfflineCachedMark` plus R-035. `GithubNode.tsx` and `JiraNode.tsx` are not edited.
+
+### What the surface does
+
+- Twenty seconds of unanswered `list-panes` pauses the panes the last answer named. One missed sample sets `silentSince` and stays live. Exit 0 is an answer, including an empty pane list. A timeout (`exitCode` null) is not. stderr matching `no server running`, `error connecting`, `lost server`, or `no such file or directory` is not. Any other non-zero is a complaint that was heard, so the host is not treated as gone.
+- The banner is `hostBanner`: "Session host stopped responding. tmux server on this Mac didn't answer for 20s. N sessions are paused, not lost — their output is buffered." Retry is `Retrying in Ns`, from `retryAt = at + 8_000`. While already paused, a sample at or after `retryAt` resets the countdown. There is no renderer timer. Reconnect now and Details are the verbs. Reconnect sets phase `reattaching` and the next `list()` is the sample.
+- A paused frame says "paused · output kept" and "nothing you type is lost or sent twice", with `data-keys-blocked`. `keystrokesBlocked` is true only for `paused`. A reattaching frame is three skeleton rows (`data-recovery-skeleton`, `aria-busy`), never an empty well.
+- A survivor is the same `panelId` and the same pid. A missing pane, or a different pid, is `ended`, with the sample's exit code or null. Phase stays `paused` while any paused pane remains.
+- A crash card says "This session ended unexpectedly", `explainExit` (137 is "killed, usually by memory pressure"), and "The pending edit was not applied". Primary is "Restart with last prompt". Then "Read log". Restart calls `restartKeepsPanel`, which returns the same id. Cmd+Enter (meta+Enter, skipped on an input or textarea) restarts the first crash card. The card does not call `paletteActions.restartPanel`; that wiring is R-034, because `TerminalPanel` is not owned. Checks 90 and 92 stay in `scripts/verify-panels-shell.cjs`.
+- Offline copy is "offline · cached · last updated <time>". The toast fires only when a source flips offline, through `notify` in `toast.ts`. The sentence is "GitHub is offline" (or Jira). The detail is "The canvas, terminals and notes keep working. Cached data stays marked until the connection returns." Host loss is not a toast. `isAttentionQueueRestatement` matches needs-you counts, and `rd-l-f.offline.1` asserts the toast does not.
+- `recoveryPillLine(2, 4)` is "2 sessions need recovery · 4 paused · Review". The 09 surface paints it as `data-recovery-pill`. The real command pill is R-036: `AttentionItem` is frozen and has no paused count, and a non-zero exit is `failed` before `recovery`.
+- A failed restore shows through `ReopenNotice`. Issue lines carry `data-boot-issue`. `bootIssueSentence` is the first non-empty issue. RecoveryHost does not also read `bootIssues()`, so the reopen notice is not duplicated.
+
+### Mount
+
+`useJobRecovery` subscribes to the recovery store with `useSyncExternalStore` as its first call, so Canvas's hook order is unchanged. The model gains `surface`. `JobRecoveryNotice` renders `RecoveryHost` when the view is on, and the unfinished-work list only when jobs, runs or a sentence exist. `.recovery-host` is `position: fixed` so it is not a box inside the bottom-left stack. `.recovery-slot { display: contents; }` is L-B's rule and is not edited.
+
+`session:host` is an event (`IPC_EVENTS.SESSION_HOST`). `verify:ipc` counts invokes, so `EXPECTED_CHANNELS` stays 206. The name is in the CLAUDE.md channel diagram (`rd-l-f.channel.1`). Direct backend `hostReport()` stays `initialHost()` and `reconnectHost` is a no-op. Publishing the event from `pollLive`, and subscribing in preload, is R-033.
+
+### Shot
+
+`rd-recovery` has a `run`, size 1440×900, reference mockup 09. It calls `window.__rdLF.mount` with a catalog: four paused panes, one reattaching skeleton, exit 137 ("ship the ledger") plus a second crash, GitHub last updated 7:22 PM, retry 8s. `catalogView` paints those states together. One reducer phase is `paused` or `reattaching`, not both. Giving the scene a `run` makes `verify:meta` `visual.1` list `rd-recovery` as a missing golden. That red is expected until the lead writes the golden. This lane does not set `UPDATE_GOLDENS` and does not write under `verify/visual/goldens/`.
+
+### Checks
+
+Linux, Node v22. `npm ci --ignore-scripts` did not rebuild `pty.node` (no `prebuilds/linux-x64`). The first `verify:rd-l-f`, before `node_modules` existed, threw `MODULE_NOT_FOUND` for esbuild. The second, before `exit-explain.ts` existed, threw because esbuild could not resolve that entry. Both are the watched red. SIGSTOP of the tmux client hung the probe (the client pid, not a server that still answers). It was continued and the leftover verify server was killed. The kill test does not stop the process.
+
+`rd-l-f.kill.1` creates two panes on `terminal-canvas-verify-l-f`, records their pids, `kill-server` through the electron lock, and asserts `list-panes` is unanswered. Two virtual silence samples then pause those pids. A new session after `start-server` has a new pid, and both original pids are in `ended`. Same-pid survival is `rd-l-f.host.2`, because a real kill-server destroys every pane.
+
+| Check | Result |
+|---|---|
+| `npx tsc -p tsconfig.node.json --noEmit` and `tsconfig.web.json` | pass (web, after dropping an unused `RecoveryView` import; the later CSS comment edit does not change TypeScript) |
+| `npm run verify:rd-l-f` | 17/17 pass (`rd-l-f.0`, `exit.1`, `answer.1`, `host.1`, `host.2`, `crash.1`, `pause.1`, `pill.1`, `offline.1`, `catalog.1`, `boot.1`, `well.1`, `mount.1`, `channel.1`, `shot.1`, `socket.1`, `kill.1`) |
+| `npm run verify:styles` | 97/97 pass |
+
+G2, after the labels fix below. Local ref `redesign/main` is absent; the base is `origin/redesign/main` at `877c71c2`.
+
+The first affected run failed `verify:rail` `labels.1`: the four recovery verbs have children `{view.reconnect}`, `{view.details}`, `{frame.restart}` and `{frame.log}`, and that check does not treat those expressions as visible text. Each button now has `aria-label` of the same string. `verify:rail` is 266/266 after that. The numbers below are the re-run.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-f` | 17/17 pass, including `kill.1` on socket `terminal-canvas-verify-l-f` |
+| `npm run affected -- --base origin/redesign/main` | 52/55 plain suites, 31.2s, stopped after the plain tier. 14 files since `877c71c2`. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta`, `verify:tmux`, `verify:first-run`. Electron suites it selected (`verify:pty-manager`, `verify:window`, `verify:ipc`) did not start. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.3s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.8s). `verify:relay` passed (2.8s). `verify:flowchart` passed (1.0s) and did not spike. No WebSocket error on this host. |
+| Electron tier, `npm run shot`, `verify:visual` | not reached by the gate, because wave 1 was already red. A direct attempt downloaded the Linux Electron binary (`v43.4.1`, `node_modules/electron/dist/electron`, ELF x86-64) via `node node_modules/electron/install.js`. `xvfb-run -a scripts/redesign/with-electron-lock.sh ./node_modules/electron/dist/electron scripts/shot.cjs` with `TC_SHOT_ONLY=rd-recovery` and `TC_FIXTURE=rd-steward` booted Electron and threw `Cannot find module './prebuilds/linux-x64//pty.node'` from `shot-entry.cjs`. `node-pty` prebuilds on disk are `darwin-arm64`, `darwin-x64`, `win32-arm64`, `win32-x64`. The Mac path `Electron.app/Contents/MacOS/Electron` is absent. The process did not exit; `timeout 90` stopped it (exit 124). No PNG under `out/shots/`. `UPDATE_GOLDENS` was not set. Mockup-critic and the rules reviewer were not run: there is no `out/shots/rd-recovery.vs-reference.png`. |
+
+`verify:meta` failures, reported and not fixed: check 14 missing `session:host` and `boot:progress` (the second is R-018; the first is R-037, because the README fence is not owned); `panels-split.2` (`git show pre-v7-run:scripts/verify-panels.cjs` fails); `visual.1` missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-sessions`, `rd-settings-keys`, `rd-recovery` (declared 87 / goldens 79). `verify:tmux` throws on `pty.node` for `linux-x64`. `verify:first-run` `revamp.create.1` wants `/^<div class="canvas-hud">/` and `CanvasHud` renders `data-screen-control`. `CanvasHud.tsx` is not in this diff.
+
+### Deviations
+
+- The mockup shows paused panels, a crash card and a skeleton at once. The shot uses `catalogView`. Transitions stay in `reduceHost`.
+- Paused and crash frames, and the pill sentence, render inside `RecoveryHost`. They are not yet on `.panel` or in `CommandPill`. R-034 and R-036.
+- "paused · output kept" is overlay copy. It is not a `panelState` word. `state.1` pins that vocabulary in `scripts/verify-rail.cjs`, which this lane does not own.
+- Tones are `needs-you`, `starting`, `exited` and `idle` through `[data-tone]`. No state hex, no new `@keyframes`, no `--lift` off `.panel`.
+- The L-F CSS comment does not name `.panel__slot` or `.xterm`. `rd-l-f.well.1` walks from the lane span and a comment that named those classes matched the next `height:`.
+- Restart in place keeps the id in the reducer. Calling `restartPanel` is R-034.
+- `session:host` is declared and sent only when something calls `sendHostReport`. The live tick does not yet. R-033.
+- The README architecture fence does not list `session:host`. Check 14 already misses `boot:progress` (R-018). R-037 asks for `session:host` only. The README is not edited.
+- Recovery verbs carry `aria-label`. `labels.1` strips a child expression unless it looks like a name, a label or a title, so `{view.reconnect}` alone was an unlabelled button.
+
+### Gates after merging L-C
+
+`origin/redesign/main` at `ddf8363f` is in this branch (`25c471f9`). No rebase. The request list and this ledger keep both lanes. L-C's R-030, R-031 and R-032 are unchanged. This lane's five requests are R-033 through R-037. No code comment or check named the old ids.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run verify:rd-l-f` | 17/17 pass |
+| `npm run affected -- --base origin/redesign/main` | 52/55 plain suites, 31.1s, stopped after the plain tier. 14 files. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta`, `verify:tmux`, `verify:first-run`. Electron suites it selected did not start. |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.2s, stopped after wave 1. Same three failures. `verify:canvas-sync` passed (14.7s). `verify:relay` passed (2.7s). `verify:flowchart` passed (0.9s). |
+
+`verify:meta` check 14 still misses `session:host` and `boot:progress`. `panels-split.2` is the absent `pre-v7-run` tag. `visual.1` is declared 89 / goldens 79. The check prints the first eight missing names; the full list is `rd-splash`, `rd-onboarding`, `rd-empty`, `rd-workspace`, `rd-arrange`, `rd-plan-palette`, `rd-map`, `rd-sessions`, `rd-settings-keys`, `rd-recovery`. `verify:tmux` is still the missing `linux-x64` `pty.node`. `verify:first-run` is still `revamp.create.1`. The shot was not repeated: `prebuilds/linux-x64/pty.node` is still absent, and `UPDATE_GOLDENS` was not set.
+
+## Lead wiring (screens 01–09)
+
+Branch `rd/lead-wiring` from `redesign/main` at `9bfc3034`. The open requests R-016 through R-037 are landed except R-024, which stays open: D1–D8 do not choose between placing a terminal on an empty canvas and changing the empty-canvas copy, and `onCanvasDoubleClick` still places a flowchart process step. R-022 and R-023 were already done. Frozen foundations were not edited. `UPDATE_GOLDENS` was not set. Nothing was written under `verify/visual/goldens/`.
+
+Two measurements needed a second commit after the request they belong to. `revamp.motion.1` reads the later `panel-settle` as 0, −3px, 1px, 0; `translateY(0)` has no unit, so the px-only sample list saw two values (`f6a5b4d9`). `rd-attn.one.1` treats any `attention-queue` import in `CommandPill.tsx` as the pill building a queue, so `ATTENTION_VERB.recovery` is imported from the pill's pure module (`96c86df3`). `verify:ipc` was recomputed from `Object.values(IPC)`: the 206 tally had already omitted `world:status` and `world:retry`, and `dialog:confirm` makes 209 (`9275573d`).
+
+### Gates
+
+Linux, Node v22.14.0. `npm ci --ignore-scripts` first. The second plain wave is after the recovery-verb move. `npm run build` (typecheck plus electron-vite) passed in the Electron attempt below; it is not part of the plain-wave tally.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:rd-l-c` | 11/11 |
+| `npm run verify:rd-l-d` | 18/18 |
+| `npm run verify:rd-l-e` | 15/15 |
+| `npm run verify:rd-l-f` | 17/17 |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:rail` | 266/266 |
+| `npm run verify:palette` | 182/182 |
+| `npm run verify:viewport` | 199/199 |
+| Plain-node wave (`npm run verify`, 67 suites) | 64/67, 31.3s, stopped after wave 1 |
+
+The three plain failures are the known ones. `verify:meta` is 51/53: `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (declared 89 / goldens 79; the check prints the first eight missing names). Check 14 is green: `boot:progress` and `session:host` are in the README fence. `verify:first-run` is 28/29, `revamp.create.1`. `verify:tmux` throws on `pty.node` until it is rebuilt (below). `verify:canvas-sync` passed (14.6s). `verify:relay` passed (1.8s). `verify:flowchart` passed (1.1s). An earlier wave, before the recovery-verb move, also failed `verify:rd-f2` (`rd-attn.one.1`, the pill importing `attention-queue`) and once failed `verify:review` `merge.1` with `{kind:'failed', detail:''}` under the 8-wide run. Alone, `verify:review` is 163/163. `verify:rd-f2` is 19/19 after the verb moved.
+
+### Electron
+
+The Linux ELF is `node_modules/electron/dist/electron` (`v43.4.1`), from `node node_modules/electron/install.js`. The Mac path in the npm scripts is absent. `npm rebuild node-pty` wrote `build/Release/pty.node` and `verify:tmux` is then 35/35. `electron-rebuild -f -w node-pty` replaced that binary with the Electron ABI. Under `xvfb-run`, `TC_SHOT_ONLY=rd-splash` wrote `out/shots/rd-splash.png` and `rd-splash.vs-reference.png` and exited 0. DBus address errors are the host. `verify:ipc` is 1/1 at 209 channels. The rest of the Electron tier was not run. No golden was written.
+
+## R-024 · Empty-canvas hint
+
+Owner chose on Oct 6, 2026: keep M388. `onCanvasDoubleClick` still places a flowchart process step. The ghost hint is now `Double-click to place a flowchart step` (`GHOST_TARGET`). `rd-empty.hints.1` pins that sentence. L-A's brief and L-B's "spawns the default agent" line name the same step. `hints.ts` already refused to teach ⌘N after the double-click; the comment now points at the ghost. No shot scene hardcoded the old sentence. `rd-canvas` was not moved. Landed in `ea1a5fca`.
+
+### Gates
+
+Linux, Node v22.14.0. `npm ci --ignore-scripts`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:rd-l-c` | 11/11 |
+| `npm run verify:rd-l-d` | 18/18 |
+| `npm run verify:rd-l-e` | 15/15 |
+| `npm run verify:rd-l-f` | 17/17 |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:rail` | 266/266 |
+
+## M448 · W0 night studio
+
+Branch `rd/w0-night` from `redesign/main` at `c432e511` (after R-024). Base the brief names is `rd-canvas` (`5cf60839`); the branch includes the hint merge and does not move that tag.
+
+### Plan
+
+Reverse M415/M416. The room is the night ink (`#0b0d12`, dark `--s-0`) in both app themes. Shells are one neutral. Identity hues are the chest light only, and none sits within ΔE 20 (CIE76) of the five dark state colours. State is drawn in the eyes, the antenna, the floor ring and (once R-039 lands) the desk screen, read from `state-palette.ts` through `stateHexForAgent`. Trims are a dim neutral so only state blooms. Amber, the needs token, is the only vertical beacon, and only while an agent is waiting. Idle and errored agents stay in the roster; an error slumps. Agents do not walk to the table. `isLiveStatus` is unchanged (still the at-work set). `goalOf` is unchanged; `WorldRobot` stops using it.
+
+`STUDIO` is the same object as `NIGHT`, so WorldOffice, WorldPlatform, WorldProps and WorldStructure pick up the night ground without an edit this lane does not own. `tableTop`, `ink` and `zoneInk` stay, so `world.studio.4` and `world.critic.label.1` stay green. The bloom threshold stays calibrated to the pale floor `#eef0f3`: a threshold taken from the night ground drops the whiteboard under `world.bloom.ink.1`. `glowScale` returns 1 for a colour under luma 0.12, so the dim trim does not bloom; `#36e6ff` and `#7ff4ff` still boost (`world.bloom.threshold.1`). `world.bloom.preimage.1` keeps the round-trip and now only requires that ACES does not lift the ground (the night ground compresses by less than the pale 0.02).
+
+### PLAN CHECK
+
+- [x] Every state colour in world/* reads state-palette.ts; identity hues only on the chest light.
+- [x] The F1 world exemption is a request for the lead (R-038), not an edit to `scripts/verify-rd-f1.cjs`.
+- [x] No three import in a pure module. WorldStage was not edited; it still has its one `/* @__PURE__ */ lazy()` for WorldView, and the flat room's existing second lazy (M431).
+
+Watched red before the palette existed: `verify:rd-w0` 1/4. `rd-world.parity.1` named `world-palette.ts:#a6f6ff`. `rd-world.identity.1` named `#ee2b4a` 19.8, `#ffc614` 19.8, `#11b9b2` 16.6. `rd-world.night.1` was the missing wiring. The esbuild of the suite did not throw: the parity walk short-circuited before the missing exports were read.
+
+### CSS override
+
+Inside `/* ── rd:W0 ── */`, badge rules that follow the earlier `.world-tag` / `.world-flat__tile` rules and win by source order:
+
+- `busy` → `var(--state-working)` (was `--world-go`, green)
+- `quiet` and `idle` → `var(--state-idle)` (quiet was `--world-stop`, red)
+- `stopped` → `var(--state-failed)`
+- `wants-you` → `var(--state-needs)`
+- `done` → `var(--state-done)`
+
+### Exports other lanes read
+
+`NIGHT`, `SHELL`, `TRIM`, `stateHexForAgent`, `ROBOT_TINTS` (chest lights, still length 10), and `STUDIO` aliased to `NIGHT`.
+
+### Requests
+
+R-038 open: drop `src/renderer/world/` from `rd-tone.literal.1`'s exemption in `scripts/verify-rd-f1.cjs` (lead, after merge). R-039 open: WorldOffice desk screen reads `stateHexForAgent`, and `MeetingTable` unmounts. R-040 done in `6dd3cad6`: an unread worktree list is one module-level array, so the resume summary does not rebuild every render. W0 does not own `useTaskHandoffs.ts`. The lead landed it on this branch before the night shot, because opening the world during that loop threw React's nested-update limit and unmounted the tree.
+
+### G2
+
+Shot `rd-world-night` (Plan tier, `TC_FIXTURE=rd-steward`, swiftshader under xvfb, Linux Electron `node_modules/electron/dist/electron`). `UPDATE_GOLDENS` was not set. Nothing was written under `verify/visual/goldens/`. `visual.1` stays red: the scene has `run`, and its golden is missing until Phase 4.
+
+World-guard: no blockers. `three` / fiber / drei / `postprocessing` stay on the existing doors. WorldStage still has one `/* @__PURE__ */ lazy()` for WorldView and the flat room's existing second lazy. `world-palette.ts` does not import three. No drei `<Environment>`. `useGLTF` still passes both decoders off. The built entry loads the WorldView chunk with `import()`, not a static three import. Reduced motion and context-loss fallback were already in WorldStage and were not edited.
+
+### Critic · rd-world-night
+
+Composite `out/shots/rd-world-night.vs-reference.png` (reference on top, capture below). Verdict: **does-not-read**.
+
+1. Silhouette. The reference is five terraces stepping back. The capture is one dark slab with desks in a loose ring. W2 owns screen 11's layout. W0 does not build terraces. Recorded disagreement.
+2. Material. The reference paints saturated candy bodies. The capture's shells are one warm neutral (`SHELL` `#6e6256`); identity is the chest light. The kickoff overrides the mockup's colored bodies. Recorded disagreement.
+3. Glow. Eyes, floor rings and the waiting antenna carry the light. The reference's tall amber beacon columns are not in this shot.
+4. Connectors. No handoff arcs between robots.
+5. Labels. The reference puts a name card on every robot. The capture does not read those cards at this framing.
+6. Composition. The capture is a closer orbit of one cluster. The reference is a wide establishing shot with a plan whiteboard behind the room. The whiteboard stays in the scene (WorldProps); it is not the subject of this frame.
+7. Chrome. The capture shows the app top bar (World view pressed, Sessions, Review, Orchestrate). The reference's bottom pill and 2D minimap are absent. Those are shared chrome, not this lane's room.
+8. STATE COLOUR. Last and smallest. Working reads cyan, needs-you amber, done green, failed red, idle slate, on the eyes and floor rings. The failed agent is in the room. Amber is the waiting beacon, not a second body colour.
+
+Ignored, per the critic brief: sample copy (Steward, ledger-export) and the 1600×1000 mockup versus the 1440×865 shot.
+
+### Gates (Linux, before merge)
+
+| Step | Result |
+|---|---|
+| typecheck | pass (`tsc --noEmit` web and node) |
+| `verify:rd-w0` | 4/4 (`rd-w0.0`, `parity.1`, `identity.1`, `night.1`) |
+| `verify:world` | 251/251 |
+| `verify:rd-f1` | 7/7 (exemption still in place; R-038 lands after merge) |
+| `verify:styles` | 97/97 |
+| `verify:rail` | 266/266 |
+| lane suites | `rd-l-a` 15/15, `rd-l-b` 14/14, `rd-l-c` 11/11, `rd-l-d` 18/18, `rd-l-e` 15/15, `rd-l-f` 17/17 alone, `rd-w1`–`rd-w6` pass |
+| plain wave | `npm run verify` 64/67 in 49.4s, stopped after wave 1. `verify:rd-l-f` `kill.1` failed in the concurrent wave (`killed: null`) and is 17/17 alone. `verify:canvas-sync` passed (15.1s). `verify:relay` passed (2.4s). `verify:flowchart` passed (1.0s). `verify:tmux` passed (0.1s; the node ABI of `pty.node` is present). |
+| Electron tier | did not start; wave 1 stopped. The night shot ran separately under xvfb and swiftshader and wrote the composite. |
+
+Known reds, not this diff: `verify:meta` 51/53 (`panels-split.2` tag `pre-v7-run` absent; `visual.1` declared 90 / goldens 79, missing redesign goldens including `rd-world-night`). `verify:first-run` 28/29 (`revamp.create.1`). `UPDATE_GOLDENS` was not set.
+
+### Merge
+
+Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62eed4`). `rd-canvas` was not moved. `rd/w0-night` was not deleted.
+
+R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
+
+The shot loop is recorded on R-040, after the tag, and the tag was not moved. The setter is `setResumeSummary` (`Canvas.tsx` resume effect), not `useSyncExternalStore`. The same `records ?? []` and the same effect are on `rd-canvas` (`5cf60839`). Opening the world is what turned the spin into #185.
+
+## M450 · W2 the room
+
+Branch `rd/w2-room` from `redesign/main` at `38644eed` (R-040's resume-loop note is on that commit). W1 and W3 are in parallel. This lane does not edit them. New requests are R-050 through R-053.
+
+### Plan
+
+Five terraces at the canvas regions. `terraceFloor` is `canvasToFloor` of the region centre, and the size is the box divided by `FLOOR_SCALE`. `panelFloor` is the same conversion for a panel: a desk when the roster has that agent, a console when it does not. `placeStations` moves the desk and the home onto that point; `stationPlan` and `goalOf` stay the ring, so `world.zone.1`–`4` stay green. The scene group subtracts the frame centre, so the frozen orbit, the lights and `TransitionRig` still look at the origin. Terrace math is `canvasToFloor` before that shift.
+
+`terraceDragCanvas` is the canvas delta of two floor points. `moveRegion` is the commit, one plan, one undo. The world does not import it (`world.ctx.door.1`). The check calls both. The scene reads the live region and panel boxes once, at open. The drag itself is R-051.
+
+State. Working and thinking breathe on the eyes, the halo, the floor ring and the desk screen, through `agentBreathes` (the trim's table). The word is not spelled again: `verify:rail` `state.2` fails a `'working'` literal outside `panel-state.ts`. Reduced motion holds the breath at 1. A waiting agent raises `NeedsBeacon`, a vertical column in `stateHexForAgent('waiting_approval')`, and no other status does. The failed pill is `failedLine` (the feed's own words). The ask chip is `askChip`, only while waiting. The visible card is the picked robot. The budget formula `const full = !compact || waiting || picked` stays, because `world.perf.11` and `world.quality.cards.1` read that line; the card branch is `picked` inside it.
+
+Shared chrome. `WorldChrome` keeps its ask pill, legend, Fit room, request count and room map in the DOM (`world.chrome.1`, `world.request.2`, `world.map.2`). The W2 span clips them. The canvas host is opacity 1, `z-index: 3`, `visibility: hidden`, pointer events none. `.command-pill`, `.minimap` and `.canvas-hud` are `visibility: visible` and take the pointer. The aura inherits the host's visibility: naming `.canvas__aura` in that rule is a third layer to `verify:styles` `aura.1`. Those are the 2D components, revealed, not reimplemented. The title bar was already outside the canvas. The camera wedge is R-050. Follow on the tier switch is R-052. Empty mounts: `data-rd-mount="W1"` and `"W3"`, marked `rd:W1 mount` and `rd:W3 mount`. The canvas is opaque (`alpha: false`).
+
+R-039. The desk screen emissive is `stateHexForAgent(status)`. `MeetingTable` returns an empty group (`drawTable` is false). The plate stays in the function so W0's suite, which this lane does not own, still sees it. `agentTint` is still read and does not paint the screen.
+
+### PLAN CHECK
+
+- [x] Two empty marked mount blocks for W1 and W3 in `WorldView.tsx` (`rd:W1 mount`, `rd:W3 mount`, `data-rd-mount`).
+- [x] `rd-world.layout.1` and `rd-world.chrome.1` are in `scripts/verify-rd-w2.cjs`. `rd-w2.0` stays.
+- [x] No literal state hex in the new world code. Screens, the beacon, the fail pill and the ask chip read `stateHexForAgent` or `var(--state-failed)` / `var(--state-needs)`. `rd-world.parity.1` is clean.
+
+`rd-world.layout.1` fails closed: the suite's esbuild imports `terraceFloor`, and a missing export does not resolve. `rd-world.chrome.1` fails if the W2 span does not name `.command-pill`, `.minimap` and `.canvas-hud`.
+
+### CSS override
+
+Inside `/* ── rd:W2 ── */` only. Later than `.canvas--behind-world { opacity: 0 }`, so the host paints. The host is `visibility: hidden`; `.world` and `.edge-indicators` restate that. The aura is not named (it inherits). The room's own ask, legend, tools, requests, room map and replay column are clipped, not deleted. An ask chip shows at any distance: `.world-tag .world-chip[data-ask]` follows the tier rule that hides every chip except up close.
+
+### Gates
+
+Typecheck passed (web and node). `verify:rd-w2` 4/4 (`rd-w2.0`, `rd-world.layout.1`, `rd-world.chrome.1`, `rd-world.state.1`). `verify:world` 251/251, including `rd-world.parity.1` and `world.rich.3`. `verify:rail` 266/266 (`state.2` clean). `verify:styles` 97/97 (`aura.1` clean).
+
+`npm run affected -- --base redesign/main` selected the suites this diff reaches and ran them. After the breath-table and aura-selector fixes, the plain wave of `npm run verify` is 65/67 and stops after wave 1. The two reds are the known ones: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent) and `visual.1` (declared 91, goldens 79; `rd-world-room` is one missing golden, expected until Phase 4), and `verify:first-run` `revamp.create.1`. The build and the Electron tier were not entered. `UPDATE_GOLDENS` was not set.
+
+Shot. `rd-world-room` exits 0 under xvfb and the Linux Electron binary (`--use-gl=angle --use-angle=swiftshader`) and writes `out/shots/rd-world-room.png` and `rd-world-room.vs-reference.png`. The PNG is the light shell (centre 227, 231, 238; dark pixels 0%). The DOM had five regions, eleven panels, a sized WebGL canvas, and the context was not lost. Readback of that canvas was `[0, 0, 0, 0]`. A CSS outline on the canvas was captured and the interior was not. That is R-053. The probe that measured it is not in the tree.
+
+Critic, against `docs/redesign/mockups/11-world-main.png`, ignoring sample copy and 1440×865 versus 1600×1000. **does-not-read.** The capture is not the night room.
+
+1. Silhouette. No terraces, robots, consoles or beacons. The frame is one light field.
+2. Material and glow. Night ground `#0b0d12` is absent. The centre matches the shell ground.
+3. Chrome. The shared pill and minimap cannot be read as screen 11's chrome over a dark room, because the room under them is the shell.
+
+Rules review: no blocker. State colour is `stateHexForAgent` or `var(--state-*)`. CSS stays inside the W2 markers. Frozen files and `redesign-contracts.ts` are untouched. `.panel__*` names are unchanged. `world-structure.ts` and `world-set.ts` do not import `three`.
+
+World guard: no source blocker. `WorldStage`'s lazy door is untouched. No `<Environment>`. `useGLTF` decoders are unchanged. The first built chunk does not construct a `WebGLRenderer` (WorldView stays its own lazy chunk). The shot not presenting the room is R-053, not a door change.
+
+### Merge
+
+Merged to `redesign/main` as `695a71da` (`--no-ff`). `rd/w2-room` was not deleted. The two mount comments (`rd:W1 mount`, `rd:W3 mount`) are in `WorldView.tsx`. R-039 was already marked done on the lane: the desk screen reads `stateHexForAgent` and `MeetingTable` returns an empty group.
+
+Linux gates on the merge, before W1: typecheck pass; `verify:world` 251/251; `verify:rd-w2` 4/4; `verify:rd-w1` and `verify:rd-w3` still the seam stub (1/1); `npm run build` exit 0. Plain wave 65/67 in 31.2s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 91, goldens 79), `verify:first-run` `revamp.create.1`. `verify:review` `merge.1` passed. `verify:rd-l-f` `kill.1` passed. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. Electron tier did not start.
+
+W1 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w1-transition`. W3 does the same after W1.
+
+### Critic · rd-world-room after the wave
+
+Re-shot on this host with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only. Capture centre `(227, 231, 238)`, dark pixels 0%. `out/shots/rd-world-room.png`, composite `out/shots/rd-world-room.vs-reference.png`.
+
+VERDICT does-not-read
+
+The last-golden half is a blank field labeled NO IMAGE. The capture beside it is a light flat page, and it does not read as the dark room above.
+
+1. **Silhouette.** The reference is a night room: a receding grid floor, raised terraces, and standing robot figures. The capture, lower right, is an orthographic page of white rounded rectangles, a tall list column, and a left icon rail. No floor, no terraces, no figures.
+2. **Material.** The reference is near-black ink with glossy white figures on dark slabs. The capture is a high-key white and pale-gray field, white cards, and a light list.
+3. **Glow.** The reference has tall amber beams and colored floor rings under the figures. The capture has no beams and no rings. The only tint is a pale mint card at the upper left of the canvas.
+4. **Connectors.** The reference has thin arcs between figures and small tiles on the terraces. The capture’s cards sit in two loose bands with no arcs between them.
+5. **Labels.** The reference puts short floating pills over the figures and terraces. The capture puts names in a left-hand list and on the white cards, each card with a gray status line.
+6. **Composition.** The reference is a high, wide view into the room, with the small map at the room’s lower right and the attention pill along the bottom. The capture is a 2D workbench: list on the left, cards to the right, map at the top right.
+7. **Chrome.** The reference keeps a thin top bar, a Work / Plan / Map control, the bottom pill, and a camera wedge. The capture shows the full 2D shell: icon rail, panels column, search field, a 2D | World control with 2D active, and a zoom strip along the bottom.
+8. **STATE COLOUR.** The reference uses cyan, amber (the only tall glow), green, and red on rings, eyes, and beams. The capture’s cards are white with gray status lines. Nothing reads as working cyan, needs-you amber, done green, or failed red.
+
+No disagreement. R-053 stays open. The flags that presented a room on the previous host did not present one here.
+
+Follow-up, same host, overview only. On `rd-w3b` the world opens and stays open: the lens has World pressed (`2D canvas=false`), `.world-view canvas` is 1092×809, visibility visible, parent opacity 1, and there is no `.world-route__note`. The renderer console is the `THREE.Clock` deprecation and nothing else. No React error #185, no maximum-update-depth loop, no error boundary, no failed lazy chunk. `drawImage` of that canvas reads `[0, 0, 0, 0]`. The world layer's background is `rgb(227, 231, 238)`, which is the PNG's centre. The same shot on `rd/w3-overview` (`10c1806a`), same electron flags, is the same field: centre `(227, 231, 238)`, dark pixels 0%. The furnished office that lane's critic saw does not reproduce on this xvfb host. The merge did not crash the room closed. No app code changed.
+
+## M449 · W1 Canvas → World transition
+
+Branch `rd/w1-transition` from `redesign/main` (rd-w0 plus the R-040 render-loop fix). Wave 3b. Merges after W2. `WorldView.tsx` is not edited.
+
+### Plan
+
+One milestone. `world-transition.ts` stays the one pure clock. Extend it; do not add a second timer.
+
+- Full move: 1000ms, `easeInOutCubic`, one `WorldTransition` sampled by the stage and (once R-043 lands) the scene. `__rdW1.atMs` freezes that same sample for the shot. It is not a second clock.
+- Plan tilt: `hostLook` gains `tilt` (`PLAN_TILT_DEG`), written as `rotateX` inside the host's existing `transform`. No layout write. Reduced motion: tilt 0, scale 1.
+- Terrace rise: `terraceRise(eased)`, already 1 when reduced. W2 mounts it (R-043).
+- Pop: `popDelays` is unchanged (nearest→farthest, `world.trans.5`). `popDelaysFromTarget` measures those distances from the camera target. W2 mounts it (R-043).
+- Reduced motion: `REDUCED_TRANSITION_MS` (120) with `{ reduced: true }`. `linear`/`fade` cross-fade; `raw` and `eased` are already at the destination, so the dolly and the pop do not play. Duration 0 still snaps (`world.trans.4`).
+- `plan-floor.ts` paints RGBA from region and panel rects through `world-space.ts`. No PNG. `handoffMisalignPx` is the 2px check at 1440×900. `landingViewport` is `cameraToViewport` of the orbit target; the stage calls it once the move back settles, after the inline transform is cleared.
+- `WorldLens` is the 2D | World control at the canvas top left. ⌘⇧W is `shortcutById('world')`. The lens keeps `shell__world-toggle`. The TopBar button stays until R-042.
+- Cancel chip: `CANCEL_CHIP` (`Entering World · Esc cancel`) plus a bar of `linear`. Esc still reverses through `setTarget` (same ramp). Filmstrip marks `FILMSTRIP_MS`.
+- The canvas host stays mounted. `inert` while covered. The world chord is handled before `shouldIgnoreKeys`, so it still fires while the world is up, and a focus lock still keeps the key.
+
+### PLAN CHECK
+
+- [x] world-transition.ts remains the single pure clock; no second timer.
+- [x] WorldView.tsx is not edited. Exports the lead or W2 must mount are listed below.
+- [x] TopBar's button removal is a request (R-042).
+
+### CSS
+
+New rules only, inside `/* ── rd:W1 ── */`. No override of an earlier rule.
+
+### Exports W2 or the lead must mount
+
+| Export | Who calls it |
+|---|---|
+| `motionOf(sample, reduced)` | WorldView's rig: `dolly`, `popRaw`, `terrace` |
+| `popDelaysFromTarget(points, target)` | WorldView, instead of distance to the origin |
+| `setWorldCameraTarget` | WorldView, the orbit target each frame. Until then the target is the floor origin and `landingViewport` centres there |
+| `paintPlanFloor(canvas, layout)` | The ground mesh. Pixels from the layout, never a screenshot |
+| `terraceRise` | WorldStructure, via `motionOf().terrace` |
+| `WorldLens` | Mounted by this lane in Canvas. Not W2's |
+
+`WorldStage` still passes the same `transition` object into `WorldView`. Reduced samples already snap `eased` and `raw`, so the current scene does not dolly or pop during the cross-fade.
+
+### Requests
+
+R-041 open: `world.stage.4` still names the 0ms snap. W0 owns `verify-world.cjs`. R-042 open: remove the TopBar World view button (F3) and retarget `world.door.9`. R-043 open: mount the curves in the scene (W2).
+
+### Gates
+
+Linux, Node. `npm ci --no-audit --no-fund`, then `node node_modules/electron/install.js` (v43.4.1) and `npm rebuild node-pty` then `npx electron-rebuild -f -w node-pty`. Shots invoke `node_modules/electron/dist/electron` under `xvfb-run`. `package.json` still points at the macOS Electron.app. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`, and again inside `npm run build`) |
+| `verify:rd-w1` | 15/15. Watched red: `REDUCED_TRANSITION_MS = 0` failed `rd-w1.reduced.1` and `.2` (13/15), then restored to 120. |
+| `verify:world` | 250/251. The one failure is `world.stage.4`. R-041. `world.trans.1`–`.8`, `world.door.1`–`.12`, `world.stage.1`–`.3` passed. `rd-world.parity.1` passed. |
+| `npm run affected -- --base redesign/main` | 40/45 before the lens label and the spacing tokens. Failed: `verify:rail` `labels.1` (the 2D segment), `verify:styles` check 6 (literal padding), plus the known `verify:meta`, `verify:first-run`, and `world.stage.4`. |
+| plain wave (`npm run verify`) | 63/67 in 31.3s, stopped after wave 1, after the label and spacing fix. Failed: `verify:meta` (`panels-split.2`, `visual.1`), `verify:first-run` `revamp.create.1`, `verify:world` `world.stage.4`, `verify:review` `merge.1` (`{kind:'failed', detail:''}`). Alone, `verify:review` is 162/163 on the same `merge.1`. `verify:rail` and `verify:styles` passed (97/97). `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (15.7s). `verify:relay` passed (2.5s). `verify:flowchart` passed (1.2s). `verify:tmux` passed. Wave 2 and the Electron tier of `verify` did not start. |
+| `npm run build` | pass. `WorldView` is its own chunk. `world.door.2` passed, so the entry does not statically import three. |
+| shots | `rd-world-transition` and `rd-world-transition-rm` wrote PNGs and composites. The reduced-motion scene attaches the debugger before `Emulation.setEmulatedMedia` (the first try died with "No target available"). Electron logs `WebGL2 blocklisted`. The room is not in the capture. R-044. |
+
+### Critic
+
+Both composites are `does-not-read`. Mockup 10 is the plan tipping into terraces with robots popping. The captures are a light field: WebGL is blocklisted on this host (R-044), and the terraces are not mounted (R-043). The harness did show the cancel chip before the shutter (`[data-world-cancel]` not hidden, canvas still mounted, reduced motion did not write `rotateX`).
+
+`rd-world-transition` (frozen at 550ms), top divergences:
+
+1. Silhouette. The mockup's mid-frame is a tilted plan with terraces rising through it. The capture has no plan and no terraces.
+2. Composition. The chip and the filmstrip have nothing to sit over. The mockup puts them on the moving plan.
+3. State colour. The mockup's robots carry working cyan and needs-you amber. The capture has no robots.
+
+`rd-world-transition-rm` (mid-fade), the same three. The scene's own check is that the host transform has no `rotateX`, and that check passed.
+
+### Review
+
+Rules review: no blockers. The filmstrip's millisecond labels use the mono face; `face.1` still passes. Two world toggles remain until R-042.
+
+World guard: no blockers. `plan-floor.ts`, `WorldLens.tsx`, `world-transition.ts` and `world-toggle.ts` import no three. `WorldStage` still has one `/* @__PURE__ */ lazy()` for `WorldView` and the existing flat-room lazy. No new `<Environment>`. Reduced motion is the 120ms cross-fade. `WorldFlat`, `WorldCardBody` and `WorldMinimap` are untouched.
+
+### Merge
+
+Merged to `redesign/main` as `aa0b55a5` (`--no-ff`) after W2. The mount is `2a24f561`. `rd/w1-transition` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W1`.
+
+The lead then mounted the curves in `WorldView`: `popDelaysFromTarget` from the camera target, `motionOf().dolly` into `dollyAt`, `motionOf().terrace` as the scale of the office and the terraces, `setWorldCameraTarget` from the orbit each frame, and `paintPlanFloor` on a ground under the terraces. `WorldLens` stays the canvas control. The top-bar World view button is gone (R-042). `world.stage.4` names the 120ms cross-fade (R-041). R-044 stays open until the swiftshader shot. W3 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w3-overview`.
+
+### Critic · after the mount
+
+Same host, electron flags `--ignore-gpu-blocklist --enable-unsafe-swiftshader` only on that command. `rd-world-transition` centre `(16, 19, 26)`, 92% of samples under a sum of 90. `rd-world-transition-rm` centre `(193, 193, 194)`, mean about `(21, 24, 28)`. Neither capture is the tilted plan. Paths: `out/shots/rd-world-transition.png`, `out/shots/rd-world-transition-rm.png`, and the `.vs-reference.png` beside each.
+
+`rd-world-transition`. VERDICT does-not-read
+
+The lower-left golden slot is a blank field labeled NO IMAGE. The lower-right capture is a flat 2D canvas with a panels column and dashed boxes. It does not show a tilted plan, terraces, or robots.
+
+1. **Silhouette** — Upper reference is a perspective floor of raised cards with small robot figures. Lower-right capture is orthogonal rectangles and a left column. No tilted floor, rising terraces, or robots anywhere in the lower half.
+2. **Material** — Reference cards are dark glass with lit rims on a receding dot grid. Capture boxes are flat dashed outlines on a flat dark field, with one solid teal card in the left column.
+3. **Glow** — Reference cards carry cyan, amber, and red blooms. Capture has a solid teal panel and a small cyan map mark at the upper right of its window. No bloom, no floor pool, no amber beacon.
+4. **Connectors** — Thin lines and dots link the dashed boxes across the capture’s right canvas. The reference’s readable links are the white callout pills around the tilted cards, not that flat graph.
+5. **Labels** — Reference labels sit on the floating cards, the top transition chips, and the bottom filmstrip. Capture labels sit in the left tree and inside the flat boxes. No filmstrip captions.
+6. **Composition** — The reference fills its frame with the tilting plan. The capture splits into a panels column on the left and a flat diagram on the right, with the map at that window’s upper right.
+7. **Chrome** — Both show the top nav and a 2D | World control. The reference also has a left icon rail, a cancel / entering-world chip, and a bottom filmstrip of the move. The capture adds the panels column, a zoom footer, and a minimap, and has no filmstrip and no cancel chip.
+8. **STATE COLOUR** — Reference card rims read cyan, amber, red, and green. Capture boxes read slate, the left card and map mark read cyan/teal, and amber, green, and red state are not visible on the canvas. Amber is not the only glow in the reference art.
+
+`rd-world-transition-rm`. VERDICT: does-not-read
+
+1. Silhouette. Center of the capture: one dark trapezoid with a tight knot of tiny pills. The reference’s stage is two rows of large glass cards, each with a white robot. No robot bodies, card slabs, or terrace blocks are in the capture.
+2. Material. That same stage is a flat near-black plane. The reference cards are frosted glass on a visible floor grid. The capture’s only solid panels are the left task column (teal header, dark rows) and a small dark card beside the pill cluster.
+3. Glow. Reference card edges bloom cyan, amber, and green, with amber the loud pool. The capture plane has no bloom. The strongest color is the teal header fill on the left.
+4. Connectors. Reference callouts have leader lines onto the cards. The capture’s pill cluster has no leaders and no arcs.
+5. Labels. Reference labels sit as large floating notes over the room and as titles on the glass. Capture labels are the left-hand row list plus micro white pills on the plane. They do not read as room callouts.
+6. Composition. The reference room fills the window, with a three-frame filmstrip along the bottom. The capture gives the left third to the task list; the plane occupies the right and is mostly empty dark, and the focal cluster is small. The lower capture is not a blank field. It is that list plus the empty tilted plane. No robots or terraces are visible there.
+7. Chrome. The reference top bar has a center status chip, and the filmstrip sits on the moving plan. The capture top bar is the ordinary view switch, a 2D | World control with World filled, and search, plus a zoom control at the bottom right and a small map box at the top right. No center chip and no filmstrip.
+8. STATE COLOUR. Reference rims use cyan, amber, and green, and amber is the glow. The capture does not show those as eyes, rings, screens, or beacons. A few specks in the cluster are not a state read, and the teal header competes with them. No red failed figure and no slate idle body.
+
+No disagreement. R-044 stays open. The dark field is the dark theme the scene sets; it is not the night room.
+
+## M451 · W3 overview, camera and time
+
+Branch `rd/w3-overview` from `redesign/main` at `38644eed` (rd-w0 plus the R-040 render-loop fix). Lane W3. One milestone. `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
+
+### Plan
+
+Pure first, then the chrome that is already in the tree.
+
+1. `world-camera.ts` is pure (no three, no React, no canvas import). Orbit, pan, zoom-to-cursor (scroll and a ctrlKey pinch share one factor), tier poses for ⌘1/2/3 from `TIER_PITCH` and a local `TIER_SCALE`, fit on the terrace bounds, follow. `world.ctx.door.1` lets only the publisher import `zoom-tier`, which is frozen, so the scale and the hysteresis band are copied as `TIER_SCALE` / `tierAt`. `rd-world.pose.1` fails if either drifts from `TIER_TARGET` / `tierFor`. `rd-world.fit.1` centres those bounds to within 2% of the viewport. A pose aimed at the origin does not, which is the "Fit room sits off-centre" regression. `rd-world.zoom.1` keeps the floor point under the cursor fixed.
+2. `WorldCameraPanel.tsx` lists Orbit (drag), Pan (Shift-drag), Zoom to cursor (scroll / pinch with ctrlKey), Work · Plan · Map, Fit room, Follow picked, Back to 2D. Every chord is `shortcutById` from the registry. No chord glyph is written in the file. `useWorldCamera()` is exported from this file. The panel is mounted from `WorldTime` until W2's mount block takes it (R-062), so screen 14 is reachable without editing `WorldView.tsx`.
+3. Replay stays on the arrival journal (`foldTo` is not retargeted). Ticks take a tone and paint `var(--state-*)` inside the W3 span. A past room runs `verbsForRoom`, and every verb is disabled with the reason `past room — go Live to act`. The sentence is on the scrubber. Card, ask and open buttons live in files this lane does not own; they already omit those verbs (`world.replay.6`). R-063 asks them to show the same reason.
+4. The away card reads the journal. The offer is `Tour the changes · 40s`. `tourStep(true)` is `cut` and `tourStep(false)` is `fly`. The existing focus lines stay so `world.tour.1` still matches. The rig already snaps a glide when reduced motion is on.
+5. `watchersOn` plus a plan-map chip use the peer's initials. The sample "MK" is not in the source. The on-robot pill remains `WorldCard`'s `world-pill__peers` (`world.peers.3`).
+6. `world-minimap.ts` grows `cameraWedge` with no value import (`world.map.2`). `cameraFootprint` uses `cameraToViewport` and lives in `world-camera.ts`. The 2D `MinimapOverlay` is L-C's. R-060.
+7. Shot `rd-world-overview`, reference 14. Map tier pressed, scrubber open, away card open. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `world-camera.ts` is pure, and `fit.1` / `zoom.1` are plain-node checks of that module, written before the panel.
+- [x] `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
+- [x] Replay disables verbs with the reason `past room — go Live to act`.
+
+### W2 mount list
+
+Already in the tree through `WorldChrome` → `WorldTime` / `WorldPeers` / `WorldMinimap`. Do not mount a second copy.
+
+- `useWorldCamera`, `WorldCameraPanel` from `WorldCameraPanel.tsx` (mounted by `WorldTime` until R-062 moves that one line).
+- `fitRoom`, `zoomToCursor`, `tierPose`, `orbitBy`, `panBy`, `followAgent`, `boundsOf`, `cameraFootprint`, `toPose`, `backTo2d`, `tierAt`, `TIER_SCALE` from `world-camera.ts`.
+- `verbsForRoom`, `PAST_ROOM_REASON`, `tickTone`, `tourStep`, `tourOfferLabel` from `world-replay.ts`.
+- `cameraWedge`, `watchersOn` from `world-minimap.ts`.
+
+### CSS override
+
+Inside `/* ── rd:W3 ── */` only. The scrubber moves to the bottom centre, the away card to the right, the camera panel to the lower left, and replay ticks follow `data-tone` through `--state-*`. Earlier `.world-time__mark[data-kind]` rules stay; the tone rules win by source order.
+
+### Gates
+
+PLAN CHECK stays true. `WorldView.tsx` and `MinimapOverlay.tsx` are untouched.
+
+| Gate | Result |
+|---|---|
+| typecheck | web and node clean (`tsc --noEmit` both projects, and `npm run typecheck`) |
+| `verify:rd-w3` | 11/11 |
+| `verify:world` | 251/251. `world.ctx.door.1` stays green because the tier scale is a copy, pinned by `rd-world.pose.1` |
+| `verify:styles` | 97/97. The past-room verbs use `--fg-3`, not a fractional opacity |
+| `verify:rail` | 266/266 after the working tone moved to `TONES[4]` (`state.2`) and the tour button gained an `aria-label` (`labels.1`) |
+| `npm run affected -- --base origin/redesign/main` | 43/45 plain suites, 31.0s, stopped after the plain tier. 13 files. `docs/redesign/requests.md` is UNMAPPED. Failures: `verify:meta` (`panels-split.2`, `visual.1`) and `verify:first-run` `revamp.create.1`. Electron suites it selected did not start |
+| plain wave (`npm run verify`) | 64/67 in 48.0s, stopped after wave 1. Same two known failures, plus `verify:rd-l-f` `kill.1` (`killed: null`; 16/17 in the concurrent wave). `verify:review` `merge.1` passed (30.8s). `verify:canvas-sync` passed (14.4s). `verify:relay` passed (2.0s). `verify:flowchart` passed (0.9s). `verify:tmux` passed. Wave 2 and the Electron tier did not start |
+| build | `npm run build` exit 0 (electron-vite 16s). The entry `index.html` loads has no `WebGLRenderer` |
+| shot | `rd-world-overview` wrote `out/shots/rd-world-overview.png` and `.vs-reference.png`. Linux Electron needs `--ignore-gpu-blocklist --enable-unsafe-swiftshader` under xvfb or WebGL is blocklisted and the room never paints. No `UPDATE_GOLDENS`. The harness leak check treats the hostname as a substring; this host is named `cursor`, which is inside "Zoom to cursor" (R-065). The capture was taken with that throw skipped locally and the skip was not committed |
+
+### Critic · rd-world-overview
+
+Verdict: **close**.
+
+The capture has the overview's chrome on the live room: camera panel lower left (Orbit, Pan, Zoom to cursor, Work/Plan/Map with Map pressed, Fit room, Follow picked, Back to 2D), "Replay · last hour" at the bottom with a Live button and state-coloured ticks, and "While you were away" on the right with the tour and Dismiss. Top nav is Canvas | Sessions | Review.
+
+1. Silhouette. The room is the orbiting office, not the mockup's near top-down floor plan. Map is pressed in the panel. The rig has no `apply` (R-062), so the lens stays on the opening orbit.
+2. Composition. No teammate initials sit on an agent. The steward fixture publishes no watching peer. "MK" is sample copy and is not in the source.
+3. Chrome. The three overview surfaces sit where the mockup puts them. The floor is the furnished room rather than the mockup's diagram of rectangles, which is the same miss as the silhouette.
+
+State colour: the scrubber ticks are green, amber, red and blue from `--state-*`. No second hex in the W3 span.
+
+### Review
+
+Rules review: no blocker. Face stays on `--font-ui` for the camera chords. Past-room verbs stay in the DOM, coloured with `--fg-3`, not `display: none` and not a fractional opacity. Tones come from the palette. CSS is inside the W3 markers. Scoped ids. D1–D8 are not re-decided.
+
+World guard: `world-camera.ts` imports no three. No new three door. `WorldStage` still has its one `/* @__PURE__ */ lazy()` for the view (the flat room's lazy is the one already there). No drei `Environment`. Reduced motion cuts the tour (`tourStep`) and the rig's glide span is already 0. `verify:world` 251/251 and the build's entry chunk does not statically import three. `WorldMinimap` is the plan map; `MinimapOverlay` is untouched (R-060).
+
+### Merge
+
+Merged to `redesign/main` as `613d72b9` (`--no-ff`) after W1. `rd/w3-overview` was not deleted. Conflicts were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W3`.
+
+The lead then landed the mount in `252fc68c`. `CameraApi.apply` glides to the pose's target, distance and pitch and keeps the camera's azimuth. The floor target is shifted back onto the scene. `VIEW.minPolar` is 0.2 so Map's 78° is inside the orbit limits. `WorldCameraPanel` sits beside the `rd:W3 mount` mark and is no longer a child of `WorldTime`. The flat room's `apply` does nothing. The rig publishes `liveView` each frame: the 2D minimap draws that footprint while the world is up (R-050, R-060), and leaving restores that viewport when the move back settles (R-064). `setWorldOn(false)` does not clear it. The shot leak check matches whole tokens, and it leaves the camera row out of the page scan (R-065).
+
+Left open: R-061 (`shortcuts.ts` is frozen), R-063 (past-room verbs on the card; `world.replay.6` still wants them omitted), R-051 (terrace drag through `moveRegion`), R-052 (Follow on `CanvasHud`). R-044 and R-053 stay open: the swiftshader flags were on the electron command and the room still did not present.
+
+Linux gates after the mount: typecheck pass; `verify:world` 251/251; `verify:rd-w1` 15/15; `verify:rd-w2` 4/4; `verify:rd-w3` 11/11; `npm run build` exit 0 (`WorldView` is its own chunk). Plain wave 64/67 in 31.4s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 94, goldens 79), `verify:first-run` `revamp.create.1`, `verify:review` `merge.1` (`{kind:'failed', detail:''}`). Alone, `verify:review` is 163/163. `UPDATE_GOLDENS` was not set.
+
+World guard on the mount: `apply` is inside `WorldView`, which is already a three door. `world-camera.ts` and `world-toggle.ts` import no three. `MinimapOverlay` imports `world-toggle` only. No `<Environment>`. Reduced motion is still the 120ms cross-fade. The entry chunk does not construct a `WebGLRenderer`.
+
+### Critic · rd-world-overview
+
+Shot under xvfb with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on the electron command only. Capture centre `(227, 231, 238)`, dark pixels 0%. `out/shots/rd-world-overview.png`, composite `out/shots/rd-world-overview.vs-reference.png`.
+
+VERDICT does-not-read
+
+1. **Silhouette** — The current capture’s main field (lower right) is a near-blank pale dotted rectangle with a few dark specks. The reference (upper window, center) is a near top-down floor of raised rectangular terraces with standing figures. No floor plan, terraces, or figures are in the lower half.
+2. **Material** — The lower window is a light gray/white shell. The reference is a dark night studio: ink floor, dark glass platforms.
+3. **Glow** — The reference floor has cyan rings and an amber bloom on agents, plus a cyan control on the lower-right card. The capture has no bloom, no floor pools, and no beacons. The pale mint wash on the top card of the left list is flat.
+4. **Connectors** — The lower canvas has no traces between objects. The reference floor shows the terraces as a linked layout; nothing like that is in the lower half.
+5. **Labels** — Reference labels sit on the terraces, on the figures, in the left camera list, on the bottom scrubber, and on the lower-right card. The capture’s only labels are the left-hand list; the pale field has none.
+6. **Composition** — The reference fills the window with the room, a camera list on the left, a scrubber along the bottom, and a card at the lower right. The capture splits into a tall left list and an empty right field, so the focus is the list.
+7. **Chrome** — The capture’s title bar, list column, and bottom zoom cluster are light. Missing from the lower half: the dark title bar, the 2D | World lens, the camera panel, the replay scrubber, and the away card. The lower-left golden slot is an empty placeholder, not a scene.
+8. **STATE COLOUR** — The reference floor shows cyan, amber (the glow), and green on the rings and scrubber ticks. The capture’s specks are dark gray. No cyan working, amber needs-you glow, green done, red failed, or slate idle appears on the canvas.
+
+No disagreement. The centre sample is the shell ground. R-053, same host as the room shot.
+
+## M452 · W4 Focus and act
+
+Branch `rd/w4-focus` from `redesign/main` at `fa49bdd8` (tag `rd-w3b` plus the blank-shot note). Wave 3c. Merges first. One milestone. Mockup 12.
+
+### Plan
+
+Pure model in `world-select.ts`, then the sheet and the chrome.
+
+1. Focus is a second slot on the pick store. `engageFocus` selects and marks the robot followed. `clearFocus` drops both. Nothing is persisted. `focusPrimary(pending)` is `approve` while a request id is present and `open` otherwise, so one control is filled. `replyRoute` is `send` for a chat (`canSend`), `paste` for an agent terminal, and `shell` otherwise. A shell's composer is closed with the reason `answer in its terminal`. `focusQuestion` reads a shot preview, else the context approval (description, argument, request id), else the ask line. `diffPreview` shows eight lines until Full diff. `focusCrumb` is World, the task title, the agent name.
+2. `WorldFocusSheet.tsx` is plain DOM. It imports no three, fiber, or drei, and it does not call `window.canvas` or `agentSession`. Approve and Deny call `actions.answer`. Reply for a chat calls `actions.send`. Open in Canvas calls `actions.open` (M429's jump). The sheet is 400px, `role="dialog"`, sections Request, What it's doing, and the fact line from `factParts` (inspector density, D3). Chords are `shortcutById('allow')` and `shortcutById('step-in')`.
+3. A pick glides through `useWorldCamera(camera).follow()` in `WorldChrome`. Bare Enter on a picked robot calls `engageFocus` (the same glide). ⌘Enter is `step-in` and calls `door.open`. Esc steps back to the room (`fit`). ⌘Esc is `step-out` and calls `setTier('plan')`. Both stop the stage's leave-world Escape while a robot is in focus. The breadcrumb is `World › task › name · Esc`.
+4. The ask chip keeps its Approve control, calling `actions.answer`, shown while that robot is in focus.
+5. Shot `rd-world-focus`, reference 12. The steward fixture supplies the pending agent. `__rdW4` is the shot door, the same shape as `__rdW3`. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `WorldFocusSheet.tsx` imports no three, fiber, or drei.
+- [x] Approve, Deny, and Reply add no approval path. They call the room's registered doors (`actions.answer`, `actions.send`, `actions.open`). The publisher's `answer` is still `answerRequest`, not `answerApproval`, so the inspector history row is R-070. An agent terminal's paste-then-submit is R-071. The sheet never calls `agentSession` itself.
+- [x] The camera glide is `useWorldCamera().follow()`, not a new camera. Esc uses `fit`. ⌘Esc uses `setTier('plan')`.
+
+### CSS
+
+New rules only, inside `/* ── rd:W4 ── */`. The sheet is 400px. The diff's `code` leaf is mono. No state hex.
+
+### Requests
+
+R-070 open: point the room's `answer` at `answerApproval` so the sheet's decision is the inspector's history row. R-071 open: a paste door for agent terminals. R-072 open: `world.open.6`'s sentence still says bare Enter opens; the reachable open is ⌘Enter. R-074 open: name `WorldFocusSheet` in the plain-DOM sentence of `src/renderer/CLAUDE.md`.
+
+R-063 stays open. It wants past-room verbs disabled with one sentence, and `world.replay.6` still requires those buttons omitted. Landing it would edit `verify-world.cjs`, `WorldFlat.tsx`, and `WorldRobot.tsx`, which this lane does not own.
+
+R-081 landed in `ab85b75f`. W6 filed it on `rd/w6-doors` against `WorldCardBody.tsx`: RequestBlock's open button now reads Open in Canvas, and `data-world-answer="open"` stays. No other W6 request was taken.
+
+The crumb and the sheet do not wear `--lift`. `shadow.1` allows that shadow on the panel frame and the launcher only. The sheet keeps its hairline.
+
+### Gates
+
+Linux, Node. `node node_modules/electron/install.js`, then `npm rebuild node-pty` and `npx electron-rebuild -f -w node-pty`. Shots use `node_modules/electron/dist/electron` under `xvfb-run` with `--ignore-gpu-blocklist --enable-unsafe-swiftshader`. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`) |
+| `verify:rd-w4` | 13/13. Watched red: `rd-w4.sheet.1` failed while the sheet's comment named the session bridge; the comment no longer does |
+| `verify:world` | 251/251, including after the Open in Canvas label |
+| `verify:styles` | 97/97 after the crumb's glyph became a path and `--lift` left the W4 span. The first affected run failed `icons.1` and `shadow.1` |
+| `verify:rail` | 266/266 after the World button gained `aria-label="World"`. The first affected run failed `labels.1` |
+| `npm run affected -- --base redesign/main` | 40/45 plain suites, 31.7s, stopped after the plain tier, before the label fixes. Failed: `verify:rail` `labels.1`, `verify:styles` `icons.1` and `shadow.1`, `verify:flowchart` `flowchart.geometry.21` (max 27ms, a spike), `verify:meta` (`panels-split.2`, `visual.1`), `verify:first-run` `revamp.create.1`. Re-ran `verify:styles` and `verify:rail` alone after the fix: both green |
+| plain wave (`npm run verify`) | 64/67 in 31.3s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 95, goldens 79, `rd-world-focus` is past the first eight missing names), `verify:first-run` `revamp.create.1`, `verify:review` `merge.1` (`merged.kind` `failed`, `detail` empty). Alone, `verify:review` is 163/163. `verify:rd-w4` passed. `verify:tmux` passed. `verify:canvas-sync` and `verify:relay` passed. Wave 2 and the Electron tier did not start |
+| `npm run build` | pass, twice. The second build is the one the shot paints. `WorldView` stays its own chunk |
+
+### Critic · rd-world-focus
+
+Verdict: **close**.
+
+Shot under xvfb. The first attempt produced no PNG before a 180s kill (stdout was block-buffered). The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The sentence below is the capture after the rules-review rebuild. The WebGL layer is the light field `--s-0`. That is R-053. The DOM is what this verdict judges.
+
+The sheet is the close-up: breadcrumb `World › Ledger CSV export › Codex — ledger-export · Esc`, REQUEST "wants to edit ledger.ts", a mono diff of `export function streamCsv(rows)`, Approve `⌘Y` filled, Deny, Full diff, What it's doing with **Finished — not verified** (green) and **Working** (cyan), facts `Opus 4.8 · on feature/csv-export`, a reply composer, Open in Canvas `⌘↵`, Sessions. The camera panel, replay scrubber and away card are the room's existing chrome.
+
+1. Silhouette. The mockup's robot and floor are absent from the capture. The host reads the world canvas back blank (R-053). The sheet's own silhouette matches: a left panel over the room.
+2. Composition. The ask chip sits in the blank layer, so it does not appear on a robot. The sheet carries the same Approve.
+3. Chrome. The question is the fixture's line. The diff is the `streamCsv` function, and the step words are the plan's. Spend and context are absent because the fixture has no meter. The reply field is open: this Codex is a chat the room can send to.
+
+State colour: the step marks are green and cyan from `[data-tone]`. No state hex in the W4 span.
+
+### Rules review
+
+The first pass named two blockers. Both are fixed in this lane.
+
+- Step words in the shot and the check are the plan's (`Working`, `Finished — not verified`). `FocusStep.tone` is `Tone`. A `none` step still wears `[data-tone="none"]`.
+- One filled primary. The sheet's Approve is the fill. The chip's Approve stays in the box at opacity 0 and comes to 1 while focused, and it is not filled. The card's request keeps its text and drops its own verbs while the sheet is open.
+
+A command with no description stays the diff, not the question. The shot's diff is a function, not criteria sentences. Empty Request and What it's doing sections are omitted. An agent terminal still sees the plain-shell sentence until R-071. `verify:rd-w4` 13/13, `verify:world` 251/251, `verify:styles` 97/97, web typecheck clean after that.
+
+NITS left: the sheet has no resting shadow, because `shadow.1` keeps `--lift` on the frame and the launcher. Sessions presses the existing segment.
+
+### World guard
+
+BLOCKERS: none. SHOULD-FIX: none in the files this lane owns. `WorldFocusSheet.tsx` imports no three, fiber, drei, or postprocessing. `WorldStage.tsx`'s one lazy import is unchanged. `world-select.ts` imports no three. The chip's reveal drops its transition under reduced motion; the glide still collapses in `CameraApi.apply`. `verify:world` is 251/251, including `world.door.1` and `rd-world.parity.1`. The built entry does not statically import three. R-074 still asks the lead to name the sheet in `src/renderer/CLAUDE.md`.
+
+### Merge
+
+Merged to `redesign/main` as `92479a7a` (`--no-ff`), first in wave 3c. `rd/w4-focus` was not deleted. No conflicts: the branch was cut from `fa49bdd8`.
+
+The lead then landed R-072 and R-074 in `59e80eba`. `world.open.6` names ⌘Enter (`step-in`) and requires `door!.open(id)` in that handler. The bare-Enter listener still asks `enterOpens` and calls `engageFocus`. The plain-DOM sentence in `src/renderer/CLAUDE.md` names `WorldFocusSheet.tsx` beside `WorldCardBody.tsx`.
+
+Left open: R-070 (`world.ctx.door.2` still requires `answerRequest`; `answerApproval`'s history row is a different write, and calling both does not record it), R-071 (a paste-then-submit door needs a terminal handle the publisher does not have; `replyControl` stays closed). R-081 was already done on the lane (`ab85b75f`).
+
+Linux gates after the landing: typecheck pass; `verify:world` 251/251; `verify:rd-w4` 13/13; `verify:rd-w1` 15/15; `verify:rd-w2` 4/4; `verify:rd-w3` 11/11; `verify:rd-w6` still the seam stub (1/1); `npm run build` exit 0 (`WorldView` is its own chunk). Plain wave 65/67 in 31.2s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 95, goldens 79), `verify:first-run` `revamp.create.1`. `verify:review` `merge.1` passed (30.8s). `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (14.6s). `verify:relay` passed (2.4s). `verify:flowchart` passed (1.0s). `UPDATE_GOLDENS` was not set.
+
+W6 rebases with `git fetch origin && git rebase origin/redesign/main`.
+
+The lead re-shot of `rd-world-focus` is recorded under M454, with the flat-room shot. The first attempt on this host was the zoomed canvas and did not show the sheet. The retry is the PNG the critic judged.
+
+## M454 · W6 WebGL fallback and the doors both ways
+
+Branch `rd/w6-doors`, cut from `redesign/main` at `rd-w3b` (`fa49bdd8`). Wave 3c, beside W4. W4 owns `WorldView.tsx` and `WorldCardBody.tsx` this wave. This lane does not.
+
+### PLAN CHECK
+
+- [x] WorldFlat is extended, not duplicated. `world.flat.1` stays the import-closure pin. No second flat room.
+- [x] Context loss never unmounts the 2D canvas. `onLost` only sets `lost`. The host stays the canvas under the layer (`docs/load-bearing.md` — hidden, never unmounted). The flat room replaces the WebGL scene inside the layer.
+- [x] Every door has its palette row (`closure.v9.1`). The canvas gesture and the Sessions row call `viewInWorld` / `stageWorldDoor`. The palette row body is `worldViewPaletteRow` (`id: 'world.view'`) in `palette-actions/objects.ts`. The literal `id: 'world.view'` in `commands.ts`, and the `V9_DOORS` row in `verb-table.ts`, are R-080: those files are not W6's. A new verb written only in `verb-table.ts` would turn `closure.v9.1` red until the literal lands, so this lane does not add the row there.
+
+Files: `WorldFlat.tsx`, `WorldStage.tsx`, `sessions/**`, `object-verbs.ts`, `palette-actions/objects.ts`, `scripts/verify-rd-w6.cjs`, `scripts/shot-scenes/rd-w6.cjs`, CSS inside `rd:W6`. Shot: `rd-world-flat`, probe forced off in the scene (not in `webgl-probe.ts`), reference 11 for words.
+
+Pure model first: `roomKind`, `worldDoor`, `flatTerraceLayout`, `urgentFace`. Then the UI. `webgl-probe.ts` is read, not edited.
+
+The flat room's column (`flex-direction: column` inside `rd:W6`) overrides the earlier row on `.world-flat`. The terrace plan sits over the agent grid. State colour is `[data-tone]` and `var(--tone)` / `var(--tone-glow)`. The Sessions row verb rests at opacity 0 and comes in on hover, focus-within and its own focus, on `--dur-1`.
+
+`world.ctx.door.1` refuses a world file importing `@renderer/canvas/`. The flat room quotes the mounted command pill's attention `aria-label` instead of importing `attentionPillLine`. That is R-083.
+
+### Probe
+
+`webglAvailable` is getContext webgl2 or webgl, then `WEBGL_lose_context`. On this xvfb host getContext succeeds and the world canvas reads back blank (R-053). The probe cannot see a context that does not present. A presenting check would be a clear and a readPixels of a known colour, which would change the answer for Orchestrate too. This lane does not change the probe. The shot stubs `HTMLCanvasElement.prototype.getContext` for the GL types only, so the probe's own "no" mounts the flat room. R-082.
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| typecheck | pass |
+| `verify:world` | 251/251 |
+| `verify:rd-w6` | 12/12 |
+| `npm run affected -- --base redesign/main` | failed on `verify:styles` `--fg-0` (fixed; `verify:styles` 97/97 after), plus the known `verify:meta` and `verify:first-run` |
+| `npm run build` | pass. `WorldFlat` is its own chunk. The entry does not statically import three (`orch-zoom.3` in the plain wave). |
+| plain wave `npm run verify` | 65/67 in 31.3s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — the check prints the first eight missing names) and `verify:first-run` `revamp.create.1`. `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. `verify:verbs` passed (`closure.v9.1` stays green because the palette literal was not half-added). |
+
+`origin/redesign/main` was still `fa49bdd8`. No rebase.
+
+### Shot
+
+`rd-world-flat` wrote `out/shots/rd-world-flat.png` and `.vs-reference.png`. At capture the layer was on, the note was `none`, five terraces and ten tiles were in the DOM, the canvas carried `canvas--behind-world`, and the layer's text started with the WebGL sentence, the terrace names, "needs you" and Open. `UPDATE_GOLDENS` was not set.
+
+### Critic
+
+`rd-world-flat` against `11-world-main.png`.
+
+VERDICT: does-not-read
+
+1. Silhouette. The reference is a night studio of five terrace slabs and robots. The capture is a light page: a banner, then cards. No robots, no floor.
+2. Material. Light glass and white cards. The reference is a dark room.
+3. Glow. No amber beacon. The only strong mark in the capture is the ordinary UI, not a needs-you glow.
+4. Connectors. None in the capture. The reference has none that read as wires either; this is not the miss.
+5. Labels. The capture does say the WebGL sentence, "Back to canvas", the task names, "needs you" and Open. It does not show the reference's bottom pill "3 need you · Go ⌘J" as the thing the room is.
+6. Composition. A document stacked down the page, not a floor plan.
+7. Chrome. Top bar, dock and the flat-room banner. The reference's chrome is the room's own pill and queue.
+8. STATE COLOUR. The capture does not read as cyan working, amber needs-you, green done, red failed, slate idle. "needs you" is a word on a light card.
+
+Disagreement: the lane brief says judge 11 for the words, not the 3D picture. The capture is the flat fallback on purpose. The words that are there — the no-WebGL sentence, the terrace names, "needs you", Open, Back to canvas — are the door the brief asked to be able to see on this host. The silhouette, material and glow misses are the picture the brief said not to copy.
+
+### Reviews
+
+Rules review: no blockers. Face is `--font-ui` inside `rd:W6`. The Sessions verb is opacity 0 to 1 on `--dur-1`, and reduced motion drops the transition. State words come from `agentWord`. No state hex in the span. CSS stays inside the markers. `verify:styles` face.1 and rest.1 passed.
+
+World guard: no blockers. `verify:world` 251/251 and the build. One lazy `WorldFlat`, one lazy `WorldView`. The flat room is the same file, not a second room. `WorldCardBody` was not edited. Context loss still only sets `lost`. The entry chunk does not statically import three.
+
+### Merge
+
+Merged to `redesign/main` as `b274e8f8` (`--no-ff`), after W4. `rd/w6-doors` was rebased onto the W4 merge (`92479a7a`, then `59e80eba` and `6c78906c`) and force-updated; the branch was not deleted. Conflicts on the rebase were only the ledger and `requests.md`; both sides were kept. CSS auto-merged inside `rd:W4` and `rd:W6`.
+
+The lane's "no rebase" line above is the record from before that update. R-081 was already done on W4 (`ab85b75f`); both request entries now say so.
+
+The lead then landed R-080 and R-083 in `d024f9e2`. `id: 'world.view'` is a literal in `commands.ts`. The verb `view-in-world` is in `VERBS` and `V9_DOORS`, and the executor runs `worldViewPaletteRow`, so the palette row and the verb share one body. `commands.ts` does not import the world modules. The pill publishes its attention sentence through `src/shared/attention-line.ts`; `WorldFlat` reads that and no longer scrapes the mounted pill. `attentionPillLine` stays in `command-pill.ts`.
+
+Left open: R-082 (report only; the probe is unchanged). R-070 and R-071 stay open from the W4 merge.
+
+### Lead gates
+
+Linux, after `d024f9e2`. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed. Frozen foundations were not edited.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass |
+| `verify:world` | 251/251 |
+| `verify:rd-w4` | 13/13 |
+| `verify:rd-w6` | 12/12 |
+| `verify:rd-w1` | 15/15 |
+| `verify:rd-w2` | 4/4 |
+| `verify:rd-w3` | 11/11 |
+| `npm run build` | exit 0. `WorldView` and `WorldFlat` are their own chunks. The entry chunk does not statically import three |
+| plain wave `npm run verify` | 65/67 in 31.5s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 96, goldens 79) and `verify:first-run` `revamp.create.1`. `verify:review` passed (31.0s), including `merge.1`. `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (15.9s). `verify:relay` passed (2.7s). `verify:flowchart` passed (1.3s). `verify:verbs` passed |
+
+World guard on the combined diff: BLOCKERS none. SHOULD-FIX none. No new three importer. `WorldFocusSheet`, `WorldCardBody` and `WorldFlat` import no three. `WorldStage` keeps the pure `lazy()` for `WorldView` and W6's second lazy for the same `WorldFlat`. No drei `Environment` was added. CSS stayed inside `rd:W4` and `rd:W6`.
+
+### Lead re-shot
+
+`rd-world-focus` and `rd-world-flat`, under xvfb, electron flags `--ignore-gpu-blocklist --enable-unsafe-swiftshader` only. The first focus capture was the zoomed canvas and did not show the sheet. The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The flat room wrote `out/shots/rd-world-flat.png` and `out/shots/rd-world-flat.vs-reference.png`. At the flat capture the probe log was `flat: true`, five terraces, ten tiles, `canvas--behind-world`, and the layer text started with the WebGL sentence.
+
+`rd-world-focus` against `12-world-focus.png`.
+
+VERDICT: does-not-read
+
+1. Silhouette — The capture is a flat light window: icon rail, file tree, and two text panes. The reference is a dark 3D room of rounded robots on a raised platform, with a tall dark sheet on the right. No robot, platform, or floating sheet appears anywhere in the capture.
+2. Material — The reference is a near-black night studio with glossy white robots and a dark raised sheet. The capture is white and pale gray panels with hairline borders across the whole window.
+3. Glow — The reference has a cyan trim around the platform and a bright core on the center robot, with amber on Approve. The capture has no edge glow, beacon, or halo; the only tint is a pale mint card in the left tree.
+4. Connectors — Dotted cyan arcs link the robots across the reference platform. The capture has no arcs or floor lines.
+5. Labels — The reference puts name pills and small signs in the room, plus a breadcrumb and an ask chip on the picked agent. The capture’s labels are a PANELS tree, a World pane title, and “Entering World · Esc cancel” on the empty right pane.
+6. Composition — The reference is a close camera on one agent: room on the left, focus sheet on the right. The capture is a three-column list (tree, checklist, empty pane), with the world as text in the middle.
+7. Chrome — The reference floor shows Work / Plan / Map and Following, plus a hint pill. The capture has a light title bar, a full left rail, a bottom composer with Send, and a zoom cluster; those floor controls are absent.
+8. STATE COLOUR — The reference uses cyan for the working trim and connectors, and amber for the needs-you Approve. The capture shows status as gray words on white, with flat Approve / Deny controls and no cyan, amber glow, green, red, or slate state mark.
+
+Disagreement: the WebGL layer reads back blank on this host (R-053). The brief says judge the DOM. This retry is still inside "Entering World" (the cancel chip and the filmstrip are up). OCR of the same PNG reads the sheet: "wants to edit ledger.ts", `export function streamCsv(rows)`, "Quoted fields round-trip Working", "on feature/csv-export", Open in Canvas, Sessions. The critic's own state-colour line sees Approve and Deny. The silhouette, material and glow misses are the blank room, which this host cannot paint. The lane's earlier critic of a settled sheet was close.
+
+`rd-world-flat` against `11-world-main.png`.
+
+VERDICT does-not-read
+
+1. Silhouette — The capture is a flat two-pane screen: a tall name list on the left and rectangular cards on a blank plane. The reference is one dark room of raised terrace slabs with standing robot figures. No robots, no slabs, no floor. Whole capture.
+2. Material — The capture is a light, near-white surface with pale cards. The reference is a near-black night studio, dark platforms, glossy white figures. Whole capture.
+3. Glow — The reference has tall amber columns rising off waiting figures, and that is the only glow. The capture has solid orange strokes on the lower-right cards and no columns, no halo. Lower-right card cluster.
+4. Composition — The reference spreads five terraces across one floor, with the map tucked at the bottom-right of the room and a pill centered on the bottom edge. The capture puts a list in the left third, clumps cards along the bottom of a mostly empty field, and parks the map at the top-right. Left list, lower card row, top-right inset.
+5. Connectors — The reference draws curved arcs between desks. The capture’s cards sit isolated, with no arcs. Card field.
+6. Chrome — The reference’s chrome is a thin dark dock, title-bar view switch, bottom attention pill, and a camera-wedge map. The capture adds a full panels tree, a light top bar, and a bottom zoom/selection bar, and the attention pill is absent. Left third and bottom edge.
+7. Labels — The reference puts short labels on the terraces, under the figures, on file tiles, and on a whiteboard. The capture puts sentences inside the cards and a long name tree in the side pane. Card bodies and left list.
+8. State colour — Working reads as green dots down the left list, and green also marks a done card, so working and done share a colour. Amber is an orange border on the lower-right cards, not a glow, and other cards carry coloured borders too. No red failed figure and no distinct slate idle. Left list and lower card row.
+
+Disagreement: the lane brief says judge 11 for the words, not the 3D picture. The capture is the flat fallback on purpose. OCR of the same PNG reads the no-WebGL sentence, Back to canvas, "needs you", "Waiting on you in its panel", Open in Canvas, PASSED, WORKING, "answer in its terminal", and Send. The silhouette, material and glow misses are the picture the brief said not to copy.
+
+## M453 · W5 Attention flight
+
+Branch `rd/w5-flight` from `redesign/main` at `edef9282` (tag `rd-w3c` plus D9). Wave 3d, the last World lane. One milestone. Mockup 13.
+
+### Plan
+
+Pure model in `world/world-flight.ts`, then the strip, the shell card and the toast.
+
+1. `world-flight.ts` is pure: no three, no React, no DOM. An arc is a quadratic bow on the floor between two points. Duration is distance times 80 ms per metre, clamped to 600–1200 ms. Reduced motion is a cut: duration 0, no dotted path. `attentionStep` is the same cursor rule as `nextAttentionId` (empty, stale, wrap, one element, both directions). The room does not sort and does not build a census.
+2. ⌘J / ⌘⇧J call `walkAttention`, which steps the published queue with `attentionStep`. The published order is `useAttentionQueue`'s once the pill writes it (R-090). There is no second ordering. The camera follows the arc with the orbit controls off, the same rule as the existing glide. A held arc is how the shot shows the path without catching the enter transition.
+3. D9 Option B. `approvalToast` sends nothing itself. Approve calls `actions.answer` first, then the toast. The sentence is `Approved <agent>'s edit to <file>`. Undo is on the toast only when `discardReady` (root, baseline, subject, and at least one path). Otherwise the action is View diff and there is no Undo. No hold, no delay. An agent that already received `y` is not un-told.
+4. A shell-prompt focus is `ShellConsoleCard`: the prompt, the room sentence "A shell prompt is answered in its terminal, never from the room.", Open in Canvas ⌘↵, Snooze 10m, Next. No reply field, no textarea. Snooze hides that id from the walk for ten minutes. Next is the same `walkAttention(1)`.
+
+Shot `rd-world-attention`, reference 13. Captured after the enter chip hides, not during the 1000 ms move. The WebGL layer is blank on this host (R-053). The strip, the card and the toast are the DOM the critic judges. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `world-flight.ts` is pure and checked first. The suite loads it in plain node. It imports no three, React, or DOM.
+- [x] ⌘J reuses the 2D queue walk. `attentionStep` is pinned equal to `nextAttentionId` on the same queue, cursor and direction. The room steps `publishFlightQueue` and does not sort. It does not build a second census. The pill publishing that queue is R-090, because `world.ctx.door.1` blocks a world file from importing the pill.
+- [x] Undo implements D9 exactly. Approvals go out immediately through `actions.answer`. The toast offers Undo only when review discard can revert that panel. Otherwise it reads `Approved <agent>'s edit to <file>` with View diff and no Undo. The shell console has no reply field.
+
+### CSS
+
+New rules only, inside `/* ── rd:W5 ── */`. Two overrides of rules that live outside the span, both recorded here:
+
+- `.world-focus[data-world-shell-card]` moves the shell card to the lower right at 360px. W4's sheet stays top-left at 400px. The attribute is the only thing that moves it.
+- `body:has([data-world-on]) [data-sonner-toaster]` sets `--offset: 88px` so the approval toast clears the strip. The toaster's own rule is unchanged on the canvas.
+
+Mono is only on the shell command's `code` leaf. Chips take colour from `[data-tone]`. No state hex.
+
+### Exports
+
+`publishFlightQueue`, `attentionStep`, `emitApproved` / `subscribeApproved`, `holdFlight`. The shot door is `window.__rdW5` (`pose`, `approve`). The pill publishing the live queue is R-090.
+
+### Requests
+
+R-090 open: the pill publishes `publishFlightQueue` beside `publishAttentionLine`. R-091 open: the 2D jump and the world jump still keep two cursors. R-092 open: name `WorldQueueStrip.tsx` in the plain-DOM sentence of `src/renderer/CLAUDE.md`. R-093 open: Snooze 10m hides the id from the world walk only. R-094 open: live Approve passes `discard: null`, so the live toast is View diff until a review offer exists.
+
+### Gates
+
+Linux, Node. `node node_modules/electron/install.js`, then `npm rebuild node-pty` and `npx electron-rebuild -f -w node-pty`. Shots use `node_modules/electron/dist/electron` under `xvfb-run` with `--ignore-gpu-blocklist --enable-unsafe-swiftshader` on that command only. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+`world.rig.1` failed once: the flight path had turned `if (!atRest) gliding.current = null` into a block, and the hand-back snaps the camera whenever the controls are off. The one-liner is restored. The path is cleared on the next line.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`) |
+| `verify:rd-w5` | 11/11 |
+| `verify:world` | 251/251 after the rig one-liner |
+| `verify:rd-w1` | 15/15 |
+| `verify:rd-w2` | 4/4 |
+| `verify:rd-w3` | 11/11 |
+| `verify:rd-w4` | 13/13 |
+| `verify:rd-w6` | 12/12 |
+| `verify:toast` | 10/10 |
+| `verify:styles` | 97/97 |
+| `npm run affected -- --base redesign/main` | 43/45 plain suites, 31.2s, stopped after the plain tier. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 97, goldens 79, missing names start at `rd-splash`; `rd-world-attention` is past the first eight) and `verify:first-run` `revamp.create.1` |
+| plain wave (`npm run verify`) | 65/67 in 31.2s, stopped after wave 1. Same two suites. `verify:tmux` passed. `verify:rd-l-f` `kill.1` did not fail. `verify:review` `merge.1` did not fail. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. Wave 2 and the Electron tier did not start |
+| `npm run build` | pass. `WorldView` stays its own chunk |
+
+### Rules review
+
+BLOCKERS: none. SHOULD-FIX: none.
+
+NITS: the shell card's `bottom: 72px` and the 14px chips are raw lengths beside the spacing scale. `verify:styles` does not flag them. The 360px width is the mockup card, the same kind of number as W4's 400px sheet. `Next</button>` is one source line so `rd-w5.shell.1` can see the label.
+
+Face: mono only on the command's `code`. Tones come from `[data-tone]` (`done`, `needs-you`). No state hex in the W5 span. No new tokens. No DOM alias renamed. `.pf__body` untouched. Sonner stays behind `toast.ts` (`toast.door.1`). D9 is followed, not re-decided. The diff is inside W5's ownership plus the shared ledger and `requests.md`. CSS edits start at the `rd:W5` marker.
+
+### World guard
+
+BLOCKERS: none. SHOULD-FIX: none.
+
+`FlightDots` lives in `WorldView.tsx`, which is already a scene importer. `world-flight.ts` and `WorldQueueStrip.tsx` import no three. `WorldStage` still has the one `/* @__PURE__ */ lazy()`. No drei `Environment`. Amber is `NIGHT.amber`. Reduced motion is a cut (`flightDuration` 0, no dots). The flat room, the card body and the minimap are unchanged. `verify:world` is 251/251, including `world.door.1` and `world.door.11`. The build keeps `WorldView` in its own chunk. `verify:orchestration` passed, which is the check that three stays out of the first chunk.
+
+### Critic · rd-world-attention
+
+Verdict: **close**.
+
+Shot under xvfb after the enter chip hid. `out/shots/rd-world-attention.png` and `out/shots/rd-world-attention.vs-reference.png`. The WebGL layer is the light field. That is R-053. The strip, the card and the toast are what this verdict judges.
+
+VERDICT close
+
+1. Silhouette — The reference is a night room with a dotted arc across the floor and a robot at the end of it. The capture is a light field with the canvas chrome still up. The card, the strip and the toast have the reference's own shapes: a lower-right panel, a bottom-centre capsule, a toast just above it. Lower right, bottom centre.
+2. Material — The reference is blue-black glass. The capture's field is the light shell ground. The card and the toast are light glass on that ground. Whole frame.
+3. Glow — The reference's only glow is the amber dotted path and the waiting beacon. The capture draws neither, because the path is in the WebGL layer. The current chip is a filled amber dot and the done chip is green. Bottom centre.
+4. Connectors — The reference's connector is the amber dotted flight. The capture has no arc. Floor.
+5. Labels — The strip reads NEEDS YOU · 2 OF 3 with ⌘J and ⌘⇧J. The card reads terraform plan, Infra, SHELL CONSOLE, "Do you want to perform these actions?", the terraform command, "A shell prompt is answered in its terminal, never from the room.", Open in Canvas ⌘↵, Snooze 10m, Next. The toast reads Approved Codex's edit to ledger.ts with Undo. No reply field. Lower right and bottom centre.
+6. Composition — The reference fills the window with the room and parks the card lower right and the strip on the bottom edge. The capture parks those three in the same places and leaves the room empty, with a panels tree on the left and a zoom bar along the bottom. Left third and bottom edge.
+7. Chrome — The reference's chrome is the strip, the card and the toast. The capture adds the title bar, the panels tree, the camera panel, the replay scrubber, an away card and the minimap. Those sit where the earlier world lanes left them. Left edge, top edge, lower left.
+8. State colour — Done is green and the current chip is amber. The hollow next chip is an outline. Needs-you is not a second green. The empty field has no working cyan, no failed red and no idle slate, because the figures are not in the capture. Bottom centre.
+
+Disagreement: the lane brief says judge the queue strip, the card and the toast, and not to debug the 3D layer. The capture is the light field on purpose (R-053). The silhouette, material, glow and connector misses are that field. The three DOM objects read as mockup 13, including Undo, which is on the toast because the shot passed a discard offer. A live Approve with no offer says View diff and shows no Undo (D9, R-094).
+
+### Merge
+
+`rd/w5-flight` merged into `redesign/main`. No foundation conflict. This is the last World lane, so there is no rebase command to print.
+
+Landed on the merge: R-090 (`CommandPill` publishes `publishFlightQueue` and clears it on unmount) and R-092 (the plain-DOM sentence names `WorldQueueStrip.tsx`).
+
+Deferred at rd-world, each left as it was: R-044 and R-053 (WebGL does not present on this host; Phase 4 re-shots on a Mac), R-051 (terrace drag through the publisher), R-052 and R-061 (`shortcuts.ts` is frozen; Follow stays on the camera panel), R-063 (past-room verbs are several owners), R-070 (folding the inspector history into `answerRequest` changes every chat answer), R-071 (paste-then-submit goes through Canvas's registry), R-082 (a presenting probe would change Orchestrate), R-091 (one jump cursor means editing Canvas's load-bearing jump), R-093 (the inbox snooze is not this card's ten minutes), R-094 (live Undo waits for a real discard offer).
+
+The blank `R-NNN` template stays a template.
+
+After that commit, typecheck passed, `verify:pill` 13/13, `verify:rd-w5` 11/11, `verify:world` 251/251, `verify:rd-w2` 4/4, and `npm run build` passed. The plain wave was 64/67. `verify:review` `merge.1` returned `merged.kind` `failed` with an empty detail in the concurrent wave, and alone it is 163/163. `panels-split.2`, `visual.1` and `revamp.create.1` are the same known reds.
+
+## Fix pass · rd/fix-must
+
+Cut from `redesign/main` at `9f390d90` (tag `rd-world` is `109d7e6b`). The owner approved the eight must-fix gaps and one frozen-file edit: a Follow row in `src/shared/shortcuts.ts`. No other frozen file changed. `UPDATE_GOLDENS` was not set.
+
+| Request | Commit | What a person sees |
+|---|---|---|
+| R-051 | `4587d7cf` | Dragging a terrace moves the 2D task region. One undo puts it back. |
+| R-070 | `f4bb5dff` | Approve in the World writes **Answered in this task**. A chat answer does not gain that row. |
+| R-094 | `4c0882fd` | Live Approve offers Undo when a review can revert that panel. Otherwise View diff. |
+| R-091 | `4fc157d6` | ⌘J in the World continues the canvas jump, and the pill's Jump uses the same cursor. |
+| R-063 | `2c8e2d35` | In a past room the card keeps Approve, Deny and Open, disabled, with `past room — go Live to act`. |
+| R-071 | `a968d951` | An agent terminal's reply can be sent from the focus sheet. A plain shell stays closed. |
+| R-061 | `31fbafed` | Follow picked is F. ⌘F remains Search. |
+| R-093 | `da29d8cf` | Snooze 10m hides a shell prompt from the World walk and from the canvas jump. |
+
+Checks: `rd-world.drag.1`, `rd-w4.history.1`, `rd-w5.undo.3`, `rd-w5.walk.3`, `world.replay.6`, `rd-w4.reply.2`, `rd-world.follow.1`, `rd-w5.snooze.1`.
+
+Still open: R-044 and R-053 (WebGL does not present on this host), R-052 (Follow on the shared HUD; the chord itself landed), R-082.
+
+`orch-timeline.6` names `ChatConversation.tsx` as an importer of the one history door. That is the opt-in permission row. A chat answer that does not pass the history argument still files nothing.
+
+Gates on this branch: typecheck passed. `verify:world` 251/251. `verify:rd-l-a` through `verify:rd-l-f`, `verify:rd-w0` through `verify:rd-w6`, `verify:rd-f1` through `verify:rd-f3`, `verify:toast`, `verify:styles` and `verify:verbs` passed. `npm run build` passed. The plain wave was 65/67. `verify:meta` `panels-split.2` and `visual.1`, and `verify:first-run` `revamp.create.1`, are the known reds. `verify:tmux` passed after `npm rebuild node-pty`. `kill.1` and `merge.1` did not fail.
+
+## Phase 4 · integration (Linux)
+
+Lead pass on `db186caf`. No `UPDATE_GOLDENS`. No DMG. No tag. Draft notes: [docs/release-notes/6.0.0.md](../release-notes/6.0.0.md). Fix list: [docs/redesign/fix-list.md](../redesign/fix-list.md).
+
+### Clean clone
+
+`/tmp/tc-rd-clean` at `db186caf`. `npm ci`, `electron-rebuild` for `node-pty`, `node node_modules/electron/install.js` (the package does not download the binary on its own), typecheck, build. Plain wave of `npm run verify` twice (`/tmp/rd-v1.log`, `/tmp/rd-v2.log`). Both: 65/67 in about 31s, stopped after wave 1. The only check-level FAILs, in both runs: `panels-split.2`, `visual.1` (declared 97, goldens 79, missing names start at `rd-splash`), `revamp.create.1`. No `kill.1`, `merge.1`, canvas-sync, relay, or flowchart failure. The Electron tier was not entered: those scripts still point at `Electron.app`.
+
+### Shots
+
+Eighteen `rd-*` scenes have `run`. Shot under xvfb with `node_modules/electron/dist/electron --no-sandbox --ignore-gpu-blocklist --enable-unsafe-swiftshader`. This VM's hostname is `cursor`, which the harness treats as a private word, so `rd-settings-keys` and `rd-recovery` failed until the hostname was `tc-shot`. `rd-plan-palette`, `rd-map`, and `rd-sessions` need `TC_FIXTURE=rd-steward`. Composites written for all eighteen. No `run`, so not shot: `rd-f1-tones`, `rd-steward-work`, `rd-steward-plan`, `rd-steward-world`, `rd-f3-titlebar`, `rd-f3-pill`.
+
+### Critic
+
+Judged the capture, not the composite's reference half. Material checked by center luminance, because a first description pass swapped light and dark. WebGL stays R-053.
+
+| Scene | Mockup | Verdict | Top divergence |
+|---|---|---|---|
+| `rd-splash` | 01 | close | Checklist and tagline read. The ghosted canvas behind the card is faint. |
+| `rd-onboarding` | 02 | close | Dark card, agents step. |
+| `rd-empty` | 03 | close | Dark empty canvas, one primary verb. |
+| `rd-workspace` | 04 | does-not-read | Light "api" canvas. The scene never loads the steward fixture or sets dark. |
+| `rd-arrange` | 05 | does-not-read | Same light canvas. No drag, guides, or marquee toolbar. |
+| `rd-plan-palette` | 06 | close | Dark plan tier, palette open. |
+| `rd-map` | 06 | close | Dark map tier. Judge the tier, not the palette. |
+| `rd-sessions` | 07 | close | Dark triage table and detail. The count is the fixture's. |
+| `rd-settings-keys` | 08 | does-not-read | Light settings. The mockup is the dark shortcut map. The scene never calls `theme('dark')`. |
+| `rd-recovery` | 09 | close | Dark. The scene does call `theme('dark')`. |
+| `rd-world-transition` | 10 | does-not-read | Dark canvas, not the tilted plan. R-053. The scene does set dark. |
+| `rd-world-transition-rm` | 10 | does-not-read | Mid cross-fade on a dark field. No dolly, which is the reduced-motion rule. The room is still not the mockup's plan. |
+| `rd-world-night` | 11 | does-not-read | Light field. WebGL blank, and the shot leaves the harness theme light. |
+| `rd-world-room` | 11 | does-not-read | Same light field. |
+| `rd-world-focus` | 12 | does-not-read | Light field. Judge the sheet, which is DOM, once the theme is dark. |
+| `rd-world-attention` | 13 | does-not-read | Light field. The strip, card, and toast are the DOM. |
+| `rd-world-overview` | 14 | does-not-read | Light field. Camera panel and scrubber are DOM. |
+| `rd-world-flat` | 11 | does-not-read | The flat room is up (no-WebGL sentence, needs you, Open in Canvas) on the light theme. The mockup's robots are not the brief. The white field is the missed `theme('dark')`. |
+
+does-not-read from a missing `theme('dark')` or a missing `loadMain` is on the fix list and is safe to land here. does-not-read from a blank WebGL room stays R-053.
+
+### Goldens
+
+`npm run verify:visual` was started without `UPDATE_GOLDENS`, on a 3840×2400 xvfb, with `--force-device-scale-factor=2` so the suite's 2x display check could pass. A wrapper at `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron` (not committed) pointed `npm run shot` at the Linux binary. The suite's own watchdog fired at 395s, before the comparison. The shot had written 77 of 79 goldens' captures (`flowchart` and `flowchart-dark` were still ahead of it). Those 77 were compared with the suite's budgets (channel 24, pixel 0.005, tile 0.35, golden scale 0.5). 77/77 FAIL. 0 pass. Sizes matched after halving (fresh 2880×1730, golden 1440×865).
+
+Same-theme scenes (mean luminance moved less than 15) differ because F1 revalued surfaces, radii, accents, and the selection ring, and F3's title bar (Canvas | Sessions | Review, "Find or run anything", no dollar amount) is on every shell scene. D1 and D7 move working to cyan and finished-OK to green. That group is: account-menu, across, approval, attention, auto, board, browser, chat, compact, composer, edge-firing, edge-waiting, file-missing, flip, flowchart-far, github, graph, group, group-collapsed, header, ink, the inspector scenes, integrations, kinds, kinds-dark, launcher, lineup, memory, merged, the navigator scenes, orchestration, orchestration-watch, overview, palette-dark, palette-query, plan-approval, queue-hold, reduced-motion, relay, replay, routine, runs, search-empty, share-members, shared-canvas, skills, start-work, starter, subagents, team-ask, teammate, tool-objects, trail, vault, watcher, wide, workflow, workflow-edit, zoomed-out.
+
+Not closed as F1: `zoomed-out-dark`, `orchestration-dark`, `orchestration-working` (dark goldens, light captures), and the overlays whose luminance jumped more than 40 points (`verbs`, `share-dialog`, `search`, `templates`, `supervisor`, `chat-copilot`, `spawn-sheet`, `palette`, `shared-offline`). Detail is the fix list.
+
+### Rules and world
+
+Diff `7556aeec` (`pre-redesign`) to `db186caf`. No `.panel__*` or `*-node__*` selector removed. No `.shell__*` selector removed; four added. Version still 5.0.0. `verify:world` 251/251. Entry chunk `index-CptrJXFM.js` (7.3MB) has no static import of another script and does not contain `WebGLRenderer`. `WorldView` loads through `__vitePreload(() => import("./WorldView-….js"))`, and that chunk depends on three's `index-DoTOJlhU.js` (2.2MB). BLOCKERS: none found on this pass.
+
+### Fix pass
+
+The two safe rows on the fix list landed in the shot scenes: `theme('dark')` on L-B, L-E, and W0–W6 except W1 (which already set it), and `loadMain` on `rd-workspace` and `rd-arrange`. The arrange drag is still not scripted. Re-shot under xvfb: `rd-workspace` and `rd-settings-keys` center luminance 20.9. `rd-world-flat` center is `#24272b` (the field was white before). Gates after the edit: typecheck pass, `verify:rd-l-b`, `verify:rd-l-e`, `verify:rd-w0` through `verify:rd-w6`, `verify:world` 251/251, `npm run build` pass, plain wave 65/67 with the same three known check failures.
+
+### Budget
+
+[docs/redesign/perf-6.0.0.md](../redesign/perf-6.0.0.md). First load 7919 KB at `pre-redesign` and 8203 KB here (+284 KB, 3.6%). `WorldView` stays a lazy chunk (297 KB → 318 KB). The three chunk is 2152 KB on both and is not in the entry. Worst-case WebGL contexts: `LIVE_BUDGET` 8 plus one world. `world-perf.ts` caps full cards at 3 (`world.perf.7`). A room of twenty desks is the reason the desks are one instanced draw, not an agent cap. No row was added to the fix list.
+
+### Later reviews
+
+World guard, after the budget note: no blocker. Same WebGL count (8 live terminals plus one world canvas, flat room when the context stays lost). `verify:world` 251/251. three stays out of `index-CptrJXFM.js`. Two should-fix hexes, both unchanged since `pre-redesign`: the whiteboard step colors in `WorldProps.tsx` and the conflict label in `WorldStructure.tsx`. `rd-world.parity.1` does not count them. They stay off the fix list.
+
+Rules review named six blockers. One was real and is fixed: the L-B seam repeats `.pf__chrome .pf__verb { opacity: 0 }` after the rest-rule exemptions, and the skill count (a `.pf__verb`) and the auto dismiss (a button) hid at rest. The exemption is restated after that rule (`rd-l-b.rest.1`). The face-rule rows (splash mono, the empty chip's "no repository chosen", the Sessions and Keyboard empty sentences, "version unknown" inside a mono path) are on the fix list and were not edited. Disagreed, and not filed: "2 dormant" and "NEEDS YOU" are what `rd-sessions.header.1` and `rd-w5.queue.1` require; the header duration is what `rd-l-b.header.1` and the L-B brief allow; the zoom percent staying visible is the seam's own comment.
+
+Fresh-context critics, one line each, against the composites that existed when they ran (workspace, arrange, settings, and the world field were still the light harness theme). The disagreement is next to them: center luminance of the capture, not the composite, is what the first table used, and the theme fix re-shot workspace and settings to luminance 20.9. These sentences were not a reason to reopen the shot scenes.
+
+- `rd-splash` does-not-read. Center is a first-run form in a rail, where the reference is a restore checklist on ghost panels.
+- `rd-onboarding` does-not-read. Center is a small checklist card, where the reference is a two-column agent setup.
+- `rd-empty` does-not-read. Center is that agent-setup card, where the reference is a blank-canvas prompt.
+- `rd-workspace` does-not-read. Light empty form, where the reference is a dark Work canvas. Disagree: this is the pre-fix capture.
+- `rd-arrange` does-not-read. Same light form, no guides. Disagree: theme is fixed; the drag is still the open row.
+- `rd-plan-palette` close. Finder is a full-height column, where the reference palette floats.
+- `rd-map` does-not-read. Pale dots, no dashed territories.
+- `rd-sessions` does-not-read. The window is the canvas, not the Sessions table.
+- `rd-settings-keys` does-not-read. Light shortcut list. Disagree: pre-fix; the re-shot is dark.
+- `rd-recovery` does-not-read. The window is the Keyboard list, not the crash card.
+- `rd-world-transition` does-not-read. No cancel chip, flat flowchart. R-053.
+- `rd-world-transition-rm` does-not-read. Sparse floor, not terrace cards.
+- `rd-world-night` does-not-read. Empty light field.
+- `rd-world-room` does-not-read. Light cards, no beacons.
+- `rd-world-focus` does-not-read. Focus sheet missing.
+- `rd-world-attention` does-not-read. Queue strip and toast missing.
+- `rd-world-overview` does-not-read. Camera panel and scrubber missing.
+- `rd-world-flat` close. Flat cards; the attention pill is absent.
+
+A Mac still has to look. These lines are the critic's sentences for that look. They do not by themselves add a code row beyond the fix list.
+
+## Phase 5 · 6.0.0 (M456)
+
+`package.json` is `6.0.0`. README's status line names `v6.0.0`. The notes are [docs/release-notes/6.0.0.md](../release-notes/6.0.0.md). D8's bump is this phase. No golden was rewritten. No DMG was built; it is attached after a Mac package pass. The build stays unsigned (`mac.identity: null`). Tag `v6.0.0` is the annotated tag on `main` after the merge, not a tag on this commit.
+
+Gates on this commit, Linux: `npm run verify:meta` 51/53 (`panels-split.2` absent `pre-v7-run`, `visual.1` missing redesign goldens). `npm run verify:package` 13/13, check 8 `present=true value=null`. `npm run typecheck` pass. Plain wave of `npm run verify` 65/67 in 31.2s, stopped after wave 1: `verify:meta` and `verify:first-run` `revamp.create.1`. Electron tier, shot, visual compare, and the DMG were not run.
+

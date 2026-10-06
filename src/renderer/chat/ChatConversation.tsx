@@ -13,6 +13,7 @@ import { takeInsert, useChat, useApprovals, isAnswered, markAnswered, unmarkAnsw
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
 import { noteApprovalOutcome, withdrawApprovalOutcome } from '@renderer/shell/approval-outcome'
+import { recordPermissionAnswer } from '@renderer/orchestration/orch-record'
 import { chatRows, composerState, composerMidTurn, queueRows, deliveredUserTurns, toolArgument, denyMessageFor, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive, composerStatus } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
@@ -229,14 +230,36 @@ interface Popup {
  * so the queue, Orchestrate and this card drop the request in the same
  * frame; a failed call puts it back.
  */
-export function answerRequest(id: string, snapshot: AgentSessionSnapshot | null, agent: string, requestId: string, allow: boolean, scope?: 'session'): void {
+/**
+ * Optional durable row. Chat answers omit it, so they keep the short flash
+ * and do not file "Answered in this task". The World passes the tool and
+ * the task, and the row is written only when main accepts.
+ */
+export interface PermissionAnswerHistory {
+  itemId?: string
+  toolName: string
+  argument: string
+}
+
+export function answerRequest(id: string, snapshot: AgentSessionSnapshot | null, agent: string, requestId: string, allow: boolean, scope?: 'session', history?: PermissionAnswerHistory): void {
   if (isAnswered(id, requestId)) return
   markAnswered(id, requestId)
   // #14. The same acknowledgment the queue shows, whichever route answered.
   const asked = snapshot?.pending.find((p) => p.requestId === requestId)
   if (asked !== undefined) noteApprovalOutcome({ requestId, panelId: id, agent, toolName: asked.toolName, kind: !allow ? 'deny' : scope === 'session' ? 'session' : 'once' })
   void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: denyMessageFor(asked?.toolName) }, ...(scope === undefined ? {} : { scope }) })
-    .then((accepted) => { if (accepted === false) withdrawApprovalOutcome(requestId); if (scope !== undefined) refreshChatGrants(id) }, () => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId) })
+    .then((accepted) => {
+      if (accepted === false) withdrawApprovalOutcome(requestId)
+      if (scope !== undefined) refreshChatGrants(id)
+      if (accepted === true && history !== undefined) {
+        recordPermissionAnswer({
+          panelId: id, requestId, allow,
+          ...(scope === undefined ? {} : { scope }),
+          ...(history.itemId === undefined ? {} : { itemId: history.itemId }),
+          asked: { toolName: history.toolName, argument: history.argument }
+        })
+      }
+    }, () => { unmarkAnswered(id, requestId); withdrawApprovalOutcome(requestId) })
 }
 
 export function ChatConversation(props: ChatConversationProps): JSX.Element {

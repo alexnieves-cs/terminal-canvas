@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react'
+import type { Tone } from '@renderer/panels/panel-state'
+import type { WorldAgentFacts } from './world-context-store'
 
 /**
  * The robot a person has picked in the room (M422): a click on a robot picks
@@ -16,22 +18,180 @@ import { useSyncExternalStore } from 'react'
 let selected: string | null = null
 const listeners = new Set<() => void>()
 
-export function selectAgent(agentId: string | null): void {
-  if (agentId === selected) return
-  selected = agentId
+function notify(): void {
   for (const l of listeners) l()
+}
+
+export function selectAgent(agentId: string | null): void {
+  if (agentId === selected) {
+    // Letting the pick go also leaves the close-up. A second null is not a change.
+    if (agentId === null && focused !== null) {
+      focused = null
+      notify()
+    }
+    return
+  }
+  selected = agentId
+  if (agentId === null) focused = null
+  notify()
 }
 
 export function selectedAgent(): string | null {
   return selected
 }
 
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
+
 export function useSelectedAgent(): string | null {
-  return useSyncExternalStore(
-    (l) => { listeners.add(l); return () => { listeners.delete(l) } },
-    selectedAgent,
-    selectedAgent
-  )
+  return useSyncExternalStore(subscribe, selectedAgent, selectedAgent)
+}
+
+/**
+ * The close-up (M452). A pick is the robot the room is addressing; a focus is
+ * that robot with the camera in and the sheet open. They share one store so
+ * the scene, the chrome and the sheet cannot disagree, and neither is
+ * persisted — a reopened room is a fresh look, same as the pick.
+ */
+let focused: string | null = null
+
+export function focusedAgent(): string | null {
+  return focused
+}
+
+/** Select this robot and mark it followed. A repeat is not a notification. */
+export function engageFocus(agentId: string): void {
+  if (selected === agentId && focused === agentId) return
+  selected = agentId
+  focused = agentId
+  notify()
+}
+
+/** Step back out of the close-up: no robot picked, no sheet. */
+export function clearFocus(): void {
+  if (selected === null && focused === null) return
+  selected = null
+  focused = null
+  notify()
+}
+
+export function useFocusedAgent(): string | null {
+  return useSyncExternalStore(subscribe, focusedAgent, focusedAgent)
+}
+
+/** The sheet's width. The W4 span writes the same number; a second copy in a component would drift. */
+export const FOCUS_SHEET_PX = 400
+
+/** Why a plain shell's composer is closed. The brief's sentence, one place. */
+export const SHELL_REPLY_REASON = 'answer in its terminal'
+
+export type ReplyRoute = 'send' | 'paste' | 'shell'
+
+/**
+ * Who a reply can reach. A chat takes `agent:send`. An agent terminal takes
+ * paste and then an explicit submit. A plain shell takes neither — typing
+ * into one from across the room is how a stray Enter runs a command.
+ */
+export function replyRoute(input: { canSend: boolean; agentTerminal: boolean }): ReplyRoute {
+  if (input.canSend) return 'send'
+  if (input.agentTerminal) return 'paste'
+  return 'shell'
+}
+
+/** The composer. Paste stays closed until a door is registered (R-071); a shell is always closed. */
+export function replyControl(route: ReplyRoute, pasteDoor: boolean): { enabled: boolean; reason: string | null } {
+  if (route === 'send') return { enabled: true, reason: null }
+  if (route === 'paste' && pasteDoor) return { enabled: true, reason: null }
+  return { enabled: false, reason: SHELL_REPLY_REASON }
+}
+
+/** Which control is filled. A pending request owns the primary; otherwise Open in Canvas does, so the surface still has one. */
+export function focusPrimary(pending: boolean): 'approve' | 'open' {
+  return pending ? 'approve' : 'open'
+}
+
+export interface FocusPreview {
+  agentId: string
+  question: string
+  diff: string
+  requestId: string
+  taskTitle: string
+  steps: readonly FocusStep[]
+  facts?: WorldAgentFacts
+}
+
+export interface FocusStep {
+  id: string
+  title: string
+  /** A plan word (`Working`, `Finished — not verified`), not a word this room invents. */
+  word: string
+  tone: Tone
+}
+
+/** What the sheet says the agent asked, and the request id Approve answers. */
+export interface FocusQuestion {
+  question: string
+  diff: string
+  requestId: string | null
+}
+
+/**
+ * The shot may publish a preview for one robot (the steward cast has a world
+ * status and no chat approval). A real approval wins for every other robot.
+ * Absent description falls through to the ask line. The argument is the diff,
+ * which is the one mono leaf, so a command never becomes the question's UI text.
+ */
+export function focusQuestion(
+  preview: FocusPreview | null,
+  agentId: string,
+  approval: { argument: string; description?: string; requestId: string } | undefined,
+  ask: string | null
+): FocusQuestion {
+  if (preview !== null && preview.agentId === agentId) {
+    return { question: preview.question, diff: preview.diff, requestId: preview.requestId === '' ? null : preview.requestId }
+  }
+  if (approval !== undefined) {
+    const described = approval.description?.trim()
+    return { question: described !== undefined && described !== '' ? described : (ask ?? ''), diff: approval.argument, requestId: approval.requestId }
+  }
+  return { question: ask ?? '', diff: '', requestId: null }
+}
+
+/** Folded diff: the first lines. Full diff is the argument unchanged. */
+export function diffPreview(text: string, full: boolean): string {
+  if (full) return text
+  const lines = text.split('\n')
+  if (lines.length <= 8) return text
+  return lines.slice(0, 8).join('\n')
+}
+
+/** World, the task, the agent. A blank task is the room, not an empty crumb. */
+export function focusCrumb(taskTitle: string | null, agentName: string): readonly [string, string, string] {
+  const task = taskTitle?.trim()
+  return ['World', task === undefined || task === '' ? 'Room' : task, agentName]
+}
+
+/** Plan steps for the sheet. The preview replaces the task's steps for that robot only. */
+export function focusSteps(preview: FocusPreview | null, agentId: string, steps: readonly FocusStep[]): readonly FocusStep[] {
+  if (preview !== null && preview.agentId === agentId) return preview.steps
+  return steps
+}
+
+let preview: FocusPreview | null = null
+
+export function setFocusPreview(next: FocusPreview | null): void {
+  preview = next
+  notify()
+}
+
+export function focusPreview(): FocusPreview | null {
+  return preview
+}
+
+export function useFocusPreview(): FocusPreview | null {
+  return useSyncExternalStore(subscribe, focusPreview, focusPreview)
 }
 
 /**

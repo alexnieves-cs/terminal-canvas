@@ -8,12 +8,14 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v5.0.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v6.0.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
-> will say and what to do. `npm run verify` is the whole verification story and
-> is green at this version; what it cannot prove is listed, by item, at the end
-> of [docs/load-bearing.md](docs/load-bearing.md).
+> will say and what to do. `npm run verify` is the whole verification story;
+> what it cannot prove is listed, by item, at the end
+> of [docs/load-bearing.md](docs/load-bearing.md). The redesign goldens are
+> not rebaselined in this release, and the DMG follows a Mac package pass
+> ([notes](docs/release-notes/6.0.0.md)).
 
 ## What it does
 
@@ -361,7 +363,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        template:list / template:save / template:delete
                        preset:template
                        settings:list / settings:set
-                       canvas:request-reset
+                       canvas:request-reset / dialog:confirm
                        agent:acknowledge
                        workspace:list / workspace:create / workspace:rename
                        workspace:delete / workspace:activate
@@ -438,7 +440,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        image:read / starter:prepare
                        docx:import / flowchart:read / world:status / world:retry
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
-                       agent:state / session:live / subagent:state
+                       agent:state / session:live / session:host / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
@@ -453,7 +455,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        canvas:tidy / canvas:flip
                        canvas:feedback
                        board:add
-                       pool:mint / pool:event
+                       pool:mint / pool:event / boot:progress
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset / canvas:plan
                        preset:spawn / preset:default / preset:capture
@@ -1221,6 +1223,28 @@ price of not killing something.
 | M432 | World and Orchestrate link to each other: a focused island's plate in Orchestrate has "View in World", which opens the room on that island's agents (the first one standing in it is picked and framed once the room settles), and the picked robot's card has "View in Orchestrate", which opens that agent's task there. [log](docs/build-log/m432-m434-world-crosslink.md) |
 | M433 | The room draws less: every desk body is one instanced draw and the stools two, and a robot far off stops casting a shadow and drops its eye glow — so a large roster's wide shot carries a handful of shadow casters instead of six per robot. [log](docs/build-log/m432-m434-world-crosslink.md) |
 | M434 | A minimap for a full room: from six agents, the room from above sits over the camera buttons — a dot per robot, the camera's sight line — and a press looks there, or picks a robot and glides to it. [log](docs/build-log/m432-m434-world-crosslink.md) |
+| M435 | Phase 0 of the redesign: the run kit, the contracts, the ownership map, and the CSS, shot and verify seams. No token was re-valued and no screen was restyled. [Log](docs/build-log/m435-m456-redesign.md). |
+| M436 | One state colour (F1). The dark material is re-valued, `[data-tone]` reads `--state-*`, working is cyan, and a finished-OK fact uses the done tone. The words stay. [Log](docs/build-log/m435-m456-redesign.md). |
+| M437 | The shared model (F2): one attention queue, task territories, zoom tiers with hysteresis, and canvas-to-floor. No screen is wired. [Log](docs/build-log/m435-m456-redesign.md). |
+| M438 | The shell frame (F3): Canvas, Sessions and Review; one shortcut registry; focus lock on ⌘⇧L; a title bar that may show a session count and never a dollar amount. [Log](docs/build-log/m435-m456-redesign.md). |
+| M439 | Launch and restore: a dark card with the mark, "Every agent, in its place.", and an honest checklist. Holding ⌥ skips the remaining reattaches. [Log](docs/build-log/m435-m456-redesign.md). |
+| M440 | First run walks Workspace, Agents, Sessions, then First task. A missing tool offers its install command. A preview teaches the state colours. Nothing runs. [Log](docs/build-log/m435-m456-redesign.md). |
+| M441 | Empty canvas: one primary verb, quick spawns, and three inert starter layouts. The minimap says "Nothing placed yet". A double-click on empty canvas still places a flowchart step. [Log](docs/build-log/m435-m456-redesign.md). |
+| M442 | Work tier: task regions, a needs-you panel with Allow, Diff and Deny, handoff edges, the inspector, the zoom HUD, the minimap, and a selection ring distinct from working. [Log](docs/build-log/m435-m456-redesign.md). |
+| M443 | Create and arrange: dragging from a port opens a connected spawn, smart guides use the 24px gap, and a marquee brings up Align, Tidy, Make task (⌘G) and Pause all. [Log](docs/build-log/m435-m456-redesign.md). |
+| M444 | Navigate: Plan turns panels into status cards, Map is the same canvas as dots, ⌘K is grouped with fly-to and fit-task, and Work, Plan and Map sit on the zoom HUD. [Log](docs/build-log/m435-m456-redesign.md). |
+| M445 | Sessions is a triage page: an attention queue, a table grouped by task where run and cost are allowed, a bulk bar, and a detail pane. The spend total lives in this header. [Log](docs/build-log/m435-m456-redesign.md). |
+| M446 | Settings, Keyboard: the shortcut map, a conflict when an agent's own ⌘K would steal the palette, a shortcut recorded inline, and focus lock so the terminal gets every key. [Log](docs/build-log/m435-m456-redesign.md). |
+| M447 | A host that stops answering says paused, not lost. A crashed session explains itself with one fix. Reattaching panels are skeletons. Stale GitHub or Jira data is marked. [Log](docs/build-log/m435-m456-redesign.md). |
+| M448 | The World at night: a dark room, neutral robot shells, and state drawn only from the canvas palette — eyes, antenna, floor ring and desk screen. [Log](docs/build-log/m435-m456-redesign.md). |
+| M449 | Canvas into World: the plan tips back, terraces rise, a cancel chip, and the 2D / World lens. Reduced motion is a 120ms cross-fade, not a dolly. [Log](docs/build-log/m435-m456-redesign.md). |
+| M450 | The room stands the same layout up. Terraces sit at the canvas coordinates. Waiting agents raise a beacon where they stand. [Log](docs/build-log/m435-m456-redesign.md). |
+| M451 | Overview: orbit, pan, zoom, ⌘1, ⌘2 and ⌘3, fit, follow, and back to 2D, plus a replay scrubber. Past rooms keep the verbs and disable them. [Log](docs/build-log/m435-m456-redesign.md). |
+| M452 | Focus: picking an agent glides in. The sheet holds the ask, Approve and Deny, facts, a reply for a chat agent, and Open in Canvas. A plain shell is not answered from the room. [Log](docs/build-log/m435-m456-redesign.md). |
+| M453 | ⌘J walks the same queue in the World as on the canvas. Approve sends immediately. Undo appears only when a review can still discard that change. [Log](docs/build-log/m435-m456-redesign.md). |
+| M454 | Without WebGL the flat room keeps the same words and the same doors. The doors between the canvas and the World go both ways. [Log](docs/build-log/m435-m456-redesign.md). |
+| M455 | Phase 4 on Linux: the fix list, the release-notes draft, dark shot fixes, the renderer budget, and the header rest rule so a skill count stays visible at rest. Goldens were not rewritten. [Log](docs/build-log/m435-m456-redesign.md). |
+| M456 | 6.0.0: the version, the release notes, and the GitHub release. The build is unsigned. The DMG is attached after a Mac package pass. [Log](docs/build-log/m435-m456-redesign.md). |
 
 ### What's next — the v10 run (D01–D20)
 

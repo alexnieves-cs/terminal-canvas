@@ -8,8 +8,13 @@ import { latestRoster, onRoster } from '@renderer/presence/presence-store'
 import { backendOf } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import type { PresenceRoster } from '@shared/presence'
-import { getWorldContext, publishWorldContext, setWorldActions, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
+import { readyDiscardFor } from '@renderer/review/discard-offer'
+import { questionSnoozeKey } from '@renderer/shell/decision-inbox'
+import { decisionSnoozed, snoozeDecision } from '@renderer/shell/useDecisionInbox'
+import { getWorldContext, publishWorldContext, setRegionMover, setWorldActions, type RegionMoveCommit, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
+import { bindDecisionSnooze, SNOOZE_FOR_MS, type DiscardOffer } from './world-flight'
 import { agentFacts } from './world-facts'
+import { SHELL_REPLY_REASON } from './world-select'
 
 /**
  * Canvas's side of the world context (M421): one hook call in Canvas.tsx that
@@ -62,6 +67,17 @@ export interface PublisherInput {
   branchOf: (panel: Panel) => string | undefined
   /** M428. A teammate's display name, the rail's own resolution. */
   teammateNameOf: (teammateId: string) => string | undefined
+  /**
+   * R-051. Canvas's `moveRegion`, once, as one history entry. The ids are the
+   * members that moved, so the stood-up room can follow them. Empty is a
+   * region with nothing to move — the drag commits nothing.
+   */
+  moveRegion: (regionId: string, dx: number, dy: number) => readonly string[]
+  /**
+   * R-071. Paste into an agent terminal and submit. Canvas owns the session
+   * handle. The publisher refuses a plain shell before calling this.
+   */
+  pasteTerminal: (agentId: string, text: string) => Promise<string | null>
 }
 
 /** Whose facts the room keeps: the panels that can be an agent in it. */
@@ -174,9 +190,21 @@ export function useWorldContextPublisher(input: PublisherInput): void {
   useEffect(() => {
     const byId = (id: string): Panel | undefined => panels.find((p) => p.rect.id === id)
     setWorldActions({
-      answer: (agentId, requestId, allow) => {
-        const panel = byId(agentId)
-        answerRequest(agentId, getChat(agentId).snapshot, panel?.title ?? 'Agent', requestId, allow)
+      answer: (agentId, requestId, allow): DiscardOffer | null => {
+        // R-070. The chat door stays the answer. History is opt-in: only this
+        // call names the tool and the task, so a chat answer does not grow a row.
+        const now = latest.current
+        const panel = now.panels.find((p) => p.rect.id === agentId)
+        const asked = now.approvals.find((a) => a.id === agentId && a.requestId === requestId)
+        const itemId = now.tasks().find((task) => task.members.includes(agentId))?.id
+        answerRequest(agentId, getChat(agentId).snapshot, panel?.title ?? 'Agent', requestId, allow, undefined, asked === undefined ? undefined : {
+          toolName: asked.toolName,
+          argument: asked.argument,
+          ...(itemId === undefined ? {} : { itemId })
+        })
+        // R-094. Undo only when a review can revert this panel. Deny has no toast.
+        if (!allow) return null
+        return readyDiscardFor(agentId)
       },
       send: async (agentId, text) => {
         try {
@@ -199,6 +227,16 @@ export function useWorldContextPublisher(input: PublisherInput): void {
         const panel = byId(agentId)
         return panel !== undefined && isChatPanel(panel)
       },
+      agentTerminal: (agentId) => {
+        const panel = byId(agentId)
+        return panel !== undefined && isTerminalPanel(panel) && panel.spec.agent !== undefined
+      },
+      pasteReply: (agentId, text) => {
+        const panel = byId(agentId)
+        // A plain shell stays closed. Typing into one from the room is how a stray Enter runs a command.
+        if (panel === undefined || !isTerminalPanel(panel) || panel.spec.agent === undefined) return Promise.resolve(SHELL_REPLY_REASON)
+        return latest.current.pasteTerminal(agentId, text)
+      },
       canOpen: (agentId) => canJump(agentId),
       orchestrate: (agentId) => {
         if (byId(agentId) === undefined) return
@@ -209,4 +247,26 @@ export function useWorldContextPublisher(input: PublisherInput): void {
   }, [panels, jump, canJump, closeWorld, orchestrate])
 
   useEffect(() => () => setWorldActions(null), [])
+
+  // R-051. The scene calls `commitRegionMove` once, on release. This is the
+  // only world file that may reach `moveRegion`, and it does not copy it.
+  useEffect(() => {
+    setRegionMover((regionId, dx, dy): RegionMoveCommit | null => {
+      const ids = latest.current.moveRegion(regionId, dx, dy)
+      return ids.length === 0 ? null : { ids }
+    })
+    return () => setRegionMover(null)
+  }, [])
+
+  // R-093. Ten minutes on a shell prompt is the inbox's snooze, under the
+  // question key, so the World walk and the canvas jump both skip it.
+  // Ten is not a menu choice; the card passes the minutes directly.
+  useEffect(() => {
+    const minutes = SNOOZE_FOR_MS / 60_000
+    bindDecisionSnooze({
+      write: (id, now) => snoozeDecision(questionSnoozeKey(id), minutes, now),
+      read: (id, now) => decisionSnoozed(questionSnoozeKey(id), now)
+    })
+    return () => bindDecisionSnooze(null)
+  }, [])
 }

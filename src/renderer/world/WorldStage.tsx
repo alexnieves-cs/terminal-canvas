@@ -4,8 +4,8 @@ import { webglAvailable } from '@renderer/webgl-probe'
 import { prefersReducedMotion, worldFits } from './world-perf'
 import { useRoster } from './world-roster'
 import { FIELD_SELECTOR, OVERLAY_SELECTOR } from './world-select'
-import { setWorldOn } from './world-toggle'
-import { createWorldTransition, hostLook, WORLD_TRANSITION_MS } from './world-transition'
+import { landWorld, setWorldOn, worldCameraTarget } from './world-toggle'
+import { CANCEL_CHIP, FILMSTRIP_MS, REDUCED_TRANSITION_MS, WORLD_TRANSITION_MS, createWorldTransition, filmstripIndex, motionOf } from './world-transition'
 
 /**
  * Where the 3D world view stands in for the 2D canvas: the "World view" toggle
@@ -135,10 +135,19 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   // Mounted from the first frame of the move to the last of the move back.
   const [present, setPresent] = useState(on)
   const layer = useRef<HTMLDivElement>(null)
-  // prefers-reduced-motion skips the choreography: the move is a snap (0ms), and
-  // the scene drops its stagger and its arrival grow (the `reduced` prop).
+  // prefers-reduced-motion is a 120ms cross-fade: no dolly, tilt or pop
+  // (`motionOf`). The scene still drops its stagger via the `reduced` prop.
   const reduced = useReducedMotion()
-  const transition = useMemo(() => createWorldTransition(on ? 1 : 0, reduced ? 0 : WORLD_TRANSITION_MS), [reduced])
+  const transition = useMemo(
+    () => createWorldTransition(on ? 1 : 0, reduced ? REDUCED_TRANSITION_MS : WORLD_TRANSITION_MS, { reduced }),
+    [reduced]
+  )
+  const chipRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLElement>(null)
+  const stripRef = useRef<HTMLOListElement>(null)
+  // Set once a frame has actually been in flight back to the canvas, so the
+  // mount's already-settled sample does not yank the viewport.
+  const returning = useRef(false)
   const fits = useWorldFits()
   const agents = useAgentIds().length
   const live = useRoster().length
@@ -148,6 +157,11 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   // this render had already rendered the lazy view and started its fetch.
   // While it closes, the open's answer stands — a `true` here would mount the scene during the move back.
   // A window too narrow for the room is not asked (it mounts no scene); widening it asks.
+  // `probeWebgl` is "getContext returned a context". A context that does not
+  // present (this host reads the world canvas back blank, R-053) still answers
+  // yes. Telling those apart would be a clear and a read of a known colour,
+  // which would change the probe for Orchestrate too. The flat room is the
+  // probe's no, and a context the browser then takes away.
   const webgl = useMemo(() => (on && fits ? probeWebgl() : (probed ?? true)), [on, fits])
   // A context lost while the room was up. Each open starts clean (derived from
   // `on` during render, so the reopening render already mounts the scene).
@@ -160,6 +174,7 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
   const onRef = useRef(on)
   onRef.current = on
   // Only while the world is on: leaving tears the scene down, and fiber loses its context on purpose then.
+  // The 2D canvas is `hostRef`. This sets `lost` and the flat room replaces the scene inside the layer. The host is not removed.
   const onLost = useCallback(() => { if (onRef.current) setLost(true) }, [])
 
   useLayoutEffect(() => {
@@ -170,28 +185,52 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
       const s = transition.sample(performance.now())
       const host = hostRef.current
       const el = layer.current
+      const motion = motionOf(s, reduced)
+      const entering = !s.settled && s.target === 1
+      if (chipRef.current) chipRef.current.hidden = !entering
+      if (barRef.current) barRef.current.style.transform = `scaleX(${Math.min(1, Math.max(0, s.linear))})`
+      if (stripRef.current) {
+        stripRef.current.hidden = s.settled
+        const index = filmstripIndex(s.linear * WORLD_TRANSITION_MS)
+        const items = stripRef.current.children
+        for (let i = 0; i < items.length; i++) {
+          if (i === index) items[i]?.setAttribute('data-on', '')
+          else items[i]?.removeAttribute('data-on')
+        }
+      }
+      if (!s.settled && s.target === 0) returning.current = true
       if (s.settled) {
-        // At rest the classes own the look (see (3)).
+        // At rest the classes own the look (see (3)). Styles come off before
+        // the landing measure, so the viewport is not read off a scaled host.
         if (host) {
           host.style.removeProperty('opacity')
           host.style.removeProperty('transform')
+          host.style.removeProperty('transform-origin')
           host.style.removeProperty('will-change')
         }
         if (el) {
           el.style.removeProperty('opacity')
           el.style.removeProperty('will-change')
         }
+        if (returning.current && s.target === 0) {
+          returning.current = false
+          landWorld(worldCameraTarget())
+        }
         if (s.target === 0) setPresent(false)
         return
       }
       if (host) {
-        const look = hostLook(s.eased)
-        host.style.opacity = String(look.opacity)
-        host.style.transform = `scale(${look.scale})`
+        host.style.opacity = String(motion.opacity)
+        // rotateX is the plan tilting back onto the floor. It stays inside
+        // `transform`: a layout write here refits every xterm.
+        host.style.transform = motion.tilt === 0
+          ? `scale(${motion.scale})`
+          : `perspective(1400px) scale(${motion.scale}) rotateX(${motion.tilt}deg)`
+        host.style.transformOrigin = '50% 72%'
         host.style.willChange = 'opacity, transform'
       }
       if (el) {
-        el.style.opacity = String(s.eased)
+        el.style.opacity = String(motion.fade)
         el.style.willChange = 'opacity'
       }
       raf = requestAnimationFrame(apply)
@@ -201,13 +240,14 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
     // this ran would show the host snap to its resting look and then fade.
     apply()
     return () => cancelAnimationFrame(raf)
-  }, [on, transition, hostRef])
+  }, [on, transition, hostRef, reduced])
 
   // Whatever the loop left on the host goes with the stage.
   useEffect(() => () => {
     const host = hostRef.current
     host?.style.removeProperty('opacity')
     host?.style.removeProperty('transform')
+    host?.style.removeProperty('transform-origin')
     host?.style.removeProperty('will-change')
   }, [hostRef])
 
@@ -250,7 +290,7 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
     </p>
   ) : null
   return (
-    <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-on={on ? '' : undefined}>
+    <div ref={layer} className="shell__world" role="region" aria-label="World view" inert={!on} data-world-layer data-world-canvas-kept data-world-on={on ? '' : undefined}>
       {fits ? (webgl && !lost ? (
         <>
           <WorldBoundary>
@@ -284,6 +324,15 @@ export function WorldStage({ on, hostRef }: { on: boolean; hostRef: RefObject<HT
           <button type="button" onClick={() => setWorldOn(false)}>Back to canvas</button>
         </div>
       )}
+      <div className="world-move" data-world-move>
+        <div className="world-move__chip" data-world-cancel ref={chipRef} hidden role="status">
+          <span>{CANCEL_CHIP}</span>
+          <span className="world-move__bar" aria-hidden="true"><i ref={barRef} /></span>
+        </div>
+        <ol className="world-move__strip" data-world-filmstrip ref={stripRef} hidden>
+          {FILMSTRIP_MS.map((ms) => <li key={ms} data-ms={ms}><span>{ms} ms</span></li>)}
+        </ol>
+      </div>
     </div>
   )
 }

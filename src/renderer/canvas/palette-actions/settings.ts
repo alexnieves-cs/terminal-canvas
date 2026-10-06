@@ -14,6 +14,8 @@ import { notifyDone } from '../../shell/toast'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } from '@renderer/session/update-store'
 import { findService } from '@shared/credential-schema'
 import type { PaletteActions } from '@renderer/palette/commands'
+import { installSettingsHost } from '@renderer/settings/mount'
+import { openSettingsPage } from '@renderer/settings/open'
 import type { ActionCtx } from './types'
 
 export type SettingsActions = Pick<PaletteActions,
@@ -317,3 +319,20 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
     }
   })
 }
+
+/**
+ * M446. The door into Settings. The command list that would show this row
+ * lives in the palette, which this lane does not own (R-026). `run` is the
+ * verb; the shot calls the same `openSettingsPage`.
+ */
+export const OPEN_SETTINGS_ROW = {
+  id: 'settings.open',
+  title: 'Open Settings',
+  subtitle: 'Keyboard, appearance, agents, sessions, privacy',
+  searchText: 'settings keyboard shortcuts appearance agents sessions privacy export',
+  run: (): void => { openSettingsPage() }
+}
+
+// Canvas already imports this module. The host installs then, because the
+// page cannot be a child of Canvas without editing that file.
+installSettingsHost()

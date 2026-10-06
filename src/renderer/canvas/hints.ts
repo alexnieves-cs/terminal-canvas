@@ -39,6 +39,16 @@ export const TMUX_HINT: Hint = HINTS[4]
 export const STARTER_HINT: Hint = HINTS[5]
 
 /**
+ * M441. The empty canvas's two gestures, in the words the mockup uses.
+ * Not members of HINTS: `hints.1` pins that list's ids, and these sentences
+ * are the empty canvas's, not the rail's.
+ */
+export const EMPTY_CANVAS_GESTURES = [
+  { id: 'pan', text: 'Space + drag to pan' },
+  { id: 'zoom', text: '⌘ + scroll to zoom' }
+] as const
+
+/**
  * M262. TAUGHT AFTER AN ATTEMPT, ONE AT A TIME. Four sentences at rest were
  * four instructions before a person had tried anything — the review's
  * complaint. The rail now carries a hint only once the person has reached
@@ -57,8 +67,9 @@ export function attemptOf(e: { type: string; button?: number; deltaMode?: number
   if (e.type === 'mousedown' && e.button === 0) return 'pan'
   if (e.type === 'wheel' && e.ctrlKey !== true && e.deltaMode === 1) return 'zoom'
   // M388. A double-click on the ground is no longer a reach for anything —
-  // it places a process step (Canvas.tsx onCanvasDoubleClick), so teaching
-  // ⌘N after it would contradict what just happened on screen.
+  // it places a flowchart process step (Canvas.tsx onCanvasDoubleClick).
+  // The empty-canvas ghost (GHOST_TARGET) names that step. Teaching ⌘N
+  // after it would contradict what just happened on screen.
   if (e.type === 'keydown' && e.metaKey !== true && e.ctrlKey !== true && typeof e.key === 'string' && e.key.length === 1) return 'palette'
   return null
 }

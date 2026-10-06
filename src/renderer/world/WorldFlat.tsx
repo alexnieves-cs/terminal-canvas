@@ -1,12 +1,18 @@
-import { Fragment, memo, useCallback, useEffect, useReducer, useRef, type JSX, type MouseEvent } from 'react'
-import { useAgent, useAgentIds, useReplayAt, worldNow } from './agent-world-store'
+import { Fragment, memo, useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore, type JSX, type MouseEvent } from 'react'
+import { attentionLine, subscribeAttentionLine } from '@shared/attention-line'
+import type { AgentState } from '@shared/types'
+import type { AgentStatus } from '@shared/world-events'
+import { agentWord, type Tone } from '@renderer/panels/panel-state'
+import { flatTerraceLayout, panelsInRegion, urgentFace, type FlatTerracePlace, type WorldBox } from '@renderer/sessions/sessions-model'
+import { getAgent, useAgent, useAgentIds, useReplayAt, worldNow } from './agent-world-store'
 import { ACTIVITY_VERB, activityOf } from './world-activity'
 import { useWorldActions, useWorldContext } from './world-context-store'
 import { badgeFor, factParts } from './world-facts'
 import { robotTint } from './world-palette'
 import { useRoster } from './world-roster'
 import { cardTitle, recentTools } from './world-scene'
-import { isRepeatClick, OPEN_HINT, openableFrom, selectAgent, selectedAgent, useSelectedAgent } from './world-select'
+import { hasArrival, isRepeatClick, OPEN_HINT, openableFrom, selectAgent, selectedAgent, takeArrival, useSelectedAgent } from './world-select'
+import { boxFromStyle, terraceSignFromChip } from './world-structure'
 import type { CameraApi } from './world-set'
 import { WorldChrome } from './WorldChrome'
 import { ACTIVITY_ICON, headlineOf, RequestBlock } from './WorldCardBody'
@@ -39,8 +45,74 @@ import { ACTIVITY_ICON, headlineOf, RequestBlock } from './WorldCardBody'
 /** The clock-driven parts of a tile (the "quiet" badge, a failed call's minute) are re-asked this often, as the 3D card does. */
 const TICK_MS = 1000
 
+/**
+ * The feed's status, said with the canvas's word. The default covers a live
+ * run: `agentWord` spells it, so this file does not.
+ */
+function feedFace(status: AgentStatus): { tone: Tone; word: string } {
+  const agent: AgentState = status === 'waiting_approval' ? 'wants-you' : status === 'error' ? 'exited' : status === 'idle' ? 'idle' : 'busy'
+  return agentWord(agent)
+}
+
+interface PlacedTerrace extends FlatTerracePlace {
+  label: string
+  members: string[]
+}
+
+/** The canvas regions, fitted into the plan. The canvas stays mounted under the room, so the boxes are the ones the 3D terraces stand on. */
+function readTerraces(host: HTMLElement): PlacedTerrace[] {
+  const panels: WorldBox[] = []
+  for (const el of document.querySelectorAll<HTMLElement>('.panel[data-panel-id]')) {
+    const id = el.getAttribute('data-panel-id')
+    if (id === null) continue
+    const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
+    if (box !== null) panels.push(box)
+  }
+  const regions: WorldBox[] = []
+  const labels = new Map<string, string>()
+  for (const el of document.querySelectorAll<HTMLElement>('[data-task-region]')) {
+    const id = el.getAttribute('data-task-region')
+    if (id === null) continue
+    const box = boxFromStyle(id, el.style.left, el.style.top, el.style.width, el.style.height)
+    if (box === null) continue
+    regions.push(box)
+    labels.set(id, terraceSignFromChip(el.querySelector('.task-region__chip')?.textContent ?? id))
+  }
+  const rect = host.getBoundingClientRect()
+  return flatTerraceLayout(regions, { w: rect.width, h: rect.height }).map((place) => {
+    const region = regions.find((item) => item.id === place.id)
+    return {
+      ...place,
+      label: labels.get(place.id) ?? place.id,
+      members: region === undefined ? [] : panelsInRegion(region, panels)
+    }
+  })
+}
+
+function samePlaces(a: readonly PlacedTerrace[], b: readonly PlacedTerrace[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((place, i) => {
+    const other = b[i]
+    return other !== undefined && place.id === other.id && place.left === other.left && place.top === other.top &&
+      place.width === other.width && place.height === other.height && place.label === other.label &&
+      place.members.join() === other.members.join()
+  })
+}
+
+/** The member the terrace wears: the queue's own order, via `urgentFace`. */
+function terraceFace(members: readonly string[]): { tone: Tone; word: string } | null {
+  const faces: { tone: Tone; word: string }[] = []
+  for (const id of members) {
+    const record = getAgent(id)
+    if (record !== undefined) faces.push(feedFace(record.status))
+  }
+  return urgentFace(faces)
+}
+
 export function WorldFlat(): JSX.Element {
   const roster = useRoster()
+  // R-083. The pill publishes this sentence. The room does not import the pill, and it does not keep a second queue.
+  const line = useSyncExternalStore(subscribeAttentionLine, attentionLine, attentionLine)
   // First-seen order: a tile's swatch is the colour its robot would have been.
   const order = useAgentIds()
   const picked = useSelectedAgent()
@@ -54,6 +126,8 @@ export function WorldFlat(): JSX.Element {
 
   const tiles = useRef(new Map<string, HTMLElement>())
   const grid = useRef<HTMLUListElement>(null)
+  const plan = useRef<HTMLDivElement>(null)
+  const [places, setPlaces] = useState<PlacedTerrace[]>([])
   const camera = useRef<CameraApi | null>(null)
   useEffect(() => {
     camera.current = {
@@ -68,7 +142,9 @@ export function WorldFlat(): JSX.Element {
       },
       // M434: no floor to map — the chrome draws no minimap over the flat room — and nothing to centre on.
       plan: () => null,
-      centre: () => undefined
+      centre: () => undefined,
+      // No orbit to glide. The 3D rig is the one that frames a pose.
+      apply: () => undefined
     }
     return () => { camera.current = null }
   }, [])
@@ -83,10 +159,50 @@ export function WorldFlat(): JSX.Element {
   useEffect(() => {
     if (picked !== null) tiles.current.get(picked)?.scrollIntoView({ block: 'nearest' })
   }, [picked])
+  // The same arrival the 3D rig takes. One of the two rooms is mounted, so this is the flat room's take.
+  useEffect(() => {
+    if (!hasArrival()) return
+    const id = takeArrival((agentId) => roster.some((a) => a.agentId === agentId), worldNow())
+    if (id === null) return
+    selectAgent(id)
+    tiles.current.get(id)?.scrollIntoView({ block: 'nearest' })
+  }, [roster])
+  useEffect(() => {
+    const host = plan.current
+    if (host === null) return
+    const measure = (): void => {
+      const next = readTerraces(host)
+      setPlaces((prev) => samePlaces(prev, next) ? prev : next)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [roster])
 
   const now = worldNow()
   return (
     <div className="world-flat" data-world-flat>
+      {line !== '' ? <p className="world-flat__pill" data-world-flat-pill>{line}</p> : null}
+      <div ref={plan} className="world-flat__plan" aria-label="Tasks in the room">
+        {places.map((place) => {
+          const face = terraceFace(place.members)
+          const waiting = place.members.find((id) => getAgent(id)?.status === 'waiting_approval')
+          return (
+            <article
+              key={place.id}
+              className="world-flat__terrace"
+              data-world-flat-terrace={place.id}
+              data-tone={face === null ? undefined : face.tone}
+              style={{ left: place.left, top: place.top, width: place.width, height: place.height }}
+            >
+              <span className="world-flat__terrace-label">{place.label}</span>
+              {face !== null ? <span className="world-flat__terrace-word">{face.word}</span> : null}
+              {waiting !== undefined ? <RequestBlock agentId={waiting} /> : null}
+            </article>
+          )
+        })}
+      </div>
       <ul ref={grid} className="world-flat__grid" aria-label="Agents in the room">
         {roster.map((a) => (
           <FlatTile
@@ -127,6 +243,7 @@ const FlatTile = memo(function FlatTile({ agentId, color, picked, now, tiles }: 
   const tools = waiting ? [] : recentTools(record)
   const watchers = ctx.peers.filter((p) => p.panelId === agentId)
   const openable = openableFrom(agentId, past, actions)
+  const face = feedFace(record.status)
 
   // A click picks (and a second lets go), as a robot's does; a double-click opens its panel — and its second click must not undo the pick (M429).
   // Enter or Space on the focused tile is a click with detail 0 — and the chrome's window Enter stands
@@ -144,7 +261,7 @@ const FlatTile = memo(function FlatTile({ agentId, color, picked, now, tiles }: 
   }
 
   return (
-    <li ref={register} className="world-flat__tile" data-badge={badge.kind} data-status={record.status} data-activity={activity} data-picked={picked ? '' : undefined} data-world-flat-tile={agentId}>
+    <li ref={register} className="world-flat__tile" data-badge={badge.kind} data-status={record.status} data-activity={activity} data-tone={face.tone} data-picked={picked ? '' : undefined} data-world-flat-tile={agentId}>
       <button
         type="button"
         className="world-flat__pick"
@@ -185,7 +302,7 @@ const FlatTile = memo(function FlatTile({ agentId, color, picked, now, tiles }: 
       {/* The way to the panel, on the picked tile, as on the picked robot's card — a waiting tile's request has its own Open. */}
       {picked && !waiting && openable ? (
         <div className="world-card__actions" role="group" aria-label="Its panel">
-          <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open panel</button>
+          <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} title={OPEN_HINT} data-world-open>Open in Canvas</button>
         </div>
       ) : null}
     </li>

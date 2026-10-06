@@ -1,3 +1,5 @@
+import type { ZoomTier } from '@shared/redesign-contracts'
+
 /**
  * M57 — semantic zoom's RENDER tier.
  *
@@ -68,4 +70,47 @@ export function farTitleParts(title: string): { kicker?: string; name: string } 
   const name = title.slice(at + FAR_TITLE_SEPARATOR.length)
   if (kicker.trim() === '' || name.trim() === '') return { name: title }
   return { kicker, name }
+}
+
+/**
+ * M444. The one sentence on a Plan card. The agent's last line is the news;
+ * the state word is what remains when that line is blank (a fresh terminal
+ * often has none). Newlines collapse so a wrapped line stays one sentence.
+ */
+export function planStatusSentence(stateWord: string, lastLine: string | null | undefined): string {
+  const line = (lastLine ?? '').replace(/\s+/g, ' ').trim()
+  return line === '' ? stateWord : line
+}
+
+/**
+ * M444. The minimap's header. A count of zero is not a number on the canvas:
+ * the empty sentence lives in the body, and this line says MAP with no digit.
+ */
+export function minimapHeader(count: number): string {
+  if (!(count > 0)) return 'MAP'
+  if (count === 1) return 'MAP · 1 TASK'
+  return `MAP · ${count} TASKS`
+}
+
+/**
+ * M444. The tier the canvas is showing, including hysteresis (`enterTier`).
+ * The HUD reads it so the Work/Plan/Map switch matches the cards, without
+ * Canvas growing a prop for a value the tier mount already computed.
+ */
+let shownTier: ZoomTier = 'work'
+const shownListeners = new Set<() => void>()
+
+export function getShownTier(): ZoomTier {
+  return shownTier
+}
+
+export function subscribeShownTier(listener: () => void): () => void {
+  shownListeners.add(listener)
+  return () => { shownListeners.delete(listener) }
+}
+
+export function publishShownTier(tier: ZoomTier): void {
+  if (shownTier === tier) return
+  shownTier = tier
+  for (const listener of shownListeners) listener()
 }

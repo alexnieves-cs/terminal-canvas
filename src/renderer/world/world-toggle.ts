@@ -60,3 +60,91 @@ function onHash(): void {
 export function useWorldOn(): boolean {
   return useSyncExternalStore(subscribe, isWorldOn, () => false)
 }
+
+export interface FloorTarget { x: number; z: number }
+
+/**
+ * Where the orbit is looking, on the floor. The room centre until W2 writes
+ * the live target each frame (`setWorldCameraTarget`). Leaving the world
+ * lands the 2D viewport on this spot.
+ */
+let cameraTarget: FloorTarget = { x: 0, z: 0 }
+
+export function worldCameraTarget(): FloorTarget {
+  return { x: cameraTarget.x, z: cameraTarget.z }
+}
+
+export function setWorldCameraTarget(next: FloorTarget): void {
+  if (next.x === cameraTarget.x && next.z === cameraTarget.z) return
+  cameraTarget = { x: next.x, z: next.z }
+}
+
+let land: ((target: FloorTarget) => void) | null = null
+
+/** Canvas assigns this during render. A hook would reorder Canvas. */
+export function setWorldLanding(fn: ((target: FloorTarget) => void) | null): void {
+  land = fn
+}
+
+export function landWorld(target: FloorTarget = worldCameraTarget()): void {
+  land?.(target)
+}
+
+/**
+ * The 2D viewport the room was last framing (R-064). The rig writes it while
+ * the world is up. `setWorldOn(false)` does not clear it: the canvas lands
+ * about a second later, when the move back settles, and a clear here would
+ * drop the pose before that call.
+ */
+export interface WorldViewport { x: number; y: number; scale: number }
+
+let landingViewportPose: WorldViewport | null = null
+
+export function worldLandingViewport(): WorldViewport | null {
+  return landingViewportPose === null ? null : { x: landingViewportPose.x, y: landingViewportPose.y, scale: landingViewportPose.scale }
+}
+
+export function setWorldLandingViewport(next: WorldViewport | null): void {
+  if (next === null) {
+    if (landingViewportPose === null) return
+    landingViewportPose = null
+    return
+  }
+  if (landingViewportPose !== null &&
+    Math.abs(landingViewportPose.x - next.x) < 0.5 &&
+    Math.abs(landingViewportPose.y - next.y) < 0.5 &&
+    Math.abs(landingViewportPose.scale - next.scale) < 0.0005) return
+  landingViewportPose = { x: next.x, y: next.y, scale: next.scale }
+}
+
+/**
+ * The world's camera, as canvas-pixel corners, for the 2D minimap (R-050,
+ * R-060). Null until the rig has a camera. The overlay projects these with
+ * the same scale and origin as its panel blocks.
+ */
+let wedge: readonly { x: number; y: number }[] | null = null
+let wedgeKey = ''
+const wedgeListeners = new Set<() => void>()
+
+function wedgeSnapshot(): readonly { x: number; y: number }[] | null {
+  return wedge
+}
+
+export function setWorldCameraWedge(points: readonly { x: number; y: number }[] | null): void {
+  const key = points === null ? '' : points.map((p) => `${p.x.toFixed(0)},${p.y.toFixed(0)}`).join(';')
+  if (key === wedgeKey) return
+  wedgeKey = key
+  wedge = points === null ? null : points.map((p) => ({ x: p.x, y: p.y }))
+  for (const listener of wedgeListeners) listener()
+}
+
+export function useWorldCameraWedge(): readonly { x: number; y: number }[] | null {
+  return useSyncExternalStore(
+    (listener) => {
+      wedgeListeners.add(listener)
+      return () => { wedgeListeners.delete(listener) }
+    },
+    wedgeSnapshot,
+    () => null
+  )
+}

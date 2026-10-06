@@ -12,7 +12,7 @@ const WATCHDOG_MS = 80000 // measured 2026-09-30 (M410) after place.rim.inset.1 
 
 const { occupiedWorld, overlapsRect, cameraStill, zoomInto } = require('./lib/place-probe.cjs')
 runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -69,7 +69,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // they are near the view centre and near each other), then step the
       // zoom out twice — still above LIVE_MIN_SCALE, and wide enough that
       // several panels and some genuine background share the canvas.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       for (let i = 0; i < 3; i++) {
         await zoomTo(wc, 'n')
         await sleep(200)
@@ -259,7 +259,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       //      a LIVE session, so it is the one observable that moves when
       //      setFocusedId(null) is deleted — DOM focus leaves the textarea on
       //      any background mousedown whether or not React was told.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await waitUntil(async () => (await liveCount(wc)) > 0, 4000)
       // The focus target is CHOSEN by hit test, never taken as "the first
       // .panel__slot in the document". DOM order is the panels array and paint
@@ -380,7 +380,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
     // step: it catches an implementation that commits once per member even if
     // its geometry happens to look correct on screen.
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const empty144b = await wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas')
         if (!host) return null
@@ -596,7 +596,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
     // the lower name answers the UPPER panel, and the two occupied rects do
     // not overlap.
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       // Snapping is OFF in this harness (so older checks pin raw arithmetic);
       // on for this fixture only, through the same settings:changed a real
       // toggle sends, and back off in the finally.
@@ -669,7 +669,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       let detail2 = { skipped: 'no live pair at 50%' }
       let pass2 = false
       {
-        await zoomTo(wc, '0')
+        await resetZoom(wc)
         await cameraStill(wc)
         await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 700, clientY: 450, deltaX: 250000, deltaY: 250000, deltaMode: 0 })); true`)
         await cameraStill(wc)
@@ -726,7 +726,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           pass2 = rimWorld > 16 + 4 && Math.abs(gap - rimWorld) < 1 && hit.id === upperId && hit.nameTop >= hit.upperBottom - 0.5
         }
         }
-        await zoomTo(wc, '0')
+        await resetZoom(wc)
         await cameraStill(wc)
       }
       ok('place.snap.rim.2 at 50% zoom a snapped stack of live terminals still leaves the upper one\'s bottom row uncovered — the gap is the rim\'s measured WORLD height there (taller than at 100%), and elementFromPoint on that row answers the upper panel',
@@ -754,7 +754,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
     {
       let detail = { skipped: 'no live pair' }
       let pass = false
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await cameraStill(wc)
       await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 700, clientY: 450, deltaX: 250000, deltaY: 250000, deltaMode: 0 })); true`)
       await cameraStill(wc)
@@ -812,7 +812,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           }
         }
       }
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await cameraStill(wc)
       ok('place.rim.inset.1 a live terminal whose rim band a higher neighbour covers draws its name INSIDE its frame (pf--rim-inset) where elementFromPoint answers it, and back on the rim once the neighbour moves clear',
         pass, JSON.stringify(detail))
@@ -862,7 +862,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // outside the cull region is never promoted and therefore never
         // spawns a PTY at all, which would leave this check asserting pid
         // identity about a panel that has no pid.
-        await zoomTo(wc, '0')
+        await resetZoom(wc)
         await settle()
         await zoomTo(wc, 'n')
         const movedId = await waitUntil(async () => {
@@ -985,7 +985,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // its own panel away and this workspace is empty.
       await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('handmovers')`)
       await settle()
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await settle()
       await zoomTo(wc, 'n')
       const subject = await waitUntil(async () => {
@@ -1195,7 +1195,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // the threshold where nothing is promoted at all. The `inCullRegion`
       // clause below is what makes that arithmetic self-checking rather than
       // a comment that can quietly stop being true.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await settle()
       for (let i = 0; i < 3; i++) await zoomTo(wc, '-')
       await settle()
@@ -1692,7 +1692,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       //      The pan happens WHILE MERGED — without it the restore is
       //      asserted against a camera that never moved, which an
       //      implementation restoring nothing satisfies for free.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await settle()
       const camera130 = await wc.executeJavaScript(`window.__m4aViewport()`)
       await MERGE()
@@ -1737,7 +1737,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // — the exact defect it exists to catch. Two zoom steps make the three
       // cameras this check compares three distinct values, which the
       // non-vacuity clause holds it to.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await zoomTo(wc, '-')
       await zoomTo(wc, '-')
       await settle()

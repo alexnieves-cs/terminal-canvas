@@ -12,7 +12,7 @@ const WATCHDOG_MS = 105000 // measured 2026-09-30 (M408 re-pin): the D1 real-inp
 
 const { occupiedWorld, overlapsRect, onScreen, cameraStill, zoomInto, measurePlacement, expectedSpot, storeRect } = require('./lib/place-probe.cjs')
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, zoomToScale, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale, state } = ctx
   {
 
     // ---------------------------------------------------------------------
@@ -178,12 +178,12 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
     ok('2 live panels never exceed the context budget', live <= 8, `live=${live}`)
 
-    // Cmd+1 fits every panel on screen, which drops scale far below
+    // Fit all (⌘0) fits every panel on screen, which drops scale far below
     // LIVE_MIN_SCALE and must demote everything unfocused. Wait on the
     // actual demotion instead of a flat sleep; DEMOTE_DELAY_MS (250ms) is
     // the timer's own delay, so give real headroom above it for the effect
     // and the IPC round-trip that follows.
-    await zoomTo(wc, '1')
+    await zoomTo(wc, '0')
     const liveAfterZoomOut = await waitUntil(
       async () => {
         const n = await liveCount(wc)
@@ -209,7 +209,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     }
 
     // Cmd+0 back to 100%: the same sessions must come back, not new ones.
-    await zoomTo(wc, '0')
+    await resetZoom(wc)
     await waitUntil(async () => (await liveCount(wc)) > 0, 3000)
     const sessionsAfterZoomIn = await sessionMap(wc)
     const { ok: preservedAfterZoomIn, changed: changedAfterZoomIn } =
@@ -246,11 +246,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         })()`)
       }
 
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const atOne = await probe()
-      await zoomTo(wc, '1')
-      const zoomedOut = await probe()
       await zoomTo(wc, '0')
+      const zoomedOut = await probe()
+      await resetZoom(wc)
 
       const focused = (r) => r && String(r.active || '').includes('xterm-helper-textarea')
       ok('6 a body click focuses the panel at any zoom, with no gate left',
@@ -436,7 +436,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //    comparison.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0') // back to 100% before setting up
+      await resetZoom(wc) // back to 100% before setting up
 
       const selection = await wc.executeJavaScript(`(async () => {
         const slot = document.querySelector('.panel__slot')
@@ -491,7 +491,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           selection && (selection.text ?? selection.error)
         )}`)
 
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
     }
 
     // ---------------------------------------------------------------------
@@ -521,7 +521,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     recompute-from-origin. It differs only in accumulated rounding.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       // Cmd+- four times lands near 0.48, and the mid-drag Cmd+- below takes
       // it lower still; neither number is hardcoded, because the assertion is
       // expressed against the viewports that are read back.
@@ -594,7 +594,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         `${result && result.vpUp && result.vpUp.scale} ` +
         `moved ${gotX},${gotY} expected ${expectedX},${expectedY}`)
 
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
     }
 
     // ---------------------------------------------------------------------
@@ -604,7 +604,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     every SIGWINCH, so this is about the process, not about the pixels.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const result = await wc.executeJavaScript(`(async () => {
         // Pick a panel that IS live rather than whichever one happens to be
         // first: check 10 leaves its target displaced by a couple of hundred
@@ -662,7 +662,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     xterm's own target-phase handler ever sees the event.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const result = await wc.executeJavaScript(`(async () => {
         const read = () => getComputedStyle(document.querySelector('.world')).transform
         const panels = [...document.querySelectorAll('.panel')].filter((p) => p.querySelector('.panel__slot'))
@@ -794,7 +794,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     // requires a carded one to survive.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await waitUntil(async () => (await liveCount(wc)) > 0, 6000)
       await wc.executeJavaScript(`(() => {
         const slot = document.querySelector('.panel__slot')
@@ -816,7 +816,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         `.filter((p) => p.querySelector('.panel__slot'))` +
         `.map((p) => p.getAttribute('data-panel-id'))`
       )
-      await zoomTo(wc, '1')
+      await zoomTo(wc, '0')
       // Wait on the demotion itself, not a clock: DEMOTE_DELAY_MS holds every
       // demotion back by 250ms, so a fixed sleep here would either be a guess
       // or would snapshot the pre-demotion state.
@@ -918,7 +918,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     nodes, which would incidentally detach a live terminal's host.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const result = await wc.executeJavaScript(`(async () => {
         const ids = () => [...document.querySelectorAll('.panel')]
           .map((p) => p.getAttribute('data-panel-id'))
@@ -969,7 +969,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     it collide.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const countBefore = await wc.executeJavaScript(
         `document.querySelectorAll('.panel').length`
       )
@@ -1001,7 +1001,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     is no absolute coordinate left that is still safe to hardcode.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const dragged = await wc.executeJavaScript(`(async () => {
         const chrome = document.querySelector('.panel__chrome')
         if (!chrome) return { error: 'no panel' }
@@ -1070,7 +1070,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     already moved, zoomed, closed, and spawned panels.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       const dragged = await wc.executeJavaScript(`(async () => {
         const chrome = document.querySelector('.panel__chrome')
         if (!chrome) return { error: 'no panel' }
@@ -1175,7 +1175,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // every existing panel's coordinates (SEED_PANELS/drags/prior spawns
       // all stay within roughly -1000..5000 on both axes) so the new panel is
       // the ONLY eligible one when it spawns and wins the budget trivially.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await wc.executeJavaScript(`
         document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
           bubbles: true, cancelable: true, clientX: 700, clientY: 450,
@@ -1252,7 +1252,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     sessions would fail on that correct behaviour, not catch a bug.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await wc.executeJavaScript(`
         document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
           bubbles: true, cancelable: true, clientX: 700, clientY: 450,
@@ -3020,7 +3020,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     working would pass the palette halves for the wrong reason.
     // ---------------------------------------------------------------------
     {
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       if (await wc.executeJavaScript(`document.querySelector('.palette') === null`)) {
         await wc.executeJavaScript(
           `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
@@ -3084,7 +3084,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         `pinch=${result && result.pinchOverPalette} background=${result && result.overBackground} ` +
         `transform: ${result && result.before} -> palette ${result && result.transformAfterPalette} ` +
         `-> background ${result && result.transformAfterBackground}`)
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
     }
 
     // 48-50. M6p — the palette's structure, end to end. The pure suite proves
@@ -3574,7 +3574,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // panel array, so starting over empty world space makes the first press
       // land dead centre deterministically instead of depending on which
       // lattice slots fifty checks of spawning and dragging have filled.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await wc.executeJavaScript(`
         document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
           bubbles: true, cancelable: true, clientX: 700, clientY: 450,
@@ -3665,7 +3665,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // the rule's spot is in view (computed in the harness), and the camera
       // after the press — past any flight's length — is the camera before,
       // exactly; the panel is on screen.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await cameraStill(wc)
       await wc.executeJavaScript(`
         document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
@@ -3688,7 +3688,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         still >= 0.5 && wantStill !== null && wantStill.inView && cam0.x === cam1.x && cam0.y === cam1.y && cam0.scale === cam1.scale && shownStill &&
           Math.abs(stillRect.x - wantStill.x) <= TOL && Math.abs(stillRect.y - wantStill.y) <= TOL,
         `scale=${still} before=${JSON.stringify(cam0)} after=${JSON.stringify(cam1)} rect=${JSON.stringify(stillRect)} expected=${JSON.stringify(wantStill)} shown=${shownStill}`)
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await cameraStill(wc)
     }
 
@@ -4397,7 +4397,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // The camera: Cmd+0 for scale 1, then Cmd+- (the harness's zoomTo takes a
       // KEY) until the scale is at or under 0.6 — the ratios below are read
       // against the ACTUAL scale, never an assumed 0.5.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await settle()
       const atOne = await measure()
       const scaleOne = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale
@@ -4405,7 +4405,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
       await settle()
       const atOut = await measure()
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await settle()
       const chromeRatio = atOne && atOut ? atOut.chromeH / atOne.chromeH : 0
       const slotRatio = atOne && atOut ? atOut.slotH / atOne.slotH : 0
@@ -4538,7 +4538,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     {
       // M402. At INITIAL, where the seed frames are: the camera is wherever
       // the last create door's reveal flew it.
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await cameraStill(wc)
       await clickEmptyCanvas(wc)
       await settle()
@@ -4657,7 +4657,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           lines: document.querySelectorAll('.panel__card-summary-line').length,
           costs: document.querySelectorAll('[data-machine-cost]').length,
           washed: cards.filter((c) => { const s = c.querySelector('.panel__card-summary') || c; return getComputedStyle(s).backgroundColor !== 'rgba(0, 0, 0, 0)' }).length } })()`)
-      await zoomTo(wc, '0')
+      await resetZoom(wc)
       await settle()
       ok('far.1 at a fifth of the size every summary card shows a kind glyph and its title on a tone wash, with no last line and no machine figure',
         read.cards >= 3 && read.glyphs === read.cards && read.titles === read.cards && read.lines === 0 && read.costs === 0 && read.washed === read.cards,

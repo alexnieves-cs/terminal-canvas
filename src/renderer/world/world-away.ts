@@ -46,6 +46,15 @@ export function installAwayTracker(): void {
   document.addEventListener('visibilitychange', () => (document.visibilityState === 'hidden' ? noteLeft() : noteBack()))
   window.addEventListener('blur', () => noteLeft())
   window.addEventListener('focus', () => noteBack())
+  // The overview shot opens the card without waiting out AWAY_MS. The app
+  // never calls it; a real away is the visibility and focus listeners above.
+  const door = {
+    away(msAgo: number): void {
+      noteLeft(Date.now() - msAgo)
+      noteBack()
+    }
+  }
+  Object.defineProperty(window, '__rdW3', { configurable: true, value: door })
 }
 
 export function awaySince(): number | null {

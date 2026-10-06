@@ -36,7 +36,7 @@ Files. `canvas/useLinkDraw.ts`, `useHandoff.ts`, `handoff-rules.ts`, `SnapGuides
 - Dropping a port drag on empty canvas opens "New object connected to <source>" with AGENTS (Claude Code ⌘N, Codex, Shell ⌘T) and PRESETS (e.g. Test watcher · vitest, Preview · localhost:5173). The foot reads "Starts when <source> finishes, with its summary as input" (a handoff-on-exit link, M41).
 - Smart guides are pink `--guide` and appear only during a drag or resize. Gaps snap to 24px and show their value. The `applyDrag` origin rule and `verify:panels` check 10 stay green.
 - Marquee → toolbar "N selected · Align · Tidy ⌘⇧T · Make task ⌘G · Pause all". ⌘G creates a task region from the selection as one undo. Tidy keeps the ⌘⌥T alias (D5).
-- Double-clicking empty canvas spawns the default agent at the cursor, sized like the last panel you used. ⌘N and ⌘T also land at the cursor when it's over the canvas. Panels settle with a slight overshoot, and reduced motion removes it.
+- Double-clicking empty canvas places a flowchart process step at the cursor, with its label open. The owner kept that gesture (Oct 6, 2026). ⌘N and ⌘T also land at the cursor when it's over the canvas. Panels settle with a slight overshoot, and reduced motion removes it.
 
 ## Prompt
 

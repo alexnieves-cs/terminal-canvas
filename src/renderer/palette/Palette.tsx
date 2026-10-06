@@ -15,16 +15,23 @@ import {
 } from 'react'
 import {
   SECTIONS,
+  bandHeaderAt,
   bestMatchIndex,
+  cyclePaletteKind,
+  filterByKind,
   filterCommands,
   holdOrder,
+  kindChipLabel,
+  panelIdOfGoto,
   seatSelection,
   splitHighlight,
   stepRunnable,
   type Command,
+  type PaletteKind,
   type PaletteScope,
   type SectionId
 } from './palette-model'
+import { runFitTask } from '@renderer/canvas/flight'
 import { type ApprovalRow,
   buildCommands,
   type PaletteActions,
@@ -215,6 +222,7 @@ const sectionLabel = (id: SectionId): string =>
 export function Palette(props: PaletteProps): JSX.Element {
   const { controller, inputMode } = props
   const [query, setQuery] = useState('')
+  const [kind, setKind] = useState<PaletteKind>('everything')
   // M399 (A6). The selection is a ROW, not a slot: the id of the command
   // Enter will run. `index` is derived from it on every render, so there is
   // no frame in which a re-ranked list leaves the highlight — and Enter — on
@@ -309,7 +317,14 @@ export function Palette(props: PaletteProps): JSX.Element {
   )
   const ranked = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
   const holdKey = `${scope ?? ''}\u0000${query}`
-  const rows = useMemo(() => (held !== null && held.key === holdKey ? holdOrder(ranked, held.order) : ranked), [ranked, held, holdKey])
+  const ordered = useMemo(() => (held !== null && held.key === holdKey ? holdOrder(ranked, held.order) : ranked), [ranked, held, holdKey])
+  // Kind is a view over the top level. A drill-in keeps every row it already
+  // had: Tab inside a scope still closes, and filtering there would hide the
+  // door the person just opened.
+  const rows = useMemo(
+    () => (scope === null ? filterByKind(ordered, kind) : ordered),
+    [ordered, kind, scope]
+  )
   // Before the effect below has seated a selection (the first render), the
   // best match is what is shown selected — the same seat that effect picks.
   const found = selectedId === null ? -1 : rows.findIndex((r) => r.id === selectedId)
@@ -535,7 +550,10 @@ export function Palette(props: PaletteProps): JSX.Element {
       // default: close, exactly as Escape does at the top level.
       case 'Tab':
         event.preventDefault()
-        controller.closePalette()
+        // Top level cycles the kind chip. preventDefault still stops Tab
+        // walking into xterm. Inside a scope, Tab closes, as it always did.
+        if (!inputMode && scope === null) setKind((current) => cyclePaletteKind(current))
+        else controller.closePalette()
         break
       // Escape is TWO-STAGE. Inside a drill-in it pops back to the top level
       // and the palette stays open; only at the top level does it close.
@@ -627,6 +645,16 @@ export function Palette(props: PaletteProps): JSX.Element {
           // answer, and the value is ignored.
           if (inputMode.kind === 'confirm') inputMode.submit('')
           else if (value) inputMode.submit(value)
+        } else if (event.metaKey) {
+          const row = index >= 0 ? rows[index] : undefined
+          const panelId = row === undefined ? null : panelIdOfGoto(row)
+          if (row !== undefined && panelId !== null && row.disabledReason === undefined) {
+            controller.closePalette()
+            row.run()
+            runFitTask()
+          } else {
+            runRow(row)
+          }
         } else {
           runRow(index >= 0 ? rows[index] : undefined)
         }
@@ -654,8 +682,8 @@ export function Palette(props: PaletteProps): JSX.Element {
     // from here: there is nothing to go back to at the top level, and no door
     // to open inside a scope (every row there is a leaf).
     : scope
-      ? '↑↓ move · ↵ go to · ← back · esc close'
-      : '↑↓ move · → open · ↵ run · esc close'
+      ? '↑↓ navigate · ↵ fly to · ← back · esc close'
+      : '↑↓ navigate · ↵ fly to · ⌘↵ fit task · tab kinds · esc close'
 
   return (
     <div
@@ -734,12 +762,26 @@ export function Palette(props: PaletteProps): JSX.Element {
                   ? 'Search terminal output, chats and tasks…'
                   : scope
                     ? `Search ${SCOPE_LABEL[scope].toLowerCase()}…`
-                    : 'Type a command…'
+                    : 'Find or run anything'
             }
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             spellCheck={false}
           />
+          {scope === null && !inputMode && (
+            <button
+              type="button"
+              className="palette__kind"
+              data-palette-kind={kind}
+              aria-label={kindChipLabel(kind)}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                setKind((current) => cyclePaletteKind(current))
+              }}
+            >
+              {kindChipLabel(kind)}
+            </button>
+          )}
         </div>
       )}
 
@@ -765,12 +807,15 @@ export function Palette(props: PaletteProps): JSX.Element {
             // is what lets stepRunnable keep walking it without knowing that
             // headers exist at all.
             const header = i === 0 || rows[i - 1].group !== row.group
+            const band = scope === null ? bandHeaderAt(rows, i, kind) : null
+            const gotoId = panelIdOfGoto(row)
             return (
               // A Fragment, not a wrapper element: <ul> may only contain <li>,
               // and a <div> here would be invalid markup that browsers silently
               // reparent — which moves the rows out from under .palette__list's
               // own scroll container.
               <Fragment key={row.id}>
+                {band !== null && <li className="palette__band" role="presentation">{band}</li>}
                 {header && <li className="palette__section" role="presentation">{sectionLabel(row.group)}</li>}
                 <li
                   ref={i === index ? selectedRef : null}
@@ -855,6 +900,9 @@ export function Palette(props: PaletteProps): JSX.Element {
                           ? splitHighlight(row.subtitle, query).map((seg, si) => seg.hit ? <mark key={si} className="palette__hit">{seg.text}</mark> : <span key={si}>{seg.text}</span>)
                           : (row.subtitle ?? ''))}
                   </span>
+                  {i === index && gotoId !== null && row.disabledReason === undefined && (
+                    <span className="palette__go">fly to →</span>
+                  )}
                   {row.entersScope && <span className="palette__chevron"><ChevronRight /></span>}
                   {row.shortcut && <kbd className="palette__kbd">{row.shortcut}</kbd>}
                 </li>
