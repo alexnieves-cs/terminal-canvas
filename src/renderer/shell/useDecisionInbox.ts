@@ -30,6 +30,11 @@ export function snoozeDecision(key: string, minutes: number, now = Date.now()): 
   bump()
 }
 
+/** Whether that inbox key is still snoozed. The World's walk reads this; it does not keep a second map. */
+export function decisionSnoozed(key: string, now = Date.now()): boolean {
+  return (snoozes.get(key) ?? 0) > now
+}
+
 export function wakeDecision(key: string): void {
   if (snoozes.delete(key)) bump()
 }

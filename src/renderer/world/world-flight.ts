@@ -22,7 +22,7 @@ const BOW = 0.22
 /** A shell prompt is answered in its terminal. The card says so, and offers no reply. */
 export const SHELL_ROOM_SENTENCE = 'A shell prompt is answered in its terminal, never from the room.'
 
-/** Ten minutes, the card's Snooze. The inbox's own snooze is R-093. */
+/** Ten minutes, the card's Snooze. The publisher writes that into the inbox; this map is only the unbound fallback. */
 export const SNOOZE_FOR_MS = 10 * 60 * 1000
 
 export interface FloorPoint {
@@ -267,6 +267,21 @@ let shell: ShellCard | null = null
 let flight: FlightState | null = null
 let fullDiff: string | null = null
 const snoozes = new Map<string, number>()
+
+/**
+ * R-093. The inbox is the one snooze store. World files cannot import the
+ * shell, so the publisher binds the read and the write. Unbound, the local
+ * map keeps the flight tests working.
+ */
+type DecisionSnooze = {
+  write: (id: string, now: number) => void
+  read: (id: string, now: number) => boolean
+}
+let decisionSnooze: DecisionSnooze | null = null
+
+export function bindDecisionSnooze(next: DecisionSnooze | null): void {
+  decisionSnooze = next
+}
 let snapshot: AttentionSnapshot = { items: queue, cursor, shell, flight, fullDiff }
 
 const listeners = new Set<() => void>()
@@ -315,11 +330,13 @@ export function showShell(next: ShellCard | null): void {
 }
 
 export function isSnoozed(id: string, now: number): boolean {
+  if (decisionSnooze !== null) return decisionSnooze.read(id, now)
   return (snoozes.get(id) ?? 0) > now
 }
 
 export function snoozePanel(id: string, now: number): void {
-  snoozes.set(id, now + SNOOZE_FOR_MS)
+  if (decisionSnooze !== null) decisionSnooze.write(id, now)
+  else snoozes.set(id, now + SNOOZE_FOR_MS)
   emit()
 }
 

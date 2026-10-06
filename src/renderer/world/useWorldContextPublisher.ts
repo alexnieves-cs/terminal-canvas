@@ -9,8 +9,10 @@ import { backendOf } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import type { PresenceRoster } from '@shared/presence'
 import { readyDiscardFor } from '@renderer/review/discard-offer'
+import { questionSnoozeKey } from '@renderer/shell/decision-inbox'
+import { decisionSnoozed, snoozeDecision } from '@renderer/shell/useDecisionInbox'
 import { getWorldContext, publishWorldContext, setRegionMover, setWorldActions, type RegionMoveCommit, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
-import type { DiscardOffer } from './world-flight'
+import { bindDecisionSnooze, SNOOZE_FOR_MS, type DiscardOffer } from './world-flight'
 import { agentFacts } from './world-facts'
 import { SHELL_REPLY_REASON } from './world-select'
 
@@ -254,5 +256,17 @@ export function useWorldContextPublisher(input: PublisherInput): void {
       return ids.length === 0 ? null : { ids }
     })
     return () => setRegionMover(null)
+  }, [])
+
+  // R-093. Ten minutes on a shell prompt is the inbox's snooze, under the
+  // question key, so the World walk and the canvas jump both skip it.
+  // Ten is not a menu choice; the card passes the minutes directly.
+  useEffect(() => {
+    const minutes = SNOOZE_FOR_MS / 60_000
+    bindDecisionSnooze({
+      write: (id, now) => snoozeDecision(questionSnoozeKey(id), minutes, now),
+      read: (id, now) => decisionSnoozed(questionSnoozeKey(id), now)
+    })
+    return () => bindDecisionSnooze(null)
   }, [])
 }

@@ -34,7 +34,8 @@ buildSync({
       export {
         flightDuration, flightArc, flightPoint, flightDots, FLIGHT_MIN_MS, FLIGHT_MAX_MS,
         attentionStep, queueStrip, approvalToast, discardReady, shellCard, SHELL_ROOM_SENTENCE,
-        fileOf, agentShort
+        fileOf, agentShort,
+        bindDecisionSnooze, snoozePanel, walkAttention, publishFlightQueue, resetAttention
       } from '../src/renderer/world/world-flight'
       export { offerFromReview } from '../src/renderer/review/discard-offer'
     `,
@@ -177,6 +178,31 @@ ok('rd-w5.css.1 the strip and the shell card live in the W5 span, with no state 
   /\.world-queue\b/.test(span) && /data-world-shell-card/.test(span) &&
   !/#[0-9a-fA-F]{3,8}/.test(span) && /font-family:\s*var\(--font-mono\)/.test(span) &&
   /font-family:\s*var\(--font-ui\)/.test(span))
+
+const inboxSrc = read('src/renderer/shell/decision-inbox.ts')
+const snoozePub = read('src/renderer/world/useWorldContextPublisher.ts')
+const snoozed = new Map()
+F.resetAttention()
+F.bindDecisionSnooze({
+  write: (id, now) => snoozed.set(id, now + 10 * 60 * 1000),
+  read: (id, now) => (snoozed.get(id) ?? 0) > now
+})
+F.publishFlightQueue([
+  { panelId: 'shell', kind: 'shell-prompt', label: 'prompt' },
+  { panelId: 'other', kind: 'approval', label: 'ask' }
+])
+F.snoozePanel('shell', 1000)
+const snoozeStep = F.walkAttention(1, 1000)
+F.bindDecisionSnooze(null)
+F.resetAttention()
+ok('rd-w5.snooze.1 a ten-minute shell snooze is the inbox key, and the walk skips it',
+  snoozed.get('shell') === 1000 + 10 * 60 * 1000 && snoozeStep !== null && snoozeStep.id === 'other' &&
+  /questionSnoozeKey\(id\)/.test(snoozePub) && /SNOOZE_FOR_MS \/ 60_000/.test(snoozePub) &&
+  /snoozeDecision\(questionSnoozeKey\(id\), minutes, now\)/.test(snoozePub) &&
+  /decisionSnoozed\(questionSnoozeKey\(id\), now\)/.test(snoozePub) &&
+  /return `q:\$\{panelId\}`/.test(inboxSrc) &&
+  !/minutes:\s*10\b/.test(inboxSrc) &&
+  /!snoozed\.has\(id\)/.test(inboxSrc))
 
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
