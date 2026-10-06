@@ -1503,27 +1503,44 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   ok('revamp.hud.1', 'the command pill steps left of the HUD only by a measured --pill-shift, the HUD yields to an open world menu, and Create keeps its word at every breakpoint',
     pillShift && hudYield && createWord, JSON.stringify({ pillShift, hudYield, createWord }))
 
-  // revamp.motion.1 — HONEST MOTION (Assessment B): the arrival, the settle
-  // and the pill's growth decelerate into place and never pass it — no
-  // translate that changes sign, no scale above 1, no animated blur — and
-  // reduced motion is covered: the global block shortens EVERY animation to
+  // revamp.motion.1 — HONEST MOTION (Assessment B): the arrival and the
+  // pill's growth decelerate into place and never pass it — no translate
+  // that changes sign, no scale above 1, no animated blur. The painted
+  // settle is the LAST @keyframes panel-settle (R-017): 0, -3px, 1px, 0.
+  // Reduced motion is covered: the global block shortens EVERY animation to
   // .01ms and one iteration (which still fires animationend, what clears a
   // panel's entering state), and the settle and the beacon drop out outright.
   const frames = (name) => (new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`).exec(bare) || [])[1] ?? ''
-  const honest = (name) => {
-    const body = frames(name)
+  // R-017. The first panel-settle is the dip. The later one, inside rd:L-B,
+  // is what paints (0, -3px, 1px, 0). Arrival and the pill still read the
+  // first definition and still refuse a translate that changes sign.
+  const framesLast = (name) => {
+    const re = new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`, 'g')
+    let body = ''
+    for (let m = re.exec(bare); m !== null; m = re.exec(bare)) body = m[1] ?? ''
+    return body
+  }
+  const measured = (body) => {
     const ys = [...body.matchAll(/translateY\((-?\d*\.?\d+)px\)/g)].map((m) => Number(m[1]))
     const scales = [...body.matchAll(/scale\((\d*\.?\d+)\)/g)].map((m) => Number(m[1]))
-    return body !== '' && !ys.some((y) => y < 0) && !scales.some((k) => k > 1) && !/filter|blur/.test(body)
+    return { ys, scales, clean: body !== '' && !scales.some((k) => k > 1) && !/filter|blur/.test(body) }
   }
-  const kf = ['panel-enter', 'panel-settle', 'pill-expand'].map((n) => [n, honest(n)])
+  const honest = (name) => {
+    const { ys, clean } = measured(frames(name))
+    return clean && !ys.some((y) => y < 0)
+  }
+  const honestSettle = () => {
+    const { ys, clean } = measured(framesLast('panel-settle'))
+    return clean && ys.length === 4 && ys[0] === 0 && ys[1] === -3 && ys[2] === 1 && ys[3] === 0
+  }
+  const kf = [['panel-enter', honest('panel-enter')], ['panel-settle', honestSettle()], ['pill-expand', honest('pill-expand')]]
   const global = /@media \(prefers-reduced-motion: reduce\) \{\s*\*,\s*\*::before,\s*\*::after \{[^}]*animation-duration:\s*\.01ms !important;[^}]*animation-iteration-count:\s*1 !important;/.test(bare)
   const settleRm = /@media \(prefers-reduced-motion: reduce\) \{ \.panel\[data-panel-settling\] > \.panel__motion \{ animation: none; \} \}/.test(bare)
   const beaconRm = /@media \(prefers-reduced-motion: reduce\) \{ \.command-pill\[data-pill-expanded\] \.command-pill__rest \{ animation: none; \} \}/.test(bare)
   // The explicit none must come AFTER the rule it cancels (same specificity).
   const beaconAfter = bare.indexOf('.command-pill[data-pill-expanded] .command-pill__rest { animation: pill-beacon') < bare.indexOf('.command-pill[data-pill-expanded] .command-pill__rest { animation: none; }')
   const settleAfter = bare.indexOf('.panel[data-panel-settling] > .panel__motion { animation: panel-settle') < bare.indexOf('.panel[data-panel-settling] > .panel__motion { animation: none; }')
-  ok('revamp.motion.1', 'the arrival, the settle and the pill\'s growth decelerate without overshoot or blur, and reduced motion covers the entering panel (global block), the settle and the beacon',
+  ok('revamp.motion.1', 'the arrival and the pill\'s growth decelerate without overshoot or blur; the painted settle is the later panel-settle (0, -3px, 1px, 0); reduced motion covers the entering panel (global block), the settle and the beacon',
     kf.every(([, v]) => v) && global && settleRm && beaconRm && beaconAfter && settleAfter, JSON.stringify({ kf, global, settleRm, beaconRm, beaconAfter, settleAfter }))
 }
 
