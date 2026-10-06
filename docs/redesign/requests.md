@@ -143,3 +143,10 @@ from: centerViewNow === 'focus'
 - Smallest change: rename the row's visible title to `Show Orchestrate`. Leave the command id.
 - Status: done: the title is `Show Orchestrate`. The id stays `canvas.orchestration`.
 - Filed on the F3 branch as R-009.
+
+### R-016 · Header path, branch and state duration
+- Lane: L-B
+- File: `src/renderer/components/PanelFrame.tsx`, `src/renderer/components/TerminalPanel.tsx`
+- Why the contract or the owner cannot absorb it: M442's frame shows a faint path, the branch and a duration beside the state word (`working · 12m`). L-B does not own those two components. The state word stays the one word from `panel-state.ts` (D7). A duration is a separate fact, and painting it by changing `shown.word` would move every check that pins that word.
+- Smallest change: in the header chrome, render the panel path, the branch when one is known, and `statePill(word, elapsedMs)` from `src/renderer/panels/header-rest.ts` beside `[data-state-word]`. Leave the word itself alone.
+- Status: open

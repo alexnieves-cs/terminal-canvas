@@ -69,7 +69,12 @@ import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advance
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { taskClusters, type TaskCluster } from './task-clusters'
-import { TaskClusterLayer } from './TaskClusterLayer'
+import { TaskClusterLayer, TaskRegionLayer, TierLayer } from './TaskClusterLayer'
+import { regionsFromMemberships } from './task-regions'
+import { InlineApproval } from '@renderer/shell/ApprovalDetail'
+import { allowPendingTarget } from '@renderer/palette/commands/approval-row'
+import { waitingSince } from '@renderer/panels/header-rest'
+import { criteriaChecklist } from '@renderer/panels/session-facts'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
@@ -263,7 +268,7 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
-import { focusLocked } from '@shared/shortcuts'
+import { focusLocked, matchShortcut } from '@shared/shortcuts'
 import { SessionsHost } from '@renderer/sessions/SessionsHost'
 import { ReviewHost } from '@renderer/review/ReviewHost'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
@@ -8712,6 +8717,52 @@ export function Canvas({
     })
   })
 
+  // M442. Appended hooks. Nothing above this point moves: a hook inserted
+  // earlier would shift every later hook's state for the life of the canvas.
+  const laneChordRef = useRef({ approvals: pendingApprovals, waiting: waitingIds })
+  laneChordRef.current = { approvals: pendingApprovals, waiting: waitingIds }
+  const onPausePanel = useCallback((id: string) => { void window.canvas.agentSession.interrupt(id) }, [])
+  const onHandOffPanel = useCallback((id: string) => { paletteActionsRef.current?.beginLink(id) }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (shouldIgnoreKeys()) return
+      const hit = matchShortcut({ metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, code: event.code })
+      if (hit?.id !== 'allow') return
+      event.preventDefault()
+      const selected = selectedIdsRef.current
+      const target = allowPendingTarget({
+        selectionEmpty: selected.size === 0,
+        selectedId: selected.size === 1 ? [...selected][0] ?? null : null,
+        approvals: laneChordRef.current.approvals,
+        queueHeadId: laneChordRef.current.waiting[0] ?? null
+      })
+      if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [shouldIgnoreKeys])
+
+  const taskRegions = regionsFromMemberships(
+    taskMemberships(displayPanels, workItems),
+    displayPanels.map((panel) => ({
+      panelId: panel.rect.id,
+      rect: panel.rect,
+      agent: isChatPanel(panel) || (isTerminalPanel(panel) && panel.spec.agent !== undefined)
+    })),
+    Object.fromEntries(workItems.map((item) => [item.id, {
+      ticket: item.key ?? null,
+      title: item.title,
+      criteriaDone: item.criteriaMet?.length ?? 0,
+      criteriaTotal: item.criteria?.length ?? 0
+    }]))
+  )
+  const taskCriteria = inspectorModel === null ? null : (() => {
+    const itemId = taskMemberships(displayPanels, workItems).find((membership) => membership.members.some((member) => member.panelId === inspectorModel.id))?.itemId
+    const item = itemId === undefined ? undefined : workItems.find((candidate) => candidate.id === itemId)
+    if (item?.criteria === undefined || item.criteria.length === 0) return null
+    return criteriaChecklist(item.criteria, item.criteriaMet ?? [])
+  })()
+
   return (
     <div
       ref={shellRef}
@@ -9274,6 +9325,23 @@ export function Canvas({
           {cardDetail === 'cluster'
             ? <TaskClusterLayer clusters={clusterHulls} />
             : !merged && <TaskClusterLayer region clusters={clusterHulls.filter((c) => c.kind === 'task')} />}
+          {!merged && <TaskRegionLayer regions={taskRegions} />}
+          <TierLayer />
+          {!merged && pendingApprovals.map((approval) => {
+            const host = displayPanels.find((panel) => panel.rect.id === approval.id)
+            if (host === undefined) return null
+            return (
+              <div key={approval.requestId} className="inline-approval-host" style={{ position: 'absolute', left: host.rect.x + 16, top: host.rect.y + host.rect.h - 132, width: Math.max(160, Math.min(420, host.rect.w - 32)), zIndex: host.z + 2 }}>
+                <InlineApproval
+                  approval={approval}
+                  waiting={waitingSince(approval.requestId, Date.now())}
+                  onAllow={() => paletteActions.answerApproval(approval.id, approval.requestId, true)}
+                  onDeny={() => paletteActions.answerApproval(approval.id, approval.requestId, false)}
+                  onViewDiff={() => paletteActions.openReview(approval.id)}
+                />
+              </div>
+            )
+          })}
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels. The LAYER itself still takes
@@ -9798,7 +9866,7 @@ export function Canvas({
         </PanelMarksContext.Provider>
         </CardDetailContext.Provider>
         {pipsEnabled && (
-          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p, undefined, { defaultName: terminalNameOf.get(id) }) }} />
+          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} onFly={goToPanelStable} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p, undefined, { defaultName: terminalNameOf.get(id) }) }} />
         )}
         {/* M69. The overview: outside .world like the pips, in the top-right
             corner, hidden while merged (the merged view's geometry is not this
@@ -9806,7 +9874,7 @@ export function Canvas({
         {/* An overview of nothing is noise beside the launcher: it appears
             with the first object. */}
         {minimapEnabled && !merged && panels.length > 0 && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} flying={flying} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} shapeIds={shapeIdSet} flying={flying} regions={taskRegions.map((region) => region.bounds)} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view
@@ -9952,18 +10020,20 @@ export function Canvas({
             navigator's Panels pane is not there to hold it. Resume alone
             never floats here any more — it is the strip (see resumeStrip). */}
         {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
-        {(reopen !== null || jobRecovery !== null) && (
-          <div className="reopen-stack" data-screen-control="">
-            {reopen !== null && (
-              <ReopenNotice
-                model={reopen}
-                onGo={paletteActions.goToPanel}
-                onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
-              />
-            )}
-            {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
-          </div>
-        )}
+        <div className="recovery-slot" data-recovery-slot="">
+          {(reopen !== null || jobRecovery !== null) && (
+            <div className="reopen-stack" data-screen-control="">
+              {reopen !== null && (
+                <ReopenNotice
+                  model={reopen}
+                  onGo={paletteActions.goToPanel}
+                  onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
+                />
+              )}
+              {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
+            </div>
+          )}
+        </div>
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner data-screen-control="" role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
@@ -10107,6 +10177,9 @@ export function Canvas({
         // M352. The Caps fields are a PERSON's door: raising a cap is theirs to do.
         onCap={(id, value) => paletteActions.capAgent(id, value, 'person')}
         onOpenReview={paletteActions.openReview}
+        taskCriteria={taskCriteria}
+        onPausePanel={onPausePanel}
+        onHandOffPanel={onHandOffPanel}
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}

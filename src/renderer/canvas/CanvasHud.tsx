@@ -87,9 +87,12 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
           stays pointer-events: none). shouldYieldWheel names the HUD so a
           wheel over these buttons never pans the world underneath. */}
       <span className="canvas-hud__zoom" role="group" aria-label="Zoom">
+        {/* M442. Percent first, then the steppers: "82% − + fit". The readout
+            stays in the DOM either way (zoomReadoutShown); the lane CSS keeps
+            it visible at 100% without removing the attribute the checks read. */}
+        <span className="canvas-hud__readout" data-hud-readout={readoutShown ? 'shown' : 'rest'} aria-hidden={readoutShown ? undefined : true}>{Math.round(viewport.scale * 100)}%</span>
         <button type="button" className="icon-button" data-hud-zoom-out title="Zoom out (⌘−)"
           aria-label="Zoom out" {...shellControl(() => onZoomBy(1 / ZOOM_STEP))}><Minus /></button>
-        <span className="canvas-hud__readout" data-hud-readout={readoutShown ? 'shown' : 'rest'} aria-hidden={readoutShown ? undefined : true}>{Math.round(viewport.scale * 100)}%</span>
         <button type="button" className="icon-button" data-hud-zoom-in title="Zoom in (⌘=)"
           aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
         {/* M264. Fit task is the PRIMARY zoom framing control; Fit all stays

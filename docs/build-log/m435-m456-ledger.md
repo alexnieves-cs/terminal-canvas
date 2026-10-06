@@ -205,3 +205,25 @@ Tag `rd-foundations` is on `7af404f1` (the F3 merge). `ownership.json` now lists
 R-011 stays open. L-C owns `useViewport` and its brief is the tier flights; the request says the retarget happens when that lane rebinds. `shortcuts.ts` was not edited.
 
 The rest of the open list is closed on this branch: D1 in the material bullet, high-contrast dark glass, the two terminal cursors, the dock's spoken count (the queue, with snooze and team asks only when that queue is empty), `subscribeLiveSessions`, `shouldIgnoreKeys` and the palette's ⌘K yielding under the focus lock, the center-view enum, Sessions and Review mounted from Canvas, `dock.dup.1` measuring the View menu row, `TC_FIXTURE=rd-steward` shared by dev and shot, and the palette title `Show Orchestrate`. Canvas still passes `attentionCount` into `pillRestState` until L-C.
+
+## L-B · M442–M443
+
+Branch `rd/l-b-workspace` off `redesign/main`. Lane `RD_LANE=L-B`. R-008, R-012 and R-005 are done on this branch and are not reopened. Canvas still passes `attentionCount` into `pillRestState` until L-C (R-005). R-011 stays L-C's (`useViewport`).
+
+### Plan
+
+M442 paints the Work tier. M443 paints create-and-arrange. Pure modules land under `src/renderer/panels/` and the owned canvas modules. Checks live in `scripts/verify-rd-l-b.cjs`. CSS stays inside `/* ── rd:L-B ── */`.
+
+PLAN CHECK:
+
+- [x] No existing hook call in `Canvas.tsx` moves. `TierLayer` and the recovery slot are JSX, appended in the tree. New hooks (`connectedSpawn` state, the chord listener) sit immediately before `return`. `useJobRecovery` stays where it is. Cursor and the connected-spawn opener are module setters in `spawn-cursor.ts`, so `onDropEmpty` and `onSpawn` do not grow a hook.
+- [x] Restyles of existing panel rules are overrides inside `rd:L-B`, listed below. The base chromeless rule and `panel-settle` keyframes are not edited.
+- [x] `rd-l-b.well.1` is a pure check that the lane's hover rules do not set a box metric on `.panel__slot`, `.xterm`, `.pf__body` or `.pf__keep`, and that the chromeless `.pf__chrome` stays `position: absolute`. `rd-l-b.allow.1` proves ⌘Y calls `answerApproval` with `allowPendingTarget`, and that the palette Allow row's id is `approval.allow.${id}.${requestId}` and its `run` calls `answerApproval`.
+
+CSS overrides inside `rd:L-B` (M442): task region (1px dashed, `--r-region`, 24px padding, chip); panel radius `--r-lg` and a resting shadow; `.pf__word` as a pill; needs-you edge via `--state-needs`; selection restates `--glow-iris`; header verbs stay opacity 0 until hover, focus or selection (already true at `.pf__chrome button`; restated, no well metric); review card radius; edge pip as an amber pill with `pointer-events: auto` on the button only; HUD readout opacity 1; minimap region outline. (M443, same span): settle overshoot `rd-panel-settle`, marquee toolbar, connected-spawn menu, snap-guide colour already `--guide`.
+
+Slots. `TierLayer` is a zero-size absolute `data-tier-layer` inside `.world` for L-C. `data-recovery-slot` wraps the existing reopen stack for L-F and stays mounted when the stack is empty. Neither is a hook.
+
+Deviations. A double-click on empty ground still mints a flowchart process step (`flowchart.app.1`). ⌘N lands at the cursor only when the mouse has moved over the canvas and the call is the one-argument path; otherwise the view centre and `place()` cascade stay. ⌘T is a new listener, not a retarget of `useViewport`. Header path, branch and duration are R-016 (`PanelFrame` / `TerminalPanel` are not owned). `statePill` is ready and is not written into `shown.word`. Making a task commits one panel history entry; the work item is a second store and does not undo with ⌘Z. Handoff animation already runs only on `data-edge-activity="firing"`; M442 pins that rather than rewriting the gesture.
+
+Shot scenes `rd-workspace` and `rd-arrange` gain a `run`. `verify:meta` `visual.1` will ask for goldens. Those goldens are not written here.
