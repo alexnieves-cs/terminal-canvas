@@ -204,8 +204,8 @@ const M = require(OUT)
 
 {
   const hints = M.EMPTY_CANVAS_GESTURES.map((row) => row.text).join('|')
-  ok('rd-empty.hints.1 the empty canvas says space-drag to pan and command-scroll to zoom, and the ghost target names a double-click',
-    hints === 'Space + drag to pan|⌘ + scroll to zoom' && M.GHOST_TARGET === 'Double-click to place a terminal',
+  ok('rd-empty.hints.1 the empty canvas says space-drag to pan and command-scroll to zoom, and the ghost target names a flowchart step',
+    hints === 'Space + drag to pan|⌘ + scroll to zoom' && M.GHOST_TARGET === 'Double-click to place a flowchart step',
     hints)
 }
 
