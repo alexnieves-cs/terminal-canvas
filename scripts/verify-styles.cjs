@@ -1523,7 +1523,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     return body
   }
   const measured = (body) => {
-    const ys = [...body.matchAll(/translateY\((-?\d*\.?\d+)px\)/g)].map((m) => Number(m[1]))
+    // A length of 0 is written without a unit (`translateY(0)`), same as the
+    // dip. The overshoot keeps its px. Both have to count or the later
+    // settle reads as two samples.
+    const ys = [...body.matchAll(/translateY\((-?\d*\.?\d+)(?:px)?\)/g)].map((m) => Number(m[1]))
     const scales = [...body.matchAll(/scale\((\d*\.?\d+)\)/g)].map((m) => Number(m[1]))
     return { ys, scales, clean: body !== '' && !scales.some((k) => k > 1) && !/filter|blur/.test(body) }
   }
