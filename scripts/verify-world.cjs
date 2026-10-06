@@ -1475,8 +1475,12 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const scene = ['WorldCard.tsx', 'WorldRobot.tsx', 'WorldStructure.tsx'].map((f) => readFileSync(join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''))
   ok('world.replay.5 the room\'s parts read the room\'s clock (worldNow), never the wall clock, so the past room is quiet where it was quiet and a tile is fresh when it was',
     scene.every((src) => !/Date\.now\(\)/.test(src.replace(/handoffArcs\(ctx\.handoffs, byId, Date\.now\(\)\)/, ''))) && scene.every((src) => /worldNow\(\)/.test(src)))
-  ok('world.replay.6 the past takes no actions: a past request has no Approve or Deny, the ask is off, the room goes back to live when it closes, and the away tracker is installed at startup (from the store), not when the room first opens',
-    /const asked = past \? undefined :/.test(card) && /\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button type="button" className="world-card__act"/.test(card) && /sending \|\| past\) return/.test(chrome) &&
+  ok('world.replay.6 a past room keeps Approve, Deny and Open visible but disabled, with the one reason, the room goes back to live when it closes, and the away tracker is installed at startup (from the store), not when the room first opens',
+    /PAST_ROOM_REASON/.test(card) && /disabled=\{past\}/.test(card) && /aria-describedby=\{reasonId\}/.test(card) &&
+      /data-world-answer="allow"/.test(card) && /data-world-answer="deny"/.test(card) && /data-world-answer="open"/.test(card) &&
+      !/const asked = past \? undefined :/.test(card) &&
+      !/\{past \|\| \(actions !== null && !actions\.canOpen\(agentId\)\) \? null : <button/.test(card) &&
+      /sending \|\| past\) return/.test(chrome) &&
       /useEffect\(\(\) => \(\) => setReplayAt\(null\), \[\]\)/.test(time) && /installAwayTracker\(\)\n\s*if \(!disconnect\)/.test(store))
   ok('world.tour.1 the tour shows each beat at its own moment with the camera on its agent — the moment BEFORE a stop, when the robot was still at its desk — falls back to the whole room when the agent is not in it, and ends live on the whole room',
     /setReplayAt\(beat\.kind === 'stopped' \? beat\.at - 1 : beat\.at\)/.test(time) && /if \(camera\.current\?\.focus\(beat\.agentId\) !== true\) camera\.current\?\.fit\(\)/.test(time) &&

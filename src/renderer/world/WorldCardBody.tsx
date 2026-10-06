@@ -6,6 +6,7 @@ import { getAgent, getAgentIds, useReplayAt } from './agent-world-store'
 import { activityOf, type Activity } from './world-activity'
 import { useWorldActions, useWorldContext } from './world-context-store'
 import { isLiveStatus } from './world-scene'
+import { PAST_ROOM_REASON } from './world-replay'
 import { useFocusedAgent } from './world-select'
 import { cardHeadline, conflictPartners, type Headline } from './world-structure'
 
@@ -53,27 +54,41 @@ export function headlineOf(record: NonNullable<ReturnType<typeof getAgent>>, app
 export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
   const ctx = useWorldContext()
   const actions = useWorldActions()
-  // M425: a request in the PAST room is history — it may have been answered since — so it has no verbs.
+  // R-063. A past room keeps the three verbs. They do nothing, and they say
+  // why: the same sentence the scrubber already uses. Live still hides Open
+  // when there is no panel to land on.
   const past = useReplayAt() !== null
   const focused = useFocusedAgent() === agentId
-  const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
+  const asked = ctx.approvals.find((a) => a.agentId === agentId)
+  const reasonId = `past-room-${agentId}`
   return (
     <div className="world-card__request" data-world-request>
-      {asked !== undefined ? (
+      {asked !== undefined && !past ? (
         <p className="world-card__ask"><span className="world-card__tool">{asked.toolName}</span>{asked.argument}</p>
       ) : (
         <p className="world-card__ask world-card__ask--open">{past ? 'Was waiting on you here' : 'Waiting on you in its panel'}</p>
       )}
       {/* The close-up sheet is the one filled primary. The card keeps the request and drops its own verbs while that sheet is open. */}
       {focused ? null : <div className="world-card__actions" role="group" aria-label="Answer the request">
-        {asked !== undefined && actions !== null ? (
+        {past ? (
           <>
-            <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Approve</button>
-            <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
+            <span id={reasonId} className="sr-only">{PAST_ROOM_REASON}</span>
+            <button type="button" className="world-card__act world-card__act--go" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="allow">Approve</button>
+            <button type="button" className="world-card__act" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="deny">Deny</button>
+            <button type="button" className="world-card__act" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="open">Open in Canvas</button>
           </>
-        ) : null}
-        {/* M429: no Open for an agent with no panel to land on (the simulator's, a teammate's elsewhere) — it would close the room onto nothing. */}
-        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open in Canvas</button>}
+        ) : (
+          <>
+            {asked !== undefined && actions !== null ? (
+              <>
+                <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Approve</button>
+                <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
+              </>
+            ) : null}
+            {/* M429: no Open for an agent with no panel to land on (the simulator's, a teammate's elsewhere) — it would close the room onto nothing. */}
+            {actions !== null && !actions.canOpen(agentId) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open in Canvas</button>}
+          </>
+        )}
       </div>}
     </div>
   )
@@ -87,7 +102,16 @@ export function AskApprove({ agentId }: { agentId: string }): JSX.Element | null
   const ctx = useWorldContext()
   const actions = useWorldActions()
   const past = useReplayAt() !== null
-  const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
+  const asked = ctx.approvals.find((a) => a.agentId === agentId)
+  const reasonId = `past-room-ask-${agentId}`
+  if (past) {
+    return (
+      <>
+        <span id={reasonId} className="sr-only">{PAST_ROOM_REASON}</span>
+        <button type="button" className="world-chip__approve" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-ask-approve>Approve</button>
+      </>
+    )
+  }
   if (asked === undefined || actions === null) return null
   const chord = shortcutById('allow')?.chord
   return (

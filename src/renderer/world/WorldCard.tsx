@@ -143,7 +143,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   if (!record || !layer.current) return null
   // M428: the work's own facts — present-day values, so the past room (a
   // replay) has none: today's spend under last hour's robot would read as
-  // what it had spent then. RequestBlock hides its verbs for the same reason.
+  // what it had spent then. The request's verbs stay, disabled, with the past-room reason.
   const facts = past ? undefined : ctx.facts[agentId]
   const held = facts?.held
   const badge = badgeFor(record, worldNow(), held !== undefined)
