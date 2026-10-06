@@ -56,7 +56,6 @@ export function RecoveryHost(): JSX.Element | null {
           )}
         </section>
       )}
-      {view.pill !== '' && <p className="recovery-pill" data-recovery-pill="">{view.pill}</p>}
       {view.bootIssue !== null && <p className="recovery-boot" data-boot-issue="" role="alert">{view.bootIssue}</p>}
       <div className="recovery-frames">
         {view.paused.filter((frame) => !terminalPaints(frame.panelId)).map((frame) => (

@@ -8,8 +8,10 @@
  * palette's, with its unbounded list. So nothing here searches or lists
  * commands; it decides one sentence and two targets.
  *
- * M264. Rest priority gains a task sentence when the related lens is on:
- * attention → task → running → selected → empty.
+ * M264. Rest priority gains a task sentence when the related lens is on.
+ * R-036. A recovery sentence from the store outranks the queue: the paused
+ * count does not fit on an attention item.
+ * recovery → attention → task → running → selected → empty.
  */
 
 import { useSyncExternalStore } from 'react'
@@ -28,9 +30,15 @@ export interface PillFacts {
    * no task sentence — never invent a title, never print a zero statement.
    */
   taskTitle?: string
+  /**
+   * R-036. `recoveryPillLine` from the recovery store. Empty is no sentence.
+   * The paused count is inside it; it is not a field on an attention item.
+   */
+  recovery?: string
 }
 
 export type PillRest =
+  | { kind: 'recovery'; text: string }
   | { kind: 'attention'; text: string }
   | { kind: 'task'; text: string }
   | { kind: 'running'; text: string }
@@ -49,6 +57,8 @@ const count = (n: number): number => (Number.isFinite(n) && n > 0 ? Math.floor(n
  * running".
  */
 export function pillRestState(facts: PillFacts): PillRest {
+  const recovery = typeof facts.recovery === 'string' ? facts.recovery.trim() : ''
+  if (recovery !== '') return { kind: 'recovery', text: recovery }
   const attention = count(facts.attention)
   // The queue is terminals AND chats: `panels`, from the one vocabulary
   // (shared/attention-words.ts), never `chats` over a waiting terminal.

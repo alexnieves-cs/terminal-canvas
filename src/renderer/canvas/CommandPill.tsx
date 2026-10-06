@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type MutableRefObject } from 'react'
 import type { PaletteActions } from '@renderer/palette/commands'
 import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
@@ -8,6 +8,8 @@ import { useAttentionQueue, type AttentionCensus } from '@renderer/session/useAt
 import type { StateInput } from '@renderer/panels/panel-state'
 import { shellControl } from '../shell/shell-control'
 import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
+import { ATTENTION_VERB } from '@shared/attention-queue'
+import { getRecoveryView, subscribeRecovery } from '@renderer/panels/recovery-store'
 import { attentionPillLine, pillRestState, publishAttentionCensus, retiresJumpHint, runningAgents, showJumpHint, type OrchestratorCandidate } from './command-pill'
 import { longAxisOf, runSelectionVerb, selectionVerbs, type SelectionFacts, type SelectionVerbKey } from './object-verbs'
 
@@ -143,6 +145,8 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
   const attentionLine = attentionPillLine(queue)
   // R-030. The rest sentence reads the queue this pill already subscribes to.
   const queueCount = queue.length
+  // R-036. The recovery sentence, paused count included, from the store.
+  const recoveryLine = useSyncExternalStore(subscribeRecovery, () => getRecoveryView().pill, () => getRecoveryView().pill)
   const [expanded, setExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -173,7 +177,13 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     : isTerminalPanel(p)
       ? { id: p.rect.id, kind: 'terminal', agent: p.spec.agent !== undefined, agentState: getAgentState(p.rect.id) }
       : { id: p.rect.id, kind: p.kind })))
-  const rest = pillRestState({ attention: queueCount, running: running.length, selected: selectedIds.length, ...(taskTitle !== undefined ? { taskTitle } : {}) })
+  const rest = pillRestState({
+    attention: queueCount,
+    running: running.length,
+    selected: selectedIds.length,
+    ...(taskTitle !== undefined ? { taskTitle } : {}),
+    ...(recoveryLine !== '' ? { recovery: recoveryLine } : {})
+  })
 
   // 4.3. Teach Cmd+J once, beside the first attention sentence; retire it when
   // that queue empties, so it is seen for a whole episode rather than a blink.
@@ -537,7 +547,12 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
           </div>
         </div>
       )}
-      {attentionLine !== '' && note === null && !expanded ? (
+      {rest.kind === 'recovery' && note === null && !expanded ? (
+        <div className="command-pill__rest command-pill__rest--line" data-pill-rest="" data-pill-state="recovery" role="group" aria-label={rest.text}>
+          <span className="command-pill__text">{rest.text.endsWith(` · ${ATTENTION_VERB.recovery}`) ? rest.text.slice(0, -(ATTENTION_VERB.recovery.length + 3)) : rest.text}</span>
+          <span data-pill-recovery="">{ATTENTION_VERB.recovery}</span>
+        </div>
+      ) : attentionLine !== '' && note === null && !expanded ? (
         <div className="command-pill__rest command-pill__rest--line" data-pill-rest="" data-pill-state="attention" role="group" aria-label={attentionLine}>
           <button type="button" className="command-pill__line-main" aria-label={attentionLine} {...shellControl(() => { focusOnOpenRef.current = false; setNote(null); setExpanded(true) })}>
             <Bell /><span className="command-pill__text">{attentionLine.split(' · ').slice(0, -2).join(' · ')}</span>
