@@ -453,7 +453,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        canvas:tidy / canvas:flip
                        canvas:feedback
                        board:add
-                       pool:mint / pool:event
+                       pool:mint / pool:event / boot:progress
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset / canvas:plan
                        preset:spawn / preset:default / preset:capture
