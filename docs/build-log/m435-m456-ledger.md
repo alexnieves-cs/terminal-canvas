@@ -1387,3 +1387,5 @@ Landed on the merge: R-090 (`CommandPill` publishes `publishFlightQueue` and cle
 Deferred at rd-world, each left as it was: R-044 and R-053 (WebGL does not present on this host; Phase 4 re-shots on a Mac), R-051 (terrace drag through the publisher), R-052 and R-061 (`shortcuts.ts` is frozen; Follow stays on the camera panel), R-063 (past-room verbs are several owners), R-070 (folding the inspector history into `answerRequest` changes every chat answer), R-071 (paste-then-submit goes through Canvas's registry), R-082 (a presenting probe would change Orchestrate), R-091 (one jump cursor means editing Canvas's load-bearing jump), R-093 (the inbox snooze is not this card's ten minutes), R-094 (live Undo waits for a real discard offer).
 
 The blank `R-NNN` template stays a template.
+
+After that commit, typecheck passed, `verify:pill` 13/13, `verify:rd-w5` 11/11, `verify:world` 251/251, `verify:rd-w2` 4/4, and `npm run build` passed. The plain wave was 64/67. `verify:review` `merge.1` returned `merged.kind` `failed` with an empty detail in the concurrent wave, and alone it is 163/163. `panels-split.2`, `visual.1` and `revamp.create.1` are the same known reds.
