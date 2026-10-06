@@ -1,7 +1,7 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import { APPEARANCE_CATEGORY, RESTORE_CATEGORY, settingsInCategory, type SettingValue } from '../shared/settings-schema'
-import { electronAccelerator } from '../shared/shortcuts'
+import { acceleratorFor, parseOverrideList } from '../shared/shortcut-overrides'
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
@@ -37,8 +37,16 @@ export interface AppMenuOptions {
  * Ctrl+C is deliberately untouched and flows through to the PTY as SIGINT -
  * which is what you want when an agent is mid-run.
  */
+function stringList(value: SettingValue): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+}
+
 export function buildAppMenu(options: AppMenuOptions): void {
   const focused = (): BrowserWindow | null => BrowserWindow.getFocusedWindow()
+  // R-025. An empty override list is today's historical accelerator:
+  // acceleratorFor(id, []) is electronAccelerator(id). Listeners still match
+  // the frozen registry; this only changes what the menu shows.
+  const accel = (id: string): string => acceleratorFor(id, parseOverrideList(stringList(options.settingValue('keyboard.overrides'))))
 
   const template: MenuItemConstructorOptions[] = [
     {
@@ -94,7 +102,7 @@ export function buildAppMenu(options: AppMenuOptions): void {
           // M65. The spawn sheet: where, what, how. ⌘N stays the instant
           // default; this is the considered one.
           label: 'New panel…',
-          accelerator: electronAccelerator('spawn-sheet'),
+          accelerator: accel('spawn-sheet'),
           click: () => options.onOpenSheet()
         },
         {
@@ -120,23 +128,23 @@ export function buildAppMenu(options: AppMenuOptions): void {
       submenu: [
         {
           label: 'Undo',
-          accelerator: electronAccelerator('undo'),
+          accelerator: accel('undo'),
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_UNDO)
         },
         {
           label: 'Redo',
-          accelerator: electronAccelerator('redo'),
+          accelerator: accel('redo'),
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_REDO)
         },
         { type: 'separator' },
         {
           label: 'Copy',
-          accelerator: electronAccelerator('copy'),
+          accelerator: accel('copy'),
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_COPY)
         },
         {
           label: 'Paste',
-          accelerator: electronAccelerator('paste'),
+          accelerator: accel('paste'),
           click: () => {
             // Read the clipboard here in main and ship the text down, so the
             // renderer never needs clipboard permissions of its own.
@@ -153,8 +161,8 @@ export function buildAppMenu(options: AppMenuOptions): void {
       // deliberately — a view state, never persisted).
       label: 'Workspace',
       submenu: [
-        { label: 'Tidy Panes', accelerator: electronAccelerator('tidy-alias'), click: () => options.onTidy() },
-        { label: 'Flip Terminals', accelerator: electronAccelerator('flip'), click: () => options.onFlip() }
+        { label: 'Tidy Panes', accelerator: accel('tidy-alias'), click: () => options.onTidy() },
+        { label: 'Flip Terminals', accelerator: accel('flip'), click: () => options.onFlip() }
       ]
     },
     {
