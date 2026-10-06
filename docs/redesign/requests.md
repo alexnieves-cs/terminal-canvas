@@ -318,3 +318,38 @@ from: centerViewNow === 'focus'
 - Smallest change: a module-level empty list, used only as the memo key. `records === null` still means the list has not been read.
 - Status: done: 6dd3cad6. The lead landed it on `rd/w0-night` before the night shot, because the room cannot open while the loop runs.
 - Finding (filed after the merge; no probe was committed): the looping setter is `setResumeSummary` in `src/renderer/canvas/Canvas.tsx`, the resume effect that calls `buildResumeSummary` (line 4281 on `redesign/main` and on `rd-canvas`). It is `useState`. `useSyncExternalStore` snapshots stayed the same object through the storm. Radix menu `setTextContent` fired thousands of times because the parent re-rendered, not because a menu store changed. The driver is `useTaskHandoffs`: while `records` is `null`, `records ?? []` was a new array every render, so the `lanes` memo rebuilt `built`, returned as `handoffsVersion`. The resume effect depends on that object and, when a subject has `createdAt < APP_OPENED_AT`, calls `setResumeSummary` with a new object. Viewport, panel count, registry version, and the world toggle were unchanged. It reproduces on `rd-canvas` (`5cf60839`) without W0: `useTaskHandoffs.ts:120` is `const worktreeRows = records ?? []`, and `Canvas.tsx:4268–4281` is the same effect. W0 did not add the loop. Opening the world only made the passive loop throw React's maximum update depth (#185) and unmount the tree; with the world closed the canvas spins and does not throw. Reproduce: load a workspace with a resume subject created before the window opened (the steward fixture does), and leave `records` null (no item names a worktree, so `worktree.list` is never called, or the invoke has not returned). The canvas re-renders continuously. Click `.shell__world-toggle` and the view throws #185. Dismiss Resume (`.resume-banner__dismiss`) and the effect calls `setResumeSummary(null)`, which React bails on once it is already null, so the setState stops even while `handoffsVersion` is still a new object. The fix is the module-level `NO_WORKTREES` constant; `records === null` still means unread.
+
+### R-060 · The 2D minimap draws the world camera wedge
+- Lane: W3
+- File: `src/renderer/canvas/MinimapOverlay.tsx` (L-C)
+- Why the contract or the owner cannot absorb it: W3 does not own the overlay. The room's plan map (`WorldMinimap`) draws `cameraWedge`. The shared footprint is `cameraFootprint` in `world-camera.ts`, built with `cameraToViewport`. The overlay still draws its own rectangle from the 2D viewport.
+- Smallest change: when the world is showing, draw the polygon from `cameraFootprint` (or the viewport `cameraToViewport` already returns) instead of a second wedge. Leave the panel blocks as they are.
+- Status: open
+
+### R-061 · Register Follow picked as F
+- Lane: W3
+- File: `src/shared/shortcuts.ts` (frozen)
+- Why the contract or the owner cannot absorb it: the camera panel reads every chord from the registry. Follow picked is F in the overview, and the registry has no row for it. `⌘F` is Search. W3 cannot edit the frozen list.
+- Smallest change: add `{ id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' }` and a handler name `followPicked`. F is not a ⌘ chord, so it does not collide with Search. The panel already calls `shortcutById('follow')`.
+- Status: open
+
+### R-062 · The rig applies a WorldCamera pose
+- Lane: W3
+- File: `src/renderer/world/WorldView.tsx`, `src/renderer/world/world-set.ts` (`CameraApi`) — W2
+- Why the contract or the owner cannot absorb it: W3 does not own the rig. `useWorldCamera` calls `apply(pose)` when the api has it, and otherwise Fit still calls the existing `fit()` (the origin aim). Tier, orbit, pan and zoom-to-cursor update the pure pose and do not move the WebGL camera. `WorldCameraPanel` is mounted from `WorldTime` so the overview is on screen; move that one line into W2's mount and drop it from `WorldTime` in the same change.
+- Smallest change: `CameraApi.apply(pose: CameraPose): void` glides the orbit to that target, distance and pitch. Fit uses it, so the terrace centre is what the lens frames.
+- Status: open
+
+### R-063 · Past-room verbs on the card use the one reason
+- Lane: W3
+- File: `src/renderer/world/WorldCard.tsx`, `WorldCardBody.tsx`, `WorldChrome.tsx`, `WorldFlat.tsx`, `WorldRobot.tsx`
+- Why the contract or the owner cannot absorb it: those files are W2, W4 and W6. `world.replay.6` requires a past request to omit Approve, Deny and Open. The overview's sentence is `verbsForRoom` / `PAST_ROOM_REASON` (`past room — go Live to act`), already on the scrubber. The card still disappears the verbs instead of disabling them with that sentence.
+- Smallest change: keep the buttons, `disabled` with `title` and `aria-describedby` set to `PAST_ROOM_REASON`, and retarget `world.replay.6` to that sentence. Do not add a second wording.
+- Status: open
+
+### R-064 · ⌘⇧W lands the 2D camera on the world pose
+- Lane: W3
+- File: `src/renderer/canvas/useViewport.ts` (L-C), `src/renderer/canvas/Canvas.tsx` (W1 hotspot)
+- Why the contract or the owner cannot absorb it: Back to 2D calls `setWorldOn(false)`. `backTo2d(camera, size)` is the viewport for that pose. Nothing the world owns writes the canvas viewport.
+- Smallest change: on leaving the world, `goTo` the viewport `backTo2d` returns, so the canvas and the room are the same spot.
+- Status: open

@@ -776,3 +776,38 @@ Merged to `redesign/main` as `5353e47f` (`--no-ff`, parents `c432e511` and `ad62
 R-038 landed on `redesign/main` as `2f630a7f`: `rd-tone.literal.1` no longer skips `src/renderer/world/`. `verify:rd-f1` stayed 7/7. R-039 stays open.
 
 The shot loop is recorded on R-040, after the tag, and the tag was not moved. The setter is `setResumeSummary` (`Canvas.tsx` resume effect), not `useSyncExternalStore`. The same `records ?? []` and the same effect are on `rd-canvas` (`5cf60839`). Opening the world is what turned the spin into #185.
+
+## M451 · W3 overview, camera and time
+
+Branch `rd/w3-overview` from `redesign/main` at `38644eed` (rd-w0 plus the R-040 render-loop fix). Lane W3. One milestone. `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
+
+### Plan
+
+Pure first, then the chrome that is already in the tree.
+
+1. `world-camera.ts` is pure (no three, no React, no canvas import). Orbit, pan, zoom-to-cursor (scroll and a ctrlKey pinch share one factor), tier poses for ⌘1/2/3 from `TIER_PITCH` and a local `TIER_SCALE`, fit on the terrace bounds, follow. `world.ctx.door.1` lets only the publisher import `zoom-tier`, which is frozen, so the scale and the hysteresis band are copied as `TIER_SCALE` / `tierAt`. `rd-world.pose.1` fails if either drifts from `TIER_TARGET` / `tierFor`. `rd-world.fit.1` centres those bounds to within 2% of the viewport. A pose aimed at the origin does not, which is the "Fit room sits off-centre" regression. `rd-world.zoom.1` keeps the floor point under the cursor fixed.
+2. `WorldCameraPanel.tsx` lists Orbit (drag), Pan (Shift-drag), Zoom to cursor (scroll / pinch with ctrlKey), Work · Plan · Map, Fit room, Follow picked, Back to 2D. Every chord is `shortcutById` from the registry. No chord glyph is written in the file. `useWorldCamera()` is exported from this file. The panel is mounted from `WorldTime` until W2's mount block takes it (R-062), so screen 14 is reachable without editing `WorldView.tsx`.
+3. Replay stays on the arrival journal (`foldTo` is not retargeted). Ticks take a tone and paint `var(--state-*)` inside the W3 span. A past room runs `verbsForRoom`, and every verb is disabled with the reason `past room — go Live to act`. The sentence is on the scrubber. Card, ask and open buttons live in files this lane does not own; they already omit those verbs (`world.replay.6`). R-063 asks them to show the same reason.
+4. The away card reads the journal. The offer is `Tour the changes · 40s`. `tourStep(true)` is `cut` and `tourStep(false)` is `fly`. The existing focus lines stay so `world.tour.1` still matches. The rig already snaps a glide when reduced motion is on.
+5. `watchersOn` plus a plan-map chip use the peer's initials. The sample "MK" is not in the source. The on-robot pill remains `WorldCard`'s `world-pill__peers` (`world.peers.3`).
+6. `world-minimap.ts` grows `cameraWedge` with no value import (`world.map.2`). `cameraFootprint` uses `cameraToViewport` and lives in `world-camera.ts`. The 2D `MinimapOverlay` is L-C's. R-060.
+7. Shot `rd-world-overview`, reference 14. Map tier pressed, scrubber open, away card open. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `world-camera.ts` is pure, and `fit.1` / `zoom.1` are plain-node checks of that module, written before the panel.
+- [x] `WorldView.tsx` and `MinimapOverlay.tsx` are not edited.
+- [x] Replay disables verbs with the reason `past room — go Live to act`.
+
+### W2 mount list
+
+Already in the tree through `WorldChrome` → `WorldTime` / `WorldPeers` / `WorldMinimap`. Do not mount a second copy.
+
+- `useWorldCamera`, `WorldCameraPanel` from `WorldCameraPanel.tsx` (mounted by `WorldTime` until R-062 moves that one line).
+- `fitRoom`, `zoomToCursor`, `tierPose`, `orbitBy`, `panBy`, `followAgent`, `boundsOf`, `cameraFootprint`, `toPose`, `backTo2d`, `tierAt`, `TIER_SCALE` from `world-camera.ts`.
+- `verbsForRoom`, `PAST_ROOM_REASON`, `tickTone`, `tourStep`, `tourOfferLabel` from `world-replay.ts`.
+- `cameraWedge`, `watchersOn` from `world-minimap.ts`.
+
+### CSS override
+
+Inside `/* ── rd:W3 ── */` only. The scrubber moves to the bottom centre, the away card to the right, the camera panel to the lower left, and replay ticks follow `data-tone` through `--state-*`. Earlier `.world-time__mark[data-kind]` rules stay; the tone rules win by source order.
