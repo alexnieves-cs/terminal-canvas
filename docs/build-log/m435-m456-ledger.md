@@ -824,12 +824,32 @@ R-041 open: `world.stage.4` still names the 0ms snap. W0 owns `verify-world.cjs`
 
 ### Gates
 
-Linux, Node. `npm ci` rebuilt the tree (`npm ci --no-audit --no-fund`). Electron binary was not in `node_modules/electron/dist` at the first commit; shots follow the rebuild.
+Linux, Node. `npm ci --no-audit --no-fund`, then `node node_modules/electron/install.js` (v43.4.1) and `npm rebuild node-pty` then `npx electron-rebuild -f -w node-pty`. Shots invoke `node_modules/electron/dist/electron` under `xvfb-run`. `package.json` still points at the macOS Electron.app. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
 
 | Gate | Result |
 |---|---|
-| typecheck | pass (`typecheck:node` and `typecheck:web`) |
-| `verify:rd-w1` | 15/15 |
-| `verify:world` | 250/251. The one failure is `world.stage.4` (the 0ms snap sentence). R-041. `world.trans.1`–`.8`, `world.door.1`–`.12` and `world.stage.1`–`.3` passed. |
+| typecheck | pass (`typecheck:node` and `typecheck:web`, and again inside `npm run build`) |
+| `verify:rd-w1` | 15/15. Watched red: `REDUCED_TRANSITION_MS = 0` failed `rd-w1.reduced.1` and `.2` (13/15), then restored to 120. |
+| `verify:world` | 250/251. The one failure is `world.stage.4`. R-041. `world.trans.1`–`.8`, `world.door.1`–`.12`, `world.stage.1`–`.3` passed. `rd-world.parity.1` passed. |
+| `npm run affected -- --base redesign/main` | 40/45 before the lens label and the spacing tokens. Failed: `verify:rail` `labels.1` (the 2D segment), `verify:styles` check 6 (literal padding), plus the known `verify:meta`, `verify:first-run`, and `world.stage.4`. |
+| plain wave (`npm run verify`) | 63/67 in 31.3s, stopped after wave 1, after the label and spacing fix. Failed: `verify:meta` (`panels-split.2`, `visual.1`), `verify:first-run` `revamp.create.1`, `verify:world` `world.stage.4`, `verify:review` `merge.1` (`{kind:'failed', detail:''}`). Alone, `verify:review` is 162/163 on the same `merge.1`. `verify:rail` and `verify:styles` passed (97/97). `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (15.7s). `verify:relay` passed (2.5s). `verify:flowchart` passed (1.2s). `verify:tmux` passed. Wave 2 and the Electron tier of `verify` did not start. |
+| `npm run build` | pass. `WorldView` is its own chunk. `world.door.2` passed, so the entry does not statically import three. |
+| shots | `rd-world-transition` and `rd-world-transition-rm` wrote PNGs and composites. The reduced-motion scene attaches the debugger before `Emulation.setEmulatedMedia` (the first try died with "No target available"). Electron logs `WebGL2 blocklisted`. The room is not in the capture. R-044. |
 
-Affected, the plain wave, and the Electron shots are recorded on the next commit of this branch.
+### Critic
+
+Both composites are `does-not-read`. Mockup 10 is the plan tipping into terraces with robots popping. The captures are a light field: WebGL is blocklisted on this host (R-044), and the terraces are not mounted (R-043). The harness did show the cancel chip before the shutter (`[data-world-cancel]` not hidden, canvas still mounted, reduced motion did not write `rotateX`).
+
+`rd-world-transition` (frozen at 550ms), top divergences:
+
+1. Silhouette. The mockup's mid-frame is a tilted plan with terraces rising through it. The capture has no plan and no terraces.
+2. Composition. The chip and the filmstrip have nothing to sit over. The mockup puts them on the moving plan.
+3. State colour. The mockup's robots carry working cyan and needs-you amber. The capture has no robots.
+
+`rd-world-transition-rm` (mid-fade), the same three. The scene's own check is that the host transform has no `rotateX`, and that check passed.
+
+### Review
+
+Rules review: no blockers. The filmstrip's millisecond labels use the mono face; `face.1` still passes. Two world toggles remain until R-042.
+
+World guard: no blockers. `plan-floor.ts`, `WorldLens.tsx`, `world-transition.ts` and `world-toggle.ts` import no three. `WorldStage` still has one `/* @__PURE__ */ lazy()` for `WorldView` and the existing flat-room lazy. No new `<Environment>`. Reduced motion is the 120ms cross-fade. `WorldFlat`, `WorldCardBody` and `WorldMinimap` are untouched.

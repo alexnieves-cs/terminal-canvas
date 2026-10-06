@@ -339,3 +339,10 @@ from: centerViewNow === 'focus'
 - Why the contract or the owner cannot absorb it: W1 does not own `WorldView.tsx`. The pure clock already exposes what the scene must read. Until this lands, robots still pop from the room origin and the floor is not the plan texture. Reduced motion already snaps `sample().eased` and `sample().raw`, so the existing dolly and pop do not play during the cross-fade.
 - Smallest change: call `popDelaysFromTarget(points, worldCameraTarget())` instead of `Math.hypot(at.x, at.z)`. Pass `motionOf(sample, reduced).dolly` to `dollyAt` and `.terrace` to the terrace scale. Call `setWorldCameraTarget` from the orbit target each frame. Paint the ground with `paintPlanFloor(canvas, layout)`, never a captured PNG.
 - Status: open
+
+### R-044 · The Linux shot host blocklists WebGL
+- Lane: W1
+- File: none in this repo. The shot is `scripts/shot-scenes/rd-w1.cjs`, run as `xvfb-run -a node_modules/electron/dist/electron --no-sandbox scripts/shot.cjs`.
+- Why the contract or the owner cannot absorb it: Electron on this host logs `ContextResult::kFatalFailure: WebGL2 blocklisted` (and WebGL1). `--disable-gpu` paints the same empty field. The scene's DOM checks passed (the cancel chip is shown, the canvas stays mounted, reduced motion does not write `rotateX`). The room itself is not in the PNG, so the capture cannot be judged against mockup 10. W1 does not own the Electron binary path in `package.json`.
+- Smallest change: re-shot `rd-world-transition` and `rd-world-transition-rm` on a machine where WebGL is allowed. Do not set `UPDATE_GOLDENS` until that capture has been looked at. The terraces in the mockup are still R-043.
+- Status: open

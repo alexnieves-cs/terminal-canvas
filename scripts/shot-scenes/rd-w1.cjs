@@ -9,6 +9,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function cast(k) {
   process.env.TC_FIXTURE = 'rd-steward'
   await k.loadMain()
+  // The mockup is the night studio. The harness defaults to the light theme.
+  await k.theme('dark')
   const layout = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'rd-steward', 'workspace.json'), 'utf8'))
   const now = Date.now()
   const events = []
@@ -55,6 +57,7 @@ module.exports = [
   { name: 'rd-world-transition-rm', reference: ['docs/redesign/mockups/10-world-transition.png'], intent: 'The same move under reduced motion: a 120ms cross-fade, frozen at mid-fade, no dolly.',
     run: async (k) => {
       await cast(k)
+      try { k.wc.debugger.attach('1.3') } catch { /* attached by an earlier scene */ }
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       for (let i = 0; i < 20; i++) {
         const on = await k.js(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`)
