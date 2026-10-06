@@ -39,6 +39,7 @@ import type { CanvasState } from '../shared/layout-schema'
 import type { PanelTextExportRequest } from '../shared/export'
 import type { OrphanRow } from '../shared/orphans'
 import type { HostState } from '../shared/exit-explain'
+import type { BootProgressEvent } from '../shared/ipc-contract'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
 import type { EventRow, TimelineFilter } from '../shared/run-ledger'
@@ -83,6 +84,15 @@ const telemetryEnabled = process.argv.includes('--tc-telemetry=1')
 if (telemetryEnabled) {
   hookupIpc()
 }
+
+// R-020. Events sent before the splash subscribes are kept. did-finish-load
+// is earlier than Canvas's effect, and a send with no listener is gone.
+const bootQueue: BootProgressEvent[] = []
+let bootListener: ((event: BootProgressEvent) => void) | null = null
+ipcRenderer.on(IPC_EVENTS.BOOT_PROGRESS, (_event: IpcRendererEvent, payload: BootProgressEvent) => {
+  if (bootListener !== null) bootListener(payload)
+  else bootQueue.push(payload)
+})
 
 const bridge: CanvasBridge = {
   pty: {
@@ -542,7 +552,15 @@ const bridge: CanvasBridge = {
   appVersion: (process.argv.find((a) => a.startsWith('--tc-version=')) ?? '').slice('--tc-version='.length),
   // M407 follow-up. A FIELD like `platform`: the folder main's expandTilde
   // reads, so a terminal's name can fold `/Users/<me>/x` and `~/x` into one place.
-  home: homedir()
+  home: homedir(),
+  boot: {
+    onProgress: (listener) => {
+      bootListener = listener
+      const queued = bootQueue.splice(0, bootQueue.length)
+      for (const event of queued) listener(event)
+      return () => { if (bootListener === listener) bootListener = null }
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('canvas', bridge)
