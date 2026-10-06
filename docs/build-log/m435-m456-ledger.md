@@ -1066,3 +1066,81 @@ VERDICT does-not-read
 8. **STATE COLOUR** — The reference floor shows cyan, amber (the glow), and green on the rings and scrubber ticks. The capture’s specks are dark gray. No cyan working, amber needs-you glow, green done, red failed, or slate idle appears on the canvas.
 
 No disagreement. The centre sample is the shell ground. R-053, same host as the room shot.
+
+## M452 · W4 Focus and act
+
+Branch `rd/w4-focus` from `redesign/main` at `fa49bdd8` (tag `rd-w3b` plus the blank-shot note). Wave 3c. Merges first. One milestone. Mockup 12.
+
+### Plan
+
+Pure model in `world-select.ts`, then the sheet and the chrome.
+
+1. Focus is a second slot on the pick store. `engageFocus` selects and marks the robot followed. `clearFocus` drops both. Nothing is persisted. `focusPrimary(pending)` is `approve` while a request id is present and `open` otherwise, so one control is filled. `replyRoute` is `send` for a chat (`canSend`), `paste` for an agent terminal, and `shell` otherwise. A shell's composer is closed with the reason `answer in its terminal`. `focusQuestion` reads a shot preview, else the context approval (description, argument, request id), else the ask line. `diffPreview` shows eight lines until Full diff. `focusCrumb` is World, the task title, the agent name.
+2. `WorldFocusSheet.tsx` is plain DOM. It imports no three, fiber, or drei, and it does not call `window.canvas` or `agentSession`. Approve and Deny call `actions.answer`. Reply for a chat calls `actions.send`. Open in Canvas calls `actions.open` (M429's jump). The sheet is 400px, `role="dialog"`, sections Request, What it's doing, and the fact line from `factParts` (inspector density, D3). Chords are `shortcutById('allow')` and `shortcutById('step-in')`.
+3. A pick glides through `useWorldCamera(camera).follow()` in `WorldChrome`. Bare Enter on a picked robot calls `engageFocus` (the same glide). ⌘Enter is `step-in` and calls `door.open`. Esc steps back to the room (`fit`). ⌘Esc is `step-out` and calls `setTier('plan')`. Both stop the stage's leave-world Escape while a robot is in focus. The breadcrumb is `World › task › name · Esc`.
+4. The ask chip keeps its Approve control, calling `actions.answer`, shown while that robot is in focus.
+5. Shot `rd-world-focus`, reference 12. The steward fixture supplies the pending agent. `__rdW4` is the shot door, the same shape as `__rdW3`. No `UPDATE_GOLDENS`.
+
+### PLAN CHECK
+
+- [x] `WorldFocusSheet.tsx` imports no three, fiber, or drei.
+- [x] Approve, Deny, and Reply add no approval path. They call the room's registered doors (`actions.answer`, `actions.send`, `actions.open`). The publisher's `answer` is still `answerRequest`, not `answerApproval`, so the inspector history row is R-070. An agent terminal's paste-then-submit is R-071. The sheet never calls `agentSession` itself.
+- [x] The camera glide is `useWorldCamera().follow()`, not a new camera. Esc uses `fit`. ⌘Esc uses `setTier('plan')`.
+
+### CSS
+
+New rules only, inside `/* ── rd:W4 ── */`. The sheet is 400px. The diff's `code` leaf is mono. No state hex.
+
+### Requests
+
+R-070 open: point the room's `answer` at `answerApproval` so the sheet's decision is the inspector's history row. R-071 open: a paste door for agent terminals. R-072 open: `world.open.6`'s sentence still says bare Enter opens; the reachable open is ⌘Enter. R-074 open: name `WorldFocusSheet` in the plain-DOM sentence of `src/renderer/CLAUDE.md`.
+
+R-063 stays open. It wants past-room verbs disabled with one sentence, and `world.replay.6` still requires those buttons omitted. Landing it would edit `verify-world.cjs`, `WorldFlat.tsx`, and `WorldRobot.tsx`, which this lane does not own.
+
+R-081 landed in `ab85b75f`. W6 filed it on `rd/w6-doors` against `WorldCardBody.tsx`: RequestBlock's open button now reads Open in Canvas, and `data-world-answer="open"` stays. No other W6 request was taken.
+
+The crumb and the sheet do not wear `--lift`. `shadow.1` allows that shadow on the panel frame and the launcher only. The sheet keeps its hairline.
+
+### Gates
+
+Linux, Node. `node node_modules/electron/install.js`, then `npm rebuild node-pty` and `npx electron-rebuild -f -w node-pty`. Shots use `node_modules/electron/dist/electron` under `xvfb-run` with `--ignore-gpu-blocklist --enable-unsafe-swiftshader`. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`) |
+| `verify:rd-w4` | 13/13. Watched red: `rd-w4.sheet.1` failed while the sheet's comment named the session bridge; the comment no longer does |
+| `verify:world` | 251/251, including after the Open in Canvas label |
+| `verify:styles` | 97/97 after the crumb's glyph became a path and `--lift` left the W4 span. The first affected run failed `icons.1` and `shadow.1` |
+| `verify:rail` | 266/266 after the World button gained `aria-label="World"`. The first affected run failed `labels.1` |
+| `npm run affected -- --base redesign/main` | 40/45 plain suites, 31.7s, stopped after the plain tier, before the label fixes. Failed: `verify:rail` `labels.1`, `verify:styles` `icons.1` and `shadow.1`, `verify:flowchart` `flowchart.geometry.21` (max 27ms, a spike), `verify:meta` (`panels-split.2`, `visual.1`), `verify:first-run` `revamp.create.1`. Re-ran `verify:styles` and `verify:rail` alone after the fix: both green |
+| plain wave (`npm run verify`) | 64/67 in 31.3s, stopped after wave 1. Failed: `verify:meta` (`panels-split.2`, `visual.1` — declared 95, goldens 79, `rd-world-focus` is past the first eight missing names), `verify:first-run` `revamp.create.1`, `verify:review` `merge.1` (`merged.kind` `failed`, `detail` empty). Alone, `verify:review` is 163/163. `verify:rd-w4` passed. `verify:tmux` passed. `verify:canvas-sync` and `verify:relay` passed. Wave 2 and the Electron tier did not start |
+| `npm run build` | pass, twice. The second build is the one the shot paints. `WorldView` stays its own chunk |
+
+### Critic · rd-world-focus
+
+Verdict: **close**.
+
+Shot under xvfb. The first attempt produced no PNG before a 180s kill (stdout was block-buffered). The retry wrote `out/shots/rd-world-focus.png` and `out/shots/rd-world-focus.vs-reference.png`. The sentence below is the capture after the rules-review rebuild. The WebGL layer is the light field `--s-0`. That is R-053. The DOM is what this verdict judges.
+
+The sheet is the close-up: breadcrumb `World › Ledger CSV export › Codex — ledger-export · Esc`, REQUEST "wants to edit ledger.ts", a mono diff of `export function streamCsv(rows)`, Approve `⌘Y` filled, Deny, Full diff, What it's doing with **Finished — not verified** (green) and **Working** (cyan), facts `Opus 4.8 · on feature/csv-export`, a reply composer, Open in Canvas `⌘↵`, Sessions. The camera panel, replay scrubber and away card are the room's existing chrome.
+
+1. Silhouette. The mockup's robot and floor are absent from the capture. The host reads the world canvas back blank (R-053). The sheet's own silhouette matches: a left panel over the room.
+2. Composition. The ask chip sits in the blank layer, so it does not appear on a robot. The sheet carries the same Approve.
+3. Chrome. The question is the fixture's line. The diff is the `streamCsv` function, and the step words are the plan's. Spend and context are absent because the fixture has no meter. The reply field is open: this Codex is a chat the room can send to.
+
+State colour: the step marks are green and cyan from `[data-tone]`. No state hex in the W4 span.
+
+### Rules review
+
+The first pass named two blockers. Both are fixed in this lane.
+
+- Step words in the shot and the check are the plan's (`Working`, `Finished — not verified`). `FocusStep.tone` is `Tone`. A `none` step still wears `[data-tone="none"]`.
+- One filled primary. The sheet's Approve is the fill. The chip's Approve stays in the box at opacity 0 and comes to 1 while focused, and it is not filled. The card's request keeps its text and drops its own verbs while the sheet is open.
+
+A command with no description stays the diff, not the question. The shot's diff is a function, not criteria sentences. Empty Request and What it's doing sections are omitted. An agent terminal still sees the plain-shell sentence until R-071. `verify:rd-w4` 13/13, `verify:world` 251/251, `verify:styles` 97/97, web typecheck clean after that.
+
+NITS left: the sheet has no resting shadow, because `shadow.1` keeps `--lift` on the frame and the launcher. Sessions presses the existing segment.
+
+### World guard
+
+BLOCKERS: none. SHOULD-FIX: none in the files this lane owns. `WorldFocusSheet.tsx` imports no three, fiber, drei, or postprocessing. `WorldStage.tsx`'s one lazy import is unchanged. `world-select.ts` imports no three. The chip's reveal drops its transition under reduced motion; the glide still collapses in `CameraApi.apply`. `verify:world` is 251/251, including `world.door.1` and `rd-world.parity.1`. The built entry does not statically import three. R-074 still asks the lead to name the sheet in `src/renderer/CLAUDE.md`.

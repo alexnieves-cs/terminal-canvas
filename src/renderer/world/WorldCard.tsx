@@ -8,10 +8,10 @@ import { getWorldContext, useWorldActions, useWorldContext } from './world-conte
 import { badgeFor, factParts } from './world-facts'
 import { cardTitle, recentTools, type BadgeKind } from './world-scene'
 import { askChip, cardTier, failedLine, type CardTier } from './world-structure'
-import { OPEN_HINT, openableFrom, useSelectedAgent } from './world-select'
+import { OPEN_HINT, openableFrom, useFocusedAgent, useSelectedAgent } from './world-select'
 import { cardScale } from './world-perf'
 import { cardStand, cardTiltDeg } from './world-transition'
-import { ACTIVITY_ICON, headlineOf, RequestBlock } from './WorldCardBody'
+import { ACTIVITY_ICON, AskApprove, headlineOf, RequestBlock } from './WorldCardBody'
 
 /**
  * What floats over a robot (M415): a white NAME PILL above its head, and —
@@ -86,6 +86,7 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
   const tier = useRef<CardTier | null>(null)
   const ctx = useWorldContext()
   const picked = useSelectedAgent() === agentId
+  const focused = useFocusedAgent() === agentId
   const past = useReplayAt() !== null
   const actions = useWorldActions()
   // The last title the agent gave in its own words. The ring is fifty events,
@@ -195,8 +196,13 @@ export const WorldCard = memo(function WorldCard({ agentId, y, layer, pop, compa
               </span>
             ) : null}
           </div>
-          {/* Ask chips only for a waiting agent who is not the picked card. */}
-          {ask !== null && !picked ? <p className="world-chip" data-ask="" data-lead={headline.tone}>{ask}</p> : null}
+          {/* The chip stays for a waiting agent who is not the picked card, and also while that robot is in focus. Approve is in the box either way; the sheet is the filled one. */}
+          {ask !== null && (!picked || focused) ? (
+            <div className="world-chip" data-ask="" data-focused={focused ? '' : undefined} data-lead={headline.tone}>
+              <span className="world-chip__text">{ask}</span>
+              <AskApprove agentId={agentId} />
+            </div>
+          ) : null}
           {!full ? null : (picked ? (
             <div className="world-card-frame">
               <div ref={card} className="world-card">

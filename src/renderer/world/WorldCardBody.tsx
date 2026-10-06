@@ -1,10 +1,12 @@
 import type { JSX } from 'react'
+import { shortcutById } from '@shared/shortcuts'
 import { KindBrowser, People, ToolEdit, ToolRead, ToolRun, ToolSearch } from '@renderer/icons'
 import type { CapHold } from '@shared/agent-session'
 import { getAgent, getAgentIds, useReplayAt } from './agent-world-store'
 import { activityOf, type Activity } from './world-activity'
 import { useWorldActions, useWorldContext } from './world-context-store'
 import { isLiveStatus } from './world-scene'
+import { useFocusedAgent } from './world-select'
 import { cardHeadline, conflictPartners, type Headline } from './world-structure'
 
 /**
@@ -53,6 +55,7 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
   const actions = useWorldActions()
   // M425: a request in the PAST room is history — it may have been answered since — so it has no verbs.
   const past = useReplayAt() !== null
+  const focused = useFocusedAgent() === agentId
   const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
   return (
     <div className="world-card__request" data-world-request>
@@ -61,7 +64,8 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
       ) : (
         <p className="world-card__ask world-card__ask--open">{past ? 'Was waiting on you here' : 'Waiting on you in its panel'}</p>
       )}
-      <div className="world-card__actions" role="group" aria-label="Answer the request">
+      {/* The close-up sheet is the one filled primary. The card keeps the request and drops its own verbs while that sheet is open. */}
+      {focused ? null : <div className="world-card__actions" role="group" aria-label="Answer the request">
         {asked !== undefined && actions !== null ? (
           <>
             <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Approve</button>
@@ -69,8 +73,26 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
           </>
         ) : null}
         {/* M429: no Open for an agent with no panel to land on (the simulator's, a teammate's elsewhere) — it would close the room onto nothing. */}
-        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open</button>}
-      </div>
+        {past || (actions !== null && !actions.canOpen(agentId)) ? null : <button type="button" className="world-card__act" onClick={() => actions?.open(agentId)} disabled={actions === null} data-world-answer="open">Open in Canvas</button>}
+      </div>}
     </div>
+  )
+}
+
+/**
+ * The inline ask (M452). The same answer door as the request block, on the
+ * chip the close-up leaves visible. A past room has no verb, same as the block.
+ */
+export function AskApprove({ agentId }: { agentId: string }): JSX.Element | null {
+  const ctx = useWorldContext()
+  const actions = useWorldActions()
+  const past = useReplayAt() !== null
+  const asked = past ? undefined : ctx.approvals.find((a) => a.agentId === agentId)
+  if (asked === undefined || actions === null) return null
+  const chord = shortcutById('allow')?.chord
+  return (
+    <button type="button" className="world-chip__approve" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-ask-approve>
+      Approve{chord !== undefined && chord !== '' ? <> <kbd>{chord}</kbd></> : null}
+    </button>
   )
 }
