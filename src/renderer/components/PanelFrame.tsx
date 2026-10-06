@@ -115,6 +115,14 @@ export interface PanelFrameProps {
   onRename?: (name: string) => void
   /** The kind's own chrome controls, between the title and close. */
   chrome?: ReactNode
+  /**
+   * R-016. The panel's place, already shortened. The full path is the
+   * tooltip. Absent for a kind that has no directory.
+   */
+  headerPath?: string
+  headerPathTitle?: string
+  /** R-016. The branch, when one is known. Absent is not a zero-value chip. */
+  headerBranch?: string
   /** M170. A terminal started as an agent wears the chat's glyph beside its state dot, so a conversation and an agent terminal share one frame. */
   agentGlyph?: boolean
   /** Terminal panels have an agent; the frame paints its state dot. */
@@ -175,7 +183,7 @@ export function FarTitle({ title }: { title: ReactNode }): JSX.Element {
 const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note', relay: 'relay', shape: 'shape' }
 
 export function PanelFrame({
-  id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState, owner,
+  id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, headerPath, headerPathTitle, headerBranch, agentGlyph, agentState, owner,
   close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore, menuDetail, titleHint, onRename
 }: PanelFrameProps): JSX.Element {
   // M405 (D2). The rim's rename field; null while the title is plain text.
@@ -427,6 +435,12 @@ export function PanelFrame({
         ) : (
           <span className="pf__title panel__title" title={titleHint ?? (typeof title === 'string' ? title : undefined)}
             onDoubleClick={onRename === undefined || typeof title !== 'string' ? undefined : (e) => { e.stopPropagation(); setRenaming(title) }}>{title}</span>
+        )}
+        {headerPath !== undefined && headerPath !== '' && (
+          <span className="pf__path" data-header-path title={headerPathTitle ?? headerPath}>{headerPath}</span>
+        )}
+        {headerBranch !== undefined && headerBranch !== '' && (
+          <span className="pf__branch" data-header-branch>{headerBranch}</span>
         )}
         {/* M106. The one menu the frame grows: the full title, the kind, and the
             door to every verb the palette holds for this panel. */}

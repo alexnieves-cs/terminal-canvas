@@ -148,42 +148,42 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/components/PanelFrame.tsx`, `src/renderer/components/TerminalPanel.tsx`
 - Why the contract or the owner cannot absorb it: M442's frame shows a faint path, the branch and a duration beside the state word (`working · 12m`). L-B does not own those two components. The state word stays the one word from `panel-state.ts` (D7). A duration is a separate fact, and painting it by changing `shown.word` would move every check that pins that word.
 - Smallest change: in the header chrome, render the panel path, the branch when one is known, and `statePill(word, elapsedMs)` from `src/renderer/panels/header-rest.ts` beside `[data-state-word]`. Leave the word itself alone.
-- Status: open
+- Status: done: `81286fc7`
 
 ### R-017 · The painted settle is a second `panel-settle`
 - Lane: L-B
 - File: `scripts/verify-styles.cjs`
 - Why the contract or the owner cannot absorb it: M443's settle overshoots (0, then -3px, then 1px, then 0). `motion.2` rejects a new keyframe name, and F1 owns this suite, so the lane redeclares `@keyframes panel-settle` inside `rd:L-B`. That later definition is the one that paints. `revamp.motion.1` reads only the first `@keyframes panel-settle`, which is still the dip and has no negative translate, so the check stays green while the painted motion overshoots.
 - Smallest change: point `honest('panel-settle')` at the last `@keyframes panel-settle`, and allow this overshoot as the lane's settle. Leave the first definition in place.
-- Status: open
+- Status: done: `a8764e45`
 
 ### R-018 · Name `boot:progress` in the README architecture fence
 - Lane: L-A
 - File: `README.md` (the fence that contains `--invoke-->`)
 - Why the contract or the owner cannot absorb it: `boot:progress` is `IPC_EVENTS.BOOT_PROGRESS`, a main→renderer send. `verify:meta` 14 reads every `IPC` and `IPC_EVENTS` channel string and requires it inside that fence. L-A owns `ipc-contract.ts` and `CLAUDE.md` for the channel edit, and not the README. `CLAUDE.md` already names the channel (`claude-md.1` is green).
 - Smallest change: on the `renderer <--send---` list, add `boot:progress` beside `pool:mint / pool:event`.
-- Status: open
+- Status: done: `8eb692c5`
 
 ### R-019 · Publish restore progress from the composition root
 - Lane: L-A
 - File: `src/main/index.ts` (and the window bootstrap that owns the reattach loop)
 - Why the contract or the owner cannot absorb it: L-A may add `src/main/bootstrap/boot-progress.ts` and must leave the rest of `src/main/bootstrap/` and the composition root alone. `publishBootProgress` and `skipRemaining` are pure; nothing calls them yet, so the splash's four lines stay pending until a caller measures them.
 - Smallest change: call `publishBootProgress` when the workspace opens (name and path), when the layout restores (task count and object count), on each tmux reattach (`done` of `total`), and when the agent probe answers. When Option is held, call `skipRemaining` and bring the unfinished panes up asleep. Do not kill them.
-- Status: open
+- Status: done: `8830ca25`
 
 ### R-020 · Subscribe the renderer to `boot:progress`
 - Lane: L-A
 - File: `src/preload/index.ts`
 - Why the contract or the owner cannot absorb it: the preload is not in L-A's list. `CanvasBridge.boot.onProgress` is already optional on the contract, so typecheck stays green without this file. The splash cannot hear a live event until the bridge forwards `IPC_EVENTS.BOOT_PROGRESS`.
 - Smallest change: `ipcRenderer.on(IPC_EVENTS.BOOT_PROGRESS, …)` and expose `canvas.boot.onProgress(listener)` returning the unsubscribe.
-- Status: open
+- Status: done: `fda0011a`
 
 ### R-021 · Mount the three L-A screens from Canvas
 - Lane: L-A
 - File: `src/renderer/canvas/Canvas.tsx`
 - Why the contract or the owner cannot absorb it: Canvas is L-B's in this wave. The shot door is `window.__rdLA.mount` on `StartupSplash`, which Canvas already imports, so the scenes can paint before the product mounts them. The APEX splash stays off under the harness (`tc-splash=off`); the restore card is a second surface.
 - Smallest change: mount `RestoreSplash` while restore is unsettled, even when `splashMode` is `'none'`. On first run, show `Onboarding` without removing the `data-onboarding-*` attributes `verify:onboarding` reads off `Launcher`'s own render. After onboarding, an empty workspace shows `BlankCanvas`.
-- Status: open
+- Status: done: `0e96fc33`
 
 ### R-022 · Minimap reads the empty sentence
 - Lane: L-A
@@ -204,95 +204,95 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/Canvas.tsx` (`onCanvasDoubleClick`)
 - Why the contract or the owner cannot absorb it: M388's double-click places a process step. The empty canvas copy, from the mockup, says "Double-click to place a terminal". L-A does not own Canvas, and retargeting the gesture would change a pinned behavior (`attemptOf` already refuses to teach ⌘N after that double-click).
 - Smallest change: when the canvas is empty, a double-click places a terminal, or the copy changes to name the process step. Leave the gesture as it is until the owner decides.
-- Status: open
+- Status: open. The gesture is unchanged: `onCanvasDoubleClick` still places a flowchart process step. D1–D8 do not choose between placing a terminal and changing the empty-canvas copy. Needs the owner.
 
 ### R-025 · Menu accelerators read keyboard overrides
 - Lane: L-E
 - File: `src/main/menu.ts`
 - Why the contract or the owner cannot absorb it: L-E owns the merge (`acceleratorFor` in `src/shared/shortcut-overrides.ts`) and the `keyboard.overrides` setting. The menu is F3's. It already rebuilds on `settings:changed` and calls `electronAccelerator`, which reads the frozen registry. A re-recorded chord persists and the Keyboard page shows it; the menu item keeps the registry accelerator, including tidy-alias `CmdOrCtrl+Alt+T`.
 - Smallest change: build each accelerator with `acceleratorFor(id, parseOverrideList(stringList(options.settingValue('keyboard.overrides'))))` instead of `electronAccelerator(id)`. An empty list matches today's historical strings. `stringList` is `Array.isArray(value) ? value.filter(v => typeof v === 'string') : []`. Listeners (`useKeyboardNav`'s `matchShortcut`, the palette's hardcoded ⌘K) still match the registry; `matchEffective` is the same merge when those files are next touched. That hook returns before an Option chord, so swapping the call alone does not fire an override that adds ⌥.
-- Status: open
+- Status: done: `2086815e`
 
 ### R-026 · Open Settings from the palette and the dock
 - Lane: L-E
 - File: `src/renderer/palette/commands.ts`, `src/renderer/canvas/Canvas.tsx` (`openSettingsScope`)
 - Why the contract or the owner cannot absorb it: the row and the verb are `OPEN_SETTINGS_ROW` / `openSettingsPage` in `palette-actions/settings.ts`. The command list and the dock's Settings callback are other lanes. Nothing a person can click reaches the page. The shot calls `window.__tcOpenSettings`, which is the same function the row's `run` calls.
 - Smallest change: add a command whose `run` imports `openSettingsPage` from `@renderer/settings/open` (a new `PaletteActions` key would re-partition the slices). Point the dock's `onSettings` at `openSettingsPage()`. Leave `Manage settings…` as the palette drill-in.
-- Status: palette half done in 1b21a8ea (feat(m444)): `canvas.settings` ("Open Settings") calls `openSettingsPage`. Dock half still open: Canvas `openSettingsScope` still opens the palette settings scope, and that call is outside the TierLayer slot.
+- Status: done. Palette half in 1b21a8ea (feat(m444)): `canvas.settings` ("Open Settings") calls `openSettingsPage`. Dock half in `e723a710`: `openSettingsScope` calls `openSettingsPage`. `Manage settings…` stays the palette drill-in.
 
 ### R-027 · Scope metrics.1 to canvas surfaces
 - Lane: L-D
 - File: `scripts/verify-styles.cjs`
 - Why the contract or the owner cannot absorb it: D3 says amend `metrics.1` so canvas surfaces stay metric-free when Sessions lands its Run and Cost columns. F1 owns `scripts/verify-styles.cjs`. L-D's suite asserts the sessions files have no `data-machine-cost` and the L-D CSS span has `.sessions-cost` and not `.panel__machine-cost`. That does not change `metrics.1` itself.
 - Smallest change: skip `src/renderer/sessions/` in the `metrics.1` walk, and retitle the check so it says canvas surfaces. Do not add `data-machine-cost` to Sessions. The inspector CPU readout stays in `shell/Inspector.tsx`.
-- Status: open
+- Status: done: `be92d686`
 
 ### R-028 · Wire Sessions actions through Canvas and main's confirm
 - Lane: L-D
 - File: `src/renderer/canvas/Canvas.tsx`, and a confirm channel from `src/main/bootstrap/dialogs.ts`
 - Why the contract or the owner cannot absorb it: Sessions reads layout, the last line, usage and the queue. It does not hold the registry, so it cannot paste, and it cannot see dormant, started-at, tmux survival or the diff stat. `window.canvas` has no generic confirm. `canvas.requestReset` confirms and then resets. `window.confirm` is not main's dialog. The camera flight is `goToPanel` / the viewport, which this lane does not own.
 - Smallest change: pass optional callbacks into `SessionsHost`. `confirmEnd` invokes main's `confirm()` and resolves the boolean. `onSend` for a terminal is `handle.paste`, never `pty.write`. A chat with no callback already calls `agentSession.send`. `onShowOnCanvas` sets the center view back to canvas and flies to the panel. `onPause`, `onRestart`, `onEnd`, `onMove`, `onNewSession`, `onAllow`, `onDeny`, `onDiff` and `onDetach` are the same doors the canvas already has. Also pass the facts the registry knows (dormant, started, survives, changes) so the header can drop a real zero and the detail can say "reload and quit (tmux)". Census `taskId` stays null until the pill's owner fills it; grouping uses work items.
-- Status: open
+- Status: done: `ae725685`. Started-at and the diff stat stay null: the registry has neither. A work item still names one conversation, filled only while empty; further panels link to the work card.
 
 ### R-029 · Steward layout does not carry the Sessions columns
 - Lane: L-D
 - File: `scripts/fixtures/rd-steward/load.cjs`
 - Why the contract or the owner cannot absorb it: F2 owns the fixture. `load.cjs` writes one shared cwd, the cast name as the title, and `workItems.panelId` for the first panel of each task only. Engine, folder, branch and state stay in `workspace.json`. The live Sessions page therefore cannot match screen 07 from `layout.load` alone. The shot paints the cast through `tc-sessions-feed`, which the page already validates (`parseFeed` refuses a bad payload). That feed is the scene's door. It is not a second layout.
 - Smallest change: stamp each panel's cwd, agent and branch (or its task membership) so `taskMemberships` can group every cast panel, and a terminal with an agent is not stored as a shell. Leave the shot feed in place until that lands.
-- Status: open
+- Status: done: `bdc19aa2`. Folder cwd and agent are stamped. Task membership is one-hop links from the first panel. The layout schema has no branch field, so branch stays in `workspace.json` and the shot feed.
 
 ### R-030 · The pill should read the queue, so Canvas can drop `attentionCount`
 - Lane: L-C
 - File: `src/renderer/canvas/CommandPill.tsx` (`pillRestState`), `src/renderer/canvas/Canvas.tsx` (the `attentionCount` prop beside `CommandPill`)
 - Why the contract or the owner cannot absorb it: R-005 asked L-C to stop passing `reachableQueue(...).length`. `CommandPill` already calls `useAttentionQueue` for the line, and still requires the `attentionCount` prop. The prop sits outside the TierLayer slot, and `CommandPill.tsx` is not in L-C's files. Dropping the argument without the pill reading the queue is a type error.
 - Smallest change: `pillRestState` uses the queue length it already subscribes to, and Canvas stops passing `attentionCount`.
-- Status: open
+- Status: done: `175e2966`
 
 ### R-031 · Electron zoom chords still expect the old ⌘0 and ⌘1
 - Lane: L-C
 - File: `scripts/panels-harness.cjs` (`zoomTo`), `scripts/verify-panels-core.cjs`, `scripts/verify-panels-kinds.cjs`, `scripts/verify-panels-agents.cjs`, `scripts/verify-panels-shell.cjs`
 - Why the contract or the owner cannot absorb it: those suites are not L-C's. `zoomTo` dispatches `key` with an empty `code`. After R-011, that `0` is Fit all and that `1` is Work. Checks that reset to INITIAL `{x:120,y:120,scale:1}` via `zoomTo(wc, '0')`, or fit via `zoomTo(wc, '1')`, will go red on macOS. Pinch zoom (`zoomToScale`) is unchanged. Reset zoom remains the palette row `canvas.fit`.
 - Smallest change: a reset in those checks runs the palette's Reset zoom row (or `resetViewport`), and a fit runs Fit all (`⌘0` / `zoomTo(wc, '0')`). Do not point `zoomTo(wc, '1')` at fit.
-- Status: open
+- Status: done: `9119c0b1`. Not run here: the Electron tier did not start on this Linux VM.
 
 ### R-032 · `verify:palette` 48 still pins ⌘0 on Reset zoom
 - Lane: L-C
 - File: `scripts/verify-palette.cjs` (check 48), `src/renderer/palette/commands.ts` (`canvas.fit`)
 - Why the contract or the owner cannot absorb it: check 48 requires the shortcut set `canvas.fit=⌘0` exactly. ⌘0 is Fit all now. The Reset zoom row still wears that chip so the check stays green. Adding a chip to Go to Work or Fit all would fail the same check. The suite is not L-C's.
 - Smallest change: move the ⌘0 chip from `canvas.fit` to the Fit all row, and retarget check 48's expected string. Leave Reset zoom with no chord.
-- Status: open
+- Status: done: `3b30aa65`
 
 ### R-033 · Publish `session:host` from the existing live tick
 - Lane: L-F
 - File: `src/main/pty-manager.ts` (`pollLive`), `src/preload/index.ts`, and the `CanvasBridge` method in the same change
 - Why the contract or the owner cannot absorb it: `session:host` is already an `IPC_EVENTS` member (`SESSION_HOST`). `createTmuxBackend` accepts `onHost` and exposes `hostReport()` / `reconnectHost()`. `sendHostReport` is the sender. `pollLive` already calls `list()` every `LIVE_TICK_MS`. Preload and `CanvasBridge` are not in L-F's list. Adding `onHost` to the bridge before preload implements it fails the web typecheck.
 - Smallest change: after `list()` in `pollLive`, if the host report changed, `sendHostReport(win.webContents.send.bind(win.webContents), backend.hostReport())`. Preload subscribes to `IPC_EVENTS.SESSION_HOST` and the bridge method is `session.onHost`. No new timer. The socket stays the one the backend was constructed with. `probeTmux` does not need `onHost`.
-- Status: open
+- Status: done: `14b22fe0`
 
 ### R-034 · Paint recovery frames on the terminal and block paused keystrokes
 - Lane: L-F
 - File: `src/renderer/components/TerminalPanel.tsx`, `src/renderer/components/PanelFrame.tsx`
 - Why the contract or the owner cannot absorb it: those components are not owned. React wipes attributes injected into its children, so a frame painted beside the panel does not sit on `.panel`. `frameVariant` and `keystrokesBlocked` are in `src/shared/exit-explain.ts`. The 09 surface renders the same copy inside `RecoveryHost` so the shot can show it.
 - Smallest change: when `frameVariant` is `paused`, render `PAUSED_LINE` and `PAUSED_KEYS` and do not send keys to xterm. When it is `reattaching`, render the skeleton rows. A crash card's Restart calls `paletteActions.restartPanel(id)` so the panel id is unchanged (`verify:panels-shell` checks 90 and 92). `restartKeepsPanel` is the contract the card already uses. Drop the overlay frames once the panel paints them.
-- Status: open
+- Status: done: `c3b13943`. Overlay frames remain for a catalog id that is not a terminal panel, so the 09 shot still has them. `verify:panels-shell` 90 and 92 were not run: the Electron tier did not start.
 
 ### R-035 · GitHub and Jira render the offline mark
 - Lane: L-F
 - File: `src/renderer/github/GithubNode.tsx`, `src/renderer/jira/JiraNode.tsx`
 - Why the contract or the owner cannot absorb it: those panels are not owned. `OfflineCachedMark` in `src/renderer/panels/offline-mark.tsx` already renders `offlineLine` with `data-recovery-offline` and `data-tone="idle"`. The 09 surface shows that mark when the recovery store says the source is offline.
 - Smallest change: when the recovery store's offline clock for that source is set, render `OfflineCachedMark` in the panel chrome (GitHub, beside the `data-github-fresh` span). Do not add a second sentence.
-- Status: open
+- Status: done: `83ef44e6`
 
 ### R-036 · The command pill reads `recoveryPillLine`
 - Lane: L-F
 - File: `src/renderer/canvas/command-pill.ts`, `src/renderer/canvas/CommandPill.tsx`
 - Why the contract or the owner cannot absorb it: the pill is F3. `attentionPillLine` is "N agents need you · sentence · Go ⌘J · + New ⌘N". `recoveryPillLine(need, paused)` is the 09 sentence ("2 sessions need recovery · 4 paused · Review"). `AttentionItem` is frozen and has no paused count. `kindOf` returns `failed` before `recovery` when `failed` is set, and `useAttentionQueue` ors `failedState` for a non-zero exit, so a crash is `failed` and the paused count never reaches the pill.
 - Smallest change: when `recoveryPillLine` from the recovery store is non-empty, that is the rest line and the verb is Review (`ATTENTION_VERB.recovery`). Read the paused count from the store. Do not add a field to `AttentionItem`. The 09 surface already paints `data-recovery-pill`; drop that copy once the pill shows the sentence.
-- Status: open
+- Status: done: `7cb70e64`
 
 ### R-037 · The README diagram lists `session:host`
 - Lane: L-F
 - File: `README.md` (the fence that contains `--invoke-->`, on the line with `session:live`)
 - Why the contract or the owner cannot absorb it: `verify:meta` check 14 reads every `'word:word'` declaration in `ipc-contract.ts`, events included, and looks for it in that fence. `session:host` is declared. L-F owns `CLAUDE.md`, which already lists it (`claude-md.1` / `rd-l-f.channel.1`). The README is not in this lane. `boot:progress` is the same check and stays R-018; this request does not add it.
 - Smallest change: add `session:host` beside `session:live` in that fence. Check 14 stays red until R-018 lands as well.
-- Status: open
+- Status: done: `2aaae4cd`

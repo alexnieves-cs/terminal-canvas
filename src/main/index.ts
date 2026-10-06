@@ -12,7 +12,8 @@ import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { runQuit } from './quit'
 import { webContents } from 'electron'
-import { IPC_EVENTS } from '../shared/ipc-contract'
+import { IPC_EVENTS, type BootProgressEvent } from '../shared/ipc-contract'
+import { publishBootProgress, skipRemaining } from './bootstrap/boot-progress'
 import { createMainState, createPanelTokens } from './bootstrap/context'
 import { createStores } from './bootstrap/stores'
 import { createPlaces } from './bootstrap/places'
@@ -396,6 +397,53 @@ app.whenReady().then(async () => {
     }
   )
   createWindow(state, stores)
+  // R-019. Measured after the probe, the layout load and the window. Sends
+  // go to the window that already exists — not sendToRenderer, which would
+  // show a window that was not up. Preload keeps an event that arrives
+  // before the splash subscribes.
+  const sendBoot = (event: BootProgressEvent): void => {
+    publishBootProgress((channel, payload) => {
+      const wc = state.window !== null && !state.window.isDestroyed() ? state.window.webContents : null
+      if (wc === null || wc.isDestroyed()) return
+      const deliver = (): void => { if (!wc.isDestroyed()) wc.send(channel, payload) }
+      if (wc.isLoading()) wc.once('did-finish-load', deliver)
+      else deliver()
+    }, event)
+  }
+  const snap = stores.layoutStore.current()
+  const ws = snap.workspaces.find((w) => w.id === snap.activeWorkspaceId) ?? snap.workspaces[0]
+  const recent = stores.layoutStore.recentDirectories()
+  const panelPath = ws?.panels.find((p): p is typeof p & { cwd: string } => 'cwd' in p && typeof p.cwd === 'string' && p.cwd !== '')?.cwd
+  const workspacePath = (recent[0] !== undefined && recent[0] !== '' ? recent[0] : panelPath) ?? app.getPath('userData')
+  sendBoot({ step: 'workspace', workspace: { name: ws?.name.trim() || 'Workspace', path: workspacePath } })
+  sendBoot({
+    step: 'layout',
+    layout: { tasks: ws?.workItems?.length ?? 0, objects: ws?.panels.length ?? 0 }
+  })
+  // Panels restored from disk stay dormant until a person opens them, so
+  // this boot attaches nothing. A later create() that finds a session
+  // already running reports that one reattach.
+  let tmuxDone = 0
+  let tmuxTotal = 0
+  let optionHeld = false
+  sendBoot({ step: 'tmux', tmux: { done: tmuxDone, total: tmuxTotal } })
+  stores.ptyManager.onBootReattach = () => {
+    const listed = state.backend.list()
+    tmuxTotal = Math.max(tmuxTotal, listed === null ? tmuxDone + 1 : listed.length, tmuxDone + 1)
+    tmuxDone += 1
+    sendBoot({ step: 'tmux', tmux: { done: tmuxDone, total: tmuxTotal }, ...(optionHeld ? { optionHeld: true } : {}) })
+  }
+  const agentsFound = [state.claudePath ? 'claude' : '', state.codexPath ? 'codex' : '', state.copilotPath ? 'copilot' : ''].filter((name) => name !== '')
+  sendBoot({ step: 'agents', agentsFound })
+  state.window?.webContents.on('before-input-event', (_event, input) => {
+    if (!input.alt || optionHeld) return
+    optionHeld = true
+    const panes = (state.backend.list() ?? []).map((pane) => ({ panelId: pane.panelId, pid: pane.pid, reattached: false }))
+    // Unfinished panes are marked asleep. killed is empty — nothing is killed.
+    skipRemaining(panes, true)
+    const total = Math.max(tmuxTotal, panes.length)
+    sendBoot({ step: 'tmux', tmux: { done: tmuxDone, total }, optionHeld: true })
+  })
   worldSim = startWorldSimWiring(state)
 
   // M55. The restore answer reaches the renderer once it can hold panels;

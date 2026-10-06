@@ -66,18 +66,30 @@ function taskRecords(state: CanvasState): SessionSourceTask[] {
   }))
 }
 
-function speak(panel: SessionSourcePanel): { word: string; tone: StateTone } {
+/**
+ * Facts the session registry can answer and the layout cannot. Absent means
+ * the page is mounted without Canvas (the shot), and every fact stays the
+ * unknown it was: dormant false, and the three timestamps and stats null.
+ */
+export interface SessionRegistryFacts {
+  dormant(id: string): boolean
+  startedAt(id: string): number | null
+  survives(id: string): boolean | null
+  changes(id: string): string | null
+}
+
+function speak(panel: SessionSourcePanel, dormant: boolean): { word: string; tone: StateTone } {
   const agent = getAgentState(panel.id)
   if (panel.kind === 'chat') {
     const chat = getChat(panel.id)
     const input = chatStateInput(chat.snapshot, chat.turns.length > 0)
-    const state: StateInput = { kind: 'chat', status: undefined, dormant: false, ...(input === undefined ? {} : { chat: input }) }
+    const state: StateInput = { kind: 'chat', status: undefined, dormant, ...(input === undefined ? {} : { chat: input }) }
     const spoken = panelState(state, agent)
     return { word: spoken.word, tone: spoken.tone }
   }
   const state: StateInput = {
     kind: 'terminal',
-    dormant: false,
+    dormant,
     status: agent === undefined ? undefined : { kind: 'running', pid: 0, command: '', cwd: panel.cwd, reattached: false }
   }
   const spoken = panelState(state, agent)
@@ -112,24 +124,24 @@ function tokensOf(id: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-function reads(branches: ReadonlyMap<string, string>, panels: readonly SessionSourcePanel[]): SessionReads {
+function reads(branches: ReadonlyMap<string, string>, panels: readonly SessionSourcePanel[], live?: SessionRegistryFacts): SessionReads {
   // The read signature is id-only. Kind has to travel with the id, or a
   // chat's meta.costUsd is skipped and the column stays blank.
   const kindOf = new Map(panels.map((panel) => [panel.id, panel.kind]))
   return {
-    word: (_id, panel) => speak(panel),
+    word: (_id, panel) => speak(panel, live?.dormant(panel.id) === true),
     lastLine: (id) => getLastLine(id).line,
     costUsd: (id) => spendOf(id, kindOf.get(id) ?? 'terminal'),
-    startedAt: () => null,
-    survives: () => null,
+    startedAt: (id) => live?.startedAt(id) ?? null,
+    survives: (id) => live?.survives(id) ?? null,
     tokens: tokensOf,
-    changes: () => null,
+    changes: (id) => live?.changes(id) ?? null,
     branch: (id) => branches.get(id) ?? '',
     activity: () => []
   }
 }
 
-export function useSessionBoard(canPasteTerminal: boolean): { facts: readonly SessionFact[]; tasks: readonly SessionSourceTask[] } {
+export function useSessionBoard(canPasteTerminal: boolean, live?: SessionRegistryFacts): { facts: readonly SessionFact[]; tasks: readonly SessionSourceTask[] } {
   const [state, setState] = useState<CanvasState | null>(null)
   const [tick, setTick] = useState(0)
   const [branches, setBranches] = useState<ReadonlyMap<string, string>>(new Map())
@@ -188,10 +200,10 @@ export function useSessionBoard(canPasteTerminal: boolean): { facts: readonly Se
 
   const facts = useMemo(() => {
     if (override !== null) return override
-    const built = factsFromSources(panels, tasks, Date.now(), reads(branches, panels))
+    const built = factsFromSources(panels, tasks, Date.now(), reads(branches, panels, live))
     if (!canPasteTerminal) return built
     return built.map((fact) => fact.shell ? fact : { ...fact, canPaste: true })
-  }, [override, panels, tasks, branches, canPasteTerminal, tick])
+  }, [override, panels, tasks, branches, canPasteTerminal, tick, live])
 
   const feedTasks = useMemo((): SessionSourceTask[] => {
     if (override === null) return tasks

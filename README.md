@@ -361,7 +361,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        template:list / template:save / template:delete
                        preset:template
                        settings:list / settings:set
-                       canvas:request-reset
+                       canvas:request-reset / dialog:confirm
                        agent:acknowledge
                        workspace:list / workspace:create / workspace:rename
                        workspace:delete / workspace:activate
@@ -438,7 +438,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        image:read / starter:prepare
                        docx:import / flowchart:read / world:status / world:retry
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
-                       agent:state / session:live / subagent:state
+                       agent:state / session:live / session:host / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
@@ -453,7 +453,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        canvas:tidy / canvas:flip
                        canvas:feedback
                        board:add
-                       pool:mint / pool:event
+                       pool:mint / pool:event / boot:progress
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset / canvas:plan
                        preset:spawn / preset:default / preset:capture

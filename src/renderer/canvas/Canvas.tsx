@@ -62,8 +62,10 @@ import {
   EMPTY_SELECTION, NO_GUIDES, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport, prefersReducedMotion } from './useViewport'
-import { StartupSplash } from './StartupSplash'
-import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, type SplashMode, type StartupInput } from './splash'
+import { RestoreSplash, StartupSplash } from './StartupSplash'
+import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, restoreLines, type RestoreFacts, type SplashMode, type StartupInput } from './splash'
+import { Onboarding } from '@renderer/onboarding/Onboarding'
+import { BlankCanvas } from '@renderer/shell/EmptyState'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advanced-doors'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
@@ -275,6 +277,7 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 import { TopBar } from '../shell/TopBar'
 import { focusLocked, matchShortcut } from '@shared/shortcuts'
 import { SessionsHost } from '@renderer/sessions/SessionsHost'
+import { openSettingsPage } from '@renderer/settings/open'
 import { ReviewHost } from '@renderer/review/ReviewHost'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { FocusTask } from '../focus/FocusTask'
@@ -7881,28 +7884,13 @@ export function Canvas({
     event.stopPropagation()
   }, [])
 
-  /**
-   * The top bar's ⚙. It opens the palette straight into the settings
-   * drill-in through the controller's own scope — the SAME authority the
-   * `Manage settings…` row's `entersScope: 'settings'` reaches, not a second
-   * door. The scope is what makes the button honest: every setting row is
-   * hiddenAtRest, so merely opening the palette would land the user on a list
-   * with no settings visible at all, which reads as a feature that was never
-   * built.
-   */
   // M68. The Jira panel's Connect verb: the palette's Credentials scope.
   const openCredentials = useCallback(() => palette.openPalette('credentials'), [palette.openPalette])
+  // R-026. The dock's Settings opens the page. Manage settings… stays the
+  // palette drill-in (entersScope: 'settings' on that row).
   const openSettingsScope = useCallback(() => {
-    palette.openPalette('settings')
-    // A useCallback for consistency with its sibling verbs, not for a
-    // load-bearing reason. An earlier comment here claimed an unstable
-    // identity would re-render TopBar on every mousemove over the canvas;
-    // that is false. TopBar is not memo-wrapped, so it re-renders whenever
-    // Canvas does — which a mousemove's setCursor already makes it do —
-    // whatever this prop's identity is. The parallel note in useViewport.ts
-    // IS true and load-bearing (those callbacks sit in a keydown effect's dep
-    // array); don't read this one as saying the same thing.
-  }, [palette.openPalette])
+    openSettingsPage()
+  }, [])
 
   // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
   // declared earlier in this component — see that ref's own comment for why
@@ -8830,6 +8818,73 @@ export function Canvas({
     return criteriaChecklist(item.criteria, item.criteriaMet ?? [])
   })()
 
+  // R-021. New hooks sit here, immediately before the return, so nothing
+  // above them changes order. The APEX splash stays on splashMode. The
+  // restore card is a second surface and stays up while a live boot is
+  // unsettled, including when that mode is 'none'.
+  const [restoreFacts, setRestoreFacts] = useState<RestoreFacts | null>(null)
+  const [restoreLeft, setRestoreLeft] = useState(false)
+  useEffect(() => {
+    const boot = window.canvas.boot
+    if (boot === undefined) return
+    return boot.onProgress((event) => {
+      setRestoreFacts((prev) => ({
+        ...(prev ?? {}),
+        ...(event.workspace !== undefined ? { workspace: event.workspace } : {}),
+        ...(event.layout !== undefined ? { layout: event.layout } : {}),
+        ...(event.tmux !== undefined ? { tmux: event.tmux } : {}),
+        ...(event.agentsPlanned !== undefined ? { agentsPlanned: event.agentsPlanned } : {}),
+        ...(event.agentsFound !== undefined ? { agentsFound: [...event.agentsFound] } : {}),
+        ...(event.failed !== undefined ? { failed: event.failed } : {}),
+        ...(event.optionHeld === true ? { optionHeld: true } : {})
+      }))
+    })
+  }, [])
+  const restoreOpen = restoreFacts !== null && !restoreLeft && !restoreLines(restoreFacts).settled
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return window.localStorage.getItem('tc.onboarding.done') === '1' } catch { return false }
+  })
+  // R-034. The crash card already keeps the panel id. Restart is the canvas door.
+  useEffect(() => {
+    const door = (window as unknown as { __rdLF?: { onRestart?: (id: string) => void } }).__rdLF
+    if (door === undefined) return
+    const previous = door.onRestart
+    door.onRestart = (id) => { paletteActionsRef.current?.restartPanel(id) }
+    return () => { door.onRestart = previous }
+  }, [])
+  const showOnboarding = startup !== undefined && startup.harnessOff !== true && startup.lastVersion === null && !onboardingDone
+  const finishOnboarding = (): void => {
+    try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }
+    setOnboardingDone(true)
+  }
+
+  // R-028. A work item names one conversation. That slot is filled only while
+  // it is empty — writing over it would replace the lane's chat. Every moved
+  // panel is also linked to the task's work card, the same one-hop make-task
+  // already uses. There is no second membership list.
+  const moveSessionsToTask = (ids: readonly string[], taskId: string): void => {
+    if (ids.length === 0) return
+    const item = workItemsRef.current.find((row) => row.id === taskId)
+    if (item === undefined) return
+    const first = ids[0]
+    if (item.panelId === undefined && first !== undefined) {
+      setWorkItems((current) => current.map((row) => (
+        row.id === taskId && row.panelId === undefined
+          ? carryWorkItem({ ...row, panelId: first, updatedAt: Date.now() })
+          : row
+      )))
+    }
+    const card = panelsRef.current.find((panel) => workCardItemId(panel) === taskId)
+    if (card === undefined) return
+    setPanels((current) => {
+      let next = current
+      for (const id of ids) next = addLink(next, id, card.rect.id)
+      if (next === current) return current
+      commitHistory(next)
+      return next
+    })
+  }
+
   return (
     <div
       ref={shellRef}
@@ -9284,7 +9339,48 @@ export function Canvas({
       {(chrome.centerView === 'sessions' || chrome.centerView === 'review') && (
         <div className="shell__page" data-center-view={chrome.centerView}>
           {chrome.centerView === 'sessions'
-            ? <SessionsHost onShowOrchestrate={() => setCenterView('orchestration')} />
+            ? <SessionsHost
+                onShowOrchestrate={() => setCenterView('orchestration')}
+                confirmEnd={(ask) => window.canvas.dialog.confirm(ask)}
+                onEnd={(ids) => { for (const id of ids) paletteActions.closePanel(id) }}
+                onPause={(ids) => { for (const id of ids) void window.canvas.agentSession.interrupt(id) }}
+                onRestart={(ids) => { for (const id of ids) paletteActions.restartPanel(id) }}
+                onMove={moveSessionsToTask}
+                onNewSession={() => paletteActions.beginSpawnSheet()}
+                onShowOnCanvas={(id) => { setCenterView('canvas'); paletteActions.goToPanel(id) }}
+                onSend={(id, text) => {
+                  const panel = panelsRef.current.find((candidate) => candidate.rect.id === id)
+                  // paste(), never pty.write. A chat has no terminal handle, so the
+                  // callback the host now always receives still has to send it.
+                  if (panel !== undefined && isTerminalPanel(panel)) {
+                    registry.get(id)?.handle.paste(text)
+                    return
+                  }
+                  void window.canvas.agentSession.send(id, text, [])
+                }}
+                onDetach={(id) => registry.detachSlot(id)}
+                onAllow={(panelId) => {
+                  const approval = pendingApprovals.find((row) => row.id === panelId)
+                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, true)
+                }}
+                onDeny={(panelId) => {
+                  const approval = pendingApprovals.find((row) => row.id === panelId)
+                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, false)
+                }}
+                onDiff={(panelId) => paletteActions.openReview(panelId)}
+                live={{
+                  dormant: (id) => registry.get(id)?.dormant === true,
+                  // lastFocusedAt is the last click, not a start. The Run column stays empty.
+                  startedAt: () => null,
+                  survives: (id) => {
+                    const session = registry.get(id)
+                    if (session === undefined || session.status.kind !== 'running') return null
+                    return backendInfo?.kind === 'tmux' ? true : null
+                  },
+                  // The session stores no diff stat. Asking git once per row would invent one.
+                  changes: () => null
+                }}
+              />
             : <ReviewHost />}
         </div>
       )}
@@ -9341,10 +9437,8 @@ export function Canvas({
         {/* M249. A SIBLING of .world, never inside it: outside the transformed
             layer it cannot change a panel's size, and it is absolutely
             positioned so expanding it pushes nothing (pill.rects.1). The
-            attention count is the REACHABLE queue, Cmd+J's, so the pill never
-            says "1 chat needs you" about a phantom it cannot jump to. */}
+            pill reads its own queue (R-030). */}
         <CommandPill actions={paletteActions} panels={panels}
-          attentionCount={reachableQueue(waitingIds, new Set(displayPanels.map((p) => p.rect.id))).length}
           {...(lens !== null ? { taskTitle: workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId } : {})}
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
           engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
@@ -10100,6 +10194,19 @@ export function Canvas({
         />
         {splash !== 'none' && !merged && (
           <StartupSplash mode={splash} rects={rects} viewport={viewport} onDone={() => setSplash('none')} />
+        )}
+        {restoreOpen && restoreFacts !== null && !merged && (
+          <RestoreSplash
+            facts={restoreFacts}
+            rects={panels.map((panel) => ({ x: panel.rect.x, y: panel.rect.y, w: panel.rect.w, h: panel.rect.h }))}
+            onDone={() => setRestoreLeft(true)}
+          />
+        )}
+        {showOnboarding && !merged && (
+          <Onboarding workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''} onHandoff={finishOnboarding} />
+        )}
+        {onboardingDone && panels.length === 0 && !merged && (
+          <BlankCanvas workspace={workspaceRows.find((w) => w.active)?.name ?? ''} />
         )}
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is

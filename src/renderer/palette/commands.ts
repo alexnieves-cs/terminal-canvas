@@ -1304,14 +1304,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // --- Canvas --------------------------------------------------------------
 
   out.push({
-    // M146. TWO rows, two names. `Reset zoom` returns to INITIAL and has no
-    // chord of its own after M444 (⌘0 fits all). The ⌘0 chip stays on this
-    // row because verify:palette 48 pins `canvas.fit=⌘0` exactly; moving it
-    // is R-032. The id is kept for the row that has always run the reset.
+    // M146. TWO rows, two names. `Reset zoom` returns to INITIAL. ⌘0 is Fit
+    // all (R-032); this row has no chord.
     id: 'canvas.fit',
     title: 'Reset zoom',
     group: 'canvas',
-    shortcut: '⌘0',
     run: () => actions.resetZoom()
   })
   out.push({
@@ -1325,8 +1322,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // where the verb resets, and Reset zoom is the row — rests in search.
     title: ctx.selectedIds.some((id) => ctx.panels.some((p) => p.id === id)) ? 'Fit selection' : 'Fit all',
     ...hiddenAtRestIf(ctx.panels.length === 0),
-    // No chord chip: verify:palette 48 pins the hint set, and this row is
-    // selection-aware. ⌘0 is Fit all on the HUD, not this verb.
+    // R-032. ⌘0 is Fit all. The chip moves here from Reset zoom. Check 48
+    // counts every row with a shortcut, including one hidden at rest.
+    shortcut: '⌘0',
     subtitle: 'the selected panels, or every panel',
     searchText: 'fit all selection zoom to fit frame view',
     group: 'canvas',

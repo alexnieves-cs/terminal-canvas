@@ -4,7 +4,7 @@ import { useAttentionCensus } from '@renderer/canvas/command-pill'
 import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
 import { shellControl } from '@renderer/shell/shell-control'
 import { SessionsView, useSessionsTheme } from './SessionsView'
-import { useSessionBoard } from './sessions-live'
+import { useSessionBoard, type SessionRegistryFacts } from './sessions-live'
 import {
   endAsk, headerSpend, replyBox, sessionsTitle, SNOOZE_MS,
   type CardAction, type EndAsk, type SessionFact
@@ -21,7 +21,7 @@ import {
  * flight are callbacks. Canvas owns the registry and main's dialog, and
  * this page does not. End does nothing until `confirmEnd` says yes.
  */
-export function SessionsHost({ onShowOrchestrate, confirmEnd, onEnd, onPause, onRestart, onMove, onNewSession, onShowOnCanvas, onSend, onDetach, onAllow, onDeny, onDiff }: {
+export function SessionsHost({ onShowOrchestrate, confirmEnd, onEnd, onPause, onRestart, onMove, onNewSession, onShowOnCanvas, onSend, onDetach, onAllow, onDeny, onDiff, live }: {
   onShowOrchestrate?: () => void
   /** Main's confirm, passed in. Absent means End does not end. */
   confirmEnd?: (ask: EndAsk) => Promise<boolean> | boolean
@@ -37,9 +37,11 @@ export function SessionsHost({ onShowOrchestrate, confirmEnd, onEnd, onPause, on
   onAllow?: (panelId: string) => void
   onDeny?: (panelId: string) => void
   onDiff?: (panelId: string) => void
+  /** Registry facts Canvas can see and this page cannot. */
+  live?: SessionRegistryFacts
 }): JSX.Element {
   const attention = useAttentionQueue(useAttentionCensus())
-  const board = useSessionBoard(onSend !== undefined)
+  const board = useSessionBoard(onSend !== undefined, live)
   const theme = useSessionsTheme()
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [openId, setOpenId] = useState<string | null>(null)

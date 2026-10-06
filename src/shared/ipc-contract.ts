@@ -16,6 +16,7 @@ import type { ReviewIdentity } from './review-identity'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult, QueueEditRequest, CorrectionAnswer } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
+import type { HostState } from './exit-explain'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
 import type { FlowchartExportRequest, FlowchartExportResult, FlowchartReadRequest, FlowchartReadResult } from './flowchart-files'
@@ -294,6 +295,8 @@ export const IPC = {
    * to run the flow it already has instead of growing a second one.
    */
   CANVAS_REQUEST_RESET: 'canvas:request-reset',
+  /** R-028. Main's confirm(), Cancel-default. The renderer does not use window.confirm. */
+  DIALOG_CONFIRM: 'dialog:confirm',
   /**
    * The merged prompt list: the saved store plus .claude/commands under the
    * cwd of the panel the palette captured. Takes a cwd because the project
@@ -1881,6 +1884,10 @@ export interface CanvasBridge {
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>
   }
+  /** R-028. Main's two-button confirm. True only when the verb button is chosen. */
+  dialog: {
+    confirm(ask: { message: string; detail?: string; verb: string }): Promise<boolean>
+  }
   preset: {
     /** A menu pick: spawn one panel from this template, now. */
     onSpawn(listener: (template: PresetTemplate) => void): () => void
@@ -2196,6 +2203,8 @@ export interface CanvasBridge {
     onSubagents(listener: (update: SubagentUpdate) => void): () => void
     /** What this panel's agent has spent. Fires only on a change. */
     onUsage(listener: (payload: { panelId: PanelId; usage: PanelUsage }) => void): () => void
+    /** R-033. Host loss, from the live tick. Each subscribe returns its unsubscribe. */
+    onHost(listener: (state: HostState) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>

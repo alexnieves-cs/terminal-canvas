@@ -108,7 +108,7 @@ pty:create pty:write pty:resize pty:kill pty:list machine:sample layout:load lay
 session:backend preset:list preset:rename preset:delete preset:set-default
 preset:spawn-by-id preset:template preset:save-panel preset:set-worktree worktree:list
 worktree:remove worktree:reveal scrollback:tail scrollback:clear scrollback:search
-canvas:request-reset prompt:list prompt:save prompt:delete template:list template:save
+canvas:request-reset dialog:confirm prompt:list prompt:save prompt:delete template:list template:save
 template:delete vault:read snapshot:list snapshot:restore memory:list memory:add
 watcher:create watcher:run watcher:stop watcher:dispose watcher:list settings:list
 settings:set agent:acknowledge workspace:list workspace:activate workspace:create

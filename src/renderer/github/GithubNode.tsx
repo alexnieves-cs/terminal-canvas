@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useState, useSyncExternalStore, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { GithubPanel } from '@renderer/panels/panels'
 import type { WorkItem } from '@shared/work-item'
 import type { DragState } from '@renderer/canvas/panel-interaction'
@@ -9,6 +9,8 @@ import { ConnectionBanner } from '@renderer/components/ConnectionBanner'
 import { useNow } from '@renderer/components/useNow'
 import { providerState } from '@renderer/panels/panel-state'
 import { syncWord } from '@renderer/shell/integration-model'
+import { OfflineCachedMark } from '@renderer/panels/offline-mark'
+import { recoveryOffline, subscribeRecovery } from '@renderer/panels/recovery-store'
 
 /**
  * M88. THE GITHUB WORK NODE — Jira's shape reached by a second service: the
@@ -61,6 +63,7 @@ export function GithubNode(props: GithubNodeProps): JSX.Element {
   const [readAt, setReadAt] = useState<number | undefined>(undefined)
   const now = useNow(readAt !== undefined)
   const fresh = syncWord(readAt, now)
+  const offlineAt = useSyncExternalStore(subscribeRecovery, () => recoveryOffline('github'), () => recoveryOffline('github'))
   const load = (): void => {
     setResult(null)
     void window.canvas.github.list(panel.rect.id).then((r) => { setResult(r); if (r.kind === 'items') setReadAt(Date.now()) }).catch(() => setResult({ kind: 'unavailable', reason: 'GitHub could not be reached.' }))
@@ -94,6 +97,7 @@ export function GithubNode(props: GithubNodeProps): JSX.Element {
         {readAt !== undefined && result !== null && result.kind === 'items' && (
           <span className="pf__summary sync-word" data-sync-stale={fresh.stale ? 'true' : 'false'} data-github-fresh title={fresh.stale ? 'This list may no longer match GitHub — refresh to read it again' : 'When this list was read from GitHub'}>{fresh.stale ? `${fresh.word} · may be stale` : fresh.word}</span>
         )}
+        {offlineAt !== null && <OfflineCachedMark source="github" lastUpdated={offlineAt} />}
         <button type="button" className="pf__control icon-button" data-github-refresh title="Read GitHub again" aria-label="Read GitHub again" {...shellControl(load)}><Refresh /></button>
       </>}
     >

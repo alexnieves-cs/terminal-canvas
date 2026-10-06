@@ -1,10 +1,14 @@
-import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useEffect, useRef, useState, useSyncExternalStore, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { shellControl } from '@renderer/shell/shell-control'
 import { lastActiveWord, panelState } from '@renderer/panels/panel-state'
 import type { PanelSession } from '@renderer/session/panel-session'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { noteStateWord, useLastActive } from '@renderer/session/last-active-store'
+import { statePill } from '@renderer/panels/header-rest'
+import { displayPath } from '@shared/display-path'
+import { keystrokesBlocked, PAUSED_KEYS, PAUSED_LINE, type FrameVariant } from '@shared/exit-explain'
+import { recoveryFrame, subscribeRecovery } from '@renderer/panels/recovery-store'
 import { useAgentOwner, useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
@@ -163,6 +167,14 @@ function TerminalPanelImpl({
   // 60Hz — see agent-state-store.ts.
   const agentState = useAgentState(session.id)
   const agentOwner = useAgentOwner(session.id)
+  // R-034. The recovery frame is painted by this panel. A string snapshot, so
+  // a host sample that does not change this id does not redraw it.
+  const variant = useSyncExternalStore(
+    subscribeRecovery,
+    () => recoveryFrame(session.id),
+    () => recoveryFrame(session.id)
+  )
+  const blockKeys = keystrokesBlocked(variant)
   const agentClass = glow && agentState ? ` panel--agent-${agentState}` : ''
   // M63. The one state word for this panel, applied to the pill, the card's
   // state line, the summary tier, the block tier and the frame's edge.
@@ -170,6 +182,24 @@ function TerminalPanelImpl({
   // M258. The last-active store stamps a time only on an OBSERVED change of
   // word; a remount on a tier change re-notes the same word and stamps nothing.
   useEffect(() => { noteStateWord(session.id, shown.word) }, [session.id, shown.word])
+  // R-016. The duration is a sibling of the state word. The first observation
+  // has no time, and statePill then returns the word — that sibling stays off
+  // so the word is not painted twice.
+  const lastAt = useLastActive(session.id)
+  const pill = statePill(shown.word, lastAt === undefined ? null : Math.max(0, Date.now() - lastAt))
+  const cwd = session.status.kind === 'running' && session.status.cwd !== '' ? session.status.cwd : session.spec.cwd
+  const pathShown = cwd === '' ? undefined : displayPath(cwd)
+  const [branch, setBranch] = useState<string | null>(null)
+  useEffect(() => {
+    if (cwd === '') { setBranch(null); return }
+    let live = true
+    const status = window.canvas?.git?.status
+    if (typeof status !== 'function') { setBranch(null); return }
+    void status(cwd).then((st) => {
+      if (live) setBranch(st.kind === 'status' && st.branch !== '' ? st.branch : null)
+    }).catch(() => { if (live) setBranch(null) })
+    return () => { live = false }
+  }, [cwd])
   useEffect(() => {
     if (openingContext === undefined || session.status.kind !== 'running') return
     session.handle.paste(openingContext)
@@ -260,6 +290,9 @@ function TerminalPanelImpl({
       rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
       title={panelLabel}
       titleHint={titleHint}
+      headerPath={pathShown?.short}
+      headerPathTitle={pathShown?.full}
+      headerBranch={branch ?? undefined}
       onRename={readOnly || onRename === undefined ? undefined : (name) => onRename(session.id, name)}
       agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
@@ -311,6 +344,7 @@ function TerminalPanelImpl({
             sentence) can ellipsise inside the badge — a flex container's bare
             text node cannot — with the whole sentence in the title. */}
         <span className="badge pf__word" data-tone={shown.tone} data-state-word title={shown.word}><span className="pf__word-text">{shown.word}</span></span>
+        {pill !== shown.word && <span className="pf__duration" data-state-duration title={pill}>{pill.slice(shown.word.length)}</span>}
         {/* M74. Never a control that cannot work: shown only for a claude
             session whose process is not live (one front-end at a time). A
             LABELLED word after the pill, the row's own control slot. */}
@@ -340,16 +374,48 @@ function TerminalPanelImpl({
             event.stopPropagation()
             onFocus(session.id)
           }}
-        />
+          onKeyDownCapture={blockKeys ? stopKey : undefined}
+          onBeforeInputCapture={blockKeys ? stopKey : undefined}
+          onPasteCapture={blockKeys ? stopKey : undefined}
+        >
+          <RecoveryWell variant={variant} />
+        </div>
       ) : (
-        <PanelCard session={session} agentState={glow ? agentState : undefined} detail={flipped ? 'summary' : cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} />
+        <PanelCard session={session} agentState={glow ? agentState : undefined} detail={flipped ? 'summary' : cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} variant={variant} />
       )}
 
     </PanelFrame>
   )
 }
 
-function PanelCard({ session, agentState, detail, title, state, shown }: {
+/** A key aimed at a paused well never reaches xterm. Capture, so the textarea is not the first listener. */
+function stopKey(event: { preventDefault(): void; stopPropagation(): void }): void {
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function RecoveryWell({ variant }: { variant: FrameVariant }): JSX.Element | null {
+  if (variant === 'paused') {
+    return (
+      <article className="recovery-frame" data-recovery-frame="paused" data-keys-blocked="" data-tone="needs-you">
+        <p className="recovery-frame__line">{PAUSED_LINE}</p>
+        <p className="recovery-frame__keys">{PAUSED_KEYS}</p>
+      </article>
+    )
+  }
+  if (variant === 'reattaching') {
+    return (
+      <article className="recovery-frame" data-recovery-frame="reattaching" data-recovery-skeleton="" data-tone="starting" aria-busy="true">
+        <span className="recovery-skeleton" />
+        <span className="recovery-skeleton" />
+        <span className="recovery-skeleton" />
+      </article>
+    )
+  }
+  return null
+}
+
+function PanelCard({ session, agentState, detail, title, state, shown, variant }: {
   session: PanelSession
   agentState?: AgentState
   detail: CardDetail
@@ -357,6 +423,7 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
   state?: AgentState
   /** M63. The one state word and tone. */
   shown: { word: string; tone: string }
+  variant: FrameVariant
 }): JSX.Element {
   const lines = session.spawned ? session.handle.tail(CARD_LINES) : []
   // M39. A DORMANT panel has no buffer — that is every panel on the canvas the
@@ -450,6 +517,7 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
           no buffer has the same three tiers as a live one. The `tail` markup
           below stays byte-identical: three checks read .panel__card-idle. */}
       {renderTier(detail)}
+      <RecoveryWell variant={variant} />
       {leaving !== null && (
         // After the live tier so a querySelector finds the live copy first;
         // inert and aria-hidden so the fading copy is never a target.
