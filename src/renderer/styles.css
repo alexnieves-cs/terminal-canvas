@@ -12456,6 +12456,111 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 
 /* ── rd:W1 ── */
 
+/* The lens sits in the canvas cell, above the world layer, and does not
+   stretch: a stretched grid item would take every click on the plan. */
+.world-lens {
+  grid-area: canvas;
+  align-self: start;
+  justify-self: start;
+  z-index: 6;
+  margin: var(--sp-3);
+  display: inline-flex;
+  pointer-events: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  overflow: hidden;
+}
+.world-lens button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  padding: var(--sp-3) var(--sp-5);
+  cursor: pointer;
+}
+.world-lens button[aria-pressed="true"] {
+  background: var(--s-4);
+  color: var(--fg);
+}
+.world-lens kbd {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  margin-left: var(--sp-3);
+  color: var(--fg-3);
+}
+.world-move {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.world-move__chip {
+  position: absolute;
+  top: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font-size: var(--t-sm);
+}
+.world-move__bar {
+  width: 72px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--s-4);
+  overflow: hidden;
+}
+.world-move__bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--fg-2);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.world-move__strip {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-4);
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.world-move__strip li {
+  width: 72px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--s-2);
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: var(--sp-2);
+}
+/* display:flex would beat the UA [hidden] rule, so a resting move would
+   keep the chip and the filmstrip on screen. */
+.world-move__chip[hidden],
+.world-move__strip[hidden] { display: none; }
+.world-move__strip li[data-on] {
+  border-color: var(--fg-2);
+  color: var(--fg);
+}
+
 /* ── /rd:W1 ── */
 
 /* ── rd:W2 ── */

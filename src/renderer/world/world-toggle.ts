@@ -60,3 +60,32 @@ function onHash(): void {
 export function useWorldOn(): boolean {
   return useSyncExternalStore(subscribe, isWorldOn, () => false)
 }
+
+export interface FloorTarget { x: number; z: number }
+
+/**
+ * Where the orbit is looking, on the floor. The room centre until W2 writes
+ * the live target each frame (`setWorldCameraTarget`). Leaving the world
+ * lands the 2D viewport on this spot.
+ */
+let cameraTarget: FloorTarget = { x: 0, z: 0 }
+
+export function worldCameraTarget(): FloorTarget {
+  return { x: cameraTarget.x, z: cameraTarget.z }
+}
+
+export function setWorldCameraTarget(next: FloorTarget): void {
+  if (next.x === cameraTarget.x && next.z === cameraTarget.z) return
+  cameraTarget = { x: next.x, z: next.z }
+}
+
+let land: ((target: FloorTarget) => void) | null = null
+
+/** Canvas assigns this during render. A hook would reorder Canvas. */
+export function setWorldLanding(fn: ((target: FloorTarget) => void) | null): void {
+  land = fn
+}
+
+export function landWorld(target: FloorTarget = worldCameraTarget()): void {
+  land?.(target)
+}

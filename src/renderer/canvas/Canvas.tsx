@@ -286,7 +286,9 @@ import { planFactsOf } from '../focus/plan-facts'
 import { planSummary, planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { WorldStage, warmWorldView } from '../world/WorldStage'
-import { setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
+import { WorldLens } from '../world/WorldLens'
+import { landingViewport } from '../world/plan-floor'
+import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn } from '../world/world-toggle'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
 import { requestArrival } from '../world/world-select'
 import { useSelectedAgent } from '../world/world-select'
@@ -3984,6 +3986,14 @@ export function Canvas({
   // longer dev-only — the packaged renderer was measured loading the room under file://.
   const worldOn = useWorldOn()
   const closeWorldView = useCallback(() => setWorldOn(false), [])
+  // M449. Assigned during render, not a hook: Canvas's hook order is load-bearing.
+  // The stage calls this once the move back has settled and the inline transform is gone.
+  setWorldLanding((target) => {
+    const box = hostRef.current?.getBoundingClientRect()
+    const width = box !== undefined && box.width > 0 ? box.width : window.innerWidth
+    const height = box !== undefined && box.height > 0 ? box.height : window.innerHeight
+    restoreCamera(landingViewport(target, { width, height }, viewportRef.current.scale))
+  })
   const canvasCovered = chrome.centerView !== 'canvas' || worldOn
   canvasCoveredRef.current = canvasCovered
   // M283. The element that last had focus INSIDE the canvas host, kept so a return from
@@ -8766,8 +8776,16 @@ export function Canvas({
   }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (shouldIgnoreKeys()) return
       const hit = matchShortcut({ metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, code: event.code })
+      // ⌘⇧W is the registry's `world` chord. It is handled before shouldIgnoreKeys
+      // so it still fires while the world covers the canvas; a locked panel keeps the key.
+      if (hit?.id === 'world') {
+        if (focusLocked()) return
+        event.preventDefault()
+        if (!event.repeat) toggleWorld()
+        return
+      }
+      if (shouldIgnoreKeys()) return
       if (hit?.id === 'allow') {
         event.preventDefault()
         const selected = selectedIdsRef.current
@@ -9094,6 +9112,7 @@ export function Canvas({
       {/* M268/M272. Orchestration shares the canvas grid cell; the canvas host
           stays mounted (visually behind, never unmounted) so PTYs and agents
           keep running. The overlay animates in; prefers-reduced-motion snaps. */}
+      {chrome.centerView === 'canvas' && <WorldLens on={worldOn} />}
       {/* M413. The 3D world view's layer, over a host that stays mounted (dev only; see WorldStage). */}
       <WorldStage on={worldOn} hostRef={hostRef} />
       {chrome.centerView === 'orchestration' && (

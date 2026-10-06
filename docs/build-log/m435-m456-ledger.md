@@ -832,3 +832,80 @@ Merged to `redesign/main` as `695a71da` (`--no-ff`). `rd/w2-room` was not delete
 Linux gates on the merge, before W1: typecheck pass; `verify:world` 251/251; `verify:rd-w2` 4/4; `verify:rd-w1` and `verify:rd-w3` still the seam stub (1/1); `npm run build` exit 0. Plain wave 65/67 in 31.2s, stopped after wave 1. Failures: `verify:meta` `panels-split.2` and `visual.1` (declared 91, goldens 79), `verify:first-run` `revamp.create.1`. `verify:review` `merge.1` passed. `verify:rd-l-f` `kill.1` passed. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. Electron tier did not start.
 
 W1 rebases with `git fetch origin && git rebase origin/redesign/main` on `rd/w1-transition`. W3 does the same after W1.
+
+## M449 · W1 Canvas → World transition
+
+Branch `rd/w1-transition` from `redesign/main` (rd-w0 plus the R-040 render-loop fix). Wave 3b. Merges after W2. `WorldView.tsx` is not edited.
+
+### Plan
+
+One milestone. `world-transition.ts` stays the one pure clock. Extend it; do not add a second timer.
+
+- Full move: 1000ms, `easeInOutCubic`, one `WorldTransition` sampled by the stage and (once R-043 lands) the scene. `__rdW1.atMs` freezes that same sample for the shot. It is not a second clock.
+- Plan tilt: `hostLook` gains `tilt` (`PLAN_TILT_DEG`), written as `rotateX` inside the host's existing `transform`. No layout write. Reduced motion: tilt 0, scale 1.
+- Terrace rise: `terraceRise(eased)`, already 1 when reduced. W2 mounts it (R-043).
+- Pop: `popDelays` is unchanged (nearest→farthest, `world.trans.5`). `popDelaysFromTarget` measures those distances from the camera target. W2 mounts it (R-043).
+- Reduced motion: `REDUCED_TRANSITION_MS` (120) with `{ reduced: true }`. `linear`/`fade` cross-fade; `raw` and `eased` are already at the destination, so the dolly and the pop do not play. Duration 0 still snaps (`world.trans.4`).
+- `plan-floor.ts` paints RGBA from region and panel rects through `world-space.ts`. No PNG. `handoffMisalignPx` is the 2px check at 1440×900. `landingViewport` is `cameraToViewport` of the orbit target; the stage calls it once the move back settles, after the inline transform is cleared.
+- `WorldLens` is the 2D | World control at the canvas top left. ⌘⇧W is `shortcutById('world')`. The lens keeps `shell__world-toggle`. The TopBar button stays until R-042.
+- Cancel chip: `CANCEL_CHIP` (`Entering World · Esc cancel`) plus a bar of `linear`. Esc still reverses through `setTarget` (same ramp). Filmstrip marks `FILMSTRIP_MS`.
+- The canvas host stays mounted. `inert` while covered. The world chord is handled before `shouldIgnoreKeys`, so it still fires while the world is up, and a focus lock still keeps the key.
+
+### PLAN CHECK
+
+- [x] world-transition.ts remains the single pure clock; no second timer.
+- [x] WorldView.tsx is not edited. Exports the lead or W2 must mount are listed below.
+- [x] TopBar's button removal is a request (R-042).
+
+### CSS
+
+New rules only, inside `/* ── rd:W1 ── */`. No override of an earlier rule.
+
+### Exports W2 or the lead must mount
+
+| Export | Who calls it |
+|---|---|
+| `motionOf(sample, reduced)` | WorldView's rig: `dolly`, `popRaw`, `terrace` |
+| `popDelaysFromTarget(points, target)` | WorldView, instead of distance to the origin |
+| `setWorldCameraTarget` | WorldView, the orbit target each frame. Until then the target is the floor origin and `landingViewport` centres there |
+| `paintPlanFloor(canvas, layout)` | The ground mesh. Pixels from the layout, never a screenshot |
+| `terraceRise` | WorldStructure, via `motionOf().terrace` |
+| `WorldLens` | Mounted by this lane in Canvas. Not W2's |
+
+`WorldStage` still passes the same `transition` object into `WorldView`. Reduced samples already snap `eased` and `raw`, so the current scene does not dolly or pop during the cross-fade.
+
+### Requests
+
+R-041 open: `world.stage.4` still names the 0ms snap. W0 owns `verify-world.cjs`. R-042 open: remove the TopBar World view button (F3) and retarget `world.door.9`. R-043 open: mount the curves in the scene (W2).
+
+### Gates
+
+Linux, Node. `npm ci --no-audit --no-fund`, then `node node_modules/electron/install.js` (v43.4.1) and `npm rebuild node-pty` then `npx electron-rebuild -f -w node-pty`. Shots invoke `node_modules/electron/dist/electron` under `xvfb-run`. `package.json` still points at the macOS Electron.app. `UPDATE_GOLDENS` was not set. Nothing under `verify/visual/goldens/` changed.
+
+| Gate | Result |
+|---|---|
+| typecheck | pass (`typecheck:node` and `typecheck:web`, and again inside `npm run build`) |
+| `verify:rd-w1` | 15/15. Watched red: `REDUCED_TRANSITION_MS = 0` failed `rd-w1.reduced.1` and `.2` (13/15), then restored to 120. |
+| `verify:world` | 250/251. The one failure is `world.stage.4`. R-041. `world.trans.1`–`.8`, `world.door.1`–`.12`, `world.stage.1`–`.3` passed. `rd-world.parity.1` passed. |
+| `npm run affected -- --base redesign/main` | 40/45 before the lens label and the spacing tokens. Failed: `verify:rail` `labels.1` (the 2D segment), `verify:styles` check 6 (literal padding), plus the known `verify:meta`, `verify:first-run`, and `world.stage.4`. |
+| plain wave (`npm run verify`) | 63/67 in 31.3s, stopped after wave 1, after the label and spacing fix. Failed: `verify:meta` (`panels-split.2`, `visual.1`), `verify:first-run` `revamp.create.1`, `verify:world` `world.stage.4`, `verify:review` `merge.1` (`{kind:'failed', detail:''}`). Alone, `verify:review` is 162/163 on the same `merge.1`. `verify:rail` and `verify:styles` passed (97/97). `verify:rd-l-f` passed, including `kill.1`. `verify:canvas-sync` passed (15.7s). `verify:relay` passed (2.5s). `verify:flowchart` passed (1.2s). `verify:tmux` passed. Wave 2 and the Electron tier of `verify` did not start. |
+| `npm run build` | pass. `WorldView` is its own chunk. `world.door.2` passed, so the entry does not statically import three. |
+| shots | `rd-world-transition` and `rd-world-transition-rm` wrote PNGs and composites. The reduced-motion scene attaches the debugger before `Emulation.setEmulatedMedia` (the first try died with "No target available"). Electron logs `WebGL2 blocklisted`. The room is not in the capture. R-044. |
+
+### Critic
+
+Both composites are `does-not-read`. Mockup 10 is the plan tipping into terraces with robots popping. The captures are a light field: WebGL is blocklisted on this host (R-044), and the terraces are not mounted (R-043). The harness did show the cancel chip before the shutter (`[data-world-cancel]` not hidden, canvas still mounted, reduced motion did not write `rotateX`).
+
+`rd-world-transition` (frozen at 550ms), top divergences:
+
+1. Silhouette. The mockup's mid-frame is a tilted plan with terraces rising through it. The capture has no plan and no terraces.
+2. Composition. The chip and the filmstrip have nothing to sit over. The mockup puts them on the moving plan.
+3. State colour. The mockup's robots carry working cyan and needs-you amber. The capture has no robots.
+
+`rd-world-transition-rm` (mid-fade), the same three. The scene's own check is that the host transform has no `rotateX`, and that check passed.
+
+### Review
+
+Rules review: no blockers. The filmstrip's millisecond labels use the mono face; `face.1` still passes. Two world toggles remain until R-042.
+
+World guard: no blockers. `plan-floor.ts`, `WorldLens.tsx`, `world-transition.ts` and `world-toggle.ts` import no three. `WorldStage` still has one `/* @__PURE__ */ lazy()` for `WorldView` and the existing flat-room lazy. No new `<Environment>`. Reduced motion is the 120ms cross-fade. `WorldFlat`, `WorldCardBody` and `WorldMinimap` are untouched.

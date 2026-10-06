@@ -319,6 +319,34 @@ from: centerViewNow === 'focus'
 - Status: done: 6dd3cad6. The lead landed it on `rd/w0-night` before the night shot, because the room cannot open while the loop runs.
 - Finding (filed after the merge; no probe was committed): the looping setter is `setResumeSummary` in `src/renderer/canvas/Canvas.tsx`, the resume effect that calls `buildResumeSummary` (line 4281 on `redesign/main` and on `rd-canvas`). It is `useState`. `useSyncExternalStore` snapshots stayed the same object through the storm. Radix menu `setTextContent` fired thousands of times because the parent re-rendered, not because a menu store changed. The driver is `useTaskHandoffs`: while `records` is `null`, `records ?? []` was a new array every render, so the `lanes` memo rebuilt `built`, returned as `handoffsVersion`. The resume effect depends on that object and, when a subject has `createdAt < APP_OPENED_AT`, calls `setResumeSummary` with a new object. Viewport, panel count, registry version, and the world toggle were unchanged. It reproduces on `rd-canvas` (`5cf60839`) without W0: `useTaskHandoffs.ts:120` is `const worktreeRows = records ?? []`, and `Canvas.tsx:4268–4281` is the same effect. W0 did not add the loop. Opening the world only made the passive loop throw React's maximum update depth (#185) and unmount the tree; with the world closed the canvas spins and does not throw. Reproduce: load a workspace with a resume subject created before the window opened (the steward fixture does), and leave `records` null (no item names a worktree, so `worktree.list` is never called, or the invoke has not returned). The canvas re-renders continuously. Click `.shell__world-toggle` and the view throws #185. Dismiss Resume (`.resume-banner__dismiss`) and the effect calls `setResumeSummary(null)`, which React bails on once it is already null, so the setState stops even while `handoffsVersion` is still a new object. The fix is the module-level `NO_WORKTREES` constant; `records === null` still means unread.
 
+### R-041 · Retarget world.stage.4 at the 120ms cross-fade
+- Lane: W1
+- File: `scripts/verify-world.cjs` (`world.stage.4`)
+- Why the contract or the owner cannot absorb it: W0 owns `scripts/verify-world.cjs`. The check still requires `createWorldTransition(on ? 1 : 0, reduced ? 0 : WORLD_TRANSITION_MS)` and calls that a 0ms snap. M449 passes `REDUCED_TRANSITION_MS` (120) with `{ reduced: true }`. `rd-w1.reduced.1` pins the cross-fade. A zero duration still snaps (`world.trans.4`).
+- Smallest change: match `reduced ? REDUCED_TRANSITION_MS : WORLD_TRANSITION_MS` and `{ reduced }`, and say the move is a 120ms cross-fade. Leave the WorldView and WorldRobot arms (`reduced ? 0 : pops`, `reducedRef.current ? 1`) as they are.
+- Status: open
+
+### R-042 · Remove the TopBar World view button
+- Lane: W1
+- File: `src/renderer/shell/TopBar.tsx` (F3). `scripts/verify-world.cjs` `world.door.9` (W0) still requires the button's render condition.
+- Why the contract or the owner cannot absorb it: TopBar is frozen with F3. The 2D | World lens (`WorldLens`, class `shell__world-toggle`) is the control. Canvas still passes `worldView` so `world.door.9` stays green until this lands.
+- Smallest change: delete the World view button. Update `world.door.9` so it no longer requires `worldView !== undefined && centerView === 'canvas'` on that button. Keep `shell__world-toggle` in the stylesheet (`world.door.8`); the lens carries the class.
+- Status: open
+
+### R-043 · Mount the transition curves in the scene
+- Lane: W1
+- File: `src/renderer/world/WorldView.tsx` (W0/W2), `src/renderer/world/WorldStructure.tsx` and the ground mesh in `WorldOffice.tsx` / `WorldPlatform.tsx` (W2)
+- Why the contract or the owner cannot absorb it: W1 does not own `WorldView.tsx`. The pure clock already exposes what the scene must read. Until this lands, robots still pop from the room origin and the floor is not the plan texture. Reduced motion already snaps `sample().eased` and `sample().raw`, so the existing dolly and pop do not play during the cross-fade.
+- Smallest change: call `popDelaysFromTarget(points, worldCameraTarget())` instead of `Math.hypot(at.x, at.z)`. Pass `motionOf(sample, reduced).dolly` to `dollyAt` and `.terrace` to the terrace scale. Call `setWorldCameraTarget` from the orbit target each frame. Paint the ground with `paintPlanFloor(canvas, layout)`, never a captured PNG.
+- Status: open
+
+### R-044 · The Linux shot host blocklists WebGL
+- Lane: W1
+- File: none in this repo. The shot is `scripts/shot-scenes/rd-w1.cjs`, run as `xvfb-run -a node_modules/electron/dist/electron --no-sandbox scripts/shot.cjs`.
+- Why the contract or the owner cannot absorb it: Electron on this host logs `ContextResult::kFatalFailure: WebGL2 blocklisted` (and WebGL1). `--disable-gpu` paints the same empty field. The scene's DOM checks passed (the cancel chip is shown, the canvas stays mounted, reduced motion does not write `rotateX`). The room itself is not in the PNG, so the capture cannot be judged against mockup 10. W1 does not own the Electron binary path in `package.json`.
+- Smallest change: re-shot `rd-world-transition` and `rd-world-transition-rm` on a machine where WebGL is allowed. Do not set `UPDATE_GOLDENS` until that capture has been looked at. The terraces in the mockup are still R-043.
+- Status: open
+
 ### R-050 · The 2D minimap needs the world's camera wedge
 - Lane: W2
 - File: `src/renderer/canvas/MinimapOverlay.tsx` (L-C)
