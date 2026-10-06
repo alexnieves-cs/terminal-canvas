@@ -68,7 +68,8 @@ export function blankCanvasTitle(workspace: string): string {
 
 export const BLANK_CANVAS_PURPOSE = 'Describe a task and an agent will take it from here — or start something smaller.'
 
-export const GHOST_TARGET = 'Double-click to place a terminal'
+/** M388's ground double-click places a flowchart process step. The owner kept that gesture (Oct 6, 2026); the hint names it. */
+export const GHOST_TARGET = 'Double-click to place a flowchart step'
 
 /** The mono chip. An empty repository says so, rather than a blank or a zero. */
 export function repoChipLabel(repo: string | null | undefined): string {

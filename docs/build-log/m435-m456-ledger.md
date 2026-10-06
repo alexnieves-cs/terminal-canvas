@@ -675,3 +675,23 @@ The three plain failures are the known ones. `verify:meta` is 51/53: `panels-spl
 ### Electron
 
 The Linux ELF is `node_modules/electron/dist/electron` (`v43.4.1`), from `node node_modules/electron/install.js`. The Mac path in the npm scripts is absent. `npm rebuild node-pty` wrote `build/Release/pty.node` and `verify:tmux` is then 35/35. `electron-rebuild -f -w node-pty` replaced that binary with the Electron ABI. Under `xvfb-run`, `TC_SHOT_ONLY=rd-splash` wrote `out/shots/rd-splash.png` and `rd-splash.vs-reference.png` and exited 0. DBus address errors are the host. `verify:ipc` is 1/1 at 209 channels. The rest of the Electron tier was not run. No golden was written.
+
+## R-024 · Empty-canvas hint
+
+Owner chose on Oct 6, 2026: keep M388. `onCanvasDoubleClick` still places a flowchart process step. The ghost hint is now `Double-click to place a flowchart step` (`GHOST_TARGET`). `rd-empty.hints.1` pins that sentence. L-A's brief and L-B's "spawns the default agent" line name the same step. `hints.ts` already refused to teach ⌘N after the double-click; the comment now points at the ghost. No shot scene hardcoded the old sentence. `rd-canvas` was not moved.
+
+### Gates
+
+Linux, Node v22.14.0. `npm ci --ignore-scripts`.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass (node and web) |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run verify:rd-l-b` | 14/14 |
+| `npm run verify:rd-l-c` | 11/11 |
+| `npm run verify:rd-l-d` | 18/18 |
+| `npm run verify:rd-l-e` | 15/15 |
+| `npm run verify:rd-l-f` | 17/17 |
+| `npm run verify:styles` | 97/97 |
+| `npm run verify:rail` | 266/266 |

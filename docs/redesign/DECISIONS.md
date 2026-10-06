@@ -80,3 +80,10 @@ inside `panel-state.ts` only.
 **Accepted default.** Ship as 6.0.0 (the visual language changes) with a
 migration note on chords. The bump is Phase 5 (M456), not this change.
 `package.json` stays `5.0.0` until that release.
+
+## R-024 — Empty-canvas double-click
+
+Owner chose on Oct 6, 2026. Keep the existing gesture: a double-click on
+empty canvas still places a flowchart process step (`onCanvasDoubleClick`).
+The empty-canvas ghost hint names that step. The gesture is not retargeted
+to a terminal.

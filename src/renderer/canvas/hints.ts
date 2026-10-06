@@ -67,8 +67,9 @@ export function attemptOf(e: { type: string; button?: number; deltaMode?: number
   if (e.type === 'mousedown' && e.button === 0) return 'pan'
   if (e.type === 'wheel' && e.ctrlKey !== true && e.deltaMode === 1) return 'zoom'
   // M388. A double-click on the ground is no longer a reach for anything —
-  // it places a process step (Canvas.tsx onCanvasDoubleClick), so teaching
-  // ⌘N after it would contradict what just happened on screen.
+  // it places a flowchart process step (Canvas.tsx onCanvasDoubleClick).
+  // The empty-canvas ghost (GHOST_TARGET) names that step. Teaching ⌘N
+  // after it would contradict what just happened on screen.
   if (e.type === 'keydown' && e.metaKey !== true && e.ctrlKey !== true && typeof e.key === 'string' && e.key.length === 1) return 'palette'
   return null
 }
