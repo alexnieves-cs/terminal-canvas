@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
-import { minimapCovered, minimapNeeded, minimapPanViewport, minimapPresence, minimapProjection, minimapToWorld, minimapViewHit, viewportCentredAt, type MinimapPointer, type MinimapPresence, type MinimapProjection } from './minimap'
+import { minimapCovered, minimapNeeded, minimapPanViewport, minimapPresence, minimapProjection, minimapToWorld, minimapViewHit, projectBox, viewportCentredAt, type MinimapPointer, type MinimapPresence, type MinimapProjection } from './minimap'
 import type { Size, Viewport, WorldRect } from './viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { MINIMAP_LEGEND, panelState, type StateInput } from '@renderer/panels/panel-state'
@@ -42,6 +42,8 @@ export interface MinimapProps {
    * reserved its box (useViewport's `safely`), so it returns clear of the target.
    */
   flying?: boolean
+  /** M442. Task territories, outlined and unfilled so a block's tone stays the panel's. */
+  regions?: readonly { x: number; y: number; w: number; h: number }[]
 }
 
 /** The one place a minimap row's state is derived — Block and its `.sr-only`
@@ -69,7 +71,7 @@ function MinimapAltRow({ row }: { row: MinimapRow }): JSX.Element {
   return <li>{row.label} — {shown.word}</li>
 }
 
-export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds, flying }: MinimapProps): JSX.Element | null {
+export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds, flying, regions }: MinimapProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
   // The CANVAS's size, not the thumb's: the camera's rectangle is the canvas
@@ -214,6 +216,10 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
       style={{ width: MINIMAP_W, height: MINIMAP_H }}
       onMouseDown={onMouseDown}
     >
+      {(regions ?? []).map((region, i) => {
+        const box = projectBox(region, projection)
+        return <div key={`region-${i}`} className="minimap__region" data-minimap-region style={{ left: box.x, top: box.y, width: Math.max(2, box.w), height: Math.max(2, box.h) }} />
+      })}
       {projection.blocks.map((b) => {
         const row = byId.get(b.id)
         return row === undefined ? null : <Block key={b.id} row={row} box={b} selected={selected?.has(b.id) === true} />

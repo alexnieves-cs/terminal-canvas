@@ -11540,9 +11540,318 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 
 /* ── rd:L-A ── */
 
+#rd-la-shot { position: fixed; inset: 0; z-index: 80; }
+
+.rd-splash {
+  position: fixed; inset: 0; z-index: 70;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--s-0) 72%, transparent);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.rd-splash__ghosts { position: absolute; inset: 0; }
+.rd-splash__ghost {
+  position: absolute;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--s-3) 55%, transparent);
+}
+.rd-splash__card {
+  position: relative;
+  width: min(440px, calc(100% - var(--sp-8)));
+  padding: var(--sp-7) var(--sp-7) var(--sp-6);
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--s-0) 55%, transparent);
+}
+.rd-splash__brand {
+  display: flex; align-items: center; gap: var(--sp-4);
+  font-size: var(--t-sm); font-weight: 600; letter-spacing: .01em;
+}
+.rd-splash__grid {
+  width: 22px; height: 22px;
+  background:
+    linear-gradient(var(--fg), var(--fg)) 0 0 / 9px 9px no-repeat,
+    linear-gradient(var(--fg), var(--fg)) 13px 0 / 9px 9px no-repeat,
+    linear-gradient(var(--fg), var(--fg)) 0 13px / 9px 9px no-repeat,
+    linear-gradient(var(--fg), var(--fg)) 13px 13px / 9px 9px no-repeat;
+}
+.rd-splash__tagline {
+  margin: var(--sp-5) 0 var(--sp-6);
+  font-size: var(--t-lg); font-weight: 600; letter-spacing: -.01em;
+}
+.rd-splash__lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.rd-splash__lines li { display: grid; grid-template-columns: 16px 1fr; grid-template-rows: auto auto; column-gap: var(--sp-4); align-items: center; }
+.rd-splash__lines li[data-phase="pending"] { color: var(--fg-4); }
+.rd-splash__mark { grid-row: 1 / span 2; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--fg-4); justify-self: center; }
+.rd-splash__mark[data-phase="done"], .rd-splash__mark[data-phase="skipped"] { border-color: var(--state-done); background: var(--state-done); }
+.rd-splash__mark[data-phase="failed"] { border-color: var(--state-failed); background: var(--state-failed); }
+.rd-splash__mark[data-phase="active"] { border-color: var(--state-working); background: var(--state-working); animation: state-breath var(--dur-breath) var(--ease) infinite; }
+.rd-splash[data-breathing="false"] .rd-splash__mark { animation: none; }
+.rd-splash__label { font-size: var(--t-md); }
+.rd-splash__name, .rd-splash__detail { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3); }
+.rd-splash__detail { grid-column: 2; }
+.rd-splash__hint { margin: var(--sp-6) 0 0; color: var(--fg-3); font-size: var(--t-sm); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-splash__mark { animation: none; }
+}
+
+.rd-onboard {
+  position: fixed; inset: 0; z-index: 70;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--s-0) 72%, transparent);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.rd-onboard__card {
+  width: min(960px, calc(100% - var(--sp-8)));
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--s-0) 55%, transparent);
+}
+.rd-onboard__main { display: flex; flex-direction: column; min-width: 0; padding: var(--sp-6); }
+.rd-onboard__brand { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--t-sm); font-weight: 600; }
+.rd-onboard__body { display: grid; grid-template-columns: 140px 1fr; gap: var(--sp-6); margin-top: var(--sp-5); }
+.rd-onboard__rail { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.rd-onboard__rail li { display: flex; align-items: center; gap: var(--sp-4); color: var(--fg-4); font-size: var(--t-sm); }
+.rd-onboard__rail li[data-current="true"] { color: var(--fg); }
+.rd-onboard__rail-index {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono); font-size: var(--t-sm);
+}
+.rd-onboard__rail li[data-current="true"] .rd-onboard__rail-index { border-color: var(--iris); color: var(--iris); }
+.rd-onboard__count { margin: 0; color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__title { margin: var(--sp-4) 0; font-size: var(--t-lg); font-weight: 600; letter-spacing: -.01em; }
+.rd-onboard__lead { margin: 0 0 var(--sp-5); color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.rd-onboard__rows li { display: flex; justify-content: space-between; gap: var(--sp-4); align-items: center; }
+.rd-onboard__agent { display: block; font-size: var(--t-md); }
+.rd-onboard__status { display: block; color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__mono { display: block; font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3); }
+.rd-onboard__rows button, .rd-onboard__custom {
+  background: transparent; color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: var(--sp-2) var(--sp-4); font: inherit; cursor: pointer;
+}
+.rd-onboard__custom { margin-top: var(--sp-4); }
+.rd-onboard__ready { margin: var(--sp-4) 0 0; font-size: var(--t-sm); }
+.rd-onboard__field { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--t-sm); }
+.rd-onboard__field input {
+  font: inherit; font-family: var(--font-ui); color: var(--fg); background: var(--s-0);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4);
+}
+.rd-onboard__foot {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
+  margin-top: var(--sp-6); color: var(--fg-3); font-size: var(--t-sm);
+}
+.rd-onboard__foot p { margin: 0; max-width: 42ch; }
+.rd-onboard__continue {
+  background: var(--iris); color: var(--on-iris); border: 0; border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-5); font: inherit; font-weight: 600; cursor: pointer;
+}
+.rd-onboard__continue:disabled { background: var(--s-3); color: var(--fg-4); cursor: default; }
+.rd-onboard__preview {
+  padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4);
+  border-left: 1px solid var(--line); background: var(--s-0);
+}
+.rd-onboard__frame {
+  border: 1px solid var(--tone, var(--line)); border-radius: var(--r-lg);
+  padding: var(--sp-4); background: var(--s-1); min-height: 72px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: var(--sp-2);
+}
+.rd-onboard__frame-kicker { color: var(--fg-3); font-size: var(--t-sm); }
+.rd-onboard__frame-word { font-size: var(--t-md); }
+.rd-onboard__caption { margin: 0; color: var(--fg-3); font-size: var(--t-sm); }
+
+.rd-empty {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center;
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.rd-empty__card {
+  width: min(640px, calc(100% - var(--sp-8)));
+  display: flex; flex-direction: column; gap: var(--sp-5);
+}
+.rd-empty__title { margin: 0; font-size: var(--t-xl); font-weight: 600; letter-spacing: -.01em; }
+.rd-empty__purpose { margin: 0; color: var(--fg-3); font-size: var(--t-md); max-width: 52ch; }
+.rd-empty__task { display: flex; align-items: center; gap: var(--sp-4); }
+.rd-empty__task input {
+  flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--s-1);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4);
+}
+.rd-empty__chip {
+  font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-4);
+}
+.rd-empty__start {
+  background: var(--iris); color: var(--on-iris); border: 0; border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-5); font: inherit; font-weight: 600; cursor: pointer;
+}
+.rd-empty__start:disabled { background: var(--s-3); color: var(--fg-4); cursor: default; }
+.rd-empty__quick, .rd-empty__hints { display: flex; flex-wrap: wrap; gap: var(--sp-4); list-style: none; margin: 0; padding: 0; }
+.rd-empty__quick button, .rd-empty__layouts button {
+  background: transparent; color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); font: inherit; cursor: pointer; text-align: left;
+}
+.rd-empty__layouts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+.rd-empty__layout-name { display: block; font-weight: 600; }
+.rd-empty__layout-sentence { display: block; color: var(--fg-3); font-size: var(--t-sm); margin-top: var(--sp-2); }
+.rd-empty__ghost {
+  margin: 0; border: 1px dashed var(--line-strong); border-radius: var(--r-lg);
+  padding: var(--sp-6); text-align: center; color: var(--fg-3);
+}
+.rd-empty__hints { color: var(--fg-3); font-size: var(--t-sm); }
+.rd-empty__minimap {
+  position: absolute; right: var(--sp-6); bottom: var(--sp-6);
+  margin: 0; width: 160px; padding: var(--sp-4);
+  background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-md);
+  color: var(--fg-3); font-size: var(--t-sm); text-align: center;
+}
+
 /* ── /rd:L-A ── */
 
 /* ── rd:L-B ── */
+
+/* M442. The territory. Bounds already include the 24px pad (--sp-7); the
+   padding here is the inset the chip sits over. The chip's ground breaks the dash. */
+.task-region {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--fg-3) 70%, transparent);
+  border-radius: var(--r-region);
+  padding: var(--sp-7);
+  pointer-events: none;
+}
+.task-region__chip {
+  position: absolute;
+  top: 0;
+  left: var(--sp-6);
+  transform: translateY(-50%);
+  padding: var(--sp-1) var(--sp-4);
+  background: var(--s-0);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  font-size: var(--t-xs);
+  font-family: var(--font-ui);
+}
+
+/* Frame. Radius and one resting shadow. Selection restates --glow-iris (D1)
+   so a selected working panel stays two facts. Needs-you is the amber edge.
+   None of these rules name the well. */
+.panel { border-radius: var(--r-lg); }
+.panel:not(.panel--selected):not([data-link-target]) { box-shadow: var(--lift), var(--rim-top); }
+.panel--selected { box-shadow: var(--glow-iris), var(--lift), var(--rim-top); }
+.panel--agent-wants-you {
+  box-shadow: 0 0 0 1px var(--state-needs), var(--tone-glow, 0 0 12px color-mix(in srgb, var(--state-needs) 45%, transparent)), var(--lift);
+}
+.pf__word[data-state-word] {
+  border-radius: var(--r-full);
+  padding-inline: var(--sp-4);
+  border: 1px solid var(--line);
+}
+.pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { opacity: 0; }
+.pf:hover .pf__chrome button, .pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close,
+.pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,
+.panel--selected .pf__chrome button, .panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close { opacity: 1; }
+
+.review-node { border-radius: var(--r-lg); }
+
+/* Off-screen pip. The layer stays pointer-events: none; only the button takes the click. */
+.edge-indicator__fly {
+  pointer-events: auto;
+  border: 0;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--state-needs) 18%, var(--s-1));
+  color: var(--fg);
+  cursor: pointer;
+}
+
+/* The percent stays readable at 100%. The attribute zoomReadoutShown writes is unchanged. */
+.canvas-hud__readout,
+.canvas-hud__readout[data-hud-readout="rest"] { opacity: 1; }
+
+.minimap__region {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--fg-3) 70%, transparent);
+  border-radius: var(--r-sm);
+  background: transparent;
+  pointer-events: none;
+}
+
+.inline-approval {
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--s-1);
+  border: 1px solid var(--state-needs);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  pointer-events: auto;
+}
+.inline-approval__verbs { display: flex; gap: var(--sp-4); margin-top: var(--sp-4); }
+.inline-approval__wait { margin: var(--sp-4) 0 0; color: var(--fg-3); font-size: var(--t-xs); }
+
+/* L-C's mount. Absolute and zero-size: it is not a box in the flow, so a
+   terminal's well cannot change because it exists. */
+.tier-layer { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.recovery-slot { display: contents; }
+
+/* M443. A slight overshoot, then settle. motion.2 already allows the name
+   panel-settle, so this is a second definition of that name. The first
+   definition (the dip) stays where it is. This one comes later and is the
+   one that paints. Reduced motion drops it. */
+@keyframes panel-settle {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+  70% { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+.panel[data-panel-settling] > .panel__motion { animation: panel-settle var(--dur-2) var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .panel[data-panel-settling] > .panel__motion { animation: none; }
+}
+
+.marquee-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-7);
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  pointer-events: auto;
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  color: var(--fg);
+}
+.marquee-toolbar button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+
+.connected-spawn {
+  min-width: 240px;
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--s-1);
+  pointer-events: auto;
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+}
+.connected-spawn__group { margin-top: var(--sp-4); color: var(--fg-3); font-size: var(--t-xs); letter-spacing: 0.04em; }
+.connected-spawn__row, .connected-spawn__close { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: var(--sp-2) 0; }
+.connected-spawn__foot { margin: var(--sp-4) 0 0; color: var(--fg-3); font-size: var(--t-xs); }
 
 /* ── /rd:L-B ── */
 

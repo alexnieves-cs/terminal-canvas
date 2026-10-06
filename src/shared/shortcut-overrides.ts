@@ -5,7 +5,7 @@
  * it is frozen at rd-foundations. A re-recorded chord cannot be written
  * there. This module is the merge: pure, no Electron, no DOM. Callers that
  * still import `electronAccelerator` or `matchShortcut` keep the registry
- * chord until they take `acceleratorFor` / `matchEffective` (R-016). An empty
+ * chord until they take `acceleratorFor` / `matchEffective` (R-025). An empty
  * override list is that registry, including the historical menu strings.
  *
  * Canvas scope requires ⌘ (D4's half of the same rule: a bare key belongs

@@ -144,14 +144,77 @@ from: centerViewNow === 'focus'
 - Status: done: the title is `Show Orchestrate`. The id stays `canvas.orchestration`.
 - Filed on the F3 branch as R-009.
 
-### R-016 · Menu accelerators read keyboard overrides
+### R-016 · Header path, branch and state duration
+- Lane: L-B
+- File: `src/renderer/components/PanelFrame.tsx`, `src/renderer/components/TerminalPanel.tsx`
+- Why the contract or the owner cannot absorb it: M442's frame shows a faint path, the branch and a duration beside the state word (`working · 12m`). L-B does not own those two components. The state word stays the one word from `panel-state.ts` (D7). A duration is a separate fact, and painting it by changing `shown.word` would move every check that pins that word.
+- Smallest change: in the header chrome, render the panel path, the branch when one is known, and `statePill(word, elapsedMs)` from `src/renderer/panels/header-rest.ts` beside `[data-state-word]`. Leave the word itself alone.
+- Status: open
+
+### R-017 · The painted settle is a second `panel-settle`
+- Lane: L-B
+- File: `scripts/verify-styles.cjs`
+- Why the contract or the owner cannot absorb it: M443's settle overshoots (0, then -3px, then 1px, then 0). `motion.2` rejects a new keyframe name, and F1 owns this suite, so the lane redeclares `@keyframes panel-settle` inside `rd:L-B`. That later definition is the one that paints. `revamp.motion.1` reads only the first `@keyframes panel-settle`, which is still the dip and has no negative translate, so the check stays green while the painted motion overshoots.
+- Smallest change: point `honest('panel-settle')` at the last `@keyframes panel-settle`, and allow this overshoot as the lane's settle. Leave the first definition in place.
+- Status: open
+
+### R-018 · Name `boot:progress` in the README architecture fence
+- Lane: L-A
+- File: `README.md` (the fence that contains `--invoke-->`)
+- Why the contract or the owner cannot absorb it: `boot:progress` is `IPC_EVENTS.BOOT_PROGRESS`, a main→renderer send. `verify:meta` 14 reads every `IPC` and `IPC_EVENTS` channel string and requires it inside that fence. L-A owns `ipc-contract.ts` and `CLAUDE.md` for the channel edit, and not the README. `CLAUDE.md` already names the channel (`claude-md.1` is green).
+- Smallest change: on the `renderer <--send---` list, add `boot:progress` beside `pool:mint / pool:event`.
+- Status: open
+
+### R-019 · Publish restore progress from the composition root
+- Lane: L-A
+- File: `src/main/index.ts` (and the window bootstrap that owns the reattach loop)
+- Why the contract or the owner cannot absorb it: L-A may add `src/main/bootstrap/boot-progress.ts` and must leave the rest of `src/main/bootstrap/` and the composition root alone. `publishBootProgress` and `skipRemaining` are pure; nothing calls them yet, so the splash's four lines stay pending until a caller measures them.
+- Smallest change: call `publishBootProgress` when the workspace opens (name and path), when the layout restores (task count and object count), on each tmux reattach (`done` of `total`), and when the agent probe answers. When Option is held, call `skipRemaining` and bring the unfinished panes up asleep. Do not kill them.
+- Status: open
+
+### R-020 · Subscribe the renderer to `boot:progress`
+- Lane: L-A
+- File: `src/preload/index.ts`
+- Why the contract or the owner cannot absorb it: the preload is not in L-A's list. `CanvasBridge.boot.onProgress` is already optional on the contract, so typecheck stays green without this file. The splash cannot hear a live event until the bridge forwards `IPC_EVENTS.BOOT_PROGRESS`.
+- Smallest change: `ipcRenderer.on(IPC_EVENTS.BOOT_PROGRESS, …)` and expose `canvas.boot.onProgress(listener)` returning the unsubscribe.
+- Status: open
+
+### R-021 · Mount the three L-A screens from Canvas
+- Lane: L-A
+- File: `src/renderer/canvas/Canvas.tsx`
+- Why the contract or the owner cannot absorb it: Canvas is L-B's in this wave. The shot door is `window.__rdLA.mount` on `StartupSplash`, which Canvas already imports, so the scenes can paint before the product mounts them. The APEX splash stays off under the harness (`tc-splash=off`); the restore card is a second surface.
+- Smallest change: mount `RestoreSplash` while restore is unsettled, even when `splashMode` is `'none'`. On first run, show `Onboarding` without removing the `data-onboarding-*` attributes `verify:onboarding` reads off `Launcher`'s own render. After onboarding, an empty workspace shows `BlankCanvas`.
+- Status: open
+
+### R-022 · Minimap reads the empty sentence
+- Lane: L-A
+- File: `src/renderer/canvas/MinimapOverlay.tsx`
+- Why the contract or the owner cannot absorb it: L-B owns the overlay. The sentence `Nothing placed yet` is `emptyState('minimap')` in `empty-states.ts`. A second sentence in the overlay would drift from `empty.2`.
+- Smallest change: when the canvas has no panels, render `emptyState('minimap').sentence` and no numeric zero.
+- Status: open
+
+### R-023 · A failed restore is the 09 surface's sentence
+- Lane: L-A
+- File: L-F's 09 states (M447)
+- Why the contract or the owner cannot absorb it: the 09 screen is L-F. The splash already stops on a failed step and calls `noteBootIssue` through `noteRestoreFailure`. `shell/ReopenNotice.tsx` already reads that list. An error card inside the splash would be a second 09.
+- Smallest change: the 09 surface shows the boot-issue sentence when restore failed. Do not invent another error card in L-A.
+- Status: open
+
+### R-024 · Empty-canvas double-click still places a process step
+- Lane: L-A
+- File: `src/renderer/canvas/Canvas.tsx` (`onCanvasDoubleClick`)
+- Why the contract or the owner cannot absorb it: M388's double-click places a process step. The empty canvas copy, from the mockup, says "Double-click to place a terminal". L-A does not own Canvas, and retargeting the gesture would change a pinned behavior (`attemptOf` already refuses to teach ⌘N after that double-click).
+- Smallest change: when the canvas is empty, a double-click places a terminal, or the copy changes to name the process step. Leave the gesture as it is until the owner decides.
+- Status: open
+
+### R-025 · Menu accelerators read keyboard overrides
 - Lane: L-E
 - File: `src/main/menu.ts`
 - Why the contract or the owner cannot absorb it: L-E owns the merge (`acceleratorFor` in `src/shared/shortcut-overrides.ts`) and the `keyboard.overrides` setting. The menu is F3's. It already rebuilds on `settings:changed` and calls `electronAccelerator`, which reads the frozen registry. A re-recorded chord persists and the Keyboard page shows it; the menu item keeps the registry accelerator, including tidy-alias `CmdOrCtrl+Alt+T`.
 - Smallest change: build each accelerator with `acceleratorFor(id, parseOverrideList(stringList(options.settingValue('keyboard.overrides'))))` instead of `electronAccelerator(id)`. An empty list matches today's historical strings. `stringList` is `Array.isArray(value) ? value.filter(v => typeof v === 'string') : []`. Listeners (`useKeyboardNav`'s `matchShortcut`, the palette's hardcoded ⌘K) still match the registry; `matchEffective` is the same merge when those files are next touched. That hook returns before an Option chord, so swapping the call alone does not fire an override that adds ⌥.
 - Status: open
 
-### R-017 · Open Settings from the palette and the dock
+### R-026 · Open Settings from the palette and the dock
 - Lane: L-E
 - File: `src/renderer/palette/commands.ts`, `src/renderer/canvas/Canvas.tsx` (`openSettingsScope`)
 - Why the contract or the owner cannot absorb it: the row and the verb are `OPEN_SETTINGS_ROW` / `openSettingsPage` in `palette-actions/settings.ts`. The command list and the dock's Settings callback are other lanes. Nothing a person can click reaches the page. The shot calls `window.__tcOpenSettings`, which is the same function the row's `run` calls.

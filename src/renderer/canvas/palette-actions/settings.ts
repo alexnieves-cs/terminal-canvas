@@ -322,7 +322,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
 
 /**
  * M446. The door into Settings. The command list that would show this row
- * lives in the palette, which this lane does not own (R-017). `run` is the
+ * lives in the palette, which this lane does not own (R-026). `run` is the
  * verb; the shot calls the same `openSettingsPage`.
  */
 export const OPEN_SETTINGS_ROW = {
