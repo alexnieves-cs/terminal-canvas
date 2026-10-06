@@ -103,6 +103,13 @@ ok('rd-w5.walk.1 World Cmd+J and the 2D walk pick the same next id — one rule,
 
 const flightSrc = read('src/renderer/world/world-flight.ts')
 const viewSrc = read('src/renderer/world/WorldView.tsx')
+const canvasJump = read('src/renderer/canvas/Canvas.tsx')
+ok('rd-w5.walk.3 the canvas jump and the world walk share one attention cursor',
+  /attentionCursor\(\)/.test(canvasJump) && /setAttentionCursor\(id\)/.test(canvasJump) &&
+  !/jumpCursorRef/.test(canvasJump) &&
+  (canvasJump.match(/setAttentionCursor\(id\)/g) ?? []).length >= 2 &&
+  /cursor = id/.test(flightSrc) && /export function attentionCursor/.test(flightSrc))
+
 ok('rd-w5.walk.2 the room steps that rule on the published queue and does not sort a second one',
   !/\.sort\(/.test(flightSrc) && /attentionStep\(/.test(flightSrc) && /walkAttention\(/.test(viewSrc) &&
   !/from '@renderer\/canvas\//.test(viewSrc) && !/from 'three'/.test(flightSrc) && !/from 'react'/.test(flightSrc) &&

@@ -289,6 +289,7 @@ import { WorldStage } from '../world/WorldStage'
 import { WorldLens } from '../world/WorldLens'
 import { landingViewport } from '../world/plan-floor'
 import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn, worldLandingViewport } from '../world/world-toggle'
+import { attentionCursor, setAttentionCursor } from '../world/world-flight'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
 import { requestArrival } from '../world/world-select'
 import { useSelectedAgent } from '../world/world-select'
@@ -2944,10 +2945,6 @@ export function Canvas({
     if (docFocusId !== null && (!selectedIds.has(docFocusId) || selectedIds.size !== 1)) setDocFocusId(null)
   }, [docFocusId, selectedIds])
 
-  // Which panel the jump key last visited. A ref, not state: it is a cursor
-  // for a keydown handler and nothing renders from it, so putting it in state
-  // would re-render the canvas on every press for no visible reason.
-  const jumpCursorRef = useRef<string | null>(null)
   // M308. Assigned below, where the inbox is built; read at press time.
   const inboxRef = useRef<Inbox | null>(null)
 
@@ -2987,7 +2984,10 @@ export function Canvas({
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
     // M308. The inbox's order — most unblocked first, snoozed skipped.
     const queue = jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current)
-    const id = nextAttentionId(queue, jumpCursorRef.current, direction)
+    // R-091. The same cursor the World's walk writes, so ⌘J here and ⌘J in
+    // the room are one cycle. The world covers the canvas, so one press is
+    // not handled twice.
+    const id = nextAttentionId(queue, attentionCursor(), direction)
     // Nothing is waiting: the key does nothing at all. Moving the camera
     // "somewhere" would be worse than silence — the user asked to be taken to
     // a panel that wants them, and there isn't one.
@@ -2997,23 +2997,22 @@ export function Canvas({
     // this lookup in principle. It must never be the ONLY thing standing
     // between the user and a working key, which is why the filter exists.
     if (!panel) return
-    jumpCursorRef.current = id
+    setAttentionCursor(id)
     landingTargetRef.current = id
     centreOn(panel.rect)
     selectAndRaise(id)
     openRequestOfRef.current(id)
   }
 
-  // M249. The command pill's Jump: Cmd+J's own queue and its own cursor — so
-  // a pill press and a Cmd+J press advance ONE cycle rather than two that
-  // disagree about which waiting panel is next — landing through
+  // M249. The command pill's Jump: Cmd+J's queue and the same cursor, so a
+  // pill press, a canvas ⌘J and a World ⌘J advance ONE cycle. Lands through
   // jumpToAttention, the notification click's function. Nothing waiting
   // does nothing, for Cmd+J's reason.
   const pillJump = useCallback(() => {
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
-    const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), jumpCursorRef.current, 1)
+    const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), attentionCursor(), 1)
     if (id === null) return
-    jumpCursorRef.current = id
+    setAttentionCursor(id)
     // #16. jumpToAttention opens the request itself (a permission in the queue).
     jumpToAttention(id)
   }, [jumpToAttention])
