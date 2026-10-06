@@ -290,3 +290,25 @@ Watched red: `verify:rd-l-a` exited 1 with `ReferenceError: blankCanvasTitle is 
 | `npm run verify:rd-l-a` | 15/15 pass |
 | `npm run verify:styles` | 97/97 pass |
 | `npm run verify:rail` | 266/266 pass. `empty.2` sees the minimap id rendered. `hints.1` ids unchanged. |
+
+## L-A · G2
+
+Rebase onto `origin/redesign/main` at `6bffde9f` was a no-op: that commit is the branch point.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass, each milestone |
+| `npm run verify:rd-l-a` | 15/15 |
+| `npm run affected -- --base redesign/main` | at M439, 53/55 plain suites, then stopped. Failures were `verify:meta` and `verify:first-run` only. Electron tier not reached. |
+| Full plain wave (67 suites, no build, no Electron) | 64/67 in 31.5s. `verify:canvas-sync`, `verify:relay` and `verify:flowchart` passed. |
+| `npm run shot`, `verify:visual`, `verify:ipc`, `verify:canvas`, `verify:window`, the panels parts | not painted. |
+
+Could not run on Linux:
+
+- `package.json` points every Electron suite and `shot` at `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`. That path does not exist. `scripts/redesign/with-electron-lock.sh` running it exits `No such file or directory`.
+- The Linux binary is present and answers `--version` (`v43.4.1`) under `xvfb-run`. Invoking `scripts/shot.cjs` with that binary dies in main: `Failed to load native module: pty.node` — `prebuilds/linux-x64/pty.node` is absent. The prebuilds on disk are darwin and win32. `verify:tmux` fails the same way in 0.2s.
+- No `out/shots/*.vs-reference.png`. No critic pass. `UPDATE_GOLDENS` was not set. `visual.1` is red on purpose: missing goldens `rd-splash`, `rd-onboarding`, `rd-empty`.
+
+Other reds, not fixed: `verify:meta` `panels-split.2` (`pre-v7-run` absent), `verify:first-run` `revamp.create.1`, `verify:meta` 14 (`boot:progress` absent from the README — R-016).
+
+Requests open: R-016 README fence, R-017 composition root publishes progress, R-018 preload subscribes, R-019 Canvas mounts the three screens, R-020 minimap reads `emptyState('minimap')`, R-021 L-F's 09 surface shows the boot-issue sentence, R-022 empty-canvas double-click still places a process step.
