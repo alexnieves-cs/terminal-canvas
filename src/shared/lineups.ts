@@ -48,14 +48,17 @@ export const LINEUPS: Readonly<Record<Lineup['id'], Lineup>> = {
 export const LINEUP_IDS: readonly Lineup['id'][] = ['solo', 'pair', 'workbench', 'swarm']
 
 /**
- * M441. Starter layouts on the empty canvas. Separate from LINEUPS, whose ids
- * `lineup.1` pins. A layout places nothing until it is clicked.
+ * M441. Starter layouts on the empty canvas. Their ids are their own (`lineup.1`
+ * pins LINEUPS' ids), but each one IS an arrangement the panel sheet already
+ * places — `lineup` names it — so a click has somewhere to go and the empty
+ * canvas teaches the same shapes the sheet offers. A layout with no lineup is
+ * a single login shell. A layout places nothing until it is clicked.
  */
 export const STARTER_LAYOUTS = [
-  { id: 'pair-tests', label: 'Pair + tests', sentence: 'An agent and a shell that runs the tests beside it.' },
-  { id: 'two-agent', label: 'Two-agent review', sentence: 'One agent writes. Another reads the diff.' },
-  { id: 'solo-shell', label: 'Solo shell', sentence: 'A single shell, and nothing else.' }
-] as const
+  { id: 'pair-tests', label: 'Pair + tests', sentence: 'An agent and a shell that runs the tests beside it.', lineup: 'pair' },
+  { id: 'workbench', label: 'Workbench', sentence: 'An agent, a dev-server shell and a preview of localhost:3000.', lineup: 'workbench' },
+  { id: 'solo-shell', label: 'Solo shell', sentence: 'A single shell, and nothing else.', lineup: null }
+] as const satisfies ReadonlyArray<{ id: string; label: string; sentence: string; lineup: Lineup['id'] | null }>
 
 export function starterLayoutAction(id: string, clicked: boolean): { id: string; places: boolean } {
   const known = STARTER_LAYOUTS.some((row) => row.id === id)

@@ -39,6 +39,8 @@ export interface SpawnSheetModel {
   templates?: readonly { template: PersistedTemplate; refusal?: string }[]
   /** M80. The template the sheet opens on, when it was opened for one. */
   templateId?: string
+  /** The row the sheet opens on, when a door already chose one (a starter layout's lineup). */
+  initialWhat?: string
   /** M80. Instantiate: the filled template, the sheet's answer in the sheet's own shape. */
   instantiate?(template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult>
   defaultPresetId: string
@@ -82,7 +84,7 @@ const TEMPLATE_PREFIX = '__tpl__'
 
 export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.Element {
   const firstAvailable = model.presets.find((p) => p.id === model.defaultPresetId && p.available !== false) ?? model.presets.find((p) => p.available !== false)
-  const [whatId, setWhatId] = useState<string>(model.templateId !== undefined ? `${TEMPLATE_PREFIX}${model.templateId}` : (firstAvailable?.id ?? COMMAND))
+  const [whatId, setWhatId] = useState<string>(model.templateId !== undefined ? `${TEMPLATE_PREFIX}${model.templateId}` : (model.initialWhat ?? firstAvailable?.id ?? COMMAND))
   const [command, setCommand] = useState('')
   const preset = model.presets.find((p) => p.id === whatId)
   const [cwd, setCwd] = useState(model.focusedCwd ?? preset?.cwd ?? '')

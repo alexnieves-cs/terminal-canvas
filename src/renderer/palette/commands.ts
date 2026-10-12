@@ -309,7 +309,7 @@ export interface PaletteActions {
   /** M80. `templateId` opens the sheet on that template. */
   /** M149. `into` threads the three `New workspace from` doors to the sheet's Enter, so a template with holes asks before any workspace exists. */
   /** M174. `seed.cwd` opens the sheet ON a folder (the launcher's recents chip). */
-  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd: string }): void
+  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd?: string; what?: string }): void
   /** M149. A sentence on the palette's feedback line — the one place a refusal from a keystroke (a paste) can be said; nothing runs. */
   say(sentence: string): void
   /** M83. Open the project memory for the captured panel's repository. */

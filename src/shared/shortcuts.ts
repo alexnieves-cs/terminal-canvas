@@ -69,7 +69,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   // of the palette's ⌘K.
   { id: 'terminal-clear', chord: '⌘K', scope: 'panel', group: 'existing', label: 'Clear' },
 
-  { id: 'spawn-at-cursor', chord: 'double-click', scope: 'mouse', group: 'mouse', label: 'Spawn at the cursor' },
+  { id: 'spawn-at-cursor', chord: 'double-click', scope: 'mouse', group: 'mouse', label: 'Place a flowchart step' },
   { id: 'spawn-handoff', chord: 'drag from a port', scope: 'mouse', group: 'mouse', label: 'Spawn a connected handoff' },
   { id: 'pan', chord: 'Space+drag', scope: 'mouse', group: 'mouse', label: 'Pan' },
   { id: 'zoom-scroll', chord: '⌘+scroll', scope: 'mouse', group: 'mouse', label: 'Zoom at the cursor' },

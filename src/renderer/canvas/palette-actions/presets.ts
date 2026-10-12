@@ -251,7 +251,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       void window.canvas.preset.savePanel(captured).then(reloadPresets)
     },
     // M174. `seed.cwd` is the launcher's recents chip: the sheet opens ON that folder.
-    beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd: string }) => {
+    beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd?: string; what?: string }) => {
       // The focused panel's LIVE directory first (M12's poll, falling back to
       // the spawn cwd), then main's recent list, then every panel's directory.
       // The captured id while the palette is open; from the menu (palette
@@ -260,7 +260,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       const lastFocused = Object.keys(focusedAt).sort((a, b) => focusedAt[b] - focusedAt[a])[0]
       const captured = palette.capturedId ?? lastFocused ?? null
       const focusedPanel = captured === null ? undefined : panelsRef.current.find((p) => p.rect.id === captured)
-      const focusedCwd = seed !== undefined ? seed.cwd : focusedPanel !== undefined && isTerminalPanel(focusedPanel)
+      const focusedCwd = seed?.cwd !== undefined ? seed.cwd : focusedPanel !== undefined && isTerminalPanel(focusedPanel)
         ? (getLiveSession(focusedPanel.rect.id)?.cwd ?? focusedPanel.spec.cwd)
         : undefined
       const panelDirs = panelsRef.current.filter(isTerminalPanel).map((p) => getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd)
@@ -301,6 +301,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
             hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),
             templates,
             ...(templateId === undefined ? {} : { templateId }),
+            ...(seed?.what === undefined ? {} : { initialWhat: seed.what }),
             instantiate: into === undefined ? instantiateTemplate : intoNewWorkspace,
             teammates: teammatesRef.current,
             // M104. The ceiling as read live: the preview says who queues before Enter.

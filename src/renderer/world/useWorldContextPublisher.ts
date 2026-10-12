@@ -9,7 +9,7 @@ import { backendOf } from '@shared/agent-backends'
 import { sendRefusalSentence } from '@shared/agent-session'
 import type { PresenceRoster } from '@shared/presence'
 import { readyDiscardFor } from '@renderer/review/discard-offer'
-import { questionSnoozeKey } from '@renderer/shell/decision-inbox'
+import { inboxKeyOf, questionSnoozeKey } from '@renderer/shell/decision-inbox'
 import { decisionSnoozed, snoozeDecision } from '@renderer/shell/useDecisionInbox'
 import { getWorldContext, publishWorldContext, setRegionMover, setWorldActions, type RegionMoveCommit, type WorldAgentFacts, type WorldContext, type WorldHandoff, type WorldPeer, type WorldTask } from './world-context-store'
 import { bindDecisionSnooze, SNOOZE_FOR_MS, type DiscardOffer } from './world-flight'
@@ -261,11 +261,26 @@ export function useWorldContextPublisher(input: PublisherInput): void {
   // R-093. Ten minutes on a shell prompt is the inbox's snooze, under the
   // question key, so the World walk and the canvas jump both skip it.
   // Ten is not a menu choice; the card passes the minutes directly.
+  // The World walks PANELS, but the inbox keys a permission request by its
+  // request id (`inboxKeyOf`). So a panel's snooze is written under both its
+  // question key and each of its pending requests' keys, and read back from
+  // either — otherwise a request snoozed in the dock stayed in the World's
+  // strip, and one snoozed in the World stayed in the dock.
   useEffect(() => {
     const minutes = SNOOZE_FOR_MS / 60_000
+    const keysOf = (id: string): string[] => [
+      questionSnoozeKey(id),
+      ...latest.current.approvals.filter((a) => a.id === id).map((a) => inboxKeyOf({ id, approval: a }))
+    ]
     bindDecisionSnooze({
-      write: (id, now) => snoozeDecision(questionSnoozeKey(id), minutes, now),
-      read: (id, now) => decisionSnoozed(questionSnoozeKey(id), now)
+      write: (id, now) => { for (const key of keysOf(id)) snoozeDecision(key, minutes, now) },
+      read: (id, now) => {
+        if (decisionSnoozed(questionSnoozeKey(id), now)) return true
+        const pending = latest.current.approvals.filter((a) => a.id === id)
+        // Every pending request on the panel snoozed: the panel is snoozed. One
+        // left unsnoozed still waits, so the walk keeps the panel.
+        return pending.length > 0 && pending.every((a) => decisionSnoozed(inboxKeyOf({ id, approval: a }), now))
+      }
     })
     return () => bindDecisionSnooze(null)
   }, [])

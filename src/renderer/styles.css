@@ -11656,6 +11656,13 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   padding: var(--sp-3) var(--sp-5); font: inherit; font-weight: 600; cursor: pointer;
 }
 .rd-onboard__continue:disabled { background: var(--s-3); color: var(--fg-4); cursor: default; }
+.rd-onboard__actions { display: flex; align-items: center; gap: var(--sp-3); }
+/* A quiet secondary: one filled primary per surface stays Continue. */
+.rd-onboard__skip {
+  background: transparent; color: var(--fg-3); border: 0; padding: var(--sp-3) var(--sp-4);
+  font: inherit; cursor: pointer; border-radius: var(--r-md);
+}
+.rd-onboard__skip:hover { color: var(--fg); background: var(--s-2); }
 .rd-onboard__preview {
   padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4);
   border-left: 1px solid var(--line); background: var(--s-0);

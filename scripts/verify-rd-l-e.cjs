@@ -199,13 +199,13 @@ const RECORDING = 'Recording — press the new shortcut, or Esc to cancel.'
 }
 
 {
-  const labels = ['General', 'Appearance', 'Agents', 'Sessions & persistence', 'Keyboard', 'Integrations', 'Privacy & export']
+  const labels = ['General', 'Appearance', 'Terminal & accessibility', 'Agents', 'Persistence', 'Keyboard', 'Files & notes', 'Privacy & export']
   const panes = typeof P.SETTINGS_PANES === 'object' && P.SETTINGS_PANES ? P.SETTINGS_PANES : []
   const keyboard = panes.find((pane) => pane.id === 'keyboard')
   const hosts = panes.filter((pane) => pane.id !== 'keyboard')
   const emptyHost = hosts.filter((pane) => typeof P.rowsForPane === 'function' && P.rowsForPane(pane.id).length === 0)
   const purposes = panes.filter((pane) => typeof pane.purpose !== 'string' || pane.purpose.trim() === '')
-  ok('rd-keys.panes.1 the seven pages are the nav, each says what it is for, and every page except Keyboard hosts schema rows',
+  ok('rd-keys.panes.1 the eight pages are the nav, each says what it is for, and every page except Keyboard hosts schema rows',
     panes.map((pane) => pane.label).join('|') === labels.join('|') && keyboard?.purpose === HEADER &&
     emptyHost.length === 0 && purposes.length === 0 && (keyboard?.categories || []).length === 0,
     JSON.stringify({ labels: panes.map((pane) => pane.label), emptyHost: emptyHost.map((pane) => pane.id), purposes: purposes.map((pane) => pane.id) }))

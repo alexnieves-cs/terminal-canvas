@@ -167,6 +167,8 @@ import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import { NavigateTier } from '@renderer/palette/navigate-tier'
 import { ConnectedSpawnMenu } from '@renderer/palette/SpawnSheet'
+import { lineupWhatId } from '@renderer/palette/spawn-sheet'
+import { STARTER_LAYOUTS } from '@shared/lineups'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
@@ -225,7 +227,7 @@ import { buildPortable, exportSentence, remapPortable, type parsePortable } from
 import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, isStarterCaption, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
+import { onboardingReadiness, probesFromReport, foundAgentIds, type OnboardingAnswers, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -8913,6 +8915,26 @@ export function Canvas({
     try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }
     setOnboardingDone(true)
   }
+  // The card's answers are SAVED, not just read: a renamed workspace keeps the
+  // name, and the first agent turned on becomes ⌘N. Claude and Codex are
+  // built-in presets already, so "turned on" is choosing the default — no
+  // preset is minted. None turned on leaves ⌘N where it was. Then the last
+  // step does what its copy says and opens the new-task sheet.
+  const completeOnboarding = (answers: OnboardingAnswers): void => {
+    finishOnboarding()
+    const active = workspaceRows.find((w) => w.active)
+    if (active !== undefined && answers.workspaceName !== '' && answers.workspaceName !== active.name) {
+      void window.canvas.workspace.rename(active.id, answers.workspaceName)
+        .catch((error: unknown) => { console.warn('[onboarding] could not rename the workspace', error) })
+        .finally(reloadWorkspaces)
+    }
+    const first = answers.enabled.find((id) => presetRows.some((p) => p.id === id && p.builtIn))
+    if (first !== undefined) {
+      void window.canvas.preset.setDefault(first).then(reloadPresets, (error: unknown) => { console.warn('[onboarding] could not set the default agent', error) })
+    }
+    paletteActionsRef.current?.beginStartWork()
+  }
+  const onboardingProbes = probesFromReport(envReport)
 
   // R-028. A work item names one conversation. That slot is filled only while
   // it is empty — writing over it would replace the lane's chat. Every moved
@@ -10259,10 +10281,44 @@ export function Canvas({
           />
         )}
         {showOnboarding && !merged && (
-          <Onboarding workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''} onHandoff={finishOnboarding} />
+          <Onboarding
+            workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''}
+            probes={onboardingProbes}
+            enabled={foundAgentIds(onboardingProbes)}
+            {...(envReport === null ? {} : { tmux: { path: envReport.tmux.path } })}
+            onHandoff={(_handoff, answers) => completeOnboarding(answers)}
+            onSkip={finishOnboarding}
+            onCustom={() => { finishOnboarding(); paletteActionsRef.current?.beginSpawnSheet() }}
+          />
         )}
-        {onboardingDone && panels.length === 0 && !merged && (
-          <BlankCanvas workspace={workspaceRows.find((w) => w.active)?.name ?? ''} />
+        {/* One empty state at a time. The launcher holds an empty canvas
+            until the person puts it away ("Blank canvas"); only then does the
+            quieter blank card show, and every button on it does something:
+            the task box opens the new-task sheet on that sentence, the quick
+            spawns are ⌘N's preset and a login shell, and a starter layout
+            opens the panel sheet on its lineup (the person still picks the
+            folder there). */}
+        {onboardingDone && panels.length === 0 && !merged && launcherPutAway && (
+          <BlankCanvas
+            workspace={workspaceRows.find((w) => w.active)?.name ?? ''}
+            onStart={(sentence) => paletteActions.beginStartWork({ title: sentence.trim() })}
+            onQuick={(id) => {
+              if (id === 'import') { void importCanvas(); return }
+              if (id === 'agent') {
+                const preset = presetRows.find((p) => p.isDefault && p.available) ?? presetRows.find((p) => p.agent !== undefined && p.available)
+                if (preset !== undefined) { paletteActions.spawnPreset(preset.id); return }
+                paletteActions.beginSpawnSheet()
+                return
+              }
+              onSpawn(worldCentre(), { cwd: '~', args: [] }, { focus: true })
+            }}
+            onLayout={(id) => {
+              const layout = STARTER_LAYOUTS.find((row) => row.id === id)
+              if (layout === undefined) return
+              if (layout.lineup === null) { onSpawn(worldCentre(), { cwd: '~', args: [] }, { focus: true }); return }
+              paletteActions.beginSpawnSheet(undefined, undefined, { what: lineupWhatId(layout.lineup) })
+            }}
+          />
         )}
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
