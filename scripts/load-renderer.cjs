@@ -92,19 +92,15 @@ const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = f
         const wanted = win.getBounds()
         win.showInactive()
         if (keepSize) {
-          win.setBounds(wanted)
-          // setBounds is clamped to the runner's ~1024-wide screen as well, so
-          // emulate the view size: the page then lays out at the width the
-          // checks were written for (the shell's compact breakpoint is read
-          // from innerWidth).
-          win.webContents.enableDeviceEmulation({
-            screenPosition: 'desktop',
-            screenSize: { width: wanted.width, height: wanted.height },
-            viewPosition: { x: 0, y: 0 },
-            viewSize: { width: wanted.width, height: wanted.height },
-            deviceScaleFactor: 0,
-            scale: 1,
-          })
+          // The clamp survives setBounds and enableLargerThanScreen alike
+          // (measured: innerWidth stayed 1024, and device emulation did not
+          // relayout the shell either). Zooming the page out by the clamp's
+          // ratio gives it the CSS-pixel viewport it was asked for: layout,
+          // elementFromPoint and in-page events all work in CSS px, so every
+          // check sees 1400x900 while the screen shows less.
+          const [cw, ch] = win.getContentSize()
+          const ratio = Math.min(1, cw / wanted.width, ch / wanted.height)
+          if (ratio < 1) win.webContents.setZoomFactor(ratio)
         }
         win.webContents.focus()
       }
