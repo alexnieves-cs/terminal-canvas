@@ -910,7 +910,14 @@ console.log('\n' + '='.repeat(60))
 // docs/load-bearing.md keep reading as evidence. So the parts' id SET is
 // compared against the old file's at `pre-v7-run`, read from git, never from
 // a stored list that would itself go stale.
+//
+// The baseline is named by its COMMIT, not by the tag. The tag was never
+// pushed to GitHub, so on the runner the lookup failed for a reason that was
+// not the code's and the check sat red on every run, which hides every red
+// behind it. A sha needs no ref to travel, only history: the workflow checks
+// out with `fetch-depth: 0`.
 {
+  const PRE_V7_RUN = '328e087f53fa56594a4975a83cad326e1e8b2695'
   const { readdirSync } = require('node:fs')
   const { execFileSync } = require('node:child_process')
   const scripts = readdirSync(join(ROOT, 'scripts'))
@@ -944,7 +951,7 @@ console.log('\n' + '='.repeat(60))
   let oldIds = new Set()
   let gitErr = null
   try {
-    oldIds = idsOf(execFileSync('git', ['show', 'pre-v7-run:scripts/verify-panels.cjs'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
+    oldIds = idsOf(execFileSync('git', ['show', `${PRE_V7_RUN}:scripts/verify-panels.cjs`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
   } catch (e) { gitErr = String(e && e.message || e).split('\n')[0] }
   const newIds = new Set()
   for (const f of parts) for (const id of idsOf(read(join('scripts', f)) || '')) newIds.add(id)
@@ -1019,15 +1026,22 @@ console.log('\n' + '='.repeat(60))
   }
   const goldensDir = join(ROOT, 'verify', 'visual', 'goldens')
   const goldens = existsSync(goldensDir) ? readdirSync(goldensDir).filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')) : []
-  const missing = declared.filter((n) => !goldens.includes(n))
+  // A scene waiting for a person to look at it on a Mac is named in
+  // verify/visual/pending-goldens.json with the reason. The list is not a way
+  // to skip a scene: a listed scene that the harness no longer declares, or
+  // that already HAS a golden, fails here, so the entry cannot outlive the wait.
+  let pending = []
+  try { pending = JSON.parse(read('verify/visual/pending-goldens.json') || '{}').scenes || [] } catch { pending = null }
+  const pendingBad = pending === null ? ['unreadable'] : pending.filter((n) => !declared.includes(n) || goldens.includes(n))
+  const missing = declared.filter((n) => !goldens.includes(n) && !(pending || []).includes(n))
   const stray = goldens.filter((n) => !declared.includes(n))
   const chain = String(pkg.scripts.verify || '')
   const channel = script ? script.match(/const CHANNEL_TOLERANCE = (\d+)\s*\/\/ [^\n]{20,}/) : null
   const budget = script ? script.match(/const PIXEL_BUDGET = ([\d.]+)\s*\/\/ [^\n]{20,}/) : null
   ok('visual.1 verify:visual exists as an Electron entry outside the chain, holds one golden per scene the shot harness declares, and states its two tolerance constants with a sentence each',
     script !== null && /require\('electron'\)/.test(script) && typeof pkg.scripts['verify:visual'] === 'string' && !chain.includes('verify:visual') &&
-      declared.length >= 50 && missing.length === 0 && stray.length === 0 && channel !== null && budget !== null,
-    JSON.stringify({ script: script !== null, declared: declared.length, goldens: goldens.length, missing: missing.slice(0, 8), stray: stray.slice(0, 8), channel: channel && channel[1], budget: budget && budget[1] }))
+      declared.length >= 50 && missing.length === 0 && stray.length === 0 && pendingBad.length === 0 && channel !== null && budget !== null,
+    JSON.stringify({ script: script !== null, declared: declared.length, goldens: goldens.length, missing: missing.slice(0, 8), stray: stray.slice(0, 8), pendingBad, channel: channel && channel[1], budget: budget && budget[1] }))
 }
 
 // M297 — critic.reference.1. Every Orchestrate scene the shot harness

@@ -10489,7 +10489,7 @@ export function Canvas({
           const envProblem = envReport !== null && !envReport.shell.ok && !envBannerDismissed
           const sections = [floatBriefing, reopen !== null, jobRecovery !== null, envProblem].filter(Boolean).length
           return (
-            <div className="recovery-slot" data-recovery-slot="">
+            <div className="recovery-slot" data-recovery-slot="" data-screen-control="">
               {sections > 0 && (
                 <WelcomeBack
                   count={sections}

@@ -26,7 +26,7 @@ buildSync({
   // one had never needed it until now.
   alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
 })
-const { IPC, registerIpcHandlers } = require(OUT)
+const { IPC, registerIpcHandlers, installTmuxAdopt } = require(OUT)
 
 const { ok, results } = require('./lib/checks.cjs').createChecks()
 
@@ -138,6 +138,10 @@ app.whenReady().then(() => {
     // only asserts REGISTRATION, never drives diagnostics:export.
     join(tmpdir(), 'tc-verify-ipc-diagnostics')
   )
+
+  // M-UX. tmux:adoptable is installed by main/index.ts beside registerIpcHandlers
+  // (it needs the login env), so this harness installs it the same way.
+  installTmuxAdopt(() => ({}))
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
@@ -326,7 +330,8 @@ app.whenReady().then(() => {
   // That tally omitted world:status and world:retry, already on the
   // integration branch. dialog:confirm is main's Cancel-default confirm,
   // for Sessions End.
-  const EXPECTED_CHANNELS = 209
+  // +1: tmux:adoptable (the UX pass's adopt door).
+  const EXPECTED_CHANNELS = 210
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

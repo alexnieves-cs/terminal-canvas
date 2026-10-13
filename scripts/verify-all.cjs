@@ -230,9 +230,25 @@ const runConcurrently = async (list, limit, envFor = null) => {
   return done
 }
 
+/* TC_VERIFY_SKIP / TC_VERIFY_ONLY — comma-separated suite names, read by CI so
+   suites known to be red can run in a separate NON-BLOCKING job instead of
+   being deleted or skipped: the blocking job leaves them out, the other job
+   runs only them. Neither is a way to hide a suite — together the two jobs
+   cover every suite, and a name that matches no suite is an error rather than
+   a silent no-op (a typo would otherwise drop a suite from both jobs). */
+const nameList = (raw) => String(raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+const select = (every, env) => {
+  const skip = nameList(env.TC_VERIFY_SKIP)
+  const only = nameList(env.TC_VERIFY_ONLY)
+  const known = new Set(every.map((s) => s.name))
+  const unknown = [...skip, ...only].filter((n) => !known.has(n))
+  if (unknown.length) throw new Error(`TC_VERIFY_SKIP/TC_VERIFY_ONLY name no suite: ${unknown.join(', ')}`)
+  return every.filter((s) => !skip.includes(s.name) && (only.length === 0 || only.includes(s.name)))
+}
+
 const main = async () => {
   const started = Date.now()
-  const all = suites()
+  const all = select(suites(), process.env)
   const plain = all.filter((s) => s.tier === 'plain')
   const serial = all.filter((s) => s.tier !== 'plain')
   const unclassified = all.filter((s) => s.tier === 'unclassified')
