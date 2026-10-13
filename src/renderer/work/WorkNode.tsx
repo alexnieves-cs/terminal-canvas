@@ -193,7 +193,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
           {/* The card is the drag source for a drop onto a Teammates-pane row: the board's own MIME, nothing else. */}
           <span className="pf__summary work-node__summary" data-work-summary draggable
             onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData(WORK_ITEM_MIME, item.id); e.dataTransfer.effectAllowed = 'move' }}
-            title={`Drag onto a teammate in the Teammates pane to dispatch ${item.key ?? item.title}`}>{item.key ?? item.source}</span>
+            title={`Drag onto an agent profile in Agent profiles to dispatch ${item.key ?? item.title}`}>{item.key ?? item.source}</span>
         </>
       )}
     >

@@ -159,7 +159,7 @@ export function TopBar({
         // called Task "the primary route" while this button landed on Panel.
         // ⌘⇧N stays the expert door to a raw panel, so the button no longer
         // shows it as its own shortcut.
-        title={preferred ? `Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N; ⌘N starts ${preferred.name} at once` : 'Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N'}
+        title={preferred ? `Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N; ⌘⌥N starts ${preferred.name} at once` : 'Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N'}
         tabIndex={-1}
         {...shellControl(onOpenSheet)}
       >
@@ -236,7 +236,7 @@ export function TopBar({
               )}
               <MenuCheckboxItem checked={contextOpen} onSelect={onToggleContext}
                 className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
-              ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>{'⇧⌘\\'}</kbd></MenuCheckboxItem>
+              ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Inspector <kbd>{'⇧⌘\\'}</kbd></MenuCheckboxItem>
               {/* (this redesign) Pin the inspector open THROUGH the Compact
                   breakpoint's own auto-collapse — a separate axis from
                   contextOpen above (open/closed at all), the way

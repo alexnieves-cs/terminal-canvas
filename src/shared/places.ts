@@ -54,5 +54,5 @@ export function insidePlace(candidate: string, places: readonly string[], realpa
 export function placeRefusal(name: string, candidate: string): string {
   const norm = normalisePath(candidate) ?? candidate
   const shown = norm === '' ? '(no folder)' : norm
-  return `${shown} is outside every place of ${name} — add ${shown === '(no folder)' ? 'a folder' : shown} to this teammate's places in the Teammates pane`
+  return `${shown} is outside every place of ${name} — add ${shown === '(no folder)' ? 'a folder' : shown} to this agent profile's places in Agent profiles`
 }

@@ -10,7 +10,9 @@ import type { SettingsPaneId } from './panes'
 
 const listeners = new Set<() => void>()
 let open = false
-let pane: SettingsPaneId = 'keyboard'
+// The page a bare open lands on: General the first time, then whichever page
+// the person was last on. A door that means a page (the shot) names it.
+let pane: SettingsPaneId = 'general'
 
 function emit(): void {
   for (const listener of listeners) listener()
@@ -29,8 +31,8 @@ export function subscribeSettings(listener: () => void): () => void {
   return () => { listeners.delete(listener) }
 }
 
-export function openSettingsPage(next: SettingsPaneId = 'keyboard'): void {
-  pane = next
+export function openSettingsPage(next?: SettingsPaneId): void {
+  if (next !== undefined) pane = next
   open = true
   emit()
 }

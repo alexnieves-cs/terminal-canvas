@@ -378,6 +378,33 @@ export interface AgentStepView {
   canContinue: boolean
 }
 
+/**
+ * The agents step's probes, read off the environment report main already
+ * built (M48), so the step never asks for a second discovery. A report that
+ * has not arrived, or whose shell did not answer, is a TIMEOUT for every row
+ * — "discovery did not answer", never "not installed". An agent the report
+ * does not cover (gemini) has no probe at all, which reads the same way.
+ */
+export function probesFromReport(report: EnvReport | null): AgentProbe[] {
+  const answered = report !== null && report.shell.ok && report.probe?.timedOut !== true
+  return ONBOARDING_AGENTS.flatMap((agent): AgentProbe[] => {
+    const cli = report?.clis.find((entry) => entry.name === agent.id)
+    if (cli === undefined) return []
+    return [answered ? { id: agent.id, path: cli.path } : { id: agent.id, path: null, timedOut: true }]
+  })
+}
+
+/** Found agents start switched on: the step is a confirmation, not a quiz. */
+export function foundAgentIds(probes: readonly AgentProbe[]): string[] {
+  return agentRows(probes, ONBOARDING_AGENTS.map((agent) => agent.id)).rows.filter((row) => row.phase === 'found').map((row) => row.id)
+}
+
+/** What the card hands back when it finishes. The caller saves it; the card does not. */
+export interface OnboardingAnswers {
+  workspaceName: string
+  enabled: string[]
+}
+
 export function agentRows(probes: readonly AgentProbe[], enabled: readonly string[]): AgentStepView {
   const on = new Set(enabled)
   const rows = ONBOARDING_AGENTS.map((agent): CanvasAgentRow => {

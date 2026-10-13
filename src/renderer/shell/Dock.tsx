@@ -233,7 +233,7 @@ function DockImpl({
     // "Connections" names one place, the pane, not also the group around it.
     { label: 'Setup', entries: [
       { id: 'integrations', label: 'Connections', icon: <Link /> },
-      { id: 'teammates', label: 'Teammates', icon: <People /> }
+      { id: 'teammates', label: 'Agent profiles', icon: <People /> }
     ] }
   ]
   const os = useAttentionOsSettings()

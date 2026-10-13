@@ -81,7 +81,7 @@ This is a design concept only. Nothing here changes `alexnieves-cs/terminal-canv
 | 9 | `09-error-disconnected.png` | Error and disconnected | A tmux host-loss banner (paused, not lost, with auto-retry). A crashed session (exit 137) explains itself with one fix. Panels that are reattaching show skeletons. GitHub data is marked offline/cached. An offline toast appears, and the pill switches to "2 sessions need recovery". |
 
 ## Key interactions and shortcuts
-- `⌘N` default agent · `⌘T` shell · `⌘⇧N` choose what to spawn · double-click canvas to spawn at the cursor · drag from a port to spawn a connected handoff
+- `⌘N` new task · `⌘⌥N` default agent · `⌘T` shell · `⌘⇧N` choose what to spawn · double-click canvas to spawn at the cursor · drag from a port to spawn a connected handoff
 - `⌘K` find or run anything · `⌘J` next that needs you · `⌘Y` allow pending request · `⌘.` pause/resume
 - `⌘0` fit all · `⌘⇧0` fit task · `⌘1/2/3` Work/Plan/Map · `⌘` + arrows move between panels · `⌘↵` / `⌘Esc` step in/out · Space+drag pan · `⌘`+scroll or pinch to zoom at the cursor
 - `⌘G` make task from selection · `⌘⇧T` tidy · `⌘⇧S` sessions view · `⌘⇧L` focus lock (the terminal gets every key)

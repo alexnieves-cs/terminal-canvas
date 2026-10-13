@@ -48,7 +48,8 @@ const byId = (id) => SHORTCUTS.find((s) => s.id === id)
 const chord = (id) => byId(id)?.chord
 
 const CONCEPT = [
-  ['new-agent', '⌘N', 'canvas', 'create'],
+  ['new-task', '⌘N', 'canvas', 'create'],
+  ['new-agent', '⌘⌥N', 'canvas', 'create'],
   ['new-shell', '⌘T', 'canvas', 'create'],
   ['spawn-sheet', '⌘⇧N', 'canvas', 'create'],
   ['make-task', '⌘G', 'canvas', 'create'],

@@ -1379,7 +1379,7 @@ const p = (name) => join(DIR, name)
     ok('lane.1 the repository is found under a place or its immediate children by origin (case-insensitive, ssh or https, .git or not); the key yields owner/repo and a Jira key none; the lane arm carries the worktree id, path, branch and root after the gate passed on the ROOT; no place, no repository, a refused gate, git\'s own refusal, an unknown teammate and a typed item with no chosen place are each refused by name and mint nothing',
       found === '/home/u/work/api' && direct === '/home/u/work/site' && none === null && key === 'acme/canvas' && badKey === null &&
         good.kind === 'lane' && good.worktreeId === 'wt1' && good.path === '/app/worktrees/api/tc-n9-1' && good.branch === 'tc/n9-1' && good.root === '/home/u/work/api' &&
-        noPlace.kind === 'refused' && /bo/.test(noPlace.reason) && /acme\/canvas/.test(noPlace.reason) && /Teammates pane/.test(noPlace.reason) &&
+        noPlace.kind === 'refused' && /bo/.test(noPlace.reason) && /acme\/canvas/.test(noPlace.reason) && /Agent profiles/.test(noPlace.reason) &&
         noRepo.kind === 'refused' && /acme\/other/.test(noRepo.reason) &&
         gitRefused.kind === 'refused' && /already exists/.test(gitRefused.reason) &&
         gateRefused.kind === 'refused' && /may not touch/.test(gateRefused.reason) &&
@@ -1446,8 +1446,8 @@ const p = (name) => join(DIR, name)
     ok('lane.repos.2 the board:repositories arm decision is three states — an unknown teammate refused by name, a teammate with NO PLACES named as a grant with the Teammates pane as its fix, and a real answer whose empty case is `repos: []` (the places hold no repository) rather than the no-places sentence',
       good.kind === 'repos' && good.repos.length === 1 && good.repos[0].path === '/home/u/work/api' && good.repos[0].repo === null &&
         empty.kind === 'repos' && empty.repos.length === 0 &&
-        noPlaces.kind === 'no-places' && /bo/.test(noPlaces.reason) && /Teammates pane/.test(noPlaces.reason) &&
-        unknown.kind === 'refused' && /teammate/i.test(unknown.reason),
+        noPlaces.kind === 'no-places' && /bo/.test(noPlaces.reason) && /Agent profiles/.test(noPlaces.reason) &&
+        unknown.kind === 'refused' && /agent profile/i.test(unknown.reason),
       JSON.stringify({ good, empty, noPlaces, unknown }))
   } catch (e) { ok('lane.repos.2 (threw)', false, String(e)) }
 

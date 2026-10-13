@@ -133,6 +133,9 @@ export function createMenuActions(
       onSpawnPreset,
       // M65. The sheet is the renderer's; the menu only asks for it.
       onOpenSheet: () => { state.window?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
+      // Same channel, with the sheet named: a second channel for "open the
+      // other sheet" would be a contract row for one string.
+      onNewTask: () => { state.window?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET, 'task') },
       onTidy: () => { state.window?.webContents.send(IPC_EVENTS.CANVAS_TIDY) },
       onFeedback: () => { state.window?.webContents.send(IPC_EVENTS.CANVAS_FEEDBACK) },
       onFlip: () => { state.window?.webContents.send(IPC_EVENTS.CANVAS_FLIP) },

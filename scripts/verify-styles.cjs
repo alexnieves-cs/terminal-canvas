@@ -970,12 +970,14 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 {
   const at = (re) => all.filter((r) => re.test(r.sel))
   const hidden = at(/\.pf__chrome\s+\.pf__verb/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body) && /transition:[^;]*var\(--dur-1\)/.test(r.body))
-  const marks = at(/\.pf__chrome\s+\.pf__mark/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  // The UX pass: lock and pin are states, so the LAST rule on the mark shows it at rest.
+  const markRules = at(/^\.pf__chrome\s+\.pf__mark$/)
+  const marks = markRules.length > 0 && /opacity:\s*1\b/.test(markRules[markRules.length - 1].body)
   const close = at(/\.pf__chrome\s+\.pf__close/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
   const revealed = all.filter((r) => /\.pf:hover/.test(r.sel) && /\.pf:focus-within/.test(r.sel) && /\.panel--selected/.test(r.sel))
     .some((r) => /opacity:\s*1\b/.test(r.body))
   const reduced = /@media[^{]*prefers-reduced-motion[^{]*\{[\s\S]*?\.pf__chrome[\s\S]*?transition:\s*none/.test(bare)
-  ok('rest.1', 'the chrome verbs, marks and close rest at opacity 0 (a --dur-1 transition) and reveal at 1 on the frame\'s :hover, :focus-within and .panel--selected; reduced motion drops the transition',
+  ok('rest.1', 'the chrome verbs and close rest at opacity 0 (the lock and pin marks, states, stay at 1) (a --dur-1 transition) and reveal at 1 on the frame\'s :hover, :focus-within and .panel--selected; reduced motion drops the transition',
     hidden && marks && close && revealed && reduced, JSON.stringify({ hidden, marks, close, revealed, reduced }))
 }
 

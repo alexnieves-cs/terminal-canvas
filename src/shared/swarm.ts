@@ -431,7 +431,7 @@ export function swarmRefusal(preset: SwarmPreset, ctx: SwarmRefusalContext): str
   // so it is inert until a person has looked at the seats and the commands.
   if (preset.reviewed === false) return `${preset.label} arrived from outside and nobody has read it yet — open it and mark it read before it may start agents`
   if (!ctx.agentAvailable) return 'no agent CLI is on the PATH — install claude or codex, or check the environment report'
-  if (ctx.teammate !== undefined && ctx.teammate.places.length === 0) return `${ctx.teammate.name} has no places — add a folder in the Teammates pane`
+  if (ctx.teammate !== undefined && ctx.teammate.places.length === 0) return `${ctx.teammate.name} has no places — add a folder in Agent profiles`
   const state = ctx.item?.state ?? 'todo'
   if (!preset.startsFrom.includes(state)) {
     const from = preset.startsFrom.map((s) => STATE_WORDS[s]).join(' or ')

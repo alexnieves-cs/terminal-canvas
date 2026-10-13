@@ -5,7 +5,7 @@ import type { AgentState } from '@shared/types'
 import {
   AGENTS_STEP_LEAD, AGENTS_STEP_TITLE, CUSTOM_COMMAND, FIRST_TASK_HANDOFF, ONBOARDING_FOOTER, ONBOARDING_RAIL,
   STATE_PREVIEW_CAPTION, agentRows, installCommand, sessionsPersistence, stepWords,
-  type AgentProbe, type OnboardingStepId
+  type AgentProbe, type OnboardingAnswers, type OnboardingStepId
 } from '@shared/onboarding'
 
 /**
@@ -22,7 +22,14 @@ export interface OnboardingProps {
   tmux?: { path: string | null; timedOut?: boolean }
   onCopy?: (command: string) => void
   onCustom?: () => void
-  onHandoff?: (handoff: typeof FIRST_TASK_HANDOFF) => void
+  /** The last Continue. `answers` is what the person typed and toggled; the caller saves it. */
+  onHandoff?: (handoff: typeof FIRST_TASK_HANDOFF, answers: OnboardingAnswers) => void
+  /**
+   * Leave the card without finishing it. Every step offers it, because a
+   * machine with no agent CLI found (or a discovery that never answered)
+   * would otherwise hold the agents step shut with nothing to press.
+   */
+  onSkip?: () => void
 }
 
 const PREVIEW: ReadonlyArray<{ agent: AgentState; title: string }> = [
@@ -35,11 +42,15 @@ const PREVIEW: ReadonlyArray<{ agent: AgentState; title: string }> = [
 const RUNNING = { kind: 'running' as const, pid: 1, command: 'preview', cwd: '', reattached: false }
 
 export function Onboarding({
-  initialStep = 'workspace', workspaceName = '', probes = [], enabled = [], tmux, onCopy, onCustom, onHandoff
+  initialStep = 'workspace', workspaceName = '', probes = [], enabled = [], tmux, onCopy, onCustom, onHandoff, onSkip
 }: OnboardingProps): JSX.Element {
   const [step, setStep] = useState<OnboardingStepId>(initialStep)
   const [name, setName] = useState(workspaceName)
-  const [chosen, setChosen] = useState<string[]>([...enabled])
+  // Untouched, the toggles follow `enabled` — the report can arrive after the
+  // card mounts, and a found agent should not sit Off because it was late.
+  const [touched, setTouched] = useState<string[] | null>(null)
+  const chosen = touched ?? [...enabled]
+  const setChosen = (next: (cur: string[]) => string[]): void => setTouched(next(chosen))
   const view = agentRows(probes, chosen)
   const sessions = sessionsPersistence(tmux)
   const index = ONBOARDING_RAIL.findIndex((row) => row.id === step)
@@ -54,7 +65,7 @@ export function Onboarding({
 
   const advance = (): void => {
     if (step === 'task') {
-      onHandoff?.(FIRST_TASK_HANDOFF)
+      onHandoff?.(FIRST_TASK_HANDOFF, { workspaceName: name.trim(), enabled: view.rows.filter((row) => row.enabled).map((row) => row.id) })
       return
     }
     const next = ONBOARDING_RAIL[index + 1]
@@ -133,7 +144,7 @@ export function Onboarding({
               {step === 'task' && (
                 <>
                   <h1 className="rd-onboard__title">First task</h1>
-                  <p className="rd-onboard__lead">Describe the first task in the new-task sheet. Nothing starts until you send it.</p>
+                  <p className="rd-onboard__lead">Start a task opens the new-task sheet. Describe the work there. Nothing starts until you send it.</p>
                   <p className="rd-onboard__mono" data-handoff={FIRST_TASK_HANDOFF.sheet} data-spawns={FIRST_TASK_HANDOFF.spawns ? 'true' : 'false'}>{FIRST_TASK_HANDOFF.sheet}</p>
                 </>
               )}
@@ -141,7 +152,10 @@ export function Onboarding({
           </div>
           <footer className="rd-onboard__foot">
             <p>{ONBOARDING_FOOTER}</p>
-            <button type="button" className="rd-onboard__continue" disabled={!canAdvance} onClick={advance}>Continue</button>
+            <div className="rd-onboard__actions">
+              {onSkip !== undefined && <button type="button" className="rd-onboard__skip" data-onboard-skip="" onClick={onSkip}>Skip setup</button>}
+              <button type="button" className="rd-onboard__continue" disabled={!canAdvance} onClick={advance}>{step === 'task' ? 'Start a task' : 'Continue'}</button>
+            </div>
           </footer>
         </div>
         <aside className="rd-onboard__preview" aria-label="State colours">

@@ -350,10 +350,10 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                       <PopoverContent>
                         <div className="skills-pane__menu" data-skills-column-menu-open={col.id}>
                           <select className="skills-pane__assign" data-skills-assign-column={col.id}
-                            aria-label={`Assign ${col.title} to teammate`} title="Assign to teammate" value=""
+                            aria-label={`Assign ${col.title} to an agent profile`} title="Assign to an agent profile" value=""
                             disabled={col.cards.length === 0 || props.teammates.length === 0}
                             onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignColumn(col.id, id); setOpenMenu(null) } }}>
-                            <option value="">Assign to teammate…</option>
+                            <option value="">Assign to an agent profile…</option>
                             {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
                           </select>
                           {/* Ungrouped's Delete stays PRESENT and disabled with its
@@ -392,10 +392,10 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                           <PopoverContent>
                             <div className="skills-pane__menu">
                               <select className="skills-pane__assign" data-skills-assign-card={card.key}
-                                aria-label={`Assign ${card.name} to teammate`} title="Assign to teammate" value=""
+                                aria-label={`Assign ${card.name} to an agent profile`} title="Assign to an agent profile" value=""
                                 disabled={props.teammates.length === 0}
                                 onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignCard(card.key, id); setOpenMenu(null) } }}>
-                                <option value="">Assign to teammate…</option>
+                                <option value="">Assign to an agent profile…</option>
                                 {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
                               </select>
                             </div>

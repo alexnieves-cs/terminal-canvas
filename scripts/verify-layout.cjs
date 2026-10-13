@@ -4141,7 +4141,7 @@ console.log('\n' + '='.repeat(60))
   ok('work.4 prRefusal answers null when a lane is ahead, GitHub is connected and the teammate may spend github; and names no lane, nothing ahead of the base, a source with no repository, not connected (the credential rows\' sentence) and a teammate without the github service each by its own sentence; a pr field is carried',
     okArm === null && typeof noLane === 'string' && /lane/.test(noLane) && typeof zero === 'string' && /ahead|commits/.test(zero) && /main/.test(zero) &&
       typeof jira === 'string' && /jira/.test(jira) && typeof notConnected === 'string' && /github token/.test(notConnected) &&
-      typeof noService === 'string' && /ada/.test(noService) && /github/.test(noService) && /Teammates pane/.test(noService) &&
+      typeof noService === 'string' && /ada/.test(noService) && /github/.test(noService) && /Agent profiles/.test(noService) &&
       carried && carried.pr && carried.pr.number === 4,
     JSON.stringify({ okArm, noLane, zero, jira, notConnected, noService, pr: carried && carried.pr }))
 }

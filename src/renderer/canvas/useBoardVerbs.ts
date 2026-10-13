@@ -449,7 +449,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // arms for the doors that never ask for one (the card's menu). An executor
     // that reached main with a teammate id nothing answers to would be refused
     // by `board:lane` one step later, in main's words, after a seat was minted.
-    if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${teammateId} — it may have been deleted; open the Teammates pane` }
+    if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${teammateId} — it may have been deleted; open Agent profiles` }
     // THE LAST GATE, and the same function the sheet's disabled Start read.
     // A caller that reached here another way (the verb, a card's menu) is
     // judged by the same sentences rather than by a second opinion.

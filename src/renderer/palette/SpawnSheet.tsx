@@ -39,6 +39,8 @@ export interface SpawnSheetModel {
   templates?: readonly { template: PersistedTemplate; refusal?: string }[]
   /** M80. The template the sheet opens on, when it was opened for one. */
   templateId?: string
+  /** The row the sheet opens on, when a door already chose one (a starter layout's lineup). */
+  initialWhat?: string
   /** M80. Instantiate: the filled template, the sheet's answer in the sheet's own shape. */
   instantiate?(template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult>
   defaultPresetId: string
@@ -82,7 +84,7 @@ const TEMPLATE_PREFIX = '__tpl__'
 
 export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.Element {
   const firstAvailable = model.presets.find((p) => p.id === model.defaultPresetId && p.available !== false) ?? model.presets.find((p) => p.available !== false)
-  const [whatId, setWhatId] = useState<string>(model.templateId !== undefined ? `${TEMPLATE_PREFIX}${model.templateId}` : (firstAvailable?.id ?? COMMAND))
+  const [whatId, setWhatId] = useState<string>(model.templateId !== undefined ? `${TEMPLATE_PREFIX}${model.templateId}` : (model.initialWhat ?? firstAvailable?.id ?? COMMAND))
   const [command, setCommand] = useState('')
   const preset = model.presets.find((p) => p.id === whatId)
   const [cwd, setCwd] = useState(model.focusedCwd ?? preset?.cwd ?? '')
@@ -217,7 +219,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // what it makes, which is the thing the row cannot.
   const what = chosenTemplate !== undefined ? templateShape
     : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas — ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
-    : parseLineupWhatId(whatId) !== null ? `lineup: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? `chat with ${BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label} — ${rowCapabilitySentence(backendOfWhatId(whatId) ?? 'claude')}` : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
+    : parseLineupWhatId(whatId) !== null ? `arrangement: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? `chat with ${BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label} — ${rowCapabilitySentence(backendOfWhatId(whatId) ?? 'claude')}` : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
@@ -272,7 +274,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
           {/* M104. The lineups: a shape of seats, previewed below before anything is minted. */}
           {LINEUP_IDS.map((id) => (
-            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!Object.values(model.available ?? { claude: model.claudeAvailable, codex: model.codexAvailable }).some(Boolean)}>lineup: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
+            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!Object.values(model.available ?? { claude: model.claudeAvailable, codex: model.codexAvailable }).some(Boolean)}>arrangement: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
           ))}
           {/* M100. One `chat as <name>` per teammate, disabled by name with no places. */}
           {teammateOptions(model.teammates ?? [], model.claudeAvailable).map((row) => (
@@ -408,7 +410,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
             a Cancel beside it. The keys stay, smaller — Enter is still the
             fast path, but no longer the only visible way to submit. */}
         <div className="sheet__actions">
-          <span className="sheet__keys">↵ · esc · ⌘N starts the default without asking</span>
+          <span className="sheet__keys">↵ · esc · ⌘⌥N starts the default without asking</span>
           <button type="button" className="sheet__button" data-sheet-cancel
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
             onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>
@@ -487,7 +489,7 @@ export function ConnectedSpawnMenu({
           {agent.label}{agent.chord === '' ? '' : ` ${agent.chord}`}
         </button>
       ))}
-      {presets.length > 0 && <div className="connected-spawn__group">Presets</div>}
+      {presets.length > 0 && <div className="connected-spawn__group">Saved commands</div>}
       {presets.map((preset) => (
         <button key={preset.id} type="button" className="connected-spawn__row" data-connected-preset={preset.id} onClick={() => onPreset(preset.id)}>{preset.name}</button>
       ))}

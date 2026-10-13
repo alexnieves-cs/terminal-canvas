@@ -379,14 +379,14 @@ export function prRefusalSync(
   if (item.source !== 'github' || item.key === undefined || repoOfKey(item.key) === null) return `a PR needs a GitHub repository — this item is ${item.source}`
   if (item.worktreeId === undefined || item.panelId === undefined) return 'no lane yet — dispatch the item first'
   if (!connected) return 'not connected — add a github token in ⌘K, then Credentials'
-  if (mate === undefined) return 'the teammate this item was dispatched to is gone — open the Teammates pane'
-  if (!mate.services.includes('github')) return `${mate.name} may not spend github — grant it in the Teammates pane`
+  if (mate === undefined) return 'the agent profile this item was dispatched to is gone — open Agent profiles'
+  if (!mate.services.includes('github')) return `${mate.name} may not spend github — grant it in Agent profiles`
   return null
 }
 
 /** M114. Why a teammate cannot be dispatched to, before main is asked; null when it can. The repository arm is main's (it reads the origin). */
 export function teammateRefusal(mate: { name: string; places: readonly string[] }): string | null {
-  return mate.places.length === 0 ? `${mate.name} has no places — add a folder in the Teammates pane` : null
+  return mate.places.length === 0 ? `${mate.name} has no places — add a folder in Agent profiles` : null
 }
 
 /** The typed door's one refusal. */

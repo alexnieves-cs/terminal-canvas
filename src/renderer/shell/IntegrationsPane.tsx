@@ -59,7 +59,7 @@ function folderName(path: string): string {
 }
 
 function permissionLine(grants: readonly { name: string; places: readonly string[] }[] | undefined): string {
-  if (grants === undefined || grants.length === 0) return 'usable by no teammate yet — grant it in the Teammates pane'
+  if (grants === undefined || grants.length === 0) return 'usable by no agent profile yet — grant it in Agent profiles'
   return `usable by ${grants.map((g) => `${g.name} (${g.places.length === 0 ? 'no workspace granted' : g.places.map(folderName).join(', ')})`).join('; ')}`
 }
 

@@ -22,6 +22,7 @@ import { useLaneChecks, type LaneWatcher } from '@renderer/checks/useLaneChecks'
 import { TaskReviewPanel, TaskVerdict } from './TaskReviewPanel'
 import type { LaneMergeResult } from '@shared/lane-merge'
 import { useLaneAccept, type AcceptUi } from './useLaneAccept'
+import { quickAccept } from './quick-accept'
 import type { PrEvidence } from '@shared/task-flow'
 import { REASON_WORKTREE_ATTACHED } from '@renderer/palette/commands/reasons'
 import { offerFromReview, publishReadyDiscard } from './discard-offer'
@@ -504,6 +505,18 @@ function renderTask(
           onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length, h.changes?.identity); task.onRefresh() }) : undefined}>
           {task.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}
         </button>
+        {/* Small and checked: Mark reviewed and Accept… as one press. It records
+            the review first (the same person's act as the button beside it),
+            then arms the same plan Accept… arms — Merge is still a separate
+            press, so nothing lands unseen. */}
+        {accept !== null && markable && !reviewedNow && quickAccept({ files: paths.length, checks: laneChecks }).offer && (
+          <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="quick-accept"
+            disabled={accept.busy}
+            title="record that you read these changes, then show the merge plan — every check on this lane passed"
+            onMouseDown={accept.busy ? undefined : press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length, h.changes?.identity); task.onRefresh(); accept.onArm() })}>
+            Review &amp; accept…
+          </button>
+        )}
         {/* M315. ACCEPT — the lane merged into the main tree's branch, after a
             plan naming both. Enabled only once the CURRENT changes are marked
             reviewed: what lands is what the person read, never a diff that

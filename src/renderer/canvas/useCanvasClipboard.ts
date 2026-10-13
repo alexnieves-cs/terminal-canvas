@@ -5,6 +5,7 @@ import { isChatPanel, type Panel } from '@renderer/panels/panels'
 import { shellQuote } from '@renderer/shell/file-tree-model'
 import { REASON_NOT_STARTED } from '@renderer/palette/commands'
 import { serveDraftEdit } from './draft-focus'
+import { taskSeedFromPaste, type PasteTaskSeed } from '@shared/paste-task'
 
 export interface CanvasClipboardDeps {
   registry: Registry
@@ -24,6 +25,8 @@ export interface CanvasClipboardDeps {
    * when either happened). Read lazily, like getAddImage.
    */
   getObjects?: () => { copy: () => boolean; paste: (text: string) => boolean } | null
+  /** The UX pass (5.2). Opens New task with a pasted link or error filled in, never started. */
+  getStartTask?: () => ((seed: PasteTaskSeed) => void) | null
 }
 
 /**
@@ -49,7 +52,7 @@ export interface CanvasClipboardDeps {
 export interface CanvasEditRoutes { copy: () => void; paste: (text: string) => void }
 
 export function useCanvasClipboard(deps: CanvasClipboardDeps): { sayRef: RefObject<(sentence: string) => void>; editRef: RefObject<CanvasEditRoutes> } {
-  const { registry, focusedIdRef, panelsRef, shouldIgnoreKeys, getAddImage, getObjects } = deps
+  const { registry, focusedIdRef, panelsRef, shouldIgnoreKeys, getAddImage, getObjects, getStartTask } = deps
   // M149. The palette action object is assigned after this hook's call, so a
   // refusal on paste is said rather than swallowed.
   const sayRef = useRef<(sentence: string) => void>(() => {})
@@ -92,6 +95,14 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): { sayRef: RefObje
       // M390/M391. No panel has the keyboard: a held copy of objects, or a
       // Mermaid diagram as text, lands on the canvas (inert — shapes only).
       if (id === null && text && getObjects?.()?.paste(text) === true) return
+      // The UX pass (5.2). Text on the empty canvas used to land nowhere. An
+      // issue link, a CI link or an error opens New task filled in; the sheet
+      // is still where the person says go.
+      if (id === null && text) {
+        const seed = taskSeedFromPaste(text)
+        const start = seed === null ? null : getStartTask?.() ?? null
+        if (seed !== null && start !== null) { start(seed); return }
+      }
       // M338. Into a relay terminal only as TEXT, through its own gate; an
       // image path would name a file on this Mac that the relay VM cannot read.
       const relay = id === null ? undefined : existingRelayTerminal(id)

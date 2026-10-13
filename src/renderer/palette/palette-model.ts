@@ -148,6 +148,12 @@ export interface Command {
    * subsequence, and a bonus on that would pull the row over `restart`.
    */
   leads?: readonly string[]
+  /**
+   * The UX pass. Shown in Tasks on the RESTING list too, not only when a query
+   * leads to it. One row carries it, New task…: the product's first verb sat
+   * in Canvas at rest, below every panel, so ⌘K opened on everything but it.
+   */
+  leadsAtRest?: true
   /** The drill-in this row belongs to, if any. See PaletteScope. */
   scope?: PaletteScope
   /**
@@ -244,7 +250,8 @@ export function filterCommands(
     // M400. A row the query LEADS to is shown in the first section, Tasks —
     // a copy, so the row keeps its own section everywhere else and the
     // headers stay one-per-section (check 30, `verify:panels:core` 48).
-    if (match !== null) scored.push({ command: scope === null && leadsQuery(query, command) ? { ...command, group: 'task' } : command, score: match, order, weak: isWeakMatch(query, command) })
+    const lifted = scope === null && (leadsQuery(query, command) || (resting && command.leadsAtRest === true))
+    if (match !== null) scored.push({ command: lifted ? { ...command, group: 'task' } : command, score: match, order, weak: isWeakMatch(query, command) })
   })
   // M409 (C5). At most WEAK_CAP rows that only a scattered subsequence found,
   // the best of them. Top level only: inside a scope (search, capability) the

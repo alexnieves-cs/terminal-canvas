@@ -1,12 +1,40 @@
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Terminal Canvas" width="112" height="112">
+</p>
+
 # Terminal Canvas
 
-[![verify](https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml/badge.svg)](https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#prerequisites)
+<p align="center">
+  <strong>An infinite canvas for coding agents.</strong><br>
+  Run Claude Code, Codex and plain shells side by side, see which one needs you,
+  review what each one changed, and keep control of the result.
+</p>
 
-An infinite canvas where every node is a live terminal running a coding-agent CLI.
-Think Figma, but the objects are terminals — and the terminals are running `claude`,
-`codex`, or anything else you would type into a shell.
+<p align="center">
+  <a href="https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml"><img alt="verify" src="https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <a href="#prerequisites"><img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-lightgrey.svg"></a>
+  <img alt="Electron app" src="https://img.shields.io/badge/built%20with-Electron-47848f.svg">
+  <img alt="Version 6.0.0" src="https://img.shields.io/badge/version-6.0.0-5edce6.svg">
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#what-you-can-do-with-it">Use cases</a> ·
+  <a href="#a-look-around">Screens</a> ·
+  <a href="docs/getting-started.md">Getting started</a> ·
+  <a href="#keyboard">Keyboard</a> ·
+  <a href="docs/release-notes/6.0.0.md">6.0 release notes</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screens/canvas.png" alt="The Terminal Canvas workspace: a Claude Code agent writing tests, a Codex agent asking permission to edit a file, a test watcher, and a review layer, grouped under one task, with the inspector on the right." width="920">
+</p>
+
+<p align="center"><sub>
+  Design mockup of the 6.0 workspace, with sample data.
+  Every screen below is from the same set; none is a recording of a live session.
+</sub></p>
 
 > **Status: `v6.0.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
@@ -16,6 +44,80 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 > of [docs/load-bearing.md](docs/load-bearing.md). The redesign goldens are
 > not rebaselined in this release, and the DMG follows a Mac package pass
 > ([notes](docs/release-notes/6.0.0.md)).
+
+## Why
+
+Coding agents run for minutes or hours, and the usual way to run several is a wall of terminal tabs
+where the one that stopped to ask you something is the one you do not see. Terminal Canvas puts
+each agent in a real terminal on a canvas you arrange, and then does the bookkeeping:
+
+- **Every panel is a genuine PTY.** Any TUI that works in Terminal works here, so `claude`, `codex`
+  or your own shell run exactly as they do anywhere else.
+- **The canvas tells you who needs you.** A panel's border carries its agent's state, an off-screen
+  panel that is waiting gets an edge pip, and `Cmd+J` flies to the next one.
+- **Review is built in.** Each panel is diffed against the snapshot taken when *its* agent started,
+  so you see what that agent changed and commit it without leaving the canvas.
+- **Work stays where you left it.** With `tmux` installed, agents outlive a reload and, if you ask,
+  a quit.
+
+## What you can do with it
+
+| Use case | How it looks |
+|---|---|
+| **Run several agents on one codebase** | Give each agent its own git worktree and branch, arrange them side by side, and merge deliberately. Four agents on one repo are four working trees, not one tangled checkout. |
+| **Never miss a question** | A permission prompt or a finished turn lights the panel's edge and the dock count, posts an OS notification while the window is behind another, and `Cmd+J` walks you to the next one. |
+| **Review one agent's work** | The review layer shows the diff since that agent started. Look at the files, discard what you do not want, and commit from the canvas. |
+| **Chain agents together** | Draw an edge from one panel to another and set it to hand off: when the source finishes, the target starts with its output as context. |
+| **Organise work as tasks** | Group the panels, files and previews for one piece of work into a task region, then zoom out to Plan or Map to see every task at once. |
+| **Hand it off and walk away** | Keep agents running after quit, come back to the **Sessions** page, and triage what finished, what failed and what is waiting. |
+| **Drive it from a script or a hook** | `tc open --preset claude --cwd ~/repo` spawns a panel on the running canvas from a shell, a git hook, or from an agent inside another panel. |
+| **See the whole picture in 3D** | Switch to the **World**: the same layout stood up as rooms, with waiting agents raising a beacon where they stand. It falls back to a flat room without WebGL. |
+
+## A look around
+
+<p align="center">
+  <img src="docs/assets/tour.gif" alt="A slideshow of the Terminal Canvas screens listed below" width="800">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screens/arrange.png" alt="Dragging from a port to spawn a connected agent, smart guides at a 24 pixel gap, and a marquee selection with Align, Tidy and Make task."><br><b>Create and arrange.</b> Drag from a port to spawn a connected agent, snap to guides, marquee a group and make it a task.</td>
+    <td width="50%"><img src="docs/assets/screens/palette.png" alt="The command palette filtered by the word plaid, over the canvas zoomed out to the Plan tier."><br><b>Find anything.</b> <code>Cmd+K</code> searches panels, tasks, files and commands. Zoomed out, panels become status cards.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screens/sessions.png" alt="The Sessions page: an attention queue of three agents waiting on you, and a table of every session grouped by task with state, run time, cost and last line."><br><b>Sessions.</b> An attention queue and a table of every session, grouped by task, with bulk actions.</td>
+    <td width="50%"><img src="docs/assets/screens/world-focus.png" alt="The World view focused on a Codex agent asking permission to edit a file, with the request, the diff and Approve and Deny buttons in a side sheet."><br><b>Focus and act.</b> Pick an agent in the World and approve or deny its request from a side sheet.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screens/world-attention.png" alt="The World view during an attention flight: a strip reading Needs you, 2 of 3, and a card for a terraform plan awaiting approval."><br><b>Attention flight.</b> <code>Cmd+J</code> flies the camera to each waiting agent in turn.</td>
+    <td width="50%"><img src="docs/assets/screens/world-overview.png" alt="The World overview: five task rooms, a camera panel, and a replay scrubber with a While you were away summary."><br><b>Overview and replay.</b> Task rooms at the canvas coordinates, a replay scrubber, and a catch-up when you return.</td>
+  </tr>
+</table>
+
+<sub>The pictures are design mockups from the 6.0 redesign ([`docs/redesign/mockups/`](docs/redesign/mockups/)).
+Names like "Steward" and "ledger-export" and the dollar amounts are sample data. The redesign's
+regression goldens are not rebaselined yet (see the status note above), so treat the shipped UI as
+following these screens rather than matching them pixel for pixel. `npm run shot` renders the real
+app's scenes on a Mac.</sub>
+
+## Quick start
+
+```sh
+git clone https://github.com/alexnieves-cs/terminal-canvas.git
+cd terminal-canvas
+npm install       # postinstall rebuilds node-pty for Electron
+npm run dev
+```
+
+macOS only. Prefer a download? [Install](#install) covers the unsigned `.dmg` and the Gatekeeper step.
+The first-run card asks what you want to work on and in which repository, then starts a task;
+[docs/getting-started.md](docs/getting-started.md) walks through it.
+
+<!--
+  VIDEO SLOT. A short screen recording would go here, between "A look around" and "Quick start".
+  Capture notes: docs/assets/CAPTURE.md. Once a file exists, drop it in this README on a line of its
+  own (GitHub plays an uploaded .mp4 inline), or link a GIF from docs/assets/.
+-->
 
 ## What it does
 
@@ -400,7 +502,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        memory:list / memory:add / vault:read
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
-                       env:report / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
+                       env:report / tmux:adoptable / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
                        check:output / combine:run / lane:merge
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover

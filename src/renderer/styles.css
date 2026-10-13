@@ -6774,6 +6774,10 @@ body {
    dismiss sits INSIDE a state pill, where a hidden box reads as a hole. Both sit
    below the hiding rule at equal specificity: SOURCE ORDER is what wins here. */
 .pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }
+/* The UX pass. Lock and pin are STATES, not verbs: hidden at rest, a locked
+   panel looked movable until the drag failed. They show at rest now, the
+   same ruling the group frame's locked mark already had (M178 F.8). */
+.pf__chrome .pf__mark { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .chat__backend { transition: none; } }
 /* M163. The inspector's Machine section (the metrics rule): the one place the
    per-panel CPU · RAM figure lives. */
@@ -11656,6 +11660,13 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   padding: var(--sp-3) var(--sp-5); font: inherit; font-weight: 600; cursor: pointer;
 }
 .rd-onboard__continue:disabled { background: var(--s-3); color: var(--fg-4); cursor: default; }
+.rd-onboard__actions { display: flex; align-items: center; gap: var(--sp-3); }
+/* A quiet secondary: one filled primary per surface stays Continue. */
+.rd-onboard__skip {
+  background: transparent; color: var(--fg-3); border: 0; padding: var(--sp-3) var(--sp-4);
+  font: inherit; cursor: pointer; border-radius: var(--r-md);
+}
+.rd-onboard__skip:hover { color: var(--fg); background: var(--s-2); }
 .rd-onboard__preview {
   padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4);
   border-left: 1px solid var(--line); background: var(--s-0);
@@ -11695,6 +11706,8 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   padding: var(--sp-3) var(--sp-5); font: inherit; font-weight: 600; cursor: pointer;
 }
 .rd-empty__start:disabled { background: var(--s-3); color: var(--fg-4); cursor: default; }
+/* The UX pass (5.5). The offer to adopt agents already running in tmux: one line, its verbs after it. */
+.rd-empty__adopt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); color: var(--fg-2); font-size: var(--t-sm); }
 .rd-empty__quick, .rd-empty__hints { display: flex; flex-wrap: wrap; gap: var(--sp-4); list-style: none; margin: 0; padding: 0; }
 .rd-empty__quick button, .rd-empty__layouts button {
   background: transparent; color: var(--fg); border: 1px solid var(--line);
@@ -11821,6 +11834,39 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
 .tier-layer { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
 .recovery-slot { display: contents; }
 
+/* The UX pass (4.4). The welcome-back card: the briefing, the Reopened
+   notice, Unfinished work and the login-shell banner as sections of ONE card
+   in the briefing's slot (top centre), not four cards in three places — the
+   env banner used to sit on top of the briefing. The card owns placement and
+   scrolling; every section inside it drops its own. */
+.welcome-back {
+  position: absolute;
+  top: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(38rem, 92%);
+  max-height: min(70vh, 40rem);
+  overflow-y: auto;
+}
+.welcome-back__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: 0 var(--sp-1); }
+.welcome-back__kicker { color: var(--fg-3); font-size: var(--t-xs); text-transform: uppercase; letter-spacing: var(--track-caps); }
+.welcome-back > .briefing,
+.welcome-back > .env-banner {
+  position: static;
+  transform: none;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  flex: none;
+}
+/* The banner's Check environment is a button now; the banner itself stays
+   click-through only where it is not one. */
+.welcome-back > .env-banner { pointer-events: auto; }
+
 /* M443. A slight overshoot, then settle. motion.2 already allows the name
    panel-settle, so this is a second definition of that name. The first
    definition (the dip) stays where it is. This one comes later and is the
@@ -11925,8 +11971,28 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   margin-top: calc(-4px * var(--far-scale, 1));
   border-radius: 50%;
   background: var(--tone);
-  pointer-events: none;
+  /* A dot is a door: a click goes to its panel. The outline grows the hit
+     area without growing the dot, which stays a state mark. */
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  outline: calc(6px * var(--far-scale, 1)) solid transparent;
+  cursor: pointer;
 }
+.navigate-card__verbs { display: flex; gap: calc(6px * var(--far-scale, 1)); margin-top: auto; }
+.navigate-card__verbs button {
+  font: inherit;
+  font-size: calc(12px * var(--far-scale, 1));
+  padding: calc(4px * var(--far-scale, 1)) calc(10px * var(--far-scale, 1));
+  border-radius: calc(6px * var(--far-scale, 1));
+  border: 1px solid var(--line);
+  background: var(--s-2);
+  color: var(--fg);
+  cursor: pointer;
+}
+/* Past Work the inline approval is drawn at world scale and cannot be read;
+   the Plan card carries the same two answers at a readable size instead. */
+.world[data-zoom-tier] .inline-approval-host { visibility: hidden; }
 
 .palette__bar { display: flex; align-items: center; gap: var(--sp-2); }
 .palette__kind {

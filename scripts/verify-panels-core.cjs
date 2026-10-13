@@ -358,7 +358,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     the guard READS it. The real-app half is a manual hold test.
     await wc.executeJavaScript(`
       for (let i = 0; i < 5; i++) {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, repeat: true, bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, repeat: true, bubbles: true }))
       }
       true
     `)
@@ -1763,7 +1763,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     {
       const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
       await wc.executeJavaScript(`
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))
       `)
       await sleep(300)
       const after = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
@@ -1848,7 +1848,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // undo had nothing to undo would pass without testing anything.
       const before = new Set(await ids())
       await wc.executeJavaScript(
-        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const spawned = await waitUntil(async () => {
         const now = await ids()
         return now.length > before.size ? now : false
@@ -1904,7 +1904,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         nativeSet(document.querySelector('.palette__input'), 'rename harness')
         await new Promise((r) => setTimeout(r, 50))
         const row = [...document.querySelectorAll('.palette__row')]
-          .find((r) => r.textContent.includes('Rename preset harness preset'))
+          .find((r) => r.textContent.includes('Rename saved command harness preset'))
         if (!row) return 'no rename row for the seeded user preset'
         if (row.className.includes('palette__row--disabled')) return 'rename row was disabled'
         row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
@@ -1950,7 +1950,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         input.dispatchEvent(new Event('input', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 50))
         const row = [...document.querySelectorAll('.palette__row')]
-          .find((r) => r.textContent.includes('Rename preset renamed by palette'))
+          .find((r) => r.textContent.includes('Rename saved command renamed by palette'))
         if (!row) return 'no rename row after the rename'
         row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 50))
@@ -2441,7 +2441,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // Cmd+N panel's id: dispatch the synthetic keydown on window, then
       // diff the id list against the snapshot taken before it.
       await wc.executeJavaScript(
-        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const ids = await waitUntil(async () => {
         const now = await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -2518,7 +2518,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const idsBefore45 = new Set(await wc.executeJavaScript(
         `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
       await wc.executeJavaScript(
-        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const ids45 = await waitUntil(async () => {
         const now = await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -2891,7 +2891,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('ctx.term.1 in a terminal whose program has mouse reporting on, a plain right-click opens no menu (the program has it) and ⌥-right-click opens the menu',
         mouseMode !== false && plain === null && withAlt !== null && withAlt.for === gid, JSON.stringify({ mouseMode, plain, withAlt }))
 
-      // ctx.canvas.1 — the ground's menu: Paste, New object…, Fit; the pill and
+      // ctx.canvas.1 — the ground's menu: Paste, New panel…, New note, New picture…, Fit; the pill and
       // the HUD step out while it is open, and a click on it is not the world's.
       const g2 = await ground()
       if (g2 !== null) await click(g2.x, g2.y, 'right')
@@ -2899,8 +2899,8 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const ctxC = await ctxRead()
       const hud = await wc.executeJavaScript(`getComputedStyle(document.querySelector('.canvas-hud')).visibility`)
       key('Escape'); await sleep(150)
-      ok('ctx.canvas.1 a real right-click on the ground opens the canvas menu (Paste, New object…, Fit), and the pill and HUD step out while it is open',
-        ctxC !== null && ctxC.for === 'canvas' && JSON.stringify(ctxC.ids) === JSON.stringify(['edit.paste', 'canvas.create', 'sel.fit']) && ctxC.pill === 'hidden' && hud === 'hidden',
+      ok('ctx.canvas.1 a real right-click on the ground opens the canvas menu (Paste, New panel…, New note, New picture…, Fit), and the pill and HUD step out while it is open',
+        ctxC !== null && ctxC.for === 'canvas' && JSON.stringify(ctxC.ids) === JSON.stringify(['edit.paste', 'canvas.create', 'canvas.note', 'canvas.image', 'sel.fit']) && ctxC.pill === 'hidden' && hud === 'hidden',
         JSON.stringify({ g2, ctxC, hud }))
 
       // M408 follow-up (the critic). Each item MEASURED by real input.
@@ -3223,8 +3223,8 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 80))
           const door = [...document.querySelectorAll('.palette__row')]
-            .find((r) => r.textContent.includes('Manage presets'))
-          if (!door) return { error: 'no Manage presets row' }
+            .find((r) => r.textContent.includes('Manage saved commands'))
+          if (!door) return { error: 'no Manage saved commands row' }
           door.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 120))
           const rowsInside = [...document.querySelectorAll('.palette__row')].map((r) => r.textContent)
@@ -3236,7 +3236,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
             leaked: rowsInside.filter((t) => t.includes('Go to')).length,
             // The administration rows the resting list hides are exactly what
             // the user drilled in FOR.
-            hasDelete: rowsInside.some((t) => t.includes('Delete preset')),
+            hasDelete: rowsInside.some((t) => t.includes('Delete saved command')),
             count: rowsInside.length
           }
           const input2 = document.querySelector('.palette__input')
@@ -3287,7 +3287,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           const scoped = {
             chip: (document.querySelector('.palette__scope') || {}).textContent || null,
             leaked: inside.filter((t) => t.includes('Go to')).length,
-            hasDelete: inside.some((t) => t.includes('Delete preset')),
+            hasDelete: inside.some((t) => t.includes('Delete saved command')),
             count: inside.length
           }
           // Entering a door clears the query, so the caret is at 0 already —
@@ -3510,7 +3510,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 100))
           const row = [...document.querySelectorAll('.palette__row')]
-            .find((r) => r.textContent.includes('Delete preset ' + victim))
+            .find((r) => r.textContent.includes('Delete saved command ' + victim))
           if (!row) return { error: 'no delete row for ' + victim }
           const wasRed = row.className.includes('palette__row--destructive')
           row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
@@ -4305,7 +4305,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // or under a later one, and a click there selects something else.
       const spawnFit = async () => {
         const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
         return waitUntil(async () => {
           const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
           return now.find((id) => !before.includes(id)) ?? false
@@ -4433,7 +4433,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       wc.reload(); await rePB
       await settle()
       const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const pbId = await waitUntil(async () => {
         const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
         return now.find((id) => !panelsBefore.includes(id)) ?? false

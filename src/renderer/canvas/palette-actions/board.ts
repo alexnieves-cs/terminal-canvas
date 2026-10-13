@@ -64,6 +64,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'markDone'
   | 'openBoard'
   | 'openTeammates'
+  | 'runRoutine'
   | 'openReview'
   | 'reviewAcross'
   | 'openGithub'
@@ -401,7 +402,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     // M116. A view, like openTeammates.
     openBoard: () => chooseNavigator('board'),
     // M100. The roster's door: the navigator's pane, chosen the way the dock chooses it.
-    openTeammates: () => chooseNavigator('teammates')
+    openTeammates: () => chooseNavigator('teammates'),
+    runRoutine: (id) => { void window.canvas.routine.run(id) }
     ,
     openReview,
     reviewAcross: (id) => openReviewAcross(id),

@@ -98,10 +98,12 @@ import { useGroupDrag } from '@renderer/groups/useGroupDrag'
 import { applyDrag, movesOrigin, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { jumpOrder, type Inbox } from '@renderer/shell/decision-inbox'
+import { useAttentionOsSettings } from '@renderer/shell/useAttentionOsSettings'
+import { arrivedReviews, nextReview, readyReviews, reviewNotice, type ReadyReview } from '@renderer/shell/ready-review'
 import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
 import { useTaskQueue } from '@renderer/shell/useTaskQueue'
 import { taskChain } from '@renderer/shell/inspector-context'
-import { useAwaySince } from '@renderer/shell/presence'
+import { dismissReturn, useAwaySince } from '@renderer/shell/presence'
 import { ReturnBriefingCard, useReturnBriefing } from '@renderer/shell/ReturnBriefing'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
@@ -167,6 +169,8 @@ import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import { NavigateTier } from '@renderer/palette/navigate-tier'
 import { ConnectedSpawnMenu } from '@renderer/palette/SpawnSheet'
+import { lineupWhatId } from '@renderer/palette/spawn-sheet'
+import { STARTER_LAYOUTS } from '@shared/lineups'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
@@ -225,7 +229,7 @@ import { buildPortable, exportSentence, remapPortable, type parsePortable } from
 import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, isStarterCaption, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
+import { onboardingReadiness, probesFromReport, foundAgentIds, type OnboardingAnswers, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -300,6 +304,8 @@ import { ReopenNotice, useReopenNotice } from '../shell/ReopenNotice'
 import { mergedLine } from '@shared/review-readiness'
 import { reopenTaskDetail, reopenTaskOutcome, type ReopenTask } from '@shared/persistence'
 import { JobRecoveryNotice, useJobRecovery } from '../shell/JobRecoveryNotice'
+import { WelcomeBack } from '../shell/WelcomeBack'
+import { adoptCommand, adoptSentence, type AdoptableSession } from '@shared/tmux-adopt'
 import { buildInspectorContext } from '../shell/inspector-context'
 import { useShellChrome, type CenterView } from '../shell/useShellChrome'
 import { useDockExpanded } from '../shell/useDockExpanded'
@@ -1615,6 +1621,15 @@ export function Canvas({
   // useViewport's keydown effect dep array — a fresh arrow per render would
   // tear that listener down and reinstall it on every mousemove over the
   // canvas (Canvas re-renders on setCursor).
+  // The UX pass (ux-proposals 2.5, overriding D4 for two chords at the
+  // owner's word): the same predicate WITHOUT the focus lock. ⌘J and ⌘Y are
+  // the two chords a person needs most while a locked agent works — "who
+  // needs me" and "allow it" — and neither means anything to a terminal, so
+  // the lock lets those two through and keeps every other key.
+  const shouldIgnoreKeysButLock = useCallback(
+    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
+    [palette.isOpen]
+  )
   const shouldIgnoreKeys = useCallback(
     // M129. A skill-editor field having the keyboard is the same situation as
     // an open palette: the user is looking at a text field, `focusedId` still
@@ -1626,20 +1641,23 @@ export function Canvas({
     // `focusedId` still names a terminal the user cannot see, and the four edit:* chords
     // are MENU IPC — `inert` on the host stops keydown, never them (orch-page.3).
     // D4 (R-008). A focus-locked panel owns the canvas chords. useViewport bails
-    // before preventDefault only when this predicate is true, so ⌘N and ⌘J
-    // reach the terminal. focusLocked() is a module read, so the callback
+    // before preventDefault only when this predicate is true, so ⌘N reaches
+    // the terminal (⌘J and ⌘Y are the UX pass's exception, above). focusLocked() is a module read, so the callback
     // stays stable and that listener is not torn down on every mousemove.
-    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused() || focusLocked(),
-    [palette.isOpen]
+    () => shouldIgnoreKeysButLock() || focusLocked(),
+    [shouldIgnoreKeysButLock]
   )
 
+  // ⌘N (the UX pass): the New task sheet. Read through the ref at press time
+  // — the palette's actions are assigned further down — so this stays stable.
+  const openNewTask = useCallback(() => { paletteActionsRef.current?.beginStartWork() }, [])
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects, frameReadable,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying, landing, reveal
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
-    onStepWorkspace, onToggleMerged
+    onStepWorkspace, onToggleMerged, openNewTask
   )
   // M410. The terminals whose rim name a neighbour above would cover draw it
   // inside their frame instead (panels.ts's `rimCoveredIds`). The rim's WORLD
@@ -1854,7 +1872,8 @@ export function Canvas({
   const { sayRef, editRef: canvasEditRef } = useCanvasClipboard({
     registry, focusedIdRef, panelsRef, shouldIgnoreKeys,
     getAddImage: () => addImageRef.current,
-    getObjects: () => objectClipboardRef.current
+    getObjects: () => objectClipboardRef.current,
+    getStartTask: () => (seed) => paletteActionsRef.current?.beginStartWork(seed)
   })
 
   // ONE subscription for the whole canvas, not one per panel: the payload
@@ -1959,7 +1978,11 @@ export function Canvas({
   // ref assigned below, once workspaceRows and switchWorkspace exist, so a
   // click there switches first instead of framing an id this canvas lacks.
   const attentionJumpRef = useRef<(panelId: string) => void>(jumpToAttention)
-  useEffect(() => window.canvas.agent.onAttentionJump((id) => attentionJumpRef.current(id)), [])
+  // The UX pass: the menu-bar item's "show the next" sends no id — it is ⌘J.
+  useEffect(() => window.canvas.agent.onAttentionJump((id) => {
+    if (typeof id === 'string') attentionJumpRef.current(id)
+    else jumpAttentionImplRef.current(1)
+  }), [])
 
   // One subscription for the whole canvas, like agent.onState above and for the
   // same reason: the store fans out per panel id, so a per-panel subscription
@@ -2046,7 +2069,10 @@ export function Canvas({
     })
     // M65. The menu's ⌘⇧N asks the renderer for the sheet. Through a ref:
     // paletteActions is built far below this effect.
-    const offSheet = window.canvas.spawn.onOpenSheet(() => paletteActionsRef.current?.beginSpawnSheet())
+    const offSheet = window.canvas.spawn.onOpenSheet((which) => {
+      if (which === 'task') paletteActionsRef.current?.beginStartWork()
+      else paletteActionsRef.current?.beginSpawnSheet()
+    })
     // M90. A codex chat's thread id is the CLI's: written onto the record the
     // first time the stream names it, with no history entry (nothing the user
     // did), so a relaunch resumes the same thread. A claude id never changes.
@@ -2947,6 +2973,10 @@ export function Canvas({
 
   // M308. Assigned below, where the inbox is built; read at press time.
   const inboxRef = useRef<Inbox | null>(null)
+  // Ready to review: assigned below, where the task queue is built. ⌘J walks
+  // these only once nothing needs the person (ready-review.ts says why).
+  const readyReviewRef = useRef<ReadyReview[]>([])
+  const reviewCursorRef = useRef<string | null>(null)
 
   /**
    * Cmd+J. centreOn + selectAndRaise, and deliberately NOTHING ELSE — no
@@ -2988,10 +3018,17 @@ export function Canvas({
     // the room are one cycle. The world covers the canvas, so one press is
     // not handled twice.
     const id = nextAttentionId(queue, attentionCursor(), direction)
-    // Nothing is waiting: the key does nothing at all. Moving the camera
-    // "somewhere" would be worse than silence — the user asked to be taken to
-    // a panel that wants them, and there isn't one.
-    if (id === null) return
+    // Nothing needs the person: the next finished task waiting for review,
+    // opened the way the dock's "Review the changes" opens it. With no review
+    // either, the key does nothing at all — moving the camera "somewhere"
+    // would be worse than silence.
+    if (id === null) {
+      const review = nextReview(readyReviewRef.current, reviewCursorRef.current)
+      if (review === null) return
+      reviewCursorRef.current = review.itemId
+      boardVerbsRef.current.review?.(review.itemId)
+      return
+    }
     const panel = displayPanelsRef.current.find((p) => p.rect.id === id)
     // Belt-and-braces: a panel can still vanish between the filter above and
     // this lookup in principle. It must never be the ONLY thing standing
@@ -3728,6 +3765,21 @@ export function Canvas({
   // report says when. Null until the invoke answers, and the launcher and the
   // palette both render the null honestly rather than as "nothing found".
   const [envReport, setEnvReport] = useState<EnvReport | null>(null)
+  // The UX pass (4.4): Dismiss all on the welcome-back card hides the banner for this run.
+  const [envBannerDismissed, setEnvBannerDismissed] = useState(false)
+  // The UX pass (5.5). Agents already running in the person's own tmux, asked
+  // once per launch; the empty canvas offers them. Null until asked, or once
+  // placed or declined. A main without the door (a harness) is no offer.
+  const [adoptable, setAdoptable] = useState<{ tmuxPath: string; sessions: AdoptableSession[] } | null>(null)
+  useEffect(() => {
+    const door = window.canvas?.env?.adoptable
+    if (typeof door !== 'function') return
+    let live = true
+    door().then((r) => {
+      if (live && r.tmuxPath !== null && r.sessions.length > 0) setAdoptable({ tmuxPath: r.tmuxPath, sessions: r.sessions })
+    }, () => { /* no answer is no offer */ })
+    return () => { live = false }
+  }, [])
   // M181. A ref beside the state: `applyStarter` is installed once (the
   // palette memo captures it), so it must read the report at CALL time — a
   // closure over the null the first render held refused the starter for
@@ -8507,6 +8559,25 @@ export function Canvas({
     // M325. Orchestrate's task list and the focus view read the check tallies too.
     active: chrome.attentionOpen || chrome.centerView !== 'canvas'
   })
+  const readyToReview = useMemo(() => readyReviews(taskQueue.groups), [taskQueue.groups])
+  readyReviewRef.current = readyToReview
+  // A task that finishes with changes says so outside the window, once per
+  // revision — the same `attention.notify` switch needs-you obeys, and only
+  // while the window is not focused (in the window, the dock row and ⌘J are
+  // already saying it). The first read seeds `seen` silently: a relaunch
+  // does not re-announce work that was already waiting.
+  const notifySetting = useAttentionOsSettings().notify
+  const seenReviewsRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const seen = seenReviewsRef.current
+    seenReviewsRef.current = new Set(readyToReview.map((r) => r.key))
+    if (seen === null || notifySetting !== true || document.hasFocus() || typeof Notification === 'undefined') return
+    for (const r of arrivedReviews(readyToReview, seen)) {
+      const words = reviewNotice(r)
+      const n = new Notification(words.title, { body: words.body })
+      n.onclick = () => { window.focus(); boardVerbsRef.current.review?.(r.itemId) }
+    }
+  }, [readyToReview, notifySetting])
 
   // Brief #20. What came back running, what came back stopped, and what was
   // lost while the app was closed — kept until each is dealt with.
@@ -8823,8 +8894,16 @@ export function Canvas({
         if (!event.repeat) toggleWorld()
         return
       }
-      if (shouldIgnoreKeys()) return
-      if (hit?.id === 'allow') {
+      // ⌘J / ⌘⇧J under a focus lock: useViewport declines them (its predicate
+      // includes the lock), so they are taken here, and only here, in that case.
+      if ((hit?.id === 'jump' || hit?.id === 'jump-prev') && focusLocked() && !shouldIgnoreKeysButLock()) {
+        event.preventDefault()
+        if (!event.repeat) onJumpAttention(hit.id === 'jump-prev' ? -1 : 1)
+        return
+      }
+      // ⌘Y passes a focus lock too (the same amendment), so it is judged by
+      // the predicate without the lock, ahead of the general stand-down.
+      if (hit?.id === 'allow' && !shouldIgnoreKeysButLock()) {
         event.preventDefault()
         const selected = selectedIdsRef.current
         const target = allowPendingTarget({
@@ -8836,9 +8915,20 @@ export function Canvas({
         if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
         return
       }
+      if (shouldIgnoreKeys()) return
       if (hit?.id === 'make-task') {
         event.preventDefault()
         makeTaskRef.current()
+        return
+      }
+      // The UX pass. ⌘/ is the shortcut sheet every Mac app has: Settings ›
+      // Keyboard, which already prints the one registry with search.
+      if (hit?.id === 'shortcuts') {
+        // An editor's own ⌘/ (comment a line) and a terminal's keep the key.
+        const at = event.target instanceof Element ? event.target : null
+        if (at?.closest('input, textarea, [contenteditable="true"], .monaco-editor, .xterm') != null) return
+        event.preventDefault()
+        if (!event.repeat) openSettingsPage('keyboard')
         return
       }
       if (hit?.id === 'new-shell') {
@@ -8851,7 +8941,7 @@ export function Canvas({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shouldIgnoreKeys, onSpawn, worldCentre])
+  }, [shouldIgnoreKeys, shouldIgnoreKeysButLock, onJumpAttention, onSpawn, worldCentre])
 
   const taskRegions = regionsFromMemberships(
     taskMemberships(displayPanels, workItems),
@@ -8913,6 +9003,26 @@ export function Canvas({
     try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }
     setOnboardingDone(true)
   }
+  // The card's answers are SAVED, not just read: a renamed workspace keeps the
+  // name, and the first agent turned on becomes ⌘N. Claude and Codex are
+  // built-in presets already, so "turned on" is choosing the default — no
+  // preset is minted. None turned on leaves ⌘N where it was. Then the last
+  // step does what its copy says and opens the new-task sheet.
+  const completeOnboarding = (answers: OnboardingAnswers): void => {
+    finishOnboarding()
+    const active = workspaceRows.find((w) => w.active)
+    if (active !== undefined && answers.workspaceName !== '' && answers.workspaceName !== active.name) {
+      void window.canvas.workspace.rename(active.id, answers.workspaceName)
+        .catch((error: unknown) => { console.warn('[onboarding] could not rename the workspace', error) })
+        .finally(reloadWorkspaces)
+    }
+    const first = answers.enabled.find((id) => presetRows.some((p) => p.id === id && p.builtIn))
+    if (first !== undefined) {
+      void window.canvas.preset.setDefault(first).then(reloadPresets, (error: unknown) => { console.warn('[onboarding] could not set the default agent', error) })
+    }
+    paletteActionsRef.current?.beginStartWork()
+  }
+  const onboardingProbes = probesFromReport(envReport)
 
   // R-028. A work item names one conversation. That slot is filled only while
   // it is empty — writing over it would replace the lane's chat. Every moved
@@ -9562,6 +9672,9 @@ export function Canvas({
             hostRef={hostRef}
             onSelect={selectAndRaise}
             merged={merged}
+            approvalOf={(id) => pendingApprovals.find((a) => a.id === id)}
+            onAnswer={(id, requestId, allow) => paletteActions.answerApproval(id, requestId, allow)}
+            onOpen={goToPanelOrRequest}
           />
           {!merged && pendingApprovals.map((approval) => {
             const host = displayPanels.find((panel) => panel.rect.id === approval.id)
@@ -10259,10 +10372,57 @@ export function Canvas({
           />
         )}
         {showOnboarding && !merged && (
-          <Onboarding workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''} onHandoff={finishOnboarding} />
+          <Onboarding
+            workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''}
+            probes={onboardingProbes}
+            enabled={foundAgentIds(onboardingProbes)}
+            {...(envReport === null ? {} : { tmux: { path: envReport.tmux.path } })}
+            onHandoff={(_handoff, answers) => completeOnboarding(answers)}
+            onSkip={finishOnboarding}
+            onCustom={() => { finishOnboarding(); paletteActionsRef.current?.beginSpawnSheet() }}
+          />
         )}
-        {onboardingDone && panels.length === 0 && !merged && (
-          <BlankCanvas workspace={workspaceRows.find((w) => w.active)?.name ?? ''} />
+        {/* One empty state at a time. The launcher holds an empty canvas
+            until the person puts it away ("Blank canvas"); only then does the
+            quieter blank card show, and every button on it does something:
+            the task box opens the new-task sheet on that sentence, the quick
+            spawns are ⌘N's preset and a login shell, and a starter layout
+            opens the panel sheet on its lineup (the person still picks the
+            folder there). */}
+        {onboardingDone && panels.length === 0 && !merged && launcherPutAway && (
+          <BlankCanvas
+            workspace={workspaceRows.find((w) => w.active)?.name ?? ''}
+            onStart={(sentence) => paletteActions.beginStartWork({ title: sentence.trim() })}
+            onQuick={(id) => {
+              if (id === 'import') { void importCanvas(); return }
+              if (id === 'agent') {
+                const preset = presetRows.find((p) => p.isDefault && p.available) ?? presetRows.find((p) => p.agent !== undefined && p.available)
+                if (preset !== undefined) { paletteActions.spawnPreset(preset.id); return }
+                paletteActions.beginSpawnSheet()
+                return
+              }
+              onSpawn(worldCentre(), { cwd: '~', args: [] }, { focus: true })
+            }}
+            adopt={adoptable === null ? null : {
+              sentence: adoptSentence(adoptable.sessions),
+              onPlace: () => {
+                // One panel per session, each through the one placement rule,
+                // so they cascade rather than stack. Each is a tmux client:
+                // closing it detaches, and their session keeps running.
+                for (const row of adoptable.sessions) {
+                  onSpawn(worldCentre(), { cwd: row.cwd === '' ? '~' : row.cwd, ...adoptCommand(adoptable.tmuxPath, row.target), title: `${row.agent} · ${row.session}` })
+                }
+                setAdoptable(null)
+              },
+              onLeave: () => setAdoptable(null)
+            }}
+            onLayout={(id) => {
+              const layout = STARTER_LAYOUTS.find((row) => row.id === id)
+              if (layout === undefined) return
+              if (layout.lineup === null) { onSpawn(worldCentre(), { cwd: '~', args: [] }, { focus: true }); return }
+              paletteActions.beginSpawnSheet(undefined, undefined, { what: lineupWhatId(layout.lineup) })
+            }}
+          />
         )}
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
@@ -10319,30 +10479,49 @@ export function Canvas({
           />
           )
         })()}
-        {/* M309. The return briefing floats over the canvas only when the
-            navigator's Panels pane is not there to hold it. Resume alone
-            never floats here any more — it is the strip (see resumeStrip). */}
-        {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
-        <div className="recovery-slot" data-recovery-slot="" data-screen-control="">
-          {(reopen !== null || jobRecovery !== null) && (
-            <div className="reopen-stack" data-screen-control="">
-              {reopen !== null && (
-                <ReopenNotice
-                  model={reopen}
-                  onGo={paletteActions.goToPanel}
-                  onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
-                />
+        {/* The UX pass (4.4). One "while you were away" card: the floating
+            briefing (M309: only when the navigator's Panels pane is not there
+            to hold it; Resume alone is the strip), the Reopened notice and
+            Unfinished work (M316), and the login-shell banner (M48), each a
+            section of it, with one Dismiss all. */}
+        {(() => {
+          const floatBriefing = briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels')
+          const envProblem = envReport !== null && !envReport.shell.ok && !envBannerDismissed
+          const sections = [floatBriefing, reopen !== null, jobRecovery !== null, envProblem].filter(Boolean).length
+          return (
+            <div className="recovery-slot" data-recovery-slot="" data-screen-control="">
+              {sections > 0 && (
+                <WelcomeBack
+                  count={sections}
+                  onDismissAll={() => {
+                    if (floatBriefing) dismissReturn()
+                    if (reopen?.acknowledgeable === true) reopen.acknowledge()
+                    jobRecovery?.dismiss()
+                    setEnvBannerDismissed(true)
+                  }}
+                >
+                  {floatBriefing && resumeBanner}
+                  {reopen !== null && (
+                    <ReopenNotice
+                      model={reopen}
+                      onGo={paletteActions.goToPanel}
+                      onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
+                    />
+                  )}
+                  {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
+                  {envProblem && envReport !== null && (
+                    <div className="env-banner" data-env-banner role="status">
+                      Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
+                      through your shell's rc files may not be found.{' '}
+                      {/* The UX pass. The fix is a button, not a sentence pointing at ⌘K. */}
+                      <button type="button" className="pf__verb pf__verb--word env-banner__check" data-env-banner-check {...shellControl(() => palette.openPalette('environment'))}>Check environment</button>
+                    </div>
+                  )}
+                </WelcomeBack>
               )}
-              {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
             </div>
-          )}
-        </div>
-        {envReport !== null && !envReport.shell.ok && (
-          <div className="env-banner" data-env-banner data-screen-control="" role="status">
-            Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
-            through your shell's rc files may not be found. Environment… in ⌘K says what was.
-          </div>
-        )}
+          )
+        })()}
         {/* M204 (D08). The lens bar: which task is lit, how much of it, what
             is missing, and the ways out. Viewport-pinned like the env banner.
             M264: Escape clears the lens when it is not destined for a focused

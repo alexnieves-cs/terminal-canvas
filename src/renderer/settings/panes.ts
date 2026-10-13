@@ -1,7 +1,7 @@
 /**
  * M446. The Settings nav, as data.
  *
- * Seven pages, in the order the screen shows them. Keyboard has no schema
+ * Eight pages, in the order the screen shows them. Keyboard has no schema
  * category: its rows are the shortcut registry. Every other page hosts the
  * settings whose category it names, so the page is the schema's rows plus
  * one sentence about what the page is for — a heading over an empty box
@@ -27,7 +27,7 @@ import {
   type SettingDef
 } from '@shared/settings-schema'
 
-export type SettingsPaneId = 'general' | 'appearance' | 'agents' | 'sessions' | 'keyboard' | 'integrations' | 'privacy'
+export type SettingsPaneId = 'general' | 'appearance' | 'terminal' | 'agents' | 'sessions' | 'keyboard' | 'integrations' | 'privacy'
 
 export interface SettingsPane {
   id: SettingsPaneId
@@ -40,14 +40,23 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
   {
     id: 'general',
     label: 'General',
-    purpose: 'How the window is arranged, how terminal type is sized, and whether a launch looks for a newer release.',
-    categories: [SHELL_CATEGORY, ACCESSIBILITY_CATEGORY, TERMINAL_CATEGORY, UPDATES_CATEGORY]
+    purpose: 'How the window is arranged, and whether a launch looks for a newer release.',
+    categories: [SHELL_CATEGORY, UPDATES_CATEGORY]
   },
   {
     id: 'appearance',
     label: 'Appearance',
     purpose: 'Which theme the canvas uses, and whether the opening animation plays.',
     categories: [APPEARANCE_CATEGORY]
+  },
+  // General used to hold these too, which made it the one page with four
+  // unrelated subjects on it. Terminal type and the screen-reader mirror are
+  // both about how a terminal is read, so they share a page.
+  {
+    id: 'terminal',
+    label: 'Terminal & accessibility',
+    purpose: 'How terminal type is sized, and how a screen reader hears what a terminal prints.',
+    categories: [TERMINAL_CATEGORY, ACCESSIBILITY_CATEGORY]
   },
   {
     id: 'agents',
@@ -57,7 +66,7 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
   },
   {
     id: 'sessions',
-    label: 'Sessions & persistence',
+    label: 'Persistence',
     purpose: 'What comes back after you quit: the layout, the camera, the selection, and a session you asked to keep.',
     categories: [RESTORE_CATEGORY, SESSION_CATEGORY]
   },
@@ -69,7 +78,7 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
   },
   {
     id: 'integrations',
-    label: 'Integrations',
+    label: 'Files & notes',
     purpose: 'The notes folder on this machine, and how its files are listed. A token is stored from the palette and is never read back.',
     categories: [FILES_CATEGORY]
   },

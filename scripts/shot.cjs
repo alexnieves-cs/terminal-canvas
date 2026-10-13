@@ -1970,7 +1970,7 @@ app.whenReady().then(async () => {
       // plugin fixture below already follows.
       repositories: async (req) => (req.teammateId === 'ada'
         ? { kind: 'repos', repos: [{ path: REPO, repo: 'acme/api' }, { path: join(FIX, 'notes'), repo: null }] }
-        : { kind: 'no-places', reason: 'bo has no places — add a folder in the Teammates pane before it can work anywhere' }) },
+        : { kind: 'no-places', reason: 'bo has no places — add a folder in the Agent profiles before it can work anywhere' }) },
     // M127. No scene spawns the real CLI, so this is the ANSWER that CLI
     // would have given for the fixture plugin planted under the fenced home —
     // the shape `listPlugins` returns, never the walk itself, which is still

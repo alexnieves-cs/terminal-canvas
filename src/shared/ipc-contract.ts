@@ -1,3 +1,4 @@
+import type { AdoptableSession } from './tmux-adopt'
 import type { AgentPlanReply, AgentPlanRequest } from './plan'
 import type { TaskEvidence, TaskEvidenceRequest, TaskExportResult, TaskIndexRow } from './task-deliverables'
 import type { LastExit } from './persistence'
@@ -719,6 +720,8 @@ export const IPC = {
   TOOL_GENERATE: 'tool:generate',
   /** M48. The environment report: what main found at startup, key names only. */
   ENV_REPORT: 'env:report',
+  /** The UX pass (5.5). The claude/codex sessions already running in the person's own tmux. Read-only: `list-panes` on their default server, nothing else. */
+  TMUX_ADOPTABLE: 'tmux:adoptable',
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
   LINK_OPEN: 'link:open',
   /** M52. A panel's recent runs from the ledger, newest first. */
@@ -2137,8 +2140,8 @@ export interface CanvasBridge {
     recent(): Promise<string[]>
     /** M262. See SPAWN_RECENT_USED. A directory with no entry has no known time. */
     recentUsed(): Promise<Record<string, number>>
-    /** M65. The menu's ⌘⇧N. */
-    onOpenSheet(listener: () => void): () => void
+    /** M65. The menu's ⌘⇧N; `'task'` is its New task… (⌘N). */
+    onOpenSheet(listener: (which?: 'task') => void): () => void
   }
   links: {
     /** M51. The text the terminal underlined and the panel it came from; main resolves and opens, or refuses with a reason. */
@@ -2148,6 +2151,8 @@ export interface CanvasBridge {
     /** M48. The startup probe's facts — PATH entries, each CLI found or absent, tmux, the layout file. Names, never values. */
     /** M107. `again: true` asks the login shell once more (Check again) and reports what it found; the app's own environment applies on relaunch. */
     report(again?: boolean): Promise<EnvReport>
+    /** The UX pass (5.5). Agents already running in the person's own tmux; `tmuxPath` null means no tmux was found. */
+    adoptable(): Promise<{ tmuxPath: string | null; sessions: AdoptableSession[] }>
   }
   export: {
     /** M58; M112 carries the live buffer when the panel has one. */

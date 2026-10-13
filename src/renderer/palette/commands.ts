@@ -6,6 +6,8 @@ import type { CreationResult } from '@shared/verb-table'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { StartWorkOutcome } from './start-work'
 import { SWARM_LIST, SWARM_PRESETS, type SwarmPresetId } from '@shared/swarm'
+import { LINEUPS, LINEUP_IDS } from '@shared/lineups'
+import { lineupWhatId } from './spawn-sheet'
 import type { ToolScope } from '@shared/toolbox'
 import { CAPABILITY_ORDER, capabilityWords, normalizeCapability } from '@shared/toolbox-query'
 import type { Command } from './palette-model'
@@ -309,7 +311,7 @@ export interface PaletteActions {
   /** M80. `templateId` opens the sheet on that template. */
   /** M149. `into` threads the three `New workspace from` doors to the sheet's Enter, so a template with holes asks before any workspace exists. */
   /** M174. `seed.cwd` opens the sheet ON a folder (the launcher's recents chip). */
-  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd: string }): void
+  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd?: string; what?: string }): void
   /** M149. A sentence on the palette's feedback line — the one place a refusal from a keystroke (a paste) can be said; nothing runs. */
   say(sentence: string): void
   /** M83. Open the project memory for the captured panel's repository. */
@@ -553,6 +555,8 @@ export interface PaletteActions {
   stopAuto(id: string): void
   /** M100. Open the navigator on the Teammates pane. */
   openTeammates(): void
+  /** The UX pass. Run one routine now, the same door the pane's Run now is. */
+  runRoutine(id: string): void
   /** M103. The palette's Open a page… row: ask for a URL in text mode, then mint a browser panel at the world centre. */
   beginBrowser(): void
   /** M106. Flip every terminal to its far view, and back. */
@@ -1005,7 +1009,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({
     id: 'spawn.sheet',
     title: 'New panel…',
-    subtitle: 'choose the directory, the preset or a command, and the agent\'s mode',
+    subtitle: 'choose the directory, a saved command or a one-off, and the agent\'s mode',
     searchText: 'new panel start spawn sheet directory command task where',
     group: 'spawn',
     shortcut: '⌘⇧N',
@@ -1198,7 +1202,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           // anywhere said what Cmd+N would spawn — the stock canvas looked
           // correct and only a user who hand-edited defaultPresetId could
           // tell. A hint on every row would be a lie on all but one.
-          ...(preset.isDefault ? { shortcut: '⌘N' } : {}),
+          ...(preset.isDefault ? { shortcut: '⌘⌥N' } : {}),
           run: () => actions.spawnPreset(preset.id)
         },
         // M253. Unread comes first: a pack preset whose command IS on the
@@ -1447,13 +1451,15 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // top bar's "+ New task" opens, and its `leads` lift it into the Tasks
   // section above every other row for "new", "task" and "start"
   // (`verify:palette task.rank.1`). The old words stay in searchText, so
-  // "start work" still finds it. At rest it keeps its Canvas place.
+  // "start work" still finds it. The UX pass: at rest it leads too
+  // (`leadsAtRest`), the first row ⌘K opens on.
   out.push({
     id: 'start.work',
     title: 'New task…',
     subtitle: 'what, where, and who — an agent works on it on its own branch',
     searchText: 'new task start work issue dispatch teammate repository folder lane begin',
     leads: ['new task', 'task', 'start task', 'start work'],
+    leadsAtRest: true,
     group: 'canvas',
     run: () => actions.beginStartWork()
   })
@@ -1471,7 +1477,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // `verify:swarm rows.1` fails for a preset with no row here, which is the
   // other half: neither can drift without a red.
   const swarmRow = (preset: typeof SWARM_LIST[number]): Omit<Command, 'id'> => ({
-    title: `New task as a ${preset.label} swarm…`, subtitle: preset.hint,
+    title: `New task as a ${preset.label} arrangement…`, subtitle: preset.hint,
     searchText: `swarm arrangement start work ${preset.id} ${preset.label} supervisor handoff worktree lane multi agent seats`,
     group: 'canvas', run: () => actions.beginStartWork({ swarm: preset.id })
   })
@@ -1488,6 +1494,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'recipe.fix-test', ...recipeRow('recipe-fix-test', 'Fix a failing test…', 'reproduce, fix the cause, prove it passes', 'fix failing test red broken ci') })
   out.push({ id: 'recipe.implement-issue', ...recipeRow('recipe-implement-issue', 'Implement an issue…', 'from the issue to a reviewed change with tests', 'implement issue feature ticket github jira') })
   out.push({ id: 'recipe.review-change', ...recipeRow('recipe-review-change', 'Review a change…', 'findings ranked by severity, no edits', 'review change diff branch pr pull request code review') })
+  // The UX pass. A person's OWN recipes were reachable only from New task ›
+  // Options; each is a row now, beside the built-ins, opening the same sheet.
+  for (const r of ctx.savedRecipes ?? []) {
+    out.push({ id: `recipe.saved.${r.id}`, ...recipeRow(r.id, `${r.name}…`, 'your saved recipe — opens New task with it filled in', `saved ${r.name}`) })
+  }
+  // The UX pass. Arrangements (M104's lineups) were reachable only from a
+  // select inside the panel sheet; each opens that sheet on it now.
+  for (const id of LINEUP_IDS) {
+    out.push({
+      id: `arrangement.${id}`, title: `New panels as ${LINEUPS[id].label}…`, subtitle: `arrangement — ${LINEUPS[id].hint}`,
+      // Found by typing, not at rest: the resting list's budget (`palette.rest.1`).
+      searchText: `arrangement lineup layout seats ${id} ${LINEUPS[id].label}`, group: 'spawn', hiddenAtRest: true,
+      run: () => actions.beginSpawnSheet(undefined, undefined, { what: lineupWhatId(id) })
+    })
+  }
+  // The UX pass. Routines were reachable only from the agent profiles pane.
+  for (const r of ctx.routines ?? []) {
+    out.push({
+      id: `routine.run.${r.id}`, title: `Run routine ${r.name} now`, subtitle: 'a scheduled run, started early — its schedule is unchanged',
+      searchText: `routine run now schedule ${r.name}`, group: 'canvas', hiddenAtRest: true, run: () => actions.runRoutine(r.id)
+    })
+  }
   out.push({ id: 'recipe.investigate-bug', ...recipeRow('recipe-investigate-bug', 'Investigate a bug…', 'reproduce, find the root cause, propose a fix', 'investigate bug debug root cause reproduce') })
   // M312. The repository setup, for the captured panel's repository.
   out.push({
@@ -1851,8 +1879,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   }
   out.push({
     id: 'manage.presets',
-    title: 'Manage presets…',
-    subtitle: `${ctx.presets.length} preset${ctx.presets.length === 1 ? '' : 's'}`,
+    title: 'Manage saved commands…',
+    subtitle: `${ctx.presets.length} saved command${ctx.presets.length === 1 ? '' : 's'}`,
     group: 'manage',
     entersScope: 'presets',
     run: () => {}
@@ -1910,7 +1938,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `preset.rename.${preset.id}`,
-          title: `Rename preset ${preset.name}`,
+          title: `Rename saved command ${preset.name}`,
           group: 'manage',
           scope: 'presets',
           hiddenAtRest: true,
@@ -1923,7 +1951,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `preset.delete.${preset.id}`,
-          title: `Delete preset ${preset.name}`,
+          title: `Delete saved command ${preset.name}`,
           group: 'manage',
           scope: 'presets',
           hiddenAtRest: true,
@@ -1937,7 +1965,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `preset.default.${preset.id}`,
-          title: `Make ${preset.name} the Cmd+N default`,
+          title: `Make ${preset.name} the ⌘⌥N default`,
           group: 'manage',
           scope: 'presets',
           hiddenAtRest: true,
@@ -2367,7 +2395,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'note.import-docx', title: 'Import a Word document…', subtitle: 'a new Markdown note beside the .docx — what was dropped is named, and the note waits to be read', group: 'canvas', searchText: 'import word docx document convert note markdown', run: () => { void actions.importDocx().then((r) => { if (r.kind === 'refused') actions.say(r.reason) }) } })
   // M253. A pack's two rows. Import shows what the pack holds and needs FIRST
   // and adds nothing until Add; export writes the library — not this canvas.
-  out.push({ id: 'pack.export', title: 'Export a pack…', subtitle: 'your workflows, saved prompts and presets in one file — secrets scrubbed, credentials named and never carried', group: 'canvas', searchText: 'export pack share bundle discipline library workflows prompts presets', run: () => { void actions.exportPack() } })
+  out.push({ id: 'pack.export', title: 'Export a pack…', subtitle: 'your workflows, saved prompts and saved commands in one file — secrets scrubbed, credentials named and never carried', group: 'canvas', searchText: 'export pack share bundle discipline library workflows prompts presets', run: () => { void actions.exportPack() } })
   out.push({ id: 'pack.sample', title: 'Import the sample dev-relations pack…', subtitle: 'release notes, changelog, announcement and PR-comment workflows — shown first, added only when you choose Add', group: 'canvas', searchText: 'sample pack dev relations devrel release notes changelog announcement github', run: () => { void actions.importSamplePack() } })
   // M255. Publishing the SELECTED draft file. Disabled by name until exactly
   // one panel is selected; the action then checks it is a file and says so.
@@ -2504,7 +2532,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // --- M100: the roster's door --------------------------------------------------
   out.push({
     id: 'manage.teammates',
-    title: 'Manage teammates…',
+    title: 'Manage agent profiles…',
     subtitle: ctx.teammateCount === undefined || ctx.teammateCount === 0 ? 'agents that keep a brief and their own memory, so each task starts where the last left off' : `${ctx.teammateCount} teammate${ctx.teammateCount === 1 ? '' : 's'}`,
     group: 'manage',
     searchText: 'teammates agents roster identity places brief memory manage',
