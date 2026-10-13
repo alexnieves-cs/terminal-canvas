@@ -522,6 +522,10 @@ app.whenReady().then(async () => {
       // tier gate stays shut, and every panel stays a card. Production
       // windows are visible; this is the harness's own condition.
       backgroundThrottling: false,
+      // A hosted runner's screen (about 1024x700) clamps a real window, so the
+      // renderer sees a compact viewport the checks never assumed. An offscreen
+      // window is not bound by any screen and renders at the requested size.
+      offscreen: !!process.env.CI,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
