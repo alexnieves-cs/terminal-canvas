@@ -512,6 +512,9 @@ app.whenReady().then(async () => {
     show: false,
     width: 1400,
     height: 900,
+    // On a small screen (a hosted CI runner is 1024 wide) macOS clamps the frame
+    // to it, so setBounds after showing cannot restore the size without this.
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: join(__dirname, '..', 'out', 'preload', 'index.js'),
       // M56. A hidden window pauses requestAnimationFrame, and a camera
