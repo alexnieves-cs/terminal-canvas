@@ -336,7 +336,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
       const backH = await benchH()
       // Evidence for a red run: the height chain the bench's `flex: 1` fills.
-      const chain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } return { inner: innerHeight, chain: out } })()`)
+      const chain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, chain: out, kids } })()`)
       ok(IDS[4],
         context && context.review === 'none' && context.checks === true && lane !== undefined && context.where.includes(lane.branch) &&
           reading === true && readDiff === true && readH > restH + 150 && back === true && Math.abs(backH - restH) <= 2,

@@ -253,7 +253,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
       await resetZoom(wc)
       const atOne = await probe()
-      await zoomTo(wc, '0')
+      // ⌘0 is Fit all now and lands far below LIVE_MIN_SCALE, where every
+      // unfocused panel is a card with no slot to click; three ⌘- steps are a
+      // zoom well away from 1:1 that still has live bodies.
+      await zoomTo(wc, '-'); await zoomTo(wc, '-'); await zoomTo(wc, '-')
+      await cameraStill(wc)
       const zoomedOut = await probe()
       await resetZoom(wc)
 
@@ -467,11 +471,12 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
         // Zoom to 50% via the canvas's own path, so the real transform is
         // what the corrector sees.
+        // Three steps (~58%), not four: four land at 0.48, under
+        // LIVE_MIN_SCALE, where a body that is not pinned is a card.
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
-        await new Promise((r) => setTimeout(r, 300))
+        await new Promise((r) => setTimeout(r, 600))
 
         const scale = window.__m4aScale()
         const screen = window.__m4aCellToScreen('beta')
@@ -495,7 +500,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         selection && selection.text === 'beta',
         `scale=${selection && selection.scale} selection=${JSON.stringify(
           selection && (selection.text ?? selection.error)
-        )}`)
+        )} ${JSON.stringify(selection)}`)
 
       await resetZoom(wc)
     }
@@ -2412,7 +2417,14 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           : false
         ok('43 a project prompt is listed and inserted from the panel\'s own cwd',
           arrived === true,
-          `focused=${focused} row=${insertRow} arrived=${arrived}`)
+          `focused=${focused} row=${insertRow} arrived=${arrived} ${JSON.stringify(await wc.executeJavaScript(`(() => ({
+            active: document.activeElement && (document.activeElement.className || document.activeElement.tagName),
+            activePanel: (document.activeElement && document.activeElement.closest('.panel') || {}).dataset?.panelId ?? null,
+            palette: document.querySelector('.palette') !== null,
+            input: (document.querySelector('.palette__input') || {}).value ?? null,
+            rows: [...document.querySelectorAll('.palette__row')].slice(0, 4).map((r) => r.textContent.slice(0, 50)),
+            echoSlot: !!document.querySelector('[data-panel-id=${JSON.stringify(echoId)}] .panel__slot')
+          }))()`))}`)
       }
     }
 
@@ -2446,6 +2458,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // Check 37 already establishes this exact idiom for capturing a
       // Cmd+N panel's id: dispatch the synthetic keydown on window, then
       // diff the id list against the snapshot taken before it.
+      // A palette left open by the check before would swallow the chord.
+      await wc.executeJavaScript(
+        `document.querySelector('.palette') && window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
+      await sleep(200)
       await wc.executeJavaScript(
         `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const ids = await waitUntil(async () => {
@@ -3657,7 +3673,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const clash = three.flatMap((a, i) => three.slice(i + 1).filter((b) => overlapsRect(a, b)).map((b) => `${a.id}/${b.id}`))
       ok('51 a second Cmd+N at one camera lands centred first, then CLEAR of the first instead of stacking, and still goes live',
         Boolean(firstCentred && second && live && clash.length === 0 && secondShown),
-        `first=${JSON.stringify(first)} rect=${JSON.stringify(firstRect)} expected=${JSON.stringify(want51)} second=${JSON.stringify(second)} viewCentre=${JSON.stringify(expectedCentre)} live=${live} shown=${secondShown}`)
+        `first=${JSON.stringify(first)} rect=${JSON.stringify(firstRect)} expected=${JSON.stringify(want51)} second=${JSON.stringify(second)} viewCentre=${JSON.stringify(expectedCentre)} live=${live} shown=${secondShown} room=${JSON.stringify(room51).slice(0, 900)}`)
       ok('place.free.1 ⌘N ×3 at one camera: no two of the three overlap (occupied rects, the rim name included), and each is on screen after its press — the view flies to the one it had no room for',
         three.length === 3 && clash.length === 0 && secondShown && thirdShown,
         `rects=${JSON.stringify(three)} clash=${JSON.stringify(clash)} shown=${secondShown}/${thirdShown}`)
@@ -4347,6 +4363,14 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       if (b) await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[1]))} + '] .panel__chrome'); if (!c) return false
         const r = c.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 20, clientY: r.top + r.height / 2, shiftKey: true }
         c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return true })()`)
+      // A new panel REPLACES the selection with itself, so A's early plain
+      // click does not survive B's spawn; adding A back is a shift press on A's
+      // chrome while A is on screen (B's own press above is then a no-op).
+      const aVisible = ids.length === 2 ? await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[0]))} + '] .panel__chrome'); if (!c) return false
+        const r = c.getBoundingClientRect(); const x = r.left + 20, y = r.top + r.height / 2
+        if (x < host.left || x > host.right || y < host.top || y > host.bottom) return false
+        const o = { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y, shiftKey: true }
+        c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return true })()`) : null
       await sleep(150)
       const selected = await wc.executeJavaScript(`[...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id'))`)
       // The row is run the way a person runs it: Cmd+K, the title typed, the row pressed (check 52's shape).
@@ -4380,7 +4404,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('fit.1 Fit selection (Zoom to fit before M409) frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
         ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
           rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
-        JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
+        JSON.stringify({ ids, selected, aVisible, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
       for (const id of ids) await clickPanelClose(wc, id)
     }
 
@@ -4407,6 +4431,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       await settle()
       const atOne = await measure()
       const scaleOne = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale
+      // Focus pins a panel live whatever the zoom (check 9's note); without it
+      // the zoomed-out camera may leave no panel in the live budget at all.
+      if (atOne) await wc.executeJavaScript(`(() => { const slot = document.querySelector('.panel[data-panel-id=${JSON.stringify(atOne.id)}] .panel__slot'); if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return true })()`)
+      await sleep(200)
       let scaleOut = scaleOne
       for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
       await settle()

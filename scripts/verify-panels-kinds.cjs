@@ -213,6 +213,22 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       const cleared143 = await clickEmptyCanvas(wc)
       if (!cleared143) throw new Error('143: found no background point to clear the selection at')
       await sleep(100)
+      // Zooming out from the viewport centre leaves the fleet's grid wherever
+      // the camera happened to sit; on the larger CI window it lands below the
+      // fold. A wheel pan (no ctrlKey) brings the first panel to the middle —
+      // the camera is not what this check is about, a reachable card is.
+      await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        const el = document.querySelector('.panel')
+        if (!host || !el) return false
+        const b = host.getBoundingClientRect(), r = el.getBoundingClientRect()
+        host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true,
+          clientX: b.left + b.width / 2, clientY: b.top + b.height / 2,
+          deltaX: Math.round(r.left + r.width / 2 - (b.left + b.width / 2)),
+          deltaY: Math.round(r.top + r.height / 2 - (b.top + b.height / 2)), deltaMode: 0 }))
+        return true
+      })()`)
+      await cameraStill(wc)
       const card = await wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas')
         if (!host) return null

@@ -516,12 +516,16 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
         const port = await portCentre(portSel)
         const drop = near ? await groundNear(near.x, near.y, mx, my) : null
         const before = await shapes()
+        const connsBefore = await connectorsDom()
         if (port && !port.zero && drop) await drag(port, drop)
         const after = await waitUntil(async () => { const s = await shapes(); return s.length === before.length + 1 ? s : false }, 2500)
+        // Evidence for a red run: a release that landed on a LINK target makes a connector, not a step.
+        const newConns = (await connectorsDom()).filter((c) => !connsBefore.some((b) => b.id === c.id)).map((c) => `${c.from}>${c.to}`)
+        const nearest = drop ? await js(`[...document.querySelectorAll('.panel[data-panel-id], .shape[data-panel-id]')].map((p) => { const r = p.getBoundingClientRect(); const dx = Math.max(r.left - ${drop.x}, 0, ${drop.x} - r.right), dy = Math.max(r.top - ${drop.y}, 0, ${drop.y} - r.bottom); return [p.getAttribute('data-panel-id'), Math.round(Math.hypot(dx, dy))] }).sort((a, b) => a[1] - b[1]).slice(0, 2)`) : null
         const fresh = after ? after.find((x) => !before.some((b) => b.id === x.id)) : null
         const box = fresh ? await js(`(() => { const r = document.querySelector('.shape[data-panel-id="${fresh.id}"]').getBoundingClientRect(); return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, top: r.top } })()`) : null
         if (fresh) { await key('Escape'); await settle() }
-        return { port, drop, fresh: fresh && fresh.id, box,
+        return { port, drop, fresh: fresh && fresh.id, box, newConns, nearest,
           centreOff: box && drop ? Math.round(Math.hypot(box.cx - drop.x, box.cy - drop.y) * 10) / 10 : null,
           facingOff: box && drop ? Math.round(Math.hypot(box.cx - drop.x, box.top - drop.y) * 10) / 10 : null }
       }

@@ -2236,9 +2236,12 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     // A dock button for the pane ALREADY showing collapses the rail instead of
     // re-showing it (chooseNavigator's `showing` branch), so a second click is
     // the right answer exactly when the first one closed what was open.
-    await dockTo('workspaces'); await settle()
+    // The dock lost its Workspaces button (M404 C2): the top bar's workspace
+    // crumb is the door now.
+    const showWorkspaces = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+    await showWorkspaces(); await settle()
     if (!(await wc.executeJavaScript(`!!document.querySelector('[data-rail-workspace]')`))) {
-      await dockTo('workspaces'); await settle()
+      await showWorkspaces(); await settle()
     }
 
     // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
@@ -3783,6 +3786,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const sentence2 = armed2 === true ? await text('[data-review-node-discard-armed="brand-new.txt"]') : ''
         const confirmed2 = armed2 === true ? await press('[data-review-node-discard-confirm="brand-new.txt"]') : false
         const gone = confirmed2 === true ? await waitUntil(async () => !existsSync(fresh), 8000) : false
+        const outcome2 = await text('[data-review-node-commit-outcome]')
         const clean = gone === true
           ? await waitUntil(async () => {
               const t = await text('[data-review-node-summary]')
@@ -3794,7 +3798,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           restored === true && /^Restore seed\.txt .*cannot be undone/.test(sentence1) &&
             gone === true && /did not exist at spawn/.test(sentence2) &&
             typeof clean === 'string' && status === '',
-          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, sentence2, gone, clean, status }))
+          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, armed2, confirmed2, sentence2, outcome2, gone, clean, status }))
       }
 
       // 114. Escape cancels, and NOTHING is committed — read back out of
