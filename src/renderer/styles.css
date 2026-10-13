@@ -11932,8 +11932,28 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   margin-top: calc(-4px * var(--far-scale, 1));
   border-radius: 50%;
   background: var(--tone);
-  pointer-events: none;
+  /* A dot is a door: a click goes to its panel. The outline grows the hit
+     area without growing the dot, which stays a state mark. */
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  outline: calc(6px * var(--far-scale, 1)) solid transparent;
+  cursor: pointer;
 }
+.navigate-card__verbs { display: flex; gap: calc(6px * var(--far-scale, 1)); margin-top: auto; }
+.navigate-card__verbs button {
+  font: inherit;
+  font-size: calc(12px * var(--far-scale, 1));
+  padding: calc(4px * var(--far-scale, 1)) calc(10px * var(--far-scale, 1));
+  border-radius: calc(6px * var(--far-scale, 1));
+  border: 1px solid var(--line);
+  background: var(--s-2);
+  color: var(--fg);
+  cursor: pointer;
+}
+/* Past Work the inline approval is drawn at world scale and cannot be read;
+   the Plan card carries the same two answers at a readable size instead. */
+.world[data-zoom-tier] .inline-approval-host { visibility: hidden; }
 
 .palette__bar { display: flex; align-items: center; gap: var(--sp-2); }
 .palette__kind {

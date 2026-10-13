@@ -168,7 +168,7 @@ export function WorldFocusSheet(): JSX.Element | null {
           {pending ? (
             <div className="world-focus__verbs" role="group" aria-label="Answer the request">
               <button type="button" className="world-focus__act" data-primary={primary === 'approve' ? '' : undefined} data-world-focus-approve onClick={() => answer(true)}>
-                Approve <Kbd chord={allowChord} />
+                Allow once <Kbd chord={allowChord} />
               </button>
               <button type="button" className="world-focus__act" onClick={() => answer(false)} data-world-focus-deny>Deny</button>
               <button type="button" className="world-focus__act" aria-expanded={full} onClick={() => setFull((open) => !open)} data-world-focus-diff-toggle>

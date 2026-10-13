@@ -98,6 +98,8 @@ import { useGroupDrag } from '@renderer/groups/useGroupDrag'
 import { applyDrag, movesOrigin, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { jumpOrder, type Inbox } from '@renderer/shell/decision-inbox'
+import { useAttentionOsSettings } from '@renderer/shell/useAttentionOsSettings'
+import { arrivedReviews, nextReview, readyReviews, reviewNotice, type ReadyReview } from '@renderer/shell/ready-review'
 import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
 import { useTaskQueue } from '@renderer/shell/useTaskQueue'
 import { taskChain } from '@renderer/shell/inspector-context'
@@ -2949,6 +2951,10 @@ export function Canvas({
 
   // M308. Assigned below, where the inbox is built; read at press time.
   const inboxRef = useRef<Inbox | null>(null)
+  // Ready to review: assigned below, where the task queue is built. ⌘J walks
+  // these only once nothing needs the person (ready-review.ts says why).
+  const readyReviewRef = useRef<ReadyReview[]>([])
+  const reviewCursorRef = useRef<string | null>(null)
 
   /**
    * Cmd+J. centreOn + selectAndRaise, and deliberately NOTHING ELSE — no
@@ -2990,10 +2996,17 @@ export function Canvas({
     // the room are one cycle. The world covers the canvas, so one press is
     // not handled twice.
     const id = nextAttentionId(queue, attentionCursor(), direction)
-    // Nothing is waiting: the key does nothing at all. Moving the camera
-    // "somewhere" would be worse than silence — the user asked to be taken to
-    // a panel that wants them, and there isn't one.
-    if (id === null) return
+    // Nothing needs the person: the next finished task waiting for review,
+    // opened the way the dock's "Review the changes" opens it. With no review
+    // either, the key does nothing at all — moving the camera "somewhere"
+    // would be worse than silence.
+    if (id === null) {
+      const review = nextReview(readyReviewRef.current, reviewCursorRef.current)
+      if (review === null) return
+      reviewCursorRef.current = review.itemId
+      boardVerbsRef.current.review?.(review.itemId)
+      return
+    }
     const panel = displayPanelsRef.current.find((p) => p.rect.id === id)
     // Belt-and-braces: a panel can still vanish between the filter above and
     // this lookup in principle. It must never be the ONLY thing standing
@@ -8509,6 +8522,25 @@ export function Canvas({
     // M325. Orchestrate's task list and the focus view read the check tallies too.
     active: chrome.attentionOpen || chrome.centerView !== 'canvas'
   })
+  const readyToReview = useMemo(() => readyReviews(taskQueue.groups), [taskQueue.groups])
+  readyReviewRef.current = readyToReview
+  // A task that finishes with changes says so outside the window, once per
+  // revision — the same `attention.notify` switch needs-you obeys, and only
+  // while the window is not focused (in the window, the dock row and ⌘J are
+  // already saying it). The first read seeds `seen` silently: a relaunch
+  // does not re-announce work that was already waiting.
+  const notifySetting = useAttentionOsSettings().notify
+  const seenReviewsRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const seen = seenReviewsRef.current
+    seenReviewsRef.current = new Set(readyToReview.map((r) => r.key))
+    if (seen === null || notifySetting !== true || document.hasFocus() || typeof Notification === 'undefined') return
+    for (const r of arrivedReviews(readyToReview, seen)) {
+      const words = reviewNotice(r)
+      const n = new Notification(words.title, { body: words.body })
+      n.onclick = () => { window.focus(); boardVerbsRef.current.review?.(r.itemId) }
+    }
+  }, [readyToReview, notifySetting])
 
   // Brief #20. What came back running, what came back stopped, and what was
   // lost while the app was closed — kept until each is dealt with.
@@ -9584,6 +9616,9 @@ export function Canvas({
             hostRef={hostRef}
             onSelect={selectAndRaise}
             merged={merged}
+            approvalOf={(id) => pendingApprovals.find((a) => a.id === id)}
+            onAnswer={(id, requestId, allow) => paletteActions.answerApproval(id, requestId, allow)}
+            onOpen={goToPanelOrRequest}
           />
           {!merged && pendingApprovals.map((approval) => {
             const host = displayPanels.find((panel) => panel.rect.id === approval.id)

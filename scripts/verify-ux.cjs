@@ -18,7 +18,9 @@ buildSync({
     contents: `
       import { probesFromReport, foundAgentIds, agentRows } from '../src/shared/onboarding'
       import { STARTER_LAYOUTS, LINEUP_IDS } from '../src/shared/lineups'
-      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS }
+      import { readyReviews, nextReview, arrivedReviews, reviewNotice } from '../src/renderer/shell/ready-review'
+      import { quickAccept, QUICK_ACCEPT_MAX_FILES } from '../src/renderer/review/quick-accept'
+      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES }
     `,
     resolveDir: __dirname,
     sourcefile: 'ux-entry.ts',
@@ -102,7 +104,7 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
   const approval = read('src/renderer/shell/ApprovalDetail.tsx')
   const shortcuts = read('src/shared/shortcuts.ts')
   ok('ux.words.1 the inline Allow advertises only the chord that is bound, and double-click is named for what it does',
-    !/<kbd>Y<\/kbd>/.test(approval) && /Allow <kbd>⌘Y<\/kbd>/.test(approval) &&
+    !/<kbd>Y<\/kbd>/.test(approval) && /Allow once <kbd>⌘Y<\/kbd>/.test(approval) &&
       /id: 'spawn-at-cursor', chord: 'double-click'[^}]*label: 'Place a flowchart step'/.test(shortcuts) &&
       /flowchart\.addShape\('process'/.test(canvas.slice(canvas.indexOf('const onCanvasDoubleClick'))),
     'inline approval and registry')
@@ -115,6 +117,73 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
     /let pane: SettingsPaneId = 'general'/.test(open) && /if \(next !== undefined\) pane = next/.test(open) &&
       /event\.key !== 'Escape' \|\| event\.defaultPrevented/.test(view) && /onClose\(\)/.test(view),
     'open.ts and SettingsView')
+}
+
+
+// ── After an agent runs ──────────────────────────────────────────────────
+
+{
+  const group = (itemId, kinds) => ({ itemId, title: 'Task ' + itemId, severity: 'review', why: '', next: { label: '', evidence: { kind: 'review', itemId } }, after: '', affects: [], oldest: 0, history: [],
+    decisions: kinds.map((kind) => ({ key: kind + ':' + itemId, kind, text: 'the agent finished with changes (2 files) and nothing is verified yet', since: 0, evidence: { kind: 'review', itemId }, affects: '' })) })
+  const list = M.readyReviews([group('a', ['review']), group('b', ['permission']), { ...group('c', ['review']), itemId: null }, group('d', ['check', 'review'])])
+  const first = M.nextReview(list, null)
+  const second = M.nextReview(list, first.itemId)
+  const wrapped = M.nextReview(list, second.itemId)
+  const gone = M.nextReview(list, 'answered-already')
+  const arrived = M.arrivedReviews(list, new Set(['review:a']))
+  const words = M.reviewNotice(list[0])
+  ok('ux.review.1 ready-to-review is the task queue\'s review decisions; the walk wraps and a stale cursor restarts at the front; only new revisions arrive',
+    list.map((r) => r.itemId).join(',') === 'a,d' && first.itemId === 'a' && second.itemId === 'd' && wrapped.itemId === 'a' && gone.itemId === 'a' &&
+      M.nextReview([], null) === null && arrived.map((r) => r.itemId).join(',') === 'd' &&
+      words.title === 'Ready to review · Task a' && /^The agent finished/.test(words.body),
+    JSON.stringify({ list: list.map((r) => r.key), words }))
+}
+
+{
+  const jump = canvas.slice(canvas.indexOf('jumpAttentionImplRef.current = '), canvas.indexOf('const pillJump'))
+  const notice = canvas.slice(canvas.indexOf('const readyToReview = '), canvas.indexOf('}, [readyToReview, notifySetting])'))
+  ok('ux.review.2 ⌘J opens the next review only when nothing needs you, and a newly ready task notifies once, only unfocused and only with notifications on',
+    /if \(id === null\) \{\s*const review = nextReview\(readyReviewRef\.current, reviewCursorRef\.current\)/.test(jump) &&
+      /boardVerbsRef\.current\.review\?\.\(review\.itemId\)/.test(jump) &&
+      /seen === null \|\| notifySetting !== true \|\| document\.hasFocus\(\)/.test(notice) && /arrivedReviews\(readyToReview, seen\)/.test(notice),
+    jump.length + ' / ' + notice.length)
+}
+
+{
+  const passed = (n) => Array.from({ length: n }, (_, i) => ({ outcome: 'passed', key: String(i) }))
+  const yes = M.quickAccept({ files: 2, checks: passed(1) })
+  const many = M.quickAccept({ files: M.QUICK_ACCEPT_MAX_FILES + 1, checks: passed(1) })
+  const unchecked = M.quickAccept({ files: 1, checks: [] })
+  const unknown = M.quickAccept({ files: 1, checks: null })
+  const red = M.quickAccept({ files: 1, checks: [...passed(1), { outcome: 'failed', key: 'x' }] })
+  const node = read('src/renderer/review/ReviewNode.tsx')
+  const verb = node.slice(node.indexOf('data-review-task-verb="quick-accept"') - 400, node.indexOf('Review &amp; accept…'))
+  ok('ux.land.1 Review & accept is offered only for a small change whose every check passed, records the review, then arms the same plan (Merge stays a separate press)',
+    yes.offer === true && many.offer === false && unchecked.offer === false && unknown.offer === false && red.offer === false &&
+      /quickAccept\(\{ files: paths\.length, checks: laneChecks \}\)\.offer/.test(verb) &&
+      /task\.onMarkReviewed\([^)]*\); task\.onRefresh\(\); accept\.onArm\(\)/.test(verb),
+    JSON.stringify({ many, unchecked, red }))
+}
+
+{
+  const tier = read('src/renderer/palette/navigate-tier.tsx')
+  const css = read('src/renderer/styles.css')
+  const mount = canvas.slice(canvas.indexOf('<NavigateTier'), canvas.indexOf('/>', canvas.indexOf('<NavigateTier')))
+  const dot = css.slice(css.indexOf('.navigate-dot {'), css.indexOf('}', css.indexOf('.navigate-dot {')))
+  ok('ux.tier.1 a waiting Plan card answers with the same two verbs, a Map dot is a door, and the world-scale inline approval hides past Work',
+    /data-navigate-allow/.test(tier) && /data-navigate-deny/.test(tier) && /onAnswer\(id, approval\.requestId, true\)/.test(tier) &&
+      /<button\s+type="button"\s+className="navigate-dot"/.test(tier) && /onOpen\?\.\(id\)/.test(tier) &&
+      /pointer-events: auto/.test(dot) && /\.world\[data-zoom-tier\] \.inline-approval-host \{ visibility: hidden; \}/.test(css) &&
+      /approvalOf=\{/.test(mount) && /onAnswer=\{/.test(mount) && /onOpen=\{goToPanelOrRequest\}/.test(mount),
+    mount.slice(0, 120))
+}
+
+{
+  const files = ['src/renderer/shell/Dock.tsx', 'src/renderer/shell/ApprovalDetail.tsx', 'src/renderer/world/WorldCardBody.tsx', 'src/renderer/world/WorldFocusSheet.tsx', 'src/renderer/palette/navigate-tier.tsx']
+  const approveWord = files.filter((f) => />\s*Approve\s*(<|$)/m.test(read(f)))
+  ok('ux.words.2 a permission request is answered "Allow once" on every surface, never "Allow" in one place and "Approve" in another',
+    approveWord.length === 0 && files.every((f) => /Allow once/.test(read(f))),
+    JSON.stringify(approveWord))
 }
 
 const passed = results.filter((r) => r.pass).length
