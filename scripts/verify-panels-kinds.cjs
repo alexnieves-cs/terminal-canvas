@@ -242,8 +242,14 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
           // The centre must really resolve to this panel — an overlapping
           // neighbour on top would make the check assert about the wrong one.
+          // Below 0.70 the Plan tier draws a navigate-card over each panel
+          // (palette/navigate-tier.tsx) and that overlay, not the .panel,
+          // takes the press — it selects on mousedown exactly as the bare
+          // card did, so it is the same claim reached through the 6.0 surface.
           const hit = document.elementFromPoint(x, y)
-          if (!hit || hit.closest('.panel') !== el) continue
+          const navId = hit && hit.closest('[data-navigate-card]')
+            ? hit.closest('[data-navigate-card]').getAttribute('data-navigate-card') : null
+          if (!hit || (hit.closest('.panel') !== el && navId !== el.dataset.panelId)) continue
           return { id: el.dataset.panelId, x, y }
         }
         return null

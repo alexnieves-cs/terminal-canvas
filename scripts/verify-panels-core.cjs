@@ -253,10 +253,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
       await resetZoom(wc)
       const atOne = await probe()
-      // ⌘0 is Fit all now and lands far below LIVE_MIN_SCALE, where every
-      // unfocused panel is a card with no slot to click; three ⌘- steps are a
-      // zoom well away from 1:1 that still has live bodies.
-      await zoomTo(wc, '-'); await zoomTo(wc, '-'); await zoomTo(wc, '-')
+      // ⌘0 is Fit all now and lands far below the Work tier, where every panel
+      // is a card with no slot to click. Below 0.70 the Plan tier cards every
+      // panel and releases focus (zoom-tier.ts), so the furthest live zoom is
+      // two ⌘- steps (0.694, still Work through its hysteresis band).
+      await zoomTo(wc, '-'); await zoomTo(wc, '-')
       await cameraStill(wc)
       const zoomedOut = await probe()
       await resetZoom(wc)
@@ -471,9 +472,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
         // Zoom to 50% via the canvas's own path, so the real transform is
         // what the corrector sees.
-        // Three steps (~58%), not four: four land at 0.48, under
-        // LIVE_MIN_SCALE, where a body that is not pinned is a card.
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        // Two steps (~69%), not more: the Plan tier starts under 0.67 coming
+        // from Work and cards every panel (focus is released, not pinned), so
+        // there is no live terminal to double-click below it.
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         await new Promise((r) => setTimeout(r, 600))
@@ -496,7 +497,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         return { scale, text: window.__m4aSelection() }
       })()`)
 
-      ok('9 a double-click selects the right word at 50% zoom',
+      ok('9 a double-click selects the right word zoomed out (~69%, the furthest live zoom)',
         selection && selection.text === 'beta',
         `scale=${selection && selection.scale} selection=${JSON.stringify(
           selection && (selection.text ?? selection.error)
@@ -4425,8 +4426,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         return { id: live.getAttribute('data-panel-id'), chromeH: chrome.height, slotH: slot.height, bodyTransform: body ? getComputedStyle(body).transform : null, scaleVar: getComputedStyle(document.querySelector('.world')).getPropertyValue('--chrome-scale').trim() }
       })()`)
       // The camera: Cmd+0 for scale 1, then Cmd+- (the harness's zoomTo takes a
-      // KEY) until the scale is at or under 0.6 — the ratios below are read
-      // against the ACTUAL scale, never an assumed 0.5.
+      // KEY) until the scale is at or under 0.75 (two steps, 0.694: the furthest
+      // zoom with a live terminal, since the Plan tier cards every panel under
+      // 0.67) — the ratios below are read against the ACTUAL scale.
       await resetZoom(wc)
       await settle()
       const atOne = await measure()
@@ -4436,7 +4438,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       if (atOne) await wc.executeJavaScript(`(() => { const slot = document.querySelector('.panel[data-panel-id=${JSON.stringify(atOne.id)}] .panel__slot'); if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return true })()`)
       await sleep(200)
       let scaleOut = scaleOne
-      for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
+      for (let i = 0; i < 12 && scaleOut > 0.75; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
       await settle()
       // A promotion back to a live terminal is async (tier timer, then the xterm
       // mounts); on a loaded runner one read right after the zoom can land first.
@@ -4447,9 +4449,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const slotRatio = atOne && atOut ? atOut.slotH / atOne.slotH : 0
       const expectedSlot = scaleOut / scaleOne
       ok('frame.3 zoomed out, the chrome bar keeps its screen height (counter-scaled by 1/scale) while the body slot shrinks with the scale and the body carries no transform',
-        atOne !== null && atOut !== null && atOne.id === atOut.id && scaleOne === 1 && scaleOut <= 0.6 &&
+        atOne !== null && atOut !== null && atOne.id === atOut.id && scaleOne === 1 && scaleOut <= 0.75 && scaleOut >= 0.67 &&
           chromeRatio >= 0.9 && chromeRatio <= 1.1 &&
-          Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.5,
+          Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.3,
         JSON.stringify({ atOne, atOut, scaleOne, scaleOut, chromeRatio, slotRatio, expectedSlot }))
     }
 

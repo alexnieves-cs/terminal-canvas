@@ -331,6 +331,8 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await click('[data-orch-workbench] [data-orch-bench-reading="off"]')
       const reading = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('.orch[data-orch-reading]'); const b = document.querySelector('.orch__body'); return o && b && b.getBoundingClientRect().height === 0 ? true : false })()`), 4000)
       const readH = await benchH()
+      // Taken IN reading mode: the numbers that explain a bench that did not take the area.
+      const readChain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, vw: innerWidth, chain: out, kids } })()`)
       const readDiff = await wc.executeJavaScript(`document.querySelector('[data-orch-workbench] [data-orch-diff]') !== null`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
@@ -340,7 +342,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       ok(IDS[4],
         context && context.review === 'none' && context.checks === true && lane !== undefined && context.where.includes(lane.branch) &&
           reading === true && readDiff === true && readH > restH + 150 && back === true && Math.abs(backH - restH) <= 2,
-        JSON.stringify({ context, restH, readH, backH, reading, back, chain }))
+        JSON.stringify({ context, restH, readH, backH, reading, back, readChain, chain }))
 
       // orch-bench.3 — the exit criterion's first sentence.
       await click('[data-orch-workbench] [data-orch-bench-mark]')

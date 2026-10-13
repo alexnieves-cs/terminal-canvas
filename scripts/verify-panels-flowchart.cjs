@@ -504,7 +504,7 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
   // port side — its CENTRE does.
   // ---------------------------------------------------------------------
   {
-    const ID = 'flowchart.app.13 with the camera panned and zoomed, a port drag released on empty ground inside the host makes the new step exactly there: from a shape\'s south port its top-centre (the facing port) is within 12px of the release, from a terminal\'s port its centre is'
+    const ID = 'flowchart.app.13 with the camera panned and zoomed, a port drag released on empty ground inside the host makes the new step exactly there: from a shape\'s south port its top-centre (the facing port) is within 12px of the release, from a terminal\'s port the connected-object menu opens there and mints no step'
     try {
       await zoomToScale(wc, 0.8)
       await js(`(() => { const h = document.querySelector('.canvas'); const r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaMode: 0, deltaX: 90, deltaY: 50, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
@@ -536,12 +536,17 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       // release is taken with room around it.
       const t2 = await panelRect(T2)
       const fromTerm = await land(`.panel[data-panel-id="${T2}"] [data-port="s"]`, t2 ? { x: t2.cx, y: t2.bottom + 150 } : null, 130, 110)
-      const termConn = fromTerm.fresh ? (await connectorsDom()).some((c) => c.from === T2 && c.to === fromTerm.fresh) : false
+      // A panel has no port side and no process step to mint: since the 6.0
+      // quick-connect (Canvas.tsx onDropEmpty) its release opens the
+      // connected-object menu at the release point instead, and makes no shape.
+      const termMenu = await js(`(() => { const m = document.querySelector('[data-connected-spawn]'); if (!m) return null; const r = m.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top) } })()`)
+      await key('Escape'); await settle()
       ok(ID,
         Math.abs(vp.scale - 0.8) < 0.04 && vp.x !== 0 && vp.y !== 0 &&
           inside(fromShape.drop) && fromShape.fresh !== null && shapeConn && fromShape.facingOff !== null && fromShape.facingOff <= 12 &&
-          inside(fromTerm.drop) && fromTerm.fresh !== null && termConn && fromTerm.centreOff !== null && fromTerm.centreOff <= 12,
-        JSON.stringify({ vp, host: hb, fromShape, shapeConn, fromTerm, termConn }))
+          inside(fromTerm.drop) && fromTerm.fresh === null && fromTerm.newConns.length === 0 && termMenu !== null &&
+          Math.abs(termMenu.x - fromTerm.drop.x) <= 150 && Math.abs(termMenu.y - fromTerm.drop.y) <= 150,
+        JSON.stringify({ vp, host: hb, fromShape, shapeConn, fromTerm, termMenu }))
     } catch (error) {
       ok(ID, false, `threw: ${error && error.stack ? error.stack : error}`)
     }
