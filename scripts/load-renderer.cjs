@@ -57,7 +57,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
    `attempts` is 3 rather than a larger number on purpose: the observed flake
    cleared immediately, and a harness that grinds through ten retries before
    reporting a genuinely broken build has turned a fast red into a slow one. */
-const loadRenderer = async (win, { attempts = 3, log = console.log } = {}) => {
+const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = false } = {}) => {
   if (!existsSync(RENDERER_HTML)) {
     throw new Error(
       `renderer build absent at ${RENDERER_HTML} — run \`npm run build\` before this suite`)
@@ -83,7 +83,15 @@ const loadRenderer = async (win, { attempts = 3, log = console.log } = {}) => {
       // focus from anything) is the harness matching production, not a
       // looser check. Local runs keep their hidden window.
       if (process.env.CI) {
+        // macOS clamps a window to the screen when it is first shown, and a
+        // hosted runner's screen is 1024 wide: the shell then lands in its
+        // compact breakpoint (rail and inspector are drawers, nav width 0)
+        // although the harness asked for 1400. `keepSize` puts the requested
+        // frame back; setBounds is not constrained to the screen the way a
+        // first presentation is.
+        const wanted = win.getBounds()
         win.showInactive()
+        if (keepSize) win.setBounds(wanted)
         win.webContents.focus()
       }
       return

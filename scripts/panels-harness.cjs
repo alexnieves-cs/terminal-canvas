@@ -1922,7 +1922,7 @@ app.whenReady().then(async () => {
       await win.loadFile(blank)
       await win.webContents.executeJavaScript(`localStorage.removeItem('tc.chat-drafts')`)
     }
-    await loadRenderer(win)
+    await loadRenderer(win, { keepSize: true })
     const wc = win.webContents
     settleProbe.wc = wc
 
@@ -2059,7 +2059,7 @@ app.whenReady().then(async () => {
     // line names a missing target and nothing else, and CI is the only place
     // these suites can be watched, so the page's own state goes in the log.
     try {
-      const digest = await wc.executeJavaScript(`(() => {
+      const digest = await win.webContents.executeJavaScript(`(() => {
         const rect = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }
         const over = [...document.body.querySelectorAll('*')].filter((el) => {
           const cs = getComputedStyle(el)
