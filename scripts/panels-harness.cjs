@@ -56,6 +56,7 @@ buildSync({
 })
 const {
   registerIpcHandlers,
+  installTmuxAdopt,
   trailFor,
   credentialStore,
   credentialDir,
@@ -246,9 +247,13 @@ const zoomToScale = async (wc, target) => {
   await new Promise((r) => setTimeout(r, 400))
 }
 
+// ⌘N is New task since the UX pass; the instant default agent, which every
+// 'n' caller here means, is ⌘⌥N (core's check 7b already sends that chord).
 const zoomTo = (wc, key) =>
   wc.executeJavaScript(
-    `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
+    key === 'n'
+      ? `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true })), true`
+      : `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
   )
 
 /**
@@ -1351,6 +1356,7 @@ app.whenReady().then(async () => {
       : { kind: 'refused', reason: 'the Team view is not wired in this build' }),
     share: async () => ({ kind: 'refused', reason: 'the panels harness does not share' })
   }
+  installTmuxAdopt(() => ({}))
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
       resolveAvailability(allPresets(layoutStore.presets()), whichHere),
