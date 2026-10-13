@@ -87,6 +87,9 @@ app.whenReady().then(async () => {
     height: 800,
     webPreferences: {
       preload: join(__dirname, '..', 'out', 'preload', 'index.js'),
+      // A hidden window pauses requestAnimationFrame; the camera's writes ride it
+      // (panels-harness.cjs sets the same, M56). Production windows are visible.
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -156,7 +159,7 @@ app.whenReady().then(async () => {
     return { x: 600, y: 400 } })()`)
   await wc.executeJavaScript(`window.__wheels = []; window.addEventListener('wheel', (e) => window.__wheels.push({ t: e.target.className && String(e.target.className).slice(0, 40), ctrl: e.ctrlKey, dy: e.deltaY, prevented: e.defaultPrevented, x: e.clientX, y: e.clientY }), true); window.addEventListener('wheel', (e) => { window.__wheels[window.__wheels.length - 1].prevented = e.defaultPrevented }, false); 0`)
   console.log('DIAG focus ' + JSON.stringify({ winVisible: win.isVisible(), winFocused: win.isFocused(), wcFocused: wc.isFocused(), docFocus: await wc.executeJavaScript('document.hasFocus()'), vis: await wc.executeJavaScript('document.visibilityState') }))
-  const synthetic = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas'); const before = document.querySelector('.world').style.transform; h.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -50, clientX: 900, clientY: 300 })); return { before, after: document.querySelector('.world').style.transform } })()`)
+  const synthetic = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas'); const before = document.querySelector('.world').style.transform; h.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -50, clientX: 900, clientY: 300 })); return new Promise((r) => setTimeout(() => r({ before, after: document.querySelector('.world').style.transform }), 400)) })()`)
   console.log('DIAG synthetic ' + JSON.stringify(synthetic))
   wc.sendInputEvent({ type: 'mouseWheel', x: bare.x, y: bare.y, deltaX: 0, deltaY: -120, canScroll: true })
   await sleep(400)
