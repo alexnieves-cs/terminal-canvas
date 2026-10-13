@@ -98,8 +98,13 @@ const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = f
           // ratio gives it the CSS-pixel viewport it was asked for: layout,
           // elementFromPoint and in-page events all work in CSS px, so every
           // check sees 1400x900 while the screen shows less.
-          const [cw, ch] = win.getContentSize()
-          const ratio = Math.min(1, cw / wanted.width, ch / wanted.height)
+          // The clamp lands a moment AFTER showInactive returns (getContentSize
+          // read straight away still said ~1330), so wait, then read the real
+          // viewport from the page itself.
+          await sleep(600)
+          const { w, h } = await win.webContents.executeJavaScript(
+            '({ w: window.innerWidth, h: window.innerHeight })')
+          const ratio = Math.min(1, w / wanted.width, h / wanted.height)
           if (ratio < 1) win.webContents.setZoomFactor(ratio)
         }
         win.webContents.focus()
