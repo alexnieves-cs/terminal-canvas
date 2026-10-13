@@ -34,4 +34,5 @@ jobs:
           echo "=== FAIL lines"
           grep -E '^(FAIL|\s*FAIL)' suite.log | cut -c1-2500 || true
           echo "=== errors"
+          grep -E '^DIAG' suite.log | cut -c1-3000 || true
           grep -nE 'Error|rejection|watchdog' suite.log | grep -v MaxListeners | cut -c1-400 | head -40 || true
