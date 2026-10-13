@@ -91,7 +91,21 @@ const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = f
         // first presentation is.
         const wanted = win.getBounds()
         win.showInactive()
-        if (keepSize) win.setBounds(wanted)
+        if (keepSize) {
+          win.setBounds(wanted)
+          // setBounds is clamped to the runner's ~1024-wide screen as well, so
+          // emulate the view size: the page then lays out at the width the
+          // checks were written for (the shell's compact breakpoint is read
+          // from innerWidth).
+          win.webContents.enableDeviceEmulation({
+            screenPosition: 'desktop',
+            screenSize: { width: wanted.width, height: wanted.height },
+            viewPosition: { x: 0, y: 0 },
+            viewSize: { width: wanted.width, height: wanted.height },
+            deviceScaleFactor: 0,
+            scale: 1,
+          })
+        }
         win.webContents.focus()
       }
       return
