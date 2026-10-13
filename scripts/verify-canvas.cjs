@@ -154,7 +154,10 @@ app.whenReady().then(async () => {
   const bare = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect()
     for (let y = c.top + 16; y < c.bottom - 16; y += 24) for (let x = c.left + 16; x < c.right - 16; x += 24) { const e = document.elementFromPoint(x, y); if (e && (e.classList.contains('canvas') || e.classList.contains('world'))) return { x: Math.round(x), y: Math.round(y) } }
     return { x: 600, y: 400 } })()`)
-  console.log('DIAG stack ' + JSON.stringify(await wc.executeJavaScript(`(() => { const out = []; for (const [x, y] of [[600,400],[300,300],[900,600],[200,500]]) out.push({ x, y, stack: document.elementsFromPoint(x, y).slice(0, 6).map((e) => e.tagName + '.' + String(e.className).slice(0, 60) + ' pe=' + getComputedStyle(e).pointerEvents) }); return { bare: ${JSON.stringify('x')} && out, win: [innerWidth, innerHeight], canvas: document.querySelector('.canvas') && document.querySelector('.canvas').getBoundingClientRect().toJSON() } })()`)))
+  await wc.executeJavaScript(`window.__wheels = []; window.addEventListener('wheel', (e) => window.__wheels.push({ t: e.target.className && String(e.target.className).slice(0, 40), ctrl: e.ctrlKey, dy: e.deltaY, prevented: e.defaultPrevented, x: e.clientX, y: e.clientY }), true); window.addEventListener('wheel', (e) => { window.__wheels[window.__wheels.length - 1].prevented = e.defaultPrevented }, false); 0`)
+  console.log('DIAG focus ' + JSON.stringify({ winVisible: win.isVisible(), winFocused: win.isFocused(), wcFocused: wc.isFocused(), docFocus: await wc.executeJavaScript('document.hasFocus()'), vis: await wc.executeJavaScript('document.visibilityState') }))
+  const synthetic = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas'); const before = document.querySelector('.world').style.transform; h.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -50, clientX: 900, clientY: 300 })); return { before, after: document.querySelector('.world').style.transform } })()`)
+  console.log('DIAG synthetic ' + JSON.stringify(synthetic))
   wc.sendInputEvent({ type: 'mouseWheel', x: bare.x, y: bare.y, deltaX: 0, deltaY: -120, canScroll: true })
   await sleep(400)
   const panned = await readTransform(wc)
@@ -174,6 +177,7 @@ app.whenReady().then(async () => {
   })
   await sleep(400)
   const zoomed = await readTransform(wc)
+  console.log('DIAG wheels ' + JSON.stringify(await wc.executeJavaScript('window.__wheels')))
   ok('3 a ctrl wheel zooms the canvas',
     zoomed && zoomed.scale > panned.scale,
     `scale ${panned?.scale} -> ${zoomed?.scale}`)
