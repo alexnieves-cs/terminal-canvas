@@ -41,7 +41,7 @@ export interface AdvancedFacts {
 export const ADVANCED_DOOR_CAP = 3
 
 export const ADVANCED_DOORS: Record<AdvancedDoorId, AdvancedDoor> = {
-  teammate: { id: 'teammate', label: 'Make it a teammate…', benefit: 'keeps a brief and its own memory, so the next task starts where this one left off' },
+  teammate: { id: 'teammate', label: 'Make it an agent profile…', benefit: 'keeps a brief and its own memory, so the next task starts where this one left off' },
   watcher: { id: 'watcher', label: 'Watch for changes…', benefit: 'reruns a check whenever files change, so the review always has a fresh result' },
   skill: { id: 'skill', label: 'Give it a skill…', benefit: 'packages instructions the agent loads only when they apply, instead of repeating them' },
   arrangement: { id: 'arrangement', label: 'Save this arrangement…', benefit: 'starts the same agents, folders and handoffs again in one step — nothing is sent until you start it' },

@@ -589,7 +589,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         </summary>
         <label className="sheet__field">
           <span className="sheet__label">Agent</span>
-          <select ref={(el) => { if (model.titleFixed && whoForced) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="teammate"
+          <select ref={(el) => { if (model.titleFixed && whoForced) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="agent profile"
             onChange={(e) => { setTeammateId(e.target.value); setRefusal(null) }}>
             {/* M400. Automatic is the launcher's answer: a teammate whose place holds the folder, or a new one for exactly it. */}
             <option value="" data-start-agent-row="auto">Automatic — {who.kind === 'mint' ? `a new teammate for ${shortPath(who.places[0] ?? '')}` : who.kind === 'reuse' && teammateId === '' ? teammateWord(who.mate) : 'the teammate for this folder'}</option>
@@ -640,7 +640,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         {/* The route to the grant, named — never a widening from inside a start. */}
         <button type="button" className="pf__verb pf__verb--word" data-start-open-teammates
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-          onClick={(e) => { e.preventDefault(); model.openTeammates() }}>Open the Teammates pane</button>
+          onClick={(e) => { e.preventDefault(); model.openTeammates() }}>Open Agent profiles</button>
       </details>
 
       {/* M403 (B5). Whether the agent will ask, said where the task starts:

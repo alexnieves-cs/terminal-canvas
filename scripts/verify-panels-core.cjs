@@ -1904,7 +1904,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         nativeSet(document.querySelector('.palette__input'), 'rename harness')
         await new Promise((r) => setTimeout(r, 50))
         const row = [...document.querySelectorAll('.palette__row')]
-          .find((r) => r.textContent.includes('Rename preset harness preset'))
+          .find((r) => r.textContent.includes('Rename saved command harness preset'))
         if (!row) return 'no rename row for the seeded user preset'
         if (row.className.includes('palette__row--disabled')) return 'rename row was disabled'
         row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
@@ -1950,7 +1950,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         input.dispatchEvent(new Event('input', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 50))
         const row = [...document.querySelectorAll('.palette__row')]
-          .find((r) => r.textContent.includes('Rename preset renamed by palette'))
+          .find((r) => r.textContent.includes('Rename saved command renamed by palette'))
         if (!row) return 'no rename row after the rename'
         row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 50))
@@ -3223,8 +3223,8 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 80))
           const door = [...document.querySelectorAll('.palette__row')]
-            .find((r) => r.textContent.includes('Manage presets'))
-          if (!door) return { error: 'no Manage presets row' }
+            .find((r) => r.textContent.includes('Manage saved commands'))
+          if (!door) return { error: 'no Manage saved commands row' }
           door.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 120))
           const rowsInside = [...document.querySelectorAll('.palette__row')].map((r) => r.textContent)
@@ -3236,7 +3236,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
             leaked: rowsInside.filter((t) => t.includes('Go to')).length,
             // The administration rows the resting list hides are exactly what
             // the user drilled in FOR.
-            hasDelete: rowsInside.some((t) => t.includes('Delete preset')),
+            hasDelete: rowsInside.some((t) => t.includes('Delete saved command')),
             count: rowsInside.length
           }
           const input2 = document.querySelector('.palette__input')
@@ -3287,7 +3287,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           const scoped = {
             chip: (document.querySelector('.palette__scope') || {}).textContent || null,
             leaked: inside.filter((t) => t.includes('Go to')).length,
-            hasDelete: inside.some((t) => t.includes('Delete preset')),
+            hasDelete: inside.some((t) => t.includes('Delete saved command')),
             count: inside.length
           }
           // Entering a door clears the query, so the caret is at 0 already —
@@ -3510,7 +3510,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 100))
           const row = [...document.querySelectorAll('.palette__row')]
-            .find((r) => r.textContent.includes('Delete preset ' + victim))
+            .find((r) => r.textContent.includes('Delete saved command ' + victim))
           if (!row) return { error: 'no delete row for ' + victim }
           const wasRed = row.className.includes('palette__row--destructive')
           row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))

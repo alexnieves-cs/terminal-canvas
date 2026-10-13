@@ -299,7 +299,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
         const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
         if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
         const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
-        if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
+        if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${a.teammate}` }
         // M197. AWAITED. Before this the verb was called and `ran` was
         // returned in the same breath — every refusal happened after that
         // return, into the card's note, which the plan's caller never
@@ -320,7 +320,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
         const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
         if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
         const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
-        if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
+        if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${a.teammate}` }
         const presetId = parseSwarmPresetId(a.arrangement)
         if (presetId === null) return { kind: 'refused', reason: `no arrangement is called ${a.arrangement} — one of ${SWARM_PRESET_IDS.join(', ')}` }
         const answer = await window.canvas.board.repositories({ teammateId: mate.id })

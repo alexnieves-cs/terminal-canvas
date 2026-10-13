@@ -2050,7 +2050,10 @@ export function Canvas({
     })
     // M65. The menu's ⌘⇧N asks the renderer for the sheet. Through a ref:
     // paletteActions is built far below this effect.
-    const offSheet = window.canvas.spawn.onOpenSheet(() => paletteActionsRef.current?.beginSpawnSheet())
+    const offSheet = window.canvas.spawn.onOpenSheet((which) => {
+      if (which === 'task') paletteActionsRef.current?.beginStartWork()
+      else paletteActionsRef.current?.beginSpawnSheet()
+    })
     // M90. A codex chat's thread id is the CLI's: written onto the record the
     // first time the stream names it, with no history entry (nothing the user
     // did), so a relaunch resumes the same thread. A claude id never changes.

@@ -201,6 +201,7 @@ const spyActions = () => {
     beginRunVerb: record('beginRunVerb'), startAuto: record('startAuto'), stopAuto: record('stopAuto'),
     // M100
     openTeammates: record('openTeammates'),
+    runRoutine: record('runRoutine'),
     // M103
     beginBrowser: record('beginBrowser'),
     // M123
@@ -276,6 +277,7 @@ const spyActions = () => {
     beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace'),
     toggleBroadcastInput: record('toggleBroadcastInput'),
     beginSpawnSheet: record('beginSpawnSheet'),
+    beginStartWork: record('beginStartWork'),
     toggleGroup: record('toggleGroup'),
     removeGroup: record('removeGroup'),
     // The three credential verbs (the credential checks exercise
@@ -2769,7 +2771,7 @@ const WS = [
   ok('start.1d a typed or Jira item — which names no repository, and which board:lane refused with a sentence naming a door that did not exist — asks ONE repository question, is satisfied by a chosen root, and distinguishes `the places hold no repository` from `choose which of them`',
     typedNeeds !== null && fields(typedNeeds) === 'repository' && typedChosen !== null && typedChosen.length === 0 &&
       noRepos !== null && fields(noRepos) === 'repository' && noRepos[0].why !== typedNeeds[0].why &&
-      /no repositor/i.test(noRepos[0].why) && /Teammates pane/.test(noRepos[0].why),
+      /no repositor/i.test(noRepos[0].why) && /Agent profiles/.test(noRepos[0].why),
     JSON.stringify({ typedNeeds, typedChosen, noRepos }))
 
   // (e) the refusals a SHEET cannot answer (a teammate with no places is a
@@ -2783,7 +2785,7 @@ const WS = [
   const fine = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x', teammateId: 't1' }, { teammates: [ada], repos, wanted: null }) : null
   const summary = typeof P.startWorkSummary === 'function' ? P.startWorkSummary({ title: 'fix the parser', teammateId: 't1', root: '/home/u/work/api' }, ada) : null
   ok('start.1e the one refusal a sheet cannot answer is a picked teammate with no places (a grant, never widened from here) — an empty roster is NOT one (M400) — and the summary states the task, the repository in the path rule\'s words and the agent before anything is minted',
-    noMates === null && typeof placeless === 'string' && /place/i.test(placeless) && /Teammates pane/.test(placeless) &&
+    noMates === null && typeof placeless === 'string' && /place/i.test(placeless) && /Agent profiles/.test(placeless) &&
       fine === null && typeof summary === 'string' && /fix the parser/.test(summary) && /work\/api/.test(summary) && /ada/.test(summary),
     JSON.stringify({ noMates, placeless, fine, summary }))
 }
@@ -2912,8 +2914,8 @@ const WS = [
 // where the selection seeds (bestMatchIndex), so Enter opens the sheet. Before
 // M400 "new task" selected "Open review this repository as a workflow" and
 // Start work… was row 13. The promotion is by PREFIX of a lead, so a query
-// no lead answers ("restart", "auth") leaves the list as it was, and the
-// resting list is untouched.
+// no lead answers ("restart", "auth") leaves the list as it was. The UX
+// pass: the resting list leads with it too (`leadsAtRest`), under Tasks.
 {
   let res = {}, threw = null
   try {
@@ -2925,9 +2927,9 @@ const WS = [
     }
   } catch (e) { threw = String(e) }
   const leads = ['new', 'new task', 'task', 'start', 'Start work']
-  ok('task.rank.1 New task… is first and selected for "new", "new task", "task", "start" (and the old "Start work"), shown under Tasks; "restart", "auth" and the short prefixes n/t/s/st/ne are not led by it, and at rest it keeps its Canvas place',
+  ok('task.rank.1 New task… is first and selected for "new", "new task", "task", "start" (and the old "Start work"), shown under Tasks; "restart", "auth" and the short prefixes n/t/s/st/ne are not led by it, and at rest it leads under Tasks',
     threw === null && leads.every((q) => res[q].first === 'start.work' && res[q].selected === 'start.work' && res[q].firstGroup === 'task' && res[q].title === 'New task…') &&
-      res.restart.first !== 'start.work' && res.restart.selected !== 'start.work' && res.auth.first !== 'start.work' && res[''].first !== 'start.work' &&
+      res.restart.first !== 'start.work' && res.restart.selected !== 'start.work' && res.auth.first !== 'start.work' && res[''].first === 'start.work' && res[''].firstGroup === 'task' &&
       // M403 (the M400 critic): a one- or two-letter prefix is the first keystroke of Split, Terminal, Settings — never promoted.
       ['n', 't', 's', 'st', 'ne'].every((q) => res[q].firstGroup !== 'task' && res[q].selected !== 'start.work'),
     threw ?? JSON.stringify(res))
@@ -3266,6 +3268,30 @@ const FRESH = () => ctx({
   ok('palette.rank.3 a title subsequence is never capped: "rnme" finds Rename, "gh" finds Open GitHub work, and twenty title-scatter rows all stay',
     rnme.includes('panel.rename') && gh.includes('github.open') && kept.length === 20 && !P.isWeakMatch('gh', byId(all, 'github.open')),
     JSON.stringify({ rnme: rnme.length, rename: rnme.includes('panel.rename'), gh: gh.length, github: gh.includes('github.open'), kept: kept.length }))
+}
+
+// The UX pass — ux.reach.1. Routines, a person's own recipes and the
+// arrangements each have a palette row, found by name, running the door that
+// already existed (the pane's Run now, New task with the recipe, the panel
+// sheet on the arrangement). A built-in recipe is not listed twice.
+{
+  let res = null, threw = null
+  try {
+    const a = spyActions()
+    const rows = P.buildCommands(ctx({ actions: a, routines: [{ id: 'r1', name: 'nightly triage' }], savedRecipes: [{ id: 'my-flaky', name: 'Chase a flake' }] }))
+    const routine = byId(rows, 'routine.run.r1'), recipe = byId(rows, 'recipe.saved.my-flaky'), pair = byId(rows, 'arrangement.pair')
+    routine.run(); recipe.run(); pair.run()
+    res = {
+      routine: routine.title, recipe: recipe.title, pair: pair.title,
+      found: P.filterCommands(rows, 'nightly triage').slice(0, 5).some((r) => r.id === 'routine.run.r1'), rest: P.filterCommands(rows, '').some((r) => r.id === 'arrangement.pair' || r.id === 'routine.run.r1'),
+      calls: a.calls.map((c) => JSON.stringify(c))
+    }
+  } catch (e) { threw = String(e) }
+  ok('ux.reach.1 routines, saved recipes and arrangements are palette rows that run the existing doors; arrangements and routines wait for a query',
+    threw === null && res.found === true && res.rest === false &&
+      res.calls.includes('["runRoutine","r1"]') && res.calls.some((c) => c.includes('beginStartWork') && c.includes('my-flaky')) &&
+      res.calls.some((c) => c.includes('beginSpawnSheet') && c.includes('__lineup__:pair')),
+    threw ?? JSON.stringify(res))
 }
 
 const failed = results.filter((r) => !r.pass)

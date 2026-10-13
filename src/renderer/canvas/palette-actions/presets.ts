@@ -140,7 +140,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
       const name = presetRows.find((p) => p.id === id)?.name ?? id
       setInputMode({
         kind: 'confirm',
-        label: `Delete preset \u201c${name}\u201d?`,
+        label: `Delete saved command \u201c${name}\u201d?`,
         initial: '',
         submit: () => {
           void window.canvas.preset.remove(id).then(reloadPresets)

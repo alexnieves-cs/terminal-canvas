@@ -35,7 +35,7 @@ export function createPlacesGate(deps: PlacesGateDeps): PlacesGate {
     check(teammateId, path) {
       if (teammateId === undefined) return { ok: true }
       const t = deps.teammate(teammateId)
-      if (t === undefined) return { ok: false, reason: `no teammate is called ${teammateId} — it may have been deleted; open the Teammates pane` }
+      if (t === undefined) return { ok: false, reason: `no agent profile is called ${teammateId} — it may have been deleted; open Agent profiles` }
       // M114. A lane is judged by the repository it forks; the refusal names
       // that root, because "add /Library/…/worktrees/lane to ada's places"
       // is a fix nobody should ever apply.

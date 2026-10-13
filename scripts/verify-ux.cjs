@@ -186,6 +186,34 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
     JSON.stringify(approveWord))
 }
 
+// ── Creation doors and words ─────────────────────────────────────────────
+
+{
+  const shortcuts = read('src/shared/shortcuts.ts')
+  const menu = read('src/main/menu.ts')
+  const actions = read('src/main/bootstrap/menu-actions.ts')
+  const preload = read('src/preload/index.ts')
+  const fileMenu = menu.slice(menu.indexOf("label: 'File'"), menu.indexOf("label: 'Edit'"))
+  ok('ux.door.1 New task is a door of its own: ⌘⌥N in the one registry, the File menu\'s FIRST row, and the menu\'s ask reaches the start sheet, not the panel sheet',
+    /id: 'new-task', chord: '⌘⌥N'/.test(shortcuts) && /'new-task': 'beginStartWork'/.test(shortcuts) && /id: 'new-agent', chord: '⌘N'/.test(shortcuts) &&
+      fileMenu.indexOf("'New task…'") !== -1 && fileMenu.indexOf("'New task…'") < fileMenu.indexOf("'New panel…'") && /accel\('new-task'\)/.test(fileMenu) &&
+      /onNewTask: \(\) => \{ state\.window\?\.webContents\.send\(IPC_EVENTS\.SPAWN_OPEN_SHEET, 'task'\) \}/.test(actions) &&
+      /which === 'task' \? 'task' : undefined/.test(preload) && /if \(which === 'task'\) paletteActionsRef\.current\?\.beginStartWork\(\)/.test(canvas),
+    fileMenu.slice(0, 200))
+}
+
+{
+  const menu = read('src/main/menu.ts')
+  const dock = read('src/renderer/shell/Dock.tsx')
+  const pane = read('src/renderer/shell/TeammatesPane.tsx')
+  const sheet = read('src/renderer/palette/SpawnSheet.tsx')
+  ok('ux.words.3 the words on screen: a preset is a saved command, a lineup is an arrangement, an agent identity is an agent profile (code ids unchanged)',
+    /'New panel from saved command'/.test(menu) && /'Save panel as command'/.test(menu) && !/from preset|as preset/.test(menu) &&
+      /\{ id: 'teammates', label: 'Agent profiles'/.test(dock) && />Agent profiles</.test(pane) && !/>Teammates</.test(pane) &&
+      />Saved commands</.test(sheet) && />arrangement: \{LINEUPS/.test(sheet) && !/>lineup: /.test(sheet),
+    '')
+}
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1

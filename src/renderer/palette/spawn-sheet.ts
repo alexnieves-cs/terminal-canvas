@@ -57,7 +57,7 @@ export function teammateOptions(teammates: readonly PersistedTeammate[], claudeA
   return teammates.map((t) => {
     const label = `chat as ${teammateWord(t)}`
     if (!claudeAvailable) return { id: t.id, label: `${label} — claude not on PATH`, disabled: true, reason: 'claude was not found on the login PATH' }
-    if (t.places.length === 0) return { id: t.id, label: `${label} — no places yet`, disabled: true, reason: `${teammateWord(t)} has no places — add a folder in the Teammates pane before it can work anywhere` }
+    if (t.places.length === 0) return { id: t.id, label: `${label} — no places yet`, disabled: true, reason: `${teammateWord(t)} has no places — add a folder in Agent profiles before it can work anywhere` }
     return { id: t.id, label, disabled: false }
   })
 }

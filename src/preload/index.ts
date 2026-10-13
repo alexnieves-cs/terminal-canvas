@@ -322,7 +322,7 @@ const bridge: CanvasBridge = {
     sheet: (req: SpawnRequest) => ipcRenderer.invoke(IPC.SPAWN_SHEET, req),
     recent: () => ipcRenderer.invoke(IPC.SPAWN_RECENT),
     recentUsed: () => ipcRenderer.invoke(IPC.SPAWN_RECENT_USED),
-    onOpenSheet: (listener) => subscribe<void>(IPC_EVENTS.SPAWN_OPEN_SHEET, () => listener())
+    onOpenSheet: (listener) => subscribe<unknown>(IPC_EVENTS.SPAWN_OPEN_SHEET, (which) => listener(which === 'task' ? 'task' : undefined))
   },
   links: {
     open: (req: { panelId: string; target: string }) => ipcRenderer.invoke(IPC.LINK_OPEN, req)

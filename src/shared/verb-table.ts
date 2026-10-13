@@ -424,6 +424,7 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   startAuto: 'M97\'s door: an auto run is started by the user, never by a plan (a plan that starts runs has no turn limit of its own)',
   stopAuto: 'M97\'s door, the stop half',
   openTeammates: 'opens a navigator pane — a view',
+  runRoutine: 'runs a saved routine early, as the pane\'s Run now does — a row per routine, and a routine is already scheduled work with its own door',
   // M324. A page, like the panes: what the person is looking at is theirs to
   // change, never an agent's line or a workflow node's.
   focusTask: 'opens a task\'s focus view — a page, a view',

@@ -42,13 +42,13 @@ export function createBoardLane(deps: BoardLaneDeps): BoardLane {
   return {
     async lane(req) {
       const mate = deps.teammate(req.teammateId)
-      if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${req.teammateId} — it may have been deleted; open the Teammates pane` }
+      if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${req.teammateId} — it may have been deleted; open Agent profiles` }
       let root: string
       if (req.root !== undefined) {
         root = req.root
       } else if (req.repo !== undefined) {
         const found = findRepoUnderPlaces(req.repo, mate.places, deps)
-        if (found === null) return { kind: 'refused', reason: `${mate.name} has no place that holds ${req.repo} — add a folder with a clone of it in the Teammates pane` }
+        if (found === null) return { kind: 'refused', reason: `${mate.name} has no place that holds ${req.repo} — add a folder with a clone of it in Agent profiles` }
         root = found
       } else {
         return { kind: 'refused', reason: `this item names no repository — choose which place ${mate.name} should work it in` }

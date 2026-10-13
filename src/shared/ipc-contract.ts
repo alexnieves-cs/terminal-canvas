@@ -2137,8 +2137,8 @@ export interface CanvasBridge {
     recent(): Promise<string[]>
     /** M262. See SPAWN_RECENT_USED. A directory with no entry has no known time. */
     recentUsed(): Promise<Record<string, number>>
-    /** M65. The menu's ⌘⇧N. */
-    onOpenSheet(listener: () => void): () => void
+    /** M65. The menu's ⌘⇧N; `'task'` is its New task… (⌘⌥N). */
+    onOpenSheet(listener: (which?: 'task') => void): () => void
   }
   links: {
     /** M51. The text the terminal underlined and the panel it came from; main resolves and opens, or refuses with a reason. */
