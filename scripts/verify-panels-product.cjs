@@ -3637,7 +3637,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         annotate2: 'revamp.annotate.2 annotate mode\'s strip is above the sheet and takes real clicks — draw and label switch the tool and drop no label — a label placed over an empty one replaces it, Done keeps what was typed and leaves no empty "…" label behind',
         marquee1: 'revamp.marquee.1 a real marquee over three objects, swept out over the rail, selects the three and NO page text: the document refuses selection for the band\'s life and gives it back after',
         snap4: 'revamp.snap.4 a real drag of a three-object selection near a neighbour, with snapping on, moves every member by the SAME delta — the snapped one (the audit measured (237,146) against (243,140) on the build before M390)',
-        snap3: 'revamp.snap.3 the alignment guide a snapping drag draws paints above every panel, in the iris token, at least 1.5 screen px thick',
+        snap3: 'revamp.snap.3 the alignment guide a snapping drag draws paints above every panel, in the guide token (M436: --guide, not --iris), at least 1.5 screen px thick',
         snap2: 'revamp.snap.2 holding ⌘ through a drag bypasses snapping (a 7px offset inside the 8px threshold is kept), and without ⌘ the same neighbour snaps'
       }
       const reported = new Set()
@@ -3880,16 +3880,16 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             const g = document.querySelector('.snap-guide'); const layer = document.querySelector('.snap-guides')
             if (!g || !layer) return { none: true }
             const r = g.getBoundingClientRect()
-            const probe = document.createElement('div'); probe.style.background = 'var(--iris)'; document.body.appendChild(probe)
-            const iris = getComputedStyle(probe).backgroundColor; probe.remove()
+            const probe = document.createElement('div'); probe.style.background = 'var(--guide)'; document.body.appendChild(probe)
+            const guideToken = getComputedStyle(probe).backgroundColor; probe.remove()
             const panelZ = Math.max(...[...document.querySelectorAll('.world .panel[data-panel-id]')].map((p) => Number(getComputedStyle(p).zIndex) || 0))
-            return { axis: g.getAttribute('data-snap-guide'), thick: Math.min(r.width, r.height), colour: getComputedStyle(g).backgroundColor, iris, layerZ: Number(getComputedStyle(layer).zIndex), panelZ }
+            return { axis: g.getAttribute('data-snap-guide'), thick: Math.min(r.width, r.height), colour: getComputedStyle(g).backgroundColor, guideToken, layerZ: Number(getComputedStyle(layer).zIndex), panelZ }
           })()`)
         })
         const p1 = {}; for (const id of ['rvP', 'rvQ', 'rvR']) p1[id] = await pos(id)
         const deltas = ['rvP', 'rvQ', 'rvR'].map((id) => p1[id] && p0[id] ? `${p1[id].x - p0[id].x},${p1[id].y - p0[id].y}` : null)
         rvOk('snap4', new Set(deltas).size === 1 && deltas[0] === '0,-40', JSON.stringify({ deltas, p0, p1 }))
-        rvOk('snap3', guide && guide.none !== true && guide.thick >= 1.5 && guide.colour === guide.iris && guide.layerZ > guide.panelZ,
+        rvOk('snap3', guide && guide.none !== true && guide.thick >= 1.5 && guide.colour === guide.guideToken && guide.layerZ > guide.panelZ,
           JSON.stringify(guide))
 
         // revamp.snap.2 — ⌘ held: 7px short of the neighbour's edge is kept; released: it snaps.

@@ -10323,7 +10323,7 @@ export function Canvas({
             navigator's Panels pane is not there to hold it. Resume alone
             never floats here any more — it is the strip (see resumeStrip). */}
         {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
-        <div className="recovery-slot" data-recovery-slot="">
+        <div className="recovery-slot" data-recovery-slot="" data-screen-control="">
           {(reopen !== null || jobRecovery !== null) && (
             <div className="reopen-stack" data-screen-control="">
               {reopen !== null && (
