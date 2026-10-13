@@ -76,6 +76,23 @@ const readCanvasOffset = (wc) =>
     `(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { left: r.left, top: r.top } })()`
   )
 
+/* A wheel through the real input pipeline. Locally that is sendInputEvent. On
+   the hosted macOS runner the window is never frontmost, and AppKit drops
+   sendInputEvent wheels aimed at it however it is shown or focused (measured:
+   an in-page WheelEvent panned the camera, the same wheel through
+   sendInputEvent never arrived). Input.dispatchMouseEvent goes to the page
+   through DevTools instead, still as a trusted browser input event, and needs
+   no window focus. It takes the DOM's sign where sendInputEvent inverts it, so
+   deltaY is negated to keep every call site's sendInputEvent meaning. */
+const sendWheel = async (wc, { x, y, deltaY, ctrl = false }) => {
+  if (!process.env.CI) {
+    wc.sendInputEvent({ type: 'mouseWheel', x, y, deltaX: 0, deltaY, modifiers: ctrl ? ['control'] : [], canScroll: true })
+    return
+  }
+  if (!wc.debugger.isAttached()) wc.debugger.attach('1.3')
+  await wc.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: -deltaY, modifiers: ctrl ? 2 : 0 })
+}
+
 app.on('window-all-closed', () => {})
 
 const SCRIPT_NAME = 'verify-canvas.cjs'
@@ -157,7 +174,7 @@ app.whenReady().then(async () => {
   const bare = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect()
     for (let y = c.top + 16; y < c.bottom - 16; y += 24) for (let x = c.left + 16; x < c.right - 16; x += 24) { const e = document.elementFromPoint(x, y); if (e && (e.classList.contains('canvas') || e.classList.contains('world'))) return { x: Math.round(x), y: Math.round(y) } }
     return { x: 600, y: 400 } })()`)
-  wc.sendInputEvent({ type: 'mouseWheel', x: bare.x, y: bare.y, deltaX: 0, deltaY: -120, canScroll: true })
+  await sendWheel(wc, { x: bare.x, y: bare.y, deltaY: -120 })
   await sleep(400)
   const panned = await readTransform(wc)
   ok('2 a bare wheel pans without scaling',
@@ -170,10 +187,7 @@ app.whenReady().then(async () => {
   // sending +120 makes the renderer's WheelEvent report deltaY -120, which the
   // exponential zoom turns into a zoom IN. Verified empirically against this
   // Electron build — sending -120 zooms out and would fail the assertion below.
-  wc.sendInputEvent({
-    type: 'mouseWheel', x: 600, y: 400, deltaX: 0, deltaY: 120,
-    modifiers: ['control'], canScroll: true
-  })
+  await sendWheel(wc, { x: 600, y: 400, deltaY: 120, ctrl: true })
   await sleep(400)
   const zoomed = await readTransform(wc)
   ok('3 a ctrl wheel zooms the canvas',
