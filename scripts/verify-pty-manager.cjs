@@ -12,6 +12,12 @@ const { execFileSync } = require('node:child_process')
 const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } = require('node:fs')
 const { tmpdir, homedir } = require('node:os')
 
+// The login-shell checks (osc133.1, the tmux ones) are written against zsh, the
+// macOS default. A hosted CI runner's $SHELL is bash, whose login shell emits no
+// OSC 133 marks. The login-shell probe is cached on first use, so the pin has to
+// be in place before any check spawns anything.
+if (!/zsh$/.test(process.env.SHELL || '') && require('node:fs').existsSync('/bin/zsh')) process.env.SHELL = '/bin/zsh'
+
 // M398 (A3). The subagent watcher is fed only CLAUDE CODE sessions
 // (subagent-scan.ts's isClaudeSession), and one of its four facts is the
 // spawned command's own basename. So the positive-path checks below spawn a
@@ -488,7 +494,10 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     // The settle: idle can only follow a tick that observed the absence of
     // output, so reaching it proves the stream is over rather than merely
     // paused between two reads of it.
-    const settled = await waitFor(() => states.some((s) => s.panelId === 'a1' && s.state === 'idle'))
+ // 20s, not the default 4s: the burst is 40 x `sleep 0.02`, and each `sleep` is a
+    // process spawn, which a loaded macOS runner stretches to several seconds. Idle can
+    // only follow the burst, so the wait has to outlast the burst, not the 20ms gap.
+    const settled = await waitFor(() => states.some((s) => s.panelId === 'a1' && s.state === 'idle'), 20000)
     await sleep(IDLE_TICK_SETTLE_MS)
     const busies = states.filter((s) => s.panelId === 'a1' && s.state === 'busy').length
     ok('17 output produces exactly one busy state on agent:state',
