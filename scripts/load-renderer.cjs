@@ -92,20 +92,28 @@ const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = f
         const wanted = win.getBounds()
         win.showInactive()
         if (keepSize) {
-          // The clamp survives setBounds and enableLargerThanScreen alike
-          // (measured: innerWidth stayed 1024, and device emulation did not
-          // relayout the shell either). Zooming the page out by the clamp's
-          // ratio gives it the CSS-pixel viewport it was asked for: layout,
-          // elementFromPoint and in-page events all work in CSS px, so every
-          // check sees 1400x900 while the screen shows less.
-          // The clamp lands a moment AFTER showInactive returns (getContentSize
-          // read straight away still said ~1330), so wait, then read the real
-          // viewport from the page itself.
-          await sleep(600)
-          const { w, h } = await win.webContents.executeJavaScript(
-            '({ w: window.innerWidth, h: window.innerHeight })')
-          const ratio = Math.min(1, w / wanted.width, h / wanted.height)
-          if (ratio < 1) win.webContents.setZoomFactor(ratio)
+          // The clamp survives setBounds and enableLargerThanScreen alike, and
+          // it lands AFTER showInactive returns (an innerWidth read 600ms
+          // later still saw the unclamped size). So follow the window: zoom
+          // the page out by the clamp's ratio whenever the content area is
+          // smaller than asked for. Layout, elementFromPoint and in-page
+          // events all work in CSS px, so every check sees 1400x900.
+          const fit = () => {
+            if (win.isDestroyed()) return
+            const [cw, ch] = win.getContentSize()
+            const ratio = Math.min(1, cw / wanted.width, ch / wanted.height)
+            if (Math.abs(win.webContents.getZoomFactor() - ratio) > 0.001) {
+              win.webContents.setZoomFactor(ratio)
+              log(`[harness] content ${cw}x${ch} of ${wanted.width}x${wanted.height}: page zoom ${ratio.toFixed(3)}`)
+            }
+          }
+          fit()
+          win.on('resize', fit)
+          win.webContents.on('did-finish-load', fit)
+          win.webContents.on('did-navigate', fit)
+          // Belt and braces for a clamp that arrives without a resize event.
+          const timer = setInterval(fit, 250)
+          win.once('closed', () => clearInterval(timer))
         }
         win.webContents.focus()
       }
