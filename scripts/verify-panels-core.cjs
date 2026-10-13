@@ -241,7 +241,12 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           await new Promise((res) => setTimeout(res, 150))
           return {
             active: document.activeElement && document.activeElement.className,
-            blocked: document.querySelectorAll('.panel__slot--blocked').length
+            blocked: document.querySelectorAll('.panel__slot--blocked').length,
+            // Evidence for a red run: which panel owns the slot and what tier it is in.
+            scale: window.__m4aScale && window.__m4aScale(),
+            slots: document.querySelectorAll('.panel__slot').length,
+            xterms: document.querySelectorAll('.panel .xterm').length,
+            slotPanel: slot.closest('.panel') && slot.closest('.panel').dataset.panelId
           }
         })()`)
       }
@@ -257,6 +262,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         focused(atOne) && focused(zoomedOut) &&
           atOne.blocked === 0 && zoomedOut.blocked === 0,
         `1:1 active=${atOne && atOne.active} zoomed active=${zoomedOut && zoomedOut.active} ` +
+        `atOne=${JSON.stringify(atOne)} zoomedOut=${JSON.stringify(zoomedOut)} ` +
         `blocked=${atOne && atOne.blocked}/${zoomedOut && zoomedOut.blocked}`)
     }
 
@@ -469,7 +475,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
         const scale = window.__m4aScale()
         const screen = window.__m4aCellToScreen('beta')
-        if (!screen) return { error: 'could not locate the word', scale }
+        if (!screen) return { error: 'could not locate the word', scale, active: document.activeElement && document.activeElement.className, xterms: document.querySelectorAll('.panel .xterm').length, slots: document.querySelectorAll('.panel__slot').length }
 
         const opts = {
           bubbles: true, cancelable: true, composed: true, view: window,
@@ -3202,9 +3208,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           return { rest, deep }
         } catch (e) { return { error: String(e) } } })()`)
         const r = probe.rest, d = probe.deep
+        // A list scrolled to its very end cannot align a row to the header edge, so a
+        // row cut there is geometry, not a seat bug: only a mid-list scroll must be clean.
         ok('palette.scroll.1 the palette opens at the top (a seat in the first screen leaves scrollTop 0, the selected row fully visible), and a query seating below the first screen cuts no row under the sticky header',
           probe.error === undefined && r.sel !== null && r.selInside === true && (!r.inFirst || r.scrollTop === 0) && r.cut.length === 0 &&
-            d !== null && d.selInside === true && d.cut.length === 0 && d.topGap !== null && (Math.abs(d.topGap) <= 2 || d.atEnd === true),
+            d !== null && d.selInside === true && (d.cut.length === 0 || d.atEnd === true) && d.topGap !== null && (Math.abs(d.topGap) <= 2 || d.atEnd === true),
           JSON.stringify(probe))
         await closePalette()
       }
@@ -3219,7 +3227,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const result = await wc.executeJavaScript(`(async () => { try {
           const input = document.querySelector('.palette__input')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
-          setter.call(input, 'manage presets')
+          setter.call(input, 'manage saved commands')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 80))
           const door = [...document.querySelectorAll('.palette__row')]
@@ -3274,7 +3282,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const result = await wc.executeJavaScript(`(async () => { try {
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
           const input = document.querySelector('.palette__input')
-          setter.call(input, 'manage presets')
+          setter.call(input, 'manage saved commands')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 80))
           // Caret at the end — where typing leaves it — which is the only
@@ -3342,11 +3350,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
             await new Promise((r) => setTimeout(r, 120))
           }
           // Half one: the door is selected, but the caret is mid-query.
-          await type('manage presets')
+          await type('manage saved commands')
           await press('ArrowRight', 0)
           const enteredFromCaretZero = document.querySelector('.palette__scope') !== null
           // Now actually enter, from the end, and type inside the scope.
-          await press('ArrowRight', 'manage presets'.length)
+          await press('ArrowRight', 'manage saved commands'.length)
           const inScope = document.querySelector('.palette__scope') !== null
           await type('del')
           // Half two: caret at the end of a non-empty query must not pop.
@@ -3447,44 +3455,38 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         await closePalette()
       }
 
-      // 49e. THE SAME LANDING WHEN NO DOOR WAS EVER TRAVERSED. M8a's top-bar
-      //      gear opens the palette straight into the settings scope
-      //      (openPalette('settings')), so there is no entered row to
-      //      remember — and this is the ONLY check that separates the shipped
-      //      design, which DERIVES the door from `entersScope`, from the
-      //      obvious alternative of stashing the entered row's id in a ref.
-      //      That alternative satisfies 49d and cannot satisfy this at all.
-      //
-      //      Deliberately not folded into check 78, whose subject is "the
-      //      button opens IN the scope" and which must keep failing for its
-      //      own reason.
+      // 49e. R-026 retired the setup this check was written for: the top-bar
+      //      gear used to open the palette straight into the settings scope (a
+      //      scope entered WITHOUT traversing its door, which is what separated
+      //      "derive the door from entersScope" from "stash the entered row").
+      //      The gear now opens the Settings page, so no UI path enters a scope
+      //      door-less any more except the Jira panel's Connect verb (agents
+      //      context.3) and the grid's ninth cell. What is left to pin here is
+      //      the half that still lives in this part: the gear opens the page
+      //      and NOT a scope, and Escape leaves it with the palette untouched.
       {
         await closePalette()
         const result = await wc.executeJavaScript(`(async () => { try {
           document.querySelector('.shell__settings')
             .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-          await new Promise((r) => setTimeout(r, 200))
-          const chip = (document.querySelector('.palette__scope') || {}).textContent || null
-          const input = document.querySelector('.palette__input')
-          if (!input) return { error: 'palette did not open' }
-          input.setSelectionRange(0, 0)
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
-          await new Promise((r) => setTimeout(r, 150))
-          const row = document.querySelector('.palette__row--selected')
-          return {
-            chip,
-            chipGone: document.querySelector('.palette__scope') === null,
-            stillOpen: document.querySelector('.palette') !== null,
-            selectedAfter: row ? row.textContent : null
+          await new Promise((r) => setTimeout(r, 300))
+          const page = document.querySelector('[data-settings-root]')
+          const out = {
+            page: page ? page.getAttribute('aria-label') : null,
+            paletteOpen: document.querySelector('.palette') !== null,
+            scopeChip: (document.querySelector('.palette__scope') || {}).textContent || null
           }
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          out.closed = document.querySelector('[data-settings-root]') === null
+          return out
         } catch (e) { return { error: String(e && e.message || e) } } })()`)
-        ok('49e popping a scope the gear opened lands on that scope’s door too',
+        ok('49e the gear opens the Settings page, not a palette scope, and Escape leaves it',
           result && !result.error &&
-            result.chip === 'Settings' &&
-            result.chipGone === true &&
-            result.stillOpen === true &&
-            typeof result.selectedAfter === 'string' &&
-            result.selectedAfter.includes('Manage settings'),
+            result.page === 'Settings' &&
+            result.paletteOpen === false &&
+            result.scopeChip === null &&
+            result.closed === true,
           JSON.stringify(result))
         await closePalette()
       }
@@ -3506,7 +3508,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           if (!victim) return { error: 'no user preset to try deleting: ' + before.join('|') }
           const input = document.querySelector('.palette__input')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
-          setter.call(input, 'delete preset ' + victim)
+          setter.call(input, 'delete saved command ' + victim)
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 100))
           const row = [...document.querySelectorAll('.palette__row')]
@@ -3582,6 +3584,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         }))
         true
       `)
+      // The pan is eased; the placement expectation below reads the camera, so
+      // let it land first or a slow runner measures the camera it is leaving.
+      await cameraStill(wc)
 
       const panelIds = () => wc.executeJavaScript(
         `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
@@ -3675,6 +3680,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         true
       `)
       const still = await zoomInto(wc, 0.5, 0.53)
+      await cameraStill(wc)
       const cam0 = await wc.executeJavaScript('window.__m4aViewport()')
       const roomStill = await measurePlacement(wc)
       const stillId = await spawnOne()
@@ -3991,7 +3997,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           async () => (await agentStateOf(shellId)) !== 'wants-you', 3000)
         ok('57 focus acknowledges, and main is the one that answers',
           back === true && before === 'wants-you' && answered === true && cleared === true,
-          `before=${before} active=${click.active} answered=${answered} ` +
+          `before=${before} active=${click.active} reachedXterm=${click.reachedXterm} back=${back} answered=${answered} log=${JSON.stringify((await agentLog()).slice(mark).slice(-4))} ` +
             `after=${await agentStateOf(shellId)}`)
       }
 
@@ -4404,7 +4410,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       let scaleOut = scaleOne
       for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
       await settle()
-      const atOut = await measure()
+      // A promotion back to a live terminal is async (tier timer, then the xterm
+      // mounts); on a loaded runner one read right after the zoom can land first.
+      const atOut = (await waitUntil(async () => (await measure()) || false, 3000)) || null
       await resetZoom(wc)
       await settle()
       const chromeRatio = atOne && atOut ? atOut.chromeH / atOne.chromeH : 0

@@ -232,7 +232,19 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         }
         return null
       })()`)
-      if (!card) throw new Error('139: no carded panel was reachable on screen')
+      if (!card) {
+        const why = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.canvas').getBoundingClientRect()
+          return { scale: window.__m4aScale && window.__m4aScale(), host: [b.left, b.top, b.right, b.bottom].map(Math.round),
+            panels: [...document.querySelectorAll('.panel')].slice(0, 8).map((el) => {
+              const r = el.getBoundingClientRect()
+              const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+              const hit = document.elementFromPoint(x, y)
+              return { id: el.dataset.panelId, card: !!el.querySelector('.panel__card'), c: [x, y], hit: hit ? hit.tagName + '.' + String(hit.className).slice(0, 40) : null, same: !!hit && hit.closest('.panel') === el }
+            }) }
+        })()`)
+        throw new Error('139: no carded panel was reachable on screen ' + JSON.stringify(why))
+      }
 
       const during119 = await dragFromTo({ x: card.x, y: card.y }, { x: card.x + 220, y: card.y + 160 })
       const after119 = await wc.executeJavaScript(`(() => ({

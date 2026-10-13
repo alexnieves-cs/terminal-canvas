@@ -2233,7 +2233,13 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     // M46: the navigator shows ONE pane, and these four checks read the
     // Workspaces list — so show it, the way a user would, and put Panels back
     // after 96 for everything below.
+    // A dock button for the pane ALREADY showing collapses the rail instead of
+    // re-showing it (chooseNavigator's `showing` branch), so a second click is
+    // the right answer exactly when the first one closed what was open.
     await dockTo('workspaces'); await settle()
+    if (!(await wc.executeJavaScript(`!!document.querySelector('[data-rail-workspace]')`))) {
+      await dockTo('workspaces'); await settle()
+    }
 
     // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
     //     Check 64 makes this claim for the palette's switcher and explains
