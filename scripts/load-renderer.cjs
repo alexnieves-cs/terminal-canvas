@@ -75,6 +75,17 @@ const loadRenderer = async (win, { attempts = 3, log = console.log } = {}) => {
       if (failures.length) {
         log(`[harness] renderer loaded on attempt ${attempt} after ${failures.join('; ')}`)
       }
+      // On the hosted macOS runner a window that was never shown is not
+      // focused, and Electron drops `sendInputEvent` wheels, clicks and keys to
+      // it: measured on #27, a synthetic wheel dispatched in the page panned
+      // the canvas while the same wheel sent as input never arrived. A real
+      // person's window is always shown, so showing it (without stealing
+      // focus from anything) is the harness matching production, not a
+      // looser check. Local runs keep their hidden window.
+      if (process.env.CI) {
+        win.showInactive()
+        win.webContents.focus()
+      }
       return
     } catch (error) {
       failures.push(`attempt ${attempt}: ${String((error && error.message) || error)}`)
