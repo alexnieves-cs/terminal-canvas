@@ -8878,6 +8878,16 @@ export function Canvas({
         makeTaskRef.current()
         return
       }
+      // The UX pass. ⌘/ is the shortcut sheet every Mac app has: Settings ›
+      // Keyboard, which already prints the one registry with search.
+      if (hit?.id === 'shortcuts') {
+        // An editor's own ⌘/ (comment a line) and a terminal's keep the key.
+        const at = event.target instanceof Element ? event.target : null
+        if (at?.closest('input, textarea, [contenteditable="true"], .monaco-editor, .xterm') != null) return
+        event.preventDefault()
+        if (!event.repeat) openSettingsPage('keyboard')
+        return
+      }
       if (hit?.id === 'new-shell') {
         event.preventDefault()
         const selected = selectedIdsRef.current
@@ -10434,7 +10444,9 @@ export function Canvas({
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner data-screen-control="" role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
-            through your shell's rc files may not be found. Environment… in ⌘K says what was.
+            through your shell's rc files may not be found.{' '}
+            {/* The UX pass. The fix is a button, not a sentence pointing at ⌘K. */}
+            <button type="button" className="pf__verb pf__verb--word env-banner__check" data-env-banner-check {...shellControl(() => palette.openPalette('environment'))}>Check environment</button>
           </div>
         )}
         {/* M204 (D08). The lens bar: which task is lit, how much of it, what

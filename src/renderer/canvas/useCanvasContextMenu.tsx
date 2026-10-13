@@ -91,7 +91,11 @@ export function useCanvasContextMenu(deps: CanvasContextMenuDeps): { onContextMe
         forId: 'canvas', at,
         rows: [
           { id: 'edit.paste', label: 'Paste', title: 'Paste onto the canvas — copied objects, a Mermaid diagram, or a picture', section: 'edit', run: () => { focusPanel(null); pasteFromClipboard() } },
-          { id: 'canvas.create', label: 'New object…', title: 'Open Create — a terminal, agent, note, picture…', section: 'create', ...(mergedRef.current ? { disabled: 'leave merged view to create an object' } : {}), run: () => actions.beginSpawnSheet() },
+          { id: 'canvas.create', label: 'New panel…', title: 'Open the panel sheet — a terminal, an agent or a chat, where and how', section: 'create', ...(mergedRef.current ? { disabled: 'leave merged view to create an object' } : {}), run: () => actions.beginSpawnSheet() },
+          // The UX pass. The sheet above makes no note or picture, and the
+          // row used to promise both; they are rows of their own here.
+          { id: 'canvas.note', label: 'New note', title: 'A Markdown note in the notes folder', section: 'create', ...(mergedRef.current ? { disabled: 'leave merged view to create an object' } : {}), run: () => { void actions.createObject('note') } },
+          { id: 'canvas.image', label: 'New picture…', title: 'Place a picture from a file', section: 'create', ...(mergedRef.current ? { disabled: 'leave merged view to create an object' } : {}), run: () => { void actions.createObject('image') } },
           ...selRows(facts([]))
         ]
       })

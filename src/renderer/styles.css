@@ -6774,6 +6774,10 @@ body {
    dismiss sits INSIDE a state pill, where a hidden box reads as a hole. Both sit
    below the hiding rule at equal specificity: SOURCE ORDER is what wins here. */
 .pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }
+/* The UX pass. Lock and pin are STATES, not verbs: hidden at rest, a locked
+   panel looked movable until the drag failed. They show at rest now, the
+   same ruling the group frame's locked mark already had (M178 F.8). */
+.pf__chrome .pf__mark { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .chat__backend { transition: none; } }
 /* M163. The inspector's Machine section (the metrics rule): the one place the
    per-panel CPU · RAM figure lives. */

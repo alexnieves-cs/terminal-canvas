@@ -57,7 +57,18 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   // panel is the handler; a bare key is not a canvas nav chord.
   { id: 'follow', chord: 'F', scope: 'canvas', group: 'navigate', label: 'Follow picked' },
   { id: 'navigator', chord: '⌘\\', scope: 'canvas', group: 'navigate', label: 'Navigator' },
-  { id: 'context', chord: '⇧⌘\\', scope: 'canvas', group: 'navigate', label: 'Context pane' },
+  { id: 'context', chord: '⇧⌘\\', scope: 'canvas', group: 'navigate', label: 'Inspector' },
+  // The UX pass. Chords that already fired but were listed nowhere, so
+  // Settings › Keyboard and the ⌘/ sheet could not show them. Their listeners
+  // still match on event.code where they always did; these rows are the names.
+  { id: 'files-pane', chord: '⌘B', scope: 'canvas', group: 'navigate', label: 'Files pane' },
+  { id: 'trail-back', chord: '⌘[', scope: 'canvas', group: 'navigate', label: 'Back to the last place' },
+  { id: 'trail-forward', chord: '⌘]', scope: 'canvas', group: 'navigate', label: 'Forward again' },
+  { id: 'workspace-prev', chord: '⌘⇧[', scope: 'canvas', group: 'navigate', label: 'Previous workspace' },
+  { id: 'workspace-next', chord: '⌘⇧]', scope: 'canvas', group: 'navigate', label: 'Next workspace' },
+  { id: 'merged', chord: '⌘⇧A', scope: 'canvas', group: 'navigate', label: 'Every workspace at once' },
+  { id: 'decisions', chord: '⌘⌥J', scope: 'canvas', group: 'sessions', label: 'Go to the decisions list' },
+  { id: 'shortcuts', chord: '⌘/', scope: 'canvas', group: 'navigate', label: 'Keyboard shortcuts' },
 
   // D5. The chord the menu still shows. Same verb as `tidy`, hidden from the
   // primary map by `aliasOf` so a later Settings page can fold it.
@@ -113,6 +124,14 @@ export const SHORTCUT_HANDLERS: Readonly<Record<string, string>> = {
   'follow': 'followPicked',
   'navigator': 'toggleNavigator',
   'context': 'toggleContext',
+  'files-pane': 'toggleTree',
+  'trail-back': 'cameraBack',
+  'trail-forward': 'cameraForward',
+  'workspace-prev': 'stepWorkspaceBack',
+  'workspace-next': 'stepWorkspace',
+  'merged': 'toggleMerged',
+  'decisions': 'focusDecisions',
+  'shortcuts': 'openKeyboardSheet',
   'flip': 'flipTerminals',
   'broadcast': 'toggleBroadcast',
   'pill': 'openCommandPill',
@@ -163,7 +182,8 @@ interface ParsedChord {
 
 const KEY_CODE: Readonly<Record<string, string>> = {
   N: 'KeyN', T: 'KeyT', K: 'KeyK', J: 'KeyJ', Y: 'KeyY', G: 'KeyG', L: 'KeyL',
-  S: 'KeyS', W: 'KeyW', F: 'KeyF', I: 'KeyI',
+  S: 'KeyS', W: 'KeyW', F: 'KeyF', I: 'KeyI', B: 'KeyB', A: 'KeyA',
+  '[': 'BracketLeft', ']': 'BracketRight', '/': 'Slash',
   '0': 'Digit0', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3',
   '.': 'Period',
   Space: 'Space',
@@ -175,7 +195,8 @@ const KEY_CODE: Readonly<Record<string, string>> = {
 
 const ACCEL: Readonly<Record<string, string>> = {
   KeyN: 'N', KeyT: 'T', KeyK: 'K', KeyJ: 'J', KeyY: 'Y', KeyG: 'G', KeyL: 'L',
-  KeyS: 'S', KeyW: 'W', KeyF: 'F', KeyI: 'I',
+  KeyS: 'S', KeyW: 'W', KeyF: 'F', KeyI: 'I', KeyB: 'B', KeyA: 'A',
+  BracketLeft: '[', BracketRight: ']', Slash: '/',
   Digit0: '0', Digit1: '1', Digit2: '2', Digit3: '3',
   Period: '.',
   Space: 'Space',

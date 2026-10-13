@@ -214,6 +214,25 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
     '')
 }
 
+// ── The shell ────────────────────────────────────────────────────────────
+
+{
+  const shortcuts = read('src/shared/shortcuts.ts')
+  const want = [["files-pane", '⌘B'], ['trail-back', '⌘['], ['trail-forward', '⌘]'], ['workspace-prev', '⌘⇧['], ['workspace-next', '⌘⇧]'], ['merged', '⌘⇧A'], ['decisions', '⌘⌥J'], ['shortcuts', '⌘/']]
+  const missing = want.filter(([id, chord]) => !shortcuts.includes(`id: '${id}', chord: '${chord}'`)).map(([id]) => id)
+  ok('ux.keys.1 every chord that fires is named in the one registry, and ⌘/ opens Settings › Keyboard (an editor or terminal keeps its own ⌘/)',
+    missing.length === 0 && /hit\?\.id === 'shortcuts'/.test(canvas) && /openSettingsPage\('keyboard'\)/.test(canvas) && /\.monaco-editor, \.xterm/.test(canvas),
+    JSON.stringify(missing))
+}
+
+{
+  const menu = read('src/renderer/canvas/useCanvasContextMenu.tsx')
+  ok('ux.shell.1 the ground\'s right-click promises only what its sheet makes, with note and picture as rows of their own; the env banner\'s fix is a button',
+    /label: 'New panel…'/.test(menu) && !/note, picture…/.test(menu) && /createObject\('note'\)/.test(menu) && /createObject\('image'\)/.test(menu) &&
+      /data-env-banner-check \{\.\.\.shellControl\(\(\) => palette\.openPalette\('environment'\)\)\}/.test(canvas) && !/Environment… in ⌘K says what was/.test(canvas),
+    '')
+}
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1

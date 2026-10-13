@@ -2891,7 +2891,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('ctx.term.1 in a terminal whose program has mouse reporting on, a plain right-click opens no menu (the program has it) and ⌥-right-click opens the menu',
         mouseMode !== false && plain === null && withAlt !== null && withAlt.for === gid, JSON.stringify({ mouseMode, plain, withAlt }))
 
-      // ctx.canvas.1 — the ground's menu: Paste, New object…, Fit; the pill and
+      // ctx.canvas.1 — the ground's menu: Paste, New panel…, New note, New picture…, Fit; the pill and
       // the HUD step out while it is open, and a click on it is not the world's.
       const g2 = await ground()
       if (g2 !== null) await click(g2.x, g2.y, 'right')
@@ -2899,8 +2899,8 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const ctxC = await ctxRead()
       const hud = await wc.executeJavaScript(`getComputedStyle(document.querySelector('.canvas-hud')).visibility`)
       key('Escape'); await sleep(150)
-      ok('ctx.canvas.1 a real right-click on the ground opens the canvas menu (Paste, New object…, Fit), and the pill and HUD step out while it is open',
-        ctxC !== null && ctxC.for === 'canvas' && JSON.stringify(ctxC.ids) === JSON.stringify(['edit.paste', 'canvas.create', 'sel.fit']) && ctxC.pill === 'hidden' && hud === 'hidden',
+      ok('ctx.canvas.1 a real right-click on the ground opens the canvas menu (Paste, New panel…, New note, New picture…, Fit), and the pill and HUD step out while it is open',
+        ctxC !== null && ctxC.for === 'canvas' && JSON.stringify(ctxC.ids) === JSON.stringify(['edit.paste', 'canvas.create', 'canvas.note', 'canvas.image', 'sel.fit']) && ctxC.pill === 'hidden' && hud === 'hidden',
         JSON.stringify({ g2, ctxC, hud }))
 
       // M408 follow-up (the critic). Each item MEASURED by real input.

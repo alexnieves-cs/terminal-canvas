@@ -92,10 +92,10 @@ const fact = (over) => ({
   const none = []
   const one = [fact({ id: '1', tone: 'idle' })]
   const titles = [M.sessionsTitle(live), M.sessionsTitle(mixed), M.sessionsTitle(onlyAsleep), M.sessionsTitle(none), M.sessionsTitle(one)]
-  ok('rd-sessions.header.1 a zero dormant count is dropped, a zero live count is dropped, and a positive count is kept',
-    titles[0] === 'Sessions · 3 live' && !/dormant/.test(titles[0]) &&
-    titles[1] === 'Sessions · 3 live · 2 dormant' &&
-    titles[2] === 'Sessions · 2 dormant' && !/0 live/.test(titles[2]) &&
+  ok('rd-sessions.header.1 a zero asleep count is dropped, a zero live count is dropped, and a positive count is kept',
+    titles[0] === 'Sessions · 3 live' && !/asleep/.test(titles[0]) &&
+    titles[1] === 'Sessions · 3 live · 2 asleep' &&
+    titles[2] === 'Sessions · 2 asleep' && !/0 live/.test(titles[2]) &&
     titles[3] === 'Sessions' &&
     titles[4] === 'Sessions · 1 live' &&
     !titles.some((t) => /0 dormant|0 live/.test(t)),
