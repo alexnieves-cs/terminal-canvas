@@ -342,7 +342,7 @@ check(HUD, 'revamp.create.1 the canvas\'s one Create door sits inside the HUD be
   const canvas = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   const once = (html.match(/data-create-open/g) ?? []).length === 1
   const first = html.indexOf('data-create-open') > -1 && html.indexOf('data-create-open') < html.indexOf('data-hud-zoom-out')
-  return { pass: /^<div class="canvas-hud">/.test(html) && once && first && /data-hud-fit\b/.test(html) &&
+  return { pass: /^<div class="canvas-hud"[ >]/.test(html) && once && first && /data-hud-fit\b/.test(html) &&
     !/data-hud-fit/.test(empty) && /data-hud-zoom-in/.test(empty) && !/data-create-open/.test(empty) &&
     !/<NewObjectRow\b/.test(canvas) && /create=\{panels\.length > 0/.test(canvas),
     detail: { html: html.slice(0, 320), empty: empty.slice(0, 200) } }

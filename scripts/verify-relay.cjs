@@ -462,7 +462,12 @@ function connect(port, tok, opts = {}) {
     await until(() => slow.json('attached').length > 0)
     await sleep(30)
     const count = (c) => c.log.reduce((n, e) => n + (e.b ? e.b.length : 0), 0)
-    const chunk = 16 * 1024, n = 320
+    // 20 MB, not 5: the property needs the relay's per-client queue to pass
+    // HIGH, which means more bytes than the kernel will park in the stalled
+    // client's socket buffers. macOS parks little; Linux loopback auto-tunes to
+    // several MB and swallowed all 5 MB, so no resync ever fired and the check
+    // read as red for a reason that was the OS's, not the relay's.
+    const chunk = 16 * 1024, n = 1280
     const stream = Buffer.alloc(chunk * n)
     for (let i = 0; i < stream.length; i++) stream[i] = 97 + ((i * 7 + (i >> 10)) % 26)
     // Like a real pty: one read per loop turn, and a paused pty produces nothing until resumed.

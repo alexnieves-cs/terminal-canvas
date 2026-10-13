@@ -28,7 +28,7 @@ integration branch, not a lane's private glob.
 ## Not on this list
 
 Both plain waves failed the same three checks, all named in the brief as
-expected: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent),
+expected: `verify:meta` `panels-split.2` (tag `pre-v7-run` absent; since fixed, the check names commit `328e087f` instead),
 `verify:meta` `visual.1` (missing `rd-*` goldens), `verify:first-run`
 `revamp.create.1`. `kill.1`, `merge.1`, `verify:canvas-sync`, `verify:relay`,
 and `verify:flowchart` did not fail in either run.

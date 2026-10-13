@@ -43,14 +43,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # M135. verify:meta panels-split.2 reads scripts/verify-panels.cjs at
-          # the tag `pre-v7-run` through `git show`; a depth-1 checkout has no
-          # tags and the check would read as red on the runner for a reason
-          # that is not the code's.
-          fetch-tags: true
+          # the `pre-v7-run` commit through `git show`; a depth-1 checkout has
+          # no such commit and the check would read as red on the runner for a
+          # reason that is not the code's. The check names the commit by sha
+          # because the tag was never pushed; full history is what it needs.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: verify:relay and verify:canvas-sync use the global
+          # `WebSocket`, which Node only has from 22. On 20 they threw
+          # `WebSocket is not defined`, and relay then hung to its watchdog.
+          node-version: 22
           cache: npm
 
       # Several suites skip loudly rather than failing when no tmux binary is
