@@ -817,8 +817,8 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   // R-032: ⌘0 is Fit all (`canvas.zoom-fit`). Reset zoom has no chord.
   // M313: Open in editor carries its own chord (⌘⇧E), a different key again.
   // M409: Undo and Redo carry the menu's ⌘Z / ⌘⇧Z — different keys again.
-  ok('48 only the default preset advertises Cmd+N',
-    withHint.sort().join(',') === 'canvas.redo=\u2318\u21e7Z,canvas.undo=\u2318Z,canvas.zoom-fit=\u23180,editor.open=\u2318\u21e7E,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
+  ok('48 only the default preset advertises the default-agent chord (⌘⌥N since the UX pass gave ⌘N to New task)',
+    withHint.sort().join(',') === 'canvas.redo=\u2318\u21e7Z,canvas.undo=\u2318Z,canvas.zoom-fit=\u23180,editor.open=\u2318\u21e7E,preset.spawn.shell=\u2318\u2325N,spawn.sheet=\u2318\u21e7N',
     withHint.join(','))
 }
 
@@ -2132,8 +2132,8 @@ const WS = [
   const sheet = byId(rows, 'spawn.sheet')
   const spawnRows = P.filterCommands(rows, '').filter((r) => r.group === 'spawn')
   const dflt = byId(rows, 'preset.spawn.shell')
-  ok('sheet.1 New panel… is the first spawn row with ⌘⇧N, and the default preset\'s row carries ⌘N',
-    sheet !== undefined && sheet.shortcut === '⌘⇧N' && spawnRows[0] && spawnRows[0].id === 'spawn.sheet' && dflt && dflt.shortcut === '⌘N',
+  ok('sheet.1 New panel… is the first spawn row with ⌘⇧N, and the default preset\'s row carries ⌘⌥N',
+    sheet !== undefined && sheet.shortcut === '⌘⇧N' && spawnRows[0] && spawnRows[0].id === 'spawn.sheet' && dflt && dflt.shortcut === '⌘⌥N',
     JSON.stringify({ sheet: sheet && sheet.title, first: spawnRows[0] && spawnRows[0].id, dflt: dflt && dflt.shortcut }))
   const build = typeof P.buildSpawnRequest === 'function' ? P.buildSpawnRequest : () => null
   const presets = [{ id: 'shell', name: 'Login shell', agent: undefined }, { id: 'claude', name: 'Claude', agent: 'claude-code' }]

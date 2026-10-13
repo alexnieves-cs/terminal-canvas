@@ -358,7 +358,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     //     the guard READS it. The real-app half is a manual hold test.
     await wc.executeJavaScript(`
       for (let i = 0; i < 5; i++) {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, repeat: true, bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, repeat: true, bubbles: true }))
       }
       true
     `)
@@ -1763,7 +1763,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     {
       const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
       await wc.executeJavaScript(`
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))
       `)
       await sleep(300)
       const after = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
@@ -1848,7 +1848,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // undo had nothing to undo would pass without testing anything.
       const before = new Set(await ids())
       await wc.executeJavaScript(
-        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const spawned = await waitUntil(async () => {
         const now = await ids()
         return now.length > before.size ? now : false
@@ -2441,7 +2441,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // Cmd+N panel's id: dispatch the synthetic keydown on window, then
       // diff the id list against the snapshot taken before it.
       await wc.executeJavaScript(
-        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const ids = await waitUntil(async () => {
         const now = await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -2518,7 +2518,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const idsBefore45 = new Set(await wc.executeJavaScript(
         `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
       await wc.executeJavaScript(
-        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const ids45 = await waitUntil(async () => {
         const now = await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -4305,7 +4305,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // or under a later one, and a click there selects something else.
       const spawnFit = async () => {
         const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
         return waitUntil(async () => {
           const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
           return now.find((id) => !before.includes(id)) ?? false
@@ -4433,7 +4433,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       wc.reload(); await rePB
       await settle()
       const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const pbId = await waitUntil(async () => {
         const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
         return now.find((id) => !panelsBefore.includes(id)) ?? false

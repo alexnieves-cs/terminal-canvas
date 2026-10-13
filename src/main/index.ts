@@ -19,6 +19,7 @@ import { createStores } from './bootstrap/stores'
 import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { installMenuBar } from './menu-bar'
+import { installTmuxAdopt } from './tmux-adopt'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
@@ -479,6 +480,7 @@ app.whenReady().then(async () => {
   // on the winning side of the lock only, like the control door above. The
   // window is read at use (rule 1): it can be closed and remade.
   installMenuBar(() => state.window)
+  installTmuxAdopt(() => state.loginEnv)
 
   // A second launch of this build reaches the running instance here rather
   // than starting a process of its own. Restoring is not optional: on darwin

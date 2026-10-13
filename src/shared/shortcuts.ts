@@ -24,8 +24,8 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   // The task door (the UX pass). ⌘N stays the instant default agent, as the
   // concept pins it; New task is the considered start, one modifier away, and
   // the File menu's first row.
-  { id: 'new-task', chord: '⌘⌥N', scope: 'canvas', group: 'create', label: 'New task' },
-  { id: 'new-agent', chord: '⌘N', scope: 'canvas', group: 'create', label: 'New agent' },
+  { id: 'new-task', chord: '⌘N', scope: 'canvas', group: 'create', label: 'New task' },
+  { id: 'new-agent', chord: '⌘⌥N', scope: 'canvas', group: 'create', label: 'New agent' },
   { id: 'new-shell', chord: '⌘T', scope: 'canvas', group: 'create', label: 'New shell' },
   { id: 'spawn-sheet', chord: '⌘⇧N', scope: 'canvas', group: 'create', label: 'Choose what to spawn' },
   { id: 'make-task', chord: '⌘G', scope: 'canvas', group: 'create', label: 'Make task from selection' },

@@ -1202,7 +1202,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           // anywhere said what Cmd+N would spawn — the stock canvas looked
           // correct and only a user who hand-edited defaultPresetId could
           // tell. A hint on every row would be a lie on all but one.
-          ...(preset.isDefault ? { shortcut: '⌘N' } : {}),
+          ...(preset.isDefault ? { shortcut: '⌘⌥N' } : {}),
           run: () => actions.spawnPreset(preset.id)
         },
         // M253. Unread comes first: a pack preset whose command IS on the
@@ -1965,7 +1965,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `preset.default.${preset.id}`,
-          title: `Make ${preset.name} the Cmd+N default`,
+          title: `Make ${preset.name} the ⌘⌥N default`,
           group: 'manage',
           scope: 'presets',
           hiddenAtRest: true,

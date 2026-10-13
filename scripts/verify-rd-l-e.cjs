@@ -73,7 +73,7 @@ const RECORDING = 'Recording — press the new shortcut, or Esc to cancel.'
     ? O.effectiveShortcuts([]).find((row) => row.id === 'new-agent')?.chord
     : null
   ok('rd-keys.cmd.1 a canvas chord without ⌘ is refused by the shortcut\'s name and is not stored',
-    bare?.ok === false && typeof bare?.reason === 'string' && bare.reason.includes('New agent') && bare.reason.includes('⌘') && kept === '⌘N',
+    bare?.ok === false && typeof bare?.reason === 'string' && bare.reason.includes('New agent') && bare.reason.includes('⌘') && kept === '⌘⌥N',
     JSON.stringify(bare))
 }
 
@@ -81,7 +81,7 @@ const RECORDING = 'Recording — press the new shortcut, or Esc to cancel.'
   const clash = typeof O.proposeOverride === 'function' ? O.proposeOverride('new-shell', '⌘N', []) : null
   const stored = clash && clash.ok === false ? clash.overrides : 'applied'
   ok('rd-keys.dup.1 a duplicate within a scope names the clashing row and does not apply',
-    clash?.ok === false && clash?.clashId === 'new-agent' && typeof clash?.reason === 'string' && clash.reason.includes('New agent') && stored === undefined,
+    clash?.ok === false && clash?.clashId === 'new-task' && typeof clash?.reason === 'string' && clash.reason.includes('New task') && stored === undefined,
     JSON.stringify(clash))
 }
 

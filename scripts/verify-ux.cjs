@@ -21,7 +21,9 @@ buildSync({
       import { readyReviews, nextReview, arrivedReviews, reviewNotice } from '../src/renderer/shell/ready-review'
       import { quickAccept, QUICK_ACCEPT_MAX_FILES } from '../src/renderer/review/quick-accept'
       import { taskSeedFromPaste } from '../src/shared/paste-task'
-      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste }
+      import { parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS } from '../src/shared/tmux-adopt'
+      import { matchShortcut } from '../src/shared/shortcuts'
+      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste, parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS, matchShortcut }
     `,
     resolveDir: __dirname,
     sourcefile: 'ux-entry.ts',
@@ -195,8 +197,8 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
   const actions = read('src/main/bootstrap/menu-actions.ts')
   const preload = read('src/preload/index.ts')
   const fileMenu = menu.slice(menu.indexOf("label: 'File'"), menu.indexOf("label: 'Edit'"))
-  ok('ux.door.1 New task is a door of its own: ⌘⌥N in the one registry, the File menu\'s FIRST row, and the menu\'s ask reaches the start sheet, not the panel sheet',
-    /id: 'new-task', chord: '⌘⌥N'/.test(shortcuts) && /'new-task': 'beginStartWork'/.test(shortcuts) && /id: 'new-agent', chord: '⌘N'/.test(shortcuts) &&
+  ok('ux.door.1 New task is a door of its own: ⌘N in the one registry (the default agent moved to ⌘⌥N), the File menu\'s FIRST row, and the menu\'s ask reaches the start sheet, not the panel sheet',
+    /id: 'new-task', chord: '⌘N'/.test(shortcuts) && /'new-task': 'beginStartWork'/.test(shortcuts) && /id: 'new-agent', chord: '⌘⌥N'/.test(shortcuts) &&
       fileMenu.indexOf("'New task…'") !== -1 && fileMenu.indexOf("'New task…'") < fileMenu.indexOf("'New panel…'") && /accel\('new-task'\)/.test(fileMenu) &&
       /onNewTask: \(\) => \{ state\.window\?\.webContents\.send\(IPC_EVENTS\.SPAWN_OPEN_SHEET, 'task'\) \}/.test(actions) &&
       /which === 'task' \? 'task' : undefined/.test(preload) && /if \(which === 'task'\) paletteActionsRef\.current\?\.beginStartWork\(\)/.test(canvas),
@@ -274,6 +276,61 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
   const review = read('src/renderer/review/TaskReviewPanel.tsx')
   ok('ux.recipe.1 Save as a recipe opens by itself once the task is verified',
     /data-task-save-recipe open=\{verification\.stage === 'verified' \|\| undefined\}/.test(review), '')
+}
+
+{
+  // ⌘N is New task and ⌘⌥N the default agent, both matched above the Alt bail.
+  const vp = read('src/renderer/canvas/useViewport.ts')
+  const k = (alt) => M.matchShortcut({ metaKey: true, altKey: alt, shiftKey: false, ctrlKey: false, code: 'KeyN' })?.id
+  const bail = vp.indexOf('if (event.ctrlKey || event.altKey) return')
+  const arm = vp.indexOf("if (hit?.id === 'new-task' || hit?.id === 'new-agent')")
+  ok('ux.keys.2 ⌘N opens New task and ⌘⌥N starts the default agent, both taken before useViewport\'s Alt bail; no bare case \'n\' is left',
+    k(false) === 'new-task' && k(true) === 'new-agent' && arm !== -1 && bail !== -1 && arm < bail &&
+      !/case 'n':/.test(vp) && /onNewTask\?\.\(\)/.test(vp) &&
+      /onStepWorkspace, onToggleMerged, openNewTask\n/.test(canvas),
+    JSON.stringify({ plain: k(false), alt: k(true), arm, bail }))
+}
+
+{
+  // ⌘J and ⌘Y pass a focus lock; nothing else does.
+  ok('ux.lock.1 ⌘J / ⌘⇧J and ⌘Y pass the focus lock (the predicate without it), and shouldIgnoreKeys still includes the lock for every other chord',
+    /\(\) => shouldIgnoreKeysButLock\(\) \|\| focusLocked\(\)/.test(canvas) &&
+      /\(hit\?\.id === 'jump' \|\| hit\?\.id === 'jump-prev'\) && focusLocked\(\) && !shouldIgnoreKeysButLock\(\)/.test(canvas) &&
+      /if \(hit\?\.id === 'allow' && !shouldIgnoreKeysButLock\(\)\) \{/.test(canvas) &&
+      /Amended \(the UX pass/.test(read('docs/redesign/DECISIONS.md')), '')
+}
+
+{
+  // One welcome-back card holds the four return notices, with one Dismiss all.
+  const slot = canvas.slice(canvas.indexOf('<WelcomeBack'), canvas.indexOf('</WelcomeBack>'))
+  ok('ux.welcome.1 the briefing, Reopened, Unfinished work and the shell banner are sections of one WelcomeBack card whose Dismiss all presses each one\'s Got it',
+    slot.includes('{floatBriefing && resumeBanner}') && slot.includes('<ReopenNotice') && slot.includes('<JobRecoveryNotice') && slot.includes('data-env-banner') &&
+      /if \(floatBriefing\) dismissReturn\(\)/.test(slot) && /reopen\.acknowledge\(\)/.test(slot) && /jobRecovery\?\.dismiss\(\)/.test(slot) &&
+      (canvas.match(/className="env-banner"/g) || []).length === 1 && (canvas.match(/<ReopenNotice\b/g) || []).length === 1,
+    slot.slice(0, 160))
+}
+
+{
+  // Agents already in the person's tmux: read-only listing, one row per session, attach as a client.
+  const out = [
+    'work\t0\t0\tclaude\t/Users/a/repo\tclaude',
+    'work\t0\t1\tzsh\t/Users/a/repo\t',
+    'side\t1\t0\tnode\t/Users/a/other\t/opt/homebrew/bin/codex --full-auto',
+    'side\t1\t1\tclaude\t/Users/a/other\tclaude',
+    'misc\t0\t0\tvim\t/tmp\tvim',
+    'garbage'
+  ].join('\n')
+  const rows = M.parseAdoptable(out)
+  const cmd = M.adoptCommand('/opt/homebrew/bin/tmux', 'work:0.0')
+  const main = read('src/main/tmux-adopt.ts')
+  ok('ux.adopt.1 claude and codex panes are found once per session, the listing is list-panes and nothing else, and a panel attaches as a client with $TMUX unset',
+    rows.length === 2 && rows[0].target === 'work:0.0' && rows[0].agent === 'claude' && rows[1].target === 'side:1.0' && rows[1].agent === 'codex' && rows[1].cwd === '/Users/a/other' &&
+      M.ADOPT_LIST_ARGS[0] === 'list-panes' && !M.ADOPT_LIST_ARGS.includes('-L') &&
+      cmd.command === '/usr/bin/env' && cmd.args.join(' ') === '-u TMUX /opt/homebrew/bin/tmux attach-session -t work:0.0' &&
+      /execFile\(tmuxPath, \[\.\.\.ADOPT_LIST_ARGS\]/.test(main) && (main.match(/execFile\(/g) || []).length === 1 &&
+      M.adoptSentence(rows) === '2 agents are already running in your tmux.' &&
+      /adopt=\{adoptable === null \? null/.test(canvas),
+    JSON.stringify(rows))
 }
 
 const passed = results.filter((r) => r.pass).length

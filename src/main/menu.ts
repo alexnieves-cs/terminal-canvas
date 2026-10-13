@@ -12,7 +12,7 @@ export interface AppMenuOptions {
   onFlip: () => void
   /** M65. The File menu's New panel… (⌘⇧N): open the spawn sheet. */
   onOpenSheet(): void
-  /** The File menu's New task… (⌘⌥N): open the start-work sheet. */
+  /** The File menu's New task… (⌘N): open the start-work sheet. */
   onNewTask(): void
   /** Resolved current values, keyed by SettingDef.id. */
   settingValue(id: string): SettingValue

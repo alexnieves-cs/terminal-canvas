@@ -259,7 +259,9 @@ export function useViewport(
    * Cmd+Shift+A: enter or leave the merged view. The same shape and the same
    * stability requirement as onStepWorkspace above.
    */
-  onToggleMerged?: () => void
+  onToggleMerged?: () => void,
+  /** ⌘N: open the New task sheet. Appended last so no positional caller shifts. Must be stable. */
+  onNewTask?: () => void
 ): ViewportControls {
   const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
@@ -570,6 +572,30 @@ export function useViewport(
         runTidyAll()
         return
       }
+      // The UX pass. ⌘N is New task (the sheet a person most often wants) and
+      // ⌘⌥N the instant default agent — matched through the registry ABOVE
+      // the Alt bail, or ⌘⌥N would be unbound. A focus lock or an open
+      // palette declines with no preventDefault, as tidy does above. The
+      // repeat is swallowed: a held ⌘⌥N must stay one agent, not thirty
+      // (the argument the general repeat bail below records).
+      if (hit?.id === 'new-task' || hit?.id === 'new-agent') {
+        if (shouldIgnoreKeys?.()) return
+        event.preventDefault()
+        if (event.repeat) return
+        if (hit.id === 'new-task') {
+          onNewTask?.()
+          return
+        }
+        const host = hostRef.current
+        if (!host) return
+        const bounds = host.getBoundingClientRect()
+        // At the viewport centre in WORLD coordinates, so a panel appears
+        // where you are looking at any zoom. onSpawn runs the point through
+        // panels.ts's cascadeCentre, which steps it down-and-right when a
+        // panel is already centred there, so repeated presses stack visibly.
+        onSpawn?.(screenToWorld({ x: bounds.width / 2, y: bounds.height / 2 }, viewportRef.current))
+        return
+      }
       if (event.ctrlKey || event.altKey) return
       if (shouldIgnoreKeys?.()) return
 
@@ -655,11 +681,6 @@ export function useViewport(
       }
       if (event.repeat && !REPEATABLE_KEYS.has(event.key)) return
 
-      const host = hostRef.current
-      if (!host) return
-      const bounds = host.getBoundingClientRect()
-      const centre = { x: bounds.width / 2, y: bounds.height / 2 }
-
       switch (event.key) {
         // ⌘0 and ⌘1 left this switch (M444): they are fit-all and Work, matched
         // above through the registry. Reset zoom stays the palette row.
@@ -675,16 +696,6 @@ export function useViewport(
         case '-':
           event.preventDefault()
           zoomBy(1 / KEYBOARD_ZOOM_STEP)
-          break
-        case 'n':
-          // Cmd+N spawns at the viewport centre in WORLD coordinates, so a
-          // panel appears where you are looking at any zoom. "Where you are
-          // looking" is where it ASKS for: onSpawn runs the point through
-          // panels.ts's cascadeCentre, which steps it down-and-right when a
-          // panel is already centred there, so repeated presses stack
-          // visibly instead of landing on identical rects.
-          event.preventDefault()
-          onSpawn?.(screenToWorld(centre, viewportRef.current))
           break
         case 'j':
         case 'J':
@@ -702,7 +713,7 @@ export function useViewport(
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
-    hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, onStepWorkspace, onToggleMerged,
+    hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, onStepWorkspace, onToggleMerged, onNewTask,
     zoomBy, fitAll, flyToTier, resetViewport, cameraBack, cameraForward
   ])
 

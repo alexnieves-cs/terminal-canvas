@@ -103,7 +103,7 @@ import { arrivedReviews, nextReview, readyReviews, reviewNotice, type ReadyRevie
 import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
 import { useTaskQueue } from '@renderer/shell/useTaskQueue'
 import { taskChain } from '@renderer/shell/inspector-context'
-import { useAwaySince } from '@renderer/shell/presence'
+import { dismissReturn, useAwaySince } from '@renderer/shell/presence'
 import { ReturnBriefingCard, useReturnBriefing } from '@renderer/shell/ReturnBriefing'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
@@ -304,6 +304,8 @@ import { ReopenNotice, useReopenNotice } from '../shell/ReopenNotice'
 import { mergedLine } from '@shared/review-readiness'
 import { reopenTaskDetail, reopenTaskOutcome, type ReopenTask } from '@shared/persistence'
 import { JobRecoveryNotice, useJobRecovery } from '../shell/JobRecoveryNotice'
+import { WelcomeBack } from '../shell/WelcomeBack'
+import { adoptCommand, adoptSentence, type AdoptableSession } from '@shared/tmux-adopt'
 import { buildInspectorContext } from '../shell/inspector-context'
 import { useShellChrome, type CenterView } from '../shell/useShellChrome'
 import { useDockExpanded } from '../shell/useDockExpanded'
@@ -1619,6 +1621,15 @@ export function Canvas({
   // useViewport's keydown effect dep array — a fresh arrow per render would
   // tear that listener down and reinstall it on every mousemove over the
   // canvas (Canvas re-renders on setCursor).
+  // The UX pass (ux-proposals 2.5, overriding D4 for two chords at the
+  // owner's word): the same predicate WITHOUT the focus lock. ⌘J and ⌘Y are
+  // the two chords a person needs most while a locked agent works — "who
+  // needs me" and "allow it" — and neither means anything to a terminal, so
+  // the lock lets those two through and keeps every other key.
+  const shouldIgnoreKeysButLock = useCallback(
+    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
+    [palette.isOpen]
+  )
   const shouldIgnoreKeys = useCallback(
     // M129. A skill-editor field having the keyboard is the same situation as
     // an open palette: the user is looking at a text field, `focusedId` still
@@ -1630,20 +1641,23 @@ export function Canvas({
     // `focusedId` still names a terminal the user cannot see, and the four edit:* chords
     // are MENU IPC — `inert` on the host stops keydown, never them (orch-page.3).
     // D4 (R-008). A focus-locked panel owns the canvas chords. useViewport bails
-    // before preventDefault only when this predicate is true, so ⌘N and ⌘J
-    // reach the terminal. focusLocked() is a module read, so the callback
+    // before preventDefault only when this predicate is true, so ⌘N reaches
+    // the terminal (⌘J and ⌘Y are the UX pass's exception, above). focusLocked() is a module read, so the callback
     // stays stable and that listener is not torn down on every mousemove.
-    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused() || focusLocked(),
-    [palette.isOpen]
+    () => shouldIgnoreKeysButLock() || focusLocked(),
+    [shouldIgnoreKeysButLock]
   )
 
+  // ⌘N (the UX pass): the New task sheet. Read through the ref at press time
+  // — the palette's actions are assigned further down — so this stays stable.
+  const openNewTask = useCallback(() => { paletteActionsRef.current?.beginStartWork() }, [])
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects, frameReadable,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying, landing, reveal
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
-    onStepWorkspace, onToggleMerged
+    onStepWorkspace, onToggleMerged, openNewTask
   )
   // M410. The terminals whose rim name a neighbour above would cover draw it
   // inside their frame instead (panels.ts's `rimCoveredIds`). The rim's WORLD
@@ -3751,6 +3765,21 @@ export function Canvas({
   // report says when. Null until the invoke answers, and the launcher and the
   // palette both render the null honestly rather than as "nothing found".
   const [envReport, setEnvReport] = useState<EnvReport | null>(null)
+  // The UX pass (4.4): Dismiss all on the welcome-back card hides the banner for this run.
+  const [envBannerDismissed, setEnvBannerDismissed] = useState(false)
+  // The UX pass (5.5). Agents already running in the person's own tmux, asked
+  // once per launch; the empty canvas offers them. Null until asked, or once
+  // placed or declined. A main without the door (a harness) is no offer.
+  const [adoptable, setAdoptable] = useState<{ tmuxPath: string; sessions: AdoptableSession[] } | null>(null)
+  useEffect(() => {
+    const door = window.canvas?.env?.adoptable
+    if (typeof door !== 'function') return
+    let live = true
+    door().then((r) => {
+      if (live && r.tmuxPath !== null && r.sessions.length > 0) setAdoptable({ tmuxPath: r.tmuxPath, sessions: r.sessions })
+    }, () => { /* no answer is no offer */ })
+    return () => { live = false }
+  }, [])
   // M181. A ref beside the state: `applyStarter` is installed once (the
   // palette memo captures it), so it must read the report at CALL time — a
   // closure over the null the first render held refused the starter for
@@ -8865,8 +8894,16 @@ export function Canvas({
         if (!event.repeat) toggleWorld()
         return
       }
-      if (shouldIgnoreKeys()) return
-      if (hit?.id === 'allow') {
+      // ⌘J / ⌘⇧J under a focus lock: useViewport declines them (its predicate
+      // includes the lock), so they are taken here, and only here, in that case.
+      if ((hit?.id === 'jump' || hit?.id === 'jump-prev') && focusLocked() && !shouldIgnoreKeysButLock()) {
+        event.preventDefault()
+        if (!event.repeat) onJumpAttention(hit.id === 'jump-prev' ? -1 : 1)
+        return
+      }
+      // ⌘Y passes a focus lock too (the same amendment), so it is judged by
+      // the predicate without the lock, ahead of the general stand-down.
+      if (hit?.id === 'allow' && !shouldIgnoreKeysButLock()) {
         event.preventDefault()
         const selected = selectedIdsRef.current
         const target = allowPendingTarget({
@@ -8878,6 +8915,7 @@ export function Canvas({
         if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
         return
       }
+      if (shouldIgnoreKeys()) return
       if (hit?.id === 'make-task') {
         event.preventDefault()
         makeTaskRef.current()
@@ -8903,7 +8941,7 @@ export function Canvas({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shouldIgnoreKeys, onSpawn, worldCentre])
+  }, [shouldIgnoreKeys, shouldIgnoreKeysButLock, onJumpAttention, onSpawn, worldCentre])
 
   const taskRegions = regionsFromMemberships(
     taskMemberships(displayPanels, workItems),
@@ -10365,6 +10403,19 @@ export function Canvas({
               }
               onSpawn(worldCentre(), { cwd: '~', args: [] }, { focus: true })
             }}
+            adopt={adoptable === null ? null : {
+              sentence: adoptSentence(adoptable.sessions),
+              onPlace: () => {
+                // One panel per session, each through the one placement rule,
+                // so they cascade rather than stack. Each is a tmux client:
+                // closing it detaches, and their session keeps running.
+                for (const row of adoptable.sessions) {
+                  onSpawn(worldCentre(), { cwd: row.cwd === '' ? '~' : row.cwd, ...adoptCommand(adoptable.tmuxPath, row.target), title: `${row.agent} · ${row.session}` })
+                }
+                setAdoptable(null)
+              },
+              onLeave: () => setAdoptable(null)
+            }}
             onLayout={(id) => {
               const layout = STARTER_LAYOUTS.find((row) => row.id === id)
               if (layout === undefined) return
@@ -10428,32 +10479,49 @@ export function Canvas({
           />
           )
         })()}
-        {/* M309. The return briefing floats over the canvas only when the
-            navigator's Panels pane is not there to hold it. Resume alone
-            never floats here any more — it is the strip (see resumeStrip). */}
-        {briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels') && resumeBanner}
-        <div className="recovery-slot" data-recovery-slot="">
-          {(reopen !== null || jobRecovery !== null) && (
-            <div className="reopen-stack" data-screen-control="">
-              {reopen !== null && (
-                <ReopenNotice
-                  model={reopen}
-                  onGo={paletteActions.goToPanel}
-                  onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
-                />
+        {/* The UX pass (4.4). One "while you were away" card: the floating
+            briefing (M309: only when the navigator's Panels pane is not there
+            to hold it; Resume alone is the strip), the Reopened notice and
+            Unfinished work (M316), and the login-shell banner (M48), each a
+            section of it, with one Dismiss all. */}
+        {(() => {
+          const floatBriefing = briefing !== null && resumeBanner !== null && !(chrome.navVisible && chrome.navigator === 'panels')
+          const envProblem = envReport !== null && !envReport.shell.ok && !envBannerDismissed
+          const sections = [floatBriefing, reopen !== null, jobRecovery !== null, envProblem].filter(Boolean).length
+          return (
+            <div className="recovery-slot" data-recovery-slot="">
+              {sections > 0 && (
+                <WelcomeBack
+                  count={sections}
+                  onDismissAll={() => {
+                    if (floatBriefing) dismissReturn()
+                    if (reopen?.acknowledgeable === true) reopen.acknowledge()
+                    jobRecovery?.dismiss()
+                    setEnvBannerDismissed(true)
+                  }}
+                >
+                  {floatBriefing && resumeBanner}
+                  {reopen !== null && (
+                    <ReopenNotice
+                      model={reopen}
+                      onGo={paletteActions.goToPanel}
+                      onStart={(id) => { paletteActions.goToPanel(id); wakeTarget(id) }}
+                    />
+                  )}
+                  {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
+                  {envProblem && envReport !== null && (
+                    <div className="env-banner" data-env-banner role="status">
+                      Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
+                      through your shell's rc files may not be found.{' '}
+                      {/* The UX pass. The fix is a button, not a sentence pointing at ⌘K. */}
+                      <button type="button" className="pf__verb pf__verb--word env-banner__check" data-env-banner-check {...shellControl(() => palette.openPalette('environment'))}>Check environment</button>
+                    </div>
+                  )}
+                </WelcomeBack>
               )}
-              {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
             </div>
-          )}
-        </div>
-        {envReport !== null && !envReport.shell.ok && (
-          <div className="env-banner" data-env-banner data-screen-control="" role="status">
-            Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
-            through your shell's rc files may not be found.{' '}
-            {/* The UX pass. The fix is a button, not a sentence pointing at ⌘K. */}
-            <button type="button" className="pf__verb pf__verb--word env-banner__check" data-env-banner-check {...shellControl(() => palette.openPalette('environment'))}>Check environment</button>
-          </div>
-        )}
+          )
+        })()}
         {/* M204 (D08). The lens bar: which task is lit, how much of it, what
             is missing, and the ways out. Viewport-pinned like the env banner.
             M264: Escape clears the lens when it is not destined for a focused

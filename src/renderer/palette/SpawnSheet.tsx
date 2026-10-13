@@ -410,7 +410,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
             a Cancel beside it. The keys stay, smaller — Enter is still the
             fast path, but no longer the only visible way to submit. */}
         <div className="sheet__actions">
-          <span className="sheet__keys">↵ · esc · ⌘N starts the default without asking</span>
+          <span className="sheet__keys">↵ · esc · ⌘⌥N starts the default without asking</span>
           <button type="button" className="sheet__button" data-sheet-cancel
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
             onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>

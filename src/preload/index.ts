@@ -241,7 +241,8 @@ const bridge: CanvasBridge = {
     list: (path: string) => ipcRenderer.invoke(IPC.FS_LIST, path)
   },
   env: {
-    report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true)
+    report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true),
+    adoptable: () => ipcRenderer.invoke(IPC.TMUX_ADOPTABLE)
   },
   combine: {
     run: (req: { root: string; lanes: string[] }) => ipcRenderer.invoke(IPC.COMBINE_RUN, req),
