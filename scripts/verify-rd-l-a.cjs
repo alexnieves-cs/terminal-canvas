@@ -195,7 +195,8 @@ const M = require(OUT)
   const idle = M.starterLayoutAction('pair-tests', false)
   const clicked = M.starterLayoutAction('pair-tests', true)
   ok('rd-empty.layouts.1 three starter layouts stay inert until clicked, and they are not the lineup ids',
-    layouts === 'pair-tests,two-agent,solo-shell' &&
+    layouts === 'pair-tests,workbench,solo-shell' &&
+      M.STARTER_LAYOUTS.every((row) => row.lineup === null || ['solo', 'pair', 'workbench', 'swarm'].includes(row.lineup)) &&
       M.STARTER_LAYOUTS.every((row) => typeof row.sentence === 'string' && row.sentence.length > 12) &&
       idle.places === false && clicked.places === true &&
       M.starterLayoutAction('nope', true).places === false,

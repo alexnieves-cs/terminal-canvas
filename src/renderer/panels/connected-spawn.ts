@@ -22,7 +22,7 @@ export function connectedSpawnMenu(
   return {
     title: `New object connected to ${sourceName}`,
     agents: [
-      { id: 'claude', label: 'Claude Code', chord: '⌘N' },
+      { id: 'claude', label: 'Claude Code', chord: '⌘⌥N' },
       { id: 'codex', label: 'Codex', chord: '' },
       { id: 'shell', label: 'Shell', chord: '⌘T' }
     ],

@@ -34,11 +34,20 @@ export interface NavigateTierProps {
   hostRef: RefObject<HTMLElement | null>
   onSelect: (id: string) => void
   merged: boolean
+  /**
+   * The request a panel is waiting on, if any. At Plan the live frame (and the
+   * inline approval drawn over it) is hidden or too small to read, so the
+   * card carries the same two answers instead.
+   */
+  approvalOf?: (id: string) => { requestId: string } | undefined
+  onAnswer?: (id: string, requestId: string, allow: boolean) => void
+  /** Go to the panel: a Map dot's click and a Plan card's double-click. */
+  onOpen?: (id: string) => void
 }
 
 export function NavigateTier({
   scale, panels, railRows, terminalPanels, focusedId, collapsedPanelIds,
-  releaseFocus, hostRef, onSelect, merged
+  releaseFocus, hostRef, onSelect, merged, approvalOf, onAnswer, onOpen
 }: NavigateTierProps): JSX.Element {
   const tier = useSyncExternalStore(subscribeShownTier, getShownTier, getShownTier)
   const terminalIds = useMemo(() => terminalPanels.map((panel) => panel.rect.id), [terminalPanels])
@@ -97,58 +106,79 @@ export function NavigateTier({
             rect={panel.rect}
             state={row.state}
             onSelect={onSelect}
+            approval={approvalOf?.(panel.rect.id)}
+            {...(onAnswer === undefined ? {} : { onAnswer })}
+            {...(onOpen === undefined ? {} : { onOpen })}
           />
         )
       })}
       {tier === 'map' && panels.map((panel) => {
         const row = byId.get(panel.rect.id)
         if (row === undefined) return null
-        return <MapDot key={panel.rect.id} id={panel.rect.id} rect={panel.rect} state={row.state} />
+        return <MapDot key={panel.rect.id} id={panel.rect.id} name={row.label} rect={panel.rect} state={row.state} {...(onOpen === undefined ? {} : { onOpen })} />
       })}
     </div>
   )
 }
 
-function PlanCard({ id, name, rect, state, onSelect }: {
+// A group, not a <button>: the card holds its own answer buttons, and a
+// button inside a button is not a button. The card itself still selects on
+// press and is reachable by keyboard (Enter opens it).
+function PlanCard({ id, name, rect, state, onSelect, approval, onAnswer, onOpen }: {
   id: string
   name: string
   rect: NavRect
   state: StateInput
   onSelect: (id: string) => void
+  approval?: { requestId: string } | undefined
+  onAnswer?: (id: string, requestId: string, allow: boolean) => void
+  onOpen?: (id: string) => void
 }): JSX.Element {
   const agent = useAgentState(id)
   const last = useLastLine(id)
   const shown = panelState(state, agent)
+  const stop = (event: { preventDefault: () => void; stopPropagation: () => void }): void => { event.preventDefault(); event.stopPropagation() }
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className="navigate-card"
       data-navigate-card={id}
       data-tone={shown.tone}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
       onMouseDown={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
+        stop(event)
         onSelect(id)
       }}
+      onDoubleClick={(event) => { stop(event); onOpen?.(id) }}
+      onKeyDown={(event) => { if (event.key === 'Enter') { stop(event); onOpen?.(id) } }}
     >
       <span className="navigate-card__name">{name}</span>
       <span className="navigate-card__pill" data-tone={shown.tone}>{shown.word}</span>
       <span className="navigate-card__line">{planStatusSentence(shown.word, last.line)}</span>
-    </button>
+      {approval !== undefined && onAnswer !== undefined && (
+        <span className="navigate-card__verbs" data-navigate-card-verbs="">
+          <button type="button" data-navigate-allow="" onMouseDown={stop} onClick={() => onAnswer(id, approval.requestId, true)}>Allow once</button>
+          <button type="button" data-navigate-deny="" onMouseDown={stop} onClick={() => onAnswer(id, approval.requestId, false)}>Deny</button>
+        </span>
+      )}
+    </div>
   )
 }
 
-function MapDot({ id, rect, state }: { id: string; rect: NavRect; state: StateInput }): JSX.Element {
+function MapDot({ id, name, rect, state, onOpen }: { id: string; name: string; rect: NavRect; state: StateInput; onOpen?: (id: string) => void }): JSX.Element {
   const agent = useAgentState(id)
   const shown = panelState(state, agent)
   return (
-    <span
+    <button
+      type="button"
       className="navigate-dot"
       data-navigate-dot={id}
       data-tone={shown.tone}
-      title={`${id} — ${shown.word}`}
+      title={`${name} — ${shown.word}`}
+      aria-label={`${name}, ${shown.word}. Go to it`}
       style={{ left: rect.x + rect.w / 2, top: rect.y + rect.h / 2 }}
+      onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); onOpen?.(id) }}
     />
   )
 }

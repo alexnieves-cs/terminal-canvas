@@ -158,7 +158,7 @@ export function startWorkNeeds(choice: StartWorkChoice, ctx: StartWorkContext): 
       why: ctx.wanted !== null
         ? `no known repository is a clone of ${ctx.wanted} — choose its folder`
         : ctx.repos.length === 0
-          ? (mate === undefined ? 'choose the repository folder to work in' : `${teammateWord(mate)}'s places hold no repository — choose another folder, or add one in the Teammates pane`)
+          ? (mate === undefined ? 'choose the repository folder to work in' : `${teammateWord(mate)}'s places hold no repository — choose another folder, or add one in Agent profiles`)
           : `choose which of ${whose === '' ? 'your' : whose}${ctx.repos.length} repositories to work in`
     })
     return needs

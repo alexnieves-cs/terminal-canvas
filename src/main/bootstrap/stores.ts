@@ -28,6 +28,7 @@ import { forgetTrail } from '../skill-trail-read'
 import { IPC_EVENTS } from '../../shared/ipc-contract'
 import { needsYouCount, needsYouNamed } from '../../shared/attention-words'
 import type { MainState } from './context'
+import { menuBarCount } from '../menu-bar'
 
 /**
  * Everything main owns for the whole life of the process: the stores rooted
@@ -243,7 +244,8 @@ export function createStores(state: MainState): Stores {
       })
       n.show()
     },
-    badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : '') },
+    // The UX pass: the menu-bar item shows the same sum the dock does.
+    badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : ''); menuBarCount(count) },
     beep: () => { shell.beep() },
     windowFocused: () => state.window?.isFocused() ?? false,
     notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,

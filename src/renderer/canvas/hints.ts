@@ -14,7 +14,7 @@ export const HINTS: ReadonlyArray<Hint> = [
   { id: 'pan', text: 'A two-finger drag pans the canvas.', where: 'rail' },
   { id: 'zoom', text: 'A pinch, or ⌘= and ⌘−, zooms it.', where: 'rail' },
   { id: 'palette', text: '⌘K opens the palette with every verb.', where: 'rail' },
-  { id: 'new-panel', text: '⌘N starts a panel where the camera is.', where: 'rail' },
+  { id: 'new-panel', text: '⌘N starts a task; ⌘⌥N starts an agent where the camera is.', where: 'rail' },
   // The launcher's "Keep agents running between sessions" row states the
   // benefit; this is its "How" disclosure, so the mechanism is named here.
   { id: 'tmux', text: 'Sessions stay alive across a reload or relaunch when tmux is installed — without it, each one ends with the app. Install tmux (for example, brew install tmux), then relaunch.', where: 'launcher' },

@@ -12,6 +12,8 @@ export interface AppMenuOptions {
   onFlip: () => void
   /** M65. The File menu's New panel… (⌘⇧N): open the spawn sheet. */
   onOpenSheet(): void
+  /** The File menu's New task… (⌘N): open the start-work sheet. */
+  onNewTask(): void
   /** Resolved current values, keyed by SettingDef.id. */
   settingValue(id: string): SettingValue
   onToggleSetting(id: string, value: SettingValue): void
@@ -99,6 +101,14 @@ export function buildAppMenu(options: AppMenuOptions): void {
       label: 'File',
       submenu: [
         {
+          // The UX pass. The task is the product's unit of work, so its door
+          // is the File menu's first row; before this the menu bar had no way
+          // to start one at all.
+          label: 'New task…',
+          accelerator: accel('new-task'),
+          click: () => options.onNewTask()
+        },
+        {
           // M65. The spawn sheet: where, what, how. ⌘N stays the instant
           // default; this is the considered one.
           label: 'New panel…',
@@ -106,7 +116,7 @@ export function buildAppMenu(options: AppMenuOptions): void {
           click: () => options.onOpenSheet()
         },
         {
-          label: 'New panel from preset',
+          label: 'New panel from saved command',
           submenu: options.presets.map((entry) => ({
             label: menuLabel(entry),
             // Disabled rather than hidden: a user who installed neither CLI
@@ -118,7 +128,7 @@ export function buildAppMenu(options: AppMenuOptions): void {
         {
           // No ellipsis: on macOS that promises a dialog, and M5a opens none —
           // a saved preset names itself. See autoName in presets.ts.
-          label: 'Save panel as preset',
+          label: 'Save panel as command',
           click: () => options.onSavePreset()
         }
       ]

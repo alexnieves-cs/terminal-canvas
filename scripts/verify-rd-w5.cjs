@@ -198,11 +198,18 @@ F.resetAttention()
 ok('rd-w5.snooze.1 a ten-minute shell snooze is the inbox key, and the walk skips it',
   snoozed.get('shell') === 1000 + 10 * 60 * 1000 && snoozeStep !== null && snoozeStep.id === 'other' &&
   /questionSnoozeKey\(id\)/.test(snoozePub) && /SNOOZE_FOR_MS \/ 60_000/.test(snoozePub) &&
-  /snoozeDecision\(questionSnoozeKey\(id\), minutes, now\)/.test(snoozePub) &&
+  /snoozeDecision\(key, minutes, now\)/.test(snoozePub) &&
   /decisionSnoozed\(questionSnoozeKey\(id\), now\)/.test(snoozePub) &&
   /return `q:\$\{panelId\}`/.test(inboxSrc) &&
   !/minutes:\s*10\b/.test(inboxSrc) &&
   /!snoozed\.has\(id\)/.test(inboxSrc))
+
+// The World walks panels; the inbox keys a permission request by request id.
+// A panel's snooze must reach both, or a request snoozed in one place still
+// shows in the other.
+ok('rd-w5.snooze.2 a World snooze writes and reads the panel\'s permission keys too, not only its question key',
+  /keysOf = \(id: string\)/.test(snoozePub) && /inboxKeyOf\(\{ id, approval: a \}\)/.test(snoozePub) &&
+  /pending\.every\(/.test(snoozePub))
 
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')

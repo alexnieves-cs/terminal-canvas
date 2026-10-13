@@ -163,7 +163,8 @@ export function sessionsTitle(facts: readonly { tone: StateTone }[]): string {
   }
   const parts = ['Sessions']
   if (live > 0) parts.push(live === 1 ? '1 live' : `${live} live`)
-  if (dormant > 0) parts.push(dormant === 1 ? '1 dormant' : `${dormant} dormant`)
+  // The UX pass: "asleep", the state word every other surface says.
+  if (dormant > 0) parts.push(dormant === 1 ? '1 asleep' : `${dormant} asleep`)
   return parts.join(' · ')
 }
 

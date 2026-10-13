@@ -44,12 +44,18 @@ export function EmptyState({ id, glyph, onVerb, fill, attrs, children }: {
  * places a flowchart process step (owner, Oct 6 2026); the ghost line names
  * that step.
  */
-export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout }: {
+export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt }: {
   workspace: string
   repo?: string | null
   onStart?: (sentence: string) => void
   onQuick?: (id: 'agent' | 'shell' | 'import') => void
   onLayout?: (id: string) => void
+  /**
+   * The UX pass (5.5). Agents already running in the person's own tmux, and
+   * the offer to put them here. Each becomes a panel attached to that
+   * session; nothing starts and nothing in their tmux changes.
+   */
+  adopt?: { sentence: string; onPlace: () => void; onLeave: () => void } | null
 }): JSX.Element {
   const [text, setText] = useState('')
   const verb = blankTaskVerb(text)
@@ -66,6 +72,13 @@ export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout }: {
           <span className="rd-empty__chip">{repoChipLabel(repo)}</span>
           <button type="button" className="rd-empty__start" disabled={!verb.enabled} title={verb.reason} onClick={() => { if (verb.enabled) onStart?.(text) }}>{verb.label}</button>
         </div>
+        {adopt != null && (
+          <div className="rd-empty__adopt" data-rd-empty-adopt="" role="status">
+            <span>{adopt.sentence}</span>
+            <button type="button" className="rd-empty__start" data-rd-empty-adopt-place="" onClick={adopt.onPlace}>Put them on the canvas</button>
+            <button type="button" data-rd-empty-adopt-leave="" onClick={adopt.onLeave}>Not now</button>
+          </div>
+        )}
         <div className="rd-empty__quick">
           <button type="button" onClick={() => onQuick?.('agent')}>Claude Code {agent?.chord ?? ''}</button>
           <button type="button" onClick={() => onQuick?.('shell')}>Shell {shell?.chord ?? ''}</button>

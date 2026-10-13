@@ -195,7 +195,7 @@ check(S, 'swarm.refuse.1 an arrangement that arrived from outside is INERT — r
 check(S, 'swarm.refuse.2 no agent CLI and no places each refuse by NAME, with the fix in the sentence', (m) => {
   const cli = m.swarmRefusal(m.SWARM_PRESETS.explore, { ...AVAILABLE, agentAvailable: false })
   const places = m.swarmRefusal(m.SWARM_PRESETS.explore, { agentAvailable: true, teammate: { name: 'ada', places: [] } })
-  return { pass: /PATH/.test(cli) && /environment report/.test(cli) && /ada has no places/.test(places) && /Teammates pane/.test(places), detail: { cli, places } }
+  return { pass: /PATH/.test(cli) && /environment report/.test(cli) && /ada has no places/.test(places) && /Agent profiles/.test(places), detail: { cli, places } }
 })
 
 check(S, 'swarm.refuse.3 a review arrangement refuses over a todo card and names the fix; explore starts from todo', (m) => {

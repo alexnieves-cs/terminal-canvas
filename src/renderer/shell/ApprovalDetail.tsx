@@ -165,7 +165,7 @@ export function InlineApproval({
     <div className="inline-approval" data-inline-approval="" role="group" aria-label="Needs you" onMouseDown={stop}>
       <p className="inline-approval__ask">{approval.argument}</p>
       <div className="inline-approval__verbs">
-        <button type="button" data-inline-allow onMouseDown={stop} onClick={onAllow}>Allow <kbd>Y</kbd> <kbd>⌘Y</kbd></button>
+        <button type="button" data-inline-allow onMouseDown={stop} onClick={onAllow}>Allow once <kbd>⌘Y</kbd></button>
         <button type="button" data-inline-diff onMouseDown={stop} onClick={onViewDiff}>View diff</button>
         <button type="button" data-inline-deny onMouseDown={stop} onClick={onDeny}>Deny</button>
       </div>

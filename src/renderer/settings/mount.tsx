@@ -20,7 +20,7 @@ import {
 import type { SettingsPaneId } from './panes'
 import { SettingsView } from './SettingsView'
 
-const PANE_IDS: readonly SettingsPaneId[] = ['general', 'appearance', 'agents', 'sessions', 'keyboard', 'integrations', 'privacy']
+const PANE_IDS: readonly SettingsPaneId[] = ['general', 'appearance', 'terminal', 'agents', 'sessions', 'keyboard', 'integrations', 'privacy']
 
 function isPane(value: string | undefined): value is SettingsPaneId {
   return value !== undefined && (PANE_IDS as readonly string[]).includes(value)

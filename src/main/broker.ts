@@ -233,8 +233,8 @@ export function createBroker(deps: BrokerDeps): Broker {
       // the audit shows the attempt with no token behind it.
       if (req.teammateId !== undefined) {
         const granted = deps.services?.(req.teammateId)
-        if (granted === undefined) return refuse(req, `no teammate is called ${req.teammateId}, or this window scopes no services — open the Teammates pane`, NOT_GRANTED_CODE)
-        if (!granted.includes(req.service)) return refuse(req, `${req.service} is not granted to this teammate — grant ${req.service} to it in the Teammates pane`, NOT_GRANTED_CODE)
+        if (granted === undefined) return refuse(req, `no agent profile is called ${req.teammateId}, or this window scopes no services — open Agent profiles`, NOT_GRANTED_CODE)
+        if (!granted.includes(req.service)) return refuse(req, `${req.service} is not granted to this agent profile — grant ${req.service} to it in Agent profiles`, NOT_GRANTED_CODE)
       }
       // M255. A write needs someone to have been asked: a teammate's card
       // (below) or a person's confirmation in main. Checked BEFORE the

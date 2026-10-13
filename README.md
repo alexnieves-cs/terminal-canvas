@@ -502,7 +502,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        memory:list / memory:add / vault:read
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
-                       env:report / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
+                       env:report / tmux:adoptable / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
                        check:output / combine:run / lane:merge
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover

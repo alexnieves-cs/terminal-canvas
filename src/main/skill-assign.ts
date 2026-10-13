@@ -119,7 +119,7 @@ export function assignSkillsToTeammate(
   keys: readonly SkillKey[]
 ): AssignResult {
   const t = teammates.find((x) => x.id === teammateId)
-  if (t === undefined) return { ok: false, reason: `no teammate is called ${teammateId} — it may have been deleted; open the Teammates pane` }
+  if (t === undefined) return { ok: false, reason: `no agent profile is called ${teammateId} — it may have been deleted; open Agent profiles` }
   const existing = t.skills ?? []
   const merged = Array.from(new Set([...existing, ...keys]))
   return { ok: true, teammate: { ...t, skills: merged } }

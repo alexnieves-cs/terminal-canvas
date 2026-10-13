@@ -73,7 +73,7 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
         {past ? (
           <>
             <span id={reasonId} className="sr-only">{PAST_ROOM_REASON}</span>
-            <button type="button" className="world-card__act world-card__act--go" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="allow">Approve</button>
+            <button type="button" className="world-card__act world-card__act--go" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="allow">Allow once</button>
             <button type="button" className="world-card__act" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="deny">Deny</button>
             <button type="button" className="world-card__act" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-answer="open">Open in Canvas</button>
           </>
@@ -81,7 +81,7 @@ export function RequestBlock({ agentId }: { agentId: string }): JSX.Element {
           <>
             {asked !== undefined && actions !== null ? (
               <>
-                <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Approve</button>
+                <button type="button" className="world-card__act world-card__act--go" onClick={() => actions.answer(agentId, asked.requestId, true)} data-world-answer="allow">Allow once</button>
                 <button type="button" className="world-card__act" onClick={() => actions.answer(agentId, asked.requestId, false)} data-world-answer="deny">Deny</button>
               </>
             ) : null}
@@ -108,7 +108,7 @@ export function AskApprove({ agentId }: { agentId: string }): JSX.Element | null
     return (
       <>
         <span id={reasonId} className="sr-only">{PAST_ROOM_REASON}</span>
-        <button type="button" className="world-chip__approve" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-ask-approve>Approve</button>
+        <button type="button" className="world-chip__approve" disabled={past} title={PAST_ROOM_REASON} aria-describedby={reasonId} data-world-ask-approve>Allow once</button>
       </>
     )
   }

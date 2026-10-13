@@ -32,6 +32,20 @@ export function SettingsView({
     return () => { stop = true; off() }
   }, [])
 
+  // Escape leaves the page, the way every other sheet in the app is left. A
+  // shortcut being recorded takes Escape first (KeyboardPane listens in the
+  // capture phase and stops it), so cancelling a recording never also
+  // closes Settings.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
+      event.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const current = settingsPane(pane)
   const stored = rows.find((row) => row.id === 'keyboard.overrides')
   const overrides = parseOverrideList(Array.isArray(stored?.value) ? stored.value.filter((item): item is string => typeof item === 'string') : [])

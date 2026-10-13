@@ -5449,7 +5449,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const panelsBefore = await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
         await wc.executeJavaScript(
-          `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+          `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
         const liveId = await waitUntil(async () => {
           const now = await wc.executeJavaScript(
             `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -5565,7 +5565,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
 
         // A LIVE terminal, through Cmd+N — a restored one is dormant (editor.1d's measured lesson).
         const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
         const liveId = await waitUntil(async () => {
           const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
           return now.find((id) => !before.includes(id)) ?? false

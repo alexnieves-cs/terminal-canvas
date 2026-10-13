@@ -103,3 +103,11 @@ chain because they are `verify:*` scripts. The lane replaces the body. `verify:m
 `rd-own.1` pins that every lane has a script, markers, and no same-wave file collision
 except `styles.css`.
 
+
+## The UX pass (after 6.0)
+
+`verify:ux` is plain node. It pins the first-run doors (onboarding reads the env report and
+saves its answers; the blank card's buttons are wired), the words the UI uses for one thing,
+and the loop after an agent runs. Wiring that lives in `Canvas.tsx` is read as text, because a
+callback that was never passed renders a button that does nothing and no other suite notices.
+The proposals it implements are in the project's `notes/ux-proposals.md`.

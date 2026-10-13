@@ -60,7 +60,7 @@ export function carryRoutine(r: PersistedRoutine): PersistedRoutine {
  */
 export function routineRefusal(r: PersistedRoutine, teammate: { name: string; scheduling: boolean; places?: readonly string[] } | undefined, facts: PlanFacts = { panels: [] }): string | null {
   if (r.name.trim() === '') return 'a routine needs a name'
-  if (teammate === undefined) return `no teammate is called ${r.teammateId} — pick one in the Teammates pane`
+  if (teammate === undefined) return `no agent profile is called ${r.teammateId} — pick one in Agent profiles`
   if (!teammate.scheduling) return `${teammate.name} may not be scheduled — allow scheduling on the teammate first`
   if (teammate.places !== undefined && teammate.places.length === 0) return `${teammate.name} has no places — a routine's chat needs a folder to work in; add one first`
   if (!Number.isFinite(r.everyMs) || r.everyMs < ROUTINE_MIN_MS) return `the shortest interval is ${ROUTINE_MIN_MS / 60_000} minute${ROUTINE_MIN_MS === 60_000 ? '' : 's'}`

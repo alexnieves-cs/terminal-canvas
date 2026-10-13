@@ -48,6 +48,12 @@ The canvas palette is also ⌘K.
 lock (⌘⇧L), in which case every key goes to the terminal. This is shown in
 mockup 08.
 
+**Amended (the UX pass, 2026-10-13, at the owner's word).** Two chords pass
+the lock: ⌘J / ⌘⇧J (next or previous that needs you) and ⌘Y (allow the
+pending request). Neither means anything to a terminal, and they are what a
+person needs while a locked agent works. Every other key still goes to the
+terminal.
+
 ## D5 — Chord migrations
 
 Conflict: Tidy is ⌘⌥T today and ⌘⇧T in the concept. New chords: ⌘1/2/3, ⌘0,

@@ -106,6 +106,9 @@ export interface PaletteContext {
   /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
   /** M100. How many teammates the roster holds, for the door's hint. */
   teammateCount?: number
+  /** The UX pass. The person's routines and saved recipes, one palette row each. */
+  routines?: readonly { id: string; name: string }[]
+  savedRecipes?: readonly { id: string; name: string }[]
   templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /**
    * M76. Every pending permission request on this renderer, with the panel's

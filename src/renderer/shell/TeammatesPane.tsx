@@ -56,22 +56,22 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
     setDraft('')
   }
   return (
-    <div className="shell__tree teammates-pane" aria-label="Teammates" data-teammates-pane>
+    <div className="shell__tree teammates-pane" aria-label="Agent profiles" data-teammates-pane>
       <div className="shell__region-title shell__region-title--action navigator__header">
-        <span className="shell__tree-root">Teammates</span>
+        <span className="shell__tree-root">Agent profiles</span>
         <span className="navigator__header-actions">
-          <button type="button" className="shell__rail-toggle icon-button" title="Hide Teammates (⌘\)" aria-label="Hide Teammates" {...shellControl(props.onToggle)}><ChevronLeft /></button>
+          <button type="button" className="shell__rail-toggle icon-button" title="Hide Agent profiles (⌘\)" aria-label="Hide Agent profiles" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
       <div className="teammates-pane__new">
-        <input className="teammates-pane__name" data-teammates-new placeholder="a new teammate's name…" value={draft}
+        <input className="teammates-pane__name" data-teammates-new placeholder="a new agent profile's name…" value={draft}
           onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitNew() }} />
-        <button type="button" className="shell__region-add icon-button" data-teammates-add title="Add this teammate" aria-label="Add this teammate" disabled={draft.trim() === ''} {...shellControl(submitNew)}><Plus /></button>
+        <button type="button" className="shell__region-add icon-button" data-teammates-add title="Add this agent profile" aria-label="Add this agent profile" disabled={draft.trim() === ''} {...shellControl(submitNew)}><Plus /></button>
       </div>
       {!props.loaded ? (
         <p className="pf__note" data-teammates-note>reading the roster…</p>
       ) : props.teammates.length === 0 ? (
-        <p className="pf__note" data-teammates-note>no teammates yet — name one above; it starts with no places, no services and no schedule</p>
+        <p className="pf__note" data-teammates-note>no agent profiles yet — name one above; it starts with no places, no services and no schedule</p>
       ) : (
         <ul className="rail-list rail-list--teammates" data-teammates-list>
           {props.teammates.map((t) => (
@@ -100,12 +100,12 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
           <label className="teammates-pane__field">
             <span className="teammates-pane__label">brief</span>
             <textarea className="teammates-pane__brief" data-teammate-brief defaultValue={selected.brief} key={selected.id}
-              placeholder="what this teammate is for — appended to every spawn's system prompt"
+              placeholder="what this agent profile is for — appended to every spawn's system prompt"
               onBlur={(e) => { if (e.target.value !== selected.brief) props.onSave({ ...selected, brief: e.target.value }) }} />
           </label>
           <div className="teammates-pane__field">
             <span className="teammates-pane__label">places</span>
-            {selected.places.length === 0 && <p className="pf__note" data-teammate-no-places>no places — this teammate can touch nothing until you add a folder</p>}
+            {selected.places.length === 0 && <p className="pf__note" data-teammate-no-places>no places — this agent profile can touch nothing until you add a folder</p>}
             <ul className="teammates-pane__list">
               {selected.places.map((p) => (
                 <li key={p} className="teammates-pane__item" data-teammate-place={p}>
@@ -114,7 +114,7 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
                 </li>
               ))}
             </ul>
-            <button type="button" className="pf__verb pf__verb--word" data-teammate-add-place title="Choose a folder this teammate may touch" {...shellControl(() => props.onAddPlace(selected.id))}>add a place…</button>
+            <button type="button" className="pf__verb pf__verb--word" data-teammate-add-place title="Choose a folder this agent profile may touch" {...shellControl(() => props.onAddPlace(selected.id))}>add a place…</button>
           </div>
           <div className="teammates-pane__field">
             <span className="teammates-pane__label">services</span>

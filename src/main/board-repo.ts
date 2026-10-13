@@ -110,7 +110,7 @@ export function repositoriesAnswer(
   mate: { name: string; places: readonly string[] } | undefined,
   deps: RepoListDeps
 ): { kind: 'repos'; repos: { path: string; repo: string | null }[] } | { kind: 'no-places'; reason: string } | { kind: 'refused'; reason: string } {
-  if (mate === undefined) return { kind: 'refused', reason: 'no teammate is called that — it may have been deleted; open the Teammates pane' }
-  if (mate.places.length === 0) return { kind: 'no-places', reason: `${mate.name} has no places — add a folder in the Teammates pane before it can work anywhere` }
+  if (mate === undefined) return { kind: 'refused', reason: 'no agent profile is called that — it may have been deleted; open Agent profiles' }
+  if (mate.places.length === 0) return { kind: 'no-places', reason: `${mate.name} has no places — add a folder in Agent profiles before it can work anywhere` }
   return { kind: 'repos', repos: repositoriesUnderPlaces(mate.places, deps) }
 }
