@@ -335,10 +335,12 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
       const backH = await benchH()
+      // Evidence for a red run: the height chain the bench's `flex: 1` fills.
+      const chain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } return { inner: innerHeight, chain: out } })()`)
       ok(IDS[4],
         context && context.review === 'none' && context.checks === true && lane !== undefined && context.where.includes(lane.branch) &&
           reading === true && readDiff === true && readH > restH + 150 && back === true && Math.abs(backH - restH) <= 2,
-        JSON.stringify({ context, restH, readH, backH, reading, back }))
+        JSON.stringify({ context, restH, readH, backH, reading, back, chain }))
 
       // orch-bench.3 — the exit criterion's first sentence.
       await click('[data-orch-workbench] [data-orch-bench-mark]')
