@@ -416,9 +416,11 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
           any time, and the line says whether it was verified — a recipe saved
           from an unverified task is the person's call, stated, not hidden. */}
       {p.onSaveRecipe !== undefined && !p.readOnly && (
-        <details className="task-review__block task-review__more" data-task-save-recipe>
+        <details className="task-review__block task-review__more" data-task-save-recipe open={verification.stage === 'verified' || undefined}>
           {/* M315. Behind a disclosure: a recipe is about the NEXT task, and at
-              rest it competed with the decisions this one is waiting on. */}
+              rest it competed with the decisions this one is waiting on. The
+              UX pass (5.3): once the task is verified nothing is waiting, so
+              the offer opens by itself — the moment a recipe is worth saving. */}
           <summary className="task-review__label">Save as a recipe for next time</summary>
           {recipeName === null ? (
             <>

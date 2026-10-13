@@ -20,7 +20,8 @@ buildSync({
       import { STARTER_LAYOUTS, LINEUP_IDS } from '../src/shared/lineups'
       import { readyReviews, nextReview, arrivedReviews, reviewNotice } from '../src/renderer/shell/ready-review'
       import { quickAccept, QUICK_ACCEPT_MAX_FILES } from '../src/renderer/review/quick-accept'
-      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES }
+      import { taskSeedFromPaste } from '../src/shared/paste-task'
+      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste }
     `,
     resolveDir: __dirname,
     sourcefile: 'ux-entry.ts',
@@ -231,6 +232,48 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
     /label: 'New panel…'/.test(menu) && !/note, picture…/.test(menu) && /createObject\('note'\)/.test(menu) && /createObject\('image'\)/.test(menu) &&
       /data-env-banner-check \{\.\.\.shellControl\(\(\) => palette\.openPalette\('environment'\)\)\}/.test(canvas) && !/Environment… in ⌘K says what was/.test(canvas),
     '')
+}
+
+// ── Beyond the window ────────────────────────────────────────────────────
+
+{
+  const bar = read('src/main/menu-bar.ts')
+  const stores = read('src/main/bootstrap/stores.ts')
+  const index = read('src/main/index.ts')
+  ok('ux.reach.2 a menu-bar item shows the dock badge\'s own count and opens New task; a system-wide chord opens it too, yielding when another app holds it',
+    /badge: \(count\) => \{ app\.dock\?\.setBadge\([^}]*\); menuBarCount\(count\) \}/.test(stores) &&
+      /installMenuBar\(\(\) => state\.window\)/.test(index) &&
+      /send\(IPC_EVENTS\.SPAWN_OPEN_SHEET, 'task'\)/.test(bar) && /globalShortcut\.register\(NEW_TASK_GLOBAL_CHORD, newTask\)/.test(bar) &&
+      /if \(!ok\) console\.warn/.test(bar) && /n > 0 \? String\(n\) : ''/.test(bar) &&
+      /if \(typeof id === 'string'\) attentionJumpRef\.current\(id\)\s*else jumpAttentionImplRef\.current\(1\)/.test(canvas),
+    '')
+}
+
+{
+  const S = M.taskSeedFromPaste
+  const issue = S('https://github.com/acme/api/issues/42')
+  const pr = S(' https://github.com/acme/api/pull/7 ')
+  const ci = S('https://github.com/acme/api/actions/runs/123456')
+  const jira = S('https://acme.atlassian.net/browse/PAY-881')
+  const js = S("TypeError: Cannot read properties of undefined (reading 'id')\n    at load (src/a.ts:3:9)\n    at main (src/b.ts:1:1)")
+  const py = S('Traceback (most recent call last):\n  File "app.py", line 4, in <module>\nKeyError: \'x\'')
+  const prose = S('remember to buy milk\nand eggs')
+  const other = S('https://example.com/page')
+  const clip = read('src/renderer/canvas/useCanvasClipboard.ts')
+  ok('ux.paste.1 an issue, PR, CI or ticket link, or an error, pasted on the empty canvas opens New task filled in (never started); prose and other links do not',
+    issue.title === 'Resolve acme/api#42' && /issues\/42/.test(issue.brief) && pr.title === 'Review acme/api#7' &&
+      ci.title === 'Fix the failing CI run' && jira.title === 'Resolve PAY-881' &&
+      /^Fix: TypeError/.test(js.title) && /```/.test(js.brief) && /^Fix: KeyError/.test(py.title) &&
+      prose === null && other === null && S('') === null &&
+      /if \(seed !== null && start !== null\) \{ start\(seed\); return \}/.test(clip) &&
+      /getStartTask: \(\) => \(seed\) => paletteActionsRef\.current\?\.beginStartWork\(seed\)/.test(canvas),
+    JSON.stringify({ issue, pr, ci, jira, js: js && js.title, py: py && py.title }))
+}
+
+{
+  const review = read('src/renderer/review/TaskReviewPanel.tsx')
+  ok('ux.recipe.1 Save as a recipe opens by itself once the task is verified',
+    /data-task-save-recipe open=\{verification\.stage === 'verified' \|\| undefined\}/.test(review), '')
 }
 
 const passed = results.filter((r) => r.pass).length

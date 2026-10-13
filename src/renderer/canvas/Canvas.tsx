@@ -1858,7 +1858,8 @@ export function Canvas({
   const { sayRef, editRef: canvasEditRef } = useCanvasClipboard({
     registry, focusedIdRef, panelsRef, shouldIgnoreKeys,
     getAddImage: () => addImageRef.current,
-    getObjects: () => objectClipboardRef.current
+    getObjects: () => objectClipboardRef.current,
+    getStartTask: () => (seed) => paletteActionsRef.current?.beginStartWork(seed)
   })
 
   // ONE subscription for the whole canvas, not one per panel: the payload
@@ -1963,7 +1964,11 @@ export function Canvas({
   // ref assigned below, once workspaceRows and switchWorkspace exist, so a
   // click there switches first instead of framing an id this canvas lacks.
   const attentionJumpRef = useRef<(panelId: string) => void>(jumpToAttention)
-  useEffect(() => window.canvas.agent.onAttentionJump((id) => attentionJumpRef.current(id)), [])
+  // The UX pass: the menu-bar item's "show the next" sends no id — it is ⌘J.
+  useEffect(() => window.canvas.agent.onAttentionJump((id) => {
+    if (typeof id === 'string') attentionJumpRef.current(id)
+    else jumpAttentionImplRef.current(1)
+  }), [])
 
   // One subscription for the whole canvas, like agent.onState above and for the
   // same reason: the store fans out per panel id, so a per-panel subscription

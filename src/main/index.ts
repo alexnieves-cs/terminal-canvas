@@ -18,6 +18,7 @@ import { createMainState, createPanelTokens } from './bootstrap/context'
 import { createStores } from './bootstrap/stores'
 import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
+import { installMenuBar } from './menu-bar'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
@@ -473,6 +474,11 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (state.window === null || state.window.isDestroyed()) createWindow(state, stores)
   })
+
+  // The UX pass (5.1). The menu-bar count and the system-wide New task chord,
+  // on the winning side of the lock only, like the control door above. The
+  // window is read at use (rule 1): it can be closed and remade.
+  installMenuBar(() => state.window)
 
   // A second launch of this build reaches the running instance here rather
   // than starting a process of its own. Restoring is not optional: on darwin
