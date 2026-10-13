@@ -33,5 +33,7 @@ jobs:
           grep -E '^[0-9]+/[0-9]+ passed|^FAILED' suite.log | cut -c1-300 || true
           echo "=== FAIL lines"
           grep -E '^(FAIL|\s*FAIL)' suite.log | cut -c1-2500 || true
+          echo "=== digest"
+          grep -E '^DIGEST' suite.log | cut -c1-3000 || true
           echo "=== errors"
           grep -nE 'Error|rejection|watchdog' suite.log | grep -v MaxListeners | cut -c1-400 | head -40 || true

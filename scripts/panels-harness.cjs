@@ -2055,6 +2055,28 @@ app.whenReady().then(async () => {
     // just crashing is exactly the silent hang this suite exists to avoid.
     console.error('\nFAIL  infrastructure error: ' + (error && error.stack ? error.stack : error))
     results.push({ n: 'infrastructure', pass: false, detail: String(error) })
+    // A digest of what the page looked like at the throw. An "infrastructure"
+    // line names a missing target and nothing else, and CI is the only place
+    // these suites can be watched, so the page's own state goes in the log.
+    try {
+      const digest = await wc.executeJavaScript(`(() => {
+        const rect = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }
+        const over = [...document.body.querySelectorAll('*')].filter((el) => {
+          const cs = getComputedStyle(el)
+          return (cs.position === 'fixed' || cs.position === 'absolute') && el.parentElement === document.body.firstElementChild || (cs.position === 'fixed')
+        }).slice(0, 25).map((el) => el.tagName.toLowerCase() + '.' + String(el.className).slice(0, 60) + ' ' + rect(el).join(','))
+        const canvas = document.querySelector('.canvas')
+        return {
+          win: [innerWidth, innerHeight], focus: document.hasFocus(),
+          canvas: canvas ? rect(canvas) : null,
+          panels: document.querySelectorAll('.panel').length, cards: document.querySelectorAll('.panel__card').length,
+          active: document.activeElement ? document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 40) : null,
+          dialogs: [...document.querySelectorAll('[role=dialog],.palette,.sheet,.launcher,.modal')].map((el) => el.tagName.toLowerCase() + '.' + String(el.className).slice(0, 40) + ' ' + rect(el).join(',')),
+          fixed: over
+        }
+      })()`)
+      console.error('DIGEST ' + JSON.stringify(digest))
+    } catch (digestError) { console.error('DIGEST unavailable: ' + digestError) }
   } finally {
     if (!watchdogFired) {
       // headroom.1 — THE DRIFT ALARM. Each part's WATCHDOG_MS is 1.25x a measured
