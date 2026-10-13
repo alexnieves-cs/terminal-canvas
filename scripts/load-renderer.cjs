@@ -83,39 +83,25 @@ const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = f
       // focus from anything) is the harness matching production, not a
       // looser check. Local runs keep their hidden window.
       if (process.env.CI) {
-        // macOS clamps a window to the screen when it is first shown, and a
-        // hosted runner's screen is 1024 wide: the shell then lands in its
-        // compact breakpoint (rail and inspector are drawers, nav width 0)
-        // although the harness asked for 1400. `keepSize` puts the requested
-        // frame back; setBounds is not constrained to the screen the way a
-        // first presentation is.
-        const wanted = win.getBounds()
+        // A hosted runner has a 1024x~700 screen and nobody at the keyboard.
+        // The harness window is OFFSCREEN there (panels-harness.cjs), so the
+        // screen cannot clamp it, but it also never becomes the key window:
+        // emulate focus, or every check that reads document.hasFocus() or
+        // types into the page sees a backgrounded app. And setSize does not
+        // resize an offscreen surface, so route it to a device-metrics
+        // override, which does.
+        const wc = win.webContents
         win.showInactive()
+        wc.focus()
         if (keepSize) {
-          // The clamp survives setBounds and enableLargerThanScreen alike, and
-          // it lands AFTER showInactive returns (an innerWidth read 600ms
-          // later still saw the unclamped size). So follow the window: zoom
-          // the page out by the clamp's ratio whenever the content area is
-          // smaller than asked for. Layout, elementFromPoint and in-page
-          // events all work in CSS px, so every check sees 1400x900.
-          const fit = () => {
-            if (win.isDestroyed()) return
-            const [cw, ch] = win.getContentSize()
-            const ratio = Math.min(1, cw / wanted.width, ch / wanted.height)
-            if (Math.abs(win.webContents.getZoomFactor() - ratio) > 0.001) {
-              win.webContents.setZoomFactor(ratio)
-              log(`[harness] content ${cw}x${ch} of ${wanted.width}x${wanted.height}: page zoom ${ratio.toFixed(3)}`)
-            }
+          try { wc.debugger.attach('1.3') } catch { /* already attached */ }
+          await wc.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => null)
+          const real = win.setSize.bind(win)
+          win.setSize = (width, height, animate) => {
+            real(width, height, animate)
+            wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }).catch(() => null)
           }
-          fit()
-          win.on('resize', fit)
-          win.webContents.on('did-finish-load', fit)
-          win.webContents.on('did-navigate', fit)
-          // Belt and braces for a clamp that arrives without a resize event.
-          const timer = setInterval(fit, 250)
-          win.once('closed', () => clearInterval(timer))
         }
-        win.webContents.focus()
       }
       return
     } catch (error) {

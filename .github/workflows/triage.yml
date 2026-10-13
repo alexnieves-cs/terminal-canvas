@@ -26,6 +26,8 @@ jobs:
       - run: node node_modules/electron/install.js
       - run: npm run build
       - name: Run suite
+        env:
+          TC_WATCHDOG_SCALE: '2'
         run: npm run verify:${{ matrix.suite }} > suite.log 2>&1 || true
       - name: Failures only
         run: |

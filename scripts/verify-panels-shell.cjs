@@ -938,36 +938,28 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         document.querySelector('.shell__settings').dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
+      // M446. The gear no longer opens the palette in a Settings scope: it opens
+      // the Settings screen (a dialog, `data-settings-root`) and Escape leaves
+      // it. The old half of this check asserted the scope chip, which only the
+      // pre-redesign gear produced; the unscoped-Search half above is unchanged.
       await waitUntil(
-        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        () => wc.executeJavaScript(`document.querySelector('[data-settings-root]') !== null`), 2000)
       await sleep(150)
       const inScope = await wc.executeJavaScript(`(() => {
-        const chip = document.querySelector('.palette__scope')
-        const rows = [...document.querySelectorAll('.palette__row')]
+        const root = document.querySelector('[data-settings-root]')
         return {
-          chip: chip ? chip.textContent.trim() : null,
-          sawASetting: rows.some((r) => r.textContent.includes('Idle after'))
+          screen: root ? root.getAttribute('aria-label') : null,
+          sawASetting: !!root && root.textContent.includes('Idle after')
         }
       })()`)
-      // The chip is now ASSERTED at BOTH clicks, not collected into the detail
-      // string and left out of the condition.
-      //
-      // `inScope.chip === 'Settings'` is the gear's half. `sawASetting` alone
-      // does not pin it: a gear that opened the palette with the query
-      // pre-filled — a plausible alternative implementation — would surface a
-      // setting row with no scope at all, and the scope is what makes the
-      // button honest, because a scope survives the user clearing the query
-      // while a pre-filled search does not.
-      //
-      // `searchChip === null` is Search's half, and it is the ONLY clause that
-      // can fail against a Search button mis-wired to openSettingsScope. Note
-      // what the gear-side read cannot do here: it is taken after the GEAR was
-      // clicked, so it reads 'Settings' whether or not Search is also
-      // scope-opening. The two reads are at two different moments on purpose.
-      ok('78 search opens the palette unscoped and settings opens it in the settings scope',
+      // Leave the screen the way a person does, so nothing below sits under it.
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+      await sleep(150)
+      const settingsClosed = await wc.executeJavaScript(`document.querySelector('[data-settings-root]') === null`)
+      ok('78 search opens the palette unscoped and the gear opens the Settings screen, which Escape leaves',
         searchOpened === true && searchChip === null &&
-          inScope.sawASetting === true && inScope.chip === 'Settings',
-        `search=${searchOpened} searchChip=${searchChip} scope=${JSON.stringify(inScope)}`)
+          inScope.screen === 'Settings' && settingsClosed === true,
+        `search=${searchOpened} searchChip=${searchChip} scope=${JSON.stringify(inScope)} closed=${settingsClosed}`)
       // What 76/77/78 LEAVE BEHIND, in the spirit of 73's and 75c's closing
       // notes. The world now holds TWO live panels, not one: check 76's spawn
       // is real and is never undone. The camera is wherever `Fit` put it (a
