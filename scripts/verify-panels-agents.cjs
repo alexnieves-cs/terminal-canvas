@@ -202,7 +202,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             // A PANEL over it is not: that is the failure this arm exists for,
             // and a rect-inside-the-host test alone reports it as a pass.
             const covered = el !== null && el.closest('.panel') !== null
-            return { w: Math.round(r.width), fill: getComputedStyle(p).fill, covered,
+            return { w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
           await wc.executeJavaScript(`(() => { window.__m233Flow('thaw', '', ''); return true })()`)
           // Past EDGE_FIRE_MS, so the fire lapses on the store's own timer
@@ -1264,7 +1264,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           if (!line) return false
           if (!composer || composer.value === '') return false
           return { chatId, termId, message: composer.value, sent: chat.getAttribute('data-chat-turns'), label: document.querySelector('[data-link-label="' + chatId + ':' + termId + '"]')?.textContent ?? null } })()`), 15000)
-        // ONE history entry: a single undo removes the whole shape.
+        // ONE history entry: a single undo removes the whole shape. The new
+        // chat's composer holds focus (and the unsent message), and a focused
+        // text field takes ⌘Z itself (canvas/draft-focus.ts) — so the person's
+        // undo of the canvas starts from the canvas, not from that field.
+        await wc.executeJavaScript(`(document.activeElement && document.activeElement.blur && document.activeElement.blur(), true)`)
         wc.send('edit:undo')
         const undone = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before}`), 5000)
         wc.send('edit:redo')
@@ -2256,6 +2260,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         let guideSeen = false
         if (chrome) {
           const to = { x: chrome.x - 215, y: chrome.y }
+          // A person's pointer arrives before it presses; on a window this wide
+          // the overview map sits over this chrome until a move lets it tuck aside.
+          wc.sendInputEvent({ type: 'mouseMove', x: chrome.x, y: chrome.y })
+          await sleep(200)
           wc.sendInputEvent({ type: 'mouseDown', x: chrome.x, y: chrome.y, button: 'left', clickCount: 1 })
           for (let i = 1; i <= 6; i++) {
             // leftButtonDown, or the drag hook reads buttons === 0 as a release.
@@ -2343,9 +2351,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // or clicked, exactly as a person would find it.
         await wc.executeJavaScript(`window.__m4aWrite('\\r\\n\\r\\n\\r\\n\\r\\n\\r\\n\\r\\nopen http://localhost:5173/ok now\\r\\n')`)
         const marked = await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('localhost') !== null`), 8000)
-        // Zoom out to ~48% through the canvas's own path.
-        for (let i = 0; i < 4; i++) await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))`)
+        // Zoom out through the canvas's own path. Three steps (~58%): the zoom
+        // step is 1.2 now, so a fourth lands at 0.48, under LIVE_MIN_SCALE,
+        // where the terminal under the pointer is a card with no cell to hover.
+        for (let i = 0; i < 3; i++) await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))`)
         await settle()
+        await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('localhost') !== null`), 4000)
         const scale = await wc.executeJavaScript(`window.__m4aScale()`)
         const target = await wc.executeJavaScript(`window.__m4aCellToScreen('localhost')`)
         const hoverOf = () => wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="lA"] .panel__terminal'); return h ? (h.dataset.linkHover ?? null) : null })()`)
@@ -2379,7 +2390,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[1],
           afterPlain === before && opened !== false && opened.target === 'http://localhost:5173/ok' && opened.panelId === 'lA' && urlAfter === urlBefore,
           JSON.stringify({ before, afterPlain, opened, navigated: urlAfter !== urlBefore }))
-        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '0', metaKey: true }))`)
+        await resetZoom(wc)
       } catch (lErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
       } finally {
@@ -2639,7 +2650,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       // run may hold one non-terminal node, and a node has no card.
       for (let i = 0; i < 3; i += 1) wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '~', args: ['-l'] })
       await settle()
-      await cmd('0'); await settle()
+      await resetZoom(wc); await settle()
       const s0 = await scale()
       const d0 = await details()
       const idle0 = await idleText()
@@ -2653,7 +2664,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const z4 = await zoomBelow(0.12); await settle()
       const s4 = await scale()
       const d4 = await details()
-      await cmd('0'); await settle()
+      await resetZoom(wc); await settle()
       const d3 = await details()
       const idle3 = await idleText()
       const all = (list, v) => list.length > 0 && list.every((x) => x === v)
@@ -2766,6 +2777,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       // on its card (with real coordinates — see the M45 lesson) promotes it.
       const live = appeared === true
         ? await waitUntil(async () => wc.executeJavaScript(`(() => {
+            // The comment above is the contract: wake it with a press on its
+            // card (a no-op once it is live) — the tier alone does not promote
+            // a panel placed among many on a large window.
+            const card = document.querySelector('.panel[data-panel-id="${orphanId}"] .panel__card')
+            if (card) { const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })) }
             const s = (window.__m4aSessions ? window.__m4aSessions() : []).find((x) => x.id === '${orphanId}')
             return !!(s && s.spawned) })()`), 8000)
         : false
@@ -2959,7 +2975,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[0],
           woke === true && ok0 === true && ok1 === true && runs !== false &&
             runs.some((r) => /false/.test(r.text) && r.exit === '1') && runs.some((r) => /true/.test(r.text) && r.exit === '0'),
-          JSON.stringify({ woke, ok0, ok1, runs, workState }))
+          JSON.stringify({ woke, ok0, ok1, anyMarks: await wc.executeJavaScript(`document.querySelectorAll('.cmd-mark').length`), shell: process.env.SHELL || null, runs, workState }))
 
         // osc133.2. Enough output to scroll, then Previous prompt from the
         //           palette: viewportY moves back to an earlier mark's line.
@@ -3318,7 +3334,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const live = spawned === false ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"] .panel__slot') !== null`), 6000)
         // Read the cwd NOW, while the task's process is alive — it exits in
         // milliseconds and leaves the PTY list.
-        const spawnedCwd = spawned === false ? null : (ptyManager.list().find((s) => s.panelId === spawned) || { cwd: null }).cwd
+        // A slow runner reaches this line after the process is gone, so the
+        // panel's own spec (what the sheet handed spawn) is the fallback.
+        const spawnedCwd = spawned === false ? null : ((ptyManager.list().find((s) => s.panelId === spawned) || { cwd: null }).cwd
+          ?? await wc.executeJavaScript(`((window.__m5aSpecOf && window.__m5aSpecOf(${JSON.stringify(spawned)})) || { spec: {} }).spec.cwd ?? null`))
         const focused = spawned === false ? false : await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"]').classList.contains('panel--selected')`)
         const exited = spawned === false ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"] [data-state-word]')?.textContent === 'exited 0'`), 8000)
         const cwdOk = spawnedCwd !== null && (spawnedCwd === dirA || spawnedCwd === realpathSync(dirA))
@@ -3390,7 +3409,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                 // (inside its own context) and translated back after the probe.
                 let pr = map ? map.getBoundingClientRect() : null, mr = m.getBoundingClientRect(), moved = false
                 if (pr && (mr.right <= pr.left || mr.left >= pr.right || mr.bottom <= pr.top || mr.top >= pr.bottom)) {
-                  m.style.transform = 'translate(' + Math.round(pr.left + pr.width / 2 - mr.left - mr.width / 2) + 'px,' + Math.round(pr.top + pr.height / 2 - mr.top - 20) + 'px)'
+                  // The `translate` property composes with a transform the menu
+                  // may already carry (its popper positions it that way);
+                  // overwriting `transform` threw it back to the origin.
+                  m.style.translate = Math.round(pr.left + pr.width / 2 - mr.left - mr.width / 2) + 'px ' + Math.round(pr.top + pr.height / 2 - mr.top - 20) + 'px'
                   moved = true; mr = m.getBoundingClientRect()
                 }
                 const overlap = pr ? Math.max(0, Math.min(mr.right, pr.right) - Math.max(mr.left, pr.left)) * Math.max(0, Math.min(mr.bottom, pr.bottom) - Math.max(mr.top, pr.top)) : 0
@@ -3402,7 +3424,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                     if (!pr || x <= pr.left || x >= pr.right || y <= pr.top || y >= pr.bottom) continue
                     probed++; const e = document.elementFromPoint(x, y)
                     if (!e || !m.contains(e)) lost.push(b.textContent.trim().slice(0, 20) + '@' + f + '→' + (e ? String(e.className).split(' ')[0] : null)) } }
-                m.style.transform = ''
+                m.style.translate = ''
                 return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
               press(trig)
               await settle()
@@ -3451,33 +3473,33 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             JSON.stringify(dismiss))
         }
         // M399 (A7) — settings.dismiss.1. SETTINGS OPENED FROM THE DOCK
-        // LEAVES ON ONE ESCAPE. The gear opens the palette straight INTO the
-        // settings scope, and Escape inside a scope pops it — so the first
-        // Esc landed on the root palette, a place the person never visited.
-        // Escape now closes when the scope is the one the palette OPENED into
-        // (a door walked through still pops back to it). A real press on the
-        // gear, real keys; then a real press outside dismisses the reopened
-        // palette the way it always has.
+        // LEAVES ON ONE ESCAPE. The gear used to open the palette straight
+        // into a settings scope, where the first Esc landed on the root
+        // palette — a place the person never visited. Since the redesign the
+        // gear opens the Settings PAGE (a dialog over the canvas): one real
+        // Escape closes it, and the root palette is never what is left. A page
+        // has no "outside" to press, so that half of the old claim is gone.
         {
           let settings = null
           try {
             const gear = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-dock="settings"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
-            const away = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(c.left + 12), y: Math.round(c.top + c.height * 0.9) } })()`)
             const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
-            const state = () => wc.executeJavaScript(`(() => { const p = document.querySelector('.palette'); const s = p && p.querySelector('.palette__scope'); return { open: !!p, scope: s ? s.textContent : null } })()`)
+            const state = () => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-settings-root]'); return { open: !!r, label: r ? r.getAttribute('aria-label') : null, palette: document.querySelector('.palette') !== null } })()`)
+            const esc = async () => { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle() }
             if (gear) {
-              press(gear); const opened = await waitUntil(async () => { const s = await state(); return s.open && s.scope === 'Settings' ? s : false }, 3000)
-              wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
-              await settle()
+              press(gear); const opened = await waitUntil(async () => { const s = await state(); return s.open ? s : false }, 3000)
+              await esc()
               const afterEsc = await state()
               press(gear); const again = await waitUntil(async () => (await state()).open, 3000) === true
-              press(away); const outside = await waitUntil(async () => !(await state()).open, 2000) === true
-              settings = { opened, afterEsc, again, outside }
+              await esc()
+              const last = await state()
+              settings = { opened, afterEsc, again, last }
             }
           } catch (error) { settings = { error: String(error && error.message || error) } }
-          ok('settings.dismiss.1 Settings opened from the dock gear closes on ONE real Escape (never landing on the root palette) and on a real press outside',
-            settings !== null && settings.opened && settings.opened.scope === 'Settings' && settings.afterEsc && settings.afterEsc.open === false &&
-              settings.again === true && settings.outside === true,
+          ok('settings.dismiss.1 Settings opened from the dock gear is the Settings page, closes on ONE real Escape (never landing on the root palette) and opens again',
+            settings !== null && settings.opened && settings.opened.label === 'Settings' && settings.opened.palette === false &&
+              settings.afterEsc && settings.afterEsc.open === false && settings.afterEsc.palette === false &&
+              settings.again === true && settings.last.open === false && settings.last.palette === false,
             JSON.stringify(settings))
         }
         // Merged view: the mounted View-menu button, then its pressed label and the headers.
@@ -3719,6 +3741,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
 
         // front.2. Back to a terminal.
         const ptyBefore2 = ptyManager.list().length
+        // The terminal this opens runs the literal command `claude`. A runner
+        // has none, and a spawn that fails leaves no session to find — so a
+        // stand-in that just stays alive is put first on the PATH main hands
+        // every PTY (the cached login env), for this open only.
+        const fakeBin = mkdtempSync(join(tmpdir(), 'tc panels front-bin '))
+        writeFileSync(join(fakeBin, 'claude'), '#!/bin/sh\nexec sleep 60\n', { mode: 0o755 })
+        const pathWas = loginEnv.PATH
+        loginEnv.PATH = fakeBin + ':' + pathWas
         const back = chatId ? await wc.executeJavaScript(`window.__m74OpenInTerminal(${JSON.stringify(chatId)})`) : null
         const tid = back && back.kind === 'opened' ? back.reason : null
         const spawned = tid ? await waitUntil(async () => (await sessionMap(wc)).has(tid), 8000) : false
@@ -3726,6 +3756,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const spec = tid ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(tid)})`) : null
         const pin = tid ? layoutStore.session(tid) : undefined
         const live = tid ? ptyManager.list().find((s) => s.panelId === tid) : undefined
+        loginEnv.PATH = pathWas
         ok(IDS[1],
           back && back.kind === 'opened' && spawned === true && chatGone === true &&
             spec && spec.spec.args.includes('--resume') && spec.spec.args[spec.spec.args.indexOf('--resume') + 1] === sessionId && spec.spec.agent === 'claude-code' && spec.spec.command === 'claude' &&
@@ -3793,7 +3824,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // MIN_SCALE is 0.1; block band is 0.16–0.20; cluster is below 0.12.
         const atBlock = await zoomBelow(0.155); await settle()
         const block = await readFar()
-        await cmd('0'); await settle()
+        await resetZoom(wc); await settle()
         const words = { ovF: 'file', ovT: 'toolbox', ovJ: 'Jira', ovN: 'note' }
         ok(IDS[0], atSummary && atBlock &&
           ['ovF', 'ovT', 'ovJ', 'ovN'].every((id) => summary[id] && summary[id].summary === words[id] && summary[id].block === null) &&
@@ -3837,14 +3868,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         //       pointer moving on ovA into the map's approach ring tucks the
         //       map aside, and the pixel at the map's centre is then ovA's
         //       (click-through); the pointer leaving brings it back.
-        await cmd('0'); await settle()
+        await resetZoom(wc); await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-minimap]') !== null`), 4000)
         const presence = () => wc.executeJavaScript(`document.querySelector('[data-minimap]')?.getAttribute('data-presence') ?? null`)
         const rest0 = await waitUntil(async () => (await presence()) === 'rest', 3000)
-        await cmd('1'); await settle()
+        await cmd('0'); await settle() // Fit all (⌘0 since the UX pass)
         const hidden = await waitUntil(async () => (await presence()) === 'hidden', 3000)
         const hiddenBox = await wc.executeJavaScript(`(() => { const m = document.querySelector('[data-minimap]'); return m ? { vis: getComputedStyle(m).visibility, w: m.offsetWidth } : null })()`)
-        await cmd('0'); await settle()
+        await resetZoom(wc); await settle()
         const back = await waitUntil(async () => (await presence()) === 'rest', 3000)
         const geo = await wc.executeJavaScript(`(() => { const m = document.querySelector('[data-minimap]').getBoundingClientRect(); const a = document.querySelector('.panel[data-panel-id="ovA"]').getBoundingClientRect()
           return { m: { x: m.left, y: m.top, w: m.width, h: m.height }, a: { x: a.left, y: a.top, w: a.width, h: a.height } } })()`)
@@ -3861,7 +3892,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const hostBox = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas').getBoundingClientRect(); return { x: h.left, y: h.top } })()`)
         await move(Math.round(hostBox.x + 40), Math.round(hostBox.y + 40))
         const returned = await waitUntil(async () => (await presence()) === 'rest', 2000)
-        await cmd('0'); await settle()
+        await resetZoom(wc); await settle()
         ok(IDS[2], rest0 === true && hidden === true && hiddenBox !== null && hiddenBox.vis === 'hidden' && hiddenBox.w > 0 && back === true &&
           onRing === 'ovA' && aside === true && through === 'ovA' && returned === true,
           JSON.stringify({ rest0, hidden, hiddenBox, back, geo, onRing, aside, through, returned, log: oLog.slice(-3) }))

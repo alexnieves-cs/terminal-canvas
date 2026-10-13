@@ -1133,6 +1133,10 @@ app.whenReady().then(async () => {
         let parsed = null
         try { parsed = JSON.parse(line) } catch { parsed = null }
         const cut = Math.floor(chatFixture.length / 2)
+        // The recorded turn lasts 160ms, which a polling check on a loaded
+        // hosted runner can miss end to end (chat.2 reads `working` and found
+        // only `idle`); a slower stream is the same turn, observable.
+        const pace = process.env.CI ? 6 : 1
         const emit = (lines) => { for (const cb of dataCbs) cb(lines.join('\n') + '\n') }
         // M76. A user line whose text starts with `ask:` is answered with a
         // permission request instead of the recorded answer; the answer
@@ -1147,8 +1151,8 @@ app.whenReady().then(async () => {
         } else if (parsed && parsed.type === 'control_response') {
           setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 40)
         } else if (parsed && parsed.type === 'user') {
-          setTimeout(() => { if (!exited) emit(chatFixture.slice(0, cut)) }, 40)
-          setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 160)
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(0, cut)) }, 40 * pace)
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 160 * pace)
         }
       },
       onData(cb) { dataCbs.push(cb) },

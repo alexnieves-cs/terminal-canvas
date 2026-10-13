@@ -963,6 +963,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // extent grew, could not promise.
       const rectOf = (key) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="${key}"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, ax: r.left, ay: r.top } })()`)
       const before = await waitUntil(() => rectOf('n2'), 4000)
+      const before1 = await rectOf('n1')
       const drag = async (from, dx, dy) => {
         const x = Math.round(from.x + from.w / 2), y = Math.round(from.y + from.h / 2)
         wc.focus()
@@ -972,6 +973,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
       if (before) await drag(before, 80, 60)
       const after = await rectOf('n2')
+      const after1 = await rectOf('n1')
+      // The selection can open the inspector, which resizes the flow and lets
+      // it refit (a different zoom AND origin) — so the move is read against the
+      // untouched n1, in block widths, not as a raw screen delta.
+      const movedW = before && before1 && after && after1 ? (after.x - after1.x) / after.w - (before.x - before1.x) / before.w : 0
+      const movedH = before && before1 && after && after1 ? (after.y - after1.y) / after.h - (before.y - before1.y) / before.h : 0
       const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfe"]')?.getAttribute('data-workflow-dirty')`)
       flushLayoutStore()
       const onDisk = layoutStore.current().templates.find((t) => t.id === TPL)
@@ -981,9 +988,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       wc.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' }); await settle()
       const gone = await wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"]') === null && document.querySelector('[data-workflow-block="n1"]') !== null && document.querySelectorAll('[data-workflow-edge]').length === 0`)
       const wholeOnDisk = layoutStore.current().templates.find((t) => t.id === TPL)
-      ok(id, before && after && after.ax > before.ax + 40 && after.ay > before.ay + 30 && dirty === 'true' &&
+      ok(id, before && after && movedW > (80 / before.w) * 0.6 && movedH > (60 / before.h) * 0.6 && dirty === 'true' &&
         diskN2 && diskN2.dx === 300 && selected === 'n2' && gone === true && wholeOnDisk && wholeOnDisk.nodes.length === 2 && wholeOnDisk.edges.length === 1,
-      JSON.stringify({ before, after, dirty, diskN2, selected, gone, diskNodes: wholeOnDisk && wholeOnDisk.nodes.length }))
+      JSON.stringify({ before, after, movedW, movedH, dirty, diskN2, selected, gone, diskNodes: wholeOnDisk && wholeOnDisk.nodes.length }))
     } catch (error) {
       ok(id, false, String(error && error.message || error))
     } finally {
@@ -1204,7 +1211,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ok(ids[2], Array.isArray(fields) && fields.includes('title') && label === 'renamed by inspector' && typeof widthReason === 'string' && /width/.test(widthReason) && widthValue === '999',
         JSON.stringify({ fields, journeyNote, label, widthReason, widthValue }))
     } catch (error) {
-      for (const id of ids) ok(id, false, String(error && error.message || error))
+      for (const id of ids) ok(id, false, String((error && error.stack) || error).split('\n').slice(0, 4).join(' | '))
     } finally {
       layoutStore.deleteTemplate(TPL)
       layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
@@ -4472,6 +4479,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // the DOM, stayed green through it. elementFromPoint at the menu
         // title's centre is the pixel-level question.
         const menuPaint = liveB !== false ? await (async () => {
+          // The menu is judged against the BODY it must clear. On a window as
+          // large as the runner's the overview map sits over this panel's
+          // title, and a dispatched click (unlike a real pointer) never tucks
+          // it aside — so take the map out of the question, then put it back.
+          await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', false)`)
+          await settle()
           await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="hdB"] [data-panel-more]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
           const open = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu]') !== null`), 3000)
           const onTop = await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu-title]'); if (!t) return 'no title'
@@ -4481,6 +4494,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 }))
             c.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 })); return true })()`)
           await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu]') === null`), 3000)
+          await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', true)`)
           return { open, onTop }
         })() : { open: false, onTop: 'hdB never woke' }
         ok('menu.paint.1 the ⋯ menu opened on a LIVE terminal is the element under its own title\'s centre — painted above the body, not merely present in the DOM', menuPaint.open === true && menuPaint.onTop === true, JSON.stringify(menuPaint))
@@ -6633,6 +6647,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       record('esc', fOpen === true && fClicked.expanded === false && fClicked.activePanel === termId && fReached === true,
         JSON.stringify({ fOpen, fClicked, fReached, tail: JSON.stringify(writes.slice(writesAtEsc2).join('').slice(-20)) }))
 
+      const PILL_OPEN = 'button[data-pill-rest], [data-pill-rest] .command-pill__line-main'
       // pill.jump.1 — a real bell puts the shell in wants-you; the camera is
       // panned well away; Jump brings the panel to the centre of the host.
       // The bell rings in a SECOND, never-focused /bin/sh spawned exactly as
@@ -6660,17 +6675,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 700, deltaY: 500, deltaMode: 0 })), true`)
       await settle()
       const away = await offset()
-      await press('[data-pill-rest]'); await settle()
-      const jumped = await press('[data-pill-action="jump"]')
+      // A waiting panel makes the rest pill a line with its own Go control
+      // (⌘J) — the jump is pressed there, not behind an expansion.
+      const jumped = await press('[data-pill-go]')
       const centred = await waitUntil(async () => { const d = await offset(); return d !== null && d < 6 }, 4000)
-      record('jump', rang === true && restAttention === true && /1 panel needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
+      record('jump', rang === true && restAttention === true && /1 (panel|agent) needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
         JSON.stringify({ bellId, rang, bellState, restAttention, restText, away, jumped, centred, final: await offset() }))
-      await press('[data-pill-rest]'); await settle()
 
       // pill.send.1 — the orchestrator door, both arms.
       const offeredBefore = await wc.executeJavaScript(`window.__m81SupervisorOffered ? window.__m81SupervisorOffered() : 'no hook'`)
       const chatsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.dataset.panelId)`)
-      const placeholder = async () => { if (!(await pillState()).expanded) { await press('[data-pill-rest]'); await settle() } return wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); return i ? i.getAttribute('placeholder') : null })()`) }
+      const placeholder = async () => { if (!(await pillState()).expanded) { await press(PILL_OPEN); await settle() } return wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); return i ? i.getAttribute('placeholder') : null })()`) }
       const typeAndSend = (text) => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); if (!i) return false; i.focus()
         const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${q(text)}); i.dispatchEvent(new Event('input', { bubbles: true }))
         i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })); return true })()`)
