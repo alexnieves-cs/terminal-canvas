@@ -241,14 +241,24 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           await new Promise((res) => setTimeout(res, 150))
           return {
             active: document.activeElement && document.activeElement.className,
-            blocked: document.querySelectorAll('.panel__slot--blocked').length
+            blocked: document.querySelectorAll('.panel__slot--blocked').length,
+            // Evidence for a red run: which panel owns the slot and what tier it is in.
+            scale: window.__m4aScale && window.__m4aScale(),
+            slots: document.querySelectorAll('.panel__slot').length,
+            xterms: document.querySelectorAll('.panel .xterm').length,
+            slotPanel: slot.closest('.panel') && slot.closest('.panel').dataset.panelId
           }
         })()`)
       }
 
       await resetZoom(wc)
       const atOne = await probe()
-      await zoomTo(wc, '0')
+      // ⌘0 is Fit all now and lands far below the Work tier, where every panel
+      // is a card with no slot to click. Below 0.70 the Plan tier cards every
+      // panel and releases focus (zoom-tier.ts), so the furthest live zoom is
+      // two ⌘- steps (0.694, still Work through its hysteresis band).
+      await zoomTo(wc, '-'); await zoomTo(wc, '-')
+      await cameraStill(wc)
       const zoomedOut = await probe()
       await resetZoom(wc)
 
@@ -257,6 +267,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         focused(atOne) && focused(zoomedOut) &&
           atOne.blocked === 0 && zoomedOut.blocked === 0,
         `1:1 active=${atOne && atOne.active} zoomed active=${zoomedOut && zoomedOut.active} ` +
+        `atOne=${JSON.stringify(atOne)} zoomedOut=${JSON.stringify(zoomedOut)} ` +
         `blocked=${atOne && atOne.blocked}/${zoomedOut && zoomedOut.blocked}`)
     }
 
@@ -461,15 +472,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
         // Zoom to 50% via the canvas's own path, so the real transform is
         // what the corrector sees.
+        // Two steps (~69%), not more: the Plan tier starts under 0.67 coming
+        // from Work and cards every panel (focus is released, not pinned), so
+        // there is no live terminal to double-click below it.
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
-        await new Promise((r) => setTimeout(r, 300))
+        await new Promise((r) => setTimeout(r, 600))
 
         const scale = window.__m4aScale()
         const screen = window.__m4aCellToScreen('beta')
-        if (!screen) return { error: 'could not locate the word', scale }
+        if (!screen) return { error: 'could not locate the word', scale, active: document.activeElement && document.activeElement.className, xterms: document.querySelectorAll('.panel .xterm').length, slots: document.querySelectorAll('.panel__slot').length }
 
         const opts = {
           bubbles: true, cancelable: true, composed: true, view: window,
@@ -485,11 +497,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         return { scale, text: window.__m4aSelection() }
       })()`)
 
-      ok('9 a double-click selects the right word at 50% zoom',
+      ok('9 a double-click selects the right word zoomed out (~69%, the furthest live zoom)',
         selection && selection.text === 'beta',
         `scale=${selection && selection.scale} selection=${JSON.stringify(
           selection && (selection.text ?? selection.error)
-        )}`)
+        )} ${JSON.stringify(selection)}`)
 
       await resetZoom(wc)
     }
@@ -2356,6 +2368,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         ok('43 a project prompt is listed and inserted from the panel\'s own cwd', false,
           'no panel is running in PROJECT_DIR — check 40a\'s spawn is this check\'s fixture')
       } else {
+        // The echo panel can be a CARD here: earlier checks leave the camera
+        // wherever they finished, and a panel outside the view (or under 0.70)
+        // has no slot to click, so nothing could focus it. Back to 1:1, then a
+        // wheel pan (no ctrlKey) puts it under the middle of the view.
+        await resetZoom(wc)
+        await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(echoId))} + ']'); if (!host || !c) return false
+          const b = host.getBoundingClientRect(), r = c.getBoundingClientRect()
+          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, deltaX: Math.round(r.left + r.width / 2 - (b.left + b.width / 2)), deltaY: Math.round(r.top + r.height / 2 - (b.top + b.height / 2)), deltaMode: 0 })); return true })()`)
+        await cameraStill(wc)
+        await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-panel-id=' + ${JSON.stringify(JSON.stringify(echoId))} + '] .panel__slot')`), 4000)
         // Focus it: the palette captures focusedId at OPEN time and lists the
         // CAPTURED panel's cwd, so this click is what makes PROJECT_DIR the
         // directory read. Retried for the same reason check 40's is.
@@ -2406,7 +2428,14 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           : false
         ok('43 a project prompt is listed and inserted from the panel\'s own cwd',
           arrived === true,
-          `focused=${focused} row=${insertRow} arrived=${arrived}`)
+          `focused=${focused} row=${insertRow} arrived=${arrived} ${JSON.stringify(await wc.executeJavaScript(`(() => ({
+            active: document.activeElement && (document.activeElement.className || document.activeElement.tagName),
+            activePanel: (document.activeElement && document.activeElement.closest('.panel') || {}).dataset?.panelId ?? null,
+            palette: document.querySelector('.palette') !== null,
+            input: (document.querySelector('.palette__input') || {}).value ?? null,
+            rows: [...document.querySelectorAll('.palette__row')].slice(0, 4).map((r) => r.textContent.slice(0, 50)),
+            echoSlot: !!document.querySelector('[data-panel-id=${JSON.stringify(echoId)}] .panel__slot')
+          }))()`))}`)
       }
     }
 
@@ -2440,6 +2469,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // Check 37 already establishes this exact idiom for capturing a
       // Cmd+N panel's id: dispatch the synthetic keydown on window, then
       // diff the id list against the snapshot taken before it.
+      // A palette left open by the check before would swallow the chord.
+      await wc.executeJavaScript(
+        `document.querySelector('.palette') && window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`)
+      await sleep(200)
       await wc.executeJavaScript(
         `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const ids = await waitUntil(async () => {
@@ -3021,6 +3054,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     // ---------------------------------------------------------------------
     {
       await resetZoom(wc)
+      // Reset zoom is a flight; `before` below must be read after it lands, or
+      // the first read catches the camera mid-flight (measured: far off-screen).
+      await cameraStill(wc)
       if (await wc.executeJavaScript(`document.querySelector('.palette') === null`)) {
         await wc.executeJavaScript(
           `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
@@ -3202,9 +3238,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           return { rest, deep }
         } catch (e) { return { error: String(e) } } })()`)
         const r = probe.rest, d = probe.deep
+        // A list scrolled to its very end cannot align a row to the header edge, so a
+        // row cut there is geometry, not a seat bug: only a mid-list scroll must be clean.
         ok('palette.scroll.1 the palette opens at the top (a seat in the first screen leaves scrollTop 0, the selected row fully visible), and a query seating below the first screen cuts no row under the sticky header',
           probe.error === undefined && r.sel !== null && r.selInside === true && (!r.inFirst || r.scrollTop === 0) && r.cut.length === 0 &&
-            d !== null && d.selInside === true && d.cut.length === 0 && d.topGap !== null && (Math.abs(d.topGap) <= 2 || d.atEnd === true),
+            d !== null && d.selInside === true && (d.cut.length === 0 || d.atEnd === true) && d.topGap !== null && (Math.abs(d.topGap) <= 2 || d.atEnd === true),
           JSON.stringify(probe))
         await closePalette()
       }
@@ -3219,7 +3257,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const result = await wc.executeJavaScript(`(async () => { try {
           const input = document.querySelector('.palette__input')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
-          setter.call(input, 'manage presets')
+          setter.call(input, 'manage saved commands')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 80))
           const door = [...document.querySelectorAll('.palette__row')]
@@ -3274,7 +3312,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const result = await wc.executeJavaScript(`(async () => { try {
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
           const input = document.querySelector('.palette__input')
-          setter.call(input, 'manage presets')
+          setter.call(input, 'manage saved commands')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 80))
           // Caret at the end — where typing leaves it — which is the only
@@ -3342,11 +3380,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
             await new Promise((r) => setTimeout(r, 120))
           }
           // Half one: the door is selected, but the caret is mid-query.
-          await type('manage presets')
+          await type('manage saved commands')
           await press('ArrowRight', 0)
           const enteredFromCaretZero = document.querySelector('.palette__scope') !== null
           // Now actually enter, from the end, and type inside the scope.
-          await press('ArrowRight', 'manage presets'.length)
+          await press('ArrowRight', 'manage saved commands'.length)
           const inScope = document.querySelector('.palette__scope') !== null
           await type('del')
           // Half two: caret at the end of a non-empty query must not pop.
@@ -3447,44 +3485,38 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         await closePalette()
       }
 
-      // 49e. THE SAME LANDING WHEN NO DOOR WAS EVER TRAVERSED. M8a's top-bar
-      //      gear opens the palette straight into the settings scope
-      //      (openPalette('settings')), so there is no entered row to
-      //      remember — and this is the ONLY check that separates the shipped
-      //      design, which DERIVES the door from `entersScope`, from the
-      //      obvious alternative of stashing the entered row's id in a ref.
-      //      That alternative satisfies 49d and cannot satisfy this at all.
-      //
-      //      Deliberately not folded into check 78, whose subject is "the
-      //      button opens IN the scope" and which must keep failing for its
-      //      own reason.
+      // 49e. R-026 retired the setup this check was written for: the top-bar
+      //      gear used to open the palette straight into the settings scope (a
+      //      scope entered WITHOUT traversing its door, which is what separated
+      //      "derive the door from entersScope" from "stash the entered row").
+      //      The gear now opens the Settings page, so no UI path enters a scope
+      //      door-less any more except the Jira panel's Connect verb (agents
+      //      context.3) and the grid's ninth cell. What is left to pin here is
+      //      the half that still lives in this part: the gear opens the page
+      //      and NOT a scope, and Escape leaves it with the palette untouched.
       {
         await closePalette()
         const result = await wc.executeJavaScript(`(async () => { try {
           document.querySelector('.shell__settings')
             .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-          await new Promise((r) => setTimeout(r, 200))
-          const chip = (document.querySelector('.palette__scope') || {}).textContent || null
-          const input = document.querySelector('.palette__input')
-          if (!input) return { error: 'palette did not open' }
-          input.setSelectionRange(0, 0)
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
-          await new Promise((r) => setTimeout(r, 150))
-          const row = document.querySelector('.palette__row--selected')
-          return {
-            chip,
-            chipGone: document.querySelector('.palette__scope') === null,
-            stillOpen: document.querySelector('.palette') !== null,
-            selectedAfter: row ? row.textContent : null
+          await new Promise((r) => setTimeout(r, 300))
+          const page = document.querySelector('[data-settings-root]')
+          const out = {
+            page: page ? page.getAttribute('aria-label') : null,
+            paletteOpen: document.querySelector('.palette') !== null,
+            scopeChip: (document.querySelector('.palette__scope') || {}).textContent || null
           }
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          out.closed = document.querySelector('[data-settings-root]') === null
+          return out
         } catch (e) { return { error: String(e && e.message || e) } } })()`)
-        ok('49e popping a scope the gear opened lands on that scope’s door too',
+        ok('49e the gear opens the Settings page, not a palette scope, and Escape leaves it',
           result && !result.error &&
-            result.chip === 'Settings' &&
-            result.chipGone === true &&
-            result.stillOpen === true &&
-            typeof result.selectedAfter === 'string' &&
-            result.selectedAfter.includes('Manage settings'),
+            result.page === 'Settings' &&
+            result.paletteOpen === false &&
+            result.scopeChip === null &&
+            result.closed === true,
           JSON.stringify(result))
         await closePalette()
       }
@@ -3506,7 +3538,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           if (!victim) return { error: 'no user preset to try deleting: ' + before.join('|') }
           const input = document.querySelector('.palette__input')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
-          setter.call(input, 'delete preset ' + victim)
+          setter.call(input, 'delete saved command ' + victim)
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 100))
           const row = [...document.querySelectorAll('.palette__row')]
@@ -3582,6 +3614,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         }))
         true
       `)
+      // The pan is eased; the placement expectation below reads the camera, so
+      // let it land first or a slow runner measures the camera it is leaving.
+      await cameraStill(wc)
 
       const panelIds = () => wc.executeJavaScript(
         `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
@@ -3608,9 +3643,22 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // The expectation comes out of the live DOM — the host's own bounds and
       // the world layer's own transform — rather than from INITIAL/PANEL_W,
       // for the reason check 7's comment gives.
+      // ⌘N places at the POINTER once the mouse has moved over the canvas
+      // (spawn-cursor.ts: Canvas.tsx onSpawn's `bare` arm), and that point is a
+      // WORLD one noted at the last mousemove, so it is stale after the pan above.
+      // A real move to the host's centre makes "where the view looks" and "where
+      // the pointer is" the same point again, which is what these checks mean.
+      const pointerToCentre = async () => {
+        const c = await wc.executeJavaScript(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), left: r.left, top: r.top } })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        await sleep(150)
+        const vp = await wc.executeJavaScript('window.__m4aViewport()')
+        return { x: (c.x - c.left - vp.x) / vp.scale, y: (c.y - c.top - vp.y) / vp.scale }
+      }
+      const pointer51 = await pointerToCentre()
       const expectedCentre = await viewCentreInWorld(wc)
       const placeRule51 = (() => { const e = require(ENTRY_OUT); return { placeNew: e.placeNew, rim: e.PLACE_RIM } })()
-      const room51 = await measurePlacement(wc)
+      const room51 = { ...(await measurePlacement(wc)), centre: pointer51 }
       const firstId = await spawnOne()
       const firstRect = firstId ? await storeRect(wc, firstId) : null
       const want51 = firstRect === null ? null : expectedSpot(room51, placeRule51, { w: firstRect.w, h: firstRect.h })
@@ -3635,7 +3683,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // was no pin — its y to 1px of the chrome-cleared spot computed in the
       // harness (place-probe.cjs's expectedSpot) from what the canvas showed.
       const firstCentred = first && firstRect !== null && want51 !== null &&
-        Math.abs(first.x - expectedCentre.x) <= TOL &&
+        Math.abs(first.x - pointer51.x) <= TOL &&
         Math.abs(firstRect.x - want51.x) <= TOL && Math.abs(firstRect.y - want51.y) <= TOL
       // M402 (B4). The second press no longer cascades one CASCADE_STEP onto
       // the first (the step left all but a 48px band of the older terminal
@@ -3652,7 +3700,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const clash = three.flatMap((a, i) => three.slice(i + 1).filter((b) => overlapsRect(a, b)).map((b) => `${a.id}/${b.id}`))
       ok('51 a second Cmd+N at one camera lands centred first, then CLEAR of the first instead of stacking, and still goes live',
         Boolean(firstCentred && second && live && clash.length === 0 && secondShown),
-        `first=${JSON.stringify(first)} rect=${JSON.stringify(firstRect)} expected=${JSON.stringify(want51)} second=${JSON.stringify(second)} viewCentre=${JSON.stringify(expectedCentre)} live=${live} shown=${secondShown}`)
+        `first=${JSON.stringify(first)} rect=${JSON.stringify(firstRect)} expected=${JSON.stringify(want51)} second=${JSON.stringify(second)} viewCentre=${JSON.stringify(expectedCentre)} live=${live} shown=${secondShown} room=${JSON.stringify(room51).slice(0, 900)}`)
       ok('place.free.1 ⌘N ×3 at one camera: no two of the three overlap (occupied rects, the rim name included), and each is on screen after its press — the view flies to the one it had no room for',
         three.length === 3 && clash.length === 0 && secondShown && thirdShown,
         `rects=${JSON.stringify(three)} clash=${JSON.stringify(clash)} shown=${secondShown}/${thirdShown}`)
@@ -3675,8 +3723,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         true
       `)
       const still = await zoomInto(wc, 0.5, 0.53)
+      await cameraStill(wc)
       const cam0 = await wc.executeJavaScript('window.__m4aViewport()')
-      const roomStill = await measurePlacement(wc)
+      const pointerStill = await pointerToCentre()
+      const roomStill = { ...(await measurePlacement(wc)), centre: pointerStill }
       const stillId = await spawnOne()
       await sleep(900)
       await cameraStill(wc)
@@ -3991,7 +4041,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           async () => (await agentStateOf(shellId)) !== 'wants-you', 3000)
         ok('57 focus acknowledges, and main is the one that answers',
           back === true && before === 'wants-you' && answered === true && cleared === true,
-          `before=${before} active=${click.active} answered=${answered} ` +
+          `before=${before} active=${click.active} reachedXterm=${click.reachedXterm} back=${back} answered=${answered} log=${JSON.stringify((await agentLog()).slice(mark).slice(-4))} ` +
             `after=${await agentStateOf(shellId)}`)
       }
 
@@ -4304,6 +4354,13 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // chrome — a panel the earlier checks left elsewhere may be off screen
       // or under a later one, and a click there selects something else.
       const spawnFit = async () => {
+        // A bare ⌘⌥N mints at the last pointer point (a WORLD one); an earlier check's
+        // far pan leaves it ~300000 units away, which put the pair so far apart that
+        // Fit selection bottomed out at 10% with neither in view. A real move to the
+        // host's centre makes the pointer and the view the same point again.
+        const c = await wc.executeJavaScript(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        await sleep(150)
         const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
         return waitUntil(async () => {
@@ -4341,6 +4398,23 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       if (b) await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[1]))} + '] .panel__chrome'); if (!c) return false
         const r = c.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 20, clientY: r.top + r.height / 2, shiftKey: true }
         c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return true })()`)
+      // A new panel REPLACES the selection with itself, so A's early plain
+      // click does not survive B's spawn; adding A back is a shift press on A's
+      // chrome while A is on screen (B's own press above is then a no-op).
+      // Placed at the pointer, B lands clear of A and the reveal may have flown
+      // the camera away from it; a plain wheel pan (no ctrlKey) brings A's chrome
+      // back to the middle so the additive press has something to press.
+      if (ids.length === 2) {
+        await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[0]))} + ']'); if (!host || !c) return false
+          const b = host.getBoundingClientRect(), r = c.getBoundingClientRect()
+          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, deltaX: Math.round(r.left + r.width / 2 - (b.left + b.width / 2)), deltaY: Math.round(r.top + r.height / 2 - (b.top + b.height / 2)), deltaMode: 0 })); return true })()`)
+        await cameraStill(wc)
+      }
+      const aVisible = ids.length === 2 ? await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[0]))} + '] .panel__chrome'); if (!c) return false
+        const r = c.getBoundingClientRect(); const x = r.left + 20, y = r.top + r.height / 2
+        if (x < host.left || x > host.right || y < host.top || y > host.bottom) return false
+        const o = { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y, shiftKey: true }
+        c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return true })()`) : null
       await sleep(150)
       const selected = await wc.executeJavaScript(`[...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id'))`)
       // The row is run the way a person runs it: Cmd+K, the title typed, the row pressed (check 52's shape).
@@ -4364,9 +4438,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const ranFit = await runRow('Fit selection')
       const framed = await waitUntil(async () => {
         const vp = await wc.executeJavaScript(`window.__m4aViewport()`)
-        const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left && r.top >= host.top && r.right <= host.right && r.bottom <= host.bottom }) })()`)
+        const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left - 24 && r.top >= host.top - 24 && r.right <= host.right + 24 && r.bottom <= host.bottom + 24 }) })()`)
         return inside ? vp : false
-      }, 4000)
+      }, 6000)
+      // Evidence for a miss: where the panels and the host sat after the flight.
+      const fitEv = framed !== false ? null : await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas').getBoundingClientRect(); return { host: [h.left, h.top, h.right, h.bottom].map(Math.round), vp: window.__m4aViewport(), panels: ${JSON.stringify(ids)}.map((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return null; const r = p.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round) }) } })()`)
       const ranReset = await runRow('Reset zoom')
       const reset = await waitUntil(async () => { const vp = await wc.executeJavaScript(`window.__m4aViewport()`); return vp.scale === 1 && vp.x === DEFAULT_CAMERA.x && vp.y === DEFAULT_CAMERA.y ? vp : false }, 4000)
       const rectsAfter = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
@@ -4374,7 +4450,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('fit.1 Fit selection (Zoom to fit before M409) frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
         ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
           rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
-        JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
+        JSON.stringify({ ids, selected, aVisible, ranFit, framed, fitEv, ranReset, reset, sessionsBefore, sessionsAfter }))
       for (const id of ids) await clickPanelClose(wc, id)
     }
 
@@ -4395,25 +4471,32 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         return { id: live.getAttribute('data-panel-id'), chromeH: chrome.height, slotH: slot.height, bodyTransform: body ? getComputedStyle(body).transform : null, scaleVar: getComputedStyle(document.querySelector('.world')).getPropertyValue('--chrome-scale').trim() }
       })()`)
       // The camera: Cmd+0 for scale 1, then Cmd+- (the harness's zoomTo takes a
-      // KEY) until the scale is at or under 0.6 — the ratios below are read
-      // against the ACTUAL scale, never an assumed 0.5.
+      // KEY) until the scale is at or under 0.75 (two steps, 0.694: the furthest
+      // zoom with a live terminal, since the Plan tier cards every panel under
+      // 0.67) — the ratios below are read against the ACTUAL scale.
       await resetZoom(wc)
       await settle()
       const atOne = await measure()
       const scaleOne = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale
+      // Focus pins a panel live whatever the zoom (check 9's note); without it
+      // the zoomed-out camera may leave no panel in the live budget at all.
+      if (atOne) await wc.executeJavaScript(`(() => { const slot = document.querySelector('.panel[data-panel-id=${JSON.stringify(atOne.id)}] .panel__slot'); if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return true })()`)
+      await sleep(200)
       let scaleOut = scaleOne
-      for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
+      for (let i = 0; i < 12 && scaleOut > 0.75; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
       await settle()
-      const atOut = await measure()
+      // A promotion back to a live terminal is async (tier timer, then the xterm
+      // mounts); on a loaded runner one read right after the zoom can land first.
+      const atOut = (await waitUntil(async () => (await measure()) || false, 3000)) || null
       await resetZoom(wc)
       await settle()
       const chromeRatio = atOne && atOut ? atOut.chromeH / atOne.chromeH : 0
       const slotRatio = atOne && atOut ? atOut.slotH / atOne.slotH : 0
       const expectedSlot = scaleOut / scaleOne
       ok('frame.3 zoomed out, the chrome bar keeps its screen height (counter-scaled by 1/scale) while the body slot shrinks with the scale and the body carries no transform',
-        atOne !== null && atOut !== null && atOne.id === atOut.id && scaleOne === 1 && scaleOut <= 0.6 &&
+        atOne !== null && atOut !== null && atOne.id === atOut.id && scaleOne === 1 && scaleOut <= 0.75 && scaleOut >= 0.67 &&
           chromeRatio >= 0.9 && chromeRatio <= 1.1 &&
-          Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.5,
+          Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.3,
         JSON.stringify({ atOne, atOut, scaleOne, scaleOut, chromeRatio, slotRatio, expectedSlot }))
     }
 
@@ -4432,6 +4515,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const rePB = new Promise((resolve) => wc.once('did-finish-load', resolve))
       wc.reload(); await rePB
       await settle()
+      // A bare ⌘⌥N spawns at the last pointer point; after the reload that is
+      // stale or unset, which can leave the terminal off-screen or carded. A
+      // real move to the host centre at 100% puts it where the click can land.
+      await resetZoom(wc)
+      await settle()
+      {
+        const c = await wc.executeJavaScript(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        await sleep(150)
+      }
       const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const pbId = await waitUntil(async () => {

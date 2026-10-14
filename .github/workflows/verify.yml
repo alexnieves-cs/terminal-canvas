@@ -21,14 +21,17 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Eight Electron suites were written for the pre-6.0 layout and are red on the
-# runner (follow-up PR fixes them). They stay RUNNING in `verify-electron-known-red`,
+# Seven Electron suites are not yet reliable on the runner: core, agents and
+# product still carry checks written for the pre-6.0 layout, and shell, kinds,
+# orchestrate and flowchart pass on their own runner but flake one different
+# check per run inside the full harness (state races, frame-time budgets). They
+# stay RUNNING in `verify-electron-known-red`,
 # which cannot fail the PR, while `verify` runs everything else and blocks. The
 # two lists below are the whole partition: scripts/verify-all.cjs errors on a
 # name that matches no suite, so a typo cannot drop one from both jobs. Remove a
 # name here when its suite is fixed; when the list is empty, delete the second job.
 env:
-  KNOWN_RED: verify:pty-manager,verify:panels:core,verify:panels:shell,verify:panels:kinds,verify:panels:agents,verify:panels:product,verify:panels:orchestrate,verify:panels:flowchart
+  KNOWN_RED: verify:panels:core,verify:panels:shell,verify:panels:kinds,verify:panels:agents,verify:panels:product,verify:panels:orchestrate,verify:panels:flowchart
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -97,6 +100,10 @@ jobs:
       - name: Run the full verification harness
         env:
           TC_VERIFY_SKIP: ${{ env.KNOWN_RED }}
+          # The runner is roughly twice as slow as the machine the watchdogs were
+          # measured on; headroom.1 skips itself above 1, so a slow runner
+          # cannot read as a regression.
+          TC_WATCHDOG_SCALE: '2'
         run: npm run verify
 
   # Non-blocking by construction: continue-on-error keeps the PR green whatever
@@ -145,4 +152,5 @@ jobs:
       - name: Run the known-red Electron suites
         env:
           TC_VERIFY_ONLY: ${{ env.KNOWN_RED }}
+          TC_WATCHDOG_SCALE: '2'
         run: npm run verify

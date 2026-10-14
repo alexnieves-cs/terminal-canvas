@@ -213,6 +213,22 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       const cleared143 = await clickEmptyCanvas(wc)
       if (!cleared143) throw new Error('143: found no background point to clear the selection at')
       await sleep(100)
+      // Zooming out from the viewport centre leaves the fleet's grid wherever
+      // the camera happened to sit; on the larger CI window it lands below the
+      // fold. A wheel pan (no ctrlKey) brings the first panel to the middle —
+      // the camera is not what this check is about, a reachable card is.
+      await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        const el = document.querySelector('.panel')
+        if (!host || !el) return false
+        const b = host.getBoundingClientRect(), r = el.getBoundingClientRect()
+        host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true,
+          clientX: b.left + b.width / 2, clientY: b.top + b.height / 2,
+          deltaX: Math.round(r.left + r.width / 2 - (b.left + b.width / 2)),
+          deltaY: Math.round(r.top + r.height / 2 - (b.top + b.height / 2)), deltaMode: 0 }))
+        return true
+      })()`)
+      await cameraStill(wc)
       const card = await wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas')
         if (!host) return null
@@ -226,13 +242,31 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
           // The centre must really resolve to this panel — an overlapping
           // neighbour on top would make the check assert about the wrong one.
+          // Below 0.70 the Plan tier draws a navigate-card over each panel
+          // (palette/navigate-tier.tsx) and that overlay, not the .panel,
+          // takes the press — it selects on mousedown exactly as the bare
+          // card did, so it is the same claim reached through the 6.0 surface.
           const hit = document.elementFromPoint(x, y)
-          if (!hit || hit.closest('.panel') !== el) continue
+          const navId = hit && hit.closest('[data-navigate-card]')
+            ? hit.closest('[data-navigate-card]').getAttribute('data-navigate-card') : null
+          if (!hit || (hit.closest('.panel') !== el && navId !== el.dataset.panelId)) continue
           return { id: el.dataset.panelId, x, y }
         }
         return null
       })()`)
-      if (!card) throw new Error('139: no carded panel was reachable on screen')
+      if (!card) {
+        const why = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.canvas').getBoundingClientRect()
+          return { scale: window.__m4aScale && window.__m4aScale(), host: [b.left, b.top, b.right, b.bottom].map(Math.round),
+            panels: [...document.querySelectorAll('.panel')].slice(0, 8).map((el) => {
+              const r = el.getBoundingClientRect()
+              const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+              const hit = document.elementFromPoint(x, y)
+              return { id: el.dataset.panelId, card: !!el.querySelector('.panel__card'), c: [x, y], hit: hit ? hit.tagName + '.' + String(hit.className).slice(0, 40) : null, same: !!hit && hit.closest('.panel') === el }
+            }) }
+        })()`)
+        throw new Error('139: no carded panel was reachable on screen ' + JSON.stringify(why))
+      }
 
       const during119 = await dragFromTo({ x: card.x, y: card.y }, { x: card.x + 220, y: card.y + 160 })
       const after119 = await wc.executeJavaScript(`(() => ({
@@ -681,7 +715,9 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         await settle()
         const pair = (await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)).filter((id) => !before2.includes(id))
         const [upperId, lowerId] = pair
-        const scale = await zoomInto(wc, 0.5, 0.53)
+        // The furthest zoom with a live terminal is ~0.67 (Plan tier cards every
+        // panel below it), so the rim is probed just inside that floor.
+        const scale = await zoomInto(wc, 0.69, 0.74)
         const bothLive = upperId !== undefined && lowerId !== undefined && await waitUntil(async () => { const a = await box(upperId), b = await box(lowerId); return a && b && a.live && b.live ? true : false }, 4000)
         detail2 = { pair, scale, bothLive }
         if (bothLive) {
@@ -723,13 +759,13 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           })()`)
           const gap = lo2.y - (up2.y + up2.h)
           detail2 = { scale, rimWorld, wantGap, gap, hit }
-          pass2 = rimWorld > 16 + 4 && Math.abs(gap - rimWorld) < 1 && hit.id === upperId && hit.nameTop >= hit.upperBottom - 0.5
+          pass2 = rimWorld > 16 + 2 && Math.abs(gap - rimWorld) < 1 && hit.id === upperId && hit.nameTop >= hit.upperBottom - 0.5
         }
         }
         await resetZoom(wc)
         await cameraStill(wc)
       }
-      ok('place.snap.rim.2 at 50% zoom a snapped stack of live terminals still leaves the upper one\'s bottom row uncovered — the gap is the rim\'s measured WORLD height there (taller than at 100%), and elementFromPoint on that row answers the upper panel',
+      ok('place.snap.rim.2 at ~70% zoom (the furthest live zoom) a snapped stack of live terminals still leaves the upper one\'s bottom row uncovered — the gap is the rim\'s measured WORLD height there (taller than at 100%), and elementFromPoint on that row answers the upper panel',
         pass2, JSON.stringify(detail2))
       } finally {
         layoutStore.setPreference('placement.snap', false)

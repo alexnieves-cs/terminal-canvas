@@ -938,36 +938,28 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         document.querySelector('.shell__settings').dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
+      // M446. The gear no longer opens the palette in a Settings scope: it opens
+      // the Settings screen (a dialog, `data-settings-root`) and Escape leaves
+      // it. The old half of this check asserted the scope chip, which only the
+      // pre-redesign gear produced; the unscoped-Search half above is unchanged.
       await waitUntil(
-        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        () => wc.executeJavaScript(`document.querySelector('[data-settings-root]') !== null`), 2000)
       await sleep(150)
       const inScope = await wc.executeJavaScript(`(() => {
-        const chip = document.querySelector('.palette__scope')
-        const rows = [...document.querySelectorAll('.palette__row')]
+        const root = document.querySelector('[data-settings-root]')
         return {
-          chip: chip ? chip.textContent.trim() : null,
-          sawASetting: rows.some((r) => r.textContent.includes('Idle after'))
+          screen: root ? root.getAttribute('aria-label') : null,
+          sawASetting: !!root && root.textContent.includes('Idle after')
         }
       })()`)
-      // The chip is now ASSERTED at BOTH clicks, not collected into the detail
-      // string and left out of the condition.
-      //
-      // `inScope.chip === 'Settings'` is the gear's half. `sawASetting` alone
-      // does not pin it: a gear that opened the palette with the query
-      // pre-filled — a plausible alternative implementation — would surface a
-      // setting row with no scope at all, and the scope is what makes the
-      // button honest, because a scope survives the user clearing the query
-      // while a pre-filled search does not.
-      //
-      // `searchChip === null` is Search's half, and it is the ONLY clause that
-      // can fail against a Search button mis-wired to openSettingsScope. Note
-      // what the gear-side read cannot do here: it is taken after the GEAR was
-      // clicked, so it reads 'Settings' whether or not Search is also
-      // scope-opening. The two reads are at two different moments on purpose.
-      ok('78 search opens the palette unscoped and settings opens it in the settings scope',
+      // Leave the screen the way a person does, so nothing below sits under it.
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+      await sleep(150)
+      const settingsClosed = await wc.executeJavaScript(`document.querySelector('[data-settings-root]') === null`)
+      ok('78 search opens the palette unscoped and the gear opens the Settings screen, which Escape leaves',
         searchOpened === true && searchChip === null &&
-          inScope.sawASetting === true && inScope.chip === 'Settings',
-        `search=${searchOpened} searchChip=${searchChip} scope=${JSON.stringify(inScope)}`)
+          inScope.screen === 'Settings' && settingsClosed === true,
+        `search=${searchOpened} searchChip=${searchChip} scope=${JSON.stringify(inScope)} closed=${settingsClosed}`)
       // What 76/77/78 LEAVE BEHIND, in the spirit of 73's and 75c's closing
       // notes. The world now holds TWO live panels, not one: check 76's spawn
       // is real and is never undone. The camera is wherever `Fit` put it (a
@@ -2241,7 +2233,16 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     // M46: the navigator shows ONE pane, and these four checks read the
     // Workspaces list — so show it, the way a user would, and put Panels back
     // after 96 for everything below.
-    await dockTo('workspaces'); await settle()
+    // A dock button for the pane ALREADY showing collapses the rail instead of
+    // re-showing it (chooseNavigator's `showing` branch), so a second click is
+    // the right answer exactly when the first one closed what was open.
+    // The dock lost its Workspaces button (M404 C2): the top bar's workspace
+    // crumb is the door now.
+    const showWorkspaces = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+    await showWorkspaces(); await settle()
+    if (!(await wc.executeJavaScript(`!!document.querySelector('[data-rail-workspace]')`))) {
+      await showWorkspaces(); await settle()
+    }
 
     // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
     //     Check 64 makes this claim for the palette's switcher and explains
@@ -3785,6 +3786,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const sentence2 = armed2 === true ? await text('[data-review-node-discard-armed="brand-new.txt"]') : ''
         const confirmed2 = armed2 === true ? await press('[data-review-node-discard-confirm="brand-new.txt"]') : false
         const gone = confirmed2 === true ? await waitUntil(async () => !existsSync(fresh), 8000) : false
+        const outcome2 = await text('[data-review-node-commit-outcome]')
         const clean = gone === true
           ? await waitUntil(async () => {
               const t = await text('[data-review-node-summary]')
@@ -3796,7 +3798,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           restored === true && /^Restore seed\.txt .*cannot be undone/.test(sentence1) &&
             gone === true && /did not exist at spawn/.test(sentence2) &&
             typeof clean === 'string' && status === '',
-          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, sentence2, gone, clean, status }))
+          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, armed2, confirmed2, sentence2, outcome2, gone, clean, status }))
       }
 
       // 114. Escape cancels, and NOTHING is committed — read back out of

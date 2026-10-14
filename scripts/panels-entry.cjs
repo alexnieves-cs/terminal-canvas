@@ -90,6 +90,9 @@ module.exports = {
   // where the credential check itself runs.
   credentialDir,
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
+  // Installed from main/index.ts, not registerIpcHandlers; without it every
+  // palette/launcher open invokes tmux:adoptable into a missing handler.
+  installTmuxAdopt: require('../src/main/tmux-adopt').installTmuxAdopt,
   INERT_PRESENCE: require('../src/main/ipc').INERT_PRESENCE,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   // registerIpcHandlers' two trailing M16 parameters need a real watcher

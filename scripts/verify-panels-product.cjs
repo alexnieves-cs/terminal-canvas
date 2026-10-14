@@ -497,6 +497,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           return { label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 24), hit: b.contains(document.elementFromPoint(x, y)) } })
         return { w: r.width, h: r.height, strip: strip !== null, stripH: strip ? strip.getBoundingClientRect().height : null, buttons } })()`) : null
       // Got it is judged at the small size: the body and composer there must not move either.
+      // Measured after a settle of its own: the resize's last frames are still laying out on a slow runner.
+      await settle()
       const smallBox = typeof chatId === 'string' ? await wc.executeJavaScript(`(() => { const panel = document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"]`)}); if (!panel) return null
         const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height } }
         const composer = panel.querySelector('.chat__composer'); return { body: box(panel.querySelector('.chat__body')), composer: composer ? box(composer) : null } })()`) : null
@@ -513,7 +515,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           stripAt.buttons.every((b) => b.hit === true && !overlaps(stripAt.strip, b.box)) &&
           small !== null && small.strip === true && small.w < stripAt.body.w && small.buttons.length > 0 && small.buttons.every((b) => b.hit === true) &&
           gotIt === true && afterGone && afterGone.strip === false && same(smallBox.body, afterGone.body) && same(smallBox.composer, afterGone.composer),
-        JSON.stringify({ stripAt, small, gotIt, afterGone }))
+        JSON.stringify({ stripAt, small, smallBox, gotIt, afterGone }))
 
       // e2e.2 — a plain folder. Back to an empty canvas (the launcher).
       for (const id of chatIds.splice(0)) await clickPanelClose(wc, id)
@@ -767,11 +769,15 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const hidden = (await win.webContents.capturePage(rect)).toBitmap()
         await wc.executeJavaScript(`${layer}.style.visibility = ''; true`); await sleep(150)
         const hit = await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${rect.x + rect.width / 2}, ${rect.y + rect.height / 2}); const p = e && e.closest('.panel'); return p ? p.getAttribute('data-panel-id') : (e ? e.className.baseVal ?? e.className : null) })()`)
-        return { rect, paints: !shown.equals(hidden), hit }
+        const sum = (b) => { let t = 0; for (let i = 0; i < b.length; i += 97) t = (t + b[i]) % 1000003; return t }
+        const style = await wc.executeJavaScript(`(() => { const l = document.querySelector('[data-annotation=' + ${JSON.stringify(JSON.stringify(aid))} + '] [data-annotation-label]'); if (!l) return null; const c = getComputedStyle(l); return { opacity: c.opacity, visibility: c.visibility, color: c.color, bg: c.backgroundColor, win: [innerWidth, innerHeight] } })()`)
+        return { rect, paints: !shown.equals(hidden), hit, ev: { len: shown.length, a: sum(shown), b: sum(hidden), style } }
       }
       const covered = await paints('cuA')
       const own = await paints('cuN')
-      const open = await paints('cuB')
+      // An uncovered caption is allowed a few looks: the label eases in, and a slow runner can capture it at the start of that ease.
+      let open = await paints('cuB')
+      for (let i = 0; i < 3 && open.paints !== true; i++) { await sleep(500); open = await paints('cuB') }
       // Retire: a press on cu1's chrome selects it (the header's beginMove).
       await wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="cu1"] .panel__chrome'); const r = h.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, buttons: 1, clientX: r.left + 30, clientY: r.top + r.height / 2 }; h.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', { ...o, buttons: 0 })); return true })()`)
       const retired = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('[data-annotation]')].map((g) => g.getAttribute('data-annotation')).sort(); return ids.includes('cuA') ? false : ids })()`), 3000)
@@ -963,15 +969,27 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // extent grew, could not promise.
       const rectOf = (key) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="${key}"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, ax: r.left, ay: r.top } })()`)
       const before = await waitUntil(() => rectOf('n2'), 4000)
+      const before1 = await rectOf('n1')
       const drag = async (from, dx, dy) => {
         const x = Math.round(from.x + from.w / 2), y = Math.round(from.y + from.h / 2)
         wc.focus()
+        wc.sendInputEvent({ type: 'mouseMove', x, y }); await sleep(150)
         wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 }); await settle()
         for (let i = 1; i <= 4; i++) { wc.sendInputEvent({ type: 'mouseMove', x: x + Math.round(dx * i / 4), y: y + Math.round(dy * i / 4), button: 'left', buttons: 1 }); await settle() }
         wc.sendInputEvent({ type: 'mouseUp', x: x + dx, y: y + dy, button: 'left', clickCount: 1 }); await settle()
       }
       if (before) await drag(before, 80, 60)
       const after = await rectOf('n2')
+      const after1 = await rectOf('n1')
+      // The selection can open the inspector, which resizes the flow and lets
+      // it refit (a different zoom AND origin) — so the move is read against the
+      // untouched n1, in block widths, not as a raw screen delta.
+      // 0.4 of the drag, not 0.6: the press selects the block, the inspector opens
+      // mid-gesture and the flow relayouts under the cursor, so a slow runner
+      // measured 0.59/0.94 of the intended delta. The claim is that the block
+      // FOLLOWED the drag, right and down, not its exact travel.
+      const movedW = before && before1 && after && after1 ? (after.x - after1.x) / after.w - (before.x - before1.x) / before.w : 0
+      const movedH = before && before1 && after && after1 ? (after.y - after1.y) / after.h - (before.y - before1.y) / before.h : 0
       const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfe"]')?.getAttribute('data-workflow-dirty')`)
       flushLayoutStore()
       const onDisk = layoutStore.current().templates.find((t) => t.id === TPL)
@@ -981,9 +999,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       wc.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' }); await settle()
       const gone = await wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"]') === null && document.querySelector('[data-workflow-block="n1"]') !== null && document.querySelectorAll('[data-workflow-edge]').length === 0`)
       const wholeOnDisk = layoutStore.current().templates.find((t) => t.id === TPL)
-      ok(id, before && after && after.ax > before.ax + 40 && after.ay > before.ay + 30 && dirty === 'true' &&
+      ok(id, before && after && movedW > (80 / before.w) * 0.4 && movedH > (60 / before.h) * 0.4 && dirty === 'true' &&
         diskN2 && diskN2.dx === 300 && selected === 'n2' && gone === true && wholeOnDisk && wholeOnDisk.nodes.length === 2 && wholeOnDisk.edges.length === 1,
-      JSON.stringify({ before, after, dirty, diskN2, selected, gone, diskNodes: wholeOnDisk && wholeOnDisk.nodes.length }))
+      JSON.stringify({ before, after, movedW, movedH, dirty, diskN2, selected, gone, diskNodes: wholeOnDisk && wholeOnDisk.nodes.length }))
     } catch (error) {
       ok(id, false, String(error && error.message || error))
     } finally {
@@ -1097,6 +1115,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     const centreOf = async (selector) => wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height } })()`)
     const dragTo = async (from, to) => {
       wc.focus()
+      // Hover first: a press with no preceding move reaches the page without a hover target on the offscreen CI window, so a 6px port never arms.
+      wc.sendInputEvent({ type: 'mouseMove', x: from.x, y: from.y }); await sleep(150)
       wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 }); await settle()
       for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(from.x + (to.x - from.x) * i / 5), y: Math.round(from.y + (to.y - from.y) * i / 5), button: 'left', buttons: 1 }); await settle() }
       wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 }); await settle()
@@ -1149,6 +1169,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       let heldReason = null
       if (port2 && block1) {
         wc.focus()
+        wc.sendInputEvent({ type: 'mouseMove', x: port2.x, y: port2.y }); await sleep(150)
         wc.sendInputEvent({ type: 'mouseDown', x: port2.x, y: port2.y, button: 'left', clickCount: 1 }); await settle()
         for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(port2.x + (block1.x - port2.x) * i / 5), y: Math.round(port2.y + (block1.y - port2.y) * i / 5), button: 'left', buttons: 1 }); await settle() }
         heldReason = await wc.executeJavaScript(`document.querySelector('[data-workflow-wire-reason]')?.textContent ?? null`)
@@ -1156,8 +1177,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
       const refusal = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-refusal]')?.textContent || false`), 3000)
       const edgesNow = await wc.executeJavaScript(`document.querySelectorAll('[data-workflow-edge]').length`)
+      // Evidence for a red run: which edges exist, what the drop point resolved to, and where the pointer's last stop was.
+      const wireEv = await wc.executeJavaScript(`(() => ({ edges: [...document.querySelectorAll('[data-workflow-edge]')].map((e) => e.getAttribute('data-workflow-edge')), blocks: [...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.width) + 'x' + Math.round(r.height) }), flowH: Math.round(document.querySelector('.react-flow')?.getBoundingClientRect().height ?? 0) }))()`).catch((e) => String(e && e.message || e).slice(0, 120))
+      const dropHit = block2 ? await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${block2.x}, ${block2.y}); return e ? e.tagName + '.' + String(e.className).slice(0, 40) + ' in ' + (e.closest('[data-workflow-block]')?.getAttribute('data-workflow-block') ?? '-') : null })()`).catch((e) => String(e && e.message || e).slice(0, 120)) : null
       ok(ids[1], wired === true && typeof edgeWord === 'string' && edgeWord.length > 0 && typeof refusal === 'string' && /cycle/.test(refusal) && edgesNow === 1,
-        JSON.stringify({ port1, block2, wired, edgeWord, refusal, edgesNow }))
+        JSON.stringify({ port1, block2, wired, edgeWord, refusal, edgesNow, wireEv, dropHit }))
       // M259 — wfx.ui.1 (second half). Selecting n1 lights its lineage — n2
       // and the edge between them — and quiets the unconnected blocks; then
       // Auto layout (top to bottom) is ONE draft step that puts n2 under n1.
@@ -1204,7 +1228,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ok(ids[2], Array.isArray(fields) && fields.includes('title') && label === 'renamed by inspector' && typeof widthReason === 'string' && /width/.test(widthReason) && widthValue === '999',
         JSON.stringify({ fields, journeyNote, label, widthReason, widthValue }))
     } catch (error) {
-      for (const id of ids) ok(id, false, String(error && error.message || error))
+      for (const id of ids) ok(id, false, String((error && error.stack) || error).split('\n').slice(0, 4).join(' | '))
     } finally {
       layoutStore.deleteTemplate(TPL)
       layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
@@ -2111,10 +2135,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const option = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('[data-sheet-what] option[data-sheet-codex]'); return o ? { text: o.textContent, disabled: o.disabled, value: o.value } : false })()`), 4000)
         let minted = false
         if (option && option.disabled === false) {
+          // Chats left over from earlier checks can survive the reload on a slow
+          // runner (the renderer's own debounced save lands after ours), so the
+          // minted chat is the one that was NOT there before the submit.
+          const knownChats = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-chat-status]')].map((p) => p.getAttribute('data-panel-id'))`)
           await set('[data-sheet-what]', option.value)
           await set('[data-sheet-where]', dirC)
           await submitSheet()
-          minted = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-chat-status]'); if (!p) return false
+          minted = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-chat-status]')].find((q) => !${JSON.stringify(knownChats)}.includes(q.getAttribute('data-panel-id'))); if (!p) return false
             const word = p.querySelector('[data-chat-backend]'); const interrupt = p.querySelector('[data-chat-interrupt]'); const door = p.querySelector('[data-open-in-terminal]')
             return { id: p.getAttribute('data-panel-id'), backend: word ? word.getAttribute('data-chat-backend') : null, wordText: word ? word.textContent : null, interruptDisabled: interrupt ? interrupt.disabled : null, interruptTitle: interrupt ? interrupt.title : null, doorDisabled: door ? door.disabled : null, doorTitle: door ? door.title : null, empty: p.querySelector('[data-chat-empty]')?.textContent ?? null, refusal: p.querySelector('[data-chat-refusal]')?.textContent ?? null, bodyText: (p.querySelector('.chat__transcript')?.textContent ?? '').slice(0, 160) } })()`), 6000)
         } else {
@@ -2133,7 +2161,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.flushSync()
         const stored = (layoutStore.initial().panels || []).filter((p) => p.kind === 'chat').map((p) => ({ id: p.id, backend: p.chat && p.chat.backend, hasKey: !!(p.chat && Object.prototype.hasOwnProperty.call(p.chat, 'backend')) }))
         const codexStored = minted === false ? null : stored.find((p) => p.id === minted.id)
-        const claudeStored = stored.find((p) => p.backend === undefined)
+        const claudeStored = stored.find((p) => p.backend === undefined && (minted === false || p.id !== minted.id))
         // The sheet's row is the assertion on EVERY machine; the minted half only where codex is installed.
         const rowOk = option && /chat with codex/.test(option.text) && option.disabled === !codexOnPath && (codexOnPath || /not on PATH/.test(option.text))
         const mintedOk = !codexOnPath || (minted && minted.backend === 'codex' && minted.wordText === 'codex' && minted.interruptDisabled === true && /nothing is in flight/.test(minted.interruptTitle || '') && minted.doorDisabled === true && /codex/.test(minted.doorTitle || '') &&
@@ -4472,6 +4500,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // the DOM, stayed green through it. elementFromPoint at the menu
         // title's centre is the pixel-level question.
         const menuPaint = liveB !== false ? await (async () => {
+          // The menu is judged against the BODY it must clear. On a window as
+          // large as the runner's the overview map sits over this panel's
+          // title, and a dispatched click (unlike a real pointer) never tucks
+          // it aside — so take the map out of the question, then put it back.
+          await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', false)`)
+          await settle()
           await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="hdB"] [data-panel-more]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
           const open = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu]') !== null`), 3000)
           const onTop = await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu-title]'); if (!t) return 'no title'
@@ -4481,6 +4515,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 }))
             c.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 })); return true })()`)
           await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu]') === null`), 3000)
+          await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', true)`)
           return { open, onTop }
         })() : { open: false, onTop: 'hdB never woke' }
         ok('menu.paint.1 the ⋯ menu opened on a LIVE terminal is the element under its own title\'s centre — painted above the body, not merely present in the DOM', menuPaint.open === true && menuPaint.onTop === true, JSON.stringify(menuPaint))
@@ -6123,6 +6158,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           const rows = [...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')]
           if (rows.length < 3) return false
           return rows.map((r) => [r.getAttribute('data-workflow-pool-item'), r.getAttribute('data-workflow-pool-state')]) })()`), 8000)
+        // The fake runner's turn is paced x6 on CI (panels-harness chatRunner) so a
+        // `working` state is observable there; the pool therefore needs seconds,
+        // not milliseconds, to finish. Wait for it before Stop is read.
+        await waitUntil(() => wc.executeJavaScript(`(() => {
+          const rows = [...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')]
+          return rows.length >= 3 && rows.every((r) => r.getAttribute('data-workflow-pool-state') === 'finished') })()`), 20000)
         // Stop is read AFTER the pool has run its course: the fake runner
         // answers each worker in milliseconds, so no instant of this run
         // has a pool live to stop — Stop's live arm (interrupt every worker,
@@ -6633,6 +6674,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       record('esc', fOpen === true && fClicked.expanded === false && fClicked.activePanel === termId && fReached === true,
         JSON.stringify({ fOpen, fClicked, fReached, tail: JSON.stringify(writes.slice(writesAtEsc2).join('').slice(-20)) }))
 
+      const PILL_OPEN = 'button[data-pill-rest], [data-pill-rest] .command-pill__line-main'
       // pill.jump.1 — a real bell puts the shell in wants-you; the camera is
       // panned well away; Jump brings the panel to the centre of the host.
       // The bell rings in a SECOND, never-focused /bin/sh spawned exactly as
@@ -6660,17 +6702,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 700, deltaY: 500, deltaMode: 0 })), true`)
       await settle()
       const away = await offset()
-      await press('[data-pill-rest]'); await settle()
-      const jumped = await press('[data-pill-action="jump"]')
+      // A waiting panel makes the rest pill a line with its own Go control
+      // (⌘J) — the jump is pressed there, not behind an expansion.
+      const jumped = await press('[data-pill-go]')
       const centred = await waitUntil(async () => { const d = await offset(); return d !== null && d < 6 }, 4000)
-      record('jump', rang === true && restAttention === true && /1 panel needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
+      record('jump', rang === true && restAttention === true && /1 (panel|agent) needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
         JSON.stringify({ bellId, rang, bellState, restAttention, restText, away, jumped, centred, final: await offset() }))
-      await press('[data-pill-rest]'); await settle()
 
       // pill.send.1 — the orchestrator door, both arms.
       const offeredBefore = await wc.executeJavaScript(`window.__m81SupervisorOffered ? window.__m81SupervisorOffered() : 'no hook'`)
       const chatsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.dataset.panelId)`)
-      const placeholder = async () => { if (!(await pillState()).expanded) { await press('[data-pill-rest]'); await settle() } return wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); return i ? i.getAttribute('placeholder') : null })()`) }
+      const placeholder = async () => { if (!(await pillState()).expanded) { await press(PILL_OPEN); await settle() } return wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); return i ? i.getAttribute('placeholder') : null })()`) }
       const typeAndSend = (text) => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); if (!i) return false; i.focus()
         const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${q(text)}); i.dispatchEvent(new Event('input', { bubbles: true }))
         i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })); return true })()`)

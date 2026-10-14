@@ -56,6 +56,7 @@ buildSync({
 })
 const {
   registerIpcHandlers,
+  installTmuxAdopt,
   trailFor,
   credentialStore,
   credentialDir,
@@ -246,9 +247,13 @@ const zoomToScale = async (wc, target) => {
   await new Promise((r) => setTimeout(r, 400))
 }
 
+// ⌘N is New task since the UX pass; the instant default agent, which every
+// 'n' caller here means, is ⌘⌥N (core's check 7b already sends that chord).
 const zoomTo = (wc, key) =>
   wc.executeJavaScript(
-    `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
+    key === 'n'
+      ? `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true })), true`
+      : `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
   )
 
 /**
@@ -507,6 +512,9 @@ app.whenReady().then(async () => {
     show: false,
     width: 1400,
     height: 900,
+    // On a small screen (a hosted CI runner is 1024 wide) macOS clamps the frame
+    // to it, so setBounds after showing cannot restore the size without this.
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: join(__dirname, '..', 'out', 'preload', 'index.js'),
       // M56. A hidden window pauses requestAnimationFrame, and a camera
@@ -514,6 +522,10 @@ app.whenReady().then(async () => {
       // tier gate stays shut, and every panel stays a card. Production
       // windows are visible; this is the harness's own condition.
       backgroundThrottling: false,
+      // A hosted runner's screen (about 1024x700) clamps a real window, so the
+      // renderer sees a compact viewport the checks never assumed. An offscreen
+      // window is not bound by any screen and renders at the requested size.
+      offscreen: !!process.env.CI,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -1121,6 +1133,10 @@ app.whenReady().then(async () => {
         let parsed = null
         try { parsed = JSON.parse(line) } catch { parsed = null }
         const cut = Math.floor(chatFixture.length / 2)
+        // The recorded turn lasts 160ms, which a polling check on a loaded
+        // hosted runner can miss end to end (chat.2 reads `working` and found
+        // only `idle`); a slower stream is the same turn, observable.
+        const pace = process.env.CI ? 6 : 1
         const emit = (lines) => { for (const cb of dataCbs) cb(lines.join('\n') + '\n') }
         // M76. A user line whose text starts with `ask:` is answered with a
         // permission request instead of the recorded answer; the answer
@@ -1135,8 +1151,8 @@ app.whenReady().then(async () => {
         } else if (parsed && parsed.type === 'control_response') {
           setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 40)
         } else if (parsed && parsed.type === 'user') {
-          setTimeout(() => { if (!exited) emit(chatFixture.slice(0, cut)) }, 40)
-          setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 160)
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(0, cut)) }, 40 * pace)
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 160 * pace)
         }
       },
       onData(cb) { dataCbs.push(cb) },
@@ -1351,6 +1367,7 @@ app.whenReady().then(async () => {
       : { kind: 'refused', reason: 'the Team view is not wired in this build' }),
     share: async () => ({ kind: 'refused', reason: 'the panels harness does not share' })
   }
+  installTmuxAdopt(() => ({}))
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
       resolveAvailability(allPresets(layoutStore.presets()), whichHere),
@@ -1916,7 +1933,7 @@ app.whenReady().then(async () => {
       await win.loadFile(blank)
       await win.webContents.executeJavaScript(`localStorage.removeItem('tc.chat-drafts')`)
     }
-    await loadRenderer(win)
+    await loadRenderer(win, { keepSize: true })
     const wc = win.webContents
     settleProbe.wc = wc
 
@@ -2049,6 +2066,28 @@ app.whenReady().then(async () => {
     // just crashing is exactly the silent hang this suite exists to avoid.
     console.error('\nFAIL  infrastructure error: ' + (error && error.stack ? error.stack : error))
     results.push({ n: 'infrastructure', pass: false, detail: String(error) })
+    // A digest of what the page looked like at the throw. An "infrastructure"
+    // line names a missing target and nothing else, and CI is the only place
+    // these suites can be watched, so the page's own state goes in the log.
+    try {
+      const digest = await win.webContents.executeJavaScript(`(() => {
+        const rect = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }
+        const over = [...document.body.querySelectorAll('*')].filter((el) => {
+          const cs = getComputedStyle(el)
+          return (cs.position === 'fixed' || cs.position === 'absolute') && el.parentElement === document.body.firstElementChild || (cs.position === 'fixed')
+        }).slice(0, 25).map((el) => el.tagName.toLowerCase() + '.' + String(el.className).slice(0, 60) + ' ' + rect(el).join(','))
+        const canvas = document.querySelector('.canvas')
+        return {
+          win: [innerWidth, innerHeight], focus: document.hasFocus(),
+          canvas: canvas ? rect(canvas) : null,
+          panels: document.querySelectorAll('.panel').length, cards: document.querySelectorAll('.panel__card').length,
+          active: document.activeElement ? document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 40) : null,
+          dialogs: [...document.querySelectorAll('[role=dialog],.palette,.sheet,.launcher,.modal')].map((el) => el.tagName.toLowerCase() + '.' + String(el.className).slice(0, 40) + ' ' + rect(el).join(',')),
+          fixed: over
+        }
+      })()`)
+      console.error('DIGEST ' + JSON.stringify(digest))
+    } catch (digestError) { console.error('DIGEST unavailable: ' + digestError) }
   } finally {
     if (!watchdogFired) {
       // headroom.1 — THE DRIFT ALARM. Each part's WATCHDOG_MS is 1.25x a measured

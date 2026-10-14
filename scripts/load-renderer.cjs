@@ -57,7 +57,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
    `attempts` is 3 rather than a larger number on purpose: the observed flake
    cleared immediately, and a harness that grinds through ten retries before
    reporting a genuinely broken build has turned a fast red into a slow one. */
-const loadRenderer = async (win, { attempts = 3, log = console.log } = {}) => {
+const loadRenderer = async (win, { attempts = 3, log = console.log, keepSize = false } = {}) => {
   if (!existsSync(RENDERER_HTML)) {
     throw new Error(
       `renderer build absent at ${RENDERER_HTML} — run \`npm run build\` before this suite`)
@@ -83,8 +83,25 @@ const loadRenderer = async (win, { attempts = 3, log = console.log } = {}) => {
       // focus from anything) is the harness matching production, not a
       // looser check. Local runs keep their hidden window.
       if (process.env.CI) {
+        // A hosted runner has a 1024x~700 screen and nobody at the keyboard.
+        // The harness window is OFFSCREEN there (panels-harness.cjs), so the
+        // screen cannot clamp it, but it also never becomes the key window:
+        // emulate focus, or every check that reads document.hasFocus() or
+        // types into the page sees a backgrounded app. And setSize does not
+        // resize an offscreen surface, so route it to a device-metrics
+        // override, which does.
+        const wc = win.webContents
         win.showInactive()
-        win.webContents.focus()
+        wc.focus()
+        if (keepSize) {
+          try { wc.debugger.attach('1.3') } catch { /* already attached */ }
+          await wc.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => null)
+          const real = win.setSize.bind(win)
+          win.setSize = (width, height, animate) => {
+            real(width, height, animate)
+            wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }).catch(() => null)
+          }
+        }
       }
       return
     } catch (error) {

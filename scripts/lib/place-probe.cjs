@@ -91,7 +91,8 @@ async function zoomInto(wc, lo, hi) {
  * the window's centre, which this used to copy, sat right of it with a rail open). Then the pure rule itself (placement.ts's placeNew,
  * bundled into the entry) — the rule is pinned by verify:viewport, and what
  * THIS pins is that the live door feeds it what the canvas shows.
- * Groups and task regions are not read: callers use it where there are none.
+ * Groups are not read: callers use it where there are none. Task regions are,
+ * from the drawn task clusters.
  * Two halves: `measurePlacement` before the press, `expectedSpot` after it,
  * once the made panel's size is known.
  */
@@ -114,7 +115,13 @@ async function measurePlacement(wc) {
     }
     const seen = new Set()
     const panels = [...document.querySelectorAll('.world .panel[data-panel-id]')].filter((p) => { const id = p.getAttribute('data-panel-id'); if (seen.has(id)) return false; seen.add(id); return true }).map((p) => ({ x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: parseFloat(p.style.width), h: parseFloat(p.style.height), terminal: p.classList.contains('pf--kind-terminal') })).filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite))
-    return { vp, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (host.clientWidth / 2 - vp.x) / vp.scale, y: (host.clientHeight / 2 - vp.y) / vp.scale } }
+    // The dashed TASK regions the placer treats as obstacles for an unanchored
+    // object (Canvas.tsx placer(): the task clusters' hulls). They are drawn in
+    // the world layer with their store rect in left/top/width/height. A suite
+    // that has made tasks earlier has them, and an expectation blind to them
+    // lands the spot a region's width away.
+    const regions = [...document.querySelectorAll('[data-task-cluster="task"]')].map((el) => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top), w: parseFloat(el.style.width), h: parseFloat(el.style.height) })).filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite))
+    return { vp, regions, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (host.clientWidth / 2 - vp.x) / vp.scale, y: (host.clientHeight / 2 - vp.y) / vp.scale } }
   })()`)
 }
 
@@ -124,6 +131,7 @@ function expectedSpot(m, { placeNew, rim }, size) {
   const edge = 16
   const within = { x: (edge - m.vp.x) / m.vp.scale, y: (edge - m.vp.y) / m.vp.scale, w: (m.cw - 2 * edge) / m.vp.scale, h: (m.ch - 2 * edge) / m.vp.scale }
   const obstacles = m.panels.map((r) => (r.terminal ? { x: r.x, y: r.y - rim, w: r.w, h: r.h + rim } : { x: r.x, y: r.y, w: r.w, h: r.h }))
+  for (const r of m.regions || []) obstacles.push(r)
   const spot = placeNew({ size: { w: size.w, h: size.h + rim }, centre: { x: m.centre.x, y: m.centre.y - rim / 2 }, obstacles, chrome: m.chrome.map(toWorld), within })
   return spot === null ? null : { x: spot.x - size.w / 2, y: spot.y - (size.h + rim) / 2 + rim, inView: spot.x - size.w / 2 >= within.x && spot.x + size.w / 2 <= within.x + within.w && spot.y - (size.h + rim) / 2 >= within.y && spot.y + (size.h + rim) / 2 <= within.y + within.h, vp: m.vp }
 }
