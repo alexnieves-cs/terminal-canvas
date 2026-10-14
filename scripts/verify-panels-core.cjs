@@ -2368,6 +2368,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         ok('43 a project prompt is listed and inserted from the panel\'s own cwd', false,
           'no panel is running in PROJECT_DIR — check 40a\'s spawn is this check\'s fixture')
       } else {
+        // The echo panel can be a CARD here: earlier checks leave the camera
+        // wherever they finished, and a panel outside the view (or under 0.70)
+        // has no slot to click, so nothing could focus it. Back to 1:1, then a
+        // wheel pan (no ctrlKey) puts it under the middle of the view.
+        await resetZoom(wc)
+        await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(echoId))} + ']'); if (!host || !c) return false
+          const b = host.getBoundingClientRect(), r = c.getBoundingClientRect()
+          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, deltaX: Math.round(r.left + r.width / 2 - (b.left + b.width / 2)), deltaY: Math.round(r.top + r.height / 2 - (b.top + b.height / 2)), deltaMode: 0 })); return true })()`)
+        await cameraStill(wc)
+        await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-panel-id=' + ${JSON.stringify(JSON.stringify(echoId))} + '] .panel__slot')`), 4000)
         // Focus it: the palette captures focusedId at OPEN time and lists the
         // CAPTURED panel's cwd, so this click is what makes PROJECT_DIR the
         // directory read. Retried for the same reason check 40's is.
@@ -3630,9 +3640,22 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // The expectation comes out of the live DOM — the host's own bounds and
       // the world layer's own transform — rather than from INITIAL/PANEL_W,
       // for the reason check 7's comment gives.
+      // ⌘N places at the POINTER once the mouse has moved over the canvas
+      // (spawn-cursor.ts: Canvas.tsx onSpawn's `bare` arm), and that point is a
+      // WORLD one noted at the last mousemove, so it is stale after the pan above.
+      // A real move to the host's centre makes "where the view looks" and "where
+      // the pointer is" the same point again, which is what these checks mean.
+      const pointerToCentre = async () => {
+        const c = await wc.executeJavaScript(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), left: r.left, top: r.top } })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        await sleep(150)
+        const vp = await wc.executeJavaScript('window.__m4aViewport()')
+        return { x: (c.x - c.left - vp.x) / vp.scale, y: (c.y - c.top - vp.y) / vp.scale }
+      }
+      const pointer51 = await pointerToCentre()
       const expectedCentre = await viewCentreInWorld(wc)
       const placeRule51 = (() => { const e = require(ENTRY_OUT); return { placeNew: e.placeNew, rim: e.PLACE_RIM } })()
-      const room51 = await measurePlacement(wc)
+      const room51 = { ...(await measurePlacement(wc)), centre: pointer51 }
       const firstId = await spawnOne()
       const firstRect = firstId ? await storeRect(wc, firstId) : null
       const want51 = firstRect === null ? null : expectedSpot(room51, placeRule51, { w: firstRect.w, h: firstRect.h })
@@ -3657,7 +3680,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // was no pin — its y to 1px of the chrome-cleared spot computed in the
       // harness (place-probe.cjs's expectedSpot) from what the canvas showed.
       const firstCentred = first && firstRect !== null && want51 !== null &&
-        Math.abs(first.x - expectedCentre.x) <= TOL &&
+        Math.abs(first.x - pointer51.x) <= TOL &&
         Math.abs(firstRect.x - want51.x) <= TOL && Math.abs(firstRect.y - want51.y) <= TOL
       // M402 (B4). The second press no longer cascades one CASCADE_STEP onto
       // the first (the step left all but a 48px band of the older terminal
@@ -3699,7 +3722,8 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const still = await zoomInto(wc, 0.5, 0.53)
       await cameraStill(wc)
       const cam0 = await wc.executeJavaScript('window.__m4aViewport()')
-      const roomStill = await measurePlacement(wc)
+      const pointerStill = await pointerToCentre()
+      const roomStill = { ...(await measurePlacement(wc)), centre: pointerStill }
       const stillId = await spawnOne()
       await sleep(900)
       await cameraStill(wc)
@@ -4367,6 +4391,15 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // A new panel REPLACES the selection with itself, so A's early plain
       // click does not survive B's spawn; adding A back is a shift press on A's
       // chrome while A is on screen (B's own press above is then a no-op).
+      // Placed at the pointer, B lands clear of A and the reveal may have flown
+      // the camera away from it; a plain wheel pan (no ctrlKey) brings A's chrome
+      // back to the middle so the additive press has something to press.
+      if (ids.length === 2) {
+        await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[0]))} + ']'); if (!host || !c) return false
+          const b = host.getBoundingClientRect(), r = c.getBoundingClientRect()
+          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, deltaX: Math.round(r.left + r.width / 2 - (b.left + b.width / 2)), deltaY: Math.round(r.top + r.height / 2 - (b.top + b.height / 2)), deltaMode: 0 })); return true })()`)
+        await cameraStill(wc)
+      }
       const aVisible = ids.length === 2 ? await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[0]))} + '] .panel__chrome'); if (!c) return false
         const r = c.getBoundingClientRect(); const x = r.left + 20, y = r.top + r.height / 2
         if (x < host.left || x > host.right || y < host.top || y > host.bottom) return false
@@ -4470,6 +4503,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const rePB = new Promise((resolve) => wc.once('did-finish-load', resolve))
       wc.reload(); await rePB
       await settle()
+      // A bare ⌘⌥N spawns at the last pointer point; after the reload that is
+      // stale or unset, which can leave the terminal off-screen or carded. A
+      // real move to the host centre at 100% puts it where the click can land.
+      await resetZoom(wc)
+      await settle()
+      {
+        const c = await wc.executeJavaScript(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        await sleep(150)
+      }
       const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
       const pbId = await waitUntil(async () => {

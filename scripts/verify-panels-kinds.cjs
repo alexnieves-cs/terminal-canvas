@@ -715,7 +715,9 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         await settle()
         const pair = (await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)).filter((id) => !before2.includes(id))
         const [upperId, lowerId] = pair
-        const scale = await zoomInto(wc, 0.5, 0.53)
+        // The furthest zoom with a live terminal is ~0.67 (Plan tier cards every
+        // panel below it), so the rim is probed just inside that floor.
+        const scale = await zoomInto(wc, 0.69, 0.74)
         const bothLive = upperId !== undefined && lowerId !== undefined && await waitUntil(async () => { const a = await box(upperId), b = await box(lowerId); return a && b && a.live && b.live ? true : false }, 4000)
         detail2 = { pair, scale, bothLive }
         if (bothLive) {
@@ -757,13 +759,13 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           })()`)
           const gap = lo2.y - (up2.y + up2.h)
           detail2 = { scale, rimWorld, wantGap, gap, hit }
-          pass2 = rimWorld > 16 + 4 && Math.abs(gap - rimWorld) < 1 && hit.id === upperId && hit.nameTop >= hit.upperBottom - 0.5
+          pass2 = rimWorld > 16 + 2 && Math.abs(gap - rimWorld) < 1 && hit.id === upperId && hit.nameTop >= hit.upperBottom - 0.5
         }
         }
         await resetZoom(wc)
         await cameraStill(wc)
       }
-      ok('place.snap.rim.2 at 50% zoom a snapped stack of live terminals still leaves the upper one\'s bottom row uncovered — the gap is the rim\'s measured WORLD height there (taller than at 100%), and elementFromPoint on that row answers the upper panel',
+      ok('place.snap.rim.2 at ~70% zoom (the furthest live zoom) a snapped stack of live terminals still leaves the upper one\'s bottom row uncovered — the gap is the rim\'s measured WORLD height there (taller than at 100%), and elementFromPoint on that row answers the upper panel',
         pass2, JSON.stringify(detail2))
       } finally {
         layoutStore.setPreference('placement.snap', false)

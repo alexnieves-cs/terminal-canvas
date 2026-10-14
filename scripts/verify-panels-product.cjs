@@ -769,11 +769,15 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const hidden = (await win.webContents.capturePage(rect)).toBitmap()
         await wc.executeJavaScript(`${layer}.style.visibility = ''; true`); await sleep(150)
         const hit = await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${rect.x + rect.width / 2}, ${rect.y + rect.height / 2}); const p = e && e.closest('.panel'); return p ? p.getAttribute('data-panel-id') : (e ? e.className.baseVal ?? e.className : null) })()`)
-        return { rect, paints: !shown.equals(hidden), hit }
+        const sum = (b) => { let t = 0; for (let i = 0; i < b.length; i += 97) t = (t + b[i]) % 1000003; return t }
+        const style = await wc.executeJavaScript(`(() => { const l = document.querySelector('[data-annotation=' + ${JSON.stringify(JSON.stringify(aid))} + '] [data-annotation-label]'); if (!l) return null; const c = getComputedStyle(l); return { opacity: c.opacity, visibility: c.visibility, color: c.color, bg: c.backgroundColor, win: [innerWidth, innerHeight] } })()`)
+        return { rect, paints: !shown.equals(hidden), hit, ev: { len: shown.length, a: sum(shown), b: sum(hidden), style } }
       }
       const covered = await paints('cuA')
       const own = await paints('cuN')
-      const open = await paints('cuB')
+      // An uncovered caption is allowed a few looks: the label eases in, and a slow runner can capture it at the start of that ease.
+      let open = await paints('cuB')
+      for (let i = 0; i < 3 && open.paints !== true; i++) { await sleep(500); open = await paints('cuB') }
       // Retire: a press on cu1's chrome selects it (the header's beginMove).
       await wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="cu1"] .panel__chrome'); const r = h.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, buttons: 1, clientX: r.left + 30, clientY: r.top + r.height / 2 }; h.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', { ...o, buttons: 0 })); return true })()`)
       const retired = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('[data-annotation]')].map((g) => g.getAttribute('data-annotation')).sort(); return ids.includes('cuA') ? false : ids })()`), 3000)
@@ -1174,8 +1178,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const refusal = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-refusal]')?.textContent || false`), 3000)
       const edgesNow = await wc.executeJavaScript(`document.querySelectorAll('[data-workflow-edge]').length`)
       // Evidence for a red run: which edges exist, what the drop point resolved to, and where the pointer's last stop was.
-      const wireEv = await wc.executeJavaScript(`(() => ({ edges: [...document.querySelectorAll('[data-workflow-edge]')].map((e) => e.getAttribute('data-workflow-edge')), blocks: [...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.width) + 'x' + Math.round(r.height) }), flowH: Math.round(document.querySelector('.react-flow')?.getBoundingClientRect().height ?? 0) }))()`)
-      const dropHit = block2 ? await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${block2.x}, ${block2.y}); return e ? e.tagName + '.' + String(e.className).slice(0, 40) + ' in ' + (e.closest('[data-workflow-block]')?.getAttribute('data-workflow-block') ?? '-') : null })()`) : null
+      const wireEv = await wc.executeJavaScript(`(() => ({ edges: [...document.querySelectorAll('[data-workflow-edge]')].map((e) => e.getAttribute('data-workflow-edge')), blocks: [...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.width) + 'x' + Math.round(r.height) }), flowH: Math.round(document.querySelector('.react-flow')?.getBoundingClientRect().height ?? 0) }))()`).catch((e) => String(e && e.message || e).slice(0, 120))
+      const dropHit = block2 ? await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${block2.x}, ${block2.y}); return e ? e.tagName + '.' + String(e.className).slice(0, 40) + ' in ' + (e.closest('[data-workflow-block]')?.getAttribute('data-workflow-block') ?? '-') : null })()`).catch((e) => String(e && e.message || e).slice(0, 120)) : null
       ok(ids[1], wired === true && typeof edgeWord === 'string' && edgeWord.length > 0 && typeof refusal === 'string' && /cycle/.test(refusal) && edgesNow === 1,
         JSON.stringify({ port1, block2, wired, edgeWord, refusal, edgesNow, wireEv, dropHit }))
       // M259 — wfx.ui.1 (second half). Selecting n1 lights its lineage — n2

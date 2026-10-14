@@ -120,7 +120,7 @@ async function measurePlacement(wc) {
     // the world layer with their store rect in left/top/width/height. A suite
     // that has made tasks earlier has them, and an expectation blind to them
     // lands the spot a region's width away.
-    const regions = [...document.querySelectorAll('.world [data-task-cluster="task"]')].map((el) => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top), w: parseFloat(el.style.width), h: parseFloat(el.style.height) })).filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite))
+    const regions = [...document.querySelectorAll('[data-task-cluster="task"]')].map((el) => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top), w: parseFloat(el.style.width), h: parseFloat(el.style.height) })).filter((r) => [r.x, r.y, r.w, r.h].every(Number.isFinite))
     return { vp, regions, chrome, panels, cw: host.clientWidth, ch: host.clientHeight, centre: { x: (host.clientWidth / 2 - vp.x) / vp.scale, y: (host.clientHeight / 2 - vp.y) / vp.scale } }
   })()`)
 }
