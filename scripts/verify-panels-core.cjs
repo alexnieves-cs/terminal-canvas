@@ -3054,6 +3054,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     // ---------------------------------------------------------------------
     {
       await resetZoom(wc)
+      // Reset zoom is a flight; `before` below must be read after it lands, or
+      // the first read catches the camera mid-flight (measured: far off-screen).
+      await cameraStill(wc)
       if (await wc.executeJavaScript(`document.querySelector('.palette') === null`)) {
         await wc.executeJavaScript(
           `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)

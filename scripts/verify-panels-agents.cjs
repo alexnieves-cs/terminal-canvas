@@ -2351,10 +2351,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // or clicked, exactly as a person would find it.
         await wc.executeJavaScript(`window.__m4aWrite('\\r\\n\\r\\n\\r\\n\\r\\n\\r\\n\\r\\nopen http://localhost:5173/ok now\\r\\n')`)
         const marked = await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('localhost') !== null`), 8000)
-        // Zoom out through the canvas's own path. Three steps (~58%): the zoom
-        // step is 1.2 now, so a fourth lands at 0.48, under LIVE_MIN_SCALE,
-        // where the terminal under the pointer is a card with no cell to hover.
-        for (let i = 0; i < 3; i++) await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))`)
+        // Zoom out through the canvas's own path. Two steps (~69%): the zoom
+        // step is 1.2, so a third lands at 0.58, inside the Plan tier, where
+        // the terminal under the pointer is a card with no cell to hover.
+        for (let i = 0; i < 2; i++) await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))`)
         await settle()
         await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('localhost') !== null`), 4000)
         const scale = await wc.executeJavaScript(`window.__m4aScale()`)
@@ -2368,7 +2368,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           wc.sendInputEvent({ type: 'mouseMove', x: Math.round(target.x), y: Math.round(target.y) })
           hovered = await waitUntil(async () => { const h = await hoverOf(); return h ? h : false }, 3000)
         }
-        ok(IDS[0], woke === true && marked === true && scale < 0.6 && target !== null && hovered === 'http://localhost:5173/ok',
+        ok(IDS[0], woke === true && marked === true && scale < 0.7 && target !== null && hovered === 'http://localhost:5173/ok',
           JSON.stringify({ woke, marked, scale, target, hovered }))
 
         // links.1. Plain click first (nothing recorded), then Cmd-click.
@@ -2716,8 +2716,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         clicked === true && !same(start, target) && same(back, start), JSON.stringify({ firstRow, start, target, back }))
       await wc.executeJavaScript(`window.__m56ReducedMotion(false)`)
       await clickRow(firstRow)
-      await sleep(60)
-      const mid = await vp()
+      // The flight begins a frame or two after the click; sample the first
+      // frame that has left the start instead of a fixed 60 ms.
+      let mid = await vp()
+      for (let i = 0; i < 40 && same(mid, start); i++) { await sleep(15); mid = await vp() }
       const landed = await waitUntil(async () => same(await vp(), target), 3000)
       ok('flight.1 the same jump without reduced motion is a multi-frame flight that lands on the identical target',
         clicked === true && !same(mid, start) && !same(mid, target) && landed === true,
@@ -2767,6 +2769,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
     //   through recovery's door. Red first: nothing subscribed.
     {
       const orphanId = 'n9990'
+      // Earlier checks leave the camera zoomed; a card tier has no live slot.
+      await resetZoom(wc); await settle()
       let created = null
       try { created = await ptyManager.create({ panelId: orphanId, cwd: tmpdir(), command: '/bin/sh', args: ['-c', 'sleep 60'] }) } catch (e) { created = { error: String(e) } }
       const rowsBefore = ptyManager.list().filter((r) => r.panelId === orphanId).length
@@ -3035,7 +3039,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         {
           const at = (sel) => wc.executeJavaScript(`(() => { const n = document.querySelector(${JSON.stringify(sel)}); if (!n) return null; const r = n.getBoundingClientRect(); return { x: Math.round(r.left + Math.min(r.width / 2, 40)), y: Math.round(r.top + r.height / 2) } })()`)
           const rclick = async (p) => { if (p === null) return; wc.sendInputEvent({ type: 'mouseMove', x: p.x, y: p.y }); wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'right', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'right', clickCount: 1 }); await sleep(250) }
-          const esc = async () => { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await sleep(200) }
+          const esc = async () => { wc.focus(); await sleep(150); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await sleep(200) }
           const sessionOf = (id) => wc.executeJavaScript(`(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(id)}) || null)`)
           // ctx.dormant.1 — a right-click on a dormant card (its body, then
           // its name strip) opens the menu and selects it, and WAKES NOTHING.
@@ -3485,7 +3489,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             const gear = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-dock="settings"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
             const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
             const state = () => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-settings-root]'); return { open: !!r, label: r ? r.getAttribute('aria-label') : null, palette: document.querySelector('.palette') !== null } })()`)
-            const esc = async () => { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle() }
+            const esc = async () => { wc.focus(); await sleep(150); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle() }
             if (gear) {
               press(gear); const opened = await waitUntil(async () => { const s = await state(); return s.open ? s : false }, 3000)
               await esc()
