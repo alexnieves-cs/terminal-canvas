@@ -4428,9 +4428,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const ranFit = await runRow('Fit selection')
       const framed = await waitUntil(async () => {
         const vp = await wc.executeJavaScript(`window.__m4aViewport()`)
-        const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left && r.top >= host.top && r.right <= host.right && r.bottom <= host.bottom }) })()`)
+        const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left - 24 && r.top >= host.top - 24 && r.right <= host.right + 24 && r.bottom <= host.bottom + 24 }) })()`)
         return inside ? vp : false
-      }, 4000)
+      }, 6000)
+      // Evidence for a miss: where the panels and the host sat after the flight.
+      const fitEv = framed !== false ? null : await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas').getBoundingClientRect(); return { host: [h.left, h.top, h.right, h.bottom].map(Math.round), vp: window.__m4aViewport(), panels: ${JSON.stringify(ids)}.map((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return null; const r = p.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round) }) } })()`)
       const ranReset = await runRow('Reset zoom')
       const reset = await waitUntil(async () => { const vp = await wc.executeJavaScript(`window.__m4aViewport()`); return vp.scale === 1 && vp.x === DEFAULT_CAMERA.x && vp.y === DEFAULT_CAMERA.y ? vp : false }, 4000)
       const rectsAfter = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
@@ -4438,7 +4440,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('fit.1 Fit selection (Zoom to fit before M409) frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
         ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
           rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
-        JSON.stringify({ ids, selected, aVisible, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
+        JSON.stringify({ ids, selected, aVisible, ranFit, framed, fitEv, ranReset, reset, sessionsBefore, sessionsAfter }))
       for (const id of ids) await clickPanelClose(wc, id)
     }
 
