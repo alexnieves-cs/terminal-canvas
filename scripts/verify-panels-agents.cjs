@@ -3409,9 +3409,9 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                 // (inside its own context) and translated back after the probe.
                 let pr = map ? map.getBoundingClientRect() : null, mr = m.getBoundingClientRect(), moved = false
                 if (pr && (mr.right <= pr.left || mr.left >= pr.right || mr.bottom <= pr.top || mr.top >= pr.bottom)) {
-                  // The `translate` property composes with a transform the menu
+                  // The translate property composes with a transform the menu
                   // may already carry (its popper positions it that way);
-                  // overwriting `transform` threw it back to the origin.
+                  // overwriting transform threw it back to the origin.
                   m.style.translate = Math.round(pr.left + pr.width / 2 - mr.left - mr.width / 2) + 'px ' + Math.round(pr.top + pr.height / 2 - mr.top - 20) + 'px'
                   moved = true; mr = m.getBoundingClientRect()
                 }
