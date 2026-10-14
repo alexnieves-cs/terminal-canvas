@@ -28,7 +28,11 @@ jobs:
       - name: Run suite
         env:
           TC_WATCHDOG_SCALE: '2'
-        run: npm run verify:${{ matrix.suite }} > suite.log 2>&1 || true
+        # A hung suite must still report: stop it at 18 minutes and print what it logged.
+        run: |
+          perl -e 'alarm 1080; exec @ARGV' npm run verify:${{ matrix.suite }} > suite.log 2>&1 || true
+          pkill -f Electron || true
+          echo "=== tail"; tail -40 suite.log | cut -c1-300
       - name: Failures only
         run: |
           echo "=== ${{ matrix.suite }}: summary"
