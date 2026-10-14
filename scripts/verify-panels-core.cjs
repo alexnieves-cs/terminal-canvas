@@ -4351,6 +4351,13 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // chrome — a panel the earlier checks left elsewhere may be off screen
       // or under a later one, and a click there selects something else.
       const spawnFit = async () => {
+        // A bare ⌘⌥N mints at the last pointer point (a WORLD one); an earlier check's
+        // far pan leaves it ~300000 units away, which put the pair so far apart that
+        // Fit selection bottomed out at 10% with neither in view. A real move to the
+        // host's centre makes the pointer and the view the same point again.
+        const c = await wc.executeJavaScript(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        await sleep(150)
         const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
         return waitUntil(async () => {
