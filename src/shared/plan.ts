@@ -70,6 +70,8 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   // hub, workers, worktrees and a terminal. A teammate's plan does not open
   // sessions, and five of them is not an exception to that.
   'swarm',
+  // M480. A night of auto runs across every lane: the person's to start.
+  'tonight',
   'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.

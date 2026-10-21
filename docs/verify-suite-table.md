@@ -132,3 +132,5 @@ temp repository with three worktrees, two editing the same line of one file (a c
 git's own `merge-tree --write-tree`), one of those and a third touching the same file in
 different places (an overlap that merges clean, the third's edit left uncommitted). It needs
 git 2.38 or later for `--write-tree`; an older git is an `error`, never read as clean.
+`tonight.batch.1` (M480) pins what the door hands main — which board tasks a Run tonight takes,
+which it names as left out, and that the batch it builds passes main's own parse.

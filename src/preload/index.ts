@@ -254,6 +254,11 @@ const bridge: CanvasBridge = {
     merge: (req: unknown) => ipcRenderer.invoke(IPC.LANE_MERGE, req),
     radar: (lanes: unknown) => ipcRenderer.invoke(IPC.LANE_RADAR, lanes)
   },
+  tonight: {
+    start: (batch: unknown) => ipcRenderer.invoke(IPC.TONIGHT_START, batch),
+    stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),
+    status: () => ipcRenderer.invoke(IPC.TONIGHT_STATUS)
+  },
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
     save: (setup: unknown) => ipcRenderer.invoke(IPC.SETUP_SAVE, setup),

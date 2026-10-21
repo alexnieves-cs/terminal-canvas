@@ -7,6 +7,7 @@ import type { CombineRunResult } from './combine'
 import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from './integration'
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { RadarLane, RadarReport } from './collision-radar'
+import type { TonightBatchSpec, TonightStatus } from './tonight'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
 import type { Recipe } from './recipes'
@@ -872,6 +873,15 @@ export const IPC = {
   /** M97. A bounded auto run on a chat: main counts, main stops. */
   AGENT_AUTO_START: 'agent:auto-start',
   AGENT_AUTO_STOP: 'agent:auto-stop',
+  /**
+   * M480. TONIGHT's doors over M477's runner: start a batch (parsed by name in
+   * main, refused while one is live), stop it (the current run, the queue and
+   * the power blocker), and read its status. Main owns the batch; the
+   * renderer only names the tasks.
+   */
+  TONIGHT_START: 'tonight:start',
+  TONIGHT_STOP: 'tonight:stop',
+  TONIGHT_STATUS: 'tonight:status',
   /**
    * M98. Session grants — `Allow for session`. The grant itself rides
    * `agent:answer`'s `scope`; these two read the granted tools for a panel
@@ -2032,6 +2042,12 @@ export interface CanvasBridge {
     merge(req: LaneMergeRequest): Promise<LaneMergeResult>
     /** M479. See LANE_RADAR. */
     radar(lanes: RadarLane[]): Promise<RadarReport>
+  }
+  /** M480. See TONIGHT_START. */
+  tonight: {
+    start(batch: TonightBatchSpec): Promise<{ kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }>
+    stop(): Promise<boolean>
+    status(): Promise<TonightStatus | null>
   }
   /** M312. See SETUP_READ. */
   setup: {

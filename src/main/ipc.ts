@@ -31,6 +31,7 @@ import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
+import type { TonightStatus } from '../shared/tonight'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -229,6 +230,10 @@ export interface AgentHandlers {
   /** M97. */
   autoStart(req: AutoStartRequest): AutoStartResult
   autoStop(id: string): boolean
+  /** M480. Tonight's doors (main/tonight-runner.ts). Optional, so a harness mirror without them answers by name. */
+  tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }
+  tonightStop?(): boolean
+  tonightStatus?(): TonightStatus | null
   /** M98. The tools granted for a session, in grant order. */
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
@@ -989,6 +994,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
   ipcMain.handle(IPC.AGENT_AUTO_START, (_event, req: AutoStartRequest) => agents.autoStart(req))
   ipcMain.handle(IPC.AGENT_AUTO_STOP, (_event, id: string) => agents.autoStop(id))
+  ipcMain.handle(IPC.TONIGHT_START, (_event, raw: unknown) => agents.tonightStart?.(raw) ?? { kind: 'refused', reason: 'tonight is not available in this process' })
+  ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
+  ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))

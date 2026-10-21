@@ -333,7 +333,9 @@ app.whenReady().then(() => {
   // +1: tmux:adoptable (the UX pass's adopt door).
   // +1: lane:radar (M479, stream C) — sibling lanes that touch the same files,
   // and git's trial merge of each pair; read-only.
-  const EXPECTED_CHANNELS = 211
+  // +3: tonight:start / tonight:stop / tonight:status (M480, stream C) — the
+  // night's batch named by the renderer, run and stopped by main.
+  const EXPECTED_CHANNELS = 214
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
