@@ -70,9 +70,15 @@ const FACTS = {
     // old `[:=]` matched that `===` as if commands.ts cleared the mark.
     const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*(?::|=(?!=))/.test(src(p)))
     const canvas = src('renderer/canvas/Canvas.tsx')
-    const uses = (name) => [...canvas.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
-    const passedOnly = uses('markTemplateRead') === 2 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(canvas) &&
-      uses('markPreviewRead') === 2 && /onMarkRead=\{markPreviewRead\}/.test(canvas)
+    // M507. The per-panel render moved to PanelNode.tsx, which Canvas calls.
+    // Canvas names each function twice (where it gets it, where it hands it
+    // to the render); PanelNode three times (its context's type, where it
+    // takes it, the one onMarkRead).
+    const node = /renderPanelNode\(panel, \{/.test(canvas) ? src('renderer/canvas/PanelNode.tsx') : ''
+    const usesIn = (text, name) => [...text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
+    const uses = (name) => usesIn(canvas, name)
+    const passedOnly = uses('markTemplateRead') === 2 && usesIn(node, 'markTemplateRead') === 3 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(node) &&
+      uses('markPreviewRead') === 2 && usesIn(node, 'markPreviewRead') === 3 && /onMarkRead=\{markPreviewRead\}/.test(node)
     ok('tool.door.1 marking a tool read has NO verb, palette row, agent line or workflow node: no door file names a mark-read function or writes `reviewed`, and Canvas passes each mark-read function only to its node\'s onMarkRead',
       reaching.length === 0 && passedOnly, JSON.stringify({ reaching, markTemplateRead: uses('markTemplateRead'), markPreviewRead: uses('markPreviewRead') }))
   }

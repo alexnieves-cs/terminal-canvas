@@ -198,7 +198,9 @@ function connect(port, tok, opts = {}) {
       ok('relay.names.2 every relay panel on the canvas is handed the roster\'s names, from the same hook the shared placeholders use',
         /const rosterNames = useRosterNames\(activeWorkspaceId\)/.test(canvas) && /relayNameOf\(rosterNames, userId\)/.test(creation) &&
         /\brelayNameFor\b[^}]*\} = useCreationVerbs\(\{[^}]*\brosterNames\b/.test(canvas) &&
-        /<RelayNode[\s\S]{0,200}nameOf=\{relayNameFor\}/.test(canvas) && /useRosterNames\(props\.workspaceId\)/.test(layer))
+        // M507. The panel render moved to PanelNode.tsx; Canvas hands it relayNameFor.
+        /renderPanelNode\(panel, \{[^}]*\brelayNameFor\b/.test(canvas) &&
+        /<RelayNode[\s\S]{0,200}nameOf=\{relayNameFor\}/.test(readFileSync(join(__dirname, '..', 'src/renderer/canvas/PanelNode.tsx'), 'utf8')) && /useRosterNames\(props\.workspaceId\)/.test(layer))
     }
     ok('relay.gate.4 the control line names the controller, or says why there is none',
       G.relayControlLine(v(OWNER), (u) => u === GUEST ? 'sam' : '?') === 'sam is in control' &&

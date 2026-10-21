@@ -3073,7 +3073,9 @@ const session = (id, over = {}) => ({
   const read = (file) => require('node:fs').readFileSync(join(__dirname, '..', file), 'utf8')
   const workflow = read('src/renderer/workflow/WorkflowNode.tsx')
   const work = read('src/renderer/work/WorkNode.tsx')
-  const canvas = read('src/renderer/canvas/Canvas.tsx')
+  // M507. The per-panel render moved to PanelNode.tsx, which Canvas calls.
+  const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
+  const canvas = /renderPanelNode\(panel, \{/.test(canvasOwn) ? read('src/renderer/canvas/PanelNode.tsx') : ''
   ok('run.surface.1 workflow and task cards consume the shared live projection, name the blocking node/question, and answer through the same approval action Canvas gives chat and Attention',
     /projectRun\(selectedRun, props\.liveFacts\)/.test(workflow) && /data-workflow-run-blocker/.test(workflow) && /data-workflow-approval="allow"/.test(workflow) &&
       /data-work-execution/.test(work) && /data-work-blocker/.test(work) && /data-work-approval="allow"/.test(work) &&

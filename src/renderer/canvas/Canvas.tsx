@@ -3,6 +3,7 @@ import {
   type Dispatch, type SetStateAction, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { useShellTail } from './useShellTail'
+import { renderPanelNode } from './PanelNode'
 import { useDropVerbs } from './useDropVerbs'
 import { useTestDoors } from './useTestDoors'
 import { useRestartVerbs } from './useRestartVerbs'
@@ -98,21 +99,14 @@ import { nextAttentionId, reachableQueue, type JumpDirection } from './attention
 import { jumpOrder, type Inbox } from '@renderer/shell/decision-inbox'
 import { nextReview, type ReadyReview } from '@renderer/shell/ready-review'
 import { dismissReturn} from '@renderer/shell/presence'
-import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
-import { ReviewNode } from '@renderer/review/ReviewNode'
-import { FileNode } from '@renderer/file/FileNode'
-import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
 import { pillFocused, orchestratorTarget } from './command-pill'
 import { CommandPill, orchestratorCandidates } from './CommandPill'
 import { noteEditorFocused } from '@renderer/file/rich-note-focus'
-import { DeckNode } from '@renderer/file/DeckNode'
 import { deckFocused } from '@renderer/file/deck-controllers'
-import { SheetNode } from '@renderer/file/SheetNode'
 import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
 import { focusedDraft, serveDraftEdit } from './draft-focus'
-import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
@@ -144,8 +138,8 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { findConnector, isShapePanel, isRelayPanel, RELAY_W, RELAY_H, isNotePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isGithubPanel, isWatcherPanel, isMemoryPanel,
-  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeJiraPanel,
+import { findConnector, isShapePanel, RELAY_W, RELAY_H, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isWatcherPanel,
+  cascadeCentre, firstRunPanels, isFilePanel, isReviewPanel, isTerminalPanel, makeJiraPanel,
   makeChatPanel, isChatPanel,
   makePanel, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, raisePanel, removePanel, setPanelRect, withFrameContents,
   addLink, setLinkAutomation, linksOf, workCardItemId,
@@ -162,8 +156,6 @@ import { STARTER_LAYOUTS } from '@shared/lineups'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
-import { JiraNode } from '@renderer/jira/JiraNode'
-import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
 import { getChat, insertIntoComposer, onChatTurnStart, scrollToTurn, useChatsVersion } from '@renderer/chat/chat-store'
 import type { SpawnResult } from '@shared/ipc-contract'
@@ -177,23 +169,14 @@ import { REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
-import { MemoryNode } from '@renderer/memory/MemoryNode'
-import { GithubNode } from '@renderer/github/GithubNode'
-import { WorkNode} from '@renderer/work/WorkNode'
 // How long an attention landing stays lit. Matches `.landing-halo`'s
 // animation in styles.css: the timer only unmounts what the CSS has already
 // faded, and under reduced motion (animation forced off) it is the whole
 // signal — a still ring shown for this long, then gone.
 const LANDING_LIT_MS = 900
-import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { getWatch } from '@renderer/watcher/watcher-store'
-import { WatcherNode } from '@renderer/watcher/WatcherNode'
-import { BrowserNode } from '@renderer/browser/BrowserNode'
-import { RelayNode } from '@renderer/relay/RelayNode'
 import { applyRelayTheme, disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
-import { ImageNode } from '@renderer/image/ImageNode'
-import { NoteNode } from '@renderer/note/NoteNode'
 import { getDraft} from '@renderer/workflow/template-draft-store'
 import { displayPath } from '@shared/display-path'
 import { laneOfPath } from '@shared/work-scope'
@@ -203,21 +186,20 @@ import { isStarterCaption, starterKeysToApply, type PersistedStarter } from '@sh
 import { onboardingReadiness, foundAgentIds} from '@shared/onboarding'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { useRuns } from './useRuns'
-import { allTemplates, isBuiltInTemplate, type PersistedTemplate, type TemplateEdge } from '@shared/templates'
+import { allTemplates, type PersistedTemplate, type TemplateEdge } from '@shared/templates'
 import { applyPoolEvent } from '@renderer/workflow/pool-store'
 import type { PoolMintReply, PoolMintRequest } from '@shared/ipc-contract'
 import { fillTemplate, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
 import { enabledEdges, sealAbandoned} from './run-model'
 import { buildRunRows} from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
-import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
+import { claudeAvailable, codexAvailable} from '@renderer/palette/commands'
 import { onChatSession, deliverToComposer } from '@renderer/chat/chat-store'
 import { clearUnread, clearLastLine} from '@renderer/session/last-line-store'
 import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { type PersistedTeammate } from '@shared/teammates'
 import type { ToolScope } from '@shared/toolbox'
-import { SkillNode } from '@renderer/skills/SkillNode'
 
 /* M127. Module scope, never a fresh literal per render: canvas-constants.ts's
    own rule — a new object each render is re-render churn through every memo
@@ -225,7 +207,7 @@ import { SkillNode } from '@renderer/skills/SkillNode'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount} from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, type Annotation} from '@shared/annotations'
-import { WORK_ITEM_STATES, carryWorkItem, prRefusalSync, teammateRefusal, type PersistedWorkItem} from '@shared/work-items'
+import { WORK_ITEM_STATES, carryWorkItem, type PersistedWorkItem} from '@shared/work-items'
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
 import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
 import { useBoardVerbs, type BoardVerbs } from './useBoardVerbs'
@@ -5828,394 +5810,10 @@ export function Canvas({
               onOpenSkill={openSkillPanel}
             />
           ))}
-          {displayPanels.map((panel) => {
-            // The partition, at the last hop. onSelect is selectAndRaise and
-            // NOT onSelectPanel: the latter clears the dormant id and calls
-            // registry.wake, which is the app's spawn gesture and means
-            // nothing for a panel with no process — the same distinction the
-            // rail draws between navigating and starting.
-            if (isReviewPanel(panel)) {
-              return (
-                <ReviewNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  onCommitted={onReviewCommitted}
-                  // The commit input is the second surface in this app that
-                  // takes DOM focus off xterm, so it inherits usePalette's
-                  // rule 4 — see ReviewNode's own prop comments for both
-                  // halves, and for why no check can observe it.
-                  restoreFocus={restoreFocus}
-                  focusedId={focusedId}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                                  // M86. A section's heading is the honest chain's label for its panel.
-                  sectionLabel={(panelId) => { const p = panelsRef.current.find((q) => q.rect.id === panelId); return p === undefined ? undefined : railLabel(p, isTerminalPanel(p) ? registry.get(panelId)?.status : undefined) }}
-                  // M202 (D07). The task, when this review was opened from a
-                  // card. Every piece is resolved HERE — the canvas owns the
-                  // board, the worktree records and the panel list, and a
-                  // review node reaching for any of them would be a second
-                  // author of facts that already have one. Absent (and the
-                  // whole section with it) for a review opened any other way,
-                  // and absent too when the item or its worktree is gone,
-                  // because a task section with no task is worse than none.
-                  task={taskContextFor(panel.subject.workItemId)}
-                  />
-              )
-            }
-            // The second sessionless arm, and onSelect is selectAndRaise here
-            // for the same reason it is above: a file panel has no process, so
-            // onSelectPanel's clear-dormant and registry.wake would be the
-            // app's spawn gesture aimed at something that can never spawn.
-            if (isFilePanel(panel)) {
-              if (panel.source.deck !== undefined) return <DeckNode key={panel.rect.id} panel={panel}
-                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
-                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
-                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setDeckView} />
-              if (panel.source.sheet !== undefined) return <SheetNode key={panel.rect.id} panel={panel}
-                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
-                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
-                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setSheetView} />
-              if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
-                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
-                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
-                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setChecklistView}
-                agents={panels.filter(isChatPanel).map((p) => ({ id: p.rect.id, label: railLabel(p, undefined) }))} />
-              return (
-                <FileNode
-                  key={panel.rect.id}
-                  // M256. The widened DISPLAY rect while in document focus —
-                  // and a drag on it leaves focus instead of moving it, so the
-                  // widened size can never be committed to the layout.
-                  panel={docFocusId === panel.rect.id ? { ...panel, rect: docFocusRect(panel.rect) } : panel}
-                  docFocused={docFocusId === panel.rect.id}
-                  onDocFocus={onDocFocus}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={docFocusId === panel.rect.id ? () => onDocFocus(panel.rect.id, false) : onBeginDrag}
-                  onClose={onClosePanel}
-                  // The editor textarea is a third surface that takes DOM
-                  // focus off xterm, so it inherits usePalette's rule 4 —
-                  // see FileNode's own prop comments for both halves, and
-                  // ReviewNode's restoreFocus prop for the precedent.
-                  restoreFocus={restoreFocus}
-                  focusedId={focusedId}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  vaultReady={vaultReady}
-                  onImportReviewed={setImportReviewed}
-                  {...(noteVault !== null && panel.source.path.startsWith(`${noteVault.root}/`) ? { vault: noteVault } : {})}
-                  {...(shared.view !== null && activeWorkspaceId !== undefined ? { sharedWorkspaceId: activeWorkspaceId } : {})}
-                />
-              )
-            }
-            // M84. The eighth kind — a PROCESS node without a PTY: its
-            // process is main's watch runner, addressed by this id.
-            if (isWatcherPanel(panel)) {
-              const trigger = panel.watch.trigger
-              const source = trigger.kind === 'panel' ? panelsRef.current.find((p) => p.rect.id === trigger.sourceId) : undefined
-              return (
-                <WatcherNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  onSetArmed={setWatcherArmed}
-                  {...(source === undefined ? {} : { sourceLabel: railLabel(source, undefined) })}
-                  workflowWord={panel.watch.templateId === undefined
-                    ? { kind: 'none' }
-                    : ((n) => (n === undefined ? { kind: 'gone' } as const : { kind: 'named', name: n } as const))(allTemplates(templateRows).find((t) => t.id === panel.watch.templateId)?.name)}
-                />
-              )
-            }
-            // M103. The eleventh kind: a live page in a guest process, its
-            // chrome ours and its state the kind word.
-            if (isBrowserPanel(panel)) {
-              return (
-                <BrowserNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  onDiscover={discoverProject}
-                  onOpenPreview={(url) => { void openPreview(url) }}
-                  onSetDevice={(paneId, device) => { setPreviewWidth(device, paneId) }}
-                  onCapture={capturePreviewNow}
-                  onStartDev={startDevServer}
-                  onBindSource={bindPreview}
-                  onMarkRead={markPreviewRead}
-                  {...(previewSubjectReason === undefined ? {} : { bindReason: previewSubjectReason })}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  onNavigated={onBrowserNavigated}
-                />
-              )
-            }
-            // M338. A relay terminal: sessionless here, its pty on the relay VM.
-            if (isRelayPanel(panel)) {
-              return (
-                <RelayNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  onSession={setRelaySession}
-                  nameOf={relayNameFor}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                />
-              )
-            }
-            // M388. The seventeenth kind renders in the ShapeLayer below, never here.
-            if (isShapePanel(panel)) return null
-            // M187. The sixteenth kind: a note, in one of its three forms.
-            if (isNotePanel(panel)) {
-              return (
-                <NoteNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  readOnly={merged}
-                  onText={(panelId, text) => { setNoteText(panelId, text) }}
-                  onTint={(panelId, tint) => { setNoteTint(panelId, tint) }}
-                />
-              )
-            }
-            // M181. The fifteenth kind: a picture, sessionless like the file panel.
-            if (isImagePanel(panel)) {
-              return (
-                <ImageNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  onReplace={replaceImage}
-                  reloadKey={imageReloads[panel.rect.id]}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                />
-              )
-            }
-            // M83. The seventh kind, sessionless like the four before it.
-            if (isMemoryPanel(panel)) {
-              return (
-                <MemoryNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  // 5.2 (D12). A camera and focus move onto the decision's
-                  // source conversation — never a reopen: a closed chat is
-                  // said to be closed, and the entry keeps its ids regardless.
-                  onShowSource={(conversationId) => {
-                    if (!panelsRef.current.some((p) => p.rect.id === conversationId)) return 'the conversation this was accepted from is closed — the decision keeps its source, but the transcript is not open on this canvas'
-                    selectOnly(conversationId)
-                    onFocusPanel(conversationId)
-                    return null
-                  }}
-                />
-              )
-            }
-            if (isToolboxPanel(panel)) {
-              return (
-                <ToolboxNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  selected={selectedIds.has(panel.rect.id)}
-                  // selectAndRaise, never onSelectPanel: the latter's
-                  // clear-dormant and registry.wake are the SPAWN gesture, and
-                  // a toolbox node can never spawn anything.
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  onOpenFile={openFileAtCentre}
-                />
-              )
-            }
-            // M73. The fifth sessionless arm on the canvas and the first
-            // process kind that is not a terminal: selectAndRaise, never
-            // onSelectPanel, for the same reason as the four above — the
-            // spawn gesture belongs to the composer's Send, not to a click.
-            if (isChatPanel(panel)) {
-              return (
-                <ChatNode
-                  key={panel.rect.id}
-                  panel={panel}
-                  selected={selectedIds.has(panel.rect.id)}
-                  onSelect={selectAndRaise}
-                  onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
-                  onClose={onClosePanel}
-                  readOnly={merged}
-                  onBeginLink={onBeginLink}
-                  linkTarget={linkDraw.state?.target === panel.rect.id}
-                  claudeAvailable={backendAvailable(presetRows, backendOf(panel.chat))}
-                  onOpenInTerminal={openInTerminal}
-                  // M97. Focus first so the palette CAPTURES this chat (its rows act on
-                  // the captured id); the open waits a tick for the focus ref to land.
-                  onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
-                  teammateName={panel.chat.teammateId === undefined ? undefined : (teammates ?? []).find((t) => t.id === panel.chat.teammateId)?.name ?? panel.chat.teammateId}
-                  taskId={workItems.find((item) => item.panelId === panel.rect.id)?.id}
-                  guide={firstTaskStrip(panel.rect.id)}
-                  onNameChat={nameChat}
-                />
-              )
-            }
-            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} onAddToBoard={addGithubToBoard} boardKeys={boardKeys} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
-            // M116. The work card: the record by id from the board's list, the
-            // lane's rail label (the chat the item was dispatched to, when it
-            // is still here), the roster for Assign. The verbs are Track A's
-            // (M114/M115) and arrive as props after the merge; absent they
-            // render disabled by name.
-            if (isWorkPanel(panel)) {
-              const item = workItems.find((i) => i.id === panel.work.itemId)
-              const execution = item?.panelId === undefined || liveRunFacts[item.panelId] === undefined ? undefined : projectSession(item.panelId, liveRunFacts[item.panelId])
-              const retained = item === undefined ? undefined : retainedOutcomes.find((outcome) => outcome.itemId === item.id)
-              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label} execution={execution} onAnswer={paletteActions.answerApproval} retainedOutcome={retained}
-                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                // M114/M115. The verbs, through the SAME palette members the rows call.
-                onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
-                onFocusTask={openFocusTask}
-                teammateReason={teammateRefusal}
-                // M275. The card's arrangement door, into the SAME one start
-                // action every other door takes — with the shape chosen, so
-                // the sheet opens on it rather than on a blank arrangement.
-                onSwarm={(itemId, preset) => paletteActionsRef.current?.beginStartWork({ itemId, swarm: preset })}
-                agentAvailable={claudeAvailable(presetRows) || codexAvailable(presetRows)}
-                onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
-                prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}
-                // M202 (D07). ONE action for all four doors. It replaces the
-                // M116 handler that required the lane's CHAT to still be open
-                // and otherwise only left a note — a task whose agent was
-                // dismissed is exactly the one a person comes back to review.
-                onReview={(itemId) => { const r = reviewTaskLane(itemId); if (r.kind === 'refused') patchWorkItem(itemId, { note: r.reason }) }}
-                // M203 (D08). The card's door onto the same verb; the sentence
-                // is SAID, never written to the item — a camera move leaves no
-                // record, and a missing member is a fact of now, not of the task.
-                onShow={(panelId) => { const r = paletteActionsRef.current?.showTask(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
-                handoff={item === undefined ? undefined : taskHandoffOf(item.id)}
-                // M202 (D07). Resume is a CAMERA and FOCUS move onto the
-                // lane's conversation, never a send: the person decides what
-                // their agent is told next.
-                onResume={(itemId) => {
-                  const it = workItemsRef.current.find((i) => i.id === itemId)
-                  if (it?.panelId === undefined) return
-                  if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed — its worktree is still there to review' }); return }
-                  selectOnly(it.panelId)
-                  onFocusPanel(it.panelId)
-                }}
-                onClearHistory={(itemId) => setRetainedOutcomes((current) => current.filter((outcome) => outcome.itemId !== itemId))}
-                onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
-            }
-            // M128. The skill panel: every OPEN panel that has a directory,
-            // with the rail's own label, so the body can answer which of them
-            // can see this skill. The record carries nothing else.
-            if (isSkillPanel(panel)) {
-              return <SkillNode key={panel.rect.id} panel={panel} sources={skillSources}
-                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                // INSERTED into the composer, never sent — M80's rule for a
-                // template's first message. `beginNewChat` is the one mint.
-                onChat={(cwd, message) => { void beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), message }) }}
-                // M129 fix. A rename that LANDED: the panel record's name and
-                // the shelf's `scope:name` key are both stale the instant the
-                // folder moves, and both are written here — one history entry
-                // for the record, and the shelf through its own invoke (the
-                // shelf is a library, never layout, so it is not in history).
-                onRenamed={(panelId, newName) => { renameSkillEverywhere(panelId, newName) }} />
-            }
-            // M133. The workflow panel: the template by id (built-ins
-            // included — they are code, not rows), the workspace's runs for
-            // the Runs tab, and the four verbs, each the door that already
-            // existed. Delete refuses a built-in by name.
-            if (isWorkflowPanel(panel)) {
-              const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
-              return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs} liveFacts={liveRunFacts} onAnswer={paletteActions.answerApproval}
-                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onMarkRead={(templateId) => { void markTemplateRead(templateId) }} onDelete={deleteWorkflowTemplate}
-                onSave={saveWorkflowDraft} onSaveCopy={saveWorkflowCopy} onReload={reloadWorkflowDraft} onStopRun={stopWorkflowRun}
-                deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
-                runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />
-            }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
-            const session = registry.get(panel.rect.id)
-            if (!session) return null
-            return (
-              <TerminalPanel
-                key={panel.rect.id}
-                session={session}
-                version={version}
-                rect={panel.rect}
-                z={panel.z}
-                title={panel.title}
-                defaultTitle={terminalNameOf.get(panel.rect.id)}
-                onRename={merged ? undefined : paletteActions.renamePanel}
-                cardDetail={cardDetail}
-                // M106. Flip hands the far view's summary to every terminal deliberately — a
-                // prop, because a LIVE panel never reads the card's detail.
-                flipped={flipped}
-                selected={selectedIds.has(panel.rect.id)}
-                onSelect={onSelectPanel}
-                onSlotMount={onSlotMount}
-                onSlotUnmount={onSlotUnmount}
-                onFocus={onFocusPanel}
-                onBeginDrag={onBeginDrag}
-                onClose={onClosePanel}
-                glow={glowEnabled}
-                readOnly={merged}
-                openingContext={openingContexts.get(panel.rect.id)}
-                onContextPasted={onContextPasted}
-                entering={enteringPanelIds.has(panel.rect.id)}
-                demoting={demotingPanelIds.has(panel.rect.id)}
-                waking={wakingPanelIds.has(panel.rect.id)}
-                onEntryEnd={onPanelEntryEnd}
-                onBeginLink={onBeginLink}
-                linkTarget={linkDraw.state?.target === panel.rect.id}
-                onOpenAsChat={openAsChatVoid}
-                rimInset={rimCovered.has(panel.rect.id)}
-              />
-            )
-          })}
+          {/* M507. Each panel by kind, in PanelNode.tsx: a plain function called here, so the tree is unchanged. */}
+          {displayPanels.map((panel) => renderPanelNode(panel, {
+              activeWorkspaceId, addGithubToBoard, addJiraToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
+            }))}
           {/* M388. Every flowchart shape, in one memoised layer (ShapeLayer's
               header: why not PanelFrame). A fragment of boxes carrying
               Panel.z, so shapes interleave with panels by the one stacking rule. */}
