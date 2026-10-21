@@ -81,7 +81,7 @@ import type {
  *     backend's silent default to claude's behaviour; `registry.1` greps for it.
  */
 
-import { autoPlanOf, AUTO_DONE_MARKER, type AutoModeId, type AutoStatus, type AutoStuckReason } from '@shared/auto'
+import { autoAfterCheck, autoCheckPassed, autoPlanOf, AUTO_CHECK_TIMEOUT_MS, AUTO_DONE_MARKER, type AutoCheck, type AutoCheckResult, type AutoModeId, type AutoStatus, type AutoStuckReason, type AutoVerdict } from '@shared/auto'
 import type { AutoStartResult } from '@shared/agent-session'
 
 export type {
@@ -170,6 +170,13 @@ export interface AgentSessionDeps {
    * only the RUN stops. Absent is a minute.
    */
   autoPermissionGraceMs?: number
+  /**
+   * M475. Runs a gated auto run's check in the session's folder. Absent
+   * means a start that names a check is REFUSED by name — never started as a
+   * claimed run, which would look gated and not be. The signal aborts it
+   * when the run is stopped or the session disposed.
+   */
+  runCheck?: (spec: { command: string; cwd: string; env: Record<string, string>; timeoutMs: number; signal: AbortSignal }) => Promise<AutoCheckResult>
   /** The delta batch window. */
   coalesceMs?: number
 }
@@ -291,6 +298,11 @@ interface AutoRun {
   limit: number
   continuation: string
   permissionTimer: ReturnType<typeof setTimeout> | null
+  /** M475. The gate, when the start named one. */
+  check?: AutoCheck
+  /** M475. Set while the check runs; aborting it kills the command. */
+  checking?: AbortController
+  checkFailures: number
 }
 
 const AUTO_PERMISSION_GRACE_MS = 60_000
@@ -718,13 +730,14 @@ export class AgentSessionManager {
    * `agents.budgetUsd` by name, unchanged — and every result after that is
    * counted HERE. The limit is the mode's unless the caller lowers it.
    */
-  startAuto(id: string, opts: { mode: AutoModeId; task?: string; limit?: number }): AutoStartResult {
+  startAuto(id: string, opts: { mode: AutoModeId; task?: string; limit?: number; check?: AutoCheck }): AutoStartResult {
     const session = this.sessions.get(id)
     if (!session) return { kind: 'refused', reason: 'no such session' }
     if (session.auto !== undefined) return { kind: 'refused', reason: `an auto run is already running here (${session.auto.mode}) — stop it first` }
-    const prompts = autoPlanOf(opts.mode, id, opts.task)
+    if (opts.check !== undefined && this.deps.runCheck === undefined) return { kind: 'refused', reason: 'this app cannot run a check here, so a checked run cannot start' }
+    const prompts = autoPlanOf(opts.mode, id, opts.task, opts.check)
     const limit = Math.max(1, Math.min(prompts.limit, opts.limit ?? prompts.limit))
-    session.auto = { sending: false, mode: opts.mode, turn: 0, limit, continuation: prompts.continuation, permissionTimer: null }
+    session.auto = { sending: false, mode: opts.mode, turn: 0, limit, continuation: prompts.continuation, permissionTimer: null, checkFailures: 0, ...(opts.check === undefined ? {} : { check: opts.check }) }
     session.autoLast = undefined
     this.emitAuto(session, 'running')
     session.auto.sending = true
@@ -746,18 +759,33 @@ export class AgentSessionManager {
     return true
   }
 
+  /** M475. A live run's status, one builder for the event, the resolution and the snapshot. */
+  private autoStatusOf(run: AutoRun, state: AutoStatus['state'], extra: { reason?: AutoStuckReason; verdict?: AutoVerdict } = {}): AutoStatus {
+    return {
+      mode: run.mode, turn: run.turn, limit: run.limit, state,
+      ...(extra.reason === undefined ? {} : { reason: extra.reason }),
+      ...(run.check === undefined ? {} : { check: run.check.command }),
+      ...(state === 'running' && run.checking !== undefined ? { checking: true as const } : {}),
+      ...(run.checkFailures > 0 ? { checkFailures: run.checkFailures } : {}),
+      ...(extra.verdict === undefined ? {} : { verdict: extra.verdict })
+    }
+  }
+
   private emitAuto(session: Session, state: AutoStatus['state'], reason?: AutoStuckReason): void {
     const run = session.auto
     const status: AutoStatus = run === undefined
       ? (session.autoLast ?? { mode: 'complete', turn: 0, limit: 0, state })
-      : { mode: run.mode, turn: run.turn, limit: run.limit, state, ...(reason === undefined ? {} : { reason }) }
+      : this.autoStatusOf(run, state, reason === undefined ? {} : { reason })
     this.emit({ id: session.id, type: 'auto', ...status })
   }
 
-  private resolveAuto(session: Session, state: 'done' | 'stuck' | 'stopped', reason?: AutoStuckReason): void {
+  /** M475. `done` takes a verdict; nothing else does. A done without one is `claimed`, never `checked`. */
+  private resolveAuto(session: Session, state: 'done' | 'stuck' | 'stopped', reason?: AutoStuckReason, verdict?: AutoVerdict): void {
     const run = session.auto
     if (run === undefined) return
     if (run.permissionTimer !== null) { clearTimeout(run.permissionTimer); run.permissionTimer = null }
+    // A check still running dies with the run: its exit would land on nothing.
+    if (run.checking !== undefined) { run.checking.abort(); run.checking = undefined }
     // The run's own continuations leave with it: a continuation queued behind
     // a message the user typed mid-turn would otherwise be served after the
     // stop — a paid turn on the auto prompt under a chip that reads stopped.
@@ -768,7 +796,7 @@ export class AgentSessionManager {
     // M322. The run's own prompts leave the transcript with it: a person never typed them.
     for (const entry of gone) this.withdrawTurn(session, entry.turnId)
     if (dropped > 0) { this.emit({ id: session.id, type: 'queue-dropped', count: dropped }); this.emitQueue(session) }
-    session.autoLast = { mode: run.mode, turn: run.turn, limit: run.limit, state, ...(reason === undefined ? {} : { reason }) }
+    session.autoLast = this.autoStatusOf(run, state, { ...(reason === undefined ? {} : { reason }), ...(state === 'done' ? { verdict: verdict ?? 'claimed' } : {}) })
     session.auto = undefined
     this.emit({ id: session.id, type: 'auto', ...session.autoLast })
   }
@@ -783,22 +811,62 @@ export class AgentSessionManager {
   private autoDecide(session: Session, event: { ok?: boolean; interrupted: boolean }): boolean {
     const run = session.auto
     if (run === undefined) return false
+    // M475. While the check runs the run is waiting on IT: a turn the user
+    // sent meanwhile is theirs, counted by nobody and deciding nothing — a
+    // second marker must not start a second check over the first.
+    if (run.checking !== undefined) return false
     run.turn += 1
     if (event.interrupted) { this.resolveAuto(session, 'stopped'); return false }
     const last = [...session.turns].reverse().find((t) => t.role === 'assistant')
     const text = last === undefined ? '' : last.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
-    if (text.includes(AUTO_DONE_MARKER)) { this.resolveAuto(session, 'done'); return false }
+    if (text.includes(AUTO_DONE_MARKER)) {
+      // M475. The marker is a claim. Without a gate it ends the run as
+      // claimed; with one it starts the check, and only the check ends it.
+      if (run.check === undefined) { this.resolveAuto(session, 'done', undefined, 'claimed'); return false }
+      this.autoRunCheck(session, run, run.check)
+      return false
+    }
     if (event.ok === false) { this.resolveAuto(session, 'stuck', 'error'); return false }
     if (run.turn >= run.limit) { this.resolveAuto(session, 'stuck', 'limit'); return false }
     this.emitAuto(session, 'running')
     return true
   }
 
-  private autoContinue(session: Session): void {
+  /**
+   * M475. Runs the gate and decides from its exit alone. Every late landing
+   * is dropped by identity: a run stopped, replaced or disposed while the
+   * check ran finds `session.auto !== run` and the result decides nothing.
+   */
+  private autoRunCheck(session: Session, run: AutoRun, check: AutoCheck): void {
+    const runCheck = this.deps.runCheck
+    if (runCheck === undefined) { this.resolveAuto(session, 'stuck', 'check'); return }
+    const abort = new AbortController()
+    run.checking = abort
+    this.emitAuto(session, 'running')
+    const landed = (result: AutoCheckResult): void => {
+      if (session.auto !== run || run.checking !== abort || this.sessions.get(session.id) !== session) return
+      run.checking = undefined
+      if (!autoCheckPassed(result)) run.checkFailures += 1
+      const next = autoAfterCheck(check, result, run.checkFailures, run.turn, run.limit)
+      if (next.kind === 'done') { this.resolveAuto(session, 'done', undefined, 'checked'); return }
+      if (next.kind === 'stuck') { this.resolveAuto(session, 'stuck', next.reason); return }
+      this.emitAuto(session, 'running')
+      this.autoContinue(session, next.prompt)
+    }
+    let pending: Promise<AutoCheckResult>
+    try {
+      pending = runCheck({ command: check.command, cwd: session.cwd, env: this.deps.envFor?.(session.id) ?? this.deps.env, timeoutMs: check.timeoutMs ?? AUTO_CHECK_TIMEOUT_MS, signal: abort.signal })
+    } catch (err) {
+      pending = Promise.resolve({ exitCode: null, output: '', error: err instanceof Error ? err.message : String(err) })
+    }
+    pending.then(landed, (err: unknown) => landed({ exitCode: null, output: '', error: err instanceof Error ? err.message : String(err) }))
+  }
+
+  private autoContinue(session: Session, text?: string): void {
     const run = session.auto
     if (run === undefined) return
     run.sending = true
-    const sent = this.send(session.id, run.continuation)
+    const sent = this.send(session.id, text ?? run.continuation)
     if (session.auto === run) run.sending = false
     if (sent === 'refused-budget') this.resolveAuto(session, 'stuck', 'budget')
     else if (sent === 'refused-cap') this.resolveAuto(session, 'stuck', 'cap')
@@ -812,6 +880,7 @@ export class AgentSessionManager {
     this.sessions.delete(id)
     this.clearInterruptTimer(session)
     if (session.auto?.permissionTimer) clearTimeout(session.auto.permissionTimer)
+    session.auto?.checking?.abort()
     session.auto = undefined
     session.autoLast = undefined
     this.dropBatch(session)
@@ -1487,7 +1556,7 @@ export class AgentSessionManager {
       ...(session.negotiated === undefined ? {} : { negotiated: { ...session.negotiated } }),
       ...(session.awaitingHandshake ? { awaitingHandshake: true as const } : {}),
       ...(this.meterKeyOf(session) === '' ? {} : { meter: this.meterOf(session) }),
-      ...(session.auto !== undefined ? { auto: { mode: session.auto.mode, turn: session.auto.turn, limit: session.auto.limit, state: 'running' as const } } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
+      ...(session.auto !== undefined ? { auto: this.autoStatusOf(session.auto, 'running') } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
     }
   }
 }

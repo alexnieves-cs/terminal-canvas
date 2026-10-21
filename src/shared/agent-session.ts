@@ -20,10 +20,11 @@ export type AgentSessionStatus =
 /** M90. Which headless CLI answers. M99: the union lives in the registry; re-exported so every M90 import still resolves. */
 export type { AgentBackend } from './agent-backends'
 
-import type { AutoModeId, AutoState, AutoStuckReason, AutoStatus } from './auto'
+import type { AutoCheck, AutoModeId, AutoState, AutoStuckReason, AutoStatus, AutoVerdict } from './auto'
 
 /** M97. `agent:auto-start`'s request and its named answer. */
-export interface AutoStartRequest { id: string; mode: AutoModeId; task?: string; limit?: number }
+/** M475. `check` gates done on a command's exit; main parses it by name (`parseAutoCheck`). */
+export interface AutoStartRequest { id: string; mode: AutoModeId; task?: string; limit?: number; check?: AutoCheck }
 export type AutoStartResult = { kind: 'started'; limit: number } | { kind: 'refused'; reason: string }
 
 /**
@@ -407,7 +408,7 @@ export type AgentSessionEvent = { id: string; owner?: string } & (
   | { type: 'permission-answered'; requestId: string; allow: boolean }
   | { type: 'permission-dropped'; requestId: string }
   /** M97. The bounded run's state, main's own count — the chip is a projection of this. */
-  | { type: 'auto'; mode: AutoModeId; turn: number; limit: number; state: AutoState; reason?: AutoStuckReason }
+  | { type: 'auto'; mode: AutoModeId; turn: number; limit: number; state: AutoState; reason?: AutoStuckReason; check?: string; checking?: true; checkFailures?: number; verdict?: AutoVerdict }
   /** M98. A request main answered `allow` itself, from a session grant: it was never pending, and attention never lit. */
   | { type: 'permission-auto-allowed'; requestId: string; toolName: string }
 )

@@ -10,6 +10,7 @@ import { writeClipboardImage } from '../clipboard-file'
 import { importClaudeTranscript } from '../claude-transcript-import'
 import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
+import { parseAutoCheck } from '../../shared/auto'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
 import { capSentence, type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
@@ -222,7 +223,12 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     // for its fix; the live check is the one-front-end-at-a-time rule.
     // M97. Main counts, main stops: the request carries a mode and an optional
     // task; the limit is the mode's unless the caller lowers it.
-    autoStart: (req) => state.agents?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
+    // M475. A check is parsed by name: a malformed one is refused, never read as "no check".
+    autoStart: (req) => {
+      const check = parseAutoCheck(req.check)
+      if (check.kind === 'refused') return check
+      return state.agents?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit, ...(check.check === undefined ? {} : { check: check.check }) }) ?? { kind: 'refused', reason: 'the agent runtime is not available' }
+    },
     autoStop: (id) => state.agents?.stopAuto(id) ?? false,
     importSession: ({ fromPanelId, toPanelId }) => {
       const sessionId = layoutStore.session(fromPanelId)

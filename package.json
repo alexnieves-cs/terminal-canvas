@@ -121,7 +121,8 @@
     "verify:rd-w4": "node scripts/verify-rd-w4.cjs",
     "verify:rd-w5": "node scripts/verify-rd-w5.cjs",
     "verify:rd-w6": "node scripts/verify-rd-w6.cjs",
-    "verify:ux": "node scripts/verify-ux.cjs"
+    "verify:ux": "node scripts/verify-ux.cjs",
+    "verify:auto": "node scripts/verify-auto.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

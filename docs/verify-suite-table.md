@@ -111,3 +111,13 @@ saves its answers; the blank card's buttons are wired), the words the UI uses fo
 and the loop after an agent runs. Wiring that lives in `Canvas.tsx` is read as text, because a
 callback that was never passed renders a button that does nothing and no other suite notices.
 The proposals it implements are in the project's `notes/ux-proposals.md`.
+
+## The streams run (M457–M509)
+
+`verify:auto` is plain node (stream C, M475). It drives `AgentSessionManager` through the
+fake process runner with an injected `runCheck`, so every branch of check-gated done is
+reached without a real test runner: a marker with no check is `claimed`, a failed check goes
+back as the next turn, a check past its retries is `stuck: check`, and a check's late pass on
+a stopped run decides nothing. Its last check runs the production runner
+(`auto-check-runner.ts`) against `/bin/sh`, because a runner that read a timeout as a pass
+would be green with a fake and wrong on a Mac.

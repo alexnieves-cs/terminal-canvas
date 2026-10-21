@@ -1,3 +1,4 @@
+import { AUTO_CLAIMED_OUTCOME } from './auto'
 import type { PersistedRun } from './runs'
 import type { PersistedWorkItem, WorkItemState } from './work-items'
 
@@ -78,7 +79,7 @@ function executionOf(run: PersistedRun): RetainedExecution {
   const outcomes = run.entries.map((entry) => entry.outcome)
   if (outcomes.some((word) => word === undefined)) return 'unknown'
   if (outcomes.some((word) => word?.startsWith('stopped'))) return 'stopped'
-  if (outcomes.some((word) => word !== 'exit 0' && word !== 'a turn' && word !== 'passed' && !word?.startsWith('handed off') && !word?.startsWith('skipped'))) return 'failed'
+  if (outcomes.some((word) => word !== 'exit 0' && word !== 'a turn' && word !== 'passed' && word !== AUTO_CLAIMED_OUTCOME && !word?.startsWith('handed off') && !word?.startsWith('skipped'))) return 'failed'
   return 'completed'
 }
 
