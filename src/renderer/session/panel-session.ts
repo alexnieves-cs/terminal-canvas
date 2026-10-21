@@ -163,4 +163,13 @@ export interface PanelSession {
    * as though it carried reattachment state; it does not.
    */
   dormant: boolean
+  /**
+   * M508. The later of creation and the last time this session went on or
+   * off screen (the tier crossing live). With lastFocusedAt, what "nobody has
+   * looked at it" is measured from; a stamp that only focus advanced would
+   * ration a panel someone has been READING for an hour without clicking.
+   */
+  seenAt: number
+  /** M508. Its scrollback is trimmed to RATIONED_SCROLLBACK; restored on the way back to live. */
+  rationed: boolean
 }
