@@ -521,7 +521,8 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   const expectedRenderer = [
     'browser/BrowserNode.tsx',
     'browser/usePreviewReload.ts',
-    'canvas/Canvas.tsx',
+    // canvas/Canvas.tsx is gone from this list on purpose: by M503 every door
+    // above had left it for its hook, and the component names no binding.
     // Was `canvas/usePaletteActions.ts` until that hook was split by domain.
     // The SAME two consumers, at their new paths and no others: the spawn
     // sheet's lineup seat, which mints a pane already bound to the lineup's
@@ -531,6 +532,9 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     // M502. markPreviewRead (the one `reviewed` writer for a preview) left
     // Canvas.tsx with the creation verbs; the same door at its new path.
     'canvas/useCreationVerbs.ts',
+    // M503. openBrowserPanel (the door that mints a browser pane with its
+    // binding) left Canvas.tsx with the object verbs; same door, new path.
+    'canvas/useObjectVerbs.ts',
     // M501. The preview verbs (bind, open, capture) left Canvas.tsx for their
     // own hook: the same door that writes a binding, at its new path.
     'canvas/usePreviewVerbs.ts',
