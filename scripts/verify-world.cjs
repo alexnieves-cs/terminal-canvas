@@ -1876,6 +1876,8 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   })
   const MAP = require('../out/verify/world-minimap.cjs')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  // M498. Orchestrate's props are laid out in CenterPages.tsx, which Canvas renders.
+  const pagesSrc = /<CenterPages\b/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/CenterPages.tsx'), 'utf8') : ''
   const orch = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
 
   // The arrival: held until the room settles, the first member IN the room, kept a grace while none is, then dropped.
@@ -1894,7 +1896,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const view = code('WorldView.tsx')
   ok('world.cross.2 the rig takes an arrival only on a RESTING frame (a glide mid-transition is dropped by the rig itself), picks the robot and glides to it through the same focus door the tour uses — and Canvas asks for it BEFORE the page change, turning the room on a frame later, from the focused plate\'s chip only',
     /if \(atRest\) \{[\s\S]{0,700}if \(hasArrival\(\)\) \{\s*const id = takeArrival\(\(agentId\) => stations\.current\?\.has\(agentId\) === true, Date\.now\(\)\)\s*if \(id !== null\) \{\s*selectAgent\(id\)\s*api\.current\?\.focus\(id\)/.test(view) &&
-      /onViewInWorld=\{\(ids\) => \{\s*requestArrival\(ids, Date\.now\(\)\)\s*leaveForCanvas\(\)\s*requestAnimationFrame\(\(\) => setWorldOn\(true\)\)/.test(canvasSrc) &&
+      /onViewInWorld=\{\(ids\) => \{\s*requestArrival\(ids, Date\.now\(\)\)\s*leaveForCanvas\(\)\s*requestAnimationFrame\(\(\) => setWorldOn\(true\)\)/.test(pagesSrc) &&
       /props\.onViewInWorld !== undefined && focusedIsOn\(t\.id\) && \(pp\.p\.island\?\.memberIds\.length \?\? 0\) > 0/.test(orch) && /data-orch-platform-world=\{p\.id\} role="button" tabIndex=\{0\}/.test(orch))
   const card = src('WorldCard.tsx'), pub = src('useWorldContextPublisher.ts'), store = src('world-context-store.ts')
   ok('world.cross.3 "View in Orchestrate" is on the PICKED robot\'s card, never in the past room, only for an agent with a panel on THIS canvas (Orchestrate has no row for another workspace\'s or the simulator\'s) — and Canvas makes it the selection before the page switch, the carry every canvas → Orchestrate switch gets',

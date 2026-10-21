@@ -13083,3 +13083,19 @@ tr[data-session-row]:focus-within .sessions-world,
   .sessions-world { transition: none; }
 }
 /* ── /rd:W6 ── */
+
+/* Streams run (M457–M509). Each stream writes CSS only between its own
+   st:<lane> markers, so five parallel branches never conflict on this file.
+   The hook (.claude/hooks/guard-paths.sh) and verify:meta streams.own.1 hold
+   the fence. Lane A writes no CSS. */
+/* ── st:B ── */
+/* ── /st:B ── */
+
+/* ── st:C ── */
+/* ── /st:C ── */
+
+/* ── st:D ── */
+/* ── /st:D ── */
+
+/* ── st:E ── */
+/* ── /st:E ── */

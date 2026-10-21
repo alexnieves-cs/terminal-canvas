@@ -1,0 +1,92 @@
+{
+  "_comment": "The streams run (M457-M509). Read by .claude/hooks/guard-paths.sh and verify:meta streams.own.1. A file owned by one lane is refused to every other lane. A file owned by no lane is open to all, so a stream is never blocked on something nobody claimed; shared_writable files are the hot ones every stream may touch, under the rules in docs/streams/RUN.md.",
+  "milestones": {
+    "S0": "M457",
+    "A": "M458-M464",
+    "B": "M465-M474",
+    "C": "M475-M486",
+    "D": "M487-M494",
+    "E": "M495-M509"
+  },
+  "shared_writable": [
+    "docs/build-log/m457-m509-ledger.md",
+    "docs/streams/requests.md",
+    "CLAUDE.md",
+    "package.json",
+    "package-lock.json",
+    "src/shared/ipc-contract.ts",
+    "src/preload/**",
+    "src/main/ipc.ts",
+    "src/main/bootstrap/**",
+    "src/renderer/canvas/Canvas.tsx",
+    "src/renderer/styles.css",
+    "scripts/verify-meta.cjs",
+    "scripts/verify-ipc-surface.cjs"
+  ],
+  "lanes": {
+    "A": [
+      "scripts/verify-panels-*.cjs",
+      "scripts/panels-harness.cjs",
+      "scripts/panels-entry.cjs",
+      "scripts/verify-all.cjs",
+      "scripts/verify-visual.cjs",
+      ".github/workflows/verify.yml",
+      ".github/workflows/triage.yml"
+    ],
+    "B": [
+      ".github/workflows/release.yml",
+      ".github/workflows/shots.yml",
+      "build/**",
+      "electron-builder.config.cjs",
+      "scripts/shot.cjs",
+      "scripts/shot-composite.cjs",
+      "scripts/shot-scenes/**",
+      "verify/visual/**",
+      "scripts/verify-package.cjs",
+      "scripts/verify-packaged.cjs",
+      "docs/redesign/fix-list.md"
+    ],
+    "C": [
+      "src/shared/auto.ts",
+      "src/shared/check-output.ts",
+      "src/shared/check-evidence.ts",
+      "src/shared/rate-limit.ts",
+      "src/shared/return-briefing.ts",
+      "src/shared/job-journal.ts",
+      "src/shared/routines.ts",
+      "src/shared/recipes.ts",
+      "src/shared/lane-merge.ts",
+      "src/main/agent-session.ts",
+      "src/main/pool-runner.ts",
+      "src/main/pool-caller.ts",
+      "src/main/routine-runner.ts",
+      "src/main/job-store.ts",
+      "src/main/job-recovery.ts",
+      "src/main/lane-merge.ts",
+      "src/main/check-output-store.ts",
+      "src/renderer/shell/task-queue.ts",
+      "scripts/verify-auto.cjs"
+    ],
+    "D": [
+      "src/cli/**",
+      "src/main/control-server.ts",
+      "src/main/control-protocol.ts",
+      "src/main/control-handler.ts",
+      "src/main/menu-bar.ts",
+      "src/main/presence/**",
+      "src/shared/relay-protocol.ts",
+      "server/**",
+      "scripts/verify-mcp.cjs",
+      "scripts/verify-control.cjs",
+      "scripts/verify-relay.cjs"
+    ],
+    "E": [
+      "docs/streams/cut-list.md",
+      "src/renderer/canvas/CanvasHud.tsx",
+      "src/renderer/orchestration/**",
+      "src/main/pty-manager.ts",
+      "src/main/scrollback-log.ts",
+      "scripts/verify-pty-manager.cjs"
+    ]
+  }
+}
