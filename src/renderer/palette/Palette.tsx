@@ -1,4 +1,5 @@
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { parseCommandQuery } from './command-panel'
 import { SpawnSheet, type SpawnSheetModel } from './SpawnSheet'
 import { StartWorkSheet, type StartWorkSheetModel } from './StartWorkSheet'
 import { SetupSheet, type SetupSheetModel } from './SetupSheet'
@@ -318,6 +319,8 @@ export function Palette(props: PaletteProps): JSX.Element {
         // M42. The query is the search TERM only inside the search scope; the
         // "no matches" row names it, so it must be the palette's own query.
         searchQuery: scope === 'search' ? query : '',
+        // M509. A leading `>` makes the query a command, only at the top level.
+        commandQuery: scope === null ? parseCommandQuery(query) : null,
         searchResults: props.searchResults,
         ...(props.workSearch === undefined ? {} : { workSearch: props.workSearch }),
         // M365. The query is the capability NAME only inside its scope.

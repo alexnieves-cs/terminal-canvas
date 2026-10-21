@@ -82,6 +82,12 @@ export interface PaletteContext {
    * empty state from []), and `scrollbackEnabled` decides the "off" state.
    */
   searchQuery: string
+  /**
+   * M509. The command after a leading `>` (`command-panel.ts`), '' for a bare
+   * `>`, null or absent when the query is not one — and always null inside a
+   * scope, where the query is a scope's term.
+   */
+  commandQuery?: string | null
   /** M122. The whole answer: hits over both logs, the cap stated, the redaction count. */
   searchResults: PanelSearchResult | null
   /** D13. Tasks and retained outcomes matching the same query; absent means nobody supplied them. */

@@ -396,6 +396,10 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   openGithub: 'a work panel is opened by the user',
   reviewAcross: 'a review across worktrees is opened by the user; `review` is the plan\'s door',
   beginWatcher: 'opens the palette\'s text mode',
+  // M509. A typed shell command is the person's own words, run as typed. An
+  // agent line or workflow node that could name one would be a code-execution
+  // door no gate reads; the palette's `>` row is the only one.
+  runCommandPanel: 'runs a shell command the person typed after > in the palette; no agent line or workflow node may name one',
   beginSaveTemplate: 'opens the palette\'s text mode',
   toggleGroup: 'cards a group — a presentation gesture',
   removeGroup: 'group administration is the user\'s',

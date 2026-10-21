@@ -1,4 +1,5 @@
 import type { TaskPlan } from '@shared/task-plan'
+import { COMMAND_ROW_ID, REASON_NO_COMMAND } from './command-panel'
 import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
 import { shapeFormSentence } from '@shared/flowchart'
@@ -234,6 +235,12 @@ export interface PaletteActions {
   jumpPrompt(id: string, direction: -1 | 1): void
   /** M52. Copy the lines between the last command's start and end marks. */
   copyLastOutput(id: string): void
+  /**
+   * M509 (backlog #55). Run a typed command in a new, focused panel — the
+   * spawn sheet's one-off task without the sheet (command-panel.ts). The
+   * palette's `>` row is its only door: EXCLUDED_ACTIONS says why.
+   */
+  runCommandPanel(command: string): void
   /** M56. Bookmarks and the camera trail. */
   addBookmark: () => void
   goToBookmark: (id: string) => void
@@ -2548,6 +2555,22 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'flip terminals titles far view overview roles',
     run: () => actions.toggleFlip()
   })
+
+  // M509 (backlog #55). `> npm test`: the one row a command query shows
+  // (filterCommands keeps only it). Run in a new panel — command-panel.ts.
+  if (ctx.commandQuery !== undefined && ctx.commandQuery !== null) {
+    const typed = ctx.commandQuery
+    const row: Command = {
+      id: COMMAND_ROW_ID,
+      title: typed === '' ? 'Run a command' : `Run ${typed}`,
+      subtitle: 'in a new panel, in the folder of the terminal you were last in; it shows the exit code',
+      group: 'spawn',
+      mono: true,
+      hiddenAtRest: true,
+      run: () => actions.runCommandPanel(typed)
+    }
+    out.push(typed === '' ? withReason(row, REASON_NO_COMMAND) : row)
+  }
 
   // M399 (A10). SAY THE DIFFERENCE. With a panel selected (the HUD reads "1
   // selected") and none clicked into, every focus-gated row said "click into

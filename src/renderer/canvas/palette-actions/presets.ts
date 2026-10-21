@@ -36,6 +36,7 @@ import { normaliseShapeText } from '@shared/flowchart'
 import { isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel, isNotePanel, isShapePanel, isRelayPanel, isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
 import type { CapturedPanel } from '@shared/ipc-contract'
 import { railLabel } from '../../shell/rail-rows'
+import { commandPanelCwd } from '@renderer/palette/command-panel'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { ActionCtx } from './types'
 import { recordPermissionAnswer } from '../../orchestration/orch-record'
@@ -81,6 +82,7 @@ export type PresetsActions = Pick<PaletteActions,
   | 'goToPanel'
   | 'jumpPrompt'
   | 'copyLastOutput'
+  | 'runCommandPanel'
 >
 
 export function presetsActions(ctx: ActionCtx): PresetsActions {
@@ -763,6 +765,19 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     copyLastOutput: (id) => {
       const text = registry.get(id)?.handle.lastCommandOutput()
       if (text !== null && text !== undefined) void navigator.clipboard.writeText(text)
+    },
+    // M509 (backlog #55). The spawn sheet's typed task, submitted with no
+    // sheet: main runs it in the login env, titles it with itself and asks
+    // for focus, so it is live now. A refusal (a folder gone) is said, never
+    // swallowed — the row already closed the palette.
+    runCommandPanel: (command) => {
+      const typed = command.trim()
+      if (typed === '') return
+      const terminals = panelsRef.current.filter(isTerminalPanel).map((p) => ({ id: p.rect.id, cwd: p.spec.cwd }))
+      const cwd = commandPanelCwd(terminals, registry.lastFocusedAt())
+      void window.canvas.spawn.sheet({ command: typed, cwd, title: typed }).then((result) => {
+        if (result.kind === 'refused') notifyRefused(result.reason)
+      })
     }
   })
 }
