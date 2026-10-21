@@ -85,6 +85,17 @@ export type ControlRequest =
   | { verb: 'share'; orgId?: string }
   | { verb: 'open-share'; shareId: string }
   | { verb: 'share-role'; shareId: string; who: string; role: 'editor' | 'viewer' | null }
+  /**
+   * M488. The writes an MCP client may make, SOCKET ONLY. `approvals` reads
+   * the chats' waiting permission requests. `answer` and `accept` (with
+   * `expectHead`) act, and each is refused unless Settings ▸ Privacy allows
+   * MCP writes; `accept` without `expectHead` is the merge's dry run and
+   * only reads. The caller's panel token rides so the handler can refuse an
+   * agent answering from inside a panel.
+   */
+  | { verb: 'approvals' }
+  | { verb: 'answer'; panelId: string; requestId: string; allow: boolean; token?: string }
+  | { verb: 'accept'; lane: string; title?: string; expectHead?: string; token?: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -230,6 +241,40 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
     case 'accounts':
     case 'shares':
       return { kind: 'ok', req: { verb } }
+    case 'approvals':
+      return { kind: 'ok', req: { verb: 'approvals' } }
+    case 'answer': {
+      const panelId = optionalString(fields['panelId'])
+      const requestId = optionalString(fields['requestId'])
+      const allow = fields['allow']
+      const token = optionalString(fields['token'])
+      if (panelId === null || panelId === undefined || panelId.length > 128) return { kind: 'bad', error: 'answer needs the panel id of the chat that asked' }
+      if (requestId === null || requestId === undefined || requestId.length > 128) return { kind: 'bad', error: 'answer needs the request id — approvals lists them' }
+      // No default: allow or deny is said, never assumed from an absent field.
+      if (typeof allow !== 'boolean') return { kind: 'bad', error: 'answer needs allow: true or false' }
+      if (token === null) return { kind: 'bad', error: 'token must be a non-empty string' }
+      return { kind: 'ok', req: { verb: 'answer', panelId, requestId, allow, ...(token === undefined ? {} : { token: token.slice(0, 128) }) } }
+    }
+    case 'accept': {
+      const lane = optionalString(fields['lane'])
+      const title = optionalString(fields['title'])
+      const expectHead = optionalString(fields['expectHead'])
+      const token = optionalString(fields['token'])
+      if (lane === null || lane === undefined || !lane.startsWith('/')) return { kind: 'bad', error: 'accept needs the lane: the absolute path of its worktree' }
+      if (title === null || token === null) return { kind: 'bad', error: 'title and token must be non-empty strings when given' }
+      // The FULL sha the dry run answered, compared exactly: a short or
+      // differently-cased one would only ever read as `moved`.
+      if (expectHead === null || (expectHead !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(expectHead))) return { kind: 'bad', error: 'expectHead must be the full commit the dry run answered' }
+      return {
+        kind: 'ok',
+        req: {
+          verb: 'accept', lane,
+          ...(title === undefined ? {} : { title: title.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 200) }),
+          ...(expectHead === undefined ? {} : { expectHead: expectHead.toLowerCase() }),
+          ...(token === undefined ? {} : { token: token.slice(0, 128) })
+        }
+      }
+    }
     case 'use': {
       const who = optionalString(fields['who'])
       if (who === null || who === undefined || !/^[A-Za-z0-9-]{1,39}$/.test(who)) return { kind: 'bad', error: 'use needs a GitHub login or user id' }

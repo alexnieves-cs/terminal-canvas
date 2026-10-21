@@ -642,6 +642,20 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M488. Off unless a person turns it on, and never `planWritable`: a plan
+    // that could set this would be an agent granting itself the answer to its
+    // own permission prompts. The description names who it reaches HONESTLY:
+    // the control socket is any process this user runs, and an agent in a
+    // panel that skips `tc` is one (the token refusal only stops an accident).
+    id: 'remote.mcpWrites',
+    label: 'Let MCP clients answer approvals and accept work',
+    description: 'allow or deny a chat\'s permission request and merge a task\'s lane through tc mcp — while on, any program you run on this Mac can do this, including an agent in a panel that talks to the control socket directly; each answer goes on the decision record',
+    keywords: ['mcp', 'remote', 'approve', 'approval', 'permission', 'accept', 'merge', 'claude code', 'client', 'write'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     // M112. A separate decision from the DSN because it fails differently: a
     // JS event is scrubbed field by field (main/telemetry.ts); a native dump
     // is process memory, which no scrubber reads.

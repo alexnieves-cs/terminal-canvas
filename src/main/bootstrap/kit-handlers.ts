@@ -40,7 +40,16 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
     which: (bin) => whichFromEnv(bin, state.loginEnv) !== null
   })
   const recipes = createRecipeStore({ dir: userData })
-  const laneMerge = createLaneMerger({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
+  const merger = createLaneMerger({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
+  // M488. One merge at a time, whoever asks — the card's Accept, Integrate and
+  // an MCP client: a failed merge runs `git merge --abort` in the main tree,
+  // which would abort ANOTHER caller's merge left stopped on conflicts.
+  let mergeQueue: Promise<unknown> = Promise.resolve()
+  const laneMerge: typeof merger = (req) => {
+    const run = mergeQueue.then(() => merger(req), () => merger(req))
+    mergeQueue = run.catch(() => undefined)
+    return run
+  }
   // M479. The same runner and root resolver as Accept, so a lane the radar reads is the lane Accept would merge.
   const laneRadar = createCollisionRadar({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
   // M317. Integrate lands lanes through the SAME merger Accept uses.

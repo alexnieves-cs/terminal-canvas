@@ -27,6 +27,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 
 | PR | Milestone | What | Checks |
 |---|---|---|---|
+| #31 | M465 | `shots.yml`: every scene painted on `macos-latest` (offscreen at 2x, so the runner's 1024px screen cannot clamp it), published as a phone gallery (artifact + the orphan `shots-gallery` branch). Harness fixes the first runs exposed: a hidden window's first capture is a stale frame (the three dark scenes that captured light), each `rd-*` scene paints its own steward fixture, `runner` is not a private word on GitHub runners, the flowchart scenes use ⌘0 (Fit all) and the palette's New shell since the redesign moved ⌘1/⌘N. Also the dispatch-only `goldens` job (M467): `UPDATE_GOLDENS=1 verify:visual` on the runner, pending list trimmed, a `goldens/run-<id>` branch for a PR; the fixture path is `/tmp` on CI so a runner image cannot move it | shots run: 97 scenes, 0 failed; `verify` |
 
 ## C — Autonomy (M475–M486)
 
@@ -44,6 +45,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | #35 | M487 | `tc mcp`: a stdio MCP server (`@modelcontextprotocol/sdk`) where each of nine tools is one control-socket line; every answer scrubbed per string, then `outward`; `send_to_agent` reaches chats only; a fresh-context critic's two must-fix findings fixed before review | `verify:mcp` (new), `verify:control` |
+| #42 | M488 | Gated MCP writes: `approvals`/`answer`/`accept` socket verbs and `list_approvals`, `answer_approval`, `accept_review` tools; writes refused by name unless `remote.mcpWrites` (default off, not plan-writable), always refused for a panel token; `accept` merges only at a full `expectHead`; each write on the decision audit; critic findings fixed, merge race filed as Q-001 | `verify:mcp` gate.1–5, `verify:control` |
 
 ## E — Cut and untangle (M495–M509)
 
@@ -51,3 +53,10 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 |---|---|---|---|
 | #34 | M498 (E4) | `CenterPages.tsx`: the Orchestrate, Team, Focus, Sessions and Review pages leave `Canvas.tsx` verbatim. 10,695 → 10,417 lines | blocking `verify` green; four text checks read the new file and require `<CenterPages>` |
 | #37 | M499–M506 (E4) | Eight hook seams (`useSkillsPane`, `useWorkflowVerbs`, `usePreviewVerbs`, `useCreationVerbs`, `useObjectVerbs`, `useChatSwapVerbs`, `useNavigatorModels`, `useAttentionModels`), each a contiguous run at its old position. 10,417 → 8,094 | text checks re-pointed at the new files, each still requiring the call in Canvas |
+
+## F — Visual and motion polish (M510–M519)
+
+Added after the run opened, at the owner's request. Plan: [docs/streams/polish.md](../streams/polish.md).
+
+| PR | Milestone | What | Checks |
+|---|---|---|---|
