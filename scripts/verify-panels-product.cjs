@@ -1157,11 +1157,25 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ok(ids[0], afterDrop && afterDrop.kind === 'chat' && n1Box && afterDrop.x > n1Box.x + 100 && added && added.ax >= added.rightmost && dirty === 'true' && onDisk && onDisk.nodes.length === 2 && collapsed === true && collapsedAgain === true,
         JSON.stringify({ entry, svgBox, afterDrop, n1Box, added, dirty, diskNodes: onDisk && onDisk.nodes.length, collapsed, collapsedAgain }))
       // wire.1: port of n1 → block n2 wires n1 → n2; then n2's port → n1 would close a cycle.
+      // The flow REFITS after the library collapses and the Add lands, and a
+      // drag aimed at points read mid-refit lands on whatever moved under
+      // them (watched on the runner: n2 read at x 652, then sitting at 548,
+      // the drop landing in n3 and only the reverse wire made). Measure once
+      // every block's rect holds for three reads 100 ms apart.
+      const blocksSettled = async (timeoutMs = 3000) => {
+        const read = () => wc.executeJavaScript(`[...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) }).join(' ')`)
+        let last = await read(), same = 0
+        const until = Date.now() + timeoutMs
+        while (same < 2 && Date.now() < until) { await sleep(100); const now = await read(); same = now === last ? same + 1 : 0; last = now }
+        return same >= 2
+      }
+      const steadyBeforeWire = await blocksSettled()
       const port1 = await centreOf('[data-workflow-block="n1"] [data-workflow-port]')
       const block2 = await centreOf('[data-workflow-block="n2"]')
       if (port1 && block2) await dragTo(port1, block2)
       const wired = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"]') !== null`), 3000)
       const edgeWord = await wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"] .react-flow__edge-text')?.textContent`)
+      const steadyBeforeCycle = await blocksSettled()
       const port2 = await centreOf('[data-workflow-block="n2"] [data-workflow-port]')
       const block1 = await centreOf('[data-workflow-block="n1"]')
       // M259 — wfx.ui.1 (first half). The cycle is REFUSED AT THE POINTER
@@ -1181,7 +1195,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const wireEv = await wc.executeJavaScript(`(() => ({ edges: [...document.querySelectorAll('[data-workflow-edge]')].map((e) => e.getAttribute('data-workflow-edge')), blocks: [...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.width) + 'x' + Math.round(r.height) }), flowH: Math.round(document.querySelector('.react-flow')?.getBoundingClientRect().height ?? 0) }))()`).catch((e) => String(e && e.message || e).slice(0, 120))
       const dropHit = block2 ? await wc.executeJavaScript(`(() => { const e = document.elementFromPoint(${block2.x}, ${block2.y}); return e ? e.tagName + '.' + String(e.className).slice(0, 40) + ' in ' + (e.closest('[data-workflow-block]')?.getAttribute('data-workflow-block') ?? '-') : null })()`).catch((e) => String(e && e.message || e).slice(0, 120)) : null
       ok(ids[1], wired === true && typeof edgeWord === 'string' && edgeWord.length > 0 && typeof refusal === 'string' && /cycle/.test(refusal) && edgesNow === 1,
-        JSON.stringify({ port1, block2, wired, edgeWord, refusal, edgesNow, wireEv, dropHit }))
+        JSON.stringify({ steadyBeforeWire, steadyBeforeCycle, port1, block2, wired, edgeWord, refusal, edgesNow, wireEv, dropHit }))
       // M259 — wfx.ui.1 (second half). Selecting n1 lights its lineage — n2
       // and the edge between them — and quiets the unconnected blocks; then
       // Auto layout (top to bottom) is ONE draft step that puts n2 under n1.
@@ -6161,9 +6175,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // The fake runner's turn is paced x6 on CI (panels-harness chatRunner) so a
         // `working` state is observable there; the pool therefore needs seconds,
         // not milliseconds, to finish. Wait for it before Stop is read.
-        await waitUntil(() => wc.executeJavaScript(`(() => {
+        const allFinished = await waitUntil(() => wc.executeJavaScript(`(() => {
           const rows = [...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')]
           return rows.length >= 3 && rows.every((r) => r.getAttribute('data-workflow-pool-state') === 'finished') })()`), 20000)
+        // Evidence for a red run: where each item and each worker stood once the wait ended.
+        const rowsEnd = await wc.executeJavaScript(`(() => ({
+          rows: [...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')].map((r) => r.getAttribute('data-workflow-pool-item') + ':' + r.getAttribute('data-workflow-pool-state')),
+          chats: [...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id') + ':' + (p.querySelector('[data-state-word]')?.textContent ?? '?') + ':' + (p.getAttribute('data-chat-turns') ?? '?')) }))()`)
         // Stop is read AFTER the pool has run its course: the fake runner
         // answers each worker in milliseconds, so no instant of this run
         // has a pool live to stop — Stop's live arm (interrupt every worker,
@@ -6185,7 +6203,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
             typeof stoppedRow === 'string' && /every item finished/.test(stoppedRow) &&
             stopAfter !== null && stopAfter.disabled === true && /nothing of this workflow is running/.test(String(stopAfter.title)),
-          JSON.stringify({ workers, spawnedForWorkers, poolRows, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
+          JSON.stringify({ workers, spawnedForWorkers, poolRows, allFinished, rowsEnd, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
 
         // workflow.panel.1g — the same door on a template with NO blocks:
         // one press, one instantiateTemplate call, the shape minted. This is
