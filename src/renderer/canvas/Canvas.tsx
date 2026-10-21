@@ -7,6 +7,8 @@ import { useShellSettings } from './useShellSettings'
 import { useShellReads } from './useShellReads'
 import { usePanelGestures } from './usePanelGestures'
 import { useShellTail } from './useShellTail'
+import { renderShellChrome } from './ShellChrome'
+import { renderInspector } from './InspectorPane'
 import { renderHostOverlays } from './HostOverlays'
 import { renderPanelNode } from './PanelNode'
 import { useDropVerbs } from './useDropVerbs'
@@ -48,7 +50,6 @@ import { useSpaceHeld } from './useSpaceHeld'
 import { SnapGuides } from './SnapGuides'
 import { smartSnap, type SpacingGuide } from './arrange'
 import { SNAP_PX, type SnapGuide } from './placement'
-import { contextualHint} from './hints'
 import { FirstTaskHint } from './FirstTaskHint'
 import { useLinkDraw } from './useLinkDraw'
 import { SubagentLayer } from './SubagentLayer'
@@ -137,11 +138,10 @@ import { type InputMode } from '@renderer/palette/Palette'
 import { NavigateTier } from '@renderer/palette/navigate-tier'
 import type { PresetRow} from '@renderer/palette/commands'
 import type { WorkItem } from '@shared/work-item'
-import { REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
 import { getChat, insertIntoComposer, onChatTurnStart, scrollToTurn, useChatsVersion } from '@renderer/chat/chat-store'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
-import { disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
+import { disposeChat} from '@renderer/chat/useChatSessions'
 import { disposeWatcher} from '@renderer/watcher/useWatchers'
 import { approvals, useApprovals } from '@renderer/chat/chat-store'
 import { TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
@@ -181,7 +181,6 @@ import type { ToolScope } from '@shared/toolbox'
    own rule — a new object each render is re-render churn through every memo
    that takes the shelf as a dependency. */
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
-import { pinCount} from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, type Annotation} from '@shared/annotations'
 import { WORK_ITEM_STATES, carryWorkItem, type PersistedWorkItem} from '@shared/work-items'
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
@@ -196,7 +195,6 @@ import { PanelMarksContext} from '@renderer/components/PanelFrame'
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
-import { TopBar } from '../shell/TopBar'
 import { focusLocked} from '@shared/shortcuts'
 import type { FocusSide } from '../focus/focus-model'
 import { planView } from '@shared/task-plan'
@@ -206,12 +204,9 @@ import { WorldLens } from '../world/WorldLens'
 import { landingViewport } from '../world/plan-floor'
 import { setWorldLanding, setWorldOn, useWorldOn, worldLandingViewport } from '../world/world-toggle'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
-import { Inspector } from '../shell/Inspector'
 import { useShellChrome, type CenterView } from '../shell/useShellChrome'
 import { useDockExpanded } from '../shell/useDockExpanded'
 import { useShellBreakpoint } from '../shell/useShellBreakpoint'
-import { Dock } from '../shell/Dock'
-import { Navigator } from '../shell/Navigator'
 import { railLabel } from '../shell/rail-rows'
 import { isRestartable} from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
@@ -222,10 +217,7 @@ import { skillEditorFocused } from '../skills/editor-focus'
 import { adoptedRunId, isSettledHandoff, recordOrchEvent} from '../orchestration/orch-record'
 import { useSharedCanvas } from '../shared-canvas/useSharedCanvas'
 import { SharedPlaceholderLayer } from '../shared-canvas/SharedPlaceholderLayer'
-import { notifyRefused } from '../shell/toast'
 import { useRosterNames } from '../presence/useRosterNames'
-import { ShareDialog } from '../account/ShareDialog'
-import { ReplaySheet } from '../replay/ReplaySheet'
 
 
 
@@ -4050,139 +4042,10 @@ export function Canvas({
           fires on any target that is not the drawer or the dock; the scrim
           just needs to not be in that exclusion list, and it isn't. */}
       {(chrome.navDrawer || chrome.ctxDrawer) && <div className="shell__scrim" aria-hidden="true" />}
-      {/* DOM order is screen order for a screen reader: dock, then the top
-          bar, then the navigator. */}
-      <Dock
-        navigator={chrome.navigator}
-        navVisible={chrome.navVisible}
-        onChoose={chrome.chooseNavigator}
-        centerView={chrome.centerView}
-        onSetCenterView={setCenterView}
-        attention={railAttention}
-        elsewhere={railElsewhere}
-        onJumpElsewhere={jumpAnywhere}
-        attentionOpen={chrome.attentionOpen}
-        onToggleAttention={chrome.toggleAttention}
-        onGoToPanel={goToPanelOrRequest}
-        onAnswer={paletteActions.answerApproval}
-        // M357. A hold's answers: the verb as a person (a refusal says why), and main's terminate.
-        onAllowMore={(id, value) => { const r = paletteActions.capAgent(id, value, 'person'); if (r.kind === 'refused') notifyRefused(r.reason) }}
-        onStopAgent={(id) => { void window.canvas.agentSession.terminate(id) }}
-        // M378. A team answer main refused says why, like every other refusal.
-        onTeamAskRefused={notifyRefused}
-        attentionFocus={chrome.attentionFocus}
-        taskTitleOf={approvalTaskOf}
-        inbox={inbox}
-        queue={taskQueue}
-        onEvidence={(e) => {
-          // M318. A decision's evidence: the asking panel, or the task's review.
-          if (e.kind === 'review') { boardVerbsRef.current.review?.(e.itemId); return }
-          if (e.kind === 'decision' || e.kind === 'panel' || e.kind === 'output') goToPanelOrRequest(e.panelId)
-        }}
-        onFocusTask={openFocusTask}
-        onSettings={openSettingsScope}
-        expanded={dock.expanded}
-        onToggleExpanded={dock.toggle}
-      />
-      <TopBar
-        presets={presetRows}
-        onOpenSheet={() => paletteActions.beginStartWork()}
-        workspaceName={workspaceRows.find((w) => w.active)?.name}
-        onShowWorkspaces={() => chrome.chooseNavigator('workspaces')}
-        // The crumb names the task of what is selected on the page SHOWING — the
-        // canvas's selection, or Orchestrate's — so it always says what an action affects.
-        {...(() => {
-          const id = chrome.centerView === 'orchestration' ? orchSelectedId : selectedId
-          if (id === null) return {}
-          const task = taskMenuRef.current(id)
-          return task.kind === 'one' ? { taskName: task.title, onShowTask: () => { leaveForCanvas(); frameTaskOf(id) } } : {}
-        })()}
-        onSearch={palette.openPalette}
-        theme={(() => { const value = settingRows.find((row) => row.id === 'appearance.theme')?.value; return value === 'light' || value === 'dark' ? value : 'system' })()}
-        onSetTheme={(value) => { void window.canvas.settings.set('appearance.theme', value) }}
-        merged={merged}
-        onToggleMerged={toggleMerged}
-        contextOpen={chrome.ctxVisible}
-        onToggleContext={chrome.toggleContext}
-        navigatorOpen={chrome.navVisible}
-        onToggleNavigator={chrome.toggleNavigator}
-        inspectorPinned={inspectorPinned}
-        onToggleInspectorPinned={onToggleInspectorPinned}
-        centerView={chrome.centerView}
-        onSetCenterView={setCenterView}
-        running={inspectorSummary.running}
-        waiting={inspectorSummary.waiting}
-        onJumpWaiting={jumpToWaiting}
-        accounts={accounts}
-        sharedWorkspace={shared.view !== null}
-        sessionCount={panels.filter((p) => isTerminalPanel(p) || isChatPanel(p)).length}
-      />
-      <ShareDialog accounts={accounts} workspaces={workspaceRows}
-        onOpened={(id) => { void switchWorkspace(id) }} onWorkspacesChanged={reloadWorkspaces} />
-      {/* M383. A conversation scrubbed back to any turn, and one beside it — a view over the renderer's own transcripts. */}
-      <ReplaySheet
-        chats={panels.flatMap((p) => (isChatPanel(p) ? [{ id: p.rect.id, label: panelName(p), cwd: p.chat.cwd }] : []))}
-        turnsOf={(id) => getChat(id).turns} />
-      {resumeStrip}
-      <Navigator
-        onResizeHandleDown={onNavResizeDown}
-        hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
-        shapeCount={shapePanels.length}
-        board={boardPaneProps}
-        runs={railRuns}
-        onRunAgain={onRunAgain}
-        navigator={chrome.navigator}
-        onToggle={chrome.toggleNavigator}
-        merged={merged}
-        workspaces={railWorkspaces}
-        snapshots={snapshots}
-        onRestoreSnapshot={restoreSnapshot}
-        onSwitchWorkspace={paletteActions.switchWorkspace}
-        onJumpWaitingWorkspace={(workspaceId) => {
-          // The active workspace's own waiting panels are the ⌘J queue; any
-          // other's are its elsewhere row, longest-waiting first.
-          const id = railElsewhere.find((w) => w.workspaceId === workspaceId)?.panelIds[0]
-          if (id !== undefined) jumpAnywhere(id)
-          else jumpToWaiting()
-        }}
-        onCreateWorkspace={paletteActions.beginCreateWorkspace}
-        onRenameWorkspace={paletteActions.beginRenameWorkspace}
-        onDeleteWorkspace={paletteActions.deleteWorkspace}
-        inbox={resumeBanner}
-        rows={railRows}
-        selectedId={selectedId}
-        taskMemberReason={navTask === null ? undefined : (panelId) => navTask.members.find((m) => m.panelId === panelId)?.reason}
-        onGoToPanel={goToPanelOrRequest}
-        onStartPanel={paletteActions.startPanel}
-        onClosePanel={paletteActions.closePanel}
-        treeRootPath={treeRoot}
-        treeRootLabel={treeRootLabel}
-        // M68. The rail's own label for the panel (the honest chain, the user's title first), never the internal panelLabel.
-        treeRootPanel={selectedId === null ? null : (railRows.find((r) => r.id === selectedId)?.label ?? null)}
-        onToggleMerged={paletteActions.toggleMerged}
-        treeRows={treeRows}
-        treeRootPending={treeRootPending}
-        // M48 (spec §5). Which panel, and why there is nothing to list.
-        // M194. The policy answers with a reason ONLY for the two states this
-        // line has never had words for — a sandboxed conversation, and a
-        // directory that cannot be used. A kind that simply has none still
-        // falls through to the line that NAMES the panel (M48 §5), which is
-        // more specific than anything the policy could invent.
-        treeEmptyReason={treeContextReason ?? (!selectedPanel
-          ? 'select a panel to list its directory'
-          : `${panelLabel(selectedPanel)} has no directory to list`)}
-        onToggleDir={toggleDir}
-        onInsertPath={insertPath}
-        onRefreshTree={refreshTree}
-        // M83. The Files pane's door to the memory of the directory it is
-        // standing in — disabled by NAME, never hidden, when there is none.
-        onOpenMemory={paletteActions.openMemory}
-        memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
-        vault={vaultPaneProps}
-        integrations={integrationsPaneProps}
-        skills={skillsPaneProps}
-        teammates={teammatesPaneProps}
-      />
+      {/* M507. The dock, top bar, share dialog, replay sheet, resume strip and navigator, in ShellChrome.tsx: a plain function called here. */}
+      {renderShellChrome({
+        accounts, approvalTaskOf, attemptedHint, boardPaneProps, boardVerbsRef, chrome, dock, frameTaskOf, goToPanelOrRequest, hintsLoaded, hintsSeen, inbox, insertPath, inspectorPinned, inspectorSummary, integrationsPaneProps, jumpAnywhere, jumpToWaiting, leaveForCanvas, merged, navTask, noteRoot, onNavResizeDown, onRunAgain, onToggleInspectorPinned, openFocusTask, openSettingsScope, orchSelectedId, palette, paletteActions, panels, presetRows, railAttention, railElsewhere, railRows, railRuns, railWorkspaces, refreshTree, reloadWorkspaces, restoreSnapshot, resumeBanner, resumeStrip, selectedId, selectedPanel, setCenterView, settingRows, shapePanels, shared, skillsPaneProps, snapshots, switchWorkspace, taskMenuRef, taskQueue, teammatesPaneProps, toggleDir, toggleMerged, treeContextReason, treeRoot, treeRootLabel, treeRootPending, treeRows, vaultPaneProps, workspaceRows
+      })}
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
           are hidden below PORT_MIN_SCALE — a 14px dot is under two screen
@@ -4499,71 +4362,10 @@ export function Canvas({
           activeWorkspaceId, addPack, adoptable, agentLinksOn, annotateTool, annotating, annotationMarks, annotations, arrangeItem, askWithoutFolder, backendInfo, boardVerbsRef, bookmarkRows, briefing, broadcastInput, broadcastReady, broadcastTargetIds, canvasCoveredRef, capability, captionRedoRef, captionUndoRef, chatInFolder, chrome, commitHistory, completeOnboarding, connectedSpawn, createObject, credentialRows, diagnostics, endAnnotate, envBannerDismissed, envReport, finishOnboarding, fitAll, fitTaskContext, flying, frameItem, getDiagnosticsInput, globalFontSize, goToPanelStable, goToViewport, groups, hasSelection, hintsLoaded, hintsSeen, importCanvas, inputMode, jobRecovery, launcherPutAway, launcherRecentUsed, launcherRecents, lens, linkMode, linkSourceName, makeTaskRef, markHint, marquee, merged, mergedView, minimapEnabled, navGrid, noteRoot, onBroadcastStopMouseDown, onCapabilityQuery, onSearchQuery, onSpawn, onboardingDone, onboardingProbes, packPreview, palette, paletteActions, paletteActionsRef, paletteApprovals, paletteTemplates, panelRows, panels, panelsRef, pipsEnabled, presetRows, promptRows, railRows, rects, reopen, restoreFacts, restoreOpen, resumeBanner, resumedNext, runResumeAction, scrollbackPersist, searchResults, selectedIds, selectedIdsRef, selectedPanelIds, setAdoptable, setAnnotateTool, setConnectedSpawn, setEnvBannerDismissed, setLauncherPutAway, setPackPreview, setPanels, setRelatedItemId, setRestoreLeft, setSplash, settingRows, shapeIdSet, shared, showOnboarding, splash, startFirstWork, starter, taskRegions, teammates, terminalNameOf, toggleAgentLinks, toggleBroadcastStable, trail, updateState, viewport, waitingIds, wakeTarget, workItems, workSearch, workspaceRows, worktreeRows, worldCentre, zoomBy, history
         })}
       </div>
-      <Inspector
-        templateOf={(id) => allTemplates(templateRows).find((t) => t.id === id)}
-        onTestNode={testNode}
-        onToggle={chrome.toggleContext}
-        tab={chrome.contextTab}
-        onSelectTab={chrome.setContextTab}
-        model={inspectorModel}
-        summary={inspectorSummary}
-        contextBand={inspectorContextBand}
-        onShowRelated={(itemId) => { setRelatedItemId(itemId); const r = frameItem(itemId); if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }}
-        // M310. A step that exists is gone to (a panel) or opened (a link, by
-        // main's own door); one that does not leads to where it is MADE — the
-        // review for a review, checks or a PR, Start work for a conversation.
-        onChainStep={(itemId, step) => {
-          if (step.present && step.panelIds[0] !== undefined) { paletteActions.goToPanel(step.panelIds[0]); return }
-          if (step.present && step.url !== undefined) { void window.canvas.links.open({ panelId: selectedIdRef.current ?? '', target: step.url }); return }
-          if (step.step === 'conversation') { paletteActions.beginStartWork({ itemId }); return }
-          if (step.step === 'review' || step.step === 'checks' || step.step === 'pr') {
-            const r = boardVerbsRef.current.review?.(itemId)
-            if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
-          }
-        }}
-        onShowTask={(panelId) => { const r = boardVerbsRef.current.show?.(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
-        onRename={paletteActions.beginRenamePanel}
-        onClose={paletteActions.closePanel}
-        onSavePreset={paletteActions.savePanelAsPreset}
-        onRestart={paletteActions.restartPanel}
-        onLock={paletteActions.lockPanel} onUnlock={paletteActions.unlockPanel} onPin={paletteActions.pinPanel} onUnpin={paletteActions.unpinPanel} onMaximise={paletteActions.maximisePanel} onRestore={paletteActions.restorePanel} pinnedCount={pinCount(panels)}
-        onFrontEnd={onFrontEnd}
-        onReviewApproval={chrome.openAttentionAt}
-        onRevokeGrants={revokeChatGrants}
-        // M352. The Caps fields are a PERSON's door: raising a cap is theirs to do.
-        onCap={(id, value) => paletteActions.capAgent(id, value, 'person')}
-        onOpenReview={paletteActions.openReview}
-        taskCriteria={taskCriteria}
-        onPausePanel={onPausePanel}
-        onHandOffPanel={onHandOffPanel}
-        onLink={paletteActions.beginLink}
-        onRemoveLink={paletteActions.removeLink}
-        onRelabelLink={paletteActions.beginRelabelLink}
-        selectedConnector={selectedConnectorDetail}
-        onPatchConnector={(id, patch) => { const r = connectors.patch(id, patch); if (r.kind === 'refused') paletteActions.say(r.reason) }}
-        onRemoveConnector={(id) => { connectors.remove(id) }}
-        onStyleShape={(id, patch) => { const r = flowchart.setShapeStyle([id], patch); if (r.kind === 'refused') paletteActions.say(r.reason) }}
-        onShapeChart={(id, act) => {
-          const said = (r: { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }): void => { paletteActions.say(r.kind === 'ran' ? (r.note ?? 'done') : r.reason) }
-          if (act === 'plan') said(paletteActions.planFromChart(id))
-          else if (act === 'layout-down' || act === 'layout-right') said(flowchartIO.layout(act === 'layout-down' ? 'down' : 'right', [id]))
-          else void flowchartIO.exportFlowchart(act === 'export-mermaid' ? 'mermaid' : 'svg').then(said)
-        }}
-        onSetRestartOnExit={onSetRestartOnExit}
-        onSetLinkAutomation={onSetLinkAutomation}
-        automationResults={automationResult}
-        automations={automationRows}
-        selectedEdge={selectedEdge}
-        panelRun={panelRun}
-        onRunAgain={onRunAgain}
-        review={reviewModel}
-        branchLine={branchLine}
-        repository={repository}
-        toolbox={toolboxModel}
-        onOpenToolbox={paletteActions.openToolbox}
-        onResizeHandleDown={onInspectorResizeDown}
-        onGoToPanel={paletteActions.goToPanel}
-      />
+      {/* M507. The inspector column, in InspectorPane.tsx: a plain function called here. */}
+      {renderInspector({
+        automationResult, automationRows, boardVerbsRef, branchLine, chrome, connectors, flowchart, flowchartIO, frameItem, inspectorContextBand, inspectorModel, inspectorSummary, onFrontEnd, onHandOffPanel, onInspectorResizeDown, onPausePanel, onRunAgain, onSetLinkAutomation, onSetRestartOnExit, paletteActions, paletteActionsRef, panelRun, panels, repository, reviewModel, selectedConnectorDetail, selectedEdge, selectedIdRef, setRelatedItemId, taskCriteria, templateRows, testNode, toolboxModel
+      })}
     </div>
   )
 }
