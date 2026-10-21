@@ -13109,7 +13109,12 @@ tr[data-session-row]:focus-within .sessions-world,
    less the switch's half-width (with a badge) and what sits right of the
    search (View, avatars, gaps). Below 1220px the older rule's min-width: 0
    still lets the field shrink. */
-.shell__top .shell__search { max-width: clamp(120px, calc(50% - 380px), 560px); }
+.shell__top .shell__search { max-width: clamp(120px, calc(50% - 380px), 560px); margin-inline: auto 0; }
+/* And it hugs the right cluster: with auto margins on both sides it centred
+   itself in the free space, which put it under the switch whenever the
+   session count was absent (a capture mid-switch showed it). The count, when
+   present, keeps the one auto margin. */
+.shell__top .shell__sessions ~ .shell__search { margin-left: 0; }
 /* The empty canvas's "Nothing placed yet" stands where the minimap will be,
    which is ALSO where the zoom bar sits: it covered Fit all. Stacked above
    the bar instead, as the minimap itself is (--nav-hud-h). */
