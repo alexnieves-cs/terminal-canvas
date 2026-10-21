@@ -40,6 +40,8 @@ const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + (read(
   + (/\brenderHostOverlays\(\{/.test(canvasOwn) ? '\n' + (read('src/renderer/canvas/HostOverlays.tsx') || '') : '')
   // M507. And the world layer's JSX to WorldLayers.tsx.
   + (/\brenderWorldLayers\(\{/.test(canvasOwn) ? '\n' + (read('src/renderer/canvas/WorldLayers.tsx') || '') : '')
+  // M507. And snapping (smartSnap's caller) to useSnapAndAgentLinks.ts.
+  + (/= useSnapAndAgentLinks\(\{/.test(canvasOwn) ? '\n' + (read('src/renderer/canvas/useSnapAndAgentLinks.ts') || '') : '')
 const commands = read('src/renderer/palette/commands.ts') || ''
 const shortcuts = read('src/shared/shortcuts.ts') || ''
 const cluster = read('src/renderer/canvas/TaskClusterLayer.tsx') || ''

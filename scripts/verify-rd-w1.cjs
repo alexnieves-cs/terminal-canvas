@@ -56,6 +56,8 @@ const floor = read('src/renderer/world/plan-floor.ts')
 // Canvas.tsx followed by that hook, and only while Canvas still calls it.
 const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
 const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + read('src/renderer/canvas/useShellTail.ts') : '')
+  // M507. The running-pid list (machineCostTargets) moved to useRunningSessions.ts.
+  + (/= useRunningSessions\(\{/.test(canvasOwn) ? '\n' + read('src/renderer/canvas/useRunningSessions.ts') : '')
 const lens = read('src/renderer/world/WorldLens.tsx')
 
 const seam = css.slice(css.indexOf(open), css.indexOf(close))

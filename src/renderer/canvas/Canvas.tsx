@@ -2,6 +2,8 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { useHistoryVerbs } from './useHistoryVerbs'
+import { useRunningSessions } from './useRunningSessions'
+import { useSnapAndAgentLinks } from './useSnapAndAgentLinks'
 import { useMainRows } from './useMainRows'
 import { useShellSettings } from './useShellSettings'
 import { useShellReads } from './useShellReads'
@@ -38,14 +40,9 @@ import { useConnectors, type Connectors } from './useConnectors'
 import { useShapeKeys } from './useShapeKeys'
 import { useFlowchartIO } from './useFlowchartIO'
 import { buildPeerFlow, type PeerFlow } from '@renderer/flowchart/shared-shapes'
-import { forgetAgentLinksFor, forgetAllAgentLinks, publishAgentLinks } from './agent-links-store'
-import { agentLinks } from '@shared/agent-links'
-import { indexToolFiles } from '@shared/tool-index'
-import { getChat as getChatState } from '@renderer/chat/chat-store'
+import { forgetAgentLinksFor, forgetAllAgentLinks} from './agent-links-store'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
-import { smartSnap, type SpacingGuide } from './arrange'
-import { SNAP_PX, type SnapGuide } from './placement'
 import { FirstTaskHint } from './FirstTaskHint'
 import { useLinkDraw } from './useLinkDraw'
 import { useCanvasTestHooks } from './useCanvasTestHooks'
@@ -58,8 +55,8 @@ import { capabilityAcross, normalizeCapability, type CapabilityAnswer } from '@s
 import { useVault } from './useVault'
 import {
   EMPTY_PRESETS,
-  EMPTY_SELECTION, NO_GUIDES,
-  MACHINE_COST_SAMPLE_MS, APP_OPENED_AT, retainSelection, panelLabel} from './canvas-constants'
+  EMPTY_SELECTION,
+  APP_OPENED_AT, retainSelection, panelLabel} from './canvas-constants'
 import { useViewport, prefersReducedMotion } from './useViewport'
 import { type StartupInput } from './splash'
 import { type TaskCluster } from './task-clusters'
@@ -85,7 +82,7 @@ import { pillFocused, orchestratorTarget } from './command-pill'
 import { CommandPill, orchestratorCandidates } from './CommandPill'
 import { noteEditorFocused } from '@renderer/file/rich-note-focus'
 import { deckFocused } from '@renderer/file/deck-controllers'
-import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
+import { sheetFocused } from '@renderer/file/sheet-controllers'
 import { focusedDraft} from './draft-focus'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
@@ -100,14 +97,13 @@ import { applySubagents, clearSubagents } from '@renderer/session/subagent-store
 import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import { applyUsage, clearUsage} from '@renderer/session/usage-store'
-import { applyMachineCosts, clearMachineCost } from '@renderer/session/machine-cost-store'
+import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
 import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
 import { searchWork, type WorkEvidenceRow } from '@shared/work-search'
 import { buildResumeSummary, pickResumeSubject, type ResumeSummary } from '@shared/resume-summary'
-import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   MergedWorkspace,
   PresetTemplate,
@@ -117,7 +113,7 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isWatcherPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isReviewPanel, isTerminalPanel, makeJiraPanel,
   makeChatPanel, isChatPanel,
-  makePanel, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, setPanelRect,
+  makePanel, nextZ, terminalRimAt, rimCoveredIds, pickRects, setPanelRect,
   addLink, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, CHAT_W, CHAT_H} from '@renderer/panels/panels'
 import { seedAfter } from '@renderer/panels/recover'
@@ -1638,93 +1634,10 @@ export function Canvas({
   const spaceHeld = useSpaceHeld()
   const version = useRegistryVersion(registry)
 
-  // Main reads ONE process table for this whole list, then walks each root's
-  // descendants there. The renderer owns this low-frequency schedule because
-  // closing or switching a canvas should stop the work immediately; neither
-  // the registry nor a module-level main timer can know that fact.
-  const machineCostTargets = useMemo<MachineCostTarget[]>(() => panels.flatMap((panel) => {
-    if (!isTerminalPanel(panel)) return []
-    const status = registry.get(panel.rect.id)?.status
-    return status?.kind === 'running' ? [{ panelId: panel.rect.id, pid: status.pid }] : []
-  }), [panels, version])
-
-  useEffect(() => {
-    let current = true
-    let inFlight = false
-    const sample = (): void => {
-      if (inFlight) return
-      if (machineCostTargets.length === 0) {
-        applyMachineCosts({ panels: [], total: { cpuPercent: 0, memoryBytes: 0 } })
-        return
-      }
-      inFlight = true
-      void window.canvas.machine.sample(machineCostTargets).then((snapshot) => {
-        if (current) applyMachineCosts(snapshot)
-      }).catch((error: unknown) => {
-        // A ps failure is normally a transient process-table race. Keep the
-        // prior reading until the next tick rather than turning it into zero.
-        console.warn('[machine-cost] could not sample process trees', error)
-      }).finally(() => {
-        inFlight = false
-      })
-    }
-    sample()
-    const timer = window.setInterval(sample, MACHINE_COST_SAMPLE_MS)
-    return () => {
-      current = false
-      window.clearInterval(timer)
-    }
-  }, [machineCostTargets])
-
-  // What the banner calls the source panel. railLabel is the honest chain's
-  // one reader — the panel header, the rail row, the attention section and
-  // the inspector's link rows all go through it — so the banner reads it too
-  // rather than becoming a fifth re-derivation that says `/bin/zsh` where
-  // every other surface says `auth refactor`. Falls back to the bare id only
-  // if the panel is gone, which a disarm makes very short-lived.
-  const linkSourceName = useMemo(() => {
-    if (linkMode.from === null) return ''
-    const panel = panels.find((p) => p.rect.id === linkMode.from)
-    return panel ? railLabel(panel, registry.get(panel.rect.id)?.status) : linkMode.from
-  }, [linkMode.from, panels, version])
-
-  // Sessions exist for every panel; only their tier changes. In a memo rather
-  // than an effect: ensure() runs synchronously during render (so a session
-  // exists by the time this same render tries to look one up below) and
-  // deliberately never calls bump() — notifying a useSyncExternalStore
-  // subscriber mid-render is what React's "update while rendering another
-  // component" warning is about. The panel list living in React state is
-  // already what triggers this render, so nothing is lost by not bumping.
-  useMemo(() => {
-    for (const panel of terminalPanels) {
-      registry.ensure(panel.rect.id, panel.spec, { dormant: dormantIds.has(panel.rect.id) })
-    }
-  }, [terminalPanels, dormantIds])
-
-  // Only sessions that are already running can be broadcast targets. This is
-  // a filter over the existing registry, never a call to ensure/wake, so an
-  // inactive selection remains inactive when the mode is armed.
-  const broadcastTargetIds = useMemo(() => (
-    merged
-      ? []
-      : terminalPanels
-        .filter((panel) => {
-          const session = registry.get(panel.rect.id)
-          return selectedIds.has(panel.rect.id) && session?.status.kind === 'running'
-        })
-        .map((panel) => panel.rect.id)
-  ), [merged, selectedIds, terminalPanels, version])
-  const broadcastReady = broadcastTargetIds.length >= 2
-
-  useEffect(() => {
-    if (!broadcastInput || !broadcastReady) {
-      registry.setInputTargets([])
-      if (broadcastInput && !broadcastReady) setBroadcastInput(false)
-      return
-    }
-    registry.setInputTargets(broadcastTargetIds)
-    return () => registry.setInputTargets([])
-  }, [broadcastInput, broadcastReady, broadcastTargetIds])
+  // M507. Machine cost, the link banner's name, session tiers and the broadcast targets, lifted into useRunningSessions.ts at exactly this position.
+  const { broadcastReady, broadcastTargetIds, linkSourceName } = useRunningSessions({
+    broadcastInput, dormantIds, linkMode, merged, panels, selectedIds, setBroadcastInput, terminalPanels, version, registry
+  })
 
   // Menu-driven clipboard stays at this exact hook position: `focusedIdRef`
   // exists above it, while addImageRef is assigned below it. The hook reads
@@ -2066,118 +1979,10 @@ export function Canvas({
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
   // and only on release.
-  // M50. Snapping: applied to applyDrag's OUTPUT, per frame, against every
-  // other panel's rect, with the threshold in SCREEN pixels over the scale
-  // (verify:viewport 27's 1/k relationship — a world-unit threshold is huge
-  // zoomed out and invisible zoomed in). The guides are the one piece of
-  // state a drag leaves in React: cleared on commit. Off when the setting
-  // is off: a user aligning by eye against a snap is fighting the app.
-  const [snapEnabled, setSnapEnabled] = useState(true)
-  useEffect(() => {
-    // Read at mount and on every settings write (settings:changed, M45):
-    // this block sits above settingRows' declaration, and a subscription is
-    // the more honest source anyway — the row's own palette toggle and a
-    // menu write both land here.
-    let live = true
-    const read = (): void => {
-      void window.canvas.settings.list().then((rows) => {
-        if (!live) return
-        const row = rows.find((r) => r.id === 'placement.snap')
-        if (row) setSnapEnabled(row.value === true)
-      })
-    }
-    read()
-    const off = window.canvas.settings.onChanged(read)
-    return () => { live = false; off() }
-  }, [])
-  const snapEnabledRef = useRef(snapEnabled)
-  snapEnabledRef.current = snapEnabled
-
-  // M247. Agent → object links. The toggle is a SETTING (canvas.agentLinks), read
-  // the way snap is: at mount and on every settings:changed, so the palette row,
-  // the HUD button, the agent line and an action node all land here.
-  const [agentLinksOn, setAgentLinksOn] = useState(true)
-  useEffect(() => {
-    let live = true
-    const read = (): void => {
-      void window.canvas.settings.list().then((rows) => {
-        if (!live) return
-        const row = rows.find((r) => r.id === 'canvas.agentLinks')
-        if (row) setAgentLinksOn(row.value === true)
-      })
-    }
-    read()
-    const off = window.canvas.settings.onChanged(read)
-    return () => { live = false; off() }
-  }, [])
-  // Derived from each conversation's tool calls, never stored: a restart re-derives
-  // them from the chat store. Published PER AGENT into agent-links-store, which
-  // replaces a snapshot only when its content changed — never the registry's
-  // version counter, which a busy agent's tool calls would otherwise drive.
-  //
-  // useChatsVersion bumps on EVERY chat state replacement, streamed deltas
-  // included; the turns array is replaced only when a turn lands. So each
-  // agent's links are recomputed only when its turns array or the set of
-  // objects (a path, a draft) actually changed — otherwise a streaming reply
-  // would re-index every transcript on the canvas several times a second.
-  // Its own name: Canvas's `chatsVersion` is declared far below, and a dependency
-  // array is evaluated during render, so borrowing it here would throw.
-  const linksChatsVersion = useChatsVersion()
-  const agentLinkCache = useRef(new Map<string, { turns: unknown; objectsKey: string }>())
-  useEffect(() => {
-    const objects = panels.filter(isFilePanel).map((p) => ({
-      id: p.rect.id,
-      path: p.source.path,
-      ...(p.source.sheet?.draft?.by === undefined ? {} : { draftBy: p.source.sheet.draft.by })
-    }))
-    const objectsKey = JSON.stringify(objects)
-    for (const agent of panels.filter(isChatPanel)) {
-      const turns = getChatState(agent.rect.id).turns
-      const hit = agentLinkCache.current.get(agent.rect.id)
-      if (hit !== undefined && hit.turns === turns && hit.objectsKey === objectsKey) continue
-      agentLinkCache.current.set(agent.rect.id, { turns, objectsKey })
-      publishAgentLinks(agent.rect.id, agentLinks({ agent: agent.rect.id, cwd: agent.chat.cwd, touches: indexToolFiles(turns), objects }))
-    }
-    // A closed agent's cache entry goes with it; its links went at the forget site.
-    const live = new Set(panels.map((p) => p.rect.id))
-    for (const id of [...agentLinkCache.current.keys()]) if (!live.has(id)) agentLinkCache.current.delete(id)
-  }, [panels, linksChatsVersion])
-  // A draft badge opens that draft's review: the sheet, brought into view and focused.
-  const openDraftReview = useCallback((objectId: string) => {
-    paletteActionsRef.current?.goToPanel(objectId)
-    sheetController(objectId)?.focusDraft()
-  }, [])
-  const toggleAgentLinks = useCallback(() => {
-    paletteActionsRef.current?.toggleSetting('canvas.agentLinks', !agentLinksOn)
-  }, [agentLinksOn])
-  const [snapGuides, setSnapGuidesState] = useState<{ guides: readonly SnapGuide[]; spacing: readonly SpacingGuide[] }>(NO_GUIDES)
-  // Clearing is the common call (every commit): the same object back when
-  // there is nothing to clear, so a release that snapped nothing re-renders nothing.
-  const setSnapGuides = useCallback((guides: readonly SnapGuide[], spacing: readonly SpacingGuide[] = []): void => {
-    setSnapGuidesState((current) => (guides.length === 0 && spacing.length === 0 ? (current === NO_GUIDES ? current : NO_GUIDES) : { guides, spacing }))
-  }, [])
-  // M390. smartSnap (arrange.ts) in place of snapRect: edge/centre alignment
-  // as before, plus EQUAL SPACING on a move, and a resize floor that is the
-  // object's own (`min` — a shape's is SHAPE_MIN, a panel's the 200x160).
-  const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }, min?: { w: number; h: number }): WorldRect => {
-    if (!snapEnabledRef.current) return rect
-    const others = panelsRef.current.filter((p) => !exclude.has(p.rect.id)).map((p) => p.rect)
-    // M402. The rim a terminal's name paints above its frame (occupiedRect),
-    // so a stack snaps the lower name clear of the upper one's bottom row. A
-    // multi-move's bounds (`selection`) carry the rim of a terminal on its top
-    // edge — its members' TOPMOST, read from their pre-drag rects (the bounds
-    // have moved, the members in panelsRef have not). The rim at THIS zoom
-    // (terminalRimAt): the strip is taller in the world below 100%.
-    const rim = terminalRimAt(viewportRef.current.scale)
-    const rimOf = (id: string): number => {
-      const members = panelsRef.current.filter((p) => (id === 'selection' ? exclude.has(p.rect.id) : p.rect.id === id))
-      const top = Math.min(...members.map((p) => p.rect.y))
-      return Math.max(0, ...members.filter((p) => p.rect.y === top).map((p) => p.rect.y - occupiedRect(p, rim).y))
-    }
-    const out = smartSnap(rect, others, SNAP_PX / viewportRef.current.scale, { ...(resize ? { resize } : {}), ...(min === undefined ? {} : { min }), spacing: true, grid: null, gapGrid: 24, rimOf })
-    setSnapGuides(out.guides, out.spacing)
-    return out.rect
-  }, [setSnapGuides])
+  // M507. Snapping and the agent links, lifted into useSnapAndAgentLinks.ts at exactly this position.
+  const { agentLinksOn, openDraftReview, setSnapGuides, snapGuides, snapNow, toggleAgentLinks } = useSnapAndAgentLinks({
+    paletteActionsRef, panels, panelsRef, viewportRef
+  })
 
   // The shared canvas (presence/canvas-sync.ts in main): a peer's move lands
   // in `panels` here without a history entry, a teammate's panels are inert
