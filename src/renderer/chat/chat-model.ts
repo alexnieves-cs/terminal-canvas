@@ -177,18 +177,11 @@ export function chatHasRun(state: { snapshot: AgentSessionSnapshot | null; turns
   return alive || (snap !== null && snap.turns > 0) || (state.meta?.turns ?? 0) > 0 || state.turns.some((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text'))
 }
 
-/** M76. The one deny message, whichever surface says it. */
-export const DENY_MESSAGE = 'denied from the canvas'
 /**
- * M358. "Keep planning" is a deny of `ExitPlanMode`, and its message is what
- * the agent reads next, so it says what the person wants instead of a bare
- * no: the plan again, revised, before anything runs.
+ * M76 / M358. The deny messages live beside PLAN_TOOL in shared/transcript.ts
+ * since M488, so main's MCP answer says the same words the canvas does.
  */
-/** M358. The deny message for a request: a plan's says "keep planning", every other tool's is M76's one. */
-export function denyMessageFor(toolName: string | undefined): string {
-  return toolName === PLAN_TOOL ? KEEP_PLANNING_MESSAGE : DENY_MESSAGE
-}
-export const KEEP_PLANNING_MESSAGE = 'Keep planning: the person has not approved this plan. Revise it (ask what they want changed if that is unclear) and present it again before you start.'
+export { DENY_MESSAGE, KEEP_PLANNING_MESSAGE, denyMessageFor } from '@shared/transcript'
 /** M76. A question is open: the composer names the fix, which is above it. */
 /** M119. The row's label, not `claude`: acp is the first other row that asks. */
 export const REASON_CHAT_PENDING = 'claude is waiting for your answer — allow or deny above'

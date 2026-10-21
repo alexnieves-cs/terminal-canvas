@@ -42,6 +42,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | #35 | M487 | `tc mcp`: a stdio MCP server (`@modelcontextprotocol/sdk`) where each of nine tools is one control-socket line; every answer scrubbed per string, then `outward`; `send_to_agent` reaches chats only; a fresh-context critic's two must-fix findings fixed before review | `verify:mcp` (new), `verify:control` |
+| #42 | M488 | Gated MCP writes: `approvals`/`answer`/`accept` socket verbs and `list_approvals`, `answer_approval`, `accept_review` tools; writes refused by name unless `remote.mcpWrites` (default off, not plan-writable), always refused for a panel token; `accept` merges only at a full `expectHead`; each write on the decision audit; critic findings fixed, merge race filed as Q-001 | `verify:mcp` gate.1–5, `verify:control` |
 
 ## E — Cut and untangle (M495–M509)
 
