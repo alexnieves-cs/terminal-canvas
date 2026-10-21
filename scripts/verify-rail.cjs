@@ -3619,7 +3619,8 @@ console.log('\n' + '='.repeat(60))
   ok('workflow.trigger.1 the Triggers verb is disabled with the same runReason Run is — a watcher armed on a blocked shape fires into a refusal',
     triggers !== null && /props\.runReason/.test(triggers[0]),
     triggers ? triggers[0].trim() : 'no Triggers verb found')
-  const canvas = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  // M500. runWorkflow moved with the workflow verbs into useWorkflowVerbs.ts.
+  const canvas = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'useWorkflowVerbs.ts'), 'utf8')
   const start = canvas.indexOf('const runWorkflow = useCallback(')
   const body = start === -1 ? '' : canvas.slice(start, canvas.indexOf('}, [', start))
   ok('workflow.fire.1 runWorkflow consults templateRefusal before instantiating, so a fired trigger on a blocked template returns the refusal instead of minting nothing',
