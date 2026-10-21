@@ -149,7 +149,9 @@ const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + read('
 }
 
 {
-  const jump = canvas.slice(canvas.indexOf('jumpAttentionImplRef.current = '), canvas.indexOf('const pillJump'))
+  // M507. The jump moved with the panel gestures; Canvas still calls them.
+  const gestures = /= usePanelGestures\(\{/.test(canvas) ? read('src/renderer/canvas/usePanelGestures.ts') : ''
+  const jump = gestures.slice(gestures.indexOf('jumpAttentionImplRef.current = '), gestures.indexOf('const pillJump'))
   // M506. The notice moved with the attention models; Canvas still calls them.
   const attention = /= useAttentionModels\(\{/.test(canvas) ? read('src/renderer/canvas/useAttentionModels.tsx') : ''
   const notice = attention.slice(attention.indexOf('const readyToReview = '), attention.indexOf('}, [readyToReview, notifySetting])'))
