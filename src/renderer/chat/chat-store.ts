@@ -555,7 +555,12 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       // decides from it. The status object is rebuilt by name so an absent
       // `reason` stays absent.
       if (!snap) return
-      const status: AutoStatus = { mode: event.mode, turn: event.turn, limit: event.limit, state: event.state, ...(event.reason === undefined ? {} : { reason: event.reason }) }
+      const status: AutoStatus = {
+        mode: event.mode, turn: event.turn, limit: event.limit, state: event.state, ...(event.reason === undefined ? {} : { reason: event.reason }),
+        // M475. The gate's fields, by name like `reason`: a verdict dropped here would read every checked run as claimed.
+        ...(event.check === undefined ? {} : { check: event.check }), ...(event.checking === true ? { checking: true as const } : {}),
+        ...(event.checkFailures === undefined ? {} : { checkFailures: event.checkFailures }), ...(event.verdict === undefined ? {} : { verdict: event.verdict })
+      }
       update(event.id, { ...prev, snapshot: { ...snap, auto: status } })
       for (const l of autoListeners) l(event.id, status)
       return

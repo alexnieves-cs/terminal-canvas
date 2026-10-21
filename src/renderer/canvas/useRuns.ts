@@ -7,7 +7,7 @@ import type { PanelUsage } from '@shared/cost'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { railLabel } from '@renderer/shell/rail-rows'
 import { getUsage } from '@renderer/session/usage-store'
-import type { AutoStatus } from '@shared/auto'
+import { autoVerdictOf, AUTO_CLAIMED_OUTCOME, type AutoStatus } from '@shared/auto'
 import {
   ABANDONED_BY_RELAUNCH, beginRun, componentOf, finishRun, recordRunEvent, runCostSince, runIsComplete, runName, type RunComponent, type RunEvent
 } from './run-model'
@@ -191,7 +191,8 @@ export function useRuns(deps: RunsDeps): RunsApi {
     if (runId === undefined) return
     const open = openRef.current.get(runId) as OpenRun
     openRef.current.delete(runId)
-    const outcome = status.state === 'done' ? 'passed' : status.state === 'stopped' ? 'stopped' : `stuck — ${status.reason ?? 'no reason given'}`
+    // M475. `passed` is a check's word: a done the agent only claimed says so.
+    const outcome = status.state === 'done' ? (autoVerdictOf(status) === 'checked' ? 'passed' : AUTO_CLAIMED_OUTCOME) : status.state === 'stopped' ? 'stopped' : `stuck — ${status.reason ?? 'no reason given'}`
     const next = current.map((r) => {
       if (r.id !== runId) return r
       const sealedEntries = r.entries.map((e) => (e.panelId === panelId && e.endedAt === undefined ? { ...e, endedAt: at, outcome } : e))
