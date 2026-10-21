@@ -857,7 +857,14 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       const selectedIds = (await shapes()).filter((s) => s.selected).map((s) => s.id)
       const manyBefore = await rectOf(pick.map((s) => s.id))
       const many = await dragFrames(lead, '200 shapes · drag a 40-shape selection (multi-move)')
-      const manyAfter = await rectOf(pick.map((s) => s.id))
+      // A condition, not the drag's one settle(): two of three CI runs read
+      // every member 'missing' after the multi-move commit, so the read waits
+      // until all 40 are back in the DOM with a position. countAfter, before
+      // and after say which side lacked them if it still misses.
+      const pickIds = pick.map((s) => s.id)
+      await waitUntil(async () => { const r = await rectOf(pickIds); return pickIds.every((id) => r[id] && Number.isFinite(r[id].x) && Number.isFinite(r[id].y)) }, 5000)
+      const manyAfter = await rectOf(pickIds)
+      const countAfter = (await shapes()).length
       const deltas = pick.map((s) => manyBefore[s.id] && manyAfter[s.id] ? `${Math.round(manyAfter[s.id].x - manyBefore[s.id].x)},${Math.round(manyAfter[s.id].y - manyBefore[s.id].y)}` : 'missing')
       const oneDelta = new Set(deltas)
       const unselectedStill = (await shapes()).filter((s) => !pick.some((p) => p.id === s.id)).length
@@ -866,7 +873,7 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
         measured.length === 4 && measured.every((r) => r.frames >= 60 && Number.isFinite(r.meanMs) && Number.isFinite(r.p95Ms) && r.p95Ms < 250) &&
           single && single.at.hit && singleMoved && rerouted &&
           pick.length === 40 && selectedIds.length === 40 && oneDelta.size === 1 && !oneDelta.has('missing') && !oneDelta.has('0,0') && unselectedStill === 160,
-        JSON.stringify({ measured, single: single && single.at, singleMoved, oneBefore, oneAfter, expectDx, expectDy, rerouted, routes: Object.keys(routesBefore).length, picked: pick.length, selected: selectedIds.length, deltas: [...oneDelta] }))
+        JSON.stringify({ measured, single: single && single.at, singleMoved, oneBefore, oneAfter, expectDx, expectDy, rerouted, routes: Object.keys(routesBefore).length, picked: pick.length, selected: selectedIds.length, deltas: [...oneDelta], countAfter, before: Object.keys(manyBefore).length, after: Object.keys(manyAfter).length, many: many && many.at }))
     } catch (error) {
       if (!reportedP1) ok(ID1, false, `threw: ${error && error.stack ? error.stack : error}`)
       ok(ID2, false, `threw: ${error && error.stack ? error.stack : error}`)
