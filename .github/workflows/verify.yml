@@ -185,8 +185,11 @@ jobs:
         run: npm run build
       - name: Run verify:visual
         env:
-          # The goldens are 2x captures; the runner's display is 1x.
+          # The goldens are 2x captures; the runner's display is 1x. TC_VISUAL_SCALE
+          # is verify:visual's own guard and switch; TC_SHOT_SCALE is the shot
+          # harness's device-metrics override on its offscreen CI window (Stream B).
           TC_VISUAL_SCALE: '2'
+          TC_SHOT_SCALE: '2'
           TC_WATCHDOG_SCALE: '2'
           VISUAL_SHOT_DIR: ${{ github.workspace }}/out/visual/shots
         run: npm run verify:visual
