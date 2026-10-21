@@ -26,7 +26,9 @@ buildSync({
     contents: `module.exports = {
       auto: require('./src/shared/auto'),
       session: require('./src/main/agent-session'),
-      runner: require('./src/main/auto-check-runner')
+      runner: require('./src/main/auto-check-runner'),
+      tonight: require('./src/shared/tonight'),
+      tonightRunner: require('./src/main/tonight-runner')
     }`,
     resolveDir: ROOT,
     loader: 'js'
@@ -44,12 +46,15 @@ const M = require(OUT)
 const A = M.auto
 const S = M.session
 const R = M.runner
+const TN = M.tonight
+const TR = M.tonightRunner
 
 const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 const FIX = join(__dirname, 'fixtures', 'agent-session')
 const fixture = (name) => readFileSync(join(FIX, name), 'utf8').split('\n').filter((l) => l.trim() !== '')
 const say = (text) => fixture('turn.jsonl').map((l) => l.split('"text":"pong"').join(`"text":${JSON.stringify(text)}`))
+const sayError = (text) => say(text).map((l) => l.split('"subtype":"success"').join('"subtype":"error_during_execution"'))
 const tick = (ms) => new Promise((r) => setTimeout(r, ms))
 const MARK = A.AUTO_DONE_MARKER
 
@@ -334,6 +339,194 @@ function makeManager(overrides = {}) {
         !A.autoCheckPassed(aborted) && abortMs < 3000 &&
         !A.autoCheckPassed(noDir),
       JSON.stringify({ pass, fail, slow, slowMs, aborted, abortMs, noDir }))
+  }
+
+
+  /* ---------------------------------------------------------------------- */
+  /* Tonight (M477): a batch of auto runs, one at a time, through the night  */
+  /* ---------------------------------------------------------------------- */
+
+  /* A harness: the REAL manager (fake processes, scripted check), a rate
+     limit the check sets by hand, a blocker that counts, and timers fired by
+     hand — a night is minutes of fake clock. */
+  function night(opts = {}) {
+    const c = scriptedCheck()
+    const m = makeManager({ runCheck: c.runCheck })
+    let rate = { kind: 'none' }
+    let clock = 1_000_000
+    const timers = []
+    const blocker = { started: 0, stopped: [], start() { this.started += 1; return 7 }, stop(id) { this.stopped.push(id) } }
+    const spent = new Map()
+    const statuses = []
+    const runner = TR.createTonightRunner({
+      startAuto: (id, o) => m.manager.startAuto(id, o),
+      stopAuto: (id) => m.manager.stopAuto(id),
+      hasSession: (id) => m.manager.get(id) !== undefined,
+      subscribe: (cb) => m.manager.subscribe(cb),
+      rateLimit: () => rate,
+      spentOf: opts.spentOf ?? ((id) => spent.get(id) ?? 0),
+      blocker,
+      now: () => clock,
+      setTimer: (fn, ms) => { const t = { fn, at: clock + ms, live: true }; timers.push(t); return t },
+      clearTimer: (t) => { t.live = false },
+      onStatus: (s) => statuses.push(s)
+    })
+    const fire = () => { const t = timers.filter((x) => x.live).sort((a, b) => a.at - b.at)[0]; if (!t) return false; t.live = false; clock = Math.max(clock, t.at); t.fn(); return true }
+    return { c, m, runner, blocker, spent, statuses, fire, timers, setRate: (r) => { rate = r }, advance: (ms) => { clock += ms }, proc: (i) => m.spawns[i].proc, clockNow: () => clock }
+  }
+
+  {
+    const parsed = TN.parseTonightBatch({ tasks: [{ id: 't1', panelId: 'p1', task: '  fix the login bug\nand test it ', check: { command: 'npm test' }, budgetUsd: 2 }], notBefore: 5 })
+    const refused = [
+      TN.parseTonightBatch(null), TN.parseTonightBatch({ tasks: [] }), TN.parseTonightBatch({ tasks: [{ id: 'a', panelId: 'p', task: '' }] }),
+      TN.parseTonightBatch({ tasks: [{ id: 'a', panelId: 'p', task: 'x' }, { id: 'a', panelId: 'q', task: 'y' }] }),
+      TN.parseTonightBatch({ tasks: [{ id: 'a', panelId: 'p', task: 'x', check: { command: '' } }] }),
+      TN.parseTonightBatch({ tasks: [{ id: 'a', panelId: 'p', task: 'x', budgetUsd: -1 }] }),
+      TN.parseTonightBatch({ tasks: [{ id: 'a', panelId: 'p', task: 'x', mode: 'yolo' }] }),
+      TN.parseTonightBatch({ tasks: [{ id: 'a', panelId: 'p', task: 'x' }], notBefore: 'tonight' })
+    ]
+    const limited = TN.tonightResumeAt({ kind: 'limited', until: 2000, overage: false, windows: {}, at: 0 }, 1_000_000)
+    const stale = TN.tonightResumeAt({ kind: 'limited', until: 1, overage: false, windows: {}, at: 0 }, 1_000_000)
+    ok('tonight.1 a batch is parsed by name — a missing task, a repeated id, a bad check, budget, mode or start time is refused with a reason, never trimmed into a smaller batch; a limit resumes after its reset plus a margin, and a stale reset still waits a minimum rather than retrying at once',
+      parsed.kind === 'ok' && parsed.batch.tasks[0].title === 'fix the login bug' && parsed.batch.tasks[0].check.command === 'npm test' && parsed.batch.tasks[0].budgetUsd === 2 && parsed.batch.notBefore === 5 &&
+        refused.every((r) => r.kind === 'refused' && r.reason !== '') &&
+        limited === 2000 * 1000 + TN.TONIGHT_RESUME_MARGIN_MS && stale === 1_000_000 + TN.TONIGHT_MIN_PAUSE_MS &&
+        TN.tonightResumeAt({ kind: 'allowed', overage: false, windows: {}, at: 0 }, 0) === undefined && TN.tonightResumeAt({ kind: 'none' }, 0) === undefined,
+      JSON.stringify({ parsed, refused: refused.map((r) => r.reason), limited, stale }))
+  }
+  {
+    // The roadmap's done check: three tasks unattended. One fails its check
+    // and is retried with the output; one hits a usage limit and resumes;
+    // the batch ends with the blocker released and the outcomes in order.
+    const n = night()
+    for (const id of ['n1', 'n2', 'n3']) n.m.manager.create({ id, cwd: `/repo/${id}` })
+    const started = n.runner.start({ tasks: [
+      { id: 'fix', panelId: 'n1', title: 'Fix the parser', task: 'fix the parser', check: { command: 'npm test', retries: 2 } },
+      { id: 'docs', panelId: 'n2', title: 'Write the docs', task: 'write the docs' },
+      { id: 'lint', panelId: 'n3', title: 'Clean lint', task: 'clean lint', check: { command: 'npm run lint' } }
+    ] })
+    const awakeAtStart = n.blocker.started === 1 && n.runner.status().awake === true
+    const onlyFirst = n.m.spawns.length === 1 && n.m.spawns[0].cwd === '/repo/n1'
+    // Task 1: claims done, the check fails, the output goes back, then it passes.
+    n.proc(0).emitLines(say(`done. ${MARK}`)); await tick(10)
+    n.c.answer({ exitCode: 1, output: 'FAIL parser.test.ts' }); await tick(10)
+    const fedBack = /FAIL parser\.test\.ts/.test(n.proc(0).stdin[n.proc(0).stdin.length - 1])
+    n.proc(0).emitLines(say(`really done. ${MARK}`)); await tick(10)
+    n.c.answer({ exitCode: 0, output: 'ok' }); await tick(10)
+    const t1 = n.runner.status().tasks[0]
+    // Task 2: the account runs out mid-run — the turn errors while limited.
+    const secondStarted = n.m.spawns.length === 2
+    n.setRate({ kind: 'limited', until: Math.floor(n.clockNow() / 1000) + 3600, overage: false, windows: {}, at: n.clockNow() })
+    n.proc(1).emitLines(sayError('rate limited')); await tick(10)
+    const paused = n.runner.status()
+    const t2Paused = paused.tasks[1].state === 'paused' && paused.state === 'paused' && paused.resumesAt !== undefined
+    const thirdNotYet = n.m.spawns.length === 2
+    // The window resets; the timer resumes the SAME task with a continue turn.
+    n.setRate({ kind: 'allowed', overage: false, windows: {}, at: n.clockNow() })
+    n.fire(); await tick(10)
+    const resumeTurn = n.proc(1).stdin[n.proc(1).stdin.length - 1]
+    const resumed = /paused by a usage limit/.test(resumeTurn) && /write the docs/.test(resumeTurn) && n.runner.status().tasks[1].attempts === 2
+    n.proc(1).emitLines(say(`docs written. ${MARK}`)); await tick(10)
+    // Task 3: checked first time.
+    n.proc(2).emitLines(say(MARK)); await tick(10)
+    n.c.answer({ exitCode: 0, output: '' }); await tick(10)
+    const end = n.runner.status()
+    ok('tonight.2 three tasks run unattended one at a time: a failed check goes back with its output and the task ends checked; a usage limit PAUSES the batch (nothing else starts) and the window\'s reset resumes the same task with a continue turn; the batch ends done with the blocker released',
+      started.kind === 'started' && awakeAtStart && onlyFirst && fedBack &&
+        t1.state === 'checked' && t1.checkFailures === 1 && secondStarted && t2Paused && thirdNotYet && resumed &&
+        end.state === 'done' && end.tasks.map((t) => t.state).join(',') === 'checked,claimed,checked' &&
+        !end.tasks.some((t) => t.state === 'stuck' || t.state === 'stopped') &&
+        end.awake === false && n.blocker.stopped.length === 1 && n.blocker.stopped[0] === 7,
+      JSON.stringify({ started, tasks: end.tasks.map((t) => [t.id, t.state, t.attempts, t.reason]), state: end.state, blocker: n.blocker, t2Paused, resumed }))
+  }
+  {
+    // The blocker is released on EVERY way out, exactly once.
+    const exits = {}
+    {
+      const n = night()
+      n.m.manager.create({ id: 's1', cwd: '/r' }); n.m.manager.create({ id: 's2', cwd: '/r' })
+      n.runner.start({ tasks: [{ id: 'a', panelId: 's1', title: 'A', task: 'a' }, { id: 'b', panelId: 's2', title: 'B', task: 'b' }] })
+      const stopped = n.runner.stop()
+      const st = n.runner.status()
+      exits.stop = stopped && st.state === 'stopped' && st.tasks.every((t) => t.state === 'stopped') && n.m.manager.get('s1').auto.state === 'stopped' && n.blocker.stopped.length === 1 && n.runner.stop() === false
+    }
+    {
+      const n = night()
+      n.m.manager.create({ id: 'q1', cwd: '/r' })
+      n.runner.start({ tasks: [{ id: 'a', panelId: 'q1', title: 'A', task: 'a' }] })
+      n.runner.dispose()
+      exits.quit = n.blocker.stopped.length === 1 && n.runner.status().tasks[0].reason === 'the app quit' && n.runner.start({ tasks: [{ id: 'a', panelId: 'q1', title: 'A', task: 'a' }] }).kind === 'refused'
+    }
+    {
+      let calls = 0
+      const n = night({ spentOf: () => { calls += 1; if (calls > 1) throw new Error('meter gone'); return 0 } })
+      n.m.manager.create({ id: 'e1', cwd: '/r' })
+      n.runner.start({ tasks: [{ id: 'a', panelId: 'e1', title: 'A', task: 'a' }] })
+      n.proc(0).emitLines(say('working')); await tick(10)
+      const st = n.runner.status()
+      exits.error = st.state === 'stopped' && /meter gone/.test(st.tasks[0].reason ?? '') && n.blocker.stopped.length === 1
+    }
+    {
+      const n = night()
+      n.m.manager.create({ id: 'w1', cwd: '/r' })
+      n.runner.start({ tasks: [{ id: 'a', panelId: 'w1', title: 'A', task: 'a' }], notBefore: n.clockNow() + 3_600_000 })
+      const waiting = n.runner.status().state === 'waiting' && n.m.spawns.length === 0 && n.blocker.started === 1
+      n.runner.stop()
+      exits.waiting = waiting && n.blocker.stopped.length === 1 && n.timers.every((t) => !t.live)
+    }
+    ok('tonight.3 the power blocker is held while a batch runs and released exactly once on every way out — the last task ending (tonight.2), a stop, the app quitting, a dep throwing mid-run, and a stop while still waiting for its start time (whose timer is cleared)',
+      exits.stop === true && exits.quit === true && exits.error === true && exits.waiting === true, JSON.stringify(exits))
+  }
+  {
+    // A limit at the START pauses before anything runs; a limit never stops a task.
+    const n = night()
+    n.m.manager.create({ id: 'l1', cwd: '/r' })
+    n.setRate({ kind: 'limited', until: Math.floor(n.clockNow() / 1000) + 600, overage: false, windows: {}, at: 0 })
+    n.runner.start({ tasks: [{ id: 'a', panelId: 'l1', title: 'A', task: 'a' }] })
+    const pausedFirst = n.runner.status().state === 'paused' && n.m.spawns.length === 0
+    // Still limited when the timer fires: it pauses again, never gives up.
+    n.fire(); await tick(10)
+    const pausedAgain = n.runner.status().state === 'paused' && n.m.spawns.length === 0 && n.runner.status().tasks[0].state === 'paused'
+    n.setRate({ kind: 'allowed', overage: false, windows: {}, at: 0 })
+    n.fire(); await tick(10)
+    const ran = n.m.spawns.length === 1 && n.runner.status().tasks[0].state === 'running' && n.runner.status().tasks[0].attempts === 1
+    ok('tonight.4 a limit when the batch starts pauses before anything is sent; a limit still in force at the resume pauses again — a limit pauses and resumes, it never stops a task',
+      pausedFirst && pausedAgain && ran, JSON.stringify(n.runner.status()))
+    n.runner.stop()
+  }
+  {
+    // A task's own failures are its own: the batch moves on and says why.
+    const n = night()
+    n.m.manager.create({ id: 'f1', cwd: '/r' }); n.m.manager.create({ id: 'f2', cwd: '/r' }); n.m.manager.create({ id: 'f3', cwd: '/r' })
+    n.spent.set('f2', 0)
+    n.runner.start({ tasks: [
+      { id: 'a', panelId: 'f1', title: 'A', task: 'a', check: { command: 'make', retries: 0 } },
+      { id: 'b', panelId: 'f2', title: 'B', task: 'b', budgetUsd: 1 },
+      { id: 'c', panelId: 'f3', title: 'C', task: 'c' }
+    ] })
+    n.proc(0).emitLines(say(MARK)); await tick(10)
+    n.c.answer({ exitCode: 2, output: 'nope' }); await tick(10)
+    n.spent.set('f2', 1.5)
+    n.proc(1).emitLines(say('spent a lot')); await tick(10)
+    const afterBudget = n.runner.status().tasks.map((t) => t.state).join(',')
+    n.proc(2).emitLines(say(`ok ${MARK}`)); await tick(10)
+    const end = n.runner.status()
+    ok('tonight.5 a task whose check keeps failing ends stuck with the reason; a task past its own budget is stopped as over-budget; the batch goes on to the next task each time and ends done — no task\'s failure is read as a limit, and none stops the night',
+      end.state === 'done' && end.tasks[0].state === 'stuck' && /check kept failing/.test(end.tasks[0].reason) &&
+        end.tasks[1].state === 'over-budget' && /\$1\.00 budget/.test(end.tasks[1].reason) && n.m.manager.get('f2').auto.state === 'stopped' &&
+        end.tasks[2].state === 'claimed' && /^stuck,over-budget,running$/.test(afterBudget) && n.blocker.stopped.length === 1,
+      JSON.stringify({ afterBudget, tasks: end.tasks.map((t) => [t.state, t.reason]) }))
+  }
+  {
+    const n = night()
+    const noChat = n.runner.start({ tasks: [{ id: 'a', panelId: 'ghost', title: 'Ghost', task: 'a' }] })
+    n.m.manager.create({ id: 'd1', cwd: '/r' })
+    n.runner.start({ tasks: [{ id: 'a', panelId: 'd1', title: 'A', task: 'a' }] })
+    const twice = n.runner.start({ tasks: [{ id: 'a', panelId: 'd1', title: 'A', task: 'a' }] })
+    ok('tonight.6 a batch naming a chat that does not exist is refused by name before the Mac is kept awake; a second batch while one runs is refused',
+      noChat.kind === 'refused' && /Ghost/.test(noChat.reason) && twice.kind === 'refused' && n.blocker.started === 1,
+      JSON.stringify({ noChat, twice, started: n.blocker.started }))
+    n.runner.stop()
   }
 
   const failed = results.filter((x) => !x.pass)

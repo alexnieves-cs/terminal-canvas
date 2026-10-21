@@ -121,3 +121,8 @@ back as the next turn, a check past its retries is `stuck: check`, and a check's
 a stopped run decides nothing. Its last check runs the production runner
 (`auto-check-runner.ts`) against `/bin/sh`, because a runner that read a timeout as a pass
 would be green with a fake and wrong on a Mac.
+Its `tonight.*` checks (M477) drive the Tonight runner over the same real manager with a
+rate limit set by hand, a power blocker that counts, and timers fired by hand: a night is
+minutes of fake clock. `tonight.2` is the roadmap's done check (three tasks, one retried on
+its check's output, one paused by a limit and resumed), and `tonight.3` walks every way a
+batch ends to show the blocker is released exactly once on each.

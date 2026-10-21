@@ -34,6 +34,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 |---|---|---|---|
 | #33 | M475 (C1a) | Check-gated done: `AUTO-DONE` is a claim; a run started with a check runs it after the marker and only exit 0 is `checked`; a failed check goes back as the next turn up to its retries, then stuck: check; no check is `claimed` ("done · unchecked", never "passed"). Production runner `auto-check-runner.ts` | `verify:auto` auto.check.1–14 |
 | #36 | M476 (C1b) | The chip says `checked` or `agent says done`; the review queue names the check that passed and sorts checked work first, bare claims last | `verify:ux` ux.verdict.1–3 |
+| this PR | M477 (C2a) | Tonight batches: one auto run at a time on existing chats, each with an optional check and budget; a usage limit pauses and resumes the same task, never stops it; `powerSaveBlocker` held only while a batch runs, released on every exit (done, stop, quit, error). No door yet (C2b) | `verify:auto` tonight.1–6 |
 
 ## D — Reach (M487–M494)
 
