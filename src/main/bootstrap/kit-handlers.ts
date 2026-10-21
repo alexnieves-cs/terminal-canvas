@@ -5,6 +5,7 @@ import { app, shell } from 'electron'
 import { whichFromEnv } from '../shell-env'
 import { createCombineRunner } from '../combine-runner'
 import { createLaneMerger } from '../lane-merge'
+import { createCollisionRadar } from '../collision-radar'
 import { createIntegrator, createReceiptStore } from '../integrator'
 import { createRepoSetupStore } from '../repo-setup-store'
 import { createRecipeStore } from '../recipe-store'
@@ -40,6 +41,8 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
   })
   const recipes = createRecipeStore({ dir: userData })
   const laneMerge = createLaneMerger({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
+  // M479. The same runner and root resolver as Accept, so a lane the radar reads is the lane Accept would merge.
+  const laneRadar = createCollisionRadar({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p) })
   // M317. Integrate lands lanes through the SAME merger Accept uses.
   const receipts = createReceiptStore({ file: join(userData, 'integration-receipts.json') })
   const integrate = createIntegrator({ run: gitRunner, commonRootOf: (p) => reviewEngine.commonRootOf(p), worktreesDir, readOutput: (id) => checkOutputs.read(id), merge: laneMerge, receipts, record: async (row) => { await runLedger.append(row) } })
@@ -77,6 +80,7 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
     combineIntegrate: integrate,
     combineReceipts: async (root) => receipts.list(typeof root === 'string' ? await reviewEngine.commonRootOf(root) : undefined),
     setupPreflight: (req) => setup.preflight(req),
-    recipeHistory: (id) => recipes.history(id)
+    recipeHistory: (id) => recipes.history(id),
+    laneRadar
   }
 }

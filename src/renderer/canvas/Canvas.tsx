@@ -265,6 +265,8 @@ import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusalSync, teamma
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
 import { ACROSS_BASELINE, type ReviewSubject } from '@shared/review'
 import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
+import { useCollisionRadar } from '@renderer/canvas/useCollisionRadar'
+import { radarFlags } from '@shared/collision-radar'
 import { useBoardVerbs, type BoardVerbs } from './useBoardVerbs'
 import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import { sendRefusalSentence } from '@shared/agent-session'
@@ -4317,6 +4319,8 @@ export function Canvas({
   // and answers `undefined` until the first read lands, so a card says
   // nothing about review rather than guessing.
   const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs, handoffsVersion } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
+  // M479. Sibling lanes that touch the same files, flagged on both tasks' cards.
+  const radar = useCollisionRadar(workItems, taskLaneOf, handoffsVersion)
   const activeWorkspaceId = workspaceRows.find((w) => w.active)?.id
   useEffect(() => { setResumeDismissed(false) }, [activeWorkspaceId])
   useEffect(() => {
@@ -9793,6 +9797,7 @@ export function Canvas({
                 // record, and a missing member is a fact of now, not of the task.
                 onShow={(panelId) => { const r = paletteActionsRef.current?.showTask(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
                 handoff={item === undefined ? undefined : taskHandoffOf(item.id)}
+                collisions={item === undefined || radar === null ? undefined : radarFlags(item.id, radar, (id) => workItems.find((w) => w.id === id)?.title ?? 'another task')}
                 // M202 (D07). Resume is a CAMERA and FOCUS move onto the
                 // lane's conversation, never a send: the person decides what
                 // their agent is told next.

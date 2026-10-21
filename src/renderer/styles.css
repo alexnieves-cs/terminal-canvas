@@ -6283,6 +6283,9 @@ body {
 .work-node__facts dd { display: inline; margin: 0; color: var(--fg-2); }
 .work-node__facts a { color: var(--iris); text-decoration: underline; }
 .work-node__note { margin: 0; }
+/* M479. The collision radar: a conflict borders in its tone (needs-you), an overlap stays quiet (idle). */
+.work-node__radar { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
+.work-node__radar li { margin: 0; padding-left: var(--sp-2); border-left: 2px solid var(--tone, var(--line)); }
 .work-node__blocker, .workflow-node__blocker { padding: var(--sp-2); border: 1px solid var(--tone, var(--line)); border-radius: var(--r-sm); }
 .work-node__blocker p, .workflow-node__blocker p { margin: 0; }
 .work-node__blocker-verbs, .workflow-node__blocker-verbs { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }

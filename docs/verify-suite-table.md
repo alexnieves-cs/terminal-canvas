@@ -126,3 +126,9 @@ rate limit set by hand, a power blocker that counts, and timers fired by hand: a
 minutes of fake clock. `tonight.2` is the roadmap's done check (three tasks, one retried on
 its check's output, one paused by a limit and resumed), and `tonight.3` walks every way a
 batch ends to show the blocker is released exactly once on each.
+
+`verify:review` `radar.*` (stream C, M479) runs the collision radar against REAL git: a
+temp repository with three worktrees, two editing the same line of one file (a conflict by
+git's own `merge-tree --write-tree`), one of those and a third touching the same file in
+different places (an overlap that merges clean, the third's edit left uncommitted). It needs
+git 2.38 or later for `--write-tree`; an older git is an `error`, never read as clean.

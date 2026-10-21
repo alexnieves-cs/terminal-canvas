@@ -3359,6 +3359,63 @@ if (GIT) {
       JSON.stringify(lines))
 }
 
+// ── M479. THE COLLISION RADAR: sibling lanes that touch the same files ─────
+// Against REAL git and real worktrees, because the whole claim is git's own
+// trial merge (`merge-tree --write-tree`): a fake runner would only test that
+// this file agrees with itself. Three lanes off one main: two edit the same
+// line of a.txt (a conflict), one of those and a third both touch b.txt in
+// different places (an overlap that merges clean), and the third's
+// UNCOMMITTED edit still counts as an overlap.
+{
+  const { execFileSync } = require('node:child_process')
+  const { mkdtempSync, writeFileSync: wf, rmSync: rm } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const base = mkdtempSync(join(tmpdir(), 'tc radar '))
+  const root = join(base, 'repo')
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
+  const g = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env })
+  try {
+    mkdirSync(root)
+    g(root, 'init', '-q', '-b', 'main')
+    wf(join(root, 'a.txt'), 'one\n'); wf(join(root, 'b.txt'), '1\n2\n3\n4\n5\n6\n7\n8\n'); wf(join(root, 'c.txt'), 'c\n')
+    g(root, 'add', '-A'); g(root, 'commit', '-qm', 'init')
+    const lanes = ['l1', 'l 2', 'l3'].map((n) => join(base, n))
+    lanes.forEach((p, i) => g(root, 'worktree', 'add', '-q', '-b', `tc/l${i + 1}`, p))
+    wf(join(lanes[0], 'a.txt'), 'ONE\n'); wf(join(lanes[0], 'b.txt'), 'x\n2\n3\n4\n5\n6\n7\n8\n'); g(lanes[0], 'commit', '-qam', 'l1')
+    wf(join(lanes[1], 'a.txt'), 'uno\n'); wf(join(lanes[1], 'c.txt'), 'cc\n'); g(lanes[1], 'commit', '-qam', 'l2')
+    // l3 edits the far end of b.txt and never commits.
+    wf(join(lanes[2], 'b.txt'), '1\n2\n3\n4\n5\n6\n7\ny\n')
+    const runner = R.createGitRunner({ gitPath: () => 'git', env: () => env, timeoutMs: () => 20000 })
+    const engine = R.createReviewEngine({ run: runner, baselineOf: () => undefined })
+    const radar = R.createCollisionRadar({ run: runner, commonRootOf: (p) => engine.commonRootOf(p), now: () => 7 })
+    const report = await radar([{ id: 'p1', path: lanes[0] }, { id: 'p2', path: lanes[1] }, { id: 'p3', path: lanes[2] }, { id: 'main', path: root }, { id: 'gone', path: join(base, 'nope') }])
+    const pair = (a, b) => report.collisions.find((c) => c.a === a && c.b === b)
+    const c12 = pair('p1', 'p2'), c13 = pair('p1', 'p3'), c23 = pair('p2', 'p3')
+    ok('radar.1 two sibling lanes that edit the same line are a CONFLICT by git\'s own trial merge, naming the file, and the trial touched neither checkout (both still on their branch, no MERGE_HEAD, clean status)',
+      c12 !== undefined && JSON.stringify(c12.files) === '["a.txt"]' && JSON.stringify(c12.conflicts) === '["a.txt"]' &&
+        g(lanes[0], 'status', '--porcelain') === '' && g(lanes[1], 'status', '--porcelain') === '' &&
+        g(lanes[0], 'rev-parse', '--abbrev-ref', 'HEAD').trim() === 'tc/l1' && g(root, 'status', '--porcelain') === '',
+      JSON.stringify(report))
+    ok('radar.2 an overlap that merges clean is reported as an overlap with no conflict, an UNCOMMITTED edit counts as the lane\'s change, and two lanes with no file in common are not reported at all',
+      c13 !== undefined && JSON.stringify(c13.files) === '["b.txt"]' && Array.isArray(c13.conflicts) && c13.conflicts.length === 0 && c23 === undefined && report.at === 7,
+      JSON.stringify(report))
+    ok('radar.3 the main tree and a folder that is not a repository are UNREAD with a reason, never a lane and never a silent drop',
+      report.unread.some((u) => u.id === 'main' && /main tree/.test(u.reason)) && report.unread.some((u) => u.id === 'gone') && report.unread.length === 2,
+      JSON.stringify(report.unread))
+    const words1 = R.radarWords('p1', report, (id) => ({ p2: 'Fix login', p3: 'Docs' })[id] ?? id)
+    const words3 = R.radarWords('p3', report, (id) => ({ p1: 'API' })[id] ?? id)
+    ok('radar.4 each card gets its OWN side of a collision: the conflict says it will not merge and names the other lane; the clean overlap names the shared files and says it merges clean for now',
+      words1.length === 2 && /conflicts with Fix login in a\.txt/.test(words1[0]) && /also changed by Docs: b\.txt — merges clean/.test(words1[1]) &&
+        words3.length === 1 && /also changed by API: b\.txt/.test(words3[0]) && R.radarWords('p9', report, String).length === 0,
+      JSON.stringify({ words1, words3 }))
+  } finally { rm(base, { recursive: true, force: true }) }
+  const pm = R.parseMergeTree
+  ok('radar.5 the merge-tree parse: exit 0 is clean, exit 1 lists each conflicted path once (sorted, the tree OID dropped), and any other exit is an ERROR, never read as clean',
+    pm(0, 'abc\0').kind === 'clean' && JSON.stringify(pm(1, 'abc\0b.txt\0a.txt\0a.txt\0')) === '{"kind":"conflicts","files":["a.txt","b.txt"]}' &&
+      pm(128, '').kind === 'error' && pm(-1, '').kind === 'error',
+    JSON.stringify(pm(1, 'abc\0b.txt\0a.txt\0a.txt\0')))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

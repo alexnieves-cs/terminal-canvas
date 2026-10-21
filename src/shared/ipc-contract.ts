@@ -6,6 +6,7 @@ import type { CheckOutputRead } from './check-output'
 import type { CombineRunResult } from './combine'
 import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from './integration'
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
+import type { RadarLane, RadarReport } from './collision-radar'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
 import type { Recipe } from './recipes'
@@ -773,6 +774,12 @@ export const IPC = {
    * same way, and writes only if the lane is still at the HEAD the person saw.
    */
   LANE_MERGE: 'lane:merge',
+  /**
+   * M479. The collision radar: for the lanes named, the files two sibling
+   * lanes both changed, and git's trial merge of each such pair
+   * (`merge-tree --write-tree`, touching no checkout). Read-only.
+   */
+  LANE_RADAR: 'lane:radar',
   /**
    * M312. The repository setup: `read` answers the saved record or a DRAFT
    * detected from the repository's own files; `save` writes one (re-resolved
@@ -2023,6 +2030,8 @@ export interface CanvasBridge {
   /** M315. See LANE_MERGE. */
   lane: {
     merge(req: LaneMergeRequest): Promise<LaneMergeResult>
+    /** M479. See LANE_RADAR. */
+    radar(lanes: RadarLane[]): Promise<RadarReport>
   }
   /** M312. See SETUP_READ. */
   setup: {
