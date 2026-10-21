@@ -34,6 +34,8 @@ const { execFileSync } = require('node:child_process')
 const { buildSync } = require('esbuild')
 const { app, BrowserWindow, webContents } = require('electron')
 
+// On CI, as panels-harness.cjs decides it; TC_SHOT_OFFSCREEN=1 tries it locally.
+const SHOT_OFFSCREEN = !!process.env.CI || process.env.TC_SHOT_OFFSCREEN === '1'
 const OUT = process.env.SHOT_DIR || join(__dirname, '..', 'out', 'shots')
 mkdirSync(OUT, { recursive: true })
 
@@ -1483,7 +1485,13 @@ app.whenReady().then(async () => {
       sandbox: false,
       backgroundThrottling: false,
       // M103. The browser pane is a <webview>; the tag on, as production has it.
-      webviewTag: true
+      webviewTag: true,
+      // M465. A hosted runner's screen is 1024x~700 and clamps an onscreen
+      // window to it, setContentSize included: every capture came back
+      // 1024x647 (Stream A's verify:visual run, #32). Offscreen there, sized
+      // by a device-metrics override below — panels-harness.cjs's answer to
+      // the same clamp.
+      offscreen: SHOT_OFFSCREEN
     }
   })
   // M162. The goldens are 1440x865 CONTENT captures. A 900px-tall window is
@@ -1495,6 +1503,14 @@ app.whenReady().then(async () => {
   // content is pinned to the goldens' own size whatever the Dock is doing.
   win.setContentSize(1440, 865)
   const wc = win.webContents
+  // The offscreen surface takes its size and scale from the emulated metrics,
+  // never from the window or the screen: 1440x865 like the goldens, at
+  // TC_SHOT_SCALE (shots.yml sets 2, the goldens' factor).
+  const pinMetrics = async (width, height) => {
+    if (!SHOT_OFFSCREEN) return
+    try { wc.debugger.attach('1.3') } catch { /* already attached */ }
+    await wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: Number(process.env.TC_SHOT_SCALE) || 1, mobile: false })
+  }
   const loginEnv = await resolveShellEnv()
   // M410. The prompt fence, as TC_TOOLBOX_HOME fences the toolbox. A login
   // shell the harness spawns (the flowchart's terminal, a ⌘N) read the
@@ -2065,7 +2081,11 @@ app.whenReady().then(async () => {
       // cursor" is that word on a host named cursor, so the row is left out
       // of the page scan. A terminal row is still scanned.
       const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const panel = document.querySelector('[data-world-camera]'); let page = document.body.innerText; if (panel && panel.innerText) page = page.split(panel.innerText).join(' '); const text = page + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const tokens = new Set(text.split(/[^A-Za-z0-9]+/).filter(Boolean)); return words.filter((w) => tokens.has(w)) })()`)
-      if (leaks.length > 0) throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name`)
+      if (leaks.length > 0) {
+        // Where it was seen, so a CI run that refuses says which row to fix.
+        const where = await js(`(() => { const t = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const w = ${JSON.stringify(leaks[0])}; const i = t.indexOf(w); return i < 0 ? '' : t.slice(Math.max(0, i - 60), i + w.length + 40).replace(/\\s+/g, ' ') })()`)
+        throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name, in "${where}"`)
+      }
       // M466. Two captures, the first thrown away. The window is hidden, so
       // nothing asks the compositor for a frame between gestures, and the
       // first capturePage after a change hands back the LAST frame it made
@@ -2215,7 +2235,7 @@ app.whenReady().then(async () => {
     // 900 → 868, 760 → 728) so a resized scene is as immune to the work-area
     // clamp as the first window is (the Act 0 critic). The FIRST window's 865
     // is a clamped 897 minus the same 32.
-    resize: async (w, h) => { win.setSize(w, h); win.setContentSize(w, h - 32); await sleep(900) }
+    resize: async (w, h) => { win.setSize(w, h); win.setContentSize(w, h - 32); await pinMetrics(w, h - 32); await sleep(900) }
   }
 
   // M148. A renderer error is PRINTED with its scene: a scene that fails
@@ -2227,6 +2247,7 @@ app.whenReady().then(async () => {
   // warnings-only filter threw away.
   win.webContents.on('console-message', (_e, level, message) => { if (level >= 2 || String(message).startsWith('[starter]')) console.log(`[renderer] ${String(message).slice(0, 300)}`) })
   await loadRenderer(win)
+  await pinMetrics(1440, 865)
   await sleep(1500)
 
   const manifest = []
