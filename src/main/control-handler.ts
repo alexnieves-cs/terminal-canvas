@@ -94,6 +94,8 @@ export interface ControlHandlerDeps {
     /** False when the row did not reach the record (recordDecision's answer). */
     record(row: EventRow): Promise<boolean>
   }
+  /** M489. The phone's test push. Absent: refused by name. */
+  phoneTest?: () => Promise<{ ok: true } | { ok: false; reason: string }>
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -219,6 +221,11 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
           : req.verb === 'share' ? sh.share(req.orgId)
           : req.verb === 'open-share' ? sh.openShare(req.shareId)
           : sh.shareRole({ shareId: req.shareId, who: req.who, role: req.role })
+      }
+      case 'phone-test': {
+        if (deps.phoneTest === undefined) return { ok: false, error: 'phone alerts are not available here' }
+        const r = await deps.phoneTest()
+        return r.ok ? { ok: true, sent: 'a test push — your phone should show it within a few seconds' } : { ok: false, error: r.reason }
       }
       case 'approvals': {
         // READ-ONLY: what each chat is waiting on, in the request's own words
