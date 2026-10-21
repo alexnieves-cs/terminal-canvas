@@ -58,12 +58,21 @@ PS1="%{$(printf '\\033]133;B\\a')%}$PS1"
 // The trap is set LAST: the DEBUG trap fires for every simple command after
 // it, so a PS1 assignment below it ran as a phantom first command (a C mark
 // for `PS1=...` and a D;0 ahead of the first prompt).
+//
+// The trap is ARMED by the last entry of PROMPT_COMMAND and disarmed by the
+// first command it marks. It also fires for the user's own PROMPT_COMMAND
+// entries (`history -a` is common), and without the arm each of those ran as
+// a phantom command after every prompt: a C mark the terminal then held open
+// as "running" until the next prompt, while the real command got no C at all.
+// An empty Enter runs no command, so the next simple command is __tc_prompt
+// itself, which marks nothing.
 const BASH_HOOKS = `
 # --- terminal-canvas shell integration (OSC 133) ---
 __tc_enc() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \\n' | sed 's/\\(..\\)/%\\1/g'; }
-__tc_prompt() { local __ec=$?; if [[ -n "$__tc_running" ]]; then ${MARK('D', '$__ec')}; unset __tc_running; fi; ${MARK('A')}; }
-__tc_debug() { [[ -n "$COMP_LINE" ]] && return; [[ "$BASH_COMMAND" == "__tc_prompt" ]] && return; [[ -n "$__tc_running" ]] && return; __tc_running=1; ${MARK('C', '$(__tc_enc "$BASH_COMMAND")')}; }
-PROMPT_COMMAND="__tc_prompt\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+__tc_prompt() { local __ec=$?; unset __tc_armed; if [[ -n "$__tc_running" ]]; then ${MARK('D', '$__ec')}; unset __tc_running; fi; ${MARK('A')}; }
+__tc_arm() { __tc_armed=1; }
+__tc_debug() { [[ -n "$COMP_LINE" ]] && return; [[ -z "$__tc_armed" ]] && return; [[ "$BASH_COMMAND" == "__tc_prompt" ]] && return; unset __tc_armed; __tc_running=1; ${MARK('C', '$(__tc_enc "$BASH_COMMAND")')}; }
+PROMPT_COMMAND="__tc_prompt\${PROMPT_COMMAND:+;$PROMPT_COMMAND};__tc_arm"
 PS1="\\[$(printf '\\033]133;B\\a')\\]$PS1"
 trap '__tc_debug' DEBUG
 `

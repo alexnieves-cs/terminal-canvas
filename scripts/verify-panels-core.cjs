@@ -2841,6 +2841,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       if (moreNow !== null) await click(moreNow.x, moreNow.y)
       const dots = await wc.executeJavaScript(`[...document.querySelectorAll(${JSON.stringify(P + ' [data-panel-menu] button[role=menuitem]:not([data-panel-menu-close])')})].map((b) => b.textContent.trim())`)
       if (moreNow !== null) await click(moreNow.x, moreNow.y)
+      // Evidence: what the right-click lands on, and whether the terminal has
+      // asked for mouse reporting (the menu stands down for enable-mouse-events).
+      const ctxHit = body === null ? null : await wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${body.x}, ${body.y}); const x = document.querySelector(${JSON.stringify(P + ' .xterm')})
+        return { el: el ? el.tagName + '.' + String(el.className.baseVal ?? el.className).slice(0, 60) : null, xterm: x ? String(x.className) : null, state: document.querySelector(${JSON.stringify(P)})?.getAttribute('data-tone') ?? null } })()`)
       if (body !== null) await click(body.x, body.y, 'right')
       await sleep(200)
       const ctxRead = () => wc.executeJavaScript(`(() => { const m = document.querySelector('[data-context-for] [data-context-menu]'); if (!m) return null
@@ -2855,7 +2859,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('ctx.panel.1 a real right-click on a terminal opens its context menu: Copy and Paste first, then exactly the ⋯ menu\'s rows (one list), then Close; the keyboard stays in the terminal and Escape closes it',
         ctxP !== null && ctxP.for === gid && ctxP.ids[0] === 'edit.copy' && ctxP.ids[1] === 'edit.paste' && ctxP.ids[ctxP.ids.length - 1] === 'sel.close' &&
           dots.length > 0 && JSON.stringify(shared) === JSON.stringify(dots) && !ctxP.focusInMenu && ctxGone === null,
-        JSON.stringify({ dots, ctxP, ctxGone }))
+        JSON.stringify({ dots, ctxP, ctxGone, ctxHit }))
 
       // ctx.paste.1 — its Paste is the ⌘V route (xterm's paste, bracketed),
       // never a raw write: the text reaches the shell's line.

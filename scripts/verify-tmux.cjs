@@ -484,6 +484,19 @@ console.log('\n' + '='.repeat(60))
       agent.files.length === 0 && agent.env.ZDOTDIR === undefined && agent.args.join(' ') === '--resume' &&
       fish.files.length === 0 && fish.args.join(' ') === '-l',
     JSON.stringify({ zsh: zsh && { env: zsh.env, args: zsh.args, files: zsh.files.map((f) => f.path) }, bash: bash && { args: bash.args, login: bash.env.TC_BASH_LOGIN, files: bash.files.map((f) => f.path) }, bashInteractive: bashInteractive && bashInteractive.args, agent, fish }))
+  // shell-integration.arm.1 — the DEBUG trap marks only a command typed at
+  // the prompt. It also fires for the user's own PROMPT_COMMAND entries, and
+  // unarmed each one (`history -a`) ran as a phantom C after every prompt
+  // that held the terminal "running" and swallowed the real command's C. The
+  // last PROMPT_COMMAND entry arms it, the prompt and the first mark disarm it.
+  const pc = brc ? (brc.content.match(/^PROMPT_COMMAND=(.*)$/m) || [])[1] || '' : ''
+  const dbg = brc ? (brc.content.match(/^__tc_debug\(\) \{(.*)\}$/m) || [])[1] || '' : ''
+  ok('shell-integration.arm.1 bash\'s DEBUG trap is armed by the LAST PROMPT_COMMAND entry and marks nothing unarmed, so a user\'s own PROMPT_COMMAND is never a command',
+    can && /;__tc_arm"$/.test(pc) && /^"__tc_prompt/.test(pc) &&
+      dbg.indexOf('[[ -z "$__tc_armed" ]] && return') >= 0 && dbg.indexOf('[[ -z "$__tc_armed" ]] && return') < dbg.indexOf('133;C') &&
+      dbg.indexOf('unset __tc_armed') >= 0 && dbg.indexOf('unset __tc_armed') < dbg.indexOf('133;C') &&
+      /__tc_prompt\(\) \{[^\n]*unset __tc_armed/.test(brc.content),
+    JSON.stringify({ pc, dbg }))
 }
 
   // shell-integration.2 — a spec with NO args at all (the harnesses' seed
