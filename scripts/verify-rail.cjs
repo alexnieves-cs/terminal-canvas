@@ -3796,7 +3796,8 @@ console.log('\n' + '='.repeat(60))
     ['src/renderer/canvas/useInspectorDetail.ts', "the inspector's Tools section"],
     // M28's action hook split by domain; `openToolbox` went to the presets slice.
     ['src/renderer/canvas/palette-actions/presets.ts', 'the Open toolbox verb'],
-    ['src/renderer/canvas/Canvas.tsx', "the Skills pane's cwd"]
+    // M499. The Skills pane's state left Canvas.tsx for its own hook.
+    ['src/renderer/canvas/useSkillsPane.ts', "the Skills pane's cwd"]
   ]
   const asks = CONSUMERS.filter(([f]) => /inspectionDirectory\(/.test(require('node:fs').readFileSync(join(__dirname, '..', ...f.split('/')), 'utf8')))
   ok('context.policy.4 every inspection consumer ASKS the one policy rather than keeping its own copy of the rule',
