@@ -1120,6 +1120,7 @@ app.whenReady().then(async () => {
   // owns. Exactly main/index.ts's handlers, over these.
   const chatFixture = readFileSync(join(__dirname, 'fixtures', 'agent-session', 'turn.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
   const chatSpawns = []
+  let harnessSessionSeq = 0
   const chatRunner = ({ command, args, cwd, env }) => {
     const dataCbs = []
     const exitCbs = []
@@ -1178,7 +1179,10 @@ app.whenReady().then(async () => {
     codex: { command: '/fake/codex' },
     // M82. The canvas's ceilings, read live from the same store main reads.
     limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0, budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0 }),
-    newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16,
+    // A counter of its own, not chatSpawns.length: an id is minted at CREATE and
+    // a spawn comes later, so a pool minting three workers before the first
+    // spawned gave all three the same id. Production mints a randomUUID each.
+    newSessionId: () => `fake-s${++harnessSessionSeq}`, interruptGraceMs: 200, coalesceMs: 16,
     // M74. The fenced answer to "has the CLI written this session": the
     // front-end fixture store, so an imported chat's first send resumes.
     transcriptExists: (id) => frontTranscripts.has(id)

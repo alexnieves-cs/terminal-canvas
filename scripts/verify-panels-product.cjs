@@ -6182,6 +6182,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const rowsEnd = await wc.executeJavaScript(`(() => ({
           rows: [...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')].map((r) => r.getAttribute('data-workflow-pool-item') + ':' + r.getAttribute('data-workflow-pool-state')),
           chats: [...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id') + ':' + (p.querySelector('[data-state-word]')?.textContent ?? '?') + ':' + (p.getAttribute('data-chat-turns') ?? '?')) }))()`)
+        // Which worker each item's prompt reached, and what each fake process was spawned with and sent.
+        const workerTurns = workers ? await wc.executeJavaScript(`Promise.all(${JSON.stringify(workers)}.map((id) => window.canvas.agentSession.transcript(id).then((t) => id + ':' + (t && t.turns ? t.turns.map((u) => u.role[0] + '=' + JSON.stringify((u.blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join('')).slice(-14)).join(',') : '?'))))`).catch((e) => String(e)) : null
+        const spawnEv = chatSpawns.slice(-4).map((sp) => (sp.args || []).filter((a) => !String(a).startsWith('-')).slice(-1).join('') + '|' + (sp.args || []).join(' ').slice(-60) + '|stdin ' + sp.proc.stdin.length)
         // Stop is read AFTER the pool has run its course: the fake runner
         // answers each worker in milliseconds, so no instant of this run
         // has a pool live to stop — Stop's live arm (interrupt every worker,
@@ -6203,7 +6206,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
             typeof stoppedRow === 'string' && /every item finished/.test(stoppedRow) &&
             stopAfter !== null && stopAfter.disabled === true && /nothing of this workflow is running/.test(String(stopAfter.title)),
-          JSON.stringify({ workers, spawnedForWorkers, poolRows, allFinished, rowsEnd, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
+          JSON.stringify({ workers, spawnedForWorkers, poolRows, allFinished, rowsEnd, workerTurns, spawnEv, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
 
         // workflow.panel.1g — the same door on a template with NO blocks:
         // one press, one instantiateTemplate call, the shape minted. This is
