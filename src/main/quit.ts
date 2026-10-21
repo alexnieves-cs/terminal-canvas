@@ -24,6 +24,12 @@ export interface QuitDeps {
    */
   agents?: { disposeAll(): void }
   /**
+   * M477. A Tonight batch, stopped BEFORE the agents are disposed so its
+   * runs end as "the app quit" and its power blocker is released by the
+   * runner's own exit path rather than by the process dying.
+   */
+  tonight?: { dispose(): void }
+  /**
    * M84. Every watcher, disarmed and its run killed. A watcher's child is an
    * ordinary `child_process`, not a pty and not a tmux session, so nothing
    * else in this sequence reaches it: without this arm a quit mid-run leaves
@@ -68,6 +74,11 @@ export function runQuit(deps: QuitDeps): void {
     else deps.manager.killAll()
   } catch (error) {
     console.warn('[quit] session teardown failed', error)
+  }
+  try {
+    deps.tonight?.dispose()
+  } catch (error) {
+    console.warn('[quit] tonight teardown failed', error)
   }
   try {
     deps.agents?.disposeAll()
