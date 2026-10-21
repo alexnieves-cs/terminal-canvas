@@ -3519,11 +3519,44 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           const r = el.getBoundingClientRect()
           return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
         })()`)
+        // The highlight is read with the pointer ON THE LINE AWAY FROM ITS
+        // MIDPOINT. The remove badge renders at the midpoint, on top of the hit
+        // stroke, so a pointer parked at `mid` ends up over the badge: once
+        // Chromium's post-layout hover update runs, :hover leaves the hit
+        // stroke and the line reads its rest colour. Whether that update had
+        // run when the colour was read was a race (link-draw.5 flaked on the
+        // runner with hovered === sibling while the badge was present). A
+        // person hovering a line is on the line; the badge is where they go
+        // next. Found by elementFromPoint along the bounding box's diagonals,
+        // so the point is on THIS link's own hit stroke, not a guess.
+        const onLine = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.link-layer [data-link="${key}"]')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          const cx = r.x + r.width / 2, cy = r.y + r.height / 2
+          for (let i = 0; i <= 40; i++) {
+            const t = 0.1 + i * 0.01
+            for (const [x, y] of [[r.x + r.width * t, r.y + r.height * t], [r.x + r.width * t, r.y + r.height * (1 - t)], [r.x + r.width * (1 - t), r.y + r.height * t], [r.x + r.width * (1 - t), r.y + r.height * (1 - t)]]) {
+              if (Math.hypot(x - cx, y - cy) < 40) continue
+              const hit = document.elementFromPoint(Math.round(x), Math.round(y))
+              if (hit && hit.classList.contains('link-layer__hit') && hit.nextElementSibling && hit.nextElementSibling.getAttribute('data-link') === '${key}') return { x: Math.round(x), y: Math.round(y) }
+            }
+          }
+          return null
+        })()`)
         let badge = null
         let hoverColors = null
         let afterRemove = null
         let afterUndo = null
-        if (mid) {
+        if (mid && onLine) {
+          wc.sendInputEvent({ type: 'mouseMove', x: onLine.x, y: onLine.y })
+          await settle()
+          hoverColors = await wc.executeJavaScript(`(() => {
+            const hovered = document.querySelector('.link-layer [data-link="${key}"]')
+            const sibling = document.querySelector('.link-layer [data-link="${siblingKey}"]')
+            if (!hovered || !sibling) return null
+            return { hovered: getComputedStyle(hovered).stroke, sibling: getComputedStyle(sibling).stroke }
+          })()`)
           wc.sendInputEvent({ type: 'mouseMove', x: mid.x, y: mid.y })
           await settle()
           badge = await wc.executeJavaScript(`(() => {
@@ -3531,12 +3564,6 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
             if (!b) return null
             const r = b.getBoundingClientRect()
             return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
-          })()`)
-          hoverColors = await wc.executeJavaScript(`(() => {
-            const hovered = document.querySelector('.link-layer [data-link="${key}"]')
-            const sibling = document.querySelector('.link-layer [data-link="${siblingKey}"]')
-            if (!hovered || !sibling) return null
-            return { hovered: getComputedStyle(hovered).stroke, sibling: getComputedStyle(sibling).stroke }
           })()`)
           if (badge) {
             await clickAt(badge.x, badge.y)
@@ -3547,11 +3574,11 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           }
         }
         ok('link-draw.5 the hover badge removes a link, and ONE undo restores it, and the hover highlight actually changes the line\'s colour',
-          mid !== null && badge !== null &&
+          mid !== null && onLine !== null && badge !== null &&
             hoverColors !== null && hoverColors.hovered !== hoverColors.sibling &&
             afterRemove !== null && !afterRemove.includes(key) &&
             afterUndo !== null && afterUndo.includes(key),
-          `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
+          `mid=${JSON.stringify(mid)} onLine=${JSON.stringify(onLine)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
           `afterRemove=${JSON.stringify(afterRemove)} afterUndo=${JSON.stringify(afterUndo)}`)
       }
 
