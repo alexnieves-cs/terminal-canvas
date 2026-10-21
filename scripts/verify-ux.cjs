@@ -23,7 +23,9 @@ buildSync({
       import { taskSeedFromPaste } from '../src/shared/paste-task'
       import { parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS } from '../src/shared/tmux-adopt'
       import { matchShortcut } from '../src/shared/shortcuts'
-      export { probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste, parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS, matchShortcut }
+      import { buildTaskQueue } from '../src/renderer/shell/task-queue'
+      import { AUTO_VERDICT_WORDS, autoChipWords } from '../src/shared/auto'
+      export { buildTaskQueue, AUTO_VERDICT_WORDS, autoChipWords, probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste, parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS, matchShortcut }
     `,
     resolveDir: __dirname,
     sourcefile: 'ux-entry.ts',
@@ -331,6 +333,32 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
       M.adoptSentence(rows) === '2 agents are already running in your tmux.' &&
       /adopt=\{adoptable === null \? null/.test(canvas),
     JSON.stringify(rows))
+}
+
+// ── Checked vs agent says done (M476) ─────────────────────────────────────
+
+{
+  const ready = (files) => ({ state: 'ready', standing: 'none', files })
+  const task = (itemId, title, auto) => ({ itemId, title, members: [`p-${itemId}`], handoff: ready(2), ...(auto === undefined ? {} : { auto }) })
+  const q = M.buildTaskQueue({
+    now: 1000, inbox: { items: [], snoozed: [] },
+    tasks: [task('a', 'Claimed task', { verdict: 'claimed' }), task('b', 'Plain task'), task('c', 'Checked task', { verdict: 'checked', check: 'npm test' })]
+  })
+  const textOf = (id) => q.groups.find((g) => g.itemId === id).decisions.find((d) => d.kind === 'review')
+  const a = textOf('a'), b = textOf('b'), c = textOf('c')
+  ok('ux.verdict.1 a review says how the agent\'s done was reached: a checked one names the check that passed and the word "checked"; a claimed one says "agent says done" and that nothing checked it; one with no auto run keeps "nothing is verified yet"',
+    c.verdict === 'checked' && /`npm test` passed \(checked\)/.test(c.text) &&
+      a.verdict === 'claimed' && a.text.includes(M.AUTO_VERDICT_WORDS.claimed) && /nothing checked it/.test(a.text) &&
+      b.verdict === undefined && /nothing is verified yet/.test(b.text) &&
+      M.autoChipWords({ mode: 'complete', turn: 1, limit: 8, state: 'done', verdict: 'claimed' }).endsWith(M.AUTO_VERDICT_WORDS.claimed) &&
+      M.autoChipWords({ mode: 'complete', turn: 1, limit: 8, state: 'done', verdict: 'checked' }).endsWith('checked'),
+    JSON.stringify({ a: a.text, b: b.text, c: c.text }))
+  ok('ux.verdict.2 the review queue sorts by it: checked work first (cheapest to finish), then a review with no auto run, then a bare claim — whatever order the tasks came in',
+    q.groups.map((g) => g.itemId).join(',') === 'c,b,a',
+    JSON.stringify(q.groups.map((g) => g.itemId)))
+  const hook = read('src/renderer/shell/useTaskQueue.ts')
+  ok('ux.verdict.3 the queue reads each task\'s verdict from its member chats\' snapshots, re-reading when any chat changes — a verdict never passed in would read every task as unverified',
+    /getChat\(id\)\.snapshot\?\.auto/.test(hook) && /autoVerdictOf\(a\)/.test(hook) && /\.\.\.\(auto === undefined \? \{\} : \{ auto \}\)/.test(hook) && /chatsVersion\]\)/.test(hook))
 }
 
 const passed = results.filter((r) => r.pass).length

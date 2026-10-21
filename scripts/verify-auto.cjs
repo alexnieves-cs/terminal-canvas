@@ -145,10 +145,11 @@ function makeManager(overrides = {}) {
   }
   {
     const base = { mode: 'complete', turn: 2, limit: 8 }
-    ok('auto.check.5 the words: a checked done says checked, a claimed or pre-M475 done keeps "done", a running check says checking; autoVerdictOf reads an absent verdict as claimed and is undefined off done',
+    ok('auto.check.5 the words: a checked done says checked, a claimed one says "agent says done" (M476), a pre-M475 done keeps "done", a running check says checking; autoVerdictOf reads an absent verdict as claimed and is undefined off done',
       A.autoChipWords({ ...base, state: 'done', verdict: 'checked' }) === 'auto · complete · checked' &&
         A.autoChipParts({ ...base, state: 'done', verdict: 'checked' }).head === 'auto checked' &&
-        A.autoChipWords({ ...base, state: 'done', verdict: 'claimed' }) === 'auto · complete · done' &&
+        A.autoChipWords({ ...base, state: 'done', verdict: 'claimed' }) === 'auto · complete · agent says done' &&
+        A.autoChipParts({ ...base, state: 'done', verdict: 'claimed' }).head === 'agent says done' &&
         A.autoChipWords({ ...base, state: 'done' }) === 'auto · complete · done' &&
         A.autoChipWords({ ...base, state: 'running', checking: true }) === 'auto · complete · checking' &&
         A.autoChipWords({ ...base, state: 'stuck', reason: 'check' }) === 'auto · complete · stuck — the check kept failing' &&

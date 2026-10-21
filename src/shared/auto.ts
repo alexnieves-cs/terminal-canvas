@@ -216,6 +216,9 @@ export interface AutoStatus {
  */
 export const AUTO_CLAIMED_OUTCOME = 'done · unchecked'
 
+/** M476. The two words a surface uses for a done run — one table, every surface. */
+export const AUTO_VERDICT_WORDS: Readonly<Record<AutoVerdict, string>> = { checked: 'checked', claimed: 'agent says done' }
+
 /** M475. The one reading of a done run: only a check's exit writes `checked`. */
 export function autoVerdictOf(s: AutoStatus): AutoVerdict | undefined {
   if (s.state !== 'done') return undefined
@@ -245,8 +248,9 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
 export function autoChipParts(s: AutoStatus): { head: string; tail: string } {
   switch (s.state) {
     case 'running': return { head: autoChipWords(s), tail: '' }
-    // M475. A claimed done keeps its pre-M475 words; a checked one says so.
-    case 'done': return { head: s.verdict === 'checked' ? 'auto checked' : 'auto done', tail: ` · ${s.mode}` }
+    // M475/M476. A checked done says so; a claimed one says whose word it is;
+    // a record from before M475 (no verdict) keeps its old words.
+    case 'done': return { head: s.verdict === 'checked' ? 'auto checked' : s.verdict === 'claimed' ? AUTO_VERDICT_WORDS.claimed : 'auto done', tail: ` · ${s.mode}` }
     case 'stopped': return { head: 'auto stopped', tail: ` · ${s.mode}` }
     case 'stuck': return { head: 'auto stuck', tail: ` — ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}` }
   }
@@ -255,7 +259,7 @@ export function autoChipParts(s: AutoStatus): { head: string; tail: string } {
 export function autoChipWords(s: AutoStatus): string {
   switch (s.state) {
     case 'running': return s.checking === true ? `auto · ${s.mode} · checking` : `auto · ${s.mode} · ${s.turn}/${s.limit}`
-    case 'done': return s.verdict === 'checked' ? `auto · ${s.mode} · checked` : `auto · ${s.mode} · done`
+    case 'done': return s.verdict === undefined ? `auto · ${s.mode} · done` : `auto · ${s.mode} · ${AUTO_VERDICT_WORDS[s.verdict]}`
     case 'stopped': return `auto · ${s.mode} · stopped`
     case 'stuck': return `auto · ${s.mode} · stuck — ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}`
   }
