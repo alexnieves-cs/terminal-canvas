@@ -272,7 +272,7 @@ export function createStores(state: MainState): Stores {
       n.show()
     },
     // The UX pass: the menu-bar item shows the same sum the dock does.
-    badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : ''); menuBarCount(count); phoneAlerts.waiting(count) },
+    badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : ''); menuBarCount(count) },
     beep: () => { shell.beep() },
     windowFocused: () => state.window?.isFocused() ?? false,
     notifyEnabled: () => layoutStore.getSetting('attention.notify') === true || phoneOn(),
@@ -281,7 +281,10 @@ export function createStores(state: MainState): Stores {
   // M76. One badge, two authors, one writer: PtyManager's waiting set and
   // the approval tracker's each report their count to a child sink and the
   // dock badge reads the sum. See main/approvals.ts.
-  const attention = createAttentionUnion(osAttention)
+  // M489. The phone hears the same sum, so a push waits for the count it
+  // reports. Wrapped here rather than in the badge line above: that line is
+  // the dock and menu bar's one writer, and verify:ux reach.2 reads it as text.
+  const attention = createAttentionUnion({ ...osAttention, badge: (count) => { osAttention.badge(count); phoneAlerts.waiting(count) } })
 
   const ptyManager = new PtyManager(
     () => state.window?.webContents ?? null,
