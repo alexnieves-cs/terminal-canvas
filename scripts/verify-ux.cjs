@@ -144,7 +144,9 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
 
 {
   const jump = canvas.slice(canvas.indexOf('jumpAttentionImplRef.current = '), canvas.indexOf('const pillJump'))
-  const notice = canvas.slice(canvas.indexOf('const readyToReview = '), canvas.indexOf('}, [readyToReview, notifySetting])'))
+  // M506. The notice moved with the attention models; Canvas still calls them.
+  const attention = /= useAttentionModels\(\{/.test(canvas) ? read('src/renderer/canvas/useAttentionModels.tsx') : ''
+  const notice = attention.slice(attention.indexOf('const readyToReview = '), attention.indexOf('}, [readyToReview, notifySetting])'))
   ok('ux.review.2 ⌘J opens the next review only when nothing needs you, and a newly ready task notifies once, only unfocused and only with notifications on',
     /if \(id === null\) \{\s*const review = nextReview\(readyReviewRef\.current, reviewCursorRef\.current\)/.test(jump) &&
       /boardVerbsRef\.current\.review\?\.\(review\.itemId\)/.test(jump) &&
