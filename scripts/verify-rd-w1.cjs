@@ -51,7 +51,11 @@ const near = (a, b) => Math.abs(a - b) < 1e-9
 const stage = read('src/renderer/world/WorldStage.tsx')
 const clock = read('src/renderer/world/world-transition.ts')
 const floor = read('src/renderer/world/plan-floor.ts')
-const canvas = read('src/renderer/canvas/Canvas.tsx')
+// M507 (the Canvas.tsx split). The hooks M442 appended now live in
+// useShellTail.ts, called at the same position, so the canvas's source is
+// Canvas.tsx followed by that hook, and only while Canvas still calls it.
+const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
+const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + read('src/renderer/canvas/useShellTail.ts') : '')
 const lens = read('src/renderer/world/WorldLens.tsx')
 
 const seam = css.slice(css.indexOf(open), css.indexOf(close))

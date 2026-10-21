@@ -31,7 +31,11 @@ ok('rd-l-b.0 seam present',
   'styles.css markers, redesign-contracts StateTone, ownership entry')
 
 const span = css.slice(css.indexOf(open), css.indexOf(close))
-const canvas = read('src/renderer/canvas/Canvas.tsx') || ''
+// M507 (the Canvas.tsx split). The hooks M442 appended now live in
+// useShellTail.ts, called at the same position, so the canvas's source is
+// Canvas.tsx followed by that hook, and only while Canvas still calls it.
+const canvasOwn = (read('src/renderer/canvas/Canvas.tsx') || '')
+const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + (read('src/renderer/canvas/useShellTail.ts') || '') : '')
 const commands = read('src/renderer/palette/commands.ts') || ''
 const shortcuts = read('src/shared/shortcuts.ts') || ''
 const cluster = read('src/renderer/canvas/TaskClusterLayer.tsx') || ''

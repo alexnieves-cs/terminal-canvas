@@ -42,7 +42,11 @@ buildSync({
   }
 })
 const M = require(OUT)
-const canvas = read('src/renderer/canvas/Canvas.tsx')
+// M507 (the Canvas.tsx split). The hooks M442 appended now live in
+// useShellTail.ts, called at the same position, so the canvas's source is
+// Canvas.tsx followed by that hook, and only while Canvas still calls it.
+const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
+const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + read('src/renderer/canvas/useShellTail.ts') : '')
 
 // ── First run ────────────────────────────────────────────────────────────
 
