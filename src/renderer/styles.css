@@ -13253,7 +13253,43 @@ tr[data-session-row]:focus-within .sessions-world,
   font-size: var(--t-sm);
   text-align: center;
 }
+/* M513. STATE AT A GLANCE. Finishing is the one change with no moment of its
+   own: working breathes and needs-you glows, but done arrived as a colour
+   swap you had to be looking at. The dot and the word now give one spring
+   breath when they turn done (integration-verified-pop, the same "it worked"
+   breath a verified connection gets), once, never a loop. Failed and idle
+   stay still on purpose: stillness is their signal. */
+.status-dot[data-tone="done"],
+.pf__word[data-tone="done"] { animation: integration-verified-pop var(--dur-spring) var(--ease-spring) 1 both; }
+/* A dormant card's "click to start" was a bare caption, the only way into a
+   restored panel and the quietest thing on it. It is a pill with a play
+   mark now, and lights when the card is under the pointer. The mark is a
+   pseudo-element, so the text the panels checks read stays exactly
+   `click to start`. */
+.panel__card-dormant .panel__card-idle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--s-2);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.panel__card-dormant .panel__card-idle::before {
+  content: "";
+  width: 7px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.panel__card-dormant:hover .panel__card-idle { border-color: var(--iris); background: var(--iris-dim); color: var(--iris); }
 @media (prefers-reduced-motion: reduce) {
+  .status-dot[data-tone="done"],
+  .pf__word[data-tone="done"] { animation: none; }
   .sessions-card { animation: none; }
   .sessions-state[data-tone="working"]::before,
   .sessions-state[data-tone="starting"]::before { animation: none; }
