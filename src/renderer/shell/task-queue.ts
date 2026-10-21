@@ -3,6 +3,7 @@ import { PLAN_TOOL } from '@shared/transcript'
 import { downstreamOf } from './decision-inbox'
 import type { ReviewHandoffState, ReviewStanding } from '@shared/review-readiness'
 import type { Tone } from '@renderer/panels/panel-state'
+import { AUTO_VERDICT_WORDS, type AutoVerdict } from '@shared/auto'
 
 /**
  * M318. THE TASK-CENTERED DECISION QUEUE — "What needs me, why, and what
@@ -69,6 +70,12 @@ export interface QueueDecision {
    * pressing it.
    */
   affects: string
+  /**
+   * M476. On a review: how the agent's "done" was reached — `checked` when an
+   * auto run's check passed, `claimed` when the agent only said so. Absent
+   * when no auto run finished in the task (a review the person started).
+   */
+  verdict?: AutoVerdict
 }
 
 /**
@@ -155,6 +162,8 @@ export interface QueueTaskInput {
   runs?: readonly QueueCheckRun[]
   /** The person's own rows from the task's durable record (`HistoryEvent`), any order. */
   events?: readonly HistoryEvent[]
+  /** M476. The latest finished auto run on a member panel: its verdict and the check it ran. */
+  auto?: { verdict: AutoVerdict; check?: string }
 }
 
 /** The slice of a durable event row the history reads — `EventRow`'s own fields. */
@@ -189,6 +198,13 @@ export interface QueueInput {
 }
 
 const SEVERITY_RANK: Record<TaskGroup['severity'], number> = { blocked: 0, failed: 1, review: 2, lost: 3 }
+
+/** M476. A review group's place among reviews: checked, then unmarked, then claimed. Zero off review. */
+function reviewRank(g: Pick<TaskGroup, 'severity' | 'decisions'>): number {
+  if (g.severity !== 'review') return 0
+  const v = g.decisions.find((d) => d.kind === 'review')?.verdict
+  return v === 'checked' ? 0 : v === 'claimed' ? 2 : 1
+}
 
 /**
  * Is this command a CHECK — something whose failure is a decision — rather
@@ -336,10 +352,18 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     const h = t.handoff
     if (h !== undefined && h.state === 'ready' && h.standing !== 'current') {
       const files = h.files === undefined ? '' : ` (${h.files} file${h.files === 1 ? '' : 's'})`
+      // M476. A checked done names the check that passed; a claimed one says
+      // it is only the agent's word. Neither is the person's review.
+      const v = t.auto?.verdict
+      const finished = v === 'checked'
+        ? `the agent finished with changes${files} and ${t.auto?.check === undefined ? 'its check' : `\`${clip(t.auto.check, 40)}\``} passed (${AUTO_VERDICT_WORDS.checked})`
+        : v === 'claimed' ? `the agent finished with changes${files} — ${AUTO_VERDICT_WORDS.claimed}, nothing checked it`
+          : `the agent finished with changes${files} and nothing is verified yet`
       push(t.itemId, {
         key: `review:${t.itemId}`, kind: 'review', since: 0, evidence: { kind: 'review', itemId: t.itemId },
-        text: h.standing === 'stale' ? `the changes moved since your review${files}` : `the agent finished with changes${files} and nothing is verified yet`,
-        affects: `Affects ${h.files === undefined ? 'the task\'s changes' : `${h.files} changed file${h.files === 1 ? '' : 's'}`} — nothing lands on your branch until you accept.`
+        text: h.standing === 'stale' ? `the changes moved since your review${files}` : finished,
+        affects: `Affects ${h.files === undefined ? 'the task\'s changes' : `${h.files} changed file${h.files === 1 ? '' : 's'}`} — nothing lands on your branch until you accept.`,
+        ...(v === undefined ? {} : { verdict: v })
       })
     }
   }
@@ -377,7 +401,9 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     const timed = decisions.filter((d) => d.since > 0).map((d) => d.since)
     return { itemId, title, decisions, affects, ...told, oldest: timed.length === 0 ? input.now : Math.min(...timed), history: itemId === null ? [] : history[itemId] ?? [] }
   })
-  groups.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.affects.length - a.affects.length || a.oldest - b.oldest || (a.itemId === null ? 1 : 0) - (b.itemId === null ? 1 : 0))
+  // M476. Among reviews, checked work first: a passing check already did part
+  // of the review, so it is the cheapest to finish; a bare claim is last.
+  groups.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || reviewRank(a) - reviewRank(b) || b.affects.length - a.affects.length || a.oldest - b.oldest || (a.itemId === null ? 1 : 0) - (b.itemId === null ? 1 : 0))
 
   const decisions = groups.reduce((n, g) => n + g.decisions.length, 0)
   const loud = new Set(groups.map((g) => g.itemId))
