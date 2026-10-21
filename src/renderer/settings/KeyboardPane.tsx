@@ -12,6 +12,7 @@ import {
   sectionPurpose,
   type ShortcutOverride
 } from '@shared/shortcut-overrides'
+import { emptyState } from '@shared/empty-states'
 import { RECORDING_HINT, stepFromKey } from './recorder'
 
 export function KeyboardPane({
@@ -99,7 +100,7 @@ export function KeyboardPane({
         </div>
       )}
       {refusal !== null && <p className="rd-settings__refusal" role="alert">{refusal}</p>}
-      {sections.length === 0 && <p className="rd-settings__lead">No shortcut matches that search.</p>}
+      {sections.length === 0 && <p className="rd-settings__lead">{emptyState('keyboard-search').sentence}</p>}
       {sections.map((section) => (
         <section key={section.group} data-shortcut-group={section.group}>
           <h2 className="rd-settings__group">{section.group}</h2>

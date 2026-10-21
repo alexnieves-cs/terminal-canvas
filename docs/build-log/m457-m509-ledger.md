@@ -28,6 +28,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | #31 | M465 | `shots.yml`: every scene painted on `macos-latest` (offscreen at 2x, so the runner's 1024px screen cannot clamp it), published as a phone gallery (artifact + the orphan `shots-gallery` branch). Harness fixes the first runs exposed: a hidden window's first capture is a stale frame (the three dark scenes that captured light), each `rd-*` scene paints its own steward fixture, `runner` is not a private word on GitHub runners, the flowchart scenes use ⌘0 (Fit all) and the palette's New shell since the redesign moved ⌘1/⌘N. Also the dispatch-only `goldens` job (M467): `UPDATE_GOLDENS=1 verify:visual` on the runner, pending list trimmed, a `goldens/run-<id>` branch for a PR; the fixture path is `/tmp` on CI so a runner image cannot move it | shots run: 97 scenes, 0 failed; `verify` |
+| this PR | M466 (B2) | The fix-list's code rows: a path is mono and a sentence is the UI face on the splash, the empty-canvas chip and onboarding's "version unknown"; Sessions and the keyboard search take their empty sentences from `empty-states.ts`; `rd-arrange` drives the marquee, a port drag into the connected spawn menu and a header drag to a snap guide, asserting each before the shot. Overlapping top tabs and the empty-canvas glyph are lane F's (M511) | `verify:styles`, `verify:rail`, `verify:rd-l-a`, `verify:rd-l-b`; shots run for a person to look at the changed scenes |
 
 ## C — Autonomy (M475–M486)
 

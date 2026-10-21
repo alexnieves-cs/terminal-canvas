@@ -13089,6 +13089,14 @@ tr[data-session-row]:focus-within .sessions-world,
    The hook (.claude/hooks/guard-paths.sh) and verify:meta streams.own.1 hold
    the fence. Lane A writes no CSS. */
 /* ── st:B ── */
+/* M466 (fix-list, face rows). A path is mono; a sentence is the UI face. The
+   splash detail, the empty-canvas chip and onboarding's "version unknown"
+   were mono whole, so a sentence like "left asleep" or "no repository
+   chosen" read as a path. Only the inner path span keeps the mono face. */
+.rd-splash__name, .rd-splash__detail, .rd-empty__chip { font-family: var(--font-ui); }
+.rd-splash__path, .rd-empty__repo { font-family: var(--font-mono); }
+.rd-onboard__where { display: block; font-size: var(--t-sm); color: var(--fg-3); }
+.rd-onboard__where .rd-onboard__mono { display: inline; }
 /* ── /st:B ── */
 
 /* ── st:C ── */
