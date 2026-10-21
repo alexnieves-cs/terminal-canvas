@@ -3139,6 +3139,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const live = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="bA"]'); if (!n || n.getAttribute('data-browser-live') !== 'yes') return false
           const wcId = n.getAttribute('data-browser-wc'); const url = n.querySelector('[data-browser-url]')?.textContent ?? ''; if (!wcId || !url.endsWith('/elsewhere')) return false
           return { url, wc: Number(wcId), address: n.querySelector('[data-browser-address]')?.value ?? null, guest: n.querySelector('webview[data-browser-guest]') !== null, leak: n.textContent.includes('bank.example') || n.textContent.includes('honest title') } })()`), 20000)
+        // Evidence for a red run: how far the guest got when the wait gave up.
+        const liveState = live ? null : await wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="bA"]'); if (!n) return 'no panel'; return { live: n.getAttribute('data-browser-live'), wc: n.getAttribute('data-browser-wc'), url: n.querySelector('[data-browser-url]')?.textContent ?? null, guest: n.querySelector('webview[data-browser-guest]') !== null, card: n.querySelector('.panel__card') !== null, text: n.textContent.slice(0, 120) } })()`)
         const read = live ? await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${live.wc} })`) : null
         const bogus = await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${wc.id} })`)
         // Browser panels only: the verb-line block before this one leaves its own panel on the canvas.
@@ -3157,7 +3159,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // The store carries every earlier block's panels: presence and absence by id, never the whole list.
             dropped === true && parsedIds.includes('bA') && !parsedIds.includes('bB') && parsed.warnings.some((w) => w.includes('bB') && /file:/.test(w)) &&
             rail && /127\.0\.0\.1/.test(rail.label ?? ''),
-          JSON.stringify({ live, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, droppedFacts, parsedIds, warnings: parsed.warnings, rail }))
+          JSON.stringify({ live, liveState, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, droppedFacts, parsedIds, warnings: parsed.warnings, rail }))
       } catch (bErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr))
       } finally {
