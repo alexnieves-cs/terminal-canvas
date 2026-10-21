@@ -13101,4 +13101,35 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:E ── */
 
 /* ── st:F ── */
+/* M511. The page switch is centred ABSOLUTELY over the bar (rd:F3), so the
+   flex row never leaves room for it: with a short breadcrumb the search field
+   grew to 560px, its auto margins pushed it and the session count left, and
+   both slid under the switch (rd-empty, rd-onboarding, rd-sessions at 1440).
+   The right cluster may now reach only the switch's right edge: half the bar,
+   less the switch's half-width (with a badge) and what sits right of the
+   search (View, avatars, gaps). Below 1220px the older rule's min-width: 0
+   still lets the field shrink. */
+.shell__top .shell__search { max-width: clamp(120px, calc(50% - 380px), 560px); }
+/* The empty canvas's "Nothing placed yet" stands where the minimap will be,
+   which is ALSO where the zoom bar sits: it covered Fit all. Stacked above
+   the bar instead, as the minimap itself is (--nav-hud-h). */
+.rd-empty__minimap { bottom: calc(var(--sp-6) + var(--nav-hud-h) + var(--sp-4)); }
+/* The blank card was bare text on the dot grid, so whatever the canvas still
+   drew behind it (a far-tier panel, the grid's dots) read through its words.
+   It is a surface now, the glass the launcher and the sheets wear, and it
+   arrives at the surface speed rather than appearing in one frame (first-arrive: the same fade and
+   6px rise the first task's guide wears, so no new keyframe). */
+.rd-empty__card {
+  padding: var(--sp-8);
+  background: var(--glass-1);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--rim-top);
+  animation: first-arrive var(--dur-2) var(--ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-empty__card { animation: none; }
+}
 /* ── /st:F ── */
