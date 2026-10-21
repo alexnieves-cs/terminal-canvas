@@ -96,7 +96,10 @@ module.exports = async function (ok, F) {
     JSON.stringify({ drawn, end }))
 
   // The wiring, read as text: the layers it feeds draw a peer shape read-only.
-  const canvas = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  // M507. The world layer's JSX moved to WorldLayers.tsx, which Canvas calls;
+  // the wiring is read in both, and the world file only while Canvas calls it.
+  const canvasOwn = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const canvas = canvasOwn + (/\brenderWorldLayers\(\{/.test(canvasOwn) ? '\n' + readFileSync(join(root, 'src/renderer/canvas/WorldLayers.tsx'), 'utf8') : '')
   const layer = readFileSync(join(root, 'src/renderer/flowchart/ShapeLayer.tsx'), 'utf8')
   const lines = readFileSync(join(root, 'src/renderer/flowchart/ConnectorLayer.tsx'), 'utf8')
   const peerNode = (/\{peerShapes\?\.map\(\(panel\) => \{[\s\S]*?<\/>\s*\)\s*\}\)/.exec(layer) || [''])[0]

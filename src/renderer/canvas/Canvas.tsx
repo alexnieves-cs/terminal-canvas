@@ -7,10 +7,10 @@ import { useShellSettings } from './useShellSettings'
 import { useShellReads } from './useShellReads'
 import { usePanelGestures } from './usePanelGestures'
 import { useShellTail } from './useShellTail'
+import { renderWorldLayers } from './WorldLayers'
 import { renderShellChrome } from './ShellChrome'
 import { renderInspector } from './InspectorPane'
 import { renderHostOverlays } from './HostOverlays'
-import { renderPanelNode } from './PanelNode'
 import { useDropVerbs } from './useDropVerbs'
 import { useTestDoors } from './useTestDoors'
 import { useRestartVerbs } from './useRestartVerbs'
@@ -32,27 +32,22 @@ import { useDiagnostics } from './useDiagnostics'
 import { useHandoff } from './useHandoff'
 import { MINIMAP_W, MINIMAP_H } from './MinimapOverlay'
 import { CardDetailContext } from '@renderer/components/card-detail-context'
-import { LinkLayer } from './LinkLayer'
-import { ShapeLayer, type LiveBinding } from '@renderer/flowchart/ShapeLayer'
+import { type LiveBinding } from '@renderer/flowchart/ShapeLayer'
 import { editNewShape, useFlowchartVerbs } from './useFlowchartVerbs'
 import { useConnectors, type Connectors } from './useConnectors'
 import { useShapeKeys } from './useShapeKeys'
 import { useFlowchartIO } from './useFlowchartIO'
-import { ConnectorLayer } from '@renderer/flowchart/ConnectorLayer'
 import { buildPeerFlow, type PeerFlow } from '@renderer/flowchart/shared-shapes'
-import { AgentLinkLayer } from './AgentLinkLayer'
 import { forgetAgentLinksFor, forgetAllAgentLinks, publishAgentLinks } from './agent-links-store'
 import { agentLinks } from '@shared/agent-links'
 import { indexToolFiles } from '@shared/tool-index'
 import { getChat as getChatState } from '@renderer/chat/chat-store'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
-import { SnapGuides } from './SnapGuides'
 import { smartSnap, type SpacingGuide } from './arrange'
 import { SNAP_PX, type SnapGuide } from './placement'
 import { FirstTaskHint } from './FirstTaskHint'
 import { useLinkDraw } from './useLinkDraw'
-import { SubagentLayer } from './SubagentLayer'
 import { useCanvasTestHooks } from './useCanvasTestHooks'
 import { usePaletteActions } from './usePaletteActions'
 import { useWorkspaceVerbs } from './useWorkspaceVerbs'
@@ -68,10 +63,7 @@ import {
 import { useViewport, prefersReducedMotion } from './useViewport'
 import { type StartupInput } from './splash'
 import { type TaskCluster } from './task-clusters'
-import { TaskClusterLayer, TaskRegionLayer, TierLayer } from './TaskClusterLayer'
 import { moveRegion} from './task-regions'
-import { InlineApproval } from '@renderer/shell/ApprovalDetail'
-import { waitingSince } from '@renderer/panels/header-rest'
 import { noteSpawnCursor, openConnectedSpawn, spawnCursor, spawnSize, takeArmedSpawn} from '@renderer/panels/spawn-cursor'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useCanvasContextMenu } from './useCanvasContextMenu'
@@ -82,10 +74,8 @@ import { chromeObstacles, placementRoom as readPlacementRoom, viewCentre } from 
 import { placePanel, type PlaceFn, type PlaceHow } from './place-new'
 import { placementQuiet } from './place-quiet'
 import { type MarqueeScreenRect } from './MarqueeLayer'
-import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
 import { usePanelDrag } from './usePanelDrag'
-import { GroupLayer } from '@renderer/groups/GroupLayer'
 import { pruneGroups, type CanvasGroup } from '@renderer/groups/groups'
 import { movesOrigin, type DragState } from './panel-interaction'
 import { type JumpDirection } from './attention'
@@ -124,7 +114,7 @@ import type {
   SessionBackendInfo} from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { findConnector, isShapePanel, RELAY_W, RELAY_H, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isWatcherPanel,
+import { findConnector, isShapePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isWatcherPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isReviewPanel, isTerminalPanel, makeJiraPanel,
   makeChatPanel, isChatPanel,
   makePanel, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, setPanelRect,
@@ -135,7 +125,6 @@ import { nextCardDetail, type CardDetail } from './card-detail'
 import { createHistory, pushHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { type InputMode } from '@renderer/palette/Palette'
-import { NavigateTier } from '@renderer/palette/navigate-tier'
 import type { PresetRow} from '@renderer/palette/commands'
 import type { WorkItem } from '@shared/work-item'
 import { getChat, insertIntoComposer, onChatTurnStart, scrollToTurn, useChatsVersion } from '@renderer/chat/chat-store'
@@ -186,8 +175,6 @@ import { WORK_ITEM_STATES, carryWorkItem, type PersistedWorkItem} from '@shared/
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
 import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
 import { useBoardVerbs, type BoardVerbs } from './useBoardVerbs'
-import { AnnotationLayer } from './AnnotationLayer'
-import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
 import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
 import { PanelMarksContext} from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
@@ -216,7 +203,6 @@ import type { PanelSearchResult } from '@shared/ipc-contract'
 import { skillEditorFocused } from '../skills/editor-focus'
 import { adoptedRunId, isSettledHandoff, recordOrchEvent} from '../orchestration/orch-record'
 import { useSharedCanvas } from '../shared-canvas/useSharedCanvas'
-import { SharedPlaceholderLayer } from '../shared-canvas/SharedPlaceholderLayer'
 import { useRosterNames } from '../presence/useRosterNames'
 
 
@@ -4166,194 +4152,10 @@ export function Canvas({
           // .world[data-detail="summary"|"block"], never by a live body.
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`, '--chrome-scale': String(Math.min(2.5, Math.max(1, 1 / viewport.scale))), '--far-scale': String(1 / viewport.scale) } as CSSProperties}
         >
-          {/* M79. Run frames: derived, read-only, never groups. */}
-          <GroupLayer
-            groups={merged ? [] : runFrames}
-            panels={displayPanels}
-            readOnly={true}
-            onBeginDrag={() => {}}
-            onToggle={() => {}}
-            onRemove={() => {}}
-          />
-          <GroupLayer
-            groups={merged ? [] : groups}
-            panels={displayPanels}
-            readOnly={merged}
-            onBeginDrag={onBeginGroupDrag}
-            onToggle={toggleGroupCollapsed}
-            onRemove={onRemoveGroup}
-          />
-          {cardDetail === 'cluster'
-            ? <TaskClusterLayer clusters={clusterHulls} />
-            : !merged && <TaskClusterLayer region clusters={clusterHulls.filter((c) => c.kind === 'task')} />}
-          {!merged && <TaskRegionLayer regions={taskRegions} />}
-          <TierLayer />
-          <NavigateTier
-            scale={viewport.scale}
-            panels={displayPanels}
-            railRows={railRows}
-            terminalPanels={terminalPanels}
-            focusedId={focusedId}
-            collapsedPanelIds={collapsedPanelIds}
-            releaseFocus={releaseFocusStable}
-            hostRef={hostRef}
-            onSelect={selectAndRaise}
-            merged={merged}
-            approvalOf={(id) => pendingApprovals.find((a) => a.id === id)}
-            onAnswer={(id, requestId, allow) => paletteActions.answerApproval(id, requestId, allow)}
-            onOpen={goToPanelOrRequest}
-          />
-          {!merged && pendingApprovals.map((approval) => {
-            const host = displayPanels.find((panel) => panel.rect.id === approval.id)
-            if (host === undefined) return null
-            return (
-              <div key={approval.requestId} className="inline-approval-host" style={{ position: 'absolute', left: host.rect.x + 16, top: host.rect.y + host.rect.h - 132, width: Math.max(160, Math.min(420, host.rect.w - 32)), zIndex: host.z + 2 }}>
-                <InlineApproval
-                  approval={approval}
-                  waiting={waitingSince(approval.requestId, Date.now())}
-                  onAllow={() => paletteActions.answerApproval(approval.id, approval.requestId, true)}
-                  onDeny={() => paletteActions.answerApproval(approval.id, approval.requestId, false)}
-                  onViewDiff={() => paletteActions.openReview(approval.id)}
-                />
-              </div>
-            )
+          {/* M507. What the world layer holds, in WorldLayers.tsx: a plain function called here, so the tree is unchanged. */}
+          {renderWorldLayers({
+            activeWorkspaceId, addGithubToBoard, addJiraToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setSheetView, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
           })}
-          {/* First child, and z-index 0 in the stylesheet, so it paints
-              beneath every panel — nextZ mints z >= 1. It is inside .world so
-              it pans and zooms with the panels. The LAYER itself still takes
-              no pointer events; M35 Task 6 opts each link's own hit stroke
-              and remove badge back in individually so a link can be hovered
-              and removed without the layer as a whole ever swallowing a
-              click. See LinkLayer.
-
-              Fed displayPanels rather than panels, for the same reason the
-              panel map below is: while merged the only rects on screen are
-              lane-offset ones, and a layer drawn from `panels` would paint
-              every link at its un-offset position — lines detached from the
-              panels they join. buildLinkSegments skips a link whose target is
-              not in the array it was handed, so a link that crosses a lane
-              boundary simply does not draw rather than drawing wrong.
-
-              onRemove is the SAME paletteActions.removeLink the inspector's
-              link rows use — never a second copy — so both surfaces produce
-              exactly one history entry and cannot disagree about what
-              removing a link means. Suppressed while merged, where geometry
-              and links are read-only, the same gate the drag and the move
-              verb already take. */}
-          {/* M93. In annotate mode a transparent sheet over the world takes every
-              click — a panel's own mousedown stops propagation, so without it a
-              note could be placed on the ground but never on a panel. */}
-          {annotating && <div className="annotate-sheet" data-annotate-sheet />}
-          <SnapGuides guides={snapGuides.guides} spacing={snapGuides.spacing} />
-          {/* The shared canvas: teammates' panels, inert, at the doc's rects. */}
-          {!merged && (
-            // M392. A teammate's drawable shape is the ShapeLayer's (peerFlow); the rest stay cards.
-            <SharedPlaceholderLayer placeholders={peerFlow.cards} workspaceId={activeWorkspaceId}
-              mayArrange={shared.mayArrange} mayRemove={shared.mayRemove} files={shared.view?.files ?? []}
-              onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder}
-              // M343. Beside the placeholder, never over it: both stay visible.
-              onAttachRelay={(p) => { if (p.relay !== undefined) openRelayPanel({ program: p.relay.program, sessionId: p.relay.session, ...(creationShareRef.current === undefined ? {} : { shareId: creationShareRef.current }) }, { x: p.x + p.w + 40 + RELAY_W / 2, y: p.y + RELAY_H / 2 }) }} />
-          )}
-          {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
-          <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft} merged={merged}
-            onSelect={merged ? undefined : setSelectedAnnotation} onBeginEdit={merged ? undefined : setEditingAnnotation} onCommitEdit={commitAnnotation} onCancelEdit={(id) => { const a = annotationsRef.current.find((x) => x.id === id); commitAnnotation(id, a?.text ?? '') }} />
-          <LinkLayer
-            panels={displayPanels}
-            draw={linkDraw.state}
-            onRemove={merged ? undefined : removeLinkStable}
-            edgeLabels={edgeLabels}
-            selectedKey={selectedLink === null ? null : `${selectedLink.from}:${selectedLink.to}`}
-            onSelect={merged ? undefined : selectLink}
-            cardDetail={cardDetail}
-          />
-          {/* M247. Beside LinkLayer, in the same world transform and on the same curve. */}
-          <AgentLinkLayer panels={displayPanels} cardDetail={cardDetail} hidden={!agentLinksOn}
-            onOpenDraft={merged ? undefined : openDraftReview} />
-          {/* M130. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
-              written back: one column per host at a fixed offset to its
-              right, re-derived from the host's rect on every render. Not
-              panels — plain elements in the world layer, so forty skill uses
-              cost zero LOD budget and zero records (M79's run frames, M114's
-              anchored card).
-
-              Suppressed while MERGED, where every geometry the view paints is
-              a lane offset that exists only in that render; at the far tiers,
-              where the host itself is drawn as a card and its trail would be
-              a column of unreadable slivers; and for a host whose lane the
-              user folded away. */}
-          {!merged && cardDetail === 'tail' && displayPanels.filter((p) => p.skillTrail !== 'collapsed').map((panel) => (
-            <SkillTrailLane
-              key={`trail:${panel.rect.id}`}
-              panel={panel}
-              selected={selectedIds.has(panel.rect.id)}
-              cwd={isTerminalPanel(panel) ? panel.spec.cwd : isChatPanel(panel) ? panel.chat.cwd : null}
-              shelf={shelf}
-              onOpenSkill={openSkillPanel}
-            />
-          ))}
-          {/* M507. Each panel by kind, in PanelNode.tsx: a plain function called here, so the tree is unchanged. */}
-          {displayPanels.map((panel) => renderPanelNode(panel, {
-              activeWorkspaceId, addGithubToBoard, addJiraToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
-            }))}
-          {/* M388. Every flowchart shape, in one memoised layer (ShapeLayer's
-              header: why not PanelFrame). A fragment of boxes carrying
-              Panel.z, so shapes interleave with panels by the one stacking rule. */}
-          {/* M389. Every connector, beneath the shapes (the link layer's slot). */}
-          <ConnectorLayer
-            views={connectors.views}
-            selectedId={connectors.selectedId}
-            editingId={connectors.editingId}
-            readOnly={merged}
-            ghost={connectors.ghost}
-            onSelect={onConnectorSelect}
-            onEditLabel={connectors.editLabel}
-            onCommitLabel={connectors.commitLabel}
-          />
-          <ShapeLayer
-            shapes={shapePanels}
-            selectedIds={selectedIds}
-            readOnly={merged}
-            onPress={flowchart.onShapePress}
-            onResize={flowchart.onShapeResize}
-            onPort={connectors.beginDraw}
-            onCommitText={flowchart.onShapeText}
-            dropTargetId={connectors.dropTargetId ?? (linkDraw.state?.target ?? null)}
-            live={shapeLive}
-            peerShapes={peerFlow.shapes}
-            peerMarks={peerFlow.marks}
-            peerRemovable={peerRemovable}
-            onPeerPress={shared.mayArrange && !merged ? onPeerShapePress : undefined}
-            onPeerRemove={onPeerShapeRemove}
-          />
-          {/* INSIDE .world, unlike the pips and the marquee below it: a lane
-              header names a region of the WORLD, so it has to pan and scale
-              with the panels it labels — see MergedLanes' own comment. Last
-              in the world layer rather than first only because JSX order is
-              not paint order here: panels carry an explicit zIndex from
-              Panel.z (>= 1) and the lanes sit at 0, which is what keeps a
-              lane behind the panels it contains. */}
-          <MergedLanes lanes={merged && mergedView ? mergedView.lanes : []} />
-          {/* Inside .world, not beside it — the opposite of EdgeIndicators
-              and for the mirror-image reason: a pip must stay pinned to the
-              viewport's edge, a subagent node belongs to a place beside its
-              parent panel, so it has to pan and zoom with it. terminalPanels,
-              never `panels`: a review node has no subagents of its own, and
-              it is already outside this array for the identical reason it is
-              outside assignTiers' input. */}
-          <SubagentLayer panels={terminalPanels} />
-          {/* Inside .world for SubagentLayer's reason: it marks a place on
-              the canvas and must pan and zoom with the panel it lights. An
-              overlay rather than a class on the panel, because each kind
-              renders its own .panel and tiering may remount it at the very
-              moment the flight ends — a class would be lost with it. Keyed
-              on the settle so a second arrival restarts the light. */}
-          {landingLit && (() => {
-            const lit = displayPanels.find((p) => p.rect.id === landingLit.id)
-            return lit
-              ? <div key={landingLit.seq} className="landing-halo" data-landing-for={lit.rect.id} aria-hidden
-                  style={{ left: lit.rect.x, top: lit.rect.y, width: lit.rect.w, height: lit.rect.h, zIndex: lit.z + 1 }} />
-              : null
-          })()}
         </div>
         </PanelMarksContext.Provider>
         </CardDetailContext.Provider>

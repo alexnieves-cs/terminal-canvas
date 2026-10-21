@@ -48,7 +48,7 @@ const M = require(OUT)
 // the host draws over the world (HostOverlays.tsx). The canvas's source is
 // Canvas.tsx followed by each, and only while Canvas still calls it.
 const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
-const canvas = canvasOwn + [['useShellTail', 'useShellTail.ts'], ['useHistoryVerbs', 'useHistoryVerbs.ts'], ['renderHostOverlays', 'HostOverlays.tsx']]
+const canvas = canvasOwn + [['useShellTail', 'useShellTail.ts'], ['useHistoryVerbs', 'useHistoryVerbs.ts'], ['renderHostOverlays', 'HostOverlays.tsx'], ['renderWorldLayers', 'WorldLayers.tsx']]
   .filter(([call]) => new RegExp(`\\b${call}\\(\\{`).test(canvasOwn))
   .map(([, file]) => '\n' + read(`src/renderer/canvas/${file}`)).join('')
 

@@ -199,7 +199,9 @@ function connect(port, tok, opts = {}) {
         /const rosterNames = useRosterNames\(activeWorkspaceId\)/.test(canvas) && /relayNameOf\(rosterNames, userId\)/.test(creation) &&
         /\brelayNameFor\b[^}]*\} = useCreationVerbs\(\{[^}]*\brosterNames\b/.test(canvas) &&
         // M507. The panel render moved to PanelNode.tsx; Canvas hands it relayNameFor.
-        /renderPanelNode\(panel, \{[^}]*\brelayNameFor\b/.test(canvas) &&
+        /renderPanelNode\(panel, \{[^}]*\brelayNameFor\b/.test(readFileSync(join(__dirname, '..', 'src/renderer/canvas/WorldLayers.tsx'), 'utf8')) &&
+        // M507. And the panel map moved to WorldLayers.tsx; Canvas hands it relayNameFor.
+        /renderWorldLayers\(\{[^}]*\brelayNameFor\b/.test(canvas) &&
         /<RelayNode[\s\S]{0,200}nameOf=\{relayNameFor\}/.test(readFileSync(join(__dirname, '..', 'src/renderer/canvas/PanelNode.tsx'), 'utf8')) && /useRosterNames\(props\.workspaceId\)/.test(layer))
     }
     ok('relay.gate.4 the control line names the controller, or says why there is none',

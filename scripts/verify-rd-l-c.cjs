@@ -30,7 +30,10 @@ ok('rd-l-c.0 seam present',
   'styles.css markers, redesign-contracts StateTone, ownership entry')
 
 const span = css.slice(css.indexOf(open), css.indexOf(close))
-const canvas = read('src/renderer/canvas/Canvas.tsx') || ''
+const canvasOwn = read('src/renderer/canvas/Canvas.tsx') || ''
+// M507. The world layer's JSX (TierLayer, NavigateTier) moved to
+// WorldLayers.tsx, which Canvas calls; read it there while Canvas calls it.
+const canvas = /\brenderWorldLayers\(\{/.test(canvasOwn) ? read('src/renderer/canvas/WorldLayers.tsx') || '' : canvasOwn
 const viewportHook = read('src/renderer/canvas/useViewport.ts') || ''
 const commands = read('src/renderer/palette/commands.ts') || ''
 const usePalette = read('src/renderer/palette/usePalette.ts') || ''

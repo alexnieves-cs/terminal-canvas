@@ -3075,7 +3075,9 @@ const session = (id, over = {}) => ({
   const work = read('src/renderer/work/WorkNode.tsx')
   // M507. The per-panel render moved to PanelNode.tsx, which Canvas calls.
   const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
-  const canvas = /renderPanelNode\(panel, \{/.test(canvasOwn) ? read('src/renderer/canvas/PanelNode.tsx') : ''
+  // M507. And the panel map that calls it moved to WorldLayers.tsx, which Canvas calls.
+  const world = /\brenderWorldLayers\(\{/.test(canvasOwn) ? read('src/renderer/canvas/WorldLayers.tsx') : ''
+  const canvas = /renderPanelNode\(panel, \{/.test(world) ? read('src/renderer/canvas/PanelNode.tsx') : ''
   ok('run.surface.1 workflow and task cards consume the shared live projection, name the blocking node/question, and answer through the same approval action Canvas gives chat and Attention',
     /projectRun\(selectedRun, props\.liveFacts\)/.test(workflow) && /data-workflow-run-blocker/.test(workflow) && /data-workflow-approval="allow"/.test(workflow) &&
       /data-work-execution/.test(work) && /data-work-blocker/.test(work) && /data-work-approval="allow"/.test(work) &&

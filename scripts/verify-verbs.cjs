@@ -74,10 +74,14 @@ const FACTS = {
     // Canvas names each function twice (where it gets it, where it hands it
     // to the render); PanelNode three times (its context's type, where it
     // takes it, the one onMarkRead).
-    const node = /renderPanelNode\(panel, \{/.test(canvas) ? src('renderer/canvas/PanelNode.tsx') : ''
+    // The panel map moved on again, to WorldLayers.tsx, which names each
+    // function three times too (its context's type, where it takes it, where
+    // it hands it to PanelNode).
+    const world = /\brenderWorldLayers\(\{/.test(canvas) ? src('renderer/canvas/WorldLayers.tsx') : ''
+    const node = /renderPanelNode\(panel, \{/.test(world) ? src('renderer/canvas/PanelNode.tsx') : ''
     const usesIn = (text, name) => [...text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
     const uses = (name) => usesIn(canvas, name)
-    const passedOnly = uses('markTemplateRead') === 2 && usesIn(node, 'markTemplateRead') === 3 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(node) &&
+    const passedOnly = uses('markTemplateRead') === 2 && usesIn(world, 'markTemplateRead') === 3 && usesIn(world, 'markPreviewRead') === 3 && usesIn(node, 'markTemplateRead') === 3 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(node) &&
       uses('markPreviewRead') === 2 && usesIn(node, 'markPreviewRead') === 3 && /onMarkRead=\{markPreviewRead\}/.test(node)
     ok('tool.door.1 marking a tool read has NO verb, palette row, agent line or workflow node: no door file names a mark-read function or writes `reviewed`, and Canvas passes each mark-read function only to its node\'s onMarkRead',
       reaching.length === 0 && passedOnly, JSON.stringify({ reaching, markTemplateRead: uses('markTemplateRead'), markPreviewRead: uses('markPreviewRead') }))
