@@ -500,6 +500,18 @@ export type PermissionAnswer = { allow: true } | { allow: false; message: string
  * plan's, not a tool's. The name is the CLI's own.
  */
 export const PLAN_TOOL = 'ExitPlanMode'
+/** M76. The one deny message, whichever surface says it. */
+export const DENY_MESSAGE = 'denied from the canvas'
+/**
+ * M358. "Keep planning" is a deny of `ExitPlanMode`, and its message is what
+ * the agent reads next, so it says what the person wants instead of a bare
+ * no: the plan again, revised, before anything runs.
+ */
+export const KEEP_PLANNING_MESSAGE = 'Keep planning: the person has not approved this plan. Revise it (ask what they want changed if that is unclear) and present it again before you start.'
+/** M358. The deny message for a request: a plan's says "keep planning", every other tool's is M76's one. */
+export function denyMessageFor(toolName: string | undefined): string {
+  return toolName === PLAN_TOOL ? KEEP_PLANNING_MESSAGE : DENY_MESSAGE
+}
 
 /** M358. The plan an `ExitPlanMode` request carries, or undefined for any other request. */
 export function planOf(toolName: string, input: Record<string, unknown>): string | undefined {

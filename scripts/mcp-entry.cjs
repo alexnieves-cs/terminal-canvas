@@ -7,6 +7,8 @@ module.exports = {
   ...require('../src/cli/mcp'),
   ...require('../src/cli/tc'),
   ...require('../src/main/control-server'),
+  ...require('../src/main/control-protocol'),
+  ...require('../src/shared/settings-schema'),
   ...require('../src/main/control-handler'),
   ...require('../src/shared/plan'),
   ...require('../src/renderer/panels/panel-state')

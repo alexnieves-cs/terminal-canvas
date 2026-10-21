@@ -164,7 +164,8 @@ const shareControl = createShareControl({
 // M366. Built before the control wiring so `tc toolbox` and `toolbox:read`
 // ask plugins through the SAME runner; it reads `state` at use, not here.
 const toolbox = createToolboxHandlers(state, places)
-const control = createControlWiring(state, stores, places, tokens, account, shareControl, toolbox.listPlugins)
+// M488. The kit is built on the next lines; the merger is reached through it at use.
+const control = createControlWiring(state, stores, places, tokens, account, shareControl, toolbox.listPlugins, (req) => kit.laneMerge(req))
 // M311–M314. Built at module scope with the other collaborators; every
 // closure inside reads `state` at the point of use (context.ts's rule).
 const kit = createKitHandlers(state, stores, app.getPath('userData'))
