@@ -188,6 +188,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           // mid-flight) but its timing against this check is uncontrolled,
           // and a check that depends on landing inside a 900 ms window is a
           // flake waiting for a slower machine.
+          // The packet is the MOTION answer: under prefers-reduced-motion the
+          // stylesheet hides it on purpose. The hosted macOS runner reports
+          // reduce (display none, reduce true on every run), so the motion
+          // case is asked for by name for this read and handed back after.
+          let emulated = false
+          try { if (!wc.debugger.isAttached()) wc.debugger.attach('1.3'); await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); emulated = true } catch { /* the read below says reduce */ }
           await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 450); return true })()`)
           await settle(); await sleep(250)
           const lit = await line()
@@ -206,6 +212,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
               display: getComputedStyle(p).display, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
           await wc.executeJavaScript(`(() => { window.__m233Flow('thaw', '', ''); return true })()`)
+          if (emulated) { try { await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] }) } catch { /* detached */ } }
           // Past EDGE_FIRE_MS, so the fire lapses on the store's own timer
           // rather than because anything told it to. A fire that never ended
           // would leave a packet parked on the edge for the life of the run.
@@ -229,7 +236,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           ok('edge.paint.1 a fire lifts the ruled edge\'s computed stroke and paints a packet with a real size, inside the canvas host and NOT under a panel — the two failures this milestone hit (a packet under a panel, and the grammar culled at the wrong tier) both left the DOM correct; expiry is edge.flow.4\'s job',
             lit !== null && lit.act === 'firing' && packet !== null && packet.w >= 4 &&
               packet.inHost === true && packet.covered === false,
-            JSON.stringify({ lit, packet }))
+            JSON.stringify({ lit, packet, emulated }))
         }
 
         // handoff.2. The target is dormant AND off screen. After the exit the
@@ -1281,7 +1288,6 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await settle()
         const saved = await wc.executeJavaScript(`(async () => {
           const ids = [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))
-          window.__m4aSelect ? window.__m4aSelect(ids) : null
           return ids })()`)
         // The SAVE VERB itself, through the palette: the two panels of the
         // template just made are selected and saved, and the record comes back
@@ -1291,14 +1297,18 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => {
           const chrome = (id) => document.querySelector('.panel[data-panel-id="' + id + '"] .pf__chrome')
           const a = chrome(${JSON.stringify(made.chatId)}); const b = chrome(${JSON.stringify(made.termId)})
-          if (a) a.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-          if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, shiftKey: true }))
+          if (a && b) { a.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, shiftKey: true })) }
+          // At a far tier a panel is a card with no chrome (the runner's
+          // instantiate landed there: neither chrome was found and nothing was
+          // selected). The selection is this check's SETUP, not its subject,
+          // so it is made through the same hook tidy.1 uses.
+          else window.__m50Select([${JSON.stringify(made.chatId)}, ${JSON.stringify(made.termId)}])
           return !!(a && b) })()`)
         await settle()
         // Evidence: which chromes the gesture found and what it left selected.
         const picked = await wc.executeJavaScript(`(() => {
           const chrome = (id) => document.querySelector('.panel[data-panel-id="' + id + '"] .pf__chrome')
-          return { a: !!chrome(${JSON.stringify(made.chatId)}), b: !!chrome(${JSON.stringify(made.termId)}),
+          return { a: !!chrome(${JSON.stringify(made.chatId)}), b: !!chrome(${JSON.stringify(made.termId)}), ids: [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id') + ':' + (p.getAttribute('data-tier') ?? '')),
             selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')) } })()`)
         await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
@@ -1638,14 +1648,22 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         agentTranscripts.appendTurn(chatId, { id: 'm-t2', role: 'assistant', blocks: [{ type: 'text', text: 'done' }], at: at + 2000 })
         agentTranscripts.appendMeta(chatId, { usage: { input: 1, output: 1, cacheWrite: 0, cacheRead: 0 }, turns: 1 })
         layoutStore.addPreset({ id: 'tools-claude', name: 'Claude (tools)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
-        layoutStore.save({
-          panels: [{ id: chatId, kind: 'chat', x: 80, y: 80, w: 520, h: 360, z: 1, chat: { cwd: trepo, sessionId: '77777777-7777-4777-8777-777777777777' } }],
-          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
-        })
-        flushLayoutStore()
-        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reT
-        await settle()
+        // The 900 ms above is not a bound, and the runner overran it (the
+        // reload showed the previous block's eight panels). So the seed is
+        // re-saved until the store, after the new page's own save, holds
+        // exactly this chat.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          layoutStore.save({
+            panels: [{ id: chatId, kind: 'chat', x: 80, y: 80, w: 520, h: 360, z: 1, chat: { cwd: trepo, sessionId: '77777777-7777-4777-8777-777777777777' } }],
+            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+          })
+          flushLayoutStore()
+          const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload(); await reT
+          await settle()
+          const held = await waitUntil(() => { const ids = layoutStore.initial().panels.map((p) => p.id); return ids.length === 1 && ids[0] === chatId }, 3000)
+          if (held === true) break
+        }
         const restored = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') !== null`), 8000)
         const restoreState = restored === true ? null : await wc.executeJavaScript(`(() => ({ panels: [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id')), launcher: !!document.querySelector('[data-launcher]'), title: document.title }))()`)
         // The baseline lands asynchronously after agent:create (git in a subprocess).
@@ -2265,7 +2283,13 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await settle()
         // Drag pB's chrome LEFT so its left edge ends 5px right of pA's right
         // edge (world 405): dx = 405 - 620 = -215 at scale 1.
-        const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pB"] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
+        // A point of the chrome that is the chrome's own: on the runner the
+        // overview map sat over left+40 (the press landed on .minimap__view
+        // and nothing moved). The drag is relative, so where along the strip
+        // it starts does not change where the edge ends.
+        const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pB"] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); const y = Math.round(r.top + r.height / 2)
+          for (let x = Math.round(r.left + 40); x < r.right - 40; x += 10) { const el = document.elementFromPoint(x, y); if (el && el.closest('.panel[data-panel-id="pB"]') && !el.closest('button')) return { x, y } }
+          return { x: Math.round(r.left + 40), y } })()`)
         let guideSeen = false
         let hit = null
         let mid = null
@@ -3430,8 +3454,17 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                   // The translate property composes with a transform the menu
                   // may already carry (its popper positions it that way);
                   // overwriting transform threw it back to the origin.
-                  m.style.translate = Math.round(pr.left + pr.width / 2 - mr.left - mr.width / 2) + 'px ' + Math.round(pr.top + pr.height / 2 - mr.top - 20) + 'px'
-                  moved = true; mr = m.getBoundingClientRect()
+                  // Measured and corrected rather than set once: a translate is in
+                  // the menu's LOCAL pixels, and on the runner one shot left the
+                  // two apart (moved, overlap 0), so each step aims at what is left.
+                  let tx = 0, ty = 0
+                  for (let i = 0; i < 4; i++) {
+                    tx += pr.left + pr.width / 2 - mr.left - mr.width / 2; ty += pr.top + pr.height / 2 - mr.top - 20
+                    m.style.translate = Math.round(tx) + 'px ' + Math.round(ty) + 'px'
+                    mr = m.getBoundingClientRect(); pr = map.getBoundingClientRect()
+                    if (Math.abs(pr.left + pr.width / 2 - mr.left - mr.width / 2) < 4) break
+                  }
+                  moved = true
                 }
                 const overlap = pr ? Math.max(0, Math.min(mr.right, pr.right) - Math.max(mr.left, pr.left)) * Math.max(0, Math.min(mr.bottom, pr.bottom) - Math.max(mr.top, pr.top)) : 0
                 // Only points over the map are probed: that is the claim, and a
@@ -3443,7 +3476,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                     probed++; const e = document.elementFromPoint(x, y)
                     if (!e || !m.contains(e)) lost.push(b.textContent.trim().slice(0, 20) + '@' + f + '→' + (e ? String(e.className).split(' ')[0] : null)) } }
                 m.style.translate = ''
-                return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
+                return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, menu: [Math.round(mr.left), Math.round(mr.top), Math.round(mr.width), Math.round(mr.height)], map: pr && [Math.round(pr.left), Math.round(pr.top), Math.round(pr.width), Math.round(pr.height)], presence: map && map.getAttribute('data-presence'), kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
               press(trig)
               await settle()
             }
@@ -3503,7 +3536,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             const gear = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-dock="settings"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
             const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
             const state = () => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-settings-root]'); return { open: !!r, label: r ? r.getAttribute('aria-label') : null, palette: document.querySelector('.palette') !== null } })()`)
-            const esc = async () => { wc.focus(); await sleep(150); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle() }
+            // Evidence for a red: did the key arrive, was it already handled by
+            // the time it bubbled to the window, and what had focus.
+            const escLog = []
+            const esc = async () => {
+              await wc.executeJavaScript(`(() => { window.__escSeen = []; const f = (e) => { if (e.key === 'Escape') window.__escSeen.push({ prevented: e.defaultPrevented, phase: e.eventPhase, target: e.target && (e.target.tagName + '.' + String(e.target.className).slice(0, 30)) }) }; window.addEventListener('keydown', f, true); window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__escSeen.push({ bubbled: true, prevented: e.defaultPrevented }) }); return true })()`)
+              wc.focus(); await sleep(150); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle()
+              escLog.push(await wc.executeJavaScript(`({ seen: window.__escSeen, active: document.activeElement && (document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 30)) })`))
+            }
             if (gear) {
               press(gear); const opened = await waitUntil(async () => { const s = await state(); return s.open ? s : false }, 3000)
               await esc()
@@ -3511,7 +3551,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
               press(gear); const again = await waitUntil(async () => (await state()).open, 3000) === true
               await esc()
               const last = await state()
-              settings = { opened, afterEsc, again, last }
+              settings = { opened, afterEsc, again, last, escLog }
             }
           } catch (error) { settings = { error: String(error && error.message || error) } }
           ok('settings.dismiss.1 Settings opened from the dock gear is the Settings page, closes on ONE real Escape (never landing on the root palette) and opens again',
