@@ -528,6 +528,9 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     // folder, and the deps interface that declares the door it calls to do it.
     'canvas/palette-actions/presets.ts',
     'canvas/palette-actions/types.ts',
+    // M502. markPreviewRead (the one `reviewed` writer for a preview) left
+    // Canvas.tsx with the creation verbs; the same door at its new path.
+    'canvas/useCreationVerbs.ts',
     // M501. The preview verbs (bind, open, capture) left Canvas.tsx for their
     // own hook: the same door that writes a binding, at its new path.
     'canvas/usePreviewVerbs.ts',
