@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react'
 import { shellControl } from '@renderer/shell/shell-control'
+import { useSlidingThumb } from './useSlidingThumb'
 
 export interface TabOption<T extends string> {
   id: T
@@ -28,8 +29,10 @@ export interface TabsProps<T extends string> {
  * inspector's `.context__tabs` / `.context__tab` alias.
  */
 export function Tabs<T extends string>({ value, tabs, onSelect, label, className, dataAttr }: TabsProps<T>): JSX.Element {
+  // M512. One underline that slides between tabs (useSlidingThumb).
+  const thumb = useSlidingThumb<HTMLDivElement>(value, '.tab[aria-selected="true"]')
   return (
-    <div className={`tabs${className ? ` ${className}` : ''}`} role="tablist" aria-label={label}>
+    <div ref={thumb} className={`tabs${className ? ` ${className}` : ''}`} role="tablist" aria-label={label}>
       {tabs.map((t) => {
         const on = t.id === value
         const extra: Record<string, string> = dataAttr ? { [dataAttr]: t.id } : {}

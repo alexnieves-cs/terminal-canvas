@@ -13132,4 +13132,67 @@ tr[data-session-row]:focus-within .sessions-world,
 @media (prefers-reduced-motion: reduce) {
   .rd-empty__card { animation: none; }
 }
+
+/* M512. Two more speeds beside --dur-1 (control) and --dur-2 (surface).
+   --dur-state is a TONE change: slower than a surface because the eye is
+   elsewhere when an agent finishes, and a colour that snaps in one frame is
+   missed where one that fades is seen. --ease-spring is a confirmation's
+   overshoot (done, saved), written with linear() so it is a CSS easing, not a
+   Motion spring; it is never used for anything that tracks the pointer. */
+:root {
+  --dur-state: 240ms;
+  --ease-spring: linear(0, .25 7%, .62 15%, .9 24%, 1.03 33%, 1.05 40%, 1.02 52%, .995 66%, 1);
+}
+/* A frame's state edge and its glow change on the state speed. The rest of
+   .panel's transition (the selection ring on box-shadow) is restated so it
+   keeps its own speed. */
+.panel { transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-state) var(--ease); }
+.pf::before { transition: box-shadow var(--dur-state) var(--ease); }
+.pf__word[data-tone], .status-dot[data-tone] { transition: color var(--dur-state) var(--ease), border-color var(--dur-state) var(--ease), background-color var(--dur-state) var(--ease); }
+
+/* M512. THE SLIDING THUMB (primitives/useSlidingThumb.ts). The segmented
+   control draws ONE lit segment and the tab strip ONE underline, at the
+   measured box of the pressed option, and slides it on --dur-2. Until the
+   hook has measured (no data-thumb) the old per-option fill stays, so a
+   control the hook never reaches still shows which option is on.
+   :where() keeps the positioning rules at zero specificity: the page switch
+   is absolutely centred (rd:F3) and its clipped Orchestrate option is
+   absolutely positioned out of view, and neither may be overridden here. */
+:where(.seg, .tabs) { --thumb-x: 0px; --thumb-w: 0px; } /* the hook's inline values win */
+:where(.seg[data-thumb], .tabs[data-thumb]) { position: relative; }
+:where(.seg[data-thumb]) > .seg__btn { position: relative; z-index: 1; }
+.seg[data-thumb]::before {
+  content: "";
+  position: absolute;
+  top: var(--sp-1);
+  bottom: var(--sp-1);
+  left: 0;
+  width: var(--thumb-w);
+  transform: translateX(var(--thumb-x));
+  border-radius: var(--r-full);
+  background: var(--iris-dim);
+  box-shadow: inset 0 0 0 1px var(--iris-dim);
+  pointer-events: none;
+}
+.seg[data-thumb] > .seg__btn--on,
+.seg[data-thumb] > .seg__btn--on:hover { background: transparent; box-shadow: none; }
+.tabs[data-thumb]::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  width: var(--thumb-w);
+  transform: translateX(var(--thumb-x));
+  border-radius: var(--r-full);
+  background: var(--iris);
+  pointer-events: none;
+}
+.tabs[data-thumb] > .tab--on { border-bottom-color: transparent; }
+.seg[data-thumb="live"]::before,
+.tabs[data-thumb="live"]::after { transition: transform var(--dur-2) var(--ease), width var(--dur-2) var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .seg[data-thumb="live"]::before,
+  .tabs[data-thumb="live"]::after { transition: none; }
+}
 /* ── /st:F ── */
