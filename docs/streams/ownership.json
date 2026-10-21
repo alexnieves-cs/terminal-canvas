@@ -6,7 +6,8 @@
     "B": "M465-M474",
     "C": "M475-M486",
     "D": "M487-M494",
-    "E": "M495-M509"
+    "E": "M495-M509",
+    "F": "M510-M519"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -87,6 +88,10 @@
       "src/main/pty-manager.ts",
       "src/main/scrollback-log.ts",
       "scripts/verify-pty-manager.cjs"
+    ],
+    "F": [
+      "docs/streams/polish.md",
+      "scripts/verify-polish.cjs"
     ]
   }
 }
