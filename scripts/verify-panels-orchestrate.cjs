@@ -326,21 +326,36 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       // orch-bench.5 — the reading mode and the diff's context line.
       const benchH = () => wc.executeJavaScript(`Math.round(document.querySelector('[data-orch-workbench]').getBoundingClientRect().height)`)
+      // The bench's height EASES between rest and reading, so a single read
+      // taken when the mode flips lands somewhere along the ease (watched on
+      // the runner: back at 449 on its way down to 200). Settled means the
+      // same height on three reads 100 ms apart; the last read is returned
+      // either way, so a bench that never settles still fails on its number.
+      const settledBenchH = async (timeoutMs = 3000) => {
+        let last = await benchH(), same = 0
+        const until = Date.now() + timeoutMs
+        while (same < 2 && Date.now() < until) {
+          await sleep(100)
+          const now = await benchH()
+          same = now === last ? same + 1 : 0
+          last = now
+        }
+        return last
+      }
       const context = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('[data-orch-workbench] [data-orch-diff-context]'); return c && /app\\.txt/.test(c.textContent) ? { text: c.textContent, review: c.querySelector('[data-orch-diff-review]')?.getAttribute('data-orch-diff-review') ?? null, checks: c.querySelector('[data-orch-diff-checks]') !== null, where: c.querySelector('[data-orch-diff-where]')?.textContent ?? '' } : false })()`), 6000)
-      const restH = await benchH()
+      const restH = await settledBenchH()
       await click('[data-orch-workbench] [data-orch-bench-reading="off"]')
       const reading = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('.orch[data-orch-reading]'); const b = document.querySelector('.orch__body'); return o && b && b.getBoundingClientRect().height === 0 ? true : false })()`), 4000)
       // Re-measured after a pause: if the bench's flex is eased in, the first read lands at the start of that ease.
       const readH1 = await benchH()
-      await sleep(700)
-      const readH = Math.max(readH1, await benchH())
+      const readH = await settledBenchH()
       const readRules = await wc.executeJavaScript(`(() => { const out = []; for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules } catch { continue } for (const r of rules) { if (r.cssText && r.cssText.includes('orch__bench') && /reading|flex/.test(r.cssText) && r.cssText.length < 400) out.push(r.cssText) } } return out.slice(0, 8) })()`)
       // Taken IN reading mode: the numbers that explain a bench that did not take the area.
       const readChain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, vw: innerWidth, chain: out, kids } })()`)
       const readDiff = await wc.executeJavaScript(`document.querySelector('[data-orch-workbench] [data-orch-diff]') !== null`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
-      const backH = await benchH()
+      const backH = await settledBenchH()
       // Evidence for a red run: the height chain the bench's `flex: 1` fills.
       const chain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, chain: out, kids } })()`)
       ok(IDS[4],
