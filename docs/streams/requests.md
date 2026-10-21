@@ -10,7 +10,7 @@ Format:
 - From: <lane> · To: <lane>
 - File: <path>
 - Smallest change: <one or two sentences>
-- Status: open
+- Status: done (M481, lane C): the merge and the ahead count take the checked sha; `verify:review` merge.4 lands a commit between the check and the merge and shows it stays unmerged.
 ```
 
 ### Q-001 · Accept merges the commit it checked, not the branch name

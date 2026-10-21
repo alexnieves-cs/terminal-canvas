@@ -67,7 +67,10 @@ export function createLaneMerger(deps: LaneMergeDeps): (req: LaneMergeRequest) =
     const laneHead = head.stdout.trim()
     if (req.expectHead !== undefined && req.expectHead !== laneHead) return { kind: 'moved' }
 
-    const ahead = await deps.run(buildCountAheadArgs(root, into, branch))
+    // Q-001 (lane D's M488 critic). Everything from here names the COMMIT that
+    // was read and checked, never the branch: an agent that lands a commit
+    // between this read and the merge would otherwise have it merged unread.
+    const ahead = await deps.run(buildCountAheadArgs(root, into, laneHead))
     const commits = ahead.ok ? Number(ahead.stdout.trim()) : NaN
     if (!Number.isInteger(commits)) return { kind: 'refused', reason: `the commits to merge could not be counted — ${firstLine(ahead.stderr)}` }
     if (commits === 0) return { kind: 'refused', reason: `nothing to merge — ${into} already has every commit on ${branch}` }
@@ -75,7 +78,7 @@ export function createLaneMerger(deps: LaneMergeDeps): (req: LaneMergeRequest) =
     if (req.dryRun === true) return { kind: 'ready', branch, into, commits, head: laneHead, root }
 
     const title = req.title.replace(/\s+/g, ' ').trim().slice(0, 120)
-    const merged = await deps.run(buildMergeArgs(root, branch, title === '' ? `Merge ${branch}` : `Merge ${branch}: ${title}`))
+    const merged = await deps.run(buildMergeArgs(root, laneHead, title === '' ? `Merge ${branch}` : `Merge ${branch}: ${title}`))
     if (!merged.ok) {
       const unmerged = await deps.run(buildUnmergedArgs(root))
       const files = unmerged.ok ? parseNulList(unmerged.stdout) : []

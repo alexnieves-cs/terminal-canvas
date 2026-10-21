@@ -3006,6 +3006,27 @@ if (GIT) {
     ok('merge.3 a detached main tree and the main tree itself are refused by name',
       detached.kind === 'refused' && /detached/.test(detached.reason) && fromMain.kind === 'refused',
       JSON.stringify({ detached, fromMain }))
+
+    // Q-001 (lane D's M488 critic). An agent that lands a commit BETWEEN the
+    // checked head and the merge: the merge takes the commit that was checked,
+    // never the branch tip, so the late commit stays in the lane, unmerged.
+    g(root, 'checkout', '-q', 'main')
+    const lane2 = join(base, 'lane race')
+    g(root, 'worktree', 'add', '-q', '-b', 'tc/race', lane2)
+    wf(join(lane2, 'b.txt'), 'checked\n'); g(lane2, 'add', '-A'); g(lane2, 'commit', '-qm', 'agent: checked')
+    const racePlan = await merge({ lane: lane2, title: 'Race', dryRun: true })
+    const racing = async (args, opts) => {
+      if (args.includes('merge') && args.includes('--no-ff')) { wf(join(lane2, 'late.txt'), 'unread\n'); g(lane2, 'add', '-A'); g(lane2, 'commit', '-qm', 'agent: late') }
+      return runner(args, opts)
+    }
+    const raceMerge = R.createLaneMerger({ run: racing, commonRootOf: (p) => engine.commonRootOf(p) })
+    const raced = await raceMerge({ lane: lane2, title: 'Race', expectHead: racePlan.head })
+    const parent2 = g(root, 'rev-parse', 'HEAD^2').trim()
+    const lateMerged = g(root, 'ls-tree', '--name-only', 'HEAD').split('\n').includes('late.txt')
+    ok('merge.4 accept merges the COMMIT it checked, not the branch name: a commit the agent lands between the check and the merge stays in the lane, unmerged, and the message still names the branch',
+      racePlan.kind === 'ready' && raced.kind === 'merged' && parent2 === racePlan.head && !lateMerged &&
+        g(root, 'log', '-1', '--format=%s').trim() === 'Merge tc/race: Race',
+      JSON.stringify({ racePlan, raced, parent2, lateMerged }))
   } catch (e) {
     ok('merge.1 accept against real git', false, 'threw: ' + String(e && e.stack || e))
   } finally {
