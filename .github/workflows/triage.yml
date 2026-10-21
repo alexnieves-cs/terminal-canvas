@@ -1,6 +1,7 @@
-# TEMPORARY (Stream A triage): each known-red Electron suite, three times on its own
-# runner, so a flake shows as a rate and each failure is read in isolation. Deleted
-# before merge.
+# TEMPORARY (Stream A triage): each known-red Electron suite on its own runner, run
+# three times in a row there, so a flake shows as a rate and each failure is read in
+# isolation. One job per suite rather than per run: macOS runners are scarce and
+# shared, and setup is half of each job. Deleted before merge.
 name: triage
 on:
   push:
@@ -15,12 +16,11 @@ concurrency:
 jobs:
   suite:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
         suite: ['panels:core', 'panels:shell', 'panels:kinds', 'panels:agents', 'panels:product', 'panels:orchestrate', 'panels:flowchart']
-        run: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -30,27 +30,29 @@ jobs:
       - run: npm ci
       - run: node node_modules/electron/install.js
       - run: npm run build
-      - name: Run suite
+      - name: Run suite three times
         env:
           TC_WATCHDOG_SCALE: '2'
-        # A hung suite must still report: stop it at 18 minutes and print what it logged.
+        # A hung suite must still report: stop each run at 18 minutes and keep what it logged.
         run: |
-          perl -e 'alarm 1080; exec @ARGV' npm run verify:${{ matrix.suite }} > suite.log 2>&1 || true
-          pkill -f Electron || true
-          echo "=== tail"; tail -40 suite.log | cut -c1-300
+          for i in 1 2 3; do
+            perl -e 'alarm 1080; exec @ARGV' npm run verify:${{ matrix.suite }} > suite-$i.log 2>&1 || true
+            pkill -f Electron || true
+            echo "=== run $i: $(grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1)"
+          done
       - name: Failures only
         run: |
-          echo "=== ${{ matrix.suite }}: summary"
-          grep -E '^[0-9]+/[0-9]+ passed|^FAILED' suite.log | cut -c1-300 || true
-          echo "=== FAIL lines"
-          grep -E '^(FAIL|\s*FAIL)' suite.log | cut -c1-2500 || true
-          echo "=== digest"
-          grep -E '^DIGEST' suite.log | cut -c1-3000 || true
-          echo "=== errors"
-          grep -nE 'Error|rejection|watchdog' suite.log | grep -v MaxListeners | cut -c1-400 | head -40 || true
-      # Red when the suite was: a job's colour is then the result, readable from the run list.
+          for i in 1 2 3; do
+            echo "=== ${{ matrix.suite }} run $i"
+            grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1 || true
+            grep -E '^(FAIL|\s*FAIL)' suite-$i.log | cut -c1-2500 || true
+            grep -nE 'watchdog — run did not finish' suite-$i.log || true
+            echo "--- tail"; tail -8 suite-$i.log | cut -c1-300
+          done
+      # Red unless all three runs reported and none failed: the job's colour is the verdict.
       - name: Verdict
         run: |
-          line=$(grep -E '^[0-9]+/[0-9]+ passed' suite.log | tail -1)
-          echo "$line"
-          [ -n "$line" ] && ! grep -qE '^FAILED|^FAIL ' suite.log
+          for i in 1 2 3; do
+            grep -qE '^[0-9]+/[0-9]+ passed' suite-$i.log || { echo "run $i: no summary"; exit 1; }
+            ! grep -qE '^FAILED|^FAIL ' suite-$i.log || { echo "run $i: failed"; exit 1; }
+          done
