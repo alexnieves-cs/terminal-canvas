@@ -3527,28 +3527,35 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // run when the colour was read was a race (link-draw.5 flaked on the
         // runner with hovered === sibling while the badge was present). A
         // person hovering a line is on the line; the badge is where they go
-        // next. Found by elementFromPoint along the bounding box's diagonals,
-        // so the point is on THIS link's own hit stroke, not a guess.
+        // next. Found from the path's own geometry and confirmed by
+        // elementFromPoint, so the point is on THIS link's hit stroke.
         const onLine = await wc.executeJavaScript(`(() => {
           const el = document.querySelector('.link-layer [data-link="${key}"]')
-          if (!el) return null
-          const r = el.getBoundingClientRect()
-          const cx = r.x + r.width / 2, cy = r.y + r.height / 2
-          for (let i = 0; i <= 40; i++) {
-            const t = 0.1 + i * 0.01
-            for (const [x, y] of [[r.x + r.width * t, r.y + r.height * t], [r.x + r.width * t, r.y + r.height * (1 - t)], [r.x + r.width * (1 - t), r.y + r.height * t], [r.x + r.width * (1 - t), r.y + r.height * (1 - t)]]) {
-              if (Math.hypot(x - cx, y - cy) < 40) continue
-              const hit = document.elementFromPoint(Math.round(x), Math.round(y))
-              if (hit && hit.classList.contains('link-layer__hit') && hit.nextElementSibling && hit.nextElementSibling.getAttribute('data-link') === '${key}') return { x: Math.round(x), y: Math.round(y) }
-            }
+          if (!el || typeof el.getPointAtLength !== 'function') return null
+          // Points ON the path, by its own geometry: user space mapped to the
+          // screen through the box the two share (the world transform is a
+          // scale and a translation, never a rotation).
+          const r = el.getBoundingClientRect(), bb = el.getBBox(), len = el.getTotalLength()
+          if (bb.width === 0 && bb.height === 0) return null
+          const sx = bb.width > 0 ? r.width / bb.width : r.height / bb.height
+          const sy = bb.height > 0 ? r.height / bb.height : sx
+          const mid = el.getPointAtLength(len / 2)
+          const miss = []
+          for (const f of [0.25, 0.2, 0.3, 0.15, 0.35, 0.75, 0.8, 0.7, 0.85, 0.65]) {
+            const p = el.getPointAtLength(len * f)
+            if (Math.hypot((p.x - mid.x) * sx, (p.y - mid.y) * sy) < 40) continue
+            const x = Math.round(r.x + (p.x - bb.x) * sx), y = Math.round(r.y + (p.y - bb.y) * sy)
+            const hit = document.elementFromPoint(x, y)
+            if (hit && hit.classList.contains('link-layer__hit') && hit.nextElementSibling && hit.nextElementSibling.getAttribute('data-link') === '${key}') return { x, y, f }
+            miss.push(f + '@' + x + ',' + y + ':' + (hit ? hit.tagName + '.' + String(hit.className.baseVal ?? hit.className).slice(0, 24) : 'none'))
           }
-          return null
+          return { miss: miss.slice(0, 4) }
         })()`)
         let badge = null
         let hoverColors = null
         let afterRemove = null
         let afterUndo = null
-        if (mid && onLine) {
+        if (mid && onLine && onLine.x !== undefined) {
           wc.sendInputEvent({ type: 'mouseMove', x: onLine.x, y: onLine.y })
           await settle()
           hoverColors = await wc.executeJavaScript(`(() => {
@@ -3574,7 +3581,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           }
         }
         ok('link-draw.5 the hover badge removes a link, and ONE undo restores it, and the hover highlight actually changes the line\'s colour',
-          mid !== null && onLine !== null && badge !== null &&
+          mid !== null && onLine !== null && onLine.x !== undefined && badge !== null &&
             hoverColors !== null && hoverColors.hovered !== hoverColors.sibling &&
             afterRemove !== null && !afterRemove.includes(key) &&
             afterUndo !== null && afterUndo.includes(key),
