@@ -13287,6 +13287,25 @@ tr[data-session-row]:focus-within .sessions-world,
   clip-path: polygon(0 0, 100% 50%, 0 100%);
 }
 .panel__card-dormant:hover .panel__card-idle { border-color: var(--iris); background: var(--iris-dim); color: var(--iris); }
+/* M515. THE INSPECTOR'S HIERARCHY. A section heading (SESSION) and a field
+   label (STATE) were the same caps micro-label, so the column read as one
+   flat list of shouted words. A heading is now a title in the body ink, the
+   way a node's heading already is (--node), and the labels keep the caps.
+   The Session block gets the hairline every other section has. Text is
+   untouched; only its look. */
+.inspector__section-heading {
+  color: var(--fg);
+  font-size: var(--t-sm);
+  letter-spacing: var(--track-tight);
+  text-transform: none;
+}
+.inspector__session {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.inspector__field { margin-bottom: var(--sp-5); }
+.inspector__label { display: block; margin-bottom: var(--sp-1); }
 @media (prefers-reduced-motion: reduce) {
   .status-dot[data-tone="done"],
   .pf__word[data-tone="done"] { animation: none; }
