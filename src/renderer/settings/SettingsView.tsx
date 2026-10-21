@@ -32,18 +32,30 @@ export function SettingsView({
     return () => { stop = true; off() }
   }, [])
 
-  // Escape leaves the page, the way every other sheet in the app is left. A
-  // shortcut being recorded takes Escape first (KeyboardPane listens in the
-  // capture phase and stops it), so cancelling a recording never also
-  // closes Settings.
+  // Escape leaves the page, the way every other sheet in the app is left.
+  //
+  // Read in the CAPTURE phase on the window, ahead of the document. A
+  // force-mounted menu (View, Account) keeps a live Radix dismissable layer
+  // while it is CLOSED, and the highest layer takes every Escape on the
+  // document and prevents its default: a listener that bailed on
+  // defaultPrevented never closed Settings once either menu had mounted
+  // (settings.dismiss.1, red on every run). So the page decides first, and
+  // stands aside for the two things that own Escape over it: a shortcut being
+  // recorded (KeyboardPane cancels it) and a menu or the palette that is
+  // actually open.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
+      if (document.querySelector('[data-settings-root] [data-recording]') !== null) return
+      // Shown, not merely mounted: a closed force-mounted menu is still in the DOM.
+      const shown = (el: Element): boolean => el.closest('[hidden]') === null && el.getClientRects().length > 0
+      if ([...document.querySelectorAll('[role="menu"], .palette')].some(shown)) return
       event.preventDefault()
+      event.stopPropagation()
       onClose()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
   const current = settingsPane(pane)
