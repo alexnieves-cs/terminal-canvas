@@ -2066,6 +2066,15 @@ app.whenReady().then(async () => {
       // of the page scan. A terminal row is still scanned.
       const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const panel = document.querySelector('[data-world-camera]'); let page = document.body.innerText; if (panel && panel.innerText) page = page.split(panel.innerText).join(' '); const text = page + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const tokens = new Set(text.split(/[^A-Za-z0-9]+/).filter(Boolean)); return words.filter((w) => tokens.has(w)) })()`)
       if (leaks.length > 0) throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name`)
+      // M466. Two captures, the first thrown away. The window is hidden, so
+      // nothing asks the compositor for a frame between gestures, and the
+      // first capturePage after a change hands back the LAST frame it made
+      // while scheduling a new one: a theme switched 950ms earlier was still
+      // light in the picture though the DOM computed dark (fix-list: the
+      // three dark scenes that captured light). Measured on xvfb: the warm-up
+      // capture is stale, one 150ms later is current.
+      await wc.capturePage()
+      await sleep(200)
       const img = await wc.capturePage()
       const path = join(OUT, `${name}.png`)
       writeFileSync(path, img.toPNG())
