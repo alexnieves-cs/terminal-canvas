@@ -31,6 +31,10 @@ on:
       - scripts/shot-composite.cjs
       - scripts/shot-scenes/**
 
+# contents: write for the gallery branch below, and nothing else.
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -106,6 +110,23 @@ jobs:
             ${{ runner.temp }}/shots
             ${{ runner.temp }}/shot.log
           retention-days: 30
+
+      # The same gallery as one commit on the orphan `shots-gallery` branch,
+      # replaced on every run. An Actions artifact sits behind a storage host
+      # that a cloud session's network policy can refuse; a branch is plain
+      # git over github.com, which is how the gallery gets published as a
+      # private page for the owner's phone. One commit, force-pushed: the
+      # branch holds the latest pictures, never a history of them.
+      - name: Publish the gallery branch
+        env:
+          GALLERY: ${{ runner.temp }}/gallery
+        run: |
+          cd "$GALLERY"
+          git init -q -b shots-gallery
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "shots gallery: ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} @ ${GITHUB_SHA::7} (run $GITHUB_RUN_ID)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" shots-gallery
 
       # A manifest with no scenes means the harness died before painting; that
       # is the one outcome this job calls red.
