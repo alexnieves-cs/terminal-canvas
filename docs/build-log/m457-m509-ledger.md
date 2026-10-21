@@ -26,6 +26,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 
 | PR | Milestone | What | Checks |
 |---|---|---|---|
+| #31 | M465 | `shots.yml`: every scene painted on `macos-latest` (offscreen at 2x, so the runner's 1024px screen cannot clamp it), published as a phone gallery (artifact + the orphan `shots-gallery` branch). Harness fixes the first runs exposed: a hidden window's first capture is a stale frame (the three dark scenes that captured light), each `rd-*` scene paints its own steward fixture, `runner` is not a private word on GitHub runners, the flowchart scenes use ⌘0 (Fit all) and the palette's New shell since the redesign moved ⌘1/⌘N | shots run: one image per declared scene; `verify` |
 
 ## C — Autonomy (M475–M486)
 

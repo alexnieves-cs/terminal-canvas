@@ -84,7 +84,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // M410. This Mac's user and host names, which no capture may show (kit.shot).
 const PRIVATE_WORDS = (() => {
   const { userInfo, hostname } = require('node:os')
-  return [userInfo().username, hostname().split('.')[0]].filter((w) => typeof w === 'string' && w.length >= 3)
+  // M465. On a GitHub-hosted runner the account is literally `runner`: no
+  // person's name, and an English word the product prints ("a suite runner in
+  // the lane", the palette's Test arrangement row), so palette and
+  // palette-dark refused to paint on CI. The runner's host name is still fenced.
+  const user = process.env.GITHUB_ACTIONS === 'true' ? null : userInfo().username
+  return [user, hostname().split('.')[0]].filter((w) => typeof w === 'string' && w.length >= 3)
 })()
 
 // M363. A fixture time the page prints as a CLOCK ("missed at 06:16 AM") is
@@ -714,10 +719,10 @@ const SCENES = [
     // M396. Everything framed first, THEN pulled back: the old camera was tuned
     // against the host-scroll displacement M395 removed, and landed with the
     // left third empty and `nightly sweep` cut at the right edge (the critic).
-    run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
+    run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.press('0', { metaKey: true }); await sleep(700); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
   { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name (large enough to read, clipped only at its end) and its state on a tone wash; with everything in view the minimap stays hidden (M395).',
     // M396. Framed, then pulled back (merged's reason, above).
-    run: async (k) => { await k.goTo('the kinds'); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.22); await k.shot('zoomed-out') } },
+    run: async (k) => { await k.goTo('the kinds'); await k.press('0', { metaKey: true }); await sleep(700); await k.zoom(0.22); await k.shot('zoomed-out') } },
   { name: 'zoomed-out-dark', intent: 'The zoomed-out canvas on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.shot('zoomed-out-dark'); await k.theme('light'); await k.zoom(1) } },
   { name: 'compact', intent: 'The shell at its compact breakpoint (1000px wide): the navigator and context become drawers, the canvas keeps the width.', size: [1000, 760],
@@ -1416,12 +1421,14 @@ const SCENES = [
         await typeText(word); await key('Return')
       }
       // Everything in view first (the branch may have run past the window's edge).
-      await press(ground.x, ground.y); await k.press('1', { metaKey: true }); await sleep(700)
+      // ⌘0 is Fit all since the redesign; ⌘1 became the Work tier and left the
+      // branch off-screen, so the line's midpoint fell outside the window (M465).
+      await press(ground.x, ground.y); await k.press('0', { metaKey: true }); await sleep(700)
       await label('Ask for a fix', 'no')
       await label('Build the change', 'yes')
       // Nothing selected, the whole chart framed: the picture a person keeps.
       await press(1380, 820)
-      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.press('0', { metaKey: true }); await sleep(700)
       await k.shot('flowchart')
     } },
   // M388–M393. The same chart on the DARK theme, as a person works on it: the
@@ -1434,14 +1441,16 @@ const SCENES = [
       const press = async (x, y, clickCount = 1) => { k.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount }); k.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount }); await sleep(300) }
       const centreOf = async (sel) => JSON.parse(await k.js(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return 'null'; const r = e.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) }) })()`))
       const shapeId = async (text) => k.js(`(() => { const e = [...document.querySelectorAll('.shape')].find((x) => x.getAttribute('aria-label').split(': ').slice(1).join(': ') === ${JSON.stringify(text)}); return e ? e.getAttribute('data-panel-id') : null })()`)
-      // A real shell, spawned the ordinary way (⌘N at the camera centre) —
+      // A real shell, spawned the ordinary way (the palette's New shell at the
+      // camera centre; ⌘N stopped being New shell in the redesign and a
+      // dispatched ⌘T spawned nothing, M465) —
       // the camera first panned so its centre is clear of the chart, to its right.
       const build = await shapeId('Build the change')
       k.wc.sendInputEvent({ type: 'mouseWheel', x: 900, y: 450, deltaX: -700, deltaY: 0 }); await sleep(400)
-      await k.press('n', { metaKey: true }); await sleep(2500)
+      await k.press('k', { metaKey: true }); await sleep(400); await k.type('New shell'); await sleep(400); await k.enter(); await sleep(2500)
       const term = await k.js(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-id]')].find((e) => !e.classList.contains('shape')); return p ? p.getAttribute('data-panel-id') : null })()`)
       if (term === null) throw new Error('flowchart-dark scene: no terminal was spawned')
-      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.press('0', { metaKey: true }); await sleep(700)
       // The wire, through the agent door — the same executor as a port drag
       // (verify:panels:flowchart drives the drag itself): the terminal to the step.
       k.wc.send('canvas:plan', { replyChannel: 'shot-flow-plan', req: { line: `connect ${term} ${build}` } }); await sleep(800)
@@ -1455,7 +1464,7 @@ const SCENES = [
       await k.context(true); await sleep(400)
       // VISIBLE, not merely mounted: a hidden Detail tab still holds the node.
       if (!(await k.js(`(() => { const e = document.querySelector('.shape-inspector'); return e !== null && e.offsetParent !== null && e.getBoundingClientRect().height > 0 })()`))) throw new Error('flowchart-dark scene: the inspector shows no visible Shape section for the selected decision')
-      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.press('0', { metaKey: true }); await sleep(700)
       await k.shot('flowchart-dark')
       await k.context(false); await sleep(300)
     } },
