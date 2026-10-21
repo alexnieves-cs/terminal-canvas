@@ -6186,7 +6186,18 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           chats: [...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id') + ':' + (p.querySelector('[data-state-word]')?.textContent ?? '?') + ':' + (p.getAttribute('data-chat-turns') ?? '?')) }))()`)
         // Which worker each item's prompt reached, and what each fake process was spawned with and sent.
         const workerTurns = workers ? await wc.executeJavaScript(`Promise.all(${JSON.stringify(workers)}.map((id) => window.canvas.agentSession.transcript(id).then((t) => id + ':' + (t && t.turns ? t.turns.map((u) => u.role[0] + '=' + JSON.stringify((u.blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join('')).slice(-14)).join(',') : '?'))))`).catch((e) => String(e)) : null
-        const spawnEv = chatSpawns.slice(-4).map((sp) => (sp.args || []).filter((a) => !String(a).startsWith('-')).slice(-1).join('') + '|' + (sp.args || []).join(' ').slice(-60) + '|stdin ' + sp.proc.stdin.length)
+        // Per worker, main's own session and the fake processes spawned for its
+        // session id: what each was sent, how many lines it wrote back to, and
+        // whether it was killed. The last four spawns alone could not say which
+        // worker a stuck `starting` belonged to.
+        const userText = (line) => { try { const m = JSON.parse(line); return m.type === 'user' ? String((m.message?.content || []).find((c) => c.type === 'text')?.text ?? '').slice(-12) : m.type } catch { return '?' } }
+        const spawnEv = workers ? workers.map((id) => {
+          const sn = agentSessions.get(id)
+          if (!sn) return id + ':none'
+          const mine = chatSpawns.filter((sp) => (sp.args || []).includes(sn.sessionId))
+          return { id, status: sn.status, pid: sn.pid, turns: sn.turns, queued: sn.queued, backend: sn.backend,
+            spawns: mine.map((sp) => ({ pid: sp.proc.pid, killed: sp.proc.killed, stdin: sp.proc.stdin.map(userText) })) }
+        }) : null
         // Stop is read AFTER the pool has run its course: the fake runner
         // answers each worker in milliseconds, so no instant of this run
         // has a pool live to stop — Stop's live arm (interrupt every worker,
