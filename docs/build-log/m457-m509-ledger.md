@@ -43,6 +43,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 |---|---|---|---|
 | #35 | M487 | `tc mcp`: a stdio MCP server (`@modelcontextprotocol/sdk`) where each of nine tools is one control-socket line; every answer scrubbed per string, then `outward`; `send_to_agent` reaches chats only; a fresh-context critic's two must-fix findings fixed before review | `verify:mcp` (new), `verify:control` |
 | #42 | M488 | Gated MCP writes: `approvals`/`answer`/`accept` socket verbs and `list_approvals`, `answer_approval`, `accept_review` tools; writes refused by name unless `remote.mcpWrites` (default off, not plan-writable), always refused for a panel token; `accept` merges only at a full `expectHead`; each write on the decision audit; critic findings fixed, merge race filed as Q-001 | `verify:mcp` gate.1–5, `verify:control` |
+| #47 | M489 | Phone alerts through ntfy: on needs-you while the Mac is idle (`remote.alertIdleMinutes`, default 3), one line to `remote.ntfyTopic` (empty = off; https server only); the payload is the panel name and question through `outward` with every path cut to its basename, a terminal sends its command's basename only; throttled per panel and per hour; `tc phone-test`; critic findings fixed | `verify:mcp` push.1–5 |
 
 ## E — Cut and untangle (M495–M509)
 
