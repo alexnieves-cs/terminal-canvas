@@ -546,6 +546,7 @@ app.on('before-quit', () => {
     backend: state.backend,
     flush: () => stores.layoutStore.flushSync(),
     agents: state.agents ?? undefined,
+    tonight: state.tonight ?? undefined,
     // M84. A watcher's child is an ordinary process: nothing else in this
     // sequence would reach it, and a quit mid-run would orphan it.
     watchers: state.watchRunner ?? undefined

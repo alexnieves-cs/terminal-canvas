@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { AgentSessionManager } from '../agent-session'
 import { claudeCliRunner } from '../claude-cli-runner'
 import { runAutoCheck } from '../auto-check-runner'
+import { createTonightRunner } from '../tonight-runner'
+import { powerSaveBlocker } from 'electron'
 import { createPoolCaller } from '../pool-caller'
 import { createJobHandlers, type JobHandlers } from '../job-recovery'
 import type { RepoMark } from '../../shared/job-journal'
@@ -95,6 +97,22 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     })
   })
   state.agents = agents
+
+  // M477. Tonight: one auto run at a time through the night. The Mac stays
+  // awake (`prevent-app-suspension`: the display may sleep, the app may not)
+  // only while a batch runs; the runner releases the blocker on every exit.
+  state.tonight = createTonightRunner({
+    startAuto: (id, opts) => agents.startAuto(id, opts),
+    stopAuto: (id) => agents.stopAuto(id),
+    hasSession: (id) => agents.get(id) !== undefined,
+    subscribe: (cb) => agents.subscribe(cb),
+    rateLimit: () => agents.rateLimit(),
+    spentOf: (id) => { const snap = agents.get(id); return snap?.meter?.spentUsd ?? snap?.costUsd ?? 0 },
+    blocker: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: (id) => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id) } },
+    now: Date.now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+  })
 
   // M138. The pool's production caller. The list is read HERE (main's, like
   // every file the app reads for an agent; absolute path only, no Places

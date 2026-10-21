@@ -79,6 +79,22 @@ const GOLDEN_SCALE = 0.5
 // the lock taken: the harness 307 s wall, this suite 313.4 s; times 1.25 of
 // the slower is 392 s.
 const WATCHDOG_MS = 395000
+// TC_WATCHDOG_SCALE, the panels harness's rule: the CI runner is roughly twice as
+// slow as the machine the 395 s was measured on, and a watchdog that fires on a
+// slow machine reports the machine, not the scenes.
+const WATCHDOG_SCALE = Number(process.env.TC_WATCHDOG_SCALE) > 0 ? Number(process.env.TC_WATCHDOG_SCALE) : 1
+const WATCHDOG_BUDGET_MS = Math.round(WATCHDOG_MS * WATCHDOG_SCALE)
+// TC_VISUAL_SCALE (M462). The goldens are 2x captures and a CI runner's display
+// is 1x, so every scene would fail as one `display` line. Forcing the device
+// scale factor here makes screen.scaleFactor report it, and the same switch is
+// handed to the shot child (after npm's `--`, which Electron reads as a Chromium
+// switch) so capturePage paints at it. Unset, nothing is forced: a developer's
+// own 2x display is what the goldens were captured on.
+const FORCED_SCALE = Number(process.env.TC_VISUAL_SCALE) > 0 ? String(Number(process.env.TC_VISUAL_SCALE)) : null
+if (FORCED_SCALE !== null) app.commandLine.appendSwitch('force-device-scale-factor', FORCED_SCALE)
+// VISUAL_SHOT_DIR (M462). Paint into this directory instead of a throwaway one,
+// so CI can upload every scene's capture, not only the failing ones.
+const SHOT_DIR_KEEP = process.env.VISUAL_SHOT_DIR || null
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -148,7 +164,8 @@ let shotChild = null // held so the watchdog can kill it: an orphaned child keep
  */
 function runShot(dir) {
   return new Promise((resolve) => {
-    const child = spawn('npm', ['run', 'shot'], { cwd: ROOT, env: { ...process.env, SHOT_DIR: dir, ELECTRON_RUN_AS_NODE: undefined }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+    const args = FORCED_SCALE === null ? ['run', 'shot'] : ['run', 'shot', '--', `--force-device-scale-factor=${FORCED_SCALE}`]
+    const child = spawn('npm', args, { cwd: ROOT, env: { ...process.env, SHOT_DIR: dir, ELECTRON_RUN_AS_NODE: undefined }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
     shotChild = child
     let out = ''
     child.stdout.on('data', (d) => { out += String(d) })
@@ -164,21 +181,25 @@ const SCRIPT_NAME = 'verify-visual.cjs'
 
 app.whenReady().then(async () => {
   const watchdog = setTimeout(() => {
-    console.error(`\nFAIL  watchdog — run did not finish within ${WATCHDOG_MS}ms`)
+    console.error(`\nFAIL  watchdog — run did not finish within ${WATCHDOG_BUDGET_MS}ms`)
     // The whole group, not the npm wrapper — see runShot's header.
     try { if (shotChild?.pid) process.kill(-shotChild.pid, 'SIGKILL') } catch { /* already gone */ }
     app.exit(1)
-  }, WATCHDOG_MS)
+  }, WATCHDOG_BUDGET_MS)
   // The goldens are one machine's captures at a device scale factor of 2,
   // halved. On a 1x display every scene would fail as `the size changed`,
   // fifty-four times, for one reason — said once, by name, instead.
-  const scale = screen.getPrimaryDisplay().scaleFactor
+  // Under TC_VISUAL_SCALE the switch, not the display, decides the paint scale:
+  // macOS reports the panel's own factor whatever Chromium was told. Whether the
+  // switch really reached the captures is not taken on trust: a capture at the
+  // wrong scale fails every scene below as `the size changed`.
+  const scale = FORCED_SCALE !== null ? Number(FORCED_SCALE) : screen.getPrimaryDisplay().scaleFactor
   if (scale !== 2) {
     ok(`display the goldens are 2x captures; this display is ${scale}x — a 1x golden set would be a second set, not this one`, false, `scaleFactor ${scale}`)
     console.log('\n' + '='.repeat(60)); console.log(`0/1 passed`); clearTimeout(watchdog); app.exit(1); return
   }
   const started = Date.now()
-  const dir = mkdtempSync(join(tmpdir(), 'tc visual '))
+  const dir = SHOT_DIR_KEEP !== null ? (mkdirSync(SHOT_DIR_KEEP, { recursive: true }), SHOT_DIR_KEEP) : mkdtempSync(join(tmpdir(), 'tc visual '))
   console.log(`[verify:visual] painting into ${dir}${UPDATE ? ' (UPDATING GOLDENS)' : ''}`)
   const shot = await runShot(dir)
   const manifestPath = join(dir, 'manifest.json')

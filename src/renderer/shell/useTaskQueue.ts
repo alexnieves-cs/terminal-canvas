@@ -8,6 +8,8 @@ import {
   type HistoryEvent, type QueueCheckRun, type RememberedDecision, type TaskQueue
 } from './task-queue'
 import { onRecordLanded } from '@renderer/orchestration/record-landed'
+import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
+import { autoVerdictOf } from '@shared/auto'
 
 /**
  * M318. The task queue's renderer half: the inputs the pure builder takes,
@@ -147,6 +149,18 @@ export function useTaskQueue(deps: TaskQueueDeps): TaskQueue {
     write(MEMORY_KEY, rememberDecisions(prev, inbox, ownerOf, seenLive.current))
   }, [liveKey, taskKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // M476. A finished auto run's verdict, read from the member chats' snapshots
+  // (main's projection) whenever any chat changes.
+  const chatsVersion = useChatsVersion()
+  const autoOf = (panelIds: readonly string[]): { verdict: 'checked' | 'claimed'; check?: string } | undefined => {
+    for (const id of panelIds) {
+      const a = getChat(id).snapshot?.auto
+      const v = a === undefined ? undefined : autoVerdictOf(a)
+      if (a !== undefined && v !== undefined) return { verdict: v, ...(a.check === undefined ? {} : { check: a.check }) }
+    }
+    return undefined
+  }
+
   const dv = useSyncExternalStore((cb) => { dismissListeners.add(cb); return () => { dismissListeners.delete(cb) } }, () => dismissVersion, () => dismissVersion)
   return useMemo(() => {
     const gone = dismissedSet()
@@ -160,7 +174,9 @@ export function useTaskQueue(deps: TaskQueueDeps): TaskQueue {
       labelOf,
       tasks: tasks.map((t) => {
         const h = handoffOf(t.id)
+        const auto = autoOf(members.get(t.id) ?? [])
         return {
+          ...(auto === undefined ? {} : { auto }),
           itemId: t.id, title: t.title, members: members.get(t.id) ?? [],
           ...(h === undefined ? {} : { handoff: { state: h.state, standing: h.standing, ...(h.changes === undefined ? {} : { files: h.changes.files }) } }),
           runs: runs.get(t.id)?.runs ?? [],
@@ -168,5 +184,5 @@ export function useTaskQueue(deps: TaskQueueDeps): TaskQueue {
         }
       })
     })
-  }, [inbox, handoffs, tasks, members, runs, handoffOf, labelOf, dv, liveKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inbox, handoffs, tasks, members, runs, handoffOf, labelOf, dv, liveKey, chatsVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 }

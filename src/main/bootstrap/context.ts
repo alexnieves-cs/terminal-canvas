@@ -4,6 +4,7 @@ import { createDirectBackend, type SessionBackend } from '../session-backend'
 import type { AgentSessionManager } from '../agent-session'
 import type { ApprovalTracker } from '../approvals'
 import type { PoolCaller } from '../pool-caller'
+import type { TonightRunner } from '../tonight-runner'
 import type { ControlServer } from '../control-server'
 import type { PresenceHub } from '../presence/presence-hub'
 import type { CanvasSync } from '../presence/canvas-sync'
@@ -73,6 +74,8 @@ export interface MainState {
   approvals: ApprovalTracker | null
   /** M138. The pool's production caller, made beside the manager it drives. */
   pool: PoolCaller | null
+  /** M477. The Tonight batch runner, made beside the manager it drives. */
+  tonight: TonightRunner | null
   /** M112. Decided once, after the store loads; read by `createWindow` for the renderer's flag. */
   telemetryOn: boolean
   /** M48. When the startup probe ran; the report says so, since it never re-runs. */
@@ -105,6 +108,7 @@ export function createMainState(): MainState {
     agents: null,
     approvals: null,
     pool: null,
+    tonight: null,
     telemetryOn: false,
     probedAt: 0,
     controlServer: null,
