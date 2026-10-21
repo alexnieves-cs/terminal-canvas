@@ -1789,11 +1789,13 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     `click=${onClick.length} dbl=${onDouble.length}`)
   const store = src('world-context-store.ts'), pub = src('useWorldContextPublisher.ts')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  // M507. canJumpAnywhere moved with the main-owned rows; Canvas still calls them.
+  const rowsSrc = /= useMainRows\(\{/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/useMainRows.ts'), 'utf8') : ''
   ok('world.open.4 canOpen is on the room\'s door interface and Canvas answers it with jumpAnywhere\'s own two cases (a panel on this canvas, or in another workspace) — and open itself refuses an id it cannot land, BEFORE the room closes (jumpAnywhere drops one silently)',
     /\n {2}canOpen\(agentId: string\): boolean\n/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
       /canJump: canJumpAnywhere,/.test(canvasSrc) &&
-      /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc) &&
-      /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc))
+      /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(rowsSrc) &&
+      /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc + rowsSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc + rowsSrc))
   const card = src('WorldCard.tsx') + src('WorldCardBody.tsx')
   ok('world.open.5 the card\'s Open is on the PICKED robot\'s card only, never in the past room, never for an agent with no panel, never twice on a waiting card (its request has one) — the shared act styling inside the one pointer-taking group — and the request\'s own Open hides for an agent with no panel too',
     /const openable = openableFrom\(agentId, past, actions\)/.test(card) && /const openHere = picked && !waiting && openable/.test(card) &&
