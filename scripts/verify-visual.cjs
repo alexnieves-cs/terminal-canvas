@@ -189,7 +189,11 @@ app.whenReady().then(async () => {
   // The goldens are one machine's captures at a device scale factor of 2,
   // halved. On a 1x display every scene would fail as `the size changed`,
   // fifty-four times, for one reason — said once, by name, instead.
-  const scale = screen.getPrimaryDisplay().scaleFactor
+  // Under TC_VISUAL_SCALE the switch, not the display, decides the paint scale:
+  // macOS reports the panel's own factor whatever Chromium was told. Whether the
+  // switch really reached the captures is not taken on trust: a capture at the
+  // wrong scale fails every scene below as `the size changed`.
+  const scale = FORCED_SCALE !== null ? Number(FORCED_SCALE) : screen.getPrimaryDisplay().scaleFactor
   if (scale !== 2) {
     ok(`display the goldens are 2x captures; this display is ${scale}x — a 1x golden set would be a second set, not this one`, false, `scaleFactor ${scale}`)
     console.log('\n' + '='.repeat(60)); console.log(`0/1 passed`); clearTimeout(watchdog); app.exit(1); return
