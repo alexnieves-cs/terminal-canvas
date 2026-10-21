@@ -2694,12 +2694,19 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
               .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
           })()
         `)
-        await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')`), 12000)
-        await wc.executeJavaScript(`
+        // Every query below is scoped to the NEWEST file panel, like the edit
+        // button above. An unscoped [data-file-node-editor] matched 169's
+        // panel when its closeDraft had not yet run after the save: the typing
+        // went into the wrong editor, the write found this panel clean, and
+        // the read came back null once 169's editor unmounted (draft=null on
+        // the runner).
+        const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].pop()`
+        const editorUp = await waitUntil(() => wc.executeJavaScript(
+          `!!(${NEWEST}?.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])'))`), 12000)
+        const typed = await wc.executeJavaScript(`
           (() => {
-            const ta = document.querySelector('[data-file-node-editor]')
-            if (!window.__m276Type(ta, 'my unsaved work\\n')) return 'no editor'
+            const ta = ${NEWEST}?.querySelector('[data-file-node-editor]')
+            return window.__m276Type(ta, 'my unsaved work\\n')
           })()
         `)
         // M276. Wait for React to have the typed draft before the outside
@@ -2707,21 +2714,24 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // only when the watcher push finds the draft DIRTY, so a push that
         // overtakes the setDraft finds a clean draft and correctly reseeds it
         // instead: no banner, and a red that is entirely the check's own race.
-        await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-dirty]')`), 5000)
+        const dirty = await waitUntil(() => wc.executeJavaScript(
+          `!!(${NEWEST}?.querySelector('[data-file-node-dirty]'))`), 5000)
         // "The agent" writes, from outside the app entirely.
         writeFileSync(FIXTURE, 'the agent wrote this\n')
         await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-conflict]')`), 5000)
+          `!!(${NEWEST}?.querySelector('[data-file-node-conflict]'))`), 5000)
         const state139 = await wc.executeJavaScript(`
-          ({
-            draft: window.__m276Text(document.querySelector('[data-file-node-editor]')),
-            banner: !!document.querySelector('[data-file-node-conflict]')
-          })
+          (() => {
+            const panel = ${NEWEST}
+            return {
+              draft: window.__m276Text(panel?.querySelector('[data-file-node-editor]') ?? null),
+              banner: !!panel?.querySelector('[data-file-node-conflict]')
+            }
+          })()
         `)
         ok('170 a write under a dirty draft raises the conflict banner and does not clobber the draft',
           state139.draft === 'my unsaved work\n' && state139.banner === true,
-          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner}`)
+          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner} editorUp=${editorUp} typed=${typed} dirty=${dirty}`)
       }
 
       // 140 — THE TRUNCATION BYPASS. buildFileNodeModel refuses to mark a
@@ -3540,16 +3550,21 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           const sx = bb.width > 0 ? r.width / bb.width : r.height / bb.height
           const sy = bb.height > 0 ? r.height / bb.height : sx
           const mid = el.getPointAtLength(len / 2)
+          // Clear of the badge: its r=9 circle in the same user space, scaled
+          // to the screen, plus a margin. A fixed 40px gate skipped EVERY
+          // point on the runner, where railGoTo leaves the link short on
+          // screen (onLine={"miss":[]}).
+          const clear = 9 * Math.max(sx, sy) + 6
           const miss = []
-          for (const f of [0.25, 0.2, 0.3, 0.15, 0.35, 0.75, 0.8, 0.7, 0.85, 0.65]) {
+          for (const f of [0.25, 0.2, 0.3, 0.15, 0.35, 0.75, 0.8, 0.7, 0.85, 0.65, 0.1, 0.9]) {
             const p = el.getPointAtLength(len * f)
-            if (Math.hypot((p.x - mid.x) * sx, (p.y - mid.y) * sy) < 40) continue
+            if (Math.hypot((p.x - mid.x) * sx, (p.y - mid.y) * sy) < clear) { miss.push(f + ':near'); continue }
             const x = Math.round(r.x + (p.x - bb.x) * sx), y = Math.round(r.y + (p.y - bb.y) * sy)
             const hit = document.elementFromPoint(x, y)
             if (hit && hit.classList.contains('link-layer__hit') && hit.nextElementSibling && hit.nextElementSibling.getAttribute('data-link') === '${key}') return { x, y, f }
             miss.push(f + '@' + x + ',' + y + ':' + (hit ? hit.tagName + '.' + String(hit.className.baseVal ?? hit.className).slice(0, 24) : 'none'))
           }
-          return { miss: miss.slice(0, 4) }
+          return { miss: miss.slice(0, 6), len: Math.round(len), sx: Math.round(sx * 100) / 100 }
         })()`)
         let badge = null
         let hoverColors = null
