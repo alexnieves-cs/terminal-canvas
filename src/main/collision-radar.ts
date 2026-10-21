@@ -29,7 +29,13 @@ export function createCollisionRadar(deps: RadarDeps): (lanes: readonly RadarLan
     if (branch.notFound) return { id: lane.id, reason: 'git was not found' }
     if (!branch.ok || branch.stdout.trim() === '' || branch.stdout.trim() === 'HEAD') return { id: lane.id, reason: 'the lane is not on a branch' }
     const root = await deps.commonRootOf(lane.path)
-    if (root === lane.path) return { id: lane.id, reason: 'this is the main tree, not a lane' }
+    // Main tree vs lane by git's own answer, never by comparing paths: on a Mac
+    // a temp folder is /var/… while git answers /private/var/…, and a string
+    // compare there called the main tree a lane.
+    const dirs = await deps.run(['-C', lane.path, 'rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir'])
+    const [gitDir, commonDir] = dirs.stdout.split('\n').map((l) => l.trim())
+    if (!dirs.ok || gitDir === undefined || commonDir === undefined || gitDir === '') return { id: lane.id, reason: 'the lane\'s repository could not be read' }
+    if (gitDir === commonDir) return { id: lane.id, reason: 'this is the main tree, not a lane' }
     const main = await deps.run(['-C', root, 'rev-parse', '--abbrev-ref', 'HEAD'])
     if (!main.ok || main.stdout.trim() === '' || main.stdout.trim() === 'HEAD') return { id: lane.id, reason: 'the main tree is not on a branch' }
     const base = await deps.run(['-C', lane.path, 'merge-base', main.stdout.trim(), 'HEAD'])

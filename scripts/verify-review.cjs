@@ -3370,6 +3370,8 @@ if (GIT) {
   const { execFileSync } = require('node:child_process')
   const { mkdtempSync, writeFileSync: wf, rmSync: rm } = require('node:fs')
   const { tmpdir } = require('node:os')
+  // NOT realpath'd, on purpose: on a Mac this is /var/… and git answers
+  // /private/var/…, which is how the first cut called the main tree a lane.
   const base = mkdtempSync(join(tmpdir(), 'tc radar '))
   const root = join(base, 'repo')
   const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
