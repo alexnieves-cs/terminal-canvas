@@ -198,6 +198,13 @@ The first-run card asks what you want to work on and in which repository, then s
   a preset and a directory are all either door accepts, never a command.
   `Environment…` in `⌘K` shows the launcher's path and the one line that puts
   it on your PATH outside the app.
+- **An MCP server.** `tc mcp` speaks the Model Context Protocol on stdio, so
+  Claude Code or any MCP client can read the canvas and drive it:
+  `claude mcp add terminal-canvas -- "$HOME/Library/Application Support/Terminal Canvas/bin/tc" mcp`.
+  Its tools read the canvas, the attention queue and the decision audit,
+  propose a task, open a review and send a message to a chat agent. Each is a line on
+  the same socket, with the same caps, and every answer is scrubbed on its way
+  out. A permission prompt is never answered through it.
 - **Command boundaries the app can see.** A login shell is decorated at spawn
   with OSC 133 marks (zsh through a `ZDOTDIR` shim that sources your own
   files first, bash through `--rcfile`), so every command gets a gutter mark

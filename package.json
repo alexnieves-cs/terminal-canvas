@@ -68,6 +68,7 @@
     "verify:agent-state": "node scripts/verify-agent-state.cjs",
     "verify:agent-session": "node scripts/verify-agent-session.cjs",
     "verify:control": "node scripts/verify-control.cjs",
+    "verify:mcp": "node scripts/verify-mcp.cjs",
     "verify:styles": "node scripts/verify-styles.cjs",
     "verify:swarm": "node scripts/verify-swarm.cjs",
     "verify:credentials": "node scripts/verify-credentials.cjs",
@@ -126,6 +127,7 @@
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
     "@react-three/postprocessing": "^3.1.3",
