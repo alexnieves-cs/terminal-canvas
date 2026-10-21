@@ -24,7 +24,12 @@ import { viewCentre } from './safe-area'
 import type { PackPreviewState } from '../pack/PackPreview'
 
 /**
-M503. The object verbs (notes, memory, browser, relay, feedback, canvas and pack import/export, node runs, note text and tint), lifted out of Canvas.tsx at exactly this position. No behaviour change.
+ * M503 (E4, the Canvas.tsx split). The object verbs: a new note, the memory,
+ * browser and relay panels, feedback, canvas and pack import/export, a
+ * node's run and test, and a note's text and tint. Lifted out of Canvas
+ * VERBATIM as one contiguous run and called at exactly the position it
+ * occupied, just below useWorkflowVerbs, with one destructured Deps object so
+ * every dependency array names the same values.
  */
 export interface UseObjectVerbsDeps {
   commitHistory: (next: Panel[]) => void

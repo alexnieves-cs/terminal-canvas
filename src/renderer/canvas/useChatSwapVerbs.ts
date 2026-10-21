@@ -21,7 +21,11 @@ import { viewCentre } from './safe-area'
 import { railLabel } from '../shell/rail-rows'
 
 /**
-M504. Terminal ↔ chat (M74), the front-end switch, watcher arming and asking (M84), and the vault note doors, lifted out of Canvas.tsx at exactly this position. No behaviour change.
+ * M504 (E4, the Canvas.tsx split). Terminal ↔ chat (M74) and the front-end
+ * switch, watcher arming and asking (M84), and the vault note doors. Lifted
+ * out of Canvas VERBATIM as one contiguous run and called at exactly the
+ * position it occupied, just below useBoardVerbs, with one destructured Deps
+ * object so every dependency array names the same values.
  */
 export interface UseChatSwapVerbsDeps {
   commitHistory: (next: Panel[]) => void

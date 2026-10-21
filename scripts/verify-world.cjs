@@ -1740,7 +1740,12 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   ok('world.facts.12 Canvas names the branch from a terminal\'s ACTIVE worktree outcome or a chat\'s task lane (the handoff hook\'s records, never the palette\'s lazy list), and the rail and the room share one teammate-name resolution',
     /status\?\.kind === 'running' && status\.worktree\?\.kind === 'active' \? status\.worktree\.branch : undefined/.test(canvasSrc) && /laneOfPath\(panel\.chat\.cwd, lanes\)\?\.branch/.test(canvasSrc) &&
-      /const lane = taskLaneOf\(item\.id\); return lane === undefined/.test(canvasSrc) && (canvasSrc.match(/^\s+teammateNameOf,$/gm) ?? []).length === 2)
+      /const lane = taskLaneOf\(item\.id\); return lane === undefined/.test(canvasSrc) &&
+      // M505. The rail's half moved with the navigator's models: one use in
+      // each file, and Canvas hands the hook the SAME resolution.
+      (canvasSrc.match(/^\s+teammateNameOf,$/gm) ?? []).length === 1 &&
+      (readFileSync(join(root, 'src/renderer/canvas/useNavigatorModels.ts'), 'utf8').match(/^\s+teammateNameOf,$/gm) ?? []).length === 1 &&
+      /= useNavigatorModels\(\{[^}]*\bteammateNameOf\b/.test(canvasSrc))
   let n = 0
   const off = CTX.subscribeWorldContext(() => n++)
   const base = { tasks: [], approvals: [], handoffs: [], peers: [] }
