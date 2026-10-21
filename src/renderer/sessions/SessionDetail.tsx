@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from 'react'
 import { outward } from '@shared/outward'
 import type { PaletteTheme } from '@shared/state-palette'
+import { emptyState } from '@shared/empty-states'
 import { shellControl } from '@renderer/shell/shell-control'
 import { appendTail, formatRun, formatTokens, formatUsd, replyBox, startedFact, stripAnsi, survivesFact, type SessionFact } from './sessions-model'
 import { Sparkline } from './Sparkline'
@@ -66,7 +67,8 @@ export function SessionDetail({ fact, theme, samples, onPause, onDetach, onEnd, 
         <p className="sessions-state" data-tone={fact.tone}>{fact.word}</p>
         <Sparkline samples={samples} tone={fact.tone} theme={theme} />
       </header>
-      <pre className="sessions-tail" data-session-tail>{lines.join('\n')}</pre>
+      {lines.length === 0 && <p className="sessions-tail-empty" data-empty-state="session-tail">{emptyState('session-tail').sentence}</p>}
+      <pre className="sessions-tail" data-session-tail data-empty={lines.length === 0 ? '' : undefined}>{lines.join('\n')}</pre>
       <form className="sessions-reply" data-session-reply onSubmit={(event) => event.preventDefault()}>
         <label className="sessions-reply__label" htmlFor="sessions-reply-text">Send to this session…</label>
         <input

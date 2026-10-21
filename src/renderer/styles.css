@@ -13200,4 +13200,62 @@ tr[data-session-row]:focus-within .sessions-world,
   .seg[data-thumb="live"]::before,
   .tabs[data-thumb="live"]::after { transition: none; }
 }
+
+/* M514. THE SESSIONS PAGE. The attention cards were a flat 16% wash of the
+   tone with the sentence in body ink, so three needs-you cards read as three
+   brown boxes and the word that mattered was the least lit thing on them.
+   Now: a hairline and an edge in the tone (the frame's own grammar, M67), a
+   quieter fill, the sentence in the tone, and an arrival on first-arrive.
+   Colour still comes only from [data-tone]. */
+.sessions-card {
+  position: relative;
+  border-color: color-mix(in srgb, var(--tone) 38%, var(--line));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--tone) 7%, var(--s-1));
+  box-shadow: inset 3px 0 0 var(--tone), var(--rim-top);
+  padding: var(--sp-4) var(--sp-5);
+  animation: first-arrive var(--dur-2) var(--ease) both;
+  transition: border-color var(--dur-state) var(--ease), background-color var(--dur-state) var(--ease);
+}
+.sessions-card:hover { border-color: color-mix(in srgb, var(--tone) 60%, var(--line)); }
+.sessions-card__sentence { color: var(--tone); font-weight: 600; font-size: var(--t-md); }
+.sessions-card__name { font-size: var(--t-sm); }
+.sessions-card button { border-radius: var(--r-md); padding: var(--sp-1) var(--sp-4); transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.sessions-card button:hover { background: var(--s-3); border-color: var(--line-strong); }
+.sessions-card__verbs > button:first-child { border-color: color-mix(in srgb, var(--tone) 50%, var(--line)); color: var(--fg); }
+/* The table: a header that stays while the rows scroll, a row that answers
+   the pointer, the run time in tabular figures, and the state word wearing
+   the status dot every other surface gives it (live tones breathe, as
+   .status-dot does). */
+.sessions-table th { position: sticky; top: 0; z-index: 1; background: var(--s-0); }
+.sessions-table tbody tr[data-session-row] { cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
+.sessions-table tbody tr[data-session-row]:hover { background: var(--s-2); }
+.sessions-table tbody tr[data-session-row][data-selected]:hover { background: color-mix(in srgb, var(--state-select) 20%, transparent); }
+.sessions-run { font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.sessions-group td { padding-top: var(--sp-4); background: transparent; color: var(--fg-2); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
+.sessions-state { gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); }
+.sessions-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.sessions-state[data-tone="working"]::before,
+.sessions-state[data-tone="starting"]::before { animation: state-breath var(--dur-breath) var(--ease) infinite; }
+/* The detail's tail before anything printed: words in a quiet well, not a
+   black box (empty-states.ts `session-tail`). */
+.sessions-tail[data-empty] { display: none; }
+.sessions-tail-empty {
+  flex: 1;
+  min-height: 120px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--fg-3);
+  font-size: var(--t-sm);
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sessions-card { animation: none; }
+  .sessions-state[data-tone="working"]::before,
+  .sessions-state[data-tone="starting"]::before { animation: none; }
+}
 /* ── /st:F ── */
