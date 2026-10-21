@@ -134,7 +134,11 @@ app.on('window-all-closed', () => {})
 // printing the path; the fixed name stays so the goldens are one machine's
 // captures of one path.) Wiped first: a previous run's files would otherwise
 // leak into this one's fixture.
-const FIX = (() => { const p = join(tmpdir(), 'tc shot fixtures golden'); rmSync(p, { recursive: true, force: true }); mkdirSync(p, { recursive: true }); return realpathSync(p) })()
+// M467: on CI the base is /tmp, not tmpdir(). A hosted Mac's tmpdir() is
+// /var/folders/<hash>/T, and the hash belongs to the runner image's user, so
+// an image update would move a path the inspector prints and fail a golden.
+const FIX_BASE = process.env.CI ? '/tmp' : tmpdir()
+const FIX = (() => { const p = join(FIX_BASE, 'tc shot fixtures golden'); rmSync(p, { recursive: true, force: true }); mkdirSync(p, { recursive: true }); return realpathSync(p) })()
 const REPO = join(FIX, 'repo')
 const NOTE = join(FIX, 'notes', 'plan.md')
 mkdirSync(join(REPO, 'src'), { recursive: true })

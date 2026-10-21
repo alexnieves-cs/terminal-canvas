@@ -22,6 +22,11 @@ on:
         description: 'Comma-separated scene names (empty = every scene)'
         required: false
         default: ''
+      goldens:
+        description: 'Write goldens instead (only after a person has looked at the gallery)'
+        type: boolean
+        required: false
+        default: false
   # A change to a scene or the harness shows its pictures on the PR itself.
   pull_request:
     paths:
@@ -41,6 +46,7 @@ concurrency:
 
 jobs:
   shots:
+    if: ${{ !inputs.goldens }}
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -132,3 +138,64 @@ jobs:
       # is the one outcome this job calls red.
       - name: The harness painted something
         run: node -e 'const m=require(process.argv[1]);if(!m.length){console.error("no scenes painted");process.exit(1)}' "$RUNNER_TEMP/shots/manifest.json"
+
+  # M467 (B3). Goldens, written where CI paints. A golden is one machine's
+  # capture, and the machine that checks them is this runner: goldens made on
+  # a developer's Mac differ from every runner capture by fonts and GPU alone.
+  # Dispatched by hand, ONLY after a person has looked at the gallery the
+  # `shots` job published; it runs verify:visual's own update path (a golden
+  # that still passes is kept byte for byte), takes every scene that now has a
+  # golden off pending-goldens.json in the same commit (verify:meta visual.1),
+  # and pushes a `goldens/<run>` branch for a PR, so the change is reviewed
+  # like any other rather than landing on main from a job.
+  goldens:
+    if: ${{ inputs.goldens }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install tmux
+        run: brew install tmux
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+      - name: Build
+        run: npm run build
+      # The same scale and watchdog env as verify.yml's verify:visual job, so
+      # the goldens are the pictures that job will compare against.
+      - name: Write goldens
+        env:
+          UPDATE_GOLDENS: '1'
+          TC_VISUAL_SCALE: '2'
+          TC_SHOT_SCALE: '2'
+          TC_WATCHDOG_SCALE: '2'
+        run: npm run verify:visual 2>&1 | tee "$RUNNER_TEMP/goldens.log"
+      - name: Take written scenes off the pending list
+        run: |
+          node -e '
+            const fs = require("fs"), p = "verify/visual/pending-goldens.json"
+            const j = JSON.parse(fs.readFileSync(p, "utf8"))
+            j.scenes = j.scenes.filter((s) => !fs.existsSync(`verify/visual/goldens/${s}.png`))
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n")
+            console.log(`still pending: ${j.scenes.length}`)'
+      - name: Push the goldens branch
+        run: |
+          git add verify/visual
+          git diff --cached --stat | tail -3 | tee -a "$GITHUB_STEP_SUMMARY"
+          if git diff --cached --quiet; then echo "no golden changed"; exit 0; fi
+          branch="goldens/run-$GITHUB_RUN_ID"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "test(m467): goldens captured on the macOS runner (run $GITHUB_RUN_ID)"
+          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "HEAD:refs/heads/$branch"
+          echo "pushed $branch" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: goldens-log
+          path: ${{ runner.temp }}/goldens.log
+          retention-days: 30
