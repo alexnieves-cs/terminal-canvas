@@ -220,9 +220,12 @@ ok('rd-keys.yield.1 shouldIgnoreKeys and the palette stand down while focus is l
   kBody.indexOf('focusLocked()') < kBody.indexOf('preventDefault'),
   'canvas predicate and palette branch')
 
-ok('rd-host.mount.1 Canvas mounts Sessions and Review and passes the session count; TopBar does not portal them',
-  /SessionsHost/.test(canvasSrc) && /ReviewHost/.test(canvasSrc) && /sessionCount=/.test(canvasSrc) &&
-  /shell__page/.test(canvasSrc) && !/createPortal/.test(top),
+// M498. The pages moved out of Canvas's JSX into CenterPages.tsx, which Canvas
+// renders; the mount is read across both, and Canvas must still mount it.
+const pagesSrc = read('src/renderer/canvas/CenterPages.tsx')
+ok('rd-host.mount.1 Canvas mounts Sessions and Review (through CenterPages) and passes the session count; TopBar does not portal them',
+  /<CenterPages\b/.test(canvasSrc) && /SessionsHost/.test(pagesSrc) && /ReviewHost/.test(pagesSrc) && /sessionCount=/.test(canvasSrc) &&
+  /shell__page/.test(pagesSrc) && !/createPortal/.test(top),
   'mount sites')
 
 const commands = read('src/renderer/palette/commands.ts')

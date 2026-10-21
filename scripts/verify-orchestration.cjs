@@ -846,6 +846,9 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
   const prefs = readFileSync(join(root, 'src/shared/orchestrate-prefs.ts'), 'utf8')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  // M498. OrchestrationView's props are laid out in CenterPages.tsx, which Canvas
+  // renders and hands the same values by name; the wiring is read there.
+  const pagesSrc = /<CenterPages\b/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/CenterPages.tsx'), 'utf8') : ''
   const orchDir = join(root, 'src/renderer/orchestration')
   const orchSrc = readdirSync(orchDir).map((f) => readFileSync(join(orchDir, f), 'utf8')).join('\n')
   ok('workbench.1 the workbench has exactly Changes · Checks · Output · Artifacts · Timeline · Combine — WORKBENCH_TABS names those six (M311 added Combine, its body in OrchCombine.tsx, OUTSIDE the strip, because it makes a scratch checkout and runs a check), each new tab has a READER in the strip (the durable record\'s timeline read) rather than an empty promise, and the strip still reaches only READ doors (review.panel/across/diff/identity, ledger.list, ledger.timeline, scrollback.tail): no review.commit, review.discard, agentSession.send, spawn — and no ledger.event, because the record is inspected here and written elsewhere',
@@ -879,7 +882,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   ok('workbench.3 the side column keeps Activity and Files only (Output and Review moved down), the view seeds its prefs from the workspace record and writes every change back through onOrchestrate, and the canvas saves the record beside the starter and passes it in',
     /\(\['activity', 'files'\] as const\)/.test(view) && !/\['activity', 'terminal', 'review', 'files'\]/.test(view) &&
       /seedOrchPrefs\(orchestrate\)/.test(view) && /onOrchestrateRef\.current\?\.\(next\)/.test(view) && /sameOrchestrate\(persistedRef\.current, next\)/.test(view) &&
-      /\.\.\.\(orchestrate === undefined \? \{\} : \{ orchestrate \}\)/.test(canvasSrc) && /orchestrate=\{orchestrate\}/.test(canvasSrc) && /onOrchestrate=\{setOrchestrate\}/.test(canvasSrc) && /onPatchWorkItem=\{patchWorkItem\}/.test(canvasSrc) && /taskHandoffOf=\{taskHandoffOf\}/.test(canvasSrc),
+      /\.\.\.\(orchestrate === undefined \? \{\} : \{ orchestrate \}\)/.test(canvasSrc) && /orchestrate=\{orchestrate\}/.test(pagesSrc) && /onOrchestrate=\{setOrchestrate\}/.test(pagesSrc) && /onPatchWorkItem=\{patchWorkItem\}/.test(pagesSrc) && /taskHandoffOf=\{taskHandoffOf\}/.test(pagesSrc),
     '')
 }
 

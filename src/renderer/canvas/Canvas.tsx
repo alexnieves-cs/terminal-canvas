@@ -2,6 +2,7 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction, type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { CenterPages } from './CenterPages'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
 import { DECK_SEED, type DeckView } from '@shared/deck'
@@ -142,7 +143,6 @@ import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
 import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
 import { searchWork, type WorkEvidenceRow } from '@shared/work-search'
-import { portableCwd } from '@shared/recipe-portability'
 import { buildResumeSummary, pickResumeSubject, type ResumeSummary } from '@shared/resume-summary'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
@@ -187,7 +187,7 @@ import { approvals, useApprovals } from '@renderer/chat/chat-store'
 import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { activityNow, forgetAllEdges, forgetEdgesFor, freezeEdgeClock, noteEdgeArrived, noteEdgeFired, noteEdgeWaiting, setEdgeContext } from './useEdgeActivity'
 import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
-import { BACKENDS, BACKEND_IDS, backendOf, carryBackend } from '@shared/agent-backends'
+import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
@@ -280,14 +280,10 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
 import { focusLocked, matchShortcut } from '@shared/shortcuts'
-import { SessionsHost } from '@renderer/sessions/SessionsHost'
 import { openSettingsPage } from '@renderer/settings/open'
-import { ReviewHost } from '@renderer/review/ReviewHost'
-import { OrchestrationView } from '../orchestration/OrchestrationView'
-import { FocusTask } from '../focus/FocusTask'
 import type { FocusSide } from '../focus/focus-model'
 import { planFactsOf } from '../focus/plan-facts'
-import { planSummary, planView } from '@shared/task-plan'
+import { planView } from '@shared/task-plan'
 import type { PersistedOrchestrate } from '@shared/orchestrate-prefs'
 import { WorldStage } from '../world/WorldStage'
 import { WorldLens } from '../world/WorldLens'
@@ -295,7 +291,6 @@ import { landingViewport } from '../world/plan-floor'
 import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn, worldLandingViewport } from '../world/world-toggle'
 import { attentionCursor, setAttentionCursor } from '../world/world-flight'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
-import { requestArrival } from '../world/world-select'
 import { useSelectedAgent } from '../world/world-select'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
@@ -321,7 +316,6 @@ import type { PanelSearchResult } from '@shared/ipc-contract'
 // M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
 import { adoptedRunId, isSettledHandoff, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
-import { arrangementTemplate } from '../orchestration/orch-arrangement'
 import { PresenceLayer } from '../presence/PresenceLayer'
 import { useSharedCanvas } from '../shared-canvas/useSharedCanvas'
 import { SharedPlaceholderLayer } from '../shared-canvas/SharedPlaceholderLayer'
@@ -332,7 +326,6 @@ import { SyncChip } from '../presence/SyncChip'
 import { usePresenceReport } from '../presence/usePresenceReport'
 import { useRosterNames } from '../presence/useRosterNames'
 import { relayNameOf } from '../relay/relay-gate'
-import { TeamView } from '../team/TeamView'
 import { useAccounts } from '../account/useAccounts'
 import { ShareDialog } from '../account/ShareDialog'
 import { ReplaySheet } from '../replay/ReplaySheet'
@@ -9262,294 +9255,23 @@ export function Canvas({
       {chrome.centerView === 'canvas' && <WorldLens on={worldOn} />}
       {/* M413. The 3D world view's layer, over a host that stays mounted (dev only; see WorldStage). */}
       <WorldStage on={worldOn} hostRef={hostRef} />
-      {chrome.centerView === 'orchestration' && (
-        <div className="shell__orch shell__orch--on" data-center-view="orchestration" role="presentation">
-          <OrchestrationView
-            panels={panels}
-            workItems={workItems}
-            templates={orchTemplates}
-            taskMemberIds={(() => {
-              const focused = workItems.find((w) => w.state === WORK_ITEM_STATES[1]) ?? workItems.find((w) => w.state === WORK_ITEM_STATES[2])
-              if (focused === undefined) return []
-              return taskMemberships(panels, [focused])[0]?.members.map((m) => m.panelId) ?? []
-            })()}
-            taskMembersOf={(itemId) => {
-              const item = workItems.find((w) => w.id === itemId)
-              return item === undefined ? [] : taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? []
-            }}
-            onJumpPanel={(id) => {
-              leaveForCanvas()
-              goToPanelOrRequest(id)
-            }}
-            onJumpWorkItem={(id) => {
-              leaveForCanvas()
-              goToWorkItem(id)
-            }}
-            onInterrupt={(id) => { void window.canvas.agentSession.interrupt(id) }}
-            onMarkDone={markDone}
-            onFocusRelated={(id) => {
-              leaveForCanvas()
-              frameTaskOf(id)
-            }}
-            onOpenFiles={() => {
-              leaveForCanvas()
-              chrome.chooseNavigator('files')
-            }}
-            /*
-             * M300. An artifact opens through the canvas's OWN file verb —
-             * the same `openFilePanel` the palette row, the drop and the M13
-             * link all reach — so Orchestrate owns no second file reader and
-             * inherits the watch ownership that one already has. It changes
-             * page, which is why the row labels itself "Open on canvas".
-             */
-            onOpenPath={(path) => {
-              leaveForCanvas()
-              openFileAtCentre(path)
-            }}
-            onShowCanvas={() => setCenterView('canvas')}
-            // M432. "View in World" on a focused island's plate: back to the canvas page, then
-            // the room on the next frame (the page change has uncovered the host the room's
-            // move starts from); the room frames the first member standing in it when it settles.
-            onViewInWorld={(ids) => {
-              requestArrival(ids, Date.now())
-              leaveForCanvas()
-              requestAnimationFrame(() => setWorldOn(true))
-            }}
-            // M284. The Dock's, the palette's and the inspector's executor — one permission path.
-            onAnswer={paletteActions.answerApproval}
-            onReviewOnCanvas={(id) => {
-              leaveForCanvas()
-              openReview(id)
-            }}
-            // M287. The workspace's Orchestrate record, the board's one patch
-            // door, and the canvas's own readiness judgement — one author each.
-            orchestrate={orchestrate}
-            onOrchestrate={setOrchestrate}
-            onPatchWorkItem={patchWorkItem}
-            taskHandoffOf={taskHandoffOf}
-            onRefreshTaskHandoffs={refreshTaskHandoffs}
-            // M289. What each handoff edge RECORDED, for the read-only lens.
-            automationResults={automationResult}
-            // M290. Retry's exit: the chat on the canvas with the prompt in its
-            // composer, unsent — the composer's own send is the only send.
-            onRetryOnCanvas={(id, text) => {
-              leaveForCanvas()
-              paletteActions.goToPanel(id)
-              insertIntoComposer(id, text)
-            }}
-            // M319. The cross-backend hand-off's exit: a NEW chat on the chosen
-            // backend, in the source chat's folder and as its teammate, with the
-            // reviewed text inserted — never sent — in its composer.
-            backendsAvailable={Object.fromEntries(BACKEND_IDS.map((b) => [b, backendAvailable(presetRows, b)]))}
-            onContinueOnBackend={(id, backend, text) => {
-              const source = panelsRef.current.find((p) => p.rect.id === id)
-              if (source === undefined || !isChatPanel(source)) return
-              leaveForCanvas()
-              void beginNewChat({
-                cwd: source.chat.cwd, backend, message: text,
-                title: `${source.title ?? id} · on ${BACKENDS[backend].label}`,
-                ...(source.chat.teammateId === undefined ? {} : { teammateId: source.chat.teammateId })
-              })
-            }}
-            // M299. The title row's scope, and the follow-up composer's one send door:
-            // the same agentSession.send a chat's composer uses, its answer read by the
-            // one sentence-maker, so a refusal reads the same on both pages.
-            workspaceName={workspaceRows.find((w) => w.active)?.name}
-            // Navigation hierarchy: the canvas's selection goes in, Orchestrate's comes out.
-            initialSelectedId={selectedId}
-            onSelectionChange={setOrchSelectedId}
-            // M325. The task list: the queue's groups, and a task opens in its workspace.
-            taskQueue={taskQueue}
-            onOpenTask={openFocusTask}
-            // M327. A task's plan progress on its row, read the way its plan side reads it.
-            planOf={(itemId) => {
-              const item = workItems.find((w) => w.id === itemId)
-              const views = planViewsFor(itemId)
-              return item?.plan === undefined || views === undefined ? undefined : planSummary(item.plan, views)
-            }}
-            onStartWork={(id) => { leaveForCanvas(); paletteActions.beginStartWork({ itemId: id }) }}
-            onSend={async (id, text) => sendRefusalSentence(await window.canvas.agentSession.send(id, text, []))}
-            /*
-             * M302. SAVE AN ARRANGEMENT. The shape is built here, where the
-             * panels and their links live, and saved through the EXISTING
-             * template door — so a saved arrangement is an ordinary template
-             * everywhere else in the app, with no second store and no schema
-             * of its own. Refusals are sentences, never silence.
-             */
-            onSaveArrangement={async (islandId) => {
-              const item = workItems.find((w) => w.id === islandId)
-              const shown = displayPanelsRef.current
-              const memberIds = item === undefined
-                ? shown.filter((p) => isChatPanel(p)).map((p) => p.rect.id)
-                : taskMemberships(shown, [item])[0]?.members.map((m) => m.panelId) ?? []
-              const members = memberIds.flatMap((id) => {
-                const p = shown.find((x) => x.rect.id === id)
-                if (p === undefined || !isChatPanel(p)) return []
-                return [{ panelId: id, title: railLabel(p, undefined), cwd: p.chat.cwd, rect: p.rect }]
-              })
-              if (members.length === 0) return 'this island has no conversation to save — an arrangement is its agents and the handoffs between them'
-              // Offsets from the FIRST member, so the saved shape is the shape
-              // on screen and not a set of absolute coordinates that would put
-              // the next instantiation wherever this one happened to sit.
-              const origin = members[0]!.rect
-              const laneChat = item?.panelId === undefined ? undefined : shown.find((x) => x.rect.id === item.panelId)
-              const arrangementRoots = [laneChat !== undefined && isChatPanel(laneChat) ? laneChat.chat.cwd : undefined, item?.recipeUsed?.repository]
-                .filter((x): x is string => x !== undefined && x !== '')
-              const edges = members.flatMap((m) => {
-                const p = shown.find((x) => x.rect.id === m.panelId)
-                return (p?.links ?? []).flatMap((l) => (l.automation?.kind === 'handoff' && l.automation.enabled
-                  ? [{ from: m.panelId, to: l.to, trigger: l.automation.trigger }]
-                  : []))
-              })
-              const template = arrangementTemplate(item?.title ?? 'Arrangement', {
-                goal: item?.title ?? 'Arrangement',
-                ...(item?.brief === undefined ? {} : { brief: item.brief }),
-                ...(item?.criteria === undefined ? {} : { criteria: item.criteria }),
-                // M321. A member working in the task's lane or repository is saved
-                // as `{{repository}}` — a template HOLE the spawn sheet asks for —
-                // so the arrangement starts in whichever repository it is taken to,
-                // not in this machine's lane (which may not even exist then).
-                members: members.map((m) => ({ panelId: m.panelId, title: m.title, cwd: portableCwd(m.cwd, arrangementRoots), dx: m.rect.x - origin.x, dy: m.rect.y - origin.y })),
-                edges
-              })
-              const saved = await window.canvas.template.save(template)
-              if (saved.kind === 'stale') return 'another editor saved this template first — open it and try again'
-              paletteActionsRef.current?.say(`Saved “${template.name}” as an arrangement — starting it opens its conversations and sends nothing`)
-              return null
-            }}
-          />
-        </div>
-      )}
-      {/* The Team view: the same overlay cell, over the same mounted canvas.
-          It reads nothing from the canvas — its tiles are people. */}
-      {chrome.centerView === 'team' && (
-        <div className="shell__orch shell__orch--on" data-center-view="team" role="presentation">
-          <TeamView accounts={accounts} />
-        </div>
-      )}
-      {/* M324. A task's focus view: the same overlay cell as Orchestrate, over
-          the same mounted canvas. A task that no longer exists (deleted,
-          another workspace) falls back to the canvas by the effect below. */}
-      {chrome.centerView === 'focus' && focusTask !== null && (() => {
-        const item = workItems.find((w) => w.id === focusTask.itemId)
-        if (item === undefined) return null
-        const members = taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? []
-        const group = taskQueue.groups.find((g) => g.itemId === item.id)
-        const handoff = taskHandoffOf(item.id)
-        const ctx = taskContextFor(item.id)
-        return (
-          <div className="shell__orch shell__orch--on" data-center-view="focus" role="presentation">
-            <FocusTask
-              // One instance per task: a switch is a new page, so nothing held
-              // mid-gesture (an armed Accept, a picked diff line) crosses tasks.
-              key={item.id}
-              item={item}
-              panels={panels}
-              workItems={workItems}
-              memberIds={members}
-              {...(group === undefined ? {} : { group })}
-              {...(taskQueue.history[item.id] === undefined ? {} : { history: taskQueue.history[item.id] })}
-              {...(handoff === undefined ? {} : { handoff })}
-              {...(ctx === undefined ? {} : { taskContext: ctx })}
-              backendAvailable={(b) => backendAvailable(presetRows, b)}
-              teammateName={(id) => (id === undefined ? undefined : (teammates ?? []).find((t) => t.id === id)?.name ?? id)}
-              taskHandoffOf={taskHandoffOf}
-              onRefreshTaskHandoffs={refreshTaskHandoffs}
-              onPatchWorkItem={patchWorkItem}
-              onBack={closeFocusTask}
-              onShowOnCanvas={(id) => {
-                setFocusTask(null)
-                leaveForCanvas()
-                const it = workItemsRef.current.find((w) => w.id === id)
-                if (it?.panelId !== undefined && panelsRef.current.some((p) => p.rect.id === it.panelId)) frameTaskOf(it.panelId)
-                else goToWorkItem(id)
-              }}
-              onJump={(id) => { setFocusTask(null); leaveForCanvas(); paletteActions.goToPanel(id) }}
-              onOpenPath={(path) => { setFocusTask(null); leaveForCanvas(); openFileAtCentre(path) }}
-              onStartWork={(id) => { setFocusTask(null); leaveForCanvas(); paletteActions.beginStartWork({ itemId: id }) }}
-              {...(focusTask.side === undefined ? {} : { initialSide: focusTask.side })}
-              openedAt={focusTask.at}
-              // M326. Another task, in the same page; Back still returns where the first was opened from.
-              // A task that needs the person opens on its request's evidence —
-              // a failed check at its output, changes at the diff; a permission
-              // or question is already in the conversation the page claims.
-              onSwitchTask={(id) => {
-                const ev = taskQueue.groups.find((g) => g.itemId === id)?.next.evidence.kind
-                openFocusTask(id, ev === 'output' ? 'checks' : ev === 'review' ? 'changes' : undefined)
-              }}
-              needsYou={new Set(taskQueue.groups.filter((g) => g.itemId !== null && g.severity !== 'review').map((g) => g.itemId as string))}
-              // M327. The plan's check step reads the task's witnessed runs; a
-              // step's new agent is an ordinary chat in the step's directory, on
-              // the task's backend, its brief INSERTED (M80's rule) by the page.
-              checkRuns={taskQueue.runs[item.id] ?? []}
-              onSpawnAgent={async (opts) => {
-                // No message here: the focus view claims the new conversation
-                // first, then hands it the brief — the canvas's panel must not take it.
-                const r = await beginNewChat({
-                  title: opts.title,
-                  ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
-                  ...(item.backend === undefined ? {} : { backend: item.backend }),
-                  ...(item.teammateId === undefined ? {} : { teammateId: item.teammateId })
-                })
-                return r.kind === 'spawned' && r.id !== undefined ? { id: r.id } : { reason: r.kind === 'refused' ? r.reason : 'no conversation was opened' }
-              }}
-              onInterrupt={(id) => { void window.canvas.agentSession.interrupt(id) }}
-            />
-          </div>
-        )
-      })()}
-      {/* R-012. Sessions and Review sit in the canvas cell, the same way
-          Orchestrate does. `.shell__page` is absolutely positioned against
-          `.shell`, so the hosts are direct children of it. TopBar used to
-          portal them; that stand-in is gone. */}
-      {(chrome.centerView === 'sessions' || chrome.centerView === 'review') && (
-        <div className="shell__page" data-center-view={chrome.centerView}>
-          {chrome.centerView === 'sessions'
-            ? <SessionsHost
-                onShowOrchestrate={() => setCenterView('orchestration')}
-                confirmEnd={(ask) => window.canvas.dialog.confirm(ask)}
-                onEnd={(ids) => { for (const id of ids) paletteActions.closePanel(id) }}
-                onPause={(ids) => { for (const id of ids) void window.canvas.agentSession.interrupt(id) }}
-                onRestart={(ids) => { for (const id of ids) paletteActions.restartPanel(id) }}
-                onMove={moveSessionsToTask}
-                onNewSession={() => paletteActions.beginSpawnSheet()}
-                onShowOnCanvas={(id) => { setCenterView('canvas'); paletteActions.goToPanel(id) }}
-                onSend={(id, text) => {
-                  const panel = panelsRef.current.find((candidate) => candidate.rect.id === id)
-                  // paste(), never pty.write. A chat has no terminal handle, so the
-                  // callback the host now always receives still has to send it.
-                  if (panel !== undefined && isTerminalPanel(panel)) {
-                    registry.get(id)?.handle.paste(text)
-                    return
-                  }
-                  void window.canvas.agentSession.send(id, text, [])
-                }}
-                onDetach={(id) => registry.detachSlot(id)}
-                onAllow={(panelId) => {
-                  const approval = pendingApprovals.find((row) => row.id === panelId)
-                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, true)
-                }}
-                onDeny={(panelId) => {
-                  const approval = pendingApprovals.find((row) => row.id === panelId)
-                  if (approval !== undefined) paletteActions.answerApproval(approval.id, approval.requestId, false)
-                }}
-                onDiff={(panelId) => paletteActions.openReview(panelId)}
-                live={{
-                  dormant: (id) => registry.get(id)?.dormant === true,
-                  // lastFocusedAt is the last click, not a start. The Run column stays empty.
-                  startedAt: () => null,
-                  survives: (id) => {
-                    const session = registry.get(id)
-                    if (session === undefined || session.status.kind !== 'running') return null
-                    return backendInfo?.kind === 'tmux' ? true : null
-                  },
-                  // The session stores no diff stat. Asking git once per row would invent one.
-                  changes: () => null
-                }}
-              />
-            : <ReviewHost />}
-        </div>
-      )}
+      {/* M498. Orchestrate, Team, a task's focus view, Sessions and Review:
+          the pages over the canvas cell, laid out in CenterPages.tsx. */}
+      <CenterPages
+        centerView={chrome.centerView} chooseNavigator={chrome.chooseNavigator} setCenterView={setCenterView} leaveForCanvas={leaveForCanvas}
+        panels={panels} panelsRef={panelsRef} displayPanelsRef={displayPanelsRef} workItems={workItems} workItemsRef={workItemsRef}
+        taskMemberships={taskMemberships} orchTemplates={orchTemplates}
+        goToPanelOrRequest={goToPanelOrRequest} goToWorkItem={goToWorkItem} frameTaskOf={frameTaskOf} openFileAtCentre={openFileAtCentre}
+        openReview={openReview} markDone={markDone} paletteActions={paletteActions} paletteActionsRef={paletteActionsRef}
+        orchestrate={orchestrate} setOrchestrate={setOrchestrate} patchWorkItem={patchWorkItem}
+        taskHandoffOf={taskHandoffOf} refreshTaskHandoffs={refreshTaskHandoffs} automationResult={automationResult}
+        presetRows={presetRows} beginNewChat={beginNewChat} workspaceRows={workspaceRows}
+        selectedId={selectedId} setOrchSelectedId={setOrchSelectedId} taskQueue={taskQueue}
+        openFocusTask={openFocusTask} closeFocusTask={closeFocusTask} planViewsFor={planViewsFor}
+        accounts={accounts} focusTask={focusTask} setFocusTask={setFocusTask} taskContextFor={taskContextFor}
+        teammates={teammates} moveSessionsToTask={moveSessionsToTask} pendingApprovals={pendingApprovals}
+        backendInfo={backendInfo} registry={registry}
+      />
       <div
         // `panning` is real React state (flips only at drag begin/end, so no
         // 60Hz cost); spaceHeld.isHeld() reads a ref and is therefore

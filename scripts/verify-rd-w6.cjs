@@ -163,7 +163,8 @@ const w6css = css.slice(css.indexOf(open), css.indexOf(close))
 
 // rd-w6.cross.1. Orchestrate's arrival is untouched. The flat room takes the same request.
 {
-  const canvas = read('src/renderer/canvas/Canvas.tsx')
+  // M498. Orchestrate's props are laid out in CenterPages.tsx, which Canvas renders.
+  const canvas = /<CenterPages\b/.test(read('src/renderer/canvas/Canvas.tsx')) ? read('src/renderer/canvas/CenterPages.tsx') : ''
   const view = read('src/renderer/world/WorldView.tsx')
   ok('rd-w6.cross.1 Orchestrate\'s View in World still requests an arrival before the page change, and the flat room takes that same arrival',
     /onViewInWorld=\{\(ids\) => \{\s*requestArrival\(ids, Date\.now\(\)\)\s*leaveForCanvas\(\)\s*requestAnimationFrame\(\(\) => setWorldOn\(true\)\)/.test(canvas) &&
