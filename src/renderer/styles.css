@@ -13306,6 +13306,84 @@ tr[data-session-row]:focus-within .sessions-world,
 }
 .inspector__field { margin-bottom: var(--sp-5); }
 .inspector__label { display: block; margin-bottom: var(--sp-1); }
+
+/* M517. ONBOARDING'S CONTROLS. Its buttons took `font: inherit` and so the
+   card's body size, a size larger than every word around them ("Copy install
+   command" was the biggest text on the step). They are control-sized now.
+   An agent's On/Off is a SWITCH: a track and a knob drawn from the button's
+   pseudo-elements, the knob sliding on --dur-1, the word kept beside it so
+   the button's text (and aria-pressed) are what they were. */
+.rd-onboard__rows button, .rd-onboard__custom { font-size: var(--t-sm); transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.rd-onboard__rows button:hover, .rd-onboard__custom:hover { background: var(--s-2); border-color: var(--line-strong); }
+.rd-onboard__rows button[aria-pressed] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 72px;
+  border: 0;
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--fg-3);
+}
+.rd-onboard__rows button[aria-pressed]:hover { background: transparent; }
+.rd-onboard__rows button[aria-pressed]::before {
+  content: "";
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--s-4);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition: background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.rd-onboard__rows button[aria-pressed]::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--sp-2) + 3px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--fg-2);
+  transition: transform var(--dur-1) var(--ease-spring), background-color var(--dur-1) var(--ease);
+}
+.rd-onboard__rows button[aria-pressed="true"] { color: var(--fg); }
+.rd-onboard__rows button[aria-pressed="true"]::before { background: var(--iris); box-shadow: none; }
+.rd-onboard__rows button[aria-pressed="true"]::after { transform: translateX(12px); background: var(--on-iris); }
+.rd-onboard__rows button[aria-pressed]:focus-visible { outline: 2px solid var(--state-select); outline-offset: 2px; border-radius: var(--r-md); }
+/* M517. SETTINGS' WAY OUT. Close sat at the foot of the page list, below
+   the fold on a short window, so the page read as a place with no door
+   (Escape works, but nothing said so). It stands at the page's top-right
+   corner now, where every sheet's close is, with its key beside it. The
+   page fades in rather than replacing the canvas in one frame, and the
+   current page in the list carries the iris mark the rail's current row
+   does. */
+.rd-settings { animation: tier-in var(--dur-2) var(--ease) both; }
+.rd-settings__close {
+  position: absolute;
+  top: var(--sp-5);
+  right: var(--sp-6);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.rd-settings__close::after {
+  content: "esc";
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.rd-settings__nav button { transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.rd-settings__nav button:not([aria-current="page"]):hover { background: var(--s-3); }
+.rd-settings__nav button[aria-current="page"] { box-shadow: inset 2px 0 0 var(--iris); }
+@media (prefers-reduced-motion: reduce) {
+  .rd-settings { animation: none; }
+  .rd-onboard__rows button[aria-pressed]::before,
+  .rd-onboard__rows button[aria-pressed]::after { transition: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .status-dot[data-tone="done"],
   .pf__word[data-tone="done"] { animation: none; }
