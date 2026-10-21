@@ -1292,6 +1292,50 @@ console.log('\n' + '='.repeat(60))
     cited.length > 100 && stale.length === 0, JSON.stringify({ cited: cited.length, stale }))
 }
 
+// M457 — streams.own.1. The streams run puts five branches on main at once,
+// and the edit hook is the only thing between two of them and a merge
+// conflict. A glob two lanes both claim, a lane claiming a shared file, or a
+// lane whose CSS fence went missing each turns the hook silently permissive
+// or silently blocking, so the map itself is checked here.
+{
+  let own = null
+  try { own = JSON.parse(read('docs/streams/ownership.json') || '') } catch { own = null }
+  const lanes = (own && own.lanes) || {}
+  const shared = (own && own.shared_writable) || []
+  const norm = (g) => g.replace(/\/\*\*$/, '').replace(/\/\*$/, '')
+  const overlaps = (a, b) => {
+    if (a === b || norm(a) === norm(b)) return true
+    const na = norm(a)
+    const nb = norm(b)
+    if (a.endsWith('/**') && (b === na || b.startsWith(na + '/'))) return true
+    if (b.endsWith('/**') && (a === nb || a.startsWith(nb + '/'))) return true
+    return false
+  }
+  const ids = Object.keys(lanes)
+  const collisions = []
+  for (let i = 0; i < ids.length; i++) {
+    for (const g of lanes[ids[i]]) {
+      for (const sg of shared) if (overlaps(g, sg)) collisions.push(`${ids[i]} ${g} ~ shared ${sg}`)
+      for (let j = i + 1; j < ids.length; j++) {
+        for (const h of lanes[ids[j]]) if (overlaps(g, h)) collisions.push(`${ids[i]} ${g} ~ ${ids[j]} ${h}`)
+      }
+    }
+  }
+  const css = read('src/renderer/styles.css') || ''
+  const fenced = ['B', 'C', 'D', 'E']
+  const badFences = fenced.filter((id) => {
+    const a = css.indexOf(`/* ── st:${id} ── */`)
+    const b = css.indexOf(`/* ── /st:${id} ── */`)
+    return a < 0 || b < a
+  })
+  const hook = read('.claude/hooks/guard-paths.sh') || ''
+  const hookReads = /docs\/streams\/ownership\.json/.test(hook) && /'tc-lane'/.test(hook)
+  ok('streams.own.1 lanes A–E own disjoint files, none claims a shared file, B–E have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
+    ['A', 'B', 'C', 'D', 'E'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
+      collisions.length === 0 && badFences.length === 0 && hookReads,
+    JSON.stringify({ lanes: ids, collisions, badFences, hookReads }))
+}
+
 // ledger.1. CLAUDE.md's table is where a fresh session learns which run is
 // live, and it pointed at the M193–M224 ledger for a whole run after
 // m225-m243-ledger.md existed — a session following it planned against the

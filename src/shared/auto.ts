@@ -65,12 +65,107 @@ export const AUTO_MODES: Readonly<Record<AutoModeId, AutoMode>> = {
 
 export const AUTO_MODE_IDS: readonly AutoModeId[] = ['complete', 'harden', 'review', 'custom']
 
+/**
+ * M475. CHECK-GATED DONE. The marker is the agent's CLAIM; a run whose
+ * start named a check treats it as "ready to check", runs the command in the
+ * session's folder, and only a zero exit makes the run `done` with verdict
+ * `checked`. A failing check sends its output back as the next turn, up to
+ * `retries` times, then the run is stuck: check. A run started WITHOUT a
+ * check still ends on the marker, but its verdict is `claimed` — the chip,
+ * the run record and every later surface say "the agent says", never
+ * "passed". The rule a reader relies on: `checked` is only ever written by
+ * a check's own exit code, never by anything the agent printed.
+ */
+export interface AutoCheck {
+  /** One shell command line, run in the session's folder (`npm test`, a build, a script). */
+  command: string
+  /** Failed checks sent back to the agent before the run is stuck. Absent is `AUTO_CHECK_RETRIES`. */
+  retries?: number
+  /** Absent is `AUTO_CHECK_TIMEOUT_MS`; a check that runs past it FAILS (it never passes by timing out). */
+  timeoutMs?: number
+}
+
+export const AUTO_CHECK_RETRIES = 3
+export const AUTO_CHECK_RETRIES_MAX = 10
+export const AUTO_CHECK_TIMEOUT_MS = 10 * 60_000
+/** How much of a failed check's output goes back to the agent: its TAIL, where a runner says why. */
+export const AUTO_CHECK_FEEDBACK_CHARS = 8 * 1024
+
+/** What a check came to. `exitCode` null is a signal or a timeout, and is a failure. */
+export interface AutoCheckResult {
+  exitCode: number | null
+  output: string
+  timedOut?: boolean
+  /** The runner could not start the command at all (no shell, no folder). Also a failure. */
+  error?: string
+}
+
+export type AutoVerdict = 'checked' | 'claimed'
+
+/**
+ * A check spec from the bridge, by name: absent is no check (`undefined`),
+ * anything present and wrong is refused with a reason rather than read as
+ * "no check" — a typo in the field would otherwise silently downgrade a
+ * gated run to a claimed one.
+ */
+export function parseAutoCheck(raw: unknown): { kind: 'ok'; check: AutoCheck | undefined } | { kind: 'refused'; reason: string } {
+  if (raw === undefined) return { kind: 'ok', check: undefined }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { kind: 'refused', reason: 'the check is not an object' }
+  const r = raw as Record<string, unknown>
+  if (typeof r.command !== 'string' || r.command.trim() === '') return { kind: 'refused', reason: 'the check has no command' }
+  if (/[\r\n]/.test(r.command)) return { kind: 'refused', reason: 'the check command is more than one line' }
+  if (r.retries !== undefined && (typeof r.retries !== 'number' || !Number.isInteger(r.retries) || r.retries < 0 || r.retries > AUTO_CHECK_RETRIES_MAX)) return { kind: 'refused', reason: `the check's retries must be a whole number from 0 to ${AUTO_CHECK_RETRIES_MAX}` }
+  if (r.timeoutMs !== undefined && (typeof r.timeoutMs !== 'number' || !Number.isFinite(r.timeoutMs) || r.timeoutMs <= 0)) return { kind: 'refused', reason: "the check's timeout must be a positive number of milliseconds" }
+  return { kind: 'ok', check: { command: r.command.trim(), ...(r.retries === undefined ? {} : { retries: r.retries as number }), ...(r.timeoutMs === undefined ? {} : { timeoutMs: r.timeoutMs as number }) } }
+}
+
+/** Passed means exit 0 and nothing else: a timeout, a signal, or a runner error is a failure whatever the output says. */
+export function autoCheckPassed(r: AutoCheckResult): boolean {
+  return r.exitCode === 0 && r.timedOut !== true && r.error === undefined
+}
+
+/** The turn a failed check sends back: the command, how it ended, and the tail of what it printed. */
+export function autoCheckFeedback(command: string, r: AutoCheckResult, attempt: number, retries: number): string {
+  const how = r.error !== undefined ? `could not run: ${r.error}`
+    : r.timedOut === true ? 'timed out'
+      : r.exitCode === null ? 'was killed by a signal'
+        : `exited ${r.exitCode}`
+  const out = r.output.length > AUTO_CHECK_FEEDBACK_CHARS
+    ? `… (${(r.output.length - AUTO_CHECK_FEEDBACK_CHARS).toLocaleString('en-US')} earlier characters not shown)\n${r.output.slice(r.output.length - AUTO_CHECK_FEEDBACK_CHARS)}`
+    : r.output
+  return `The check \`${command}\` ${how}, so the task is not done yet (check ${attempt} of ${retries + 1}). Its output:\n\n${out.trim() === '' ? '(no output)' : out}\n\nFix what it reports. ${TAIL}`
+}
+
+/**
+ * The step after a check, pure. `failures` counts failed checks INCLUDING
+ * this one. A pass is done-checked; a failure past the retries is stuck:
+ * check; a failure with retries left but no turns left is stuck: limit; else
+ * the output goes back as the next turn.
+ */
+export type AutoAfterCheck =
+  | { kind: 'done'; verdict: 'checked' }
+  | { kind: 'retry'; prompt: string }
+  | { kind: 'stuck'; reason: 'check' | 'limit' }
+
+export function autoAfterCheck(check: AutoCheck, r: AutoCheckResult, failures: number, turn: number, limit: number): AutoAfterCheck {
+  if (autoCheckPassed(r)) return { kind: 'done', verdict: 'checked' }
+  const retries = check.retries ?? AUTO_CHECK_RETRIES
+  if (failures > retries) return { kind: 'stuck', reason: 'check' }
+  if (turn >= limit) return { kind: 'stuck', reason: 'limit' }
+  return { kind: 'retry', prompt: autoCheckFeedback(check.command, r, failures, retries) }
+}
+
 export interface AutoPrompts { opening: string; continuation: string; limit: number }
 
-/** The prompts a run sends, with the custom task filled where the mode takes one. */
-export function autoPlanOf(mode: AutoModeId, _panelId: string, task = ''): AutoPrompts {
+/**
+ * The prompts a run sends, with the custom task filled where the mode takes
+ * one. A gated run's prompts say which check follows the marker, so the
+ * agent runs it itself first instead of learning about it from a failure.
+ */
+export function autoPlanOf(mode: AutoModeId, _panelId: string, task = '', check?: AutoCheck): AutoPrompts {
   const m = AUTO_MODES[mode]
-  return { opening: m.opening.split('{{task}}').join(task.trim() === '' ? '(no task given)' : task.trim()), continuation: m.continuation, limit: m.turnLimit }
+  const gate = check === undefined ? '' : ` After you print ${AUTO_DONE_MARKER}, \`${check.command}\` runs in this folder, and the task counts as done only if it exits 0 — run it yourself first.`
+  return { opening: m.opening.split('{{task}}').join(task.trim() === '' ? '(no task given)' : task.trim()) + gate, continuation: m.continuation + gate, limit: m.turnLimit }
 }
 
 /**
@@ -96,7 +191,7 @@ export function validateAutoMode(mode: AutoMode, facts: PlanFacts, panelId = fac
 }
 
 export type AutoState = 'running' | 'done' | 'stuck' | 'stopped'
-export type AutoStuckReason = 'limit' | 'permission' | 'exit' | 'budget' | 'cap' | 'error'
+export type AutoStuckReason = 'limit' | 'permission' | 'exit' | 'budget' | 'cap' | 'error' | 'check'
 
 export interface AutoStatus {
   mode: AutoModeId
@@ -104,6 +199,27 @@ export interface AutoStatus {
   limit: number
   state: AutoState
   reason?: AutoStuckReason
+  /** M475. The gate's command, when the run named one. */
+  check?: string
+  /** M475. True while the check runs: the run is live, the agent is idle, nothing is sent. */
+  checking?: true
+  /** M475. Failed checks so far. Absent is none. */
+  checkFailures?: number
+  /** M475. On `done` only: `checked` when the check passed, `claimed` when there was no check. Absent on a pre-M475 record reads as claimed. */
+  verdict?: AutoVerdict
+}
+
+/**
+ * M475. A run record's outcome word for a done the agent only claimed. A
+ * completed execution (`retained-outcomes`), never `passed`, which is the
+ * word a check's exit earns.
+ */
+export const AUTO_CLAIMED_OUTCOME = 'done · unchecked'
+
+/** M475. The one reading of a done run: only a check's exit writes `checked`. */
+export function autoVerdictOf(s: AutoStatus): AutoVerdict | undefined {
+  if (s.state !== 'done') return undefined
+  return s.verdict === 'checked' ? 'checked' : 'claimed'
 }
 
 const STUCK_WORDS: Record<AutoStuckReason, string> = {
@@ -113,7 +229,9 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
   budget: 'the budget refused a send',
   // M350. The agent's own cap, not the canvas's budget: a different fix, so a different word.
   cap: 'cap reached',
-  error: 'a turn ended in an error'
+  error: 'a turn ended in an error',
+  // M475. The check kept failing past its retries: the agent's AUTO-DONE was never confirmed.
+  check: 'the check kept failing'
 }
 
 /** The chip's words: one function, every surface. */
@@ -127,7 +245,8 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
 export function autoChipParts(s: AutoStatus): { head: string; tail: string } {
   switch (s.state) {
     case 'running': return { head: autoChipWords(s), tail: '' }
-    case 'done': return { head: 'auto done', tail: ` · ${s.mode}` }
+    // M475. A claimed done keeps its pre-M475 words; a checked one says so.
+    case 'done': return { head: s.verdict === 'checked' ? 'auto checked' : 'auto done', tail: ` · ${s.mode}` }
     case 'stopped': return { head: 'auto stopped', tail: ` · ${s.mode}` }
     case 'stuck': return { head: 'auto stuck', tail: ` — ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}` }
   }
@@ -135,8 +254,8 @@ export function autoChipParts(s: AutoStatus): { head: string; tail: string } {
 
 export function autoChipWords(s: AutoStatus): string {
   switch (s.state) {
-    case 'running': return `auto · ${s.mode} · ${s.turn}/${s.limit}`
-    case 'done': return `auto · ${s.mode} · done`
+    case 'running': return s.checking === true ? `auto · ${s.mode} · checking` : `auto · ${s.mode} · ${s.turn}/${s.limit}`
+    case 'done': return s.verdict === 'checked' ? `auto · ${s.mode} · checked` : `auto · ${s.mode} · done`
     case 'stopped': return `auto · ${s.mode} · stopped`
     case 'stuck': return `auto · ${s.mode} · stuck — ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}`
   }

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { AgentSessionManager } from '../agent-session'
 import { claudeCliRunner } from '../claude-cli-runner'
+import { runAutoCheck } from '../auto-check-runner'
 import { createPoolCaller } from '../pool-caller'
 import { createJobHandlers, type JobHandlers } from '../job-recovery'
 import type { RepoMark } from '../../shared/job-journal'
@@ -80,6 +81,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     // reference here would be null for the life of the app.
     preAnswer: (id, toolName) => state.approvals?.granted(id, toolName) ?? false
     ,
+    // M475. A gated auto run's check: the login shell, the session's folder.
+    runCheck: runAutoCheck,
     // M102. Each headless session gets the door and its OWN panel id and token
     // — the same block PtyManager gives a terminal — so `tc api` from a chat
     // is that chat's, never a claim.
