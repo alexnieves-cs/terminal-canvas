@@ -4537,6 +4537,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId, 5000)
         await sleep(400)
       }
+      // Evidence: the insert targets the panel the palette CAPTURES (the focused
+      // one), and __m4aCellToScreen reads the focused panel's buffer.
+      const focusedAtPalette = await wc.executeJavaScript(`window.__m4aFocusedId()`)
       const liveCwd = typeof pbId === 'string' ? (ptyManager.list().find((s) => s.panelId === pbId) || { cwd: null }).cwd : null
       const title = typeof pbId === 'string' ? await wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .pf__title') || {}).textContent ?? null`) : null
       await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
@@ -4559,10 +4562,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const echoedCwd = cwdTail ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-cwd=') !== null && window.__m4aCellToScreen(${JSON.stringify(cwdTail)}) !== null`), 5000) : false
       const echoedPanel = typeof title === 'string' && title !== '' ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-panel=' + ${JSON.stringify(title.split(' ')[0])}) !== null`), 3000) : false
       const literal = await wc.executeJavaScript(`window.__m4aCellToScreen('{{cwd}}') !== null || window.__m4aCellToScreen('{{panel}}') !== null`)
+      const focusedAfter = await wc.executeJavaScript(`window.__m4aFocusedId()`)
       ok('prompt.builtin.1 a saved prompt\'s {{cwd}} and {{panel}} paste the target\'s live cwd and title into the terminal with no question asked, and the literal holes never reach the agent',
         typeof pbId === 'string' && inserted === true && (asked === null || asked === 'palette open' && false || !/1 of/.test(String(asked))) &&
           echoedCwd !== false && echoedPanel !== false && literal === false,
-        JSON.stringify({ pbId, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
+        JSON.stringify({ pbId, focusedAtPalette, focusedAfter, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
       if (typeof pbId === 'string') await clickPanelClose(wc, pbId)
     }
 
