@@ -5,6 +5,9 @@ name: triage
 on:
   push:
     branches: [claude/project-thread-gobh8m]
+    # Only what can change a panels suite's result: a CI-only commit must not
+    # cancel and restart twenty-one macOS jobs.
+    paths: ['scripts/verify-panels-*.cjs', 'scripts/panels-*.cjs', 'src/**', '.github/workflows/triage.yml']
   workflow_dispatch:
 concurrency:
   group: triage-${{ github.ref }}
