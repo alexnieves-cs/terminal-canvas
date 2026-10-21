@@ -1,0 +1,113 @@
+# The shots gallery (M465): paint every scene on a real Mac and publish the
+# pictures so a person can look at them without one.
+#
+# Goldens are written only after a person has LOOKED (CLAUDE.md, "A golden
+# changes on purpose or not at all"), and the owner of this repository does
+# not keep a Mac checkout at hand. This job is how looking happens: it runs
+# `npm run shot` on the hosted runner, converts every capture (and the golden
+# it would replace) to a phone-sized JPEG, and uploads a self-contained
+# gallery — index.html opens straight from the unzipped artifact, and the same
+# directory is what gets published as a private page for the owner's phone.
+# The full-size PNGs are a second artifact, because those are what a golden
+# update would commit.
+#
+# It asserts nothing and never blocks: verify:visual is the check, this is the
+# picture. A scene that fails to paint is listed first on the page, in red.
+name: shots
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated scene names (empty = every scene)'
+        required: false
+        default: ''
+  # A change to a scene or the harness shows its pictures on the PR itself.
+  pull_request:
+    paths:
+      - .github/workflows/shots.yml
+      - scripts/shot.cjs
+      - scripts/shot-gallery.cjs
+      - scripts/shot-composite.cjs
+      - scripts/shot-scenes/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Scenes spawn real shells, and some read tmux; the same setup verify.yml has.
+      - name: Install tmux
+        run: brew install tmux
+
+      - name: Install dependencies
+        run: npm ci
+      # Same gotcha as verify.yml: npm ci on the runner can leave Electron's
+      # binary out of node_modules.
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+
+      - name: Build
+        run: npm run build
+
+      # TC_SHOT_SCALE=2: the runner has no Retina display, and a 1x capture is
+      # not the picture a golden would be made from (shot.cjs explains).
+      - name: Paint every scene
+        env:
+          TC_SHOT_SCALE: '2'
+          SHOT_DIR: ${{ runner.temp }}/shots
+          SHOT_ONLY: ${{ inputs.only }}
+        run: npm run shot 2>&1 | tee "$RUNNER_TEMP/shot.log"
+
+      - name: Build the gallery
+        env:
+          SHOTS: ${{ runner.temp }}/shots
+          GALLERY: ${{ runner.temp }}/gallery
+        run: |
+          mkdir -p "$GALLERY/shots" "$GALLERY/golden"
+          # 1280px wide JPEGs: sharp on a phone, and the whole gallery stays a
+          # few tens of MB instead of hundreds. sips ships with macOS.
+          for f in "$SHOTS"/*.png; do
+            n=$(basename "$f" .png)
+            case "$n" in *.vs-reference) continue;; esac
+            sips -s format jpeg -s formatOptions 75 --resampleWidth 1280 "$f" --out "$GALLERY/shots/$n.jpg" >/dev/null
+            g="verify/visual/goldens/$n.png"
+            if [ -f "$g" ]; then
+              sips -s format jpeg -s formatOptions 75 --resampleWidth 1280 "$g" --out "$GALLERY/golden/$n.jpg" >/dev/null
+            fi
+          done
+          cp "$SHOTS/manifest.json" "$GALLERY/manifest.json"
+          node scripts/shot-gallery.cjs "$SHOTS" "$GALLERY" jpg
+          du -sh "$GALLERY"
+          # The page's headline, in the run summary too.
+          node -e 'const g=require(process.argv[1]);console.log(`### Shots\n${g.counts.scenes} scenes · ${g.counts.failed} failed · ${g.counts.noGolden} with no golden yet\n`);for(const s of g.scenes.filter(s=>s.failed||!s.shot))console.log(`- **${s.name}** failed: ${(s.failed||"no capture").slice(0,200)}`)' "$GALLERY/gallery.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-gallery
+          path: ${{ runner.temp }}/gallery
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-png
+          path: |
+            ${{ runner.temp }}/shots
+            ${{ runner.temp }}/shot.log
+          retention-days: 30
+
+      # A manifest with no scenes means the harness died before painting; that
+      # is the one outcome this job calls red.
+      - name: The harness painted something
+        run: node -e 'const m=require(process.argv[1]);if(!m.length){console.error("no scenes painted");process.exit(1)}' "$RUNNER_TEMP/shots/manifest.json"

@@ -108,6 +108,11 @@ async function changesRead(k, scene) {
 
 // Never touch the real store: this harness spawns real shells.
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'tc-shot-')))
+// M465. A hosted macOS runner has no Retina display, so it paints at 1x while
+// every golden is a 2x capture halved (verify-visual.cjs's scale gate). The CI
+// shots job sets TC_SHOT_SCALE=2 so its pictures are the same pixels a Mac
+// would paint; unset, a local run keeps the display's own factor.
+if (process.env.TC_SHOT_SCALE) app.commandLine.appendSwitch('force-device-scale-factor', process.env.TC_SHOT_SCALE)
 app.on('window-all-closed', () => {})
 
 // ---------------------------------------------------------------------------
