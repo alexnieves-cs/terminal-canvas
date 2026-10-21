@@ -203,6 +203,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             // and a rect-inside-the-host test alone reports it as a pass.
             const covered = el !== null && el.closest('.panel') !== null
             return { w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
+              display: getComputedStyle(p).display, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
           await wc.executeJavaScript(`(() => { window.__m233Flow('thaw', '', ''); return true })()`)
           // Past EDGE_FIRE_MS, so the fire lapses on the store's own timer
@@ -844,6 +845,9 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const compact = await waitUntil(async () => (await frame()).bp === 'compact', 5000)
         await settle()
         const closedAtCompact = await frame()
+        // Evidence: the shell's own classes and the persisted navigator state at the moment it was read.
+        const compactShell = await wc.executeJavaScript(`(() => { const s = document.querySelector('.shell'); const r = document.querySelector('.shell__rail'); return { cls: s ? s.className : null, rail: r ? { cls: r.className, pos: getComputedStyle(r).position, tr: getComputedStyle(r).transition.slice(0, 80) } : null } })()`)
+        const compactPrefs = await wc.executeJavaScript(`(async () => { try { const all = await window.canvas.settings.list(); const pick = (k) => { const row = (all.rows || all).find ? (all.rows || all).find((r) => r.id === k || r.key === k) : null; return row ? (row.value ?? row.current ?? null) : null }; return { railOpen: pick('shell.railOpen'), navigator: pick('shell.navigator') } } catch (e) { return String(e) } })()`)
         await dockClick('panels'); await settle()
         const open = await wc.executeJavaScript(`(() => {
           const shell = document.querySelector('.shell'); const rail = document.querySelector('.shell__rail'); const canvas = document.querySelector('.canvas')
@@ -871,7 +875,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             open !== null && open.drawer === true && open.overlaps === true &&
             vpAfter.x === vpBefore.x && vpAfter.y === vpBefore.y && vpAfter.scale === vpBefore.scale &&
             afterEscape === false && reopened === true && afterOutside === false,
-          JSON.stringify({ compact, closedAtCompact, open, vpBefore, vpAfter, afterEscape, reopened, afterOutside }))
+          JSON.stringify({ compact, closedAtCompact, compactShell, compactPrefs, open, vpBefore, vpAfter, afterEscape, reopened, afterOutside }))
 
         // ctx.1. Select sA through the rail, pin the context open through the
         //        top bar's toggle, then every tab.
@@ -1291,6 +1295,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, shiftKey: true }))
           return !!(a && b) })()`)
         await settle()
+        // Evidence: which chromes the gesture found and what it left selected.
+        const picked = await wc.executeJavaScript(`(() => {
+          const chrome = (id) => document.querySelector('.panel[data-panel-id="' + id + '"] .pf__chrome')
+          return { a: !!chrome(${JSON.stringify(made.chatId)}), b: !!chrome(${JSON.stringify(made.termId)}),
+            selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')) } })()`)
         await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
         const saveRan = await wc.executeJavaScript(`(async () => {
@@ -1319,7 +1328,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             saveRan === true && mine && mine.nodes.length === 2 && mine.edges.length === 1 && mine.edges[0].trigger === 'idle' &&
             mine.nodes.every((n) => n.kind === 'chat' || n.presetId !== undefined || (n.command ?? '') !== '') &&
             builtInDelete === false,
-          JSON.stringify({ rowRan, sheet, made, undone, saveRan, mine, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
+          JSON.stringify({ rowRan, sheet, made, undone, picked, saveRan, mine, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
         try { rmSync(tDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (mErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(mErr && mErr.message || mErr) + ' | renderer: ' + (mLog.slice(-4).join(' || ') || '(none)'))
@@ -2258,12 +2267,16 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // edge (world 405): dx = 405 - 620 = -215 at scale 1.
         const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pB"] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
         let guideSeen = false
+        let hit = null
+        let mid = null
         if (chrome) {
           const to = { x: chrome.x - 215, y: chrome.y }
           // A person's pointer arrives before it presses; on a window this wide
           // the overview map sits over this chrome until a move lets it tuck aside.
           wc.sendInputEvent({ type: 'mouseMove', x: chrome.x, y: chrome.y })
           await sleep(200)
+          // Evidence: what the press will land on.
+          hit = await wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${chrome.x}, ${chrome.y}); return el ? el.tagName + '.' + String(el.className).slice(0, 60) + (el.closest('.panel') ? ' in ' + el.closest('.panel').getAttribute('data-panel-id') : '') : null })()`)
           wc.sendInputEvent({ type: 'mouseDown', x: chrome.x, y: chrome.y, button: 'left', clickCount: 1 })
           for (let i = 1; i <= 6; i++) {
             // leftButtonDown, or the drag hook reads buttons === 0 as a release.
@@ -2272,13 +2285,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           }
           await sleep(120)
           guideSeen = await wc.executeJavaScript(`document.querySelectorAll('[data-snap-guide]').length > 0`)
+          mid = await rectOf('pB')
           wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
         }
         await settle()
         const after = await rectOf('pB')
         const guideGone = await wc.executeJavaScript(`document.querySelectorAll('[data-snap-guide]').length === 0`)
         ok(IDS[0], chrome !== null && after !== null && after.x === 400 && guideSeen === true && guideGone === true,
-          JSON.stringify({ chrome, after, guideSeen, guideGone }))
+          JSON.stringify({ chrome, hit, mid, after, guideSeen, guideGone }))
 
         // tidy.1. Select pC and pD (rail click then shift-click on chrome is
         //         the M18 gesture; the harness's marquee is heavier) through
