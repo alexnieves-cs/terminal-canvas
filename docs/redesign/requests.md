@@ -366,7 +366,7 @@ from: centerViewNow === 'focus'
 - File: `src/renderer/canvas/CanvasHud.tsx` (L-C)
 - Why the contract or the owner cannot absorb it: screen 11's bottom-left control is Work / Plan / Map plus Follow. `CanvasHud` paints Work, Plan and Map (`data-hud-tier`) and has no Follow. W2 reveals that HUD and cannot import it. Follow's behaviour is W3's (`world-camera.ts`), which does not own `CanvasHud.tsx`.
 - Smallest change: a Follow control beside the three tiers, calling a callback the world registers. Absent callback, the control is not painted, so the 2D canvas is unchanged.
-- Status: deferred. `CanvasHud` is L-C's. The Follow chord landed with R-061 (`31fbafed`); the HUD still has no Follow beside Work / Plan / Map. The camera panel already has the control.
+- Status: done at M497 (streams run, lane E). The room's chrome registers its camera's follow through `canvas/follow-door.ts`; `CanvasHud` paints Follow after Map only while one is registered, disabled with the reason while no robot is picked. The 2D HUD is unchanged. `verify:rd-w2 follow.1`–`.4`.
 
 ### R-053 · The Linux shot does not present the WebGL room
 - Lane: W2
