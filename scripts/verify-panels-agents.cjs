@@ -208,7 +208,9 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             // A PANEL over it is not: that is the failure this arm exists for,
             // and a rect-inside-the-host test alone reports it as a pass.
             const covered = el !== null && el.closest('.panel') !== null
-            return { w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
+            const by = covered ? el.closest('.panel') : null
+            const coverBy = by ? { id: by.getAttribute('data-panel-id'), z: getComputedStyle(by).zIndex, rect: (() => { const q = by.getBoundingClientRect(); return [Math.round(q.x), Math.round(q.y), Math.round(q.width), Math.round(q.height)] })(), layerZ: getComputedStyle(document.querySelector('.link-layer')).zIndex } : null
+            return { coverBy, w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
               display: getComputedStyle(p).display, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
           await wc.executeJavaScript(`(() => { window.__m233Flow('thaw', '', ''); return true })()`)
@@ -1282,8 +1284,9 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(document.activeElement && document.activeElement.blur && document.activeElement.blur(), true)`)
         wc.send('edit:undo')
         const undone = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before}`), 5000)
+        const beforeRedo = await wc.executeJavaScript(`({ active: document.activeElement && (document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 30)), panels: document.querySelectorAll('.panel').length })`)
         wc.send('edit:redo')
-        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before} + 2`), 5000)
+        const redone = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before} + 2`), 5000)
         // Save the two panels as a template of the user's own.
         await settle()
         const saved = await wc.executeJavaScript(`(async () => {
@@ -1338,7 +1341,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             saveRan === true && mine && mine.nodes.length === 2 && mine.edges.length === 1 && mine.edges[0].trigger === 'idle' &&
             mine.nodes.every((n) => n.kind === 'chat' || n.presetId !== undefined || (n.command ?? '') !== '') &&
             builtInDelete === false,
-          JSON.stringify({ rowRan, sheet, made, undone, picked, saveRan, mine, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
+          JSON.stringify({ rowRan, sheet, made, undone, beforeRedo, redone, picked, saveRan, mine: mine ?? null, listed: Array.isArray(listed) ? listed.map((t) => t.name) : listed, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
         try { rmSync(tDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (mErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(mErr && mErr.message || mErr) + ' | renderer: ' + (mLog.slice(-4).join(' || ') || '(none)'))
@@ -1470,27 +1473,36 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const edge = (to, trigger) => ({ to, automation: { kind: 'handoff', enabled: true, trigger } })
         const gDir = mkdtempSync(join(tmpdir(), 'tc panels graph-'))
         layoutStore.addPreset({ id: 'graph-claude', name: 'Claude (graph)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
-        layoutStore.save({
-          panels: [
-            ...fromPanels([
-              gPanel('gA', 60, 60, [edge('gC', 'exit-ok'), edge('gD', 'exit-fail')]), gPanel('gB', 60, 340, [edge('gC', 'exit-ok')]),
-              // The join TARGET prints once and sleeps: the tty echoes the pasted
-              // payloads into its log without a shell executing them — a shell
-              // ran A's transcript line by line and its `exit` line ended the
-              // target before B's part arrived (the first run); a bare `cat`
-              // never leaves `starting` and is never receivable (the second).
-              gPanel('gC', 440, 60, undefined, '/bin/sh', ['-c', 'echo ready; sleep 600']), gPanel('gD', 440, 340),
-              gPanel('gT', 820, 340), gPanel('gS', 820, 60, [edge('gK', 'exit')])
-            ]),
-            { id: 'gH', kind: 'chat', x: 1200, y: 60, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '88888888-8888-4888-8888-888888888888' }, links: [edge('gT', 'idle')] },
-            { id: 'gK', kind: 'chat', x: 1200, y: 340, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '99999999-9999-4999-8999-999999999999' } }
-          ],
-          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
-        })
-        layoutStore.flushSync()
-        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reG
-        await settle()
+        // The seed is re-saved until the store holds it: the previous page's
+        // in-flight layout save can land after this one and the reload then
+        // restores the previous block's panels (the tools.1 clobber), which
+        // left graph.1-3 reading seeded=false and the suite's watchdog firing.
+        const G_IDS = ['gA', 'gB', 'gC', 'gD', 'gT', 'gS', 'gH', 'gK']
+        for (let attempt = 0; attempt < 3; attempt++) {
+          layoutStore.save({
+            panels: [
+              ...fromPanels([
+                gPanel('gA', 60, 60, [edge('gC', 'exit-ok'), edge('gD', 'exit-fail')]), gPanel('gB', 60, 340, [edge('gC', 'exit-ok')]),
+                // The join TARGET prints once and sleeps: the tty echoes the pasted
+                // payloads into its log without a shell executing them — a shell
+                // ran A's transcript line by line and its `exit` line ended the
+                // target before B's part arrived (the first run); a bare `cat`
+                // never leaves `starting` and is never receivable (the second).
+                gPanel('gC', 440, 60, undefined, '/bin/sh', ['-c', 'echo ready; sleep 600']), gPanel('gD', 440, 340),
+                gPanel('gT', 820, 340), gPanel('gS', 820, 60, [edge('gK', 'exit')])
+              ]),
+              { id: 'gH', kind: 'chat', x: 1200, y: 60, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '88888888-8888-4888-8888-888888888888' }, links: [edge('gT', 'idle')] },
+              { id: 'gK', kind: 'chat', x: 1200, y: 340, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '99999999-9999-4999-8999-999999999999' } }
+            ],
+            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+          })
+          layoutStore.flushSync()
+          const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload(); await reG
+          await settle()
+          const held = await waitUntil(() => { const ids = layoutStore.initial().panels.map((p) => p.id).sort(); return JSON.stringify(ids) === JSON.stringify([...G_IDS].sort()) }, 3000)
+          if (held === true) break
+        }
         // The rail collapsed: gT and gS sit at x 820 and a real click on their
         // cards must land inside the window whatever the previous block left.
         await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', false)`)
@@ -3119,8 +3131,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const live = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="gA"] .panel__slot') !== null`), 6000)
         const click = (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`)
         const t1 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
-        await settle()
-        const carded = await wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed') && document.querySelector('.panel[data-panel-id="gA"] .panel__slot') === null`)
+        // A condition, not one settle(): the collapse re-renders the live
+        // member to its card on the next commit, which a loaded CI runner can
+        // push past a fixed window. cardedHow records which half lagged.
+        const cardedNow = () => wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed') && document.querySelector('.panel[data-panel-id="gA"] .panel__slot') === null`)
+        const carded = (await waitUntil(cardedNow, 4000)) === true
+        const cardedHow = await wc.executeJavaScript(`({ collapsed: document.querySelector('.canvas-group[data-group-id="g1"]')?.classList.contains('canvas-group--collapsed') ?? null, slot: document.querySelector('.panel[data-panel-id="gA"] .panel__slot') !== null, card: document.querySelector('.panel[data-panel-id="gA"] .panel__card') !== null })`)
         const t2 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
         await settle()
         const expanded = await wc.executeJavaScript(`!document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed')`)
@@ -3134,7 +3150,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const removed = await wc.executeJavaScript(`document.querySelector('.canvas-group') === null && document.querySelectorAll('.panel[data-panel-id]').length === 2`)
         const ptyStill = ptyManager.list().some((s) => s.panelId === 'gA')
         ok(ID, framed && live === true && t1 && carded && t2 && expanded && r1 && removed && ptyStill,
-          JSON.stringify({ framed, live, t1, carded, t2, expanded, r1, removed, ptyStill, log: gLog.slice(-3) }))
+          JSON.stringify({ framed, live, t1, carded, cardedHow, t2, expanded, r1, removed, ptyStill, log: gLog.slice(-3) }))
       } catch (gErr) {
         ok(ID, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
       } finally {
@@ -3454,15 +3470,17 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                   // The translate property composes with a transform the menu
                   // may already carry (its popper positions it that way);
                   // overwriting transform threw it back to the origin.
-                  // Measured and corrected rather than set once: a translate is in
-                  // the menu's LOCAL pixels, and on the runner one shot left the
-                  // two apart (moved, overlap 0), so each step aims at what is left.
+                  // The MAP is moved, not the menu: the menu is a Motion element
+                  // that owns its own transform, and on the runner an inline
+                  // translate on it never took (moved, menu still at its
+                  // corner, overlap 0). The map is plain CSS. Measured and
+                  // corrected, since a translate is in the element's own pixels.
                   let tx = 0, ty = 0
                   for (let i = 0; i < 4; i++) {
-                    tx += pr.left + pr.width / 2 - mr.left - mr.width / 2; ty += pr.top + pr.height / 2 - mr.top - 20
-                    m.style.translate = Math.round(tx) + 'px ' + Math.round(ty) + 'px'
-                    mr = m.getBoundingClientRect(); pr = map.getBoundingClientRect()
-                    if (Math.abs(pr.left + pr.width / 2 - mr.left - mr.width / 2) < 4) break
+                    tx += mr.left + mr.width / 2 - pr.left - pr.width / 2; ty += mr.top + 20 + pr.height / 2 - pr.top - pr.height / 2
+                    map.style.translate = Math.round(tx) + 'px ' + Math.round(ty) + 'px'
+                    pr = map.getBoundingClientRect(); mr = m.getBoundingClientRect()
+                    if (Math.abs(mr.left + mr.width / 2 - pr.left - pr.width / 2) < 4) break
                   }
                   moved = true
                 }
@@ -3475,7 +3493,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                     if (!pr || x <= pr.left || x >= pr.right || y <= pr.top || y >= pr.bottom) continue
                     probed++; const e = document.elementFromPoint(x, y)
                     if (!e || !m.contains(e)) lost.push(b.textContent.trim().slice(0, 20) + '@' + f + '→' + (e ? String(e.className).split(' ')[0] : null)) } }
-                m.style.translate = ''
+                m.style.translate = ''; if (map) map.style.translate = ''
                 return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, menu: [Math.round(mr.left), Math.round(mr.top), Math.round(mr.width), Math.round(mr.height)], map: pr && [Math.round(pr.left), Math.round(pr.top), Math.round(pr.width), Math.round(pr.height)], presence: map && map.getAttribute('data-presence'), kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
               press(trig)
               await settle()
