@@ -154,3 +154,47 @@ jobs:
           TC_VERIFY_ONLY: ${{ env.KNOWN_RED }}
           TC_WATCHDOG_SCALE: '2'
         run: npm run verify
+
+  # M462. The visual suite (scripts/verify-visual.cjs): every shot scene painted
+  # and compared with its committed golden. NON-BLOCKING until Stream B has
+  # written goldens a person looked at (and captured where this job paints, or
+  # every scene differs by the machine, not the app); it then joins the blocking
+  # job and HAND_RUN in verify-all.cjs loses it. Every scene's PNG is uploaded,
+  # with a diff and the fresh half-size capture beside each one that failed, so
+  # the run is something a person can look at, not only a count.
+  verify-visual:
+    name: verify:visual (non-blocking)
+    runs-on: macos-latest
+    continue-on-error: true
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # The shot harness spawns real shells and tmux-backed sessions for some scenes.
+      - name: Install tmux
+        run: brew install tmux
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+      # verify:visual consumes the build; it does not make one.
+      - name: Build
+        run: npm run build
+      - name: Run verify:visual
+        env:
+          # The goldens are 2x captures; the runner's display is 1x.
+          TC_VISUAL_SCALE: '2'
+          TC_WATCHDOG_SCALE: '2'
+          VISUAL_SHOT_DIR: ${{ github.workspace }}/out/visual/shots
+        run: npm run verify:visual
+      - name: Upload the scenes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-${{ github.run_id }}
+          path: out/visual/
+          if-no-files-found: warn
+          retention-days: 14
