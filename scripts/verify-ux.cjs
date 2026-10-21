@@ -42,11 +42,15 @@ buildSync({
   }
 })
 const M = require(OUT)
-// M507 (the Canvas.tsx split). The hooks M442 appended now live in
-// useShellTail.ts, called at the same position, so the canvas's source is
-// Canvas.tsx followed by that hook, and only while Canvas still calls it.
+// M507 (the Canvas.tsx split). Code these checks read moved, verbatim, into
+// hooks Canvas calls at the same position: the hooks M442 appended
+// (useShellTail.ts) and the preset menu's events (useHistoryVerbs.ts). The
+// canvas's source is Canvas.tsx followed by each, and only while Canvas
+// still calls it.
 const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
-const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + read('src/renderer/canvas/useShellTail.ts') : '')
+const canvas = canvasOwn + ['useShellTail', 'useHistoryVerbs']
+  .filter((hook) => new RegExp(`= ${hook}\\(\\{`).test(canvasOwn))
+  .map((hook) => '\n' + read(`src/renderer/canvas/${hook}.ts`)).join('')
 
 // ── First run ────────────────────────────────────────────────────────────
 
