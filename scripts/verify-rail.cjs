@@ -3619,7 +3619,8 @@ console.log('\n' + '='.repeat(60))
   ok('workflow.trigger.1 the Triggers verb is disabled with the same runReason Run is — a watcher armed on a blocked shape fires into a refusal',
     triggers !== null && /props\.runReason/.test(triggers[0]),
     triggers ? triggers[0].trim() : 'no Triggers verb found')
-  const canvas = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  // M500. runWorkflow moved with the workflow verbs into useWorkflowVerbs.ts.
+  const canvas = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'useWorkflowVerbs.ts'), 'utf8')
   const start = canvas.indexOf('const runWorkflow = useCallback(')
   const body = start === -1 ? '' : canvas.slice(start, canvas.indexOf('}, [', start))
   ok('workflow.fire.1 runWorkflow consults templateRefusal before instantiating, so a fired trigger on a blocked template returns the refusal instead of minting nothing',
@@ -3796,7 +3797,8 @@ console.log('\n' + '='.repeat(60))
     ['src/renderer/canvas/useInspectorDetail.ts', "the inspector's Tools section"],
     // M28's action hook split by domain; `openToolbox` went to the presets slice.
     ['src/renderer/canvas/palette-actions/presets.ts', 'the Open toolbox verb'],
-    ['src/renderer/canvas/Canvas.tsx', "the Skills pane's cwd"]
+    // M499. The Skills pane's state left Canvas.tsx for its own hook.
+    ['src/renderer/canvas/useSkillsPane.ts', "the Skills pane's cwd"]
   ]
   const asks = CONSUMERS.filter(([f]) => /inspectionDirectory\(/.test(require('node:fs').readFileSync(join(__dirname, '..', ...f.split('/')), 'utf8')))
   ok('context.policy.4 every inspection consumer ASKS the one policy rather than keeping its own copy of the rule',
