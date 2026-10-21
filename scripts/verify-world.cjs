@@ -1498,7 +1498,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     /return roster\.peers\.filter\(\(p\) => p\.live\)\.map/.test(pub) && /panelId: p\.presence\.currentPanelId \?\? null/.test(pub) && /mode: p\.presence\.mode/.test(pub) &&
       SEL.peerFollowTarget({ panelId: 'a' }, ['a']) === 'a' && SEL.peerFollowTarget({ panelId: 'a' }, ['b']) === null && SEL.peerFollowTarget({ panelId: null }, ['a']) === null && SEL.peerFollowTarget(undefined, ['a']) === null)
   ok('world.peers.2 the room tells teammates where you are and what you look at — mode \'world\' while it is up, and the robot you picked as your current panel — with no new presence field (the mode string already crosses, and verify:presence pins the payload\'s keys)',
-    /mode: annotating \? 'annotate' : merged \? 'merged' : worldOn \? 'world' : chrome\.centerView/.test(canvasSrc) && /focusedId: worldOn && worldPicked !== null \? worldPicked : focusedId/.test(canvasSrc))
+    // M507. The presence report moved with the task lens; Canvas still calls it.
+    (() => { const lensSrc = /= useTaskLens\(\{/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/useTaskLens.ts'), 'utf8') : ''
+      return /mode: annotating \? 'annotate' : merged \? 'merged' : worldOn \? 'world' : chrome\.centerView/.test(lensSrc) && /focusedId: worldOn && worldPicked !== null \? worldPicked : focusedId/.test(lensSrc) })())
   ok('world.peers.3 the teammates looking at an agent wear their initials in its pill, in their own colour; the strip rings those in the room and follows on a press, glides on each move, and lets go when they leave the roster',
     /const watchers = ctx\.peers\.filter\(\(p\) => p\.panelId === agentId\)/.test(card) && /className="world-pill__peers"/.test(card) &&
       /if \(followed === undefined\) \{ setFollowing\(null\); return \}/.test(peersSrc) && /if \(target !== null\) camera\.current\?\.focus\(target\)/.test(peersSrc) && /data-in-room=\{p\.mode === 'world'/.test(peersSrc) && !THREE_DOOR_RE.test(peersSrc))

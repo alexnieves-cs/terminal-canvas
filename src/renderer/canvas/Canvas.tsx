@@ -2,6 +2,9 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction, type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { useAnnotations } from './useAnnotations'
+import { useTaskLens } from './useTaskLens'
+import { useRunRows } from './useRunRows'
 import { useAttentionModels } from './useAttentionModels'
 import { useNavigatorModels } from './useNavigatorModels'
 import { useChatSwapVerbs } from './useChatSwapVerbs'
@@ -59,16 +62,14 @@ import { useVault } from './useVault'
 import {
   EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, NO_GUIDES, EMPTY_SETTINGS, EMPTY_WORKSPACES,
-  MACHINE_COST_SAMPLE_MS, APP_OPENED_AT, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
+  MACHINE_COST_SAMPLE_MS, APP_OPENED_AT, retainSelection, panelLabel} from './canvas-constants'
 import { useViewport, prefersReducedMotion } from './useViewport'
 import { RestoreSplash, StartupSplash } from './StartupSplash'
 import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, restoreLines, type RestoreFacts, type SplashMode, type StartupInput } from './splash'
 import { Onboarding } from '@renderer/onboarding/Onboarding'
 import { BlankCanvas } from '@renderer/shell/EmptyState'
-import type { TaskMenuFact } from '@renderer/components/PanelFrame'
-import { advancedDoors, type AdvancedDoor, type AdvancedDoorId } from './advanced-doors'
-import { FIT_TASK_NO_CONTEXT, missingSentence, taskMembership, type TaskMembership } from './task-members'
-import { taskClusters, type TaskCluster } from './task-clusters'
+import { FIT_TASK_NO_CONTEXT, missingSentence} from './task-members'
+import { type TaskCluster } from './task-clusters'
 import { TaskClusterLayer, TaskRegionLayer, TierLayer } from './TaskClusterLayer'
 import { moveRegion, regionsFromMemberships } from './task-regions'
 import { InlineApproval } from '@renderer/shell/ApprovalDetail'
@@ -82,7 +83,7 @@ import { useCanvasClipboard } from './useCanvasClipboard'
 import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
 import {
-  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
 import { chromeObstacles, placementRoom as readPlacementRoom, sizeToView, viewCentre } from './safe-area'
 import { placePanel, type PlaceFn, type PlaceHow } from './place-new'
 import { placementQuiet } from './place-quiet'
@@ -149,8 +150,8 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, isRelayPanel, RELAY_W, RELAY_H, isNotePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, maximiseRect, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
-  addLink, setRestartOnExit, setLinkAutomation, linksOf, workCardItemId,
+  makePanel, makeReviewPanel, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
+  addLink, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, CHAT_W, CHAT_H} from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
@@ -172,8 +173,8 @@ import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart, scrollT
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
-import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
-import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
+import { disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
+import { disposeWatcher} from '@renderer/watcher/useWatchers'
 import { approvals, useApprovals } from '@renderer/chat/chat-store'
 import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { activityNow, forgetAllEdges, forgetEdgesFor, freezeEdgeClock, noteEdgeArrived, noteEdgeFired, noteEdgeWaiting, setEdgeContext } from './useEdgeActivity'
@@ -212,14 +213,13 @@ import { applyPoolEvent } from '@renderer/workflow/pool-store'
 import type { PoolMintReply, PoolMintRequest } from '@shared/ipc-contract'
 import { fillTemplate, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
 import { enabledEdges, sealAbandoned} from './run-model'
-import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
+import { buildRunRows} from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
-import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText, deliverToComposer } from '@renderer/chat/chat-store'
-import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
+import { onChatSession, deliverToComposer } from '@renderer/chat/chat-store'
+import { clearUnread, clearLastLine} from '@renderer/session/last-line-store'
 import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
-import { lastLineOf } from '../shell/rail-rows'
 import { type PersistedTeammate } from '@shared/teammates'
 import { parseSkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
@@ -230,8 +230,8 @@ import { SkillNode } from '@renderer/skills/SkillNode'
    own rule — a new object each render is re-render churn through every memo
    that takes the shelf as a dependency. */
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
-import { pinCount, pinRefusal } from '@renderer/canvas/lod'
-import { ANNOTATIONS_MAX, annotationPoint, dropEmptyLabels, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
+import { pinCount} from '@renderer/canvas/lod'
+import { ANNOTATIONS_MAX, type Annotation} from '@shared/annotations'
 import { WORK_ITEM_STATES, carryWorkItem, prRefusalSync, teammateRefusal, type PersistedWorkItem} from '@shared/work-items'
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
 import { ACROSS_BASELINE, type ReviewSubject } from '@shared/review'
@@ -241,8 +241,7 @@ import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import { AnnotationLayer } from './AnnotationLayer'
 import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
 import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
-import type { SnapshotMeta } from '@shared/ipc-contract'
-import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
+import { PanelMarksContext} from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -260,7 +259,6 @@ import { landingViewport } from '../world/plan-floor'
 import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn, worldLandingViewport } from '../world/world-toggle'
 import { attentionCursor, setAttentionCursor } from '../world/world-flight'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
-import { useSelectedAgent } from '../world/world-select'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { ReopenNotice} from '../shell/ReopenNotice'
@@ -287,7 +285,6 @@ import type { SharedPanel } from '@shared/canvas-ops'
 import { notifyRefused } from '../shell/toast'
 import { RosterStrip } from '../presence/RosterStrip'
 import { SyncChip } from '../presence/SyncChip'
-import { usePresenceReport } from '../presence/usePresenceReport'
 import { useRosterNames } from '../presence/useRosterNames'
 import { useAccounts } from '../account/useAccounts'
 import { ShareDialog } from '../account/ShareDialog'
@@ -5235,110 +5232,10 @@ export function Canvas({
   // M79. The recorder observes the handoff hook; Run again restarts the roots.
   const runsApi = useRuns({ panelsRef, runsRef, setRuns, restartWithSpec })
   useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled, onRunEvent: runsApi.onRunEvent })
-  const [runAgainResult, setRunAgainResult] = useState<{ id: string; sentence: string } | null>(null)
-  useEffect(() => { forgetOpenRunsRef.current = runsApi.forgetOpen }, [runsApi])
-  // M172. The `N live / N quiet` capsules left the dock (the metrics rule); the
-  // rail's `Agents · N` heading carries the count. `railCapsules` stays a pure
-  // export for `verify:rail lastline.1`.
-  // M105. A chat's turn end sets its LAST LINE SAID and, when the user was
-  // elsewhere, the unread mark — per id, in its own store, never on version().
-  useEffect(() => onChatTurnEnd((id) => { setLastLine(id, lastLineOf(lastAssistantText(id)), focusedIdRef.current !== id) }), [])
-  // M105. After a relaunch the row still says what its chat said last — read,
-  // never unread: a restored answer was read in its earlier life.
-  useEffect(() => onChatSeeded((id) => { if (getLastLine(id).line !== '') return; const line = lastLineOf(lastAssistantText(id)); if (line !== '') setLastLine(id, line, false) }), [])
-  // M97. An auto run is a run: the store's auto bus feeds the recorder.
-  useEffect(() => onChatAuto((id, status) => runsApi.onAutoEvent(id, status)), [runsApi])
-  const anyOpen = runs.some((r) => r.endedAt === undefined)
-  useEffect(() => {
-    if (!anyOpen) return
-    const timer = setInterval(() => setRunTick((n) => n + 1), 1000)
-    return () => clearInterval(timer)
-  }, [anyOpen])
-  const onRunAgain = useCallback((id: string) => { setRunAgainResult({ id, sentence: runsApi.runAgain(id, runsRef.current) }) }, [runsApi])
-  const terminalIdSet = useMemo(() => new Set(panels.filter(isTerminalPanel).map((p) => p.rect.id)), [panels])
-  const runRowsBuilt = useMemo(() => buildRunRows(runs, terminalIdSet, Date.now()), [runs, terminalIdSet, runTick])
-  const runRowsSig = runSignature(runRowsBuilt) + (runAgainResult === null ? '' : `|${runAgainResult.id}:${runAgainResult.sentence}`)
-  const railRuns = useMemo(() => runRowsBuilt.map((r) => (runAgainResult !== null && runAgainResult.id === r.id ? { ...r, note: runAgainResult.sentence } : r)), [runRowsSig])
-  // The run FRAMES: the newest run per set of panels, as read-only group frames,
-  // derived every render and never persisted as groups.
-  const runFrames = useMemo<CanvasGroup[]>(() => {
-    const seen = new Set<string>()
-    const out: CanvasGroup[] = []
-    for (const run of runs) {
-      const key = [...run.panelIds].sort().join(',')
-      if (seen.has(key)) continue
-      seen.add(key)
-      const members = run.panelIds.filter((id) => panels.some((p) => p.rect.id === id))
-      if (members.length === 0) continue
-      out.push({ id: `run:${run.id}`, label: run.name, colour: 'blue', panelIds: members })
-    }
-    return out
-  }, [runs, panels])
-  const panelRun = useMemo(() => {
-    if (selectedId === null) return null
-    const run = runs.find((r) => r.panelIds.includes(selectedId))
-    if (!run) return null
-    const row = runRowsBuilt.find((r) => r.id === run.id)
-    return row === undefined ? null : { id: run.id, name: run.name, facts: row.facts, outcome: row.outcome, tone: row.tone, runAgain: row.runAgain }
-  }, [runs, selectedId, runRowsSig])
-
-  const onSetRestartOnExit = useCallback((from: string, to: string, enabled: boolean) => {
-    setPanels((current) => {
-      const next = setRestartOnExit(current, from, to, enabled)
-      if (next === current) return current
-      commitHistory(next)
-      return next
-    })
-    if (!enabled) setAutomationResult((current) => {
-      const next = new Map(current)
-      next.delete(`${from}:${to}`)
-      return next
-    })
-  }, [commitHistory])
-
-  // M41: the one-rule-per-link mutator, the handoff control's verb. Same
-  // shape as onSetRestartOnExit above, which is now a thin call into it.
-  const onSetLinkAutomation = useCallback((from: string, to: string, automation: LinkAutomation) => {
-    setPanels((current) => {
-      const next = setLinkAutomation(current, from, to, automation)
-      if (next === current) return current
-      commitHistory(next)
-      return next
-    })
-    if (!automation.enabled) setAutomationResult((current) => {
-      const next = new Map(current)
-      next.delete(`${from}:${to}`)
-      return next
-    })
-  }, [commitHistory])
-
-  // Palette actions. Everything the palette can do that needs the registry,
-  // the camera, or IPC lives here — buildCommands takes callbacks precisely so
-  // none of that reaches the pure layer.
-  /**
-   * M27. Create a note and open it, ready to write in.
-   *
-   * Two steps rather than one, and the prompt is the palette's own input mode
-   * rather than a dialog — the machinery M5a's preset editing was deferred
-   * over ("a modal would fight xterm for keyboard focus") and which every
-   * rename, delete and confirm in this app already reuses, so a note prompt
-   * inherits all four of usePalette's focus rules for free.
-   *
-   * The root is read from the ref at CALL time rather than closed over: the
-   * user may select a different panel between opening the palette and running
-   * the row, and a note belongs to the project they are looking at NOW.
-   *
-   * `exists` RE-PROMPTS with feedback rather than opening the existing file.
-   * "Create" and "open" are different acts, and silently turning one into the
-   * other is how a user ends up appending to a file they thought was new —
-   * with the existing bytes untouched either way, since main refuses at the
-   * `wx` flag rather than after a check.
-   */
-  // M73. Keep main told about every chat panel on this canvas; disposal is
-  // explicit at the removing sites (see useChatSessions).
-  // M84. One module-level subscription to watcher:state, installed once.
-  useWatchers()
-  useChatSessions(panels)
+  // M507. The run rows and the link automation setters, lifted into useRunRows.ts at exactly this position.
+  const { onRunAgain, onSetLinkAutomation, onSetRestartOnExit, panelRun, railRuns, runFrames } = useRunRows({
+    commitHistory, focusedIdRef, forgetOpenRunsRef, panels, runTick, runs, runsApi, runsRef, selectedId, setAutomationResult, setPanels, setRunTick
+  })
   // M73. Mint a chat panel. The CLI session id is minted HERE so the panel
   // record is complete before any invoke resolves; main's agent:create is
   // asked FIRST so a refusal (no such directory, no claude) is answered by
@@ -5515,406 +5412,14 @@ export function Canvas({
   }, [commitHistory, selectOnly, addToSelection])
   instantiateTemplateRef.current = instantiateTemplate
 
-  // M92. Lock, pin and maximise are LAYOUT facts, each one history entry.
-  // Absent stays absent: the field is deleted, never set to undefined, so the
-  // record on disk has no key. Maximise stores the rect to go back to; the
-  // first drag or resize clears the mark (usePanelDrag's onDrag), since the
-  // restore rect would lie once the user moved it.
-  const setPanelFlag = useCallback((id: string, patch: (panel: Panel) => Panel | null): void => {
-    if (mergedRef.current) return
-    setPanels((current) => {
-      const panel = current.find((p) => p.rect.id === id)
-      if (!panel) return current
-      const next = patch(panel)
-      if (next === null) return current
-      const out = current.map((p) => (p === panel ? next : p))
-      commitHistory(out)
-      return out
-    })
-  }, [commitHistory])
-  const strip = (panel: Panel, key: 'locked' | 'pinned' | 'maximised' | 'skillTrail'): Panel => {
-    const { [key]: _gone, ...rest } = panel
-    return rest as Panel
-  }
-  const lockPanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.locked === true ? null : { ...p, locked: true })), [setPanelFlag])
-  const unlockPanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.locked === true ? strip(p, 'locked') : null)), [setPanelFlag])
-  const pinPanel = useCallback((id: string) => setPanelFlag(id, (p) => (pinRefusal(p.kind, p.pinned === true, pinCount(panelsRef.current)) !== undefined ? null : { ...p, pinned: true })), [setPanelFlag])
-  const unpinPanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.pinned === true ? strip(p, 'pinned') : null)), [setPanelFlag])
-  const maximisePanel = useCallback((id: string) => {
-    const host = hostRef.current
-    if (!host) return
-    const bounds = host.getBoundingClientRect()
-    // M315. Fill view is for READING, so it fills at 100%. Computed against the
-    // camera as it stood, a Fill view from a zoomed-out canvas (43% after Fit
-    // all) filled the window with 43%-size text. The camera goes to 100% with
-    // the world point under the canvas centre held still, and the rect is
-    // sized for THAT camera; within 2% of 100% nothing moves.
-    const now = viewportRef.current
-    const target = Math.abs(now.scale - 1) <= 0.02 ? now : (() => {
-      const cx = bounds.width / 2
-      const cy = bounds.height / 2
-      const wx = (cx - now.x) / now.scale
-      const wy = (cy - now.y) / now.scale
-      return { x: cx - wx, y: cy - wy, scale: 1 }
-    })()
-    // Always: at 100% already, this still stops a flight in progress — the rect
-    // below is sized for THIS camera, and a camera still moving would carry it off.
-    goToViewport(target)
-    const rect = maximiseRect(target, { width: bounds.width, height: bounds.height }, MAXIMISE_MARGIN)
-    // The raise rides the same patch (one history entry, one setState).
-    setPanelFlag(id, (p) => (p.maximised !== undefined ? null : { ...p, maximised: { restore: p.rect }, rect: { ...rect, id }, z: nextZ(panelsRef.current) }))
-  }, [setPanelFlag, goToViewport])
-  const restorePanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.maximised === undefined ? null : { ...strip(p, 'maximised'), rect: p.maximised.restore })), [setPanelFlag])
-  // M130. The fourth layout mark, through the same one-history-entry door the
-  // other three take. Absent stays absent: expanding DELETES the key rather
-  // than writing `skillTrail: undefined`, which survives IPC and reads as
-  // present on the next parse.
-  const toggleSkillTrail = useCallback((id: string) => setPanelFlag(id, (p) => (
-    p.skillTrail === 'collapsed' ? strip(p, 'skillTrail') : { ...p, skillTrail: 'collapsed' as const }
-  )), [setPanelFlag])
-
-  // Frozen on a SIGNATURE of the marks, not on `panels`: a drag rebuilds the
-  // array at 60Hz, and a context value that changed with it would re-render
-  // every frame consuming it (the rail's own freeze, applied here).
-  // M203/M204 (D08). EVERY TASK'S MEMBERS, built ONE way for the three verbs,
-  // the lens and the ⋯ menu — derived from what the canvas already holds and
-  // never stored. A plain function, not a hook: each caller passes the panels
-  // it means (the DISPLAYED ones) and reads it at its own moment.
-  const taskMemberships = (shown: readonly Panel[], items: readonly PersistedWorkItem[]): TaskMembership[] => {
-    const cwdOf = (id: string): string | undefined => {
-      const live = getLiveSession(id)?.cwd
-      if (live !== undefined) return live
-      const p = shown.find((q) => q.rect.id === id)
-      if (p !== undefined && isChatPanel(p)) return p.chat.cwd
-      // The panel's OWN spec, never only the registry: a restored terminal is
-      // DORMANT (no session, no PTY) until touched, and reading the registry
-      // alone dropped every sleeping terminal in the lane out of its task —
-      // `task.show.1` found it on its first real press.
-      if (p !== undefined && isTerminalPanel(p)) return p.spec.cwd
-      return registry.get(id)?.spec.cwd
-    }
-    // The LANE comes from the handoff hook's records, never from
-    // `worktreeRows`: the palette's list loads only when ⌘K opens, so reading
-    // it made a task's in-lane panels vanish until somebody had opened the
-    // palette (task.show.1's second run) — the trap M202's `reviewTaskLane`
-    // already names. The origin panel id rides the SAME record (M204's
-    // critic: read from the palette's list, a gone origin could not be
-    // reported until ⌘K had opened, and a fallback of '' reported a panel
-    // with no id as gone).
-    const memberships = items.map((item) => {
-      const lane = taskLaneOf(item.id)
-      return taskMembership({ item, panels: shown, cwdOf, runs, ...(lane === undefined ? {} : { lane: { path: lane.path, panelId: lane.panelId } }) })
-    })
-    return memberships
-  }
-  // Presence: this window's cursor, viewport, selection and mode, to main at
-  // 15Hz for the active workspace's awareness (renderer/presence/). It creates
-  // no ref any earlier hook depends on. It sits AFTER taskMemberships, which
-  // presenceTask calls during render: placed beside activeWorkspaceId it read
-  // that const inside its temporal dead zone, and the canvas threw
-  // `Cannot access 'taskMemberships' before initialization` on the first
-  // render with a focused panel (verify:panels:core 6 found it).
-  // The task for the Team view's tile: the focused panel's task, else the one
-  // in progress — the same "focused" pick Orchestrate's taskMemberIds makes.
-  const presenceTask = useMemo(() => {
-    const own = focusedId === null ? undefined : taskMemberships(panels, workItems).find((m) => m.members.some((x) => x.panelId === focusedId))
-    const item = (own === undefined ? undefined : workItems.find((w) => w.id === own.itemId))
-      ?? workItems.find((w) => w.state === WORK_ITEM_STATES[1])
-    return item?.title ?? ''
-  }, [focusedId, panels, workItems])
-  // M426: in the room, what a person is looking at is the robot they picked — teammates see that.
-  const worldPicked = useSelectedAgent()
-  usePresenceReport({
-    hostRef, workspaceId: activeWorkspaceId, viewport, focusedId: worldOn && worldPicked !== null ? worldPicked : focusedId, selectedIds: selectedPanelIds,
-    mode: annotating ? 'annotate' : merged ? 'merged' : worldOn ? 'world' : chrome.centerView,
-    currentTask: presenceTask
+  // M507. The layout marks, task membership and the related-item lens, lifted into useTaskLens.ts at exactly this position.
+  const { approvalTaskOf, clusterHulls, lens, lockPanel, maximisePanel, navTask, panelMarks, pinPanel, relatedItemId, restorePanel, setRelatedItemId, taskMemberships, taskMenuRef, unlockPanel, unpinPanel } = useTaskLens({
+    activeWorkspaceId, annotating, cardDetail, chrome, clusterHullsRef, commitHistory, displayPanels, displayPanelsRef, dormantIds, focusedId, focusedIdRef, goToViewport, groups, hostRef, merged, mergedRef, onFocusPanel, openFocusTaskRef, palette, paletteActionsRef, panels, panelsRef, runs, selectedId, selectedPanelIds, setPanels, setResumedNext, shouldIgnoreKeys, taskLaneOf, version, viewport, viewportRef, workItems, workItemsRef, worktreeRows, worldOn, registry
   })
-  // M303 (Quiet instrument). The hulls are computed at EVERY tier now: far
-  // out they are M270's filled silhouettes; nearer in, the task ones are
-  // drawn as quiet dashed regions (TaskClusterLayer's `region`), so a task
-  // reads as one place on the canvas at the distance you work at. Groups are
-  // left out near in — GroupLayer already frames them there.
-  const clusterHulls = useMemo(() => {
-    return taskClusters({
-      panels: displayPanels.map((p) => ({
-        id: p.rect.id,
-        rect: p.rect,
-        tone: panelState(
-          { kind: p.kind, status: isTerminalPanel(p) ? registry.get(p.rect.id)?.status : undefined, dormant: dormantIds.has(p.rect.id) },
-          getAgentState(p.rect.id)
-        ).tone
-      })),
-      memberships: taskMemberships(displayPanels, workItems),
-      titles: Object.fromEntries(workItems.map((i) => [i.id, i.title])),
-      groups: groups.map((g) => ({ id: g.id, title: g.label, panelIds: g.panelIds }))
-    })
-  }, [cardDetail, displayPanels, workItems, groups, dormantIds, version, runs, taskLaneOf])
-  // M402. For the placer (onSpawn's `placer`), which is declared above this and reads it at press time.
-  clusterHullsRef.current = clusterHulls
-  // M204 (D08). THE TASK LENS — a VIEW state, never persisted (M106's flip is
-  // the precedent). Derived as the task's panels change, and cleared when the
-  // task leaves the board — which includes switching to a workspace whose
-  // board does not hold it, since Canvas is not remounted per workspace.
-  const [relatedItemId, setRelatedItemId] = useState<string | null>(null)
-  // #10. The collapsed resume line lives exactly as long as the lens it rides.
-  useEffect(() => { if (relatedItemId === null) setResumedNext(null) }, [relatedItemId])
-  const lens = useMemo(() => {
-    if (relatedItemId === null) return null
-    const item = workItems.find((i) => i.id === relatedItemId)
-    return item === undefined ? null : (taskMemberships(displayPanels, [item])[0] ?? null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relatedItemId, displayPanels, workItems, worktreeRows, runs])
-  // M303 (Quiet instrument). The navigator groups by TASK at rest, not only
-  // while a lens is lit: the lit lens wins, otherwise the one task the
-  // selection belongs to. A selection in several tasks (or none) falls back
-  // to the by-kind places — guessing one of many would mislabel the rest.
-  const navTask = useMemo(() => {
-    if (lens !== null) return lens
-    if (selectedId === null) return null
-    const owners = taskMemberships(displayPanels, workItems).filter((m) => m.members.some((x) => x.panelId === selectedId))
-    return owners.length === 1 ? owners[0]! : null
-  }, [lens, selectedId, displayPanels, workItems])
-  // Keyed on a SIGNATURE string, never on `lens` itself: the lens is
-  // re-derived from `displayPanels`, a new array on every frame of a drag,
-  // and the marks context below is frozen precisely so a drag re-renders no
-  // frame (M204's critic). The same members with the same reasons are the
-  // same map.
-  const lensSignature = lens === null ? null : lens.members.map((m) => `${m.panelId}=${m.reason}`).join(',')
-  const lensMap = useMemo(() => (lensSignature === null ? null : new Map(lensSignature === '' ? [] : lensSignature.split(',').map((e) => e.split('=') as [string, string]))), [lensSignature])
-  useEffect(() => { if (relatedItemId !== null && !workItems.some((i) => i.id === relatedItemId)) setRelatedItemId(null) }, [relatedItemId, workItems])
-  // M264. Escape clears the sticky stage when the lens is lit — but never when
-  // the key belongs to a focused terminal (`.xterm`), an open text draft, or
-  // chrome that already owns Escape (shouldIgnoreKeys). Stealing agent Escape
-  // is the paste defect M204 deliberately avoided.
-  useEffect(() => {
-    if (relatedItemId === null) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      if (shouldIgnoreKeys()) return
-      const active = document.activeElement
-      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable)) return
-      if (active instanceof Element && active.closest('.xterm') !== null) return
-      event.preventDefault()
-      setRelatedItemId(null)
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [relatedItemId, shouldIgnoreKeys])
-  // M204 (D08). The ⋯ menu's task section asks this at the moment it opens.
-  // A ref, so the marks object below keeps ONE identity and no frame
-  // re-renders for a membership it is not showing.
-  const taskMenuRef = useRef<(id: string) => TaskMenuFact>(() => ({ kind: 'none' }))
-  taskMenuRef.current = (id) => {
-    const items = workItemsRef.current
-    const owners = taskMemberships(displayPanelsRef.current, items).filter((m) => m.members.some((x) => x.panelId === id))
-    const title = (m: TaskMembership): string => items.find((i) => i.id === m.itemId)?.title ?? m.itemId
-    if (owners.length === 0) return { kind: 'none' }
-    if (owners.length > 1) return { kind: 'many', titles: owners.map(title) }
-    return { kind: 'one', title: title(owners[0]!), related: owners[0]!.itemId === relatedItemId }
-  }
-  // Brief #19. The ⋯ menu's advanced doors: what is true of this panel, asked
-  // when the menu opens (a ref, the task section's reason), and the palette
-  // verb each door runs — no new action, only a new moment to offer it.
-  const advancedRef = useRef<(id: string) => AdvancedDoor[]>(() => [])
-  advancedRef.current = (id) => {
-    const all = displayPanelsRef.current
-    const p = all.find((x) => x.rect.id === id)
-    if (p === undefined) return []
-    const cwd = isTerminalPanel(p) ? p.spec.cwd : isChatPanel(p) ? p.chat.cwd : undefined
-    const owners = taskMemberships(all, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === id))
-    return advancedDoors({
-      kind: p.kind,
-      agentic: isChatPanel(p) || (isTerminalPanel(p) && p.spec.agent !== undefined),
-      hasCwd: cwd !== undefined && cwd !== '',
-      teammate: isChatPanel(p) && p.chat.teammateId !== undefined,
-      taskMembers: owners.length === 1 ? owners[0]!.members.length : 0,
-      watched: cwd !== undefined && all.some((x) => isWatcherPanel(x) && x.watch.cwd === cwd)
-    })
-  }
-  const advancedVerbs = useMemo(() => ({
-    of: (id: string) => advancedRef.current(id),
-    run: (id: string, door: AdvancedDoorId) => {
-      const a = paletteActionsRef.current
-      if (a === null || a === undefined) return
-      if (door === 'teammate') a.openTeammates()
-      else if (door === 'skill') a.openToolbox(id)
-      else if (door === 'workflow') void a.createObject('workflow')
-      else if (door === 'watcher') { onFocusPanel(id); focusedIdRef.current = id; a.beginWatcher() }
-      else {
-        const owner = taskMemberships(displayPanelsRef.current, workItemsRef.current).find((m) => m.members.some((x) => x.panelId === id))
-        a.beginSaveTemplate(owner === undefined ? [id] : owner.members.map((x) => x.panelId))
-      }
-    }
-  }), [onFocusPanel])
-  // #17. The approval detail's Task line — the same membership the ⋯ menu
-  // reads, through its ref, so the Dock's memo sees ONE function for the life
-  // of the canvas.
-  const approvalTaskOf = useCallback((panelId: string): string | undefined => {
-    const fact = taskMenuRef.current(panelId)
-    return fact.kind === 'one' ? fact.title : fact.kind === 'many' ? fact.titles.join(', ') : undefined
-  }, [])
-  const taskVerbs = useMemo(() => {
-    const speak = (r: { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string } | undefined): void => {
-      if (r !== undefined && (r.kind === 'refused' || ('partial' in r && r.partial === true))) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))
-    }
-    return {
-      of: (id: string) => taskMenuRef.current(id),
-      show: (id: string) => speak(paletteActionsRef.current?.showTask(id)),
-      related: (id: string) => speak(paletteActionsRef.current?.showRelated(id)),
-      arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id)),
-      // M324. The member's ONE task (the menu offers the verb only then).
-      focus: (id: string) => {
-        const owner = taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === id))
-        if (owner.length === 1) openFocusTaskRef.current(owner[0]!.itemId)
-      }
-    }
-  }, [])
-  const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined || p.skillTrail === 'collapsed' ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}${p.skillTrail === 'collapsed' ? 'T' : ''}` : '')).filter((s) => s !== '').join(',')
-  const panelMarks = useMemo<PanelMarks>(() => ({
-    marks: new Map(marksSignature === '' ? [] : marksSignature.split(',').map((entry) => {
-      const [id, flags] = entry.split(':') as [string, string]
-      return [id, { locked: flags.includes('L'), pinned: flags.includes('P'), maximised: flags.includes('M'), trailCollapsed: flags.includes('T') }] as const
-    })),
-    maximise: maximisePanel,
-    restore: restorePanel,
-    // M130. The capsule's verb. Present for every kind, because the frame
-    // decides whether to paint a capsule from the TRAIL, not from the kind.
-    toggleTrail: toggleSkillTrail,
-    readOnly: merged,
-    // M106. The ⋯ menu's door: the ref is set HERE as well as by the render,
-    // because openPalette captures the ref synchronously and the focus it just
-    // asked for lands a render later.
-    more: (id) => { onFocusPanel(id); focusedIdRef.current = id; palette.openPalette() },
-    // M204 (D08). The lens rides the one context every kind's frame reads, so
-    // a terminal, a chat and a card dim on ONE rule.
-    lens: lensMap,
-    task: taskVerbs,
-    advanced: advancedVerbs
-  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs, advancedVerbs])
-
-  // M93. The verbs. Placement resolves the anchor against the panels in paint
-  // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
-  // is one stack over one Panel[], and widening it is a bigger change than a
-  // margin note earns — so deleting a note is not undoable, said plainly in
-  // the build log rather than pretended here.
-  const placeAnnotation = useCallback((world: { x: number; y: number }): boolean => {
-    if (!annotating || mergedRef.current) return false
-    const ordered = [...panelsRef.current].sort((a, b) => a.z - b.z)
-    const anchor = resolveAnchor(world, ordered)
-    const id = `a${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`
-    // M395. No empty label outlives its editor. The one still open is left to
-    // its editor, which commits what was typed as it unmounts here (an empty
-    // one removes itself); any other empty label is dropped (dropEmptyLabels).
-    setAnnotations((current) => [...dropEmptyLabels(current, editingAnnotationRef.current), { id, text: '', anchor }].slice(-ANNOTATIONS_MAX))
-    setSelectedAnnotation(id)
-    setEditingAnnotation(id)
-    return true
-  }, [annotating])
-  const commitAnnotation = useCallback((id: string, text: string) => {
-    setEditingAnnotation((current) => (current === id ? null : current))
-    // An empty FRESH note is no note (a mis-click removes itself); an existing
-    // note emptied and blurred keeps its text — clearing is not deleting, and
-    // Delete is the verb for that.
-    setAnnotations((current) => {
-      const existing = current.find((a) => a.id === id)
-      if (text === '' && existing !== undefined && existing.text !== '') return current
-      return text === '' ? current.filter((a) => a.id !== id) : current.map((a) => (a.id === id ? { ...a, text } : a))
-    })
-    if (text === '') setSelectedAnnotation((current) => (current === id ? null : current))
-  }, [])
-  const removeAnnotation = useCallback((id: string) => {
-    setAnnotations((current) => current.filter((a) => a.id !== id))
-    setSelectedAnnotation((current) => (current === id ? null : current))
-    setEditingAnnotation((current) => (current === id ? null : current))
-  }, [])
-  const beginAnnotate = useCallback((): { kind: string; reason?: string } => {
-    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only — leave it to annotate' }
-    setAnnotating(true)
-    return { kind: 'entered' }
-  }, [])
-  // M395. Done closes the open label too: its editor commits what was typed
-  // as it unmounts (AnnotationLayer's NoteEditor), and a label left with
-  // nothing in it is removed rather than kept as "…".
-  const endAnnotate = useCallback(() => {
-    setAnnotating(false)
-    setInkDraft(null)
-    setEditingAnnotation(null)
-    setAnnotations((current) => {
-      const next = dropEmptyLabels(current, editingAnnotationRef.current)
-      return next.length === current.length ? current : next
-    })
-  }, [])
-  placeAnnotationRef.current = placeAnnotation
-  // M155. A finished stroke: anchored by its FIRST point (a stroke that starts
-  // on a panel belongs to it — the label's own rule), its points stored
-  // RELATIVE to that anchor point and simplified so a slow hand does not keep
-  // a thousand of them; selected on commit so Delete is one keystroke away.
-  // Like a label (M93), a stroke is OUTSIDE history: Delete is not undoable,
-  // said here and in the build log rather than pretended.
-  const commitInk = useCallback((points: Array<[number, number]>, scale: number) => {
-    if (!annotating || mergedRef.current || points.length < 2) return
-    if (!points.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y))) return
-    const ordered = [...panelsRef.current].sort((a, b) => a.z - b.z)
-    const first = { x: points[0]![0], y: points[0]![1] }
-    const anchor = resolveAnchor(first, ordered)
-    // Relative to the ANCHOR POINT for both kinds — the point the painter adds.
-    // The first cut measured a panel stroke from the panel's top-left, and the
-    // painter (through annotationPoint) added dx,dy a second time: every
-    // stroke drawn on a panel sat offset by its own start (the M155 critic).
-    // The tolerance is 0.75 SCREEN px, through the scale the stroke was drawn at.
-    const rel = simplifyStroke(points, 0.75 / Math.max(scale, 0.01)).map(([x, y]) => [x - first.x, y - first.y] as [number, number])
-    const id = `k${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`
-    setAnnotations((current) => [...current, { id, text: '', anchor, ink: { points: rel, width: INK_WIDTH } }].slice(-ANNOTATIONS_MAX))
-    setSelectedAnnotation(id)
-  }, [annotating])
-  inkToolRef.current = () => annotating && annotateTool === 'draw'
-  commitInkRef.current = commitInk
-  // Delete removes the selected note; Escape clears the selection or leaves the mode.
-  useEffect(() => {
-    if (selectedAnnotation === null && !annotating) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (shouldIgnoreKeys()) return
-      const active = document.activeElement
-      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable)) return
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedAnnotation !== null) {
-        event.preventDefault()
-        removeAnnotation(selectedAnnotation)
-      } else if (event.key === 'Escape') {
-        event.preventDefault()
-        if (selectedAnnotation !== null) setSelectedAnnotation(null)
-        else setAnnotating(false)
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [selectedAnnotation, annotating, shouldIgnoreKeys, removeAnnotation])
-  // A panel-anchored note whose panel is gone draws nothing (annotationPoint
-  // is null) and is dropped by the parser on the next load — NOT pruned here
-  // on every panels change: undo of a panel's removal would otherwise have
-  // pruned its note for good (the verifier). The mode ends when the view merges.
-  useEffect(() => { if (merged) { setAnnotating(false); setSelectedAnnotation(null); setEditingAnnotation(null) } }, [merged])
-  // M93. The time machine's rows: read when the Workspaces pane is on screen
-  // and after every restore; null until the first answer (three states).
-  const [snapshots, setSnapshots] = useState<SnapshotMeta[] | null>(null)
-  const readSnapshots = useCallback(() => {
-    void window.canvas.snapshot.list().then(setSnapshots).catch(() => setSnapshots([]))
-  }, [])
-  useEffect(() => { if (chrome.navigator === 'workspaces') readSnapshots() }, [chrome.navigator, readSnapshots])
-  const restoreSnapshot = useCallback((at: number) => {
-    if (mergedRef.current) return
-    // The renderer's own id counter rides along: a panel spawned inside the
-    // store's coalesce window is not on disk yet, and main mints past both.
-    void window.canvas.snapshot.restore(at, nextIdRef.current).then(async (result) => {
-      if (result.kind === 'refused') { console.warn(`[snapshot] ${result.reason}`); return }
-      // A new workspace exists on disk; the list re-reads, then the ordinary
-      // switch — the same transaction a click on a workspace row runs.
-      await reloadWorkspacesRef.current?.()
-      await switchWorkspace(result.workspaceId)
-      readSnapshots()
-    })
-  }, [switchWorkspace, readSnapshots])
-  const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
-
+  // M507. Annotations, ink and the time machine's rows, lifted into useAnnotations.ts at exactly this position.
+  const { annotationMarks, beginAnnotate, commitAnnotation, endAnnotate, restoreSnapshot, snapshots } = useAnnotations({
+    annotateTool, annotating, annotationSeq, annotations, chrome, commitInkRef, editingAnnotationRef, inkToolRef, merged, mergedRef, nextIdRef, panels, placeAnnotationRef, reloadWorkspacesRef, selectedAnnotation, setAnnotating, setAnnotations, setEditingAnnotation, setInkDraft, setSelectedAnnotation, shouldIgnoreKeys, switchWorkspace, panelsRef
+  })
   const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true; at?: Point }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current

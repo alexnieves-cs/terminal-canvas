@@ -261,8 +261,10 @@ const FACTS = {
     //   session/scrollback-store.ts  the renderer's own tail mirror
     const DISPLAY_READERS = [
       'main/ipc.ts',
-      'renderer/canvas/Canvas.tsx',
       'renderer/canvas/useBoardVerbs.ts',
+      // M507. Was Canvas.tsx: the rail's last line said (M105), a DISPLAY of
+      // the chat's own answer, left with the run rows. Same reader, new path.
+      'renderer/canvas/useRunRows.ts',
       'renderer/chat/chat-store.ts',
       'renderer/session/scrollback-store.ts'
     ]
