@@ -2209,18 +2209,27 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     //     despite its own comment naming that as a case the memo stops.
     //     Asserted on the JSX: the prop values must be bare identifiers.
     {
-      const canvasSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
-      const pasted = canvasSrc.match(/onContextPasted=\{([^}]*)\}/)
-      const pastedStable = pasted !== null && /^\s*[A-Za-z_$][\w$]*\s*$/.test(pasted[1])
-      const layer = canvasSrc.match(/<LinkLayer[\s\S]*?onRemove=\{([^}]*)\}/)
-      const layerValue = layer ? layer[1] : ''
+      // Every file under canvas/, as check 94 walks it: the JSX that passes
+      // these props moved out of Canvas.tsx into PanelNode.tsx and
+      // WorldLayers.tsx (lane E's split) without changing a value. EVERY use
+      // must be stable, and at least one of each must exist.
+      const msDir = join(__dirname, '..', 'src', 'renderer', 'canvas')
+      const msWalk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? msWalk(join(d, e.name))
+          : /\.tsx$/.test(e.name) ? [readFileSync(join(d, e.name), 'utf8')] : [])
+      const msFiles = msWalk(msDir)
+      const pastedAll = msFiles.flatMap((src) => [...src.matchAll(/onContextPasted=\{([^}]*)\}/g)].map((m) => m[1]))
+      const pastedStable = pastedAll.length > 0 && pastedAll.every((v) => /^\s*[A-Za-z_$][\w$]*\s*$/.test(v))
+      // Per file, so a lazy match cannot run from one file's <LinkLayer into
+      // another's onRemove.
+      const layerAll = msFiles.flatMap((src) => [...src.matchAll(/<LinkLayer\b[^>]*?onRemove=\{([^}]*)\}/g)].map((m) => m[1]))
       // A bare identifier, or the merged-view gate around one — never an arrow,
       // never a member read of paletteActions (whose identity follows the
       // palette's captured id), never a call.
-      const layerStable = layer !== null && /^\s*(?:merged\s*\?\s*undefined\s*:\s*)?[A-Za-z_$][\w$]*\s*$/.test(layerValue)
+      const layerStable = layerAll.length > 0 && layerAll.every((v) => /^\s*(?:merged\s*\?\s*undefined\s*:\s*)?[A-Za-z_$][\w$]*\s*$/.test(v))
       ok('memo-stable.1 onContextPasted and LinkLayer onRemove are passed as stable identifiers',
         pastedStable && layerStable,
-        `onContextPasted=${JSON.stringify(pasted && pasted[1])} onRemove=${JSON.stringify(layerValue)}`)
+        `onContextPasted=${JSON.stringify(pastedAll)} onRemove=${JSON.stringify(layerAll)}`)
     }
 
     // ---------------------------------------------------------------------
