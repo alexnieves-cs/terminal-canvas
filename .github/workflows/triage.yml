@@ -1,0 +1,53 @@
+# TEMPORARY (Stream A triage): each known-red Electron suite, three times on its own
+# runner, so a flake shows as a rate and each failure is read in isolation. Deleted
+# before merge.
+name: triage
+on:
+  push:
+    branches: [claude/project-thread-gobh8m]
+  workflow_dispatch:
+concurrency:
+  group: triage-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  suite:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ['panels:core', 'panels:shell', 'panels:kinds', 'panels:agents', 'panels:product', 'panels:orchestrate', 'panels:flowchart']
+        run: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: brew install tmux
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: npm run build
+      - name: Run suite
+        env:
+          TC_WATCHDOG_SCALE: '2'
+        # A hung suite must still report: stop it at 18 minutes and print what it logged.
+        run: |
+          perl -e 'alarm 1080; exec @ARGV' npm run verify:${{ matrix.suite }} > suite.log 2>&1 || true
+          pkill -f Electron || true
+          echo "=== tail"; tail -40 suite.log | cut -c1-300
+      - name: Failures only
+        run: |
+          echo "=== ${{ matrix.suite }}: summary"
+          grep -E '^[0-9]+/[0-9]+ passed|^FAILED' suite.log | cut -c1-300 || true
+          echo "=== FAIL lines"
+          grep -E '^(FAIL|\s*FAIL)' suite.log | cut -c1-2500 || true
+          echo "=== digest"
+          grep -E '^DIGEST' suite.log | cut -c1-3000 || true
+          echo "=== errors"
+          grep -nE 'Error|rejection|watchdog' suite.log | grep -v MaxListeners | cut -c1-400 | head -40 || true
+      # Red when the suite was: a job's colour is then the result, readable from the run list.
+      - name: Verdict
+        run: |
+          line=$(grep -E '^[0-9]+/[0-9]+ passed' suite.log | tail -1)
+          echo "$line"
+          [ -n "$line" ] && ! grep -qE '^FAILED|^FAIL ' suite.log
