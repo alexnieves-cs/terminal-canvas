@@ -1,7 +1,11 @@
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
-  type Dispatch, type SetStateAction, type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
+  type Dispatch, type SetStateAction, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { useDropVerbs } from './useDropVerbs'
+import { useTestDoors } from './useTestDoors'
+import { useRestartVerbs } from './useRestartVerbs'
+import { useReviewVerbs } from './useReviewVerbs'
 import { useAnnotations } from './useAnnotations'
 import { useTaskLens } from './useTaskLens'
 import { useRunRows } from './useRunRows'
@@ -14,9 +18,6 @@ import { usePreviewVerbs } from './usePreviewVerbs'
 import { useWorkflowVerbs } from './useWorkflowVerbs'
 import { CenterPages } from './CenterPages'
 import { useSkillsPane } from './useSkillsPane'
-import type { ChecklistView } from '@shared/checklist'
-import { type DeckView } from '@shared/deck'
-import { isSheetPath, type SheetView } from '@shared/sheet'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
@@ -83,8 +84,8 @@ import { useCanvasClipboard } from './useCanvasClipboard'
 import { useCanvasContextMenu } from './useCanvasContextMenu'
 import { useTiering } from './useTiering'
 import {
-  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
-import { chromeObstacles, placementRoom as readPlacementRoom, sizeToView, viewCentre } from './safe-area'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
+import { chromeObstacles, placementRoom as readPlacementRoom, viewCentre } from './safe-area'
 import { placePanel, type PlaceFn, type PlaceHow } from './place-new'
 import { placementQuiet } from './place-quiet'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
@@ -108,8 +109,6 @@ import { checklistFocused } from '@renderer/file/checklist-controllers'
 import { pillFocused, orchestratorTarget } from './command-pill'
 import { CommandPill, orchestratorCandidates } from './CommandPill'
 import { noteEditorFocused } from '@renderer/file/rich-note-focus'
-import { typeIntoEditor, editorText, focusEditor } from '@renderer/file/editor-registry'
-import type { ImportedNote } from '@shared/imported-note'
 import { DeckNode } from '@renderer/file/DeckNode'
 import { deckFocused } from '@renderer/file/deck-controllers'
 import { SheetNode } from '@renderer/file/SheetNode'
@@ -147,15 +146,14 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { findConnector, isShapePanel, isRelayPanel, RELAY_W, RELAY_H, isNotePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, isWatcherPanel, isMemoryPanel,
-  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
-  makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, raisePanel, removePanel, reviewCentre, REVIEW_H, REVIEW_MIN, REVIEW_W, setPanelRect, TASK_REVIEW_SIZE, withFrameContents,
+import { findConnector, isShapePanel, isRelayPanel, RELAY_W, RELAY_H, isNotePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isGithubPanel, isWatcherPanel, isMemoryPanel,
+  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeJiraPanel,
+  makeChatPanel, isChatPanel,
+  makePanel, nextZ, occupiedRect, terminalRimAt, rimCoveredIds, pickRects, raisePanel, removePanel, setPanelRect, withFrameContents,
   addLink, setLinkAutomation, linksOf, workCardItemId,
   type Panel, type TerminalPanel as TerminalPanelModel, CHAT_W, CHAT_H} from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
-import { shellQuote } from '@renderer/shell/file-tree-model'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
@@ -169,22 +167,21 @@ import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
-import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart, scrollToTurn, useChatsVersion } from '@renderer/chat/chat-store'
-import { attachmentKind } from '@renderer/chat/composer-model'
+import { getChat, insertIntoComposer, onChatTurnStart, scrollToTurn, useChatsVersion } from '@renderer/chat/chat-store'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
 import { disposeWatcher} from '@renderer/watcher/useWatchers'
 import { approvals, useApprovals } from '@renderer/chat/chat-store'
 import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
-import { activityNow, forgetAllEdges, forgetEdgesFor, freezeEdgeClock, noteEdgeArrived, noteEdgeFired, noteEdgeWaiting, setEdgeContext } from './useEdgeActivity'
-import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
+import { forgetAllEdges, forgetEdgesFor, setEdgeContext } from './useEdgeActivity'
+import { REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
-import { WorkNode, WORK_ITEM_GONE } from '@renderer/work/WorkNode'
+import { WorkNode} from '@renderer/work/WorkNode'
 // How long an attention landing stays lit. Matches `.landing-halo`'s
 // animation in styles.css: the timer only unmounts what the CSS has already
 // faded, and under reduced motion (animation forced off) it is the whole
@@ -221,9 +218,7 @@ import { clearUnread, clearLastLine} from '@renderer/session/last-line-store'
 import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { type PersistedTeammate } from '@shared/teammates'
-import { parseSkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
-import { SKILL_CARD_MIME } from '@renderer/shell/skills-pane-model'
 import { SkillNode } from '@renderer/skills/SkillNode'
 
 /* M127. Module scope, never a fresh literal per render: canvas-constants.ts's
@@ -234,10 +229,8 @@ import { pinCount} from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, type Annotation} from '@shared/annotations'
 import { WORK_ITEM_STATES, carryWorkItem, prRefusalSync, teammateRefusal, type PersistedWorkItem} from '@shared/work-items'
 import { REVIEW_COMMENTS_MAX, commentPlace, newReviewComment } from '@shared/review-comments'
-import { ACROSS_BASELINE, type ReviewSubject } from '@shared/review'
 import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
 import { useBoardVerbs, type BoardVerbs } from './useBoardVerbs'
-import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import { AnnotationLayer } from './AnnotationLayer'
 import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
 import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
@@ -260,7 +253,6 @@ import { setWorldLanding, setWorldOn, toggleWorld, useWorldOn, worldLandingViewp
 import { attentionCursor, setAttentionCursor } from '../world/world-flight'
 import { useWorldContextPublisher } from '../world/useWorldContextPublisher'
 import { Inspector } from '../shell/Inspector'
-import type { AutomationRow } from '../shell/Inspector'
 import { ReopenNotice} from '../shell/ReopenNotice'
 import { JobRecoveryNotice} from '../shell/JobRecoveryNotice'
 import { WelcomeBack } from '../shell/WelcomeBack'
@@ -271,7 +263,7 @@ import { useShellBreakpoint } from '../shell/useShellBreakpoint'
 import { Dock } from '../shell/Dock'
 import { Navigator } from '../shell/Navigator'
 import { railLabel } from '../shell/rail-rows'
-import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
+import { isRestartable, isRunning } from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from './trigger-words'
 import type { PanelSearchResult } from '@shared/ipc-contract'
@@ -4349,660 +4341,23 @@ export function Canvas({
   // assignment because navGrid.isOpen is a stable useCallback: this runs once.
   useEffect(() => { navGridIsOpenRef.current = navGrid.isOpen }, [navGrid.isOpen])
 
-  /**
-   * A review node is minted from the SUBJECT's stored baseline, asked for
-   * once here and then carried inside the node — see ReviewSubject. The
-   * label is snapshotted through the same honest chain the rail row walks,
-   * because the panel it names may be closed long before the node is.
-   */
-  const openReview = useCallback((subjectId: string) => {
-    const subject = panelsRef.current.find((p) => p.rect.id === subjectId)
-    // A review of a review is not a thing, and neither is a review of a file
-    // panel: only a terminal panel ever had a session, and only a session ever
-    // had a baseline. The id could only reach here from a row that should have
-    // been gated.
-    // M77: a chat panel has a baseline too (agent:create captures one).
-    if (subject === undefined || !(isTerminalPanel(subject) || isChatPanel(subject))) return
-    const label = railLabel(subject, isTerminalPanel(subject) ? registry.get(subjectId)?.status : undefined)
-    void window.canvas.review.baseline(subjectId).then((baseline) => {
-      // Null is reachable despite the row's gate: a panel can be killed
-      // between the click and the reply, and main drops its baseline on
-      // kill. Minting a node with no baseline would produce a panel that can
-      // never answer anything.
-      if (baseline === null) return
-      // RE-READ, never the captured `subject`: the await is a real gap, and
-      // it is not only "the panel got closed" (dispose drops the baseline
-      // too, which the null check above already catches). A WORKSPACE
-      // SWITCH landing in this gap replaces the whole `panels` array while
-      // leaving the subject's session — and therefore its baseline —
-      // perfectly intact (demote, not dispose), so `baseline` comes back
-      // non-null for a panel that is no longer in THIS canvas. Using the
-      // captured `subject.rect` would place the node by a rect that only
-      // meant something in the workspace that is no longer on screen, and
-      // the node would carry a subjectId nothing here answers to.
-      const current = panelsRef.current.find((p) => p.rect.id === subjectId)
-      if (current === undefined || !(isTerminalPanel(current) || isChatPanel(current))) return
-      // `r`, from the SAME counter `n` comes from. PanelId doubles as a tmux
-      // session name, so a review node minting an id a terminal panel in any
-      // workspace already owns is M7's invisible collision through a new
-      // door — the second panel to go live attaches to the first one's
-      // session and the user simply sees one agent through two panels.
-      const id = `r${nextIdRef.current++}`
-      // M402. Sized to the canvas it opens into (B3), placed by the one rule
-      // beside its subject (B4) — never on another review of the same panel —
-      // and flown to.
-      const size = sizeToView(hostRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
-      const place = placer({ lit: true })
-      setPanels((existing) => {
-        const centre = reviewCentre(current.rect, size?.w, size?.h)
-        const next = [
-          ...existing,
-          place(existing, makeReviewPanel(id, centre, nextZ(existing), {
-            subjectId,
-            repoRoot: baseline.root,
-            baselineSha: baseline.sha,
-            label
-          }, size), { anchored: true, parentId: subjectId })
-        ]
-        commitHistory(next)
-        return next
-      })
-      selectOnly(id)
-    })
-  }, [commitHistory, placer])
+  // M507. The review verbs and the toolbox doors, lifted into useReviewVerbs.ts at exactly this position.
+  const { onDragOver, openFileAtCentre, openFilePanel, openReview, openReviewAcross, openToolboxPanel, reviewTaskLane } = useReviewVerbs({
+    commitHistory, hostRef, jumpToAttention, nextIdRef, panelsRef, placer, selectOnly, setPanels, taskLaneOf, viewportRef, workItemsRef, worldCentre, registry
+  })
+  // M507. The drop and the refs its later verbs fill, lifted into useDropVerbs.ts at exactly this position.
+  const { addImageRef, beginNewChatRef, dropPath, importDocxRef, onDrop, openAsChatRef, openInTerminalRef } = useDropVerbs({
+    hitOrderRef, navGridIsOpenRef, openFilePanel, palette, paletteActionsRef, panelsRef, viewportRef, registry
+  })
+  // M507. The window doors the Electron suites drive, lifted into useTestDoors.ts at exactly this position.
+  useTestDoors({
+    beginNewChatRef, commitHistory, dropPath, historyRef, hostRef, lastHostFocusRef, nextIdRef, onClosePanel, openAsChatRef, openFilePanel, openInTerminalRef, openJiraPanel, openToolboxPanel, paletteActionsRef, panelsRef, placer, selectOnly, setPanels, spawnWorkCard, undoCanvasRef, viewportRef, workItemsRef, worldCentre
+  })
 
-  /**
-   * M202 (D07). THE TASK REVIEW — the one implementation all four doors reach
-   * (the card's verb, the palette row, `tc plan review-task` and an action
-   * node), the way M197 made every Start work door land on one.
-   *
-   * It is deliberately NOT `openReviewAcross` with an extra field. That one
-   * starts from the SUBJECT PANEL and asks main for its baseline, so it needs
-   * the lane's conversation to still be open — and a task whose chat has been
-   * closed is exactly the case this milestone exists for: the item keeps its
-   * `panelId` and notes `lane closed`, and the work is still sitting in the
-   * worktree. This one starts from the WORKTREE RECORD instead, which carries
-   * the repository `root` and outlives the panel that made it (a worktree
-   * record OUTLIVES its panel — M37's rule), so the review opens on a lane
-   * whose agent was dismissed hours ago.
-   *
-   * Every refusal is BY NAME, because the card's button is always present.
-   */
-  const reviewTaskLane = useCallback((itemId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
-    const item = workItemsRef.current.find((i) => i.id === itemId)
-    if (item === undefined) return { kind: 'refused', reason: WORK_ITEM_GONE }
-    if (item.worktreeId === undefined) return { kind: 'refused', reason: 'no lane yet — start work on this item first' }
-    // The SAME records the card's readiness was judged against, read by the
-    // handoff hook rather than by the palette's list — which loads only when
-    // ⌘K opens, and would refuse this verb on a real lane until it did.
-    const record = taskLaneOf(itemId)
-    // The worktree was removed outside this app, or its record was pruned.
-    // Never fall back to another root: reviewing a different repository under
-    // this task's name is the substitution the guide forbids by name.
-    if (record === undefined) return { kind: 'refused', reason: 'the worktree this task was started in is not listed any more — start work again to give it a fresh lane' }
-    // M315. One review per task. A second press used to stack a second node
-    // beside the first, off-screen, and the person saw nothing happen. The
-    // existing one is brought into view instead — the press always LANDS.
-    // A census node a canvas saved before M315 is REPLACED by the lane's own
-    // review below rather than landed on — it cannot show the diff.
-    const isLaneReview = (p: Panel): boolean => isReviewPanel(p) && p.subject.workItemId === itemId && p.subject.across !== true
-    const already = panelsRef.current.find(isLaneReview)
-    if (already !== undefined) { jumpToAttention(already.rect.id); return { kind: 'ran' } }
-    const mint = (subject: ReviewSubject): void => {
-      if (panelsRef.current.some(isLaneReview)) return
-      const census = subject.across === true ? panelsRef.current.find((p) => isReviewPanel(p) && p.subject.workItemId === itemId) : undefined
-      if (census !== undefined) { jumpToAttention(census.rect.id); return }
-      const id = `r${nextIdRef.current++}`
-      // M402 (B3). The review opens at the size of the canvas it opens into,
-      // up to TASK_REVIEW_SIZE — a fixed 960 was wider than a 1200px window's
-      // canvas, so its controls sat off screen under the minimap.
-      const size = sizeToView(hostRef.current, TASK_REVIEW_SIZE, REVIEW_MIN) ?? TASK_REVIEW_SIZE
-      // The review opens where the person can SEE it: minted beside the
-      // conversation it was otherwise placed off-screen with no camera move,
-      // and the press looked like it did nothing. The placer's reveal waits
-      // for the panel to be rendered before flying to it at a readable zoom,
-      // and lands with the arrival glow the attention jump has (`lit`).
-      const place = placer({ lit: true })
-      setPanels((current) => {
-        const existing = subject.across === true ? current : current.filter((p) => !(isReviewPanel(p) && p.subject.workItemId === itemId))
-        const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
-        const made = makeReviewPanel(id, anchorPanel === undefined ? viewCentre(hostRef.current, viewportRef.current) : reviewCentre(anchorPanel.rect, size.w, size.h), nextZ(existing), subject, size)
-        const next = [...existing, place(existing, made, anchorPanel === undefined ? undefined : { anchored: true, parentId: anchorPanel.rect.id })]
-        commitHistory(next)
-        return next
-      })
-      selectOnly(id)
-    }
-    const across: ReviewSubject = {
-      subjectId: item.panelId ?? itemId,
-      repoRoot: record.root,
-      // Never sent to git: an across node asks `review:across` with its
-      // root alone and each section compares against its own fork.
-      baselineSha: ACROSS_BASELINE,
-      label: item.title,
-      across: true,
-      workItemId: itemId
-    }
-    // M315. THE LANE, not the census. An across node lists every worktree of
-    // the repository with no diff, no line comments and a blocked commit —
-    // so the review a task's "Review changes" opened could not show what the
-    // agent changed, and the comment loop the guide promised had no gutter to
-    // start from. The lane's own section carries its fork point; a review of
-    // the WORKTREE against that fork is an ordinary `review:at` node, the
-    // most-exercised review there is. The census is the fallback only when
-    // the fork cannot be read, never a silent substitute for another root.
-    void window.canvas.review.across(record.root).then((answer) => {
-      const section = answer.kind === 'across' ? answer.sections.find((s) => s.path === record.path || (s.path !== answer.root && s.panelId === record.panelId)) : undefined
-      mint(section?.base === undefined
-        ? across
-        : { subjectId: item.panelId ?? itemId, repoRoot: section.path, baselineSha: section.base, label: item.title, workItemId: itemId })
-    }).catch(() => mint(across))
-    return { kind: 'ran' }
-  }, [commitHistory, taskLaneOf, jumpToAttention, placer])
-
-  /**
-   * M86. A review of EVERY worktree of the subject's repository: the same mint
-   * as `openReview`, with the subject flagged `across`. The node asks for its
-   * root's sections rather than one baseline, so a killed subject changes
-   * nothing about what it shows — the whole reason the flag exists.
-   */
-  const openReviewAcross = useCallback((subjectId: string) => {
-    const subject = panelsRef.current.find((p) => p.rect.id === subjectId)
-    if (subject === undefined || !(isTerminalPanel(subject) || isChatPanel(subject))) return
-    void window.canvas.review.baseline(subjectId).then((baseline) => {
-      if (baseline === null) return
-      const current = panelsRef.current.find((p) => p.rect.id === subjectId)
-      if (current === undefined || !(isTerminalPanel(current) || isChatPanel(current))) return
-      const id = `r${nextIdRef.current++}`
-      const size = sizeToView(hostRef.current, { w: REVIEW_W, h: REVIEW_H }, REVIEW_MIN)
-      const place = placer({ lit: true })
-      setPanels((existing) => {
-        const next = [
-          ...existing,
-          place(existing, makeReviewPanel(id, reviewCentre(current.rect, size?.w, size?.h), nextZ(existing), { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: `every worktree of ${baseline.root.split('/').pop() ?? baseline.root}`, across: true }, size), { anchored: true, parentId: subjectId })
-        ]
-        commitHistory(next)
-        return next
-      })
-      selectOnly(id)
-    })
-  }, [commitHistory, placer])
-
-  /**
-   * Put a file on the canvas, at a world point.
-   *
-   * Modelled on openReview, and it needs none of that function's await: the
-   * path is already in hand, so there is no IPC gap for a workspace switch to
-   * land in and nothing to re-read afterwards. The READ is the node's own
-   * (FileNode's mount effect), which is what keeps "the renderer is showing
-   * this file" and "main is watching it" one statement.
-   */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true }) => {
-    // M245. A newly opened .csv/.tsv/.xlsx opens as a sheet. Only NEW opens:
-    // a persisted file panel without the key stays the text view it was.
-    const sheet = opts?.sheet ?? (opts?.prose !== true && opts?.checklist === undefined && opts?.deck === undefined && isSheetPath(path) ? {} : undefined)
-    if (path === '') return
-    // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
-    // session name and the global-uniqueness rule turns on nothing else being
-    // able to mint a colliding one — see nextIdRef's own comment for the two
-    // seed sites that keep this counter ahead of every persisted id.
-    //
-    // Minted OUTSIDE the updater, exactly as openReview mints its `r`: a
-    // state updater must be pure, and `nextIdRef.current++` inside one is a
-    // side effect StrictMode would run twice, burning an id per spawn.
-    const id = `f${nextIdRef.current++}`
-    // M402. The one placement rule, as onSpawn and openReview: opening the
-    // same file twice at an unmoved camera must not stack the two, and a note
-    // made from ⌘K lands where "+ Create" would put it, not on what is there.
-    const place = opts?.exact ? null : placer()
-    setPanels((existing) => {
-      const made = makeFilePanel(id, centre, nextZ(existing), {
-          path,
-          // Conditional, never `...opts`. A spread writes `prose: undefined`,
-          // which `'prose' in source` reads as PRESENT — the absent-stays-
-          // absent trap this field's own doc comment records. ONE mint
-          // function for both, so a note and an opened file cannot drift
-          // apart in id minting, cascading, z-order or selection.
-          ...(opts?.prose === true ? { prose: true as const } : {}),
-          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
-          ...(sheet === undefined ? {} : { sheet }),
-          ...(opts?.imported === undefined ? {} : { imported: opts.imported }),
-          ...(opts?.deck === undefined ? {} : { deck: opts.deck })
-        })
-      const next = [...existing, place === null ? made : place(existing, made)]
-      commitHistory(next)
-      return next
-    })
-    // selectOnly, not setSelectedIds: a freshly opened file panel is the
-    // whole selection, and this is the one helper that says so. See the
-    // selectedIds note — the marquee made selection a SET, so every
-    // single-panel selector goes through here.
-    selectOnly(id)
-  }, [commitHistory, selectOnly, placer])
-  // M149 (the Act II critic). A STABLE door for the memo'd toolbox nodes: a
-  // fresh arrow per render defeated ToolboxNode's memo for every node.
-  const openFileAtCentre = useCallback((path: string) => openFilePanel(path, worldCentre()), [openFilePanel, worldCentre])
-
-  /**
-   * Open a toolbox node for one panel's directory.
-   *
-   * Takes the cwd and a LABEL rather than a panel id, and that is the same
-   * decision `openReview` makes for `ReviewSubject`: the node must keep
-   * answering after the panel it was opened from is closed, so it snapshots
-   * what it needs at mint time and holds no reference to the panel.
-   */
-  const openToolboxPanel = useCallback((cwd: string, label: string, centre: Point) => {
-    if (cwd === '') return
-    // `t`, off the SAME counter as `n`, `r`, `f` and `j`. Minted OUTSIDE the
-    // updater for openFilePanel's stated reason: a state updater must be pure,
-    // and `nextIdRef.current++` inside one is a side effect StrictMode would
-    // run twice. See nextIdRef's two seed sites, both of which had to widen
-    // their regex to `[nrfjt]` for this prefix — and which were already blind
-    // to M19's own `j`.
-    const id = `t${nextIdRef.current++}`
-    const place = placer()
-    setPanels((existing) => {
-      const next = [
-        ...existing,
-        place(existing, makeToolboxPanel(id, centre, nextZ(existing), { cwd, label }))
-      ]
-      commitHistory(next)
-      return next
-    })
-    selectOnly(id)
-  }, [commitHistory, selectOnly])
-
-  /**
-   * The drop door, on the .canvas host.
-   *
-   * preventDefault on dragover is REQUIRED, not defensive: without it the
-   * browser's default action for a dropped file is to NAVIGATE to it, which
-   * destroys the app's own page — every panel, every camera, the whole
-   * renderer — and looks like a crash rather than like a missing handler.
-   *
-   * Known, currently-unaddressed edge case: these handlers are on `.canvas`,
-   * and both the palette and the nav grid mount as children of it too — so a
-   * drop while either overlay is open mints a file panel underneath it,
-   * unseen until the overlay closes. Worth a note, not a fix.
-   */
-  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-  }, [])
-  /**
-   * M59. ONE function behind the real drop and the __m59Drop hook, so a check
-   * through the hook is evidence about the door a user reaches. Three
-   * answers, each the audit's: a drop while the palette or the nav grid is
-   * open is IGNORED (it used to mint a file panel unseen underneath the
-   * overlay); a drop OVER a live terminal panel PASTES the path into it —
-   * bracketed, shell-quoted, the same door Jira context and the file tree
-   * use, because a file dragged onto an agent's terminal means "give this to
-   * the agent"; anywhere else opens a file panel at the drop's own world
-   * point, as before.
-   */
-  // M75. A path relative to a chat's directory, when it is inside it.
-  const relativeTo = (cwd: string, path: string): string => {
-    const base = cwd.replace(/\/+$/, '')
-    return path.startsWith(base + '/') ? path.slice(base.length + 1) : path
-  }
-  const addImageRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
-  const importDocxRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
-  const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
-    if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
-    const world = screenToWorld(screen, viewportRef.current)
-    const hit = hitTest(hitOrderRef.current, world)
-    if (hit !== null) {
-      const target = panelsRef.current.find((p) => p.rect.id === hit)
-      const session = registry.get(hit)
-      if (target !== undefined && target.kind === 'terminal' && session !== undefined && session.spawned) {
-        session.handle.paste(shellQuote(path))
-        return 'pasted'
-      }
-      // M75. A drop on a chat panel: an image becomes an attachment on the
-      // next message, anything else a `@` reference relative to the panel's
-      // directory — the composer's own verbs, never a file panel.
-      if (target !== undefined && isChatPanel(target)) {
-        if (attachmentKind(path) === 'image') attachToComposer(hit, { kind: 'path', path })
-        else insertIntoComposer(hit, `@${relativeTo(target.chat.cwd, path)} `)
-        return 'pasted'
-      }
-    }
-    // M186. A PICTURE dropped on nothing becomes a picture. The agent targets
-    // above are untouched — a drop on a chat is still an attachment and a drop
-    // on a terminal is still a shell-quoted path — because this is the arm for
-    // a gesture that landed on the canvas itself, which had no arm at all.
-    // Through a REF: `addImageFromPath` is declared with the other media
-    // verbs further down, and naming a `const` from a hook's dependency list
-    // above its declaration is a TDZ error rather than a style preference
-    // (the same reason `openFilePanel`'s own test hook sits in its own effect).
-    if (attachmentKind(path) === 'image') {
-      void addImageRef.current?.(path, world)
-      return 'opened'
-    }
-    // M250. A WORD DOCUMENT dropped on nothing becomes a note — the canvas
-    // door of `import-docx`, through a ref for addImageRef's TDZ reason. A
-    // .docx opened as a file panel would be a "binary" arm nobody can use.
-    if (/\.docx$/i.test(path)) {
-      void importDocxRef.current?.(path, world)
-      return 'opened'
-    }
-    openFilePanel(path, world)
-    return 'opened'
-  }, [openFilePanel, palette, registry])
-  const onDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    // M127. The Skills pane's OWN MIME, read here and nowhere else — M114's
-    // rule for the board's drops. A card dropped on the canvas opens the
-    // skill's panel at the drop point, through the ONE door
-    // `openSkillPanel`; the `skill` panel kind is M128's, so today that door
-    // records the request and opens nothing. Checked BEFORE the file arm,
-    // because a drag with no files would otherwise fall out of it silently.
-    // M59's guard, hoisted ABOVE the skill arm: a drop while the palette or
-    // the nav grid owns the keyboard opens NOTHING. The skill arm returned
-    // before ever reaching it, so a card dropped under an open overlay minted
-    // a panel the user could not see — the same defect the file arm's own
-    // comment already records.
-    if (palette.isOpen() || navGridIsOpenRef.current()) return
-    const skill = event.dataTransfer.getData(SKILL_CARD_MIME)
-    if (skill !== '') {
-      const parsed = parseSkillKey(skill)
-      if (parsed !== null) {
-        const box = event.currentTarget.getBoundingClientRect()
-        const world = screenToWorld({ x: event.clientX - box.left, y: event.clientY - box.top }, viewportRef.current)
-        paletteActionsRef.current?.openSkillPanel(parsed.scope, parsed.name, world)
-      }
-      return
-    }
-    // One file. A multi-file drop opening N panels at once is a decision to
-    // ask for rather than to acquire as a side effect of a gesture.
-    const file = event.dataTransfer.files[0]
-    if (file === undefined) return
-    // Electron 43 REMOVED File.path from the renderer. Reading `file.path`
-    // yields undefined, the mint is skipped, and the drop looks like it did
-    // nothing at all — with no error, because undefined is a perfectly
-    // ordinary value for a property that does not exist. webUtils.getPathForFile,
-    // behind the bridge, is the supported replacement.
-    const path = window.canvas.file.pathForFile(file)
-    if (!path) return
-    const host = event.currentTarget.getBoundingClientRect()
-    // The DROP's own screen point, so the panel lands under the cursor at
-    // every zoom rather than where the cursor would have been at 1:1.
-    dropPath(path, { x: event.clientX - host.left, y: event.clientY - host.top })
-    // M137. `palette.isOpen()` is read through a stable ref, so `dropPath` is
-    // the one dependency; if the palette ever becomes a value, it joins this list.
-  }, [dropPath])
-
-  /**
-   * verify:panels' route into the file-panel gesture, the same reason every
-   * other window hook in this file exists: main's open dialog is native and a
-   * real drop cannot be synthesised, so executeJavaScript has no other way in.
-   *
-   * It drives openFilePanel — the SAME function the palette row and the drop
-   * handler both call — rather than reaching for setPanels itself, so a check
-   * that passes through it is evidence about production code rather than about
-   * a second mint path that only the suite can reach.
-   *
-   * Its own effect rather than a member of the __m4a* block above, and that is
-   * forced rather than tidy: this effect's dependency list is evaluated during
-   * render at the line it sits on, and openFilePanel is a `const` declared
-   * further down — naming it up there is a TDZ error, not a style preference.
-   */
-  // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true }) => Promise<SpawnResult>>(
-    async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
-  )
-  const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
-  const openInTerminalRef = useRef<(id: string) => { kind: string; reason?: string }>(() => ({ kind: 'refused', reason: 'not ready' }))
-  useEffect(() => {
-    const w = window as unknown as Record<string, unknown>
-    w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
-    // M408 (D1). How many undo steps the panel history holds — read-only, so
-    // grab.slop.1 can say a click and a rename double-click wrote none.
-    w.__m408HistoryDepth = (): number => historyRef.current.past.length
-    // M407 follow-up. The edit:undo step itself, so starter.caption.undo.1 can
-    // press it twice inside ONE task (two IPC messages may each get a render).
-    w.__m407Undo = (): void => undoCanvasRef.current()
-    // M283. What a return from Orchestrate would hand the keyboard back to (orch-page.4).
-    w.__m283HostFocus = (): string | null => { const el = lastHostFocusRef.current; return el === null ? null : `${el.tagName}.${String(el.className).split(' ')[0]}${el.isConnected ? '' : ' (gone)'}` }
-    // M113/M114. The board's doors for verify:panels — the SAME verbs the
-    // palette rows and the card call, through the palette ref.
-    // M182. The binding's Update, through the same member the text mode's submit calls.
-    w.__m182Update = (ids: string[]): Promise<{ kind: string; reason?: string; note?: string }> => paletteActionsRef.current?.updateBoundTemplate(ids) ?? Promise.resolve({ kind: 'refused', reason: 'not ready' })
-    w.__m113 = {
-      add: (item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt' | 'state'> & { state?: PersistedWorkItem['state'] }): string | null =>
-        paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
-      dispatch: (itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> =>
-        paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root) ?? Promise.resolve({ kind: 'refused', reason: 'not ready' }),
-      // M197. The START door, through the SAME action every real door takes —
-      // the hook proves the real path rather than a parallel one, the rule
-      // __m13Open established.
-      start: (opts?: { itemId?: string; teammateId?: string; title?: string }): void => paletteActionsRef.current?.beginStartWork(opts),
-      items: (): PersistedWorkItem[] => workItemsRef.current,
-      close: (id: string): void => onClosePanel(id),
-      show: (itemId: string): void => spawnWorkCard(itemId),
-      done: (itemId: string): void => paletteActionsRef.current?.markDone(itemId)
-    }
-    // M233. The flow door, for the shot harness and the panels suite.
-    //
-    // It calls the SAME store functions useHandoff calls — noteEdgeFired,
-    // noteEdgeArrived, noteEdgeWaiting — rather than reaching into the
-    // layer or setting an attribute, which is the rule __m13Open and
-    // __m59Drop already obey: a hook that reconstructs the behaviour proves
-    // the reconstruction, not the app. A scene painted through this is
-    // therefore a scene of the real grammar with only the TRIGGER faked.
-    //
-    // A state with no golden is a state no critic ever sees, and `firing`
-    // and `waiting` cannot be reached from a fixture without a real agent
-    // exiting on cue — which is the whole reason this exists.
-    w.__m233Flow = (op: string, from: string, to: string, owed?: string[]): void => {
-      if (op === 'fired') noteEdgeFired(from, to)
-      else if (op === 'arrived') noteEdgeArrived(from, to)
-      else if (op === 'waiting') noteEdgeWaiting(to, owed ?? [])
-      else if (op === 'thaw') freezeEdgeClock(null)
-    }
-    // A read-only window onto the store, so a scene or a check can say WHY a
-    // state did not render instead of guessing from an absent attribute.
-    w.__m233Dump = (): string => JSON.stringify([...activityNow()])
-    // The clock freeze, so a golden of a moving packet is not a flaky golden.
-    // See freezeEdgeClock: it fakes WHEN it is and nothing else — the real
-    // reducer computes the real t and the real bez() places the real dot.
-    w.__m233Freeze = (at: number): void => freezeEdgeClock(at)
-    // M59. The drop door, by screen point — see dropPath.
-    // M91. The hook takes CLIENT coordinates (what a check reads off a rect)
-    // and subtracts the host's origin, exactly as the real onDrop does — the
-    // first version handed them to dropPath raw, which is host-relative, and
-    // an error the size of the shell's left columns went unseen while the
-    // rail was 260px (the slot's centre still fell inside the panel).
-    w.__m59Drop = (path: string, x: number, y: number): string => {
-      const bounds = hostRef.current?.getBoundingClientRect()
-      return dropPath(path, { x: x - (bounds?.left ?? 0), y: y - (bounds?.top ?? 0) })
-    }
-    // M21's mint, through the SAME openToolboxPanel the inspector button and
-    // the palette row both call — so the hook proves the real path rather than
-    // a parallel one, the rule __m13Open already obeys.
-    w.__m20Toolbox = (cwd: string, label: string): void =>
-      openToolboxPanel(cwd, label, worldCentre())
-    // M276. The file editor's door, for the checks that used to type by
-    // calling the native textarea value setter — Monaco has no such surface.
-    // It executes a REAL edit on the REAL model, so the change event React
-    // listens to fires exactly as it does under a keystroke: the rule
-    // __m13Open established, applied to a widget instead of a verb. The
-    // refused alternative (a hidden mirror textarea, so those checks passed
-    // untouched) is written up in monaco.ts.
-    w.__m276Type = (node: Element | null, text: string): boolean => typeIntoEditor(node, text)
-    w.__m276Text = (node: Element | null): string | null => editorText(node)
-    w.__m276Focus = (node: Element | null): boolean => focusEditor(node)
-    // M24's mint, through the SAME openJiraPanel the palette row calls — so
-    // the hook proves the real gesture rather than a parallel mint, the rule
-    // __m13Open and __m20Toolbox already obey.
-    w.__m24Jira = (): void => openJiraPanel()
-    // M73's mint, through the SAME beginNewChat the palette row, the launcher
-    // line and the sheet call — read through a ref because beginNewChat is
-    // declared below this block (it needs selectOnly), the create-above /
-    // assign-below shape this file already uses. Resolves main's answer, so a
-    // check can read a refusal by name.
-    w.__m73Chat = (cwd: string): Promise<{ kind: string; reason?: string }> => beginNewChatRef.current({ cwd })
-    // M81. The supervisor the sheet's row makes, and whether a second is offered.
-    w.__m81Supervisor = async (cwd?: string): Promise<boolean> => {
-      const result = await beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message: 'What is this canvas doing?' })
-      return result.kind === 'spawned'
-    }
-    w.__m81SupervisorOffered = (): boolean => !panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)
-    // M287. A watcher panel, minted the way the palette's `watch` verb mints
-    // one (makeWatcherPanel + commitHistory + selectOnly); the node registers
-    // itself with main on mount, so a check can then `watcher.run` it and read
-    // a REAL run's outcome and stamp in the workbench. The trigger is a timer
-    // an hour out — the check runs it by hand.
-    w.__m287Watcher = (cwd: string, command: string, args: string[]): string => {
-      const watcherId = `w${nextIdRef.current++}`
-      const centre = viewCentre(hostRef.current, viewportRef.current)
-      const place = placer()
-      setPanels((current) => {
-        const next = [...current, place(current, makeWatcherPanel(watcherId, centre, nextZ(current), { cwd, command, args, trigger: { kind: 'timer', everyMs: 3600000 } }))]
-        commitHistory(next)
-        return next
-      })
-      selectOnly(watcherId)
-      return watcherId
-    }
-    // M74's two verbs, through the same functions the palette rows, the
-    // action bar and the chrome buttons call.
-    w.__m74OpenAsChat = (id: string): Promise<{ kind: string; reason?: string }> => openAsChatRef.current(id)
-    w.__m74OpenInTerminal = (id: string): { kind: string; reason?: string } => openInTerminalRef.current(id)
-  }, [openFilePanel, worldCentre, openJiraPanel, dropPath])
-
-  /**
-   * A node committed. Advance ITS OWN stored baseline to the commit it just
-   * made, and nothing else.
-   *
-   * Without this the node reports the same files after a commit as before it,
-   * permanently: it diffs the working tree against its baseline, and
-   * committing does not change the working tree. A second press would then
-   * re-commit content that is already in history.
-   *
-   * The SUBJECT PANEL's baseline in main is deliberately left alone. A node
-   * can outlive its subject, so reaching into that panel's state is only
-   * sometimes possible at all — and a write verb on one panel silently
-   * resetting another surface's reading is the wrong direction.
-   *
-   * NO history entry. Cmd+Z cannot undo a commit, and an undo that restored
-   * the old baseline would put the node back to reporting work that is now in
-   * history — an undo stack that lies about what it can reverse is worse than
-   * one that declines. The panel array still changes, so the existing
-   * layout.save effect persists the new sha with no extra plumbing.
-   */
-  const onReviewCommitted = useCallback((nodeId: string, sha: string) => {
-    if (sha === '') return
-    setPanels((existing) => existing.map((p) =>
-      p.rect.id === nodeId && isReviewPanel(p)
-        ? { ...p, subject: { ...p.subject, baselineSha: sha } }
-        : p))
-  }, [])
-
-  /**
-   * The restart sequence, shared by `restartPanel` and `restartPanelWithMode`
-   * so the two can never drift.
-   *
-   * `nextSpec` is what the panel should come back as. `restartPanel` passes
-   * the spec unchanged; `restartPanelWithMode` passes one carrying a new
-   * permission mode, which is the ONLY way a knob ever changes on a live
-   * panel — see restartPanelWithMode's own comment for why a bare edit is
-   * unsound.
-   *
-   * Every ordering note on the old restartPanel still applies verbatim and is
-   * left where it was; this function is that body with one parameter added.
-   */
-  const restartWithSpec = useCallback(
-    (id: string, nextSpec: PanelSpecTemplate) => {
-      if (!isRestartable(registry.get(id)?.status)) return
-      clearAgentState(id)
-      forgetEdgesFor(id); forgetAgentLinksFor(id)
-      clearLastLine(id)
-      clearLastActive(id)
-      clearLiveSession(id)
-      clearSubagents(id)
-      clearTrail(id)
-      clearUsage(id)
-      clearMachineCost(id)
-      clearScrollbackTail(id)
-      void registry.dispose(id).then(() => {
-        // RE-CHECKED, never captured: the await is a real gap and the panel
-        // can be closed inside it.
-        if (!panelsRef.current.some((p) => p.rect.id === id)) return
-        registry.ensure(id, nextSpec, { dormant: false })
-        registry.touch(id)
-        registry.bumpVersion()
-      })
-    },
-    [registry]
-  )
-
-  // #24: functional links run from the registry's post-status exit hook, not
-  // from a second raw IPC listener. A dormant or absent target is RECORDED as
-  // skipped and never woken: an automation may restart an already-running
-  // terminal, but it must not create an agent the user did not explicitly
-  // start. The rule graph is cycle-free at creation and load, so one exit can
-  // cascade only along a finite directed chain.
-  const [automationResult, setAutomationResult] = useState<Map<string, string>>(() => new Map())
-  /**
-   * M301, closing Phase C's deferred item. This map is IN MEMORY, so after a
-   * relaunch a handoff that fired — or was skipped, or was refused — read
-   * `unknown`/`pending` in the dependency lens until the edge happened to fire
-   * again. The only record of it was this Map, and the Map does not survive
-   * quitting.
-   *
-   * It does now: M300 writes a durable row at `setHandoffResult`, the one
-   * funnel every outcome passes through, with the link's own `from:to` key. On
-   * mount the record is read ONCE and the newest row per key seeds the map, so
-   * the lens opens on what actually happened rather than on silence.
-   *
-   * SEEDING, not authority: a row only fills a key this run has not written,
-   * so a live outcome always wins over a remembered one. And a failed read
-   * seeds nothing — the lens then says `unknown`, which is true, rather than
-   * inheriting a stale sentence.
-   */
-  useEffect(() => {
-    if (typeof window.canvas?.ledger?.timeline !== 'function') return
-    let live = true
-    void window.canvas.ledger.timeline({}, 200).then(
-      (read) => {
-        if (!live) return
-        const seed = new Map<string, string>()
-        for (const e of read.entries) {
-          if (e.kind !== 'event' || e.row.event !== 'handoff') continue
-          const key = e.row.key
-          // Newest first, so the first row for a key is its latest outcome.
-          // Belt and braces with the write-side filter above: a row an older
-          // build may already have left on disk is not restored either.
-          if (key !== undefined && e.row.detail !== undefined && isSettledHandoff(e.row.detail) && !seed.has(key)) seed.set(key, e.row.detail)
-        }
-        if (seed.size === 0) return
-        setAutomationResult((current) => {
-          const next = new Map(current)
-          for (const [k, v] of seed) if (!next.has(k)) next.set(k, v)
-          return next
-        })
-      },
-      () => { /* a read that failed seeds nothing; `unknown` is the honest word */ }
-    )
-    return () => { live = false }
-  }, [])
-  const automationRowsBuilt: AutomationRow[] = panels.flatMap((source) => linksOf(source)
-    .filter((link) => link.automation !== undefined)
-    .map((link) => {
-      const target = panels.find((panel) => panel.rect.id === link.to)
-      return target === undefined ? null : {
-        from: source.rect.id,
-        to: target.rect.id,
-        source: railLabel(source, undefined),
-        target: railLabel(target, undefined),
-        enabled: link.automation!.enabled,
-        automation: link.automation!,
-        sentence: describeAutomation(link.automation!)
-      }
-    })
-    .filter((row): row is AutomationRow => row !== null))
-  const automationRowsSignature = JSON.stringify(automationRowsBuilt)
-  const automationRows = useMemo(() => automationRowsBuilt, [automationRowsSignature])
+  // M507. The review commit, the restart sequence and the automation rows, lifted into useRestartVerbs.ts at exactly this position.
+  const { automationResult, automationRows, automationRowsBuilt, automationRowsSignature, onReviewCommitted, restartWithSpec, setAutomationResult } = useRestartVerbs({
+    panels, panelsRef, setPanels, registry
+  })
   // M78. What every edge with a rule SAYS on the canvas (principle 13): the
   // trigger in the vocabulary's words, and `⋈ waiting` while a join is owed.
   const edgeLabels = useMemo(() => {
