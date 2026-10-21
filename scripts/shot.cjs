@@ -2248,12 +2248,25 @@ app.whenReady().then(async () => {
   for (const scene of scenes) {
     if (only.length > 0 && !only.includes(scene.name)) continue
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
+    // M465. The redesign scenes are pictures of the steward cast and the
+    // older scenes of the default fixture, and one run has to paint both: a
+    // whole-run TC_FIXTURE left either set half-red (rd-l-c throws without
+    // it, the old scenes miss their cards with it). So the fixture is the
+    // scene's own: a redesign scene gets rd-steward unless it names another
+    // `fixture`, and the run's own value comes back after it.
+    const runFixture = process.env.TC_FIXTURE
+    const fixture = scene.fixture !== undefined ? scene.fixture : rdScenes.includes(scene) ? 'rd-steward' : runFixture
+    if (fixture === undefined) delete process.env.TC_FIXTURE
+    else process.env.TC_FIXTURE = fixture
     try {
       await scene.run(kit)
       manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}) })
     } catch (error) {
       console.log(`scene ${scene.name} failed: ${error && error.message || error}`)
       manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}), failed: String(error && error.message || error) })
+    } finally {
+      if (runFixture === undefined) delete process.env.TC_FIXTURE
+      else process.env.TC_FIXTURE = runFixture
     }
   }
   writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2))
