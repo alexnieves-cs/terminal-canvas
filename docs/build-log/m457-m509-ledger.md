@@ -21,6 +21,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 
 | PR | Milestone | What | Checks |
 |---|---|---|---|
+| #32 | M462 | `verify:visual` runs on CI as a non-blocking job and uploads every scene (`out/visual/`): `TC_VISUAL_SCALE`/`TC_SHOT_SCALE` paint 2x on the runner's 1x screen, `VISUAL_SHOT_DIR` keeps the captures, the watchdog honours `TC_WATCHDOG_SCALE` | job uploaded 97 scenes; size and "runner" paint issues are B's (#31) |
 
 ## B — Ship 6.0 (M465–M474)
 
