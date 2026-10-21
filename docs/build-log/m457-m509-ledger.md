@@ -57,3 +57,5 @@ Added after the run opened, at the owner's request. Plan: [docs/streams/polish.m
 
 | PR | Milestone | What | Checks |
 |---|---|---|---|
+| #43 | M510 | Lane F: `ownership.json` (F owns `polish.md`, `verify-polish.cjs`), the `st:F` fence, `streams.own.1` covers A–F, the run book's row, `docs/streams/polish.md` | `verify:meta` streams.own.1 |
+| this PR | M511–M512 | Top-bar search capped at the page switch's right edge; the empty canvas's note above the zoom bar; the blank card a glass surface on `first-arrive`. `--dur-state`/`--ease-spring` (+ `MOTION_STATE_MS`); tone edges, glows, words and dots fade on the state speed; one measured, sliding thumb for `SegmentedControl` and `Tabs` | `verify:polish` (new) polish.fence/motion/tokens/thumb/topbar |
