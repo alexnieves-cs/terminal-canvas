@@ -43,14 +43,14 @@ buildSync({
 })
 const M = require(OUT)
 // M507 (the Canvas.tsx split). Code these checks read moved, verbatim, into
-// hooks Canvas calls at the same position: the hooks M442 appended
-// (useShellTail.ts) and the preset menu's events (useHistoryVerbs.ts). The
-// canvas's source is Canvas.tsx followed by each, and only while Canvas
-// still calls it.
+// files Canvas calls at the same position: the hooks M442 appended
+// (useShellTail.ts), the preset menu's events (useHistoryVerbs.ts) and what
+// the host draws over the world (HostOverlays.tsx). The canvas's source is
+// Canvas.tsx followed by each, and only while Canvas still calls it.
 const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
-const canvas = canvasOwn + ['useShellTail', 'useHistoryVerbs']
-  .filter((hook) => new RegExp(`= ${hook}\\(\\{`).test(canvasOwn))
-  .map((hook) => '\n' + read(`src/renderer/canvas/${hook}.ts`)).join('')
+const canvas = canvasOwn + [['useShellTail', 'useShellTail.ts'], ['useHistoryVerbs', 'useHistoryVerbs.ts'], ['renderHostOverlays', 'HostOverlays.tsx']]
+  .filter(([call]) => new RegExp(`\\b${call}\\(\\{`).test(canvasOwn))
+  .map(([, file]) => '\n' + read(`src/renderer/canvas/${file}`)).join('')
 
 // ── First run ────────────────────────────────────────────────────────────
 

@@ -256,7 +256,9 @@ const tick = () => new Promise((r) => setImmediate(r))
     ok('sync.line.1 a SHARED workspace says what its sync is doing — offline with N waiting, reconnecting, catching up, off and why — and says nothing when connected and caught up, or when the workspace is not shared',
       wrong.length === 0, JSON.stringify(wrong))
     const { readFileSync } = require('node:fs')
-    const canvas = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    // M507. The chip's mount moved to HostOverlays.tsx, which Canvas calls.
+    const canvasOwn = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    const canvas = /\brenderHostOverlays\(\{/.test(canvasOwn) ? readFileSync(join(root, 'src/renderer/canvas/HostOverlays.tsx'), 'utf8') : ''
     const provider = readFileSync(join(root, 'src/main/presence/presence-provider.ts'), 'utf8')
     ok('sync.wire.1 the provider reports its unacknowledged count to the hub, and the canvas shows the chip under the roster, told whether the workspace is shared',
       /onUnsyncedChanges: \(\{ number \}\) => \{ onUnsynced\?\.\(number\) \}/.test(provider) &&
