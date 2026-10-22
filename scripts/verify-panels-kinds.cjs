@@ -1591,6 +1591,20 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         const row = rows.find((w) => w.active)
         return row ? row.id : null
       }
+      /**
+       * Main's list is the truth, but the chord steps from the RENDERER's copy
+       * of it, which catches up a render later: a press sent the moment main
+       * reports the move steps from the old row (152 once wrapped w14 → w1, not
+       * w14 → w40, because the renderer still stood on w40). A person cannot
+       * press that fast; the check waits until the top bar names the row too.
+       */
+      const landedOn = async (wsId) => {
+        const rows = await wsRows()
+        const row = rows.find((w) => w.active)
+        if (!row || row.id !== wsId) return false
+        const crumb = await wc.executeJavaScript(`document.querySelector('.shell__workspace')?.getAttribute('title') ?? null`)
+        return crumb === row.name || (typeof crumb === 'string' && crumb.startsWith(row.name + ' / '))
+      }
       /** The class the top bar's merged toggle carries while the view is on. */
       const mergedOn = () => wc.executeJavaScript(
         `document.querySelector('.shell__merge--on') !== null`)
@@ -1643,13 +1657,13 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       if (ids128.length >= 2) {
         await wc.executeJavaScript(
           `window.__m7aWorkspace().switchTo(${JSON.stringify(last128)})`)
-        await settle()
+        await waitUntil(() => landedOn(last128), 2500)
         const parked = await activeId()
         await NEXT()
-        await waitUntil(async () => (await activeId()) === first128, 2500)
+        await waitUntil(() => landedOn(first128), 2500)
         stepped128 = await activeId()
         await PREV()
-        await waitUntil(async () => (await activeId()) === last128, 2500)
+        await waitUntil(() => landedOn(last128), 2500)
         back128 = await activeId()
         // The same physical key a German keyboard prints as '*'. It has to
         // wrap forward again from `last128`, which is where the PREV above
