@@ -2146,6 +2146,12 @@ app.whenReady().then(async () => {
       // stays the shot scenes' layout. The steward cast has no live/twin
       // cards, so those clicks would miss and are skipped.
       if (process.env.TC_FIXTURE === 'rd-steward') {
+        // M467. The steward cast is asleep by design, and the harness keeps
+        // main's PTYs across a reload. rd-arrange's real drag woke
+        // claude-ledger, so every later steward scene re-created a panel
+        // main still held: "already has a live PTY" in rd-map's inspector, a
+        // red dot in rd-world-focus. A fresh fixture starts from no sessions.
+        ptyManager.killAll()
         const { writeStewardLayout } = require('./fixtures/rd-steward/load.cjs')
         writeStewardLayout(layoutPath, REPO, join(__dirname, '..'))
       } else {
