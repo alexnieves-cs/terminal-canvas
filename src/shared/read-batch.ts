@@ -28,9 +28,10 @@
  * holds a symlink to `~/.ssh` makes `link/id_rsa` look inside; resolving it
  * needs the disk, which the renderer does not have.
  *
- * Pure, and imports only a path helper, so `verify:borrow reads.*` runs it
+ * Pure, importing only a path helper and the backend registry, so `verify:borrow reads.*` runs it
  * under plain node.
  */
+import { BACKENDS, DEFAULT_BACKEND } from './agent-backends'
 import { normalisePath } from './agent-links'
 
 /** Tool names whose every effect is a read, in Claude's spelling; matched case-insensitively. */
@@ -85,8 +86,9 @@ function inside(path: string, root: string): boolean {
 }
 
 /** Whether one pending request may be allowed by the batch. */
-export function batchAllowable(ask: { toolName: string; input: Record<string, unknown> }, cwd: string | undefined, backend: string = 'claude'): boolean {
-  if (backend !== 'claude') return false
+export function batchAllowable(ask: { toolName: string; input: Record<string, unknown> }, cwd: string | undefined, backend: string = DEFAULT_BACKEND): boolean {
+  // The registry row says whose tool vocabulary this is (agent-backends.ts); an unknown backend is never batched.
+  if ((BACKENDS as Readonly<Record<string, { batchesReads: boolean } | undefined>>)[backend]?.batchesReads !== true) return false
   // Claude's own spelling, exactly: a lower-cased `read` is an ACP kind, never Claude's tool.
   if (!(READ_ONLY_TOOLS as readonly string[]).includes(ask.toolName)) return false
   const allowed = KEYS[ask.toolName.toLowerCase()] ?? []
@@ -105,12 +107,12 @@ export function batchAllowable(ask: { toolName: string; input: Record<string, un
 export interface BatchChat {
   id: string
   cwd: string | undefined
-  /** The chat's backend; only `claude` is ever batched. */
+  /** The chat's backend; only a row with `batchesReads` is ever batched. */
   backend: string | undefined
   pending: ReadonlyArray<{ requestId: string; toolName: string; input: Record<string, unknown> }>
 }
 
 /** The requests one press allows, across every chat, in the order given. */
 export function readsToAllow(chats: readonly BatchChat[]): Array<{ panelId: string; requestId: string }> {
-  return chats.flatMap((c) => c.pending.filter((p) => batchAllowable(p, c.cwd, c.backend ?? 'claude')).map((p) => ({ panelId: c.id, requestId: p.requestId })))
+  return chats.flatMap((c) => c.pending.filter((p) => batchAllowable(p, c.cwd, c.backend ?? DEFAULT_BACKEND)).map((p) => ({ panelId: c.id, requestId: p.requestId })))
 }
