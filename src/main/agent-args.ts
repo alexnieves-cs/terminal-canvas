@@ -69,7 +69,8 @@ export function agentArgs(
   let args = [...spec.args]
   const append = (flag: string, value: string): void => {
     // Rule 2.
-    if (args.includes(flag)) return
+    // `--flag=value` is the same flag (M534's critic: a person's `--settings=path` must win too).
+    if (args.includes(flag) || args.some((a) => a.startsWith(`${flag}=`))) return
     args = [...args, flag, value]
   }
 

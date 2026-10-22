@@ -318,9 +318,35 @@ check('borrow.hooks.4 tc hook reads the panel and secret only from its env, and 
   return { pass, detail: { good, noEnv, badState } }
 })
 const hookSrc = require('node:fs').readFileSync(join(ROOT, 'src/main/pty-manager.ts'), 'utf8')
-ok('borrow.hooks.5 pty-manager mints the hook secret per spawn only for a claude panel with the control socket, compares it in constant time, and passes the hooks only when it minted one',
-  /control !== null && spec\.agent === 'claude-code' \? randomBytes\(16\)\.toString\('hex'\)/.test(hookSrc) && /timingSafeEqual\(got, want\)/.test(hookSrc) && /agentArgs\(spec, sessionId \?\? '', hookSecret !== undefined\)/.test(hookSrc),
+ok('borrow.hooks.5 pty-manager passes the hooks only for a claude panel with the socket on a backend whose env is per session, mints the secret only when the hooks were appended, keeps it across a reattach, and compares it in constant time',
+  /control !== null && spawnArgs === null && spec\.agent === 'claude-code' && this\.getBackend\(\)\.sessionEnv/.test(hookSrc) &&
+  /hooked !== null && hooked\.includes\(CLAUDE_STATE_HOOKS\)/.test(hookSrc) && /this\.hookSecrets\.get\(spec\.panelId\) \?\? randomBytes\(16\)/.test(hookSrc) &&
+  (hookSrc.match(/this\.hookSecrets\.delete\(/g) ?? []).length === (hookSrc.match(/this\.firstSpawnedAt\.delete\(/g) ?? []).length &&
+  /timingSafeEqual\(got, want\)/.test(hookSrc),
   'pty-manager.ts no longer reads as the check expects')
+const tmuxMod = load('src/main/tmux-args.ts', 'tmux-args')
+check('borrow.hooks.6 under tmux the panel id and secret go on THAT session with new-session -e (before --), and only from tmux 3.2', tmuxMod, (T) => {
+  const base = { confPath: '/c', panelId: 'p1', cols: 80, rows: 24, command: 'claude', args: ['--x'] }
+  const withEnv = T.buildTmuxArgs({ ...base, sessionEnv: { TC_PANEL_ID: 'p1', TC_HOOK_SECRET: SECRET } })
+  const without = T.buildTmuxArgs(base)
+  const dash = withEnv.indexOf('--')
+  const e1 = withEnv.indexOf(`TC_PANEL_ID=p1`)
+  const e2 = withEnv.indexOf(`TC_HOOK_SECRET=${SECRET}`)
+  const versions = ['tmux 3.0a', 'tmux 3.1c', 'tmux 3.2', 'tmux 3.4', 'tmux next-3.6', 'tmux 4.0', 'garbage'].map((v) => T.tmuxHasSessionEnv(v))
+  const pass = e1 > 0 && withEnv[e1 - 1] === '-e' && e2 > 0 && withEnv[e2 - 1] === '-e' && e1 < dash && e2 < dash && !without.includes('-e') &&
+    JSON.stringify(versions) === JSON.stringify([false, false, true, true, true, true, false])
+  return { pass, detail: { withEnv, versions } }
+})
+check('borrow.hooks.7 the prompt repaint right after Stop leaves the panel idle; output later is a new turn', stateMod, (S) => {
+  const done = S.nextState({ ...S.initialDetector(0), state: 'busy' }, { kind: 'done' }, 1000, 60000)
+  const repaint = S.nextState(done, { kind: 'output' }, 1000 + S.DONE_SETTLE_MS - 1, 60000).state
+  const later = S.nextState(done, { kind: 'output' }, 1000 + S.DONE_SETTLE_MS, 60000).state
+  return { pass: done.state === 'idle' && repaint === 'idle' && later === 'busy', detail: { repaint, later } }
+})
+check('borrow.hooks.8 a person\'s own --settings=path also wins over the hooks', argsMod, (A) => {
+  const own = A.agentArgs({ agent: 'claude-code', args: ['--settings=/Users/a/s.json'] }, '', true)
+  return { pass: !own.includes('--settings') && own.includes('--settings=/Users/a/s.json'), detail: own }
+})
 
 // ── G5 (M535): tc view ──
 check('borrow.view.1 tc view writes a plan line: a page is create-browser, a picture image-add, anything else file-open, each path made absolute against the shell', tcMod, (T) => {

@@ -18,8 +18,12 @@ import {
   exitFilePath,
   parseListOutput,
   TMUX_SOCKET,
+  tmuxHasSessionEnv,
   type TmuxSocket
 } from './tmux-args'
+
+/** M534 (G4). The env keys a spawn must set on ITS session, not the shared server (buildTmuxArgs `sessionEnv`). */
+export const SESSION_ENV_KEYS = ['TC_PANEL_ID', 'TC_HOOK_SECRET'] as const
 
 /**
  * How a panel's process comes into existence, and who can answer questions
@@ -35,6 +39,13 @@ export interface SessionBackend {
   readonly kind: 'tmux' | 'direct'
   /** Why we are on this backend. Surfaced to the user when kind is 'direct'. */
   readonly reason: string
+  /**
+   * M534 (G4). Whether a spawn's per-panel env (SESSION_ENV_KEYS) reaches
+   * that panel's process and no other. Direct: always. tmux: only from 3.2,
+   * where `new-session -e` exists; without it claude's state hooks are not
+   * passed and the bell and the idle timer decide, as before.
+   */
+  readonly sessionEnv: boolean
 
   spawn(
     spec: PanelSpec,
@@ -117,6 +128,7 @@ export function createDirectBackend(reason: string): SessionBackend {
   return {
     kind: 'direct',
     reason,
+    sessionEnv: true,
     spawn(spec, command, cwd, env) {
       return pty.spawn(command, spec.args, {
         name: 'xterm-256color',
@@ -196,9 +208,12 @@ export function createTmuxBackend(o: {
     if (changed) o.onHost?.(copyHost(host))
   }
 
+  // The probe's reason for a usable tmux is its `tmux -V` line (tmux-probe.ts).
+  const sessionEnv = tmuxHasSessionEnv(o.reason)
   const api: SessionBackend = {
     kind: 'tmux',
     reason: o.reason,
+    sessionEnv,
 
     spawn(spec, command, cwd, env) {
       // node-pty still owns the transport; what it spawns is a tmux CLIENT
@@ -214,7 +229,8 @@ export function createTmuxBackend(o: {
           rows: spec.rows,
           command,
           args: spec.args,
-          socket
+          socket,
+          ...(sessionEnv ? { sessionEnv: Object.fromEntries(SESSION_ENV_KEYS.flatMap((k) => env[k] === undefined ? [] : [[k, env[k]!]])) } : {})
         }),
         {
           name: 'xterm-256color',
