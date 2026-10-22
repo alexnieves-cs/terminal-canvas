@@ -1470,13 +1470,18 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       // eases the camera, so a read on a fixed settle() caught the narrow window
       // mid-refit on the runner (compH 1.585, two plates clipped). Two equal
       // reads 150 ms apart; the last read either way, so a red keeps its evidence.
-      const settledRead = async (timeoutMs = 4000) => {
+      // Two equal reads were not enough on a loaded runner: a frame stalled
+      // past 150 ms mid-ease reads the same twice, and one run took the narrow
+      // window at plateH 1.011 with every plate clipped. Three equal reads
+      // 200 ms apart now, so the camera must hold still for 400 ms.
+      const settledRead = async (timeoutMs = 6000) => {
         const start = Date.now()
-        let prev = await read()
+        let prev = await read(), same = 0
         while (Date.now() - start < timeoutMs) {
-          await sleep(150)
+          await sleep(200)
           const next = await read()
-          if (JSON.stringify(next) === JSON.stringify(prev)) return next
+          same = JSON.stringify(next) === JSON.stringify(prev) ? same + 1 : 0
+          if (same >= 2) return next
           prev = next
         }
         return prev
