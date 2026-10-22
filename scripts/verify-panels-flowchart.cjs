@@ -893,7 +893,10 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       // The thrown error's own stack, as console text the recorder above keeps:
       // the console line alone carries only the message.
       await installLoopTrap()
+      await js('(() => { window.__fsrN = {}; return true })()')
       const many = await dragFrames(lead, '200 shapes · drag a 40-shape selection (multi-move)')
+      // The triage build's probe, crash or not: every external-store forced re-render the 40-shape move caused.
+      console.log('[fsr-drag] ' + JSON.stringify(await js('window.__fsrN || null').catch(() => 'gone')))
       // A condition, not the drag's one settle(): two of three CI runs read
       // every member 'missing' after the multi-move commit, so the read waits
       // until all 40 are back in the DOM with a position. countAfter, before

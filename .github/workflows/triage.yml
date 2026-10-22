@@ -48,7 +48,7 @@ jobs:
             for (const f of fs.readdirSync(dir).filter((n) => /^index-.*\.js$/.test(n))) {
               const src = fs.readFileSync(dir + f, "utf8"); const at = "function forceStoreRerender(fiber) {"
               if (!src.includes(at)) continue
-              const probe = "try { const n = []; for (let x = fiber, k = 0; x && k < 5; x = x.return) { const t = x.type; if (t && typeof t !== \"string\") { n.push(t.displayName || t.name || (t.type && (t.type.displayName || t.type.name)) || (t.render && t.render.name) || \"?\"); k++ } } const r = (window.__fsr = window.__fsr || []); r.push(n.join(\"<\")); if (r.length > 120) r.shift() } catch {}"
+              const probe = "try { const n = []; for (let x = fiber, k = 0; x && k < 5; x = x.return) { const t = x.type; if (t && typeof t !== \"string\") { n.push(t.displayName || t.name || (t.type && (t.type.displayName || t.type.name)) || (t.render && t.render.name) || \"?\"); k++ } } const c = n.join(\"<\"); const r = (window.__fsr = window.__fsr || []); r.push(c); if (r.length > 120) r.shift(); const m = (window.__fsrN = window.__fsrN || {}); m[c] = (m[c] || 0) + 1 } catch {}"
               fs.writeFileSync(dir + f, src.replace(at, at + probe)); console.log("probed " + f)
             }'
       - name: Run suite three times
@@ -73,7 +73,7 @@ jobs:
             grep -E '^(FAIL|\s*FAIL)' suite-$i.log | cut -c1-2500 || true
             grep -nE 'watchdog — run did not finish' suite-$i.log || true
             grep -nE 'reloadWithin:|^\[106\]' suite-$i.log | cut -c1-600 || true
-            grep -nE '^\[renderer-error\]' suite-$i.log | cut -c1-4000 || true
+            grep -nE '^\[(renderer-error|fsr-drag)\]' suite-$i.log | cut -c1-4000 || true
             echo "--- tail"; tail -30 suite-$i.log | cut -c1-300
           done
       # The bundle lines a renderer error's stack names (the development build is
