@@ -857,6 +857,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         bw.setSize(1000, 900)
         const compact = await waitUntil(async () => (await frame()).bp === 'compact', 5000)
         await settle()
+        // The breakpoint flips a render before the rail's collapse reaches its
+        // box: one run read the shell already `--rail-collapsed` with the rail
+        // still 300 px wide. Read the frame once the rail has had the chance to
+        // give its width back (the assertion below still demands 0).
+        await waitUntil(async () => (await frame()).nav === 0, 3000)
         const closedAtCompact = await frame()
         // Evidence: the shell's own classes and the persisted navigator state at the moment it was read.
         const compactShell = await wc.executeJavaScript(`(() => { const s = document.querySelector('.shell'); const r = document.querySelector('.shell__rail'); return { cls: s ? s.className : null, rail: r ? { cls: r.className, pos: getComputedStyle(r).position, tr: getComputedStyle(r).transition.slice(0, 80) } : null } })()`)
