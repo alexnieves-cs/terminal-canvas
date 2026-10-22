@@ -25,8 +25,13 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 47000 // measured 2026-09-29 alone in the Electron tier, two green runs: 37.6 s, 37.4 s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 60000 // measured 2026-10-22 (M458) on the Mac runner at TC_WATCHDOG_SCALE 2, with app.12/app.13 and the reload retries in: green runs 81.6 s and 84.7 s (90% of the scaled 94 s, headroom.1's line) and one slow run past it — about 47 s unscaled at worst; 1.25x that, to the next second. Was 47000, measured 2026-09-29 alone in the Electron tier, two green runs: 37.6 s, 37.4 s — re-measure when a milestone adds checks
 
+// perf.2's hang bound, scaled as the watchdog is: the Mac runner (TC_WATCHDOG_SCALE 2)
+// read a pinch at p95 250 and 350 ms on contended runs whose every drag still
+// landed — the machine, not a hang. Parsed as the harness parses it (a
+// malformed value is 1).
+const HANG_P95_MS = 250 * (Number(process.env.TC_WATCHDOG_SCALE) > 0 ? Number(process.env.TC_WATCHDOG_SCALE) : 1)
 runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
   const { IPC_EVENTS, app, attachPtyLifecycle, chatSpawns, fromPanels, flushLayoutStore, join, killedPanelIds, layoutStore, listSessions, mkdtempSync, ok, ptyManager, requestFromRendererWith, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, zoomToScale, state, reloadWithin } = ctx
   const { clipboard } = require('electron')
@@ -865,15 +870,18 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       await waitUntil(async () => { const r = await rectOf(pickIds); return pickIds.every((id) => r[id] && Number.isFinite(r[id].x) && Number.isFinite(r[id].y)) }, 5000)
       const manyAfter = await rectOf(pickIds)
       const countAfter = (await shapes()).length
+      // Evidence for the run that read 0 shapes after the commit (the 5 s wait
+      // above did not bring them back): what the page was showing instead.
+      const lost = countAfter === 200 ? null : await js(`({ panels: document.querySelectorAll('.panel[data-panel-id]').length, shapeKind: document.querySelectorAll('[data-panel-kind="shape"]').length, world: document.querySelector('.world') !== null, behindWorld: document.querySelector('.canvas--behind-world') !== null, scale: window.__m4aScale ? window.__m4aScale() : null, workspace: document.querySelector('.shell__workspace')?.getAttribute('title') ?? null, dialog: [...document.querySelectorAll('[role="dialog"]')].map((d) => (d.getAttribute('aria-label') || d.textContent || '').slice(0, 60)) })`)
       const deltas = pick.map((s) => manyBefore[s.id] && manyAfter[s.id] ? `${Math.round(manyAfter[s.id].x - manyBefore[s.id].x)},${Math.round(manyAfter[s.id].y - manyBefore[s.id].y)}` : 'missing')
       const oneDelta = new Set(deltas)
       const unselectedStill = (await shapes()).filter((s) => !pick.some((p) => p.id === s.id)).length
       const measured = [...rows, single && single.row, many && many.row].filter(Boolean)
       ok(ID2,
-        measured.length === 4 && measured.every((r) => r.frames >= 60 && Number.isFinite(r.meanMs) && Number.isFinite(r.p95Ms) && r.p95Ms < 250) &&
+        measured.length === 4 && measured.every((r) => r.frames >= 60 && Number.isFinite(r.meanMs) && Number.isFinite(r.p95Ms) && r.p95Ms < HANG_P95_MS) &&
           single && single.at.hit && singleMoved && rerouted &&
           pick.length === 40 && selectedIds.length === 40 && oneDelta.size === 1 && !oneDelta.has('missing') && !oneDelta.has('0,0') && unselectedStill === 160,
-        JSON.stringify({ measured, single: single && single.at, singleMoved, oneBefore, oneAfter, expectDx, expectDy, rerouted, routes: Object.keys(routesBefore).length, picked: pick.length, selected: selectedIds.length, deltas: [...oneDelta], countAfter, before: Object.keys(manyBefore).length, after: Object.keys(manyAfter).length, many: many && many.at }))
+        JSON.stringify({ measured, single: single && single.at, singleMoved, oneBefore, oneAfter, expectDx, expectDy, rerouted, routes: Object.keys(routesBefore).length, picked: pick.length, selected: selectedIds.length, deltas: [...oneDelta], countAfter, lost, before: Object.keys(manyBefore).length, after: Object.keys(manyAfter).length, many: many && many.at }))
     } catch (error) {
       if (!reportedP1) ok(ID1, false, `threw: ${error && error.stack ? error.stack : error}`)
       ok(ID2, false, `threw: ${error && error.stack ? error.stack : error}`)
