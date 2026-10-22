@@ -12,10 +12,10 @@ owner as an artifact; this file is the part a fresh session needs.
 | M512 | Motion tokens: a state speed for tone changes and a spring for confirmations, beside `--dur-1`/`--dur-2`; `motion.ts` mirrors them |
 | M513 | State at a glance: each frame's tone edge, a live sign on the state chip, an asleep panel's resting body |
 | M514 | Sessions page: no empty columns at rest, toned chips and needs-you cards, the inspector's empty state |
-| M515 | Inspector: the path rule (short form in the body, full path on `title`), section rhythm, the tab indicator |
-| M516 | Overlays and notices: popovers grow from their trigger, notices stack clear of controls |
+| M515 | Inspector: headings read as headings over caps labels; the Session summary's folder in the short form (the full path stays in `cwd`, the path rule's bargain) |
+| M516 | Responsiveness (re-scoped at Alex's ask, 2026-10-22): every control gives way on the frame it is pressed — a zero-specificity, transform-only scale with no transition in, released on `--dur-1`; nothing in `st:F` transitions `all` or pairs an animation with `pointer-events: none` (`polish.react.1–2`). The old scope (overlay origins) stays dropped: the popper wrapper is `display: contents` |
 | M517 | Onboarding and settings: real switches, one button size, a way out of Settings |
-| M518 | World labels: contrast and collision spacing |
+| M518 | World labels: contrast and collision spacing. Waits on the owner's cut-list pick, which may hide World |
 | M519 | Goldens: a before/after gallery from the Mac runner for the owner, then the `shots` workflow's `goldens` input |
 
 ## Rules this lane keeps

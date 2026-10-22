@@ -15,7 +15,8 @@ import type { JumpDirection } from './attention'
 import type { Point } from './viewport'
 import { type StartupInput, restoreLines, type RestoreFacts } from './splash'
 import { regionsFromMemberships } from './task-regions'
-import { toggleWorld } from '../world/world-toggle'
+import { toggleWorld, isWorldOn } from '../world/world-toggle'
+import { labOn } from '../labs/useLabs'
 
 import type { InspectorModel } from '@renderer/shell/inspector-fields'
 import type { PendingApproval } from '@renderer/shell/rail-sections'
@@ -98,6 +99,8 @@ export function useShellTail(deps: UseShellTailDeps) {
       if (hit?.id === 'world') {
         if (focusLocked()) return
         event.preventDefault()
+        // M496. Hidden by the cut list: the chord still LEAVES a room, never enters one.
+        if (!labOn('world') && !isWorldOn()) return
         if (!event.repeat) toggleWorld()
         return
       }

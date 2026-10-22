@@ -1,4 +1,5 @@
 import { ConnectorInspector } from '@renderer/flowchart/ConnectorInspector'
+import { shortPath } from '@shared/display-path'
 import type { ConnectorPatch } from '@renderer/canvas/useConnectors'
 import type { Connector } from '@shared/flowchart'
 import { ShapeInspector, type ShapeChartAct } from '@renderer/flowchart/ShapeInspector'
@@ -873,7 +874,9 @@ function InspectorPanel({
         const folder = model.fields.find((field) => field.key === 'cwd')?.value
         const facts = sessionFacts({
           state: shown.word,
-          ...(folder === undefined ? {} : { folder }),
+          // M515. The full path is two rows up (cwd, the path rule's bargain);
+          // the session's summary repeats it in the short form, full on hover.
+          ...(folder === undefined ? {} : { folder: shortPath(folder) }),
           ...(branchLine !== null && branchLine !== '' ? { branch: branchLine } : {}),
           ...(model.reattached ? { host: 'tmux · survives quit' } : {}),
           ...(model.usage.hidden || model.usage.costLabel === undefined ? {} : { usage: model.usage.costLabel })
@@ -886,7 +889,7 @@ function InspectorPanel({
               {facts.map((fact) => (
                 <div className="inspector__field" key={fact.label} data-inspector-session-fact={fact.label}>
                   <dt className="inspector__label">{fact.label}</dt>
-                  <dd className="inspector__value">{fact.value}</dd>
+                  <dd className="inspector__value" title={fact.label === 'Folder' ? folder : undefined}>{fact.value}</dd>
                 </div>
               ))}
             </dl>
