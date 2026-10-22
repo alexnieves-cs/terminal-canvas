@@ -23,9 +23,37 @@ import type { PanelSpec } from '@shared/types'
  * The per-agent spellings live in `AGENT_CAPABILITIES`, so a Claude option can
  * never leak into Codex argv (or vice versa).
  */
+/**
+ * M534 (G4). Claude Code's hooks, passed PER PANEL with `--settings`, so the
+ * panel learns exactly when claude is waiting on a person (Notification) or
+ * has finished its turn (Stop) instead of guessing from a bell and silence.
+ * wmux writes these into `~/.claude/settings.json`; this never touches a
+ * person's own settings — `--settings` adds to them for this one process.
+ *
+ * Each hook runs `tc hook <state>`, which reaches main over the control
+ * socket with the panel id and a per-spawn secret from the panel's env
+ * (pty-manager.ts), so no other process can set this panel's state. A hook
+ * that cannot reach the app exits 0 silently and the bell still works.
+ * The JSON holds no path, id or secret: it is the same for every panel.
+ */
+const hook = (state: 'waiting' | 'done' | 'busy', matcher?: string): Array<{ matcher?: string; hooks: Array<{ type: 'command'; command: string }> }> =>
+  [{ ...(matcher === undefined ? {} : { matcher }), hooks: [{ type: 'command', command: `tc hook ${state} >/dev/null 2>&1 || true` }] }]
+export const CLAUDE_STATE_HOOKS = JSON.stringify({
+  hooks: {
+    // Only a question asks for the person: claude's idle_prompt notification
+    // fires after a minute of plain waiting, and would turn every finished
+    // panel into wants-you.
+    Notification: hook('waiting', 'permission_prompt|elicitation_dialog'),
+    Stop: hook('done'),
+    UserPromptSubmit: hook('busy')
+  }
+})
+
 export function agentArgs(
   spec: Pick<PanelSpec, 'agent' | 'args' | 'agentOptions'>,
-  sessionId: string
+  sessionId: string,
+  /** M534. Add CLAUDE_STATE_HOOKS: only when the app's control socket is there for them to reach. */
+  stateHooks = false
 ): string[] {
   // Rule 1. Not `if (spec.agentOptions)` — see the comment above.
   //
@@ -64,6 +92,9 @@ export function agentArgs(
     const flag = capability.flags[key]
     if (value !== undefined && flag !== undefined) append(flag, value)
   }
+
+  // M534. Claude only, and rule 2: a person's own `--settings` wins.
+  if (stateHooks && spec.agent === 'claude-code') append('--settings', CLAUDE_STATE_HOOKS)
 
   return args
 }

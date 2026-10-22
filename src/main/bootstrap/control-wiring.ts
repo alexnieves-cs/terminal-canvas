@@ -135,6 +135,7 @@ export function createControlWiring(state: MainState, stores: Stores, places: Pl
     }),
     // M489. The phone's test push, past the idle rule: a person asked for it.
     phoneTest: () => stores.phoneAlerts.test(),
+    hook: (panel, secret, state) => ptyManager.hook(panel, secret, state),
     // M369. The decision audit, read from main's own file.
     audit: (limit) => stores.decisionAudit.list(limit),
     // M366. The toolbox door `toolbox:read` uses, over main's ONE cache, so a

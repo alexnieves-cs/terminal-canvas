@@ -187,6 +187,13 @@ export type AgentEvent =
   /** The user acted on this panel: typed into it, or looked at it. */
   | { kind: 'acknowledge' }
   | { kind: 'exit' }
+  /**
+   * M534 (G4). Claude Code's own Stop hook: the turn is over. Exact where
+   * idleness is a guess, so busy goes idle at once instead of after
+   * idleAfterMs. wants-you stays sticky: a question still on screen is not
+   * answered by the turn ending.
+   */
+  | { kind: 'done' }
 
 export function initialDetector(now: number): Detector {
   // 'starting', not 'idle': a panel that has never emitted a byte has not
@@ -202,6 +209,7 @@ export function initialDetector(now: number): Detector {
  *   busy --no bytes for idleAfterMs--> idle
  *   (busy | idle) --bell--> wants-you
  *   wants-you --user input to this panel, or focus--> busy | idle
+ *   (starting | busy | idle) --claude's Stop hook (M534)--> idle
  *   any --pty exit--> exited
  *
  * Pure, and takes `now` as a parameter, so every transition above is testable
@@ -235,6 +243,8 @@ export function nextState(
       // "finished" from "asked a question"; this can, which is why M6d's
       // notification will be gated on this state and not on idleness.
       return { ...prev, lastOutputAt: now, state: 'wants-you' }
+    case 'done':
+      return prev.state === 'wants-you' ? prev : { ...prev, state: 'idle' }
     case 'tick':
       if (prev.state !== 'busy') return prev
       return now - prev.lastOutputAt >= idleAfterMs ? { ...prev, state: 'idle' } : prev

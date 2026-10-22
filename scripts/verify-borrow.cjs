@@ -271,6 +271,57 @@ check('borrow.reads.3 ⌘⌥Y is the registry\'s allow-reads chord with a handle
   return { pass, detail: { row, clash: clash.length } }
 })
 
+// ── G4 (M534): exact Claude states from per-panel hooks ──
+const stateMod = load('src/main/agent-state.ts', 'agent-state')
+const argsMod = load('src/main/agent-args.ts', 'agent-args')
+const protoMod = load('src/main/control-protocol.ts', 'control-protocol')
+const tcMod = load('src/cli/tc.ts', 'tc')
+const SECRET = '0123456789abcdef0123456789abcdef'
+check('borrow.hooks.1 Stop ends a busy turn at once, and never clears a question still waiting (wants-you stays sticky)', stateMod, (S) => {
+  const d = (state) => ({ ...S.initialDetector(0), state })
+  const busy = S.nextState(d('busy'), { kind: 'done' }, 10, 60000).state
+  const asking = S.nextState(d('wants-you'), { kind: 'done' }, 10, 60000).state
+  const dead = S.nextState(d('exited'), { kind: 'done' }, 10, 60000).state
+  return { pass: busy === 'idle' && asking === 'wants-you' && dead === 'exited', detail: { busy, asking, dead } }
+})
+check('borrow.hooks.2 a claude panel gets --settings with Notification (questions only, never idle_prompt), Stop and UserPromptSubmit hooks running tc hook; never without the flag, never for another agent, never over a person\'s own --settings', argsMod, (A) => {
+  const on = A.agentArgs({ agent: 'claude-code', args: [] }, '', true)
+  const off = A.agentArgs({ agent: 'claude-code', args: [] }, '', false)
+  const other = A.agentArgs({ agent: 'codex', args: [] }, '', true)
+  const own = A.agentArgs({ agent: 'claude-code', args: ['--settings', '{}'] }, '', true)
+  const at = on.indexOf('--settings')
+  const json = at >= 0 ? JSON.parse(on[at + 1]) : {}
+  const cmds = ['Notification', 'Stop', 'UserPromptSubmit'].map((k) => json.hooks?.[k]?.[0]?.hooks?.[0]?.command)
+  const pass = at >= 0 && json.hooks?.Notification?.[0]?.matcher === 'permission_prompt|elicitation_dialog' && cmds[0] === 'tc hook waiting >/dev/null 2>&1 || true' && cmds[1] === 'tc hook done >/dev/null 2>&1 || true' && cmds[2] === 'tc hook busy >/dev/null 2>&1 || true' &&
+    !off.includes('--settings') && !other.includes('--settings') && own.filter((a) => a === '--settings').length === 1 && !/TC_|[0-9a-f]{32}/.test(A.CLAUDE_STATE_HOOKS)
+  return { pass, detail: { on, off, other, own } }
+})
+check('borrow.hooks.3 the socket takes hook with a 32-hex secret and one of three states; a bad secret, state or missing panel is refused, and a URL can never carry it', protoMod, (P) => {
+  const line = (o) => P.parseControlLine(JSON.stringify(o))
+  const good = line({ verb: 'hook', panel: 'p1', secret: SECRET, state: 'done' })
+  const bad = [
+    line({ verb: 'hook', panel: 'p1', secret: 'short', state: 'done' }),
+    line({ verb: 'hook', panel: 'p1', secret: SECRET, state: 'exited' }),
+    line({ verb: 'hook', secret: SECRET, state: 'done' }),
+    P.parseControlUrl(`terminal-canvas://hook?panel=p1&secret=${SECRET}&state=done`)
+  ]
+  const pass = good.kind === 'ok' && good.req.verb === 'hook' && good.req.state === 'done' && bad.every((b) => b.kind === 'bad')
+  return { pass, detail: { good, bad: bad.map((b) => b.kind) } }
+})
+check('borrow.hooks.4 tc hook reads the panel and secret only from its env, and refuses outside a claude panel or with a fourth state', tcMod, (T) => {
+  const env = { TC_PANEL_ID: 'p1', TC_HOOK_SECRET: SECRET }
+  const good = T.buildRequest(['hook', 'waiting'], env)
+  const noEnv = T.buildRequest(['hook', 'waiting'], {})
+  const badState = T.buildRequest(['hook', 'exited'], env)
+  const req = good.kind === 'ok' ? JSON.parse(good.line) : null
+  const pass = req !== null && req.verb === 'hook' && req.panel === 'p1' && req.secret === SECRET && req.state === 'waiting' && noEnv.kind === 'usage' && badState.kind === 'usage'
+  return { pass, detail: { good, noEnv, badState } }
+})
+const hookSrc = require('node:fs').readFileSync(join(ROOT, 'src/main/pty-manager.ts'), 'utf8')
+ok('borrow.hooks.5 pty-manager mints the hook secret per spawn only for a claude panel with the control socket, compares it in constant time, and passes the hooks only when it minted one',
+  /control !== null && spec\.agent === 'claude-code' \? randomBytes\(16\)\.toString\('hex'\)/.test(hookSrc) && /timingSafeEqual\(got, want\)/.test(hookSrc) && /agentArgs\(spec, sessionId \?\? '', hookSecret !== undefined\)/.test(hookSrc),
+  'pty-manager.ts no longer reads as the check expects')
+
 ;(async () => {
   const p3 = await phone3.catch((e) => ({ error: e.message }))
   if (p3) {

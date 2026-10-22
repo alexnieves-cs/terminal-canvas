@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { ReviewIdentity } from '../shared/review-identity'
 import { createOutputCapture, mintCheckRunId, type CheckOutputRecord, type OutputCapture } from '../shared/check-output'
 import { agentArgs } from './agent-args'
@@ -342,6 +342,8 @@ interface Session {
   agent: PanelSpec['agent']
   /** M398 (A3). Whether the last tick fed this session to the watcher, so leaving it can clear the card. */
   watched: boolean
+  /** M534 (G4). The secret `tc hook` must carry to set this panel's state; absent when no hooks were passed. */
+  hookSecret?: string
 }
 
 /** M52. The run ledger and the shell-integration directory, injected. */
@@ -690,6 +692,16 @@ export class PtyManager {
       env['TC_CONTROL_SOCKET'] = control.socket
       env['PATH'] = env['PATH'] === undefined || env['PATH'] === '' ? control.binDir : `${control.binDir}:${env['PATH']}`
     }
+    // M534 (G4). A claude panel gets its state from claude's own hooks
+    // (agent-args.ts CLAUDE_STATE_HOOKS). The hook proves which panel it
+    // speaks for with a secret minted per spawn and held only in this
+    // process's env and the session below — any process can reach the
+    // socket, and none but this panel's own should set its state.
+    const hookSecret = control !== null && spec.agent === 'claude-code' ? randomBytes(16).toString('hex') : undefined
+    if (hookSecret !== undefined) {
+      env['TC_PANEL_ID'] = spec.panelId
+      env['TC_HOOK_SECRET'] = hookSecret
+    }
 
     // M37. The worktree decides the cwd BEFORE the baseline is captured
     // below, so the snapshot is taken in the worktree — which is the whole
@@ -787,7 +799,7 @@ export class PtyManager {
       sessionId = randomUUID()
       this.setPinnedSession(spec.panelId, sessionId)
     }
-    const args = spawnArgs ?? agentArgs(spec, sessionId ?? '')
+    const args = spawnArgs ?? agentArgs(spec, sessionId ?? '', hookSecret !== undefined)
 
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
     // is missing, so a probe taken afterwards answers true unconditionally and
@@ -857,7 +869,8 @@ export class PtyManager {
       run: null,
       spawnedAt,
       agent: spec.agent,
-      watched: false
+      watched: false,
+      ...(hookSecret !== undefined ? { hookSecret } : {})
     }
     this.sessions.set(spec.panelId, session)
     // Only ever ticks while something is in the map; see startIdleTick.
@@ -1171,6 +1184,23 @@ export class PtyManager {
     const session = this.sessions.get(panelId)
     if (!session) return
     this.applyEvent(session, { kind: 'acknowledge' })
+  }
+
+  /**
+   * M534 (G4). A claude panel's own hook reporting its state (`tc hook`).
+   * Answers false, and changes nothing, unless the secret is the one minted
+   * for this panel's spawn — a reattached or killed panel has none, and an
+   * answer of false is all a caller learns. waiting is a bell (wants-you),
+   * busy is output, done is the exact end of a turn (agent-state.ts).
+   */
+  hook(panelId: PanelId, secret: string, state: 'waiting' | 'done' | 'busy'): boolean {
+    const session = this.sessions.get(panelId)
+    if (!session || session.killed || session.hookSecret === undefined) return false
+    const want = Buffer.from(session.hookSecret)
+    const got = Buffer.from(secret)
+    if (got.length !== want.length || !timingSafeEqual(got, want)) return false
+    this.applyEvent(session, { kind: state === 'waiting' ? 'bell' : state === 'busy' ? 'output' : 'done' })
+    return true
   }
 
   private startIdleTick(): void {

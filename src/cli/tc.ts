@@ -49,6 +49,7 @@ export const USAGE = [
   '       tc share-role <share-id> <login|user-id> <editor|viewer|none>',
   '       tc mcp   (an MCP server on stdio, for Claude Code or any MCP client)',
   '       tc phone-test   (one test push to the ntfy topic in Settings)',
+  '       tc hook waiting|done|busy   (run by a claude panel\'s own hooks; needs TC_PANEL_ID and TC_HOOK_SECRET)',
   '',
   'login and join ask in the app before they act; login opens your browser and waits for it.',
   'use, share, open-share and share-role ask in the app too; accounts and shares only list.',
@@ -279,6 +280,16 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     case 'ping':
     case 'phone-test':
       return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }
+    case 'hook': {
+      // M534 (G4). Run by claude's hooks inside a panel, never by hand: the
+      // panel id and secret come only from the env pty-manager gave it.
+      const state = rest[0]
+      if (rest.length !== 1 || (state !== 'waiting' && state !== 'done' && state !== 'busy')) return { kind: 'usage', error: 'hook takes one of waiting, done, busy' }
+      const panel = env['TC_PANEL_ID']
+      const secret = env['TC_HOOK_SECRET']
+      if (panel === undefined || panel === '' || secret === undefined || secret === '') return { kind: 'usage', error: 'tc hook runs inside a claude panel (TC_PANEL_ID and TC_HOOK_SECRET are not set)' }
+      return { kind: 'ok', line: JSON.stringify({ verb: 'hook', panel, secret, state }) }
+    }
     case 'focus':
       return rest.length === 1 ? { kind: 'ok', line: JSON.stringify({ verb: 'focus', id: rest[0] }) } : { kind: 'usage', error: 'focus takes exactly one panel id' }
     default:
