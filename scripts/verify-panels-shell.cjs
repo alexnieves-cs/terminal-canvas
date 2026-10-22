@@ -3468,6 +3468,12 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const atClick = await wc.executeJavaScript(`(async () => ({
           selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')),
           button: !!document.querySelector('[data-inspector-action="review"]'),
+          // Which inspector arm stood in for the button: 'reading…' is a
+          // review read never answered, the not-a-repository line an answer
+          // that says the cwd is not one; the heading says whose pane it is.
+          arm: (document.querySelector('[data-work-arm="changes"]') || {}).textContent || null,
+          heading: (document.querySelector('.inspector__heading, .context__title, [data-inspector-heading]') || {}).textContent || null,
+          tab: (document.querySelector('.context__panel:not([hidden])') || { getAttribute: () => null }).getAttribute('data-context-panel'),
           baseline: ${JSON.stringify(subject ?? null)} === null ? null : await window.canvas.review.baseline(${JSON.stringify(subject ?? '')}).then((b) => b !== null) }))()`)
         const clicked = await clickShell('[data-inspector-action="review"]')
         const node = await waitUntil(async () => {
