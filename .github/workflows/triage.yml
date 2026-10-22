@@ -43,16 +43,20 @@ jobs:
       - name: Run suite three times
         env:
           TC_WATCHDOG_SCALE: '2'
+          # Flowchart six times while perf.2's render loop (1 run in about 6) is caught.
+          RUNS: ${{ matrix.suite == 'panels:flowchart' && '1 2 3 4 5 6' || '1 2 3' }}
         # A hung suite must still report: stop each run at 18 minutes and keep what it logged.
         run: |
-          for i in 1 2 3; do
+          for i in $RUNS; do
             perl -e 'alarm 1080; exec @ARGV' npm run verify:${{ matrix.suite }} > suite-$i.log 2>&1 || true
             pkill -f Electron || true
             echo "=== run $i: $(grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1)"
           done
       - name: Failures only
+        env:
+          RUNS: ${{ matrix.suite == 'panels:flowchart' && '1 2 3 4 5 6' || '1 2 3' }}
         run: |
-          for i in 1 2 3; do
+          for i in $RUNS; do
             echo "=== ${{ matrix.suite }} run $i"
             grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1 || true
             grep -E '^(FAIL|\s*FAIL)' suite-$i.log | cut -c1-2500 || true
@@ -63,8 +67,10 @@ jobs:
           done
       # Red unless all three runs reported and none failed: the job's colour is the verdict.
       - name: Verdict
+        env:
+          RUNS: ${{ matrix.suite == 'panels:flowchart' && '1 2 3 4 5 6' || '1 2 3' }}
         run: |
-          for i in 1 2 3; do
+          for i in $RUNS; do
             grep -qE '^[0-9]+/[0-9]+ passed' suite-$i.log || { echo "run $i: no summary"; exit 1; }
             ! grep -qE '^FAILED|^FAIL ' suite-$i.log || { echo "run $i: failed"; exit 1; }
           done
