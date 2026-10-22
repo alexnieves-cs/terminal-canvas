@@ -209,7 +209,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             // and a rect-inside-the-host test alone reports it as a pass.
             const covered = el !== null && el.closest('.panel') !== null
             const by = covered ? el.closest('.panel') : null
-            const coverBy = by ? { id: by.getAttribute('data-panel-id'), z: getComputedStyle(by).zIndex, rect: (() => { const q = by.getBoundingClientRect(); return [Math.round(q.x), Math.round(q.y), Math.round(q.width), Math.round(q.height)] })(), layerZ: getComputedStyle(document.querySelector('.link-layer')).zIndex } : null
+            const coverBy = by ? { hit: el.tagName + '.' + String(el.className.baseVal ?? el.className).slice(0, 60), hitOpacity: getComputedStyle(el).opacity, hitVis: getComputedStyle(el).visibility, id: by.getAttribute('data-panel-id'), z: getComputedStyle(by).zIndex, rect: (() => { const q = by.getBoundingClientRect(); return [Math.round(q.x), Math.round(q.y), Math.round(q.width), Math.round(q.height)] })(), layerZ: getComputedStyle(document.querySelector('.link-layer')).zIndex } : null
             return { coverBy, w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
               display: getComputedStyle(p).display, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)

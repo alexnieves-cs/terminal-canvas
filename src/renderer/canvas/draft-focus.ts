@@ -31,6 +31,18 @@ export function focusedDraft(): HTMLElement | null {
 }
 
 /**
+ * Fields that have taken an edit since the page loaded. A field's native undo
+ * stack holds only edits made in it (typing, insertText, a cut), and each fires
+ * `input`, so a field never seen here has nothing for ⌘Z or ⌘⇧Z to do. Such a
+ * field keeps the keyboard but not history: the empty canvas's launcher
+ * focuses its own field on mount, so undoing the last panels away and pressing
+ * redo sent the redo into that untouched field, and the canvas lost it
+ * (verify:panels:agents template.1 on the runner).
+ */
+const edited = new WeakSet<EventTarget>()
+if (typeof document !== 'undefined') document.addEventListener('input', (event) => { if (event.target !== null) edited.add(event.target) }, true)
+
+/**
  * True when the draft's own surface serves this verb itself. `data-edit-owner`
  * surfaces serve copy/paste; only the rich note and Monaco keep their own
  * history, so everyone else's ⌘Z is the field's native undo.
@@ -49,6 +61,7 @@ export function serveDraftEdit(verb: 'copy' | 'paste' | 'undo' | 'redo', text?: 
   const el = focusedDraft()
   if (el === null) return false
   if (ownedElsewhere(el, verb)) return true
+  if ((verb === 'undo' || verb === 'redo') && !edited.has(el)) return false
   if (verb === 'paste') {
     // insertText keeps the field's native undo stack and fires `input`, so a
     // React-controlled field sees the change through its onChange.
