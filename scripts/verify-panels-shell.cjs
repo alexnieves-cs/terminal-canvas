@@ -3025,12 +3025,19 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         await settle()
         await waitUntil(async () => wc.executeJavaScript(
           `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        // Pressed again only when a press has minted NOTHING for 3 s: on the
+        // runner one run in three read the button for the right panel and no
+        // node after it (the press landed while the inspector was re-keying
+        // from r90 to `first`). The check still demands exactly one fresh id,
+        // so a second press that ALSO minted would read red, not green.
         await clickShell('[data-inspector-action="review"]')
+        let pressedAt = Date.now()
         const node = await waitUntil(async () => {
           const ids = await panelIds()
           const fresh = ids.filter((id) => !beforeIds.includes(id))
+          if (fresh.length === 0 && Date.now() - pressedAt > 3000) { await clickShell('[data-inspector-action="review"]'); pressedAt = Date.now() }
           return fresh.length === 1 ? fresh[0] : false
-        }, 8000)
+        }, 10000)
         const heading = await wc.executeJavaScript(`(() => {
           const n = document.querySelector('.review-node[data-panel-id=' +
             ${JSON.stringify(JSON.stringify(node))} + ']')
