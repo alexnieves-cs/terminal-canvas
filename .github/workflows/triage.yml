@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ['panels:shell', 'panels:flowchart']
+        suite: ['panels:flowchart']
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -30,20 +30,16 @@ jobs:
       - run: npm ci
       - run: node node_modules/electron/install.js
       - run: npm run build
-      # Flowchart only, while perf.2's lost page is diagnosed: the renderer again
-      # as a development build, unminified, so React names the component behind
-      # the "maximum update depth" error (#185) the runner hit after a 40-shape move.
+      # Flowchart only, while perf.2's lost page is diagnosed: the PRODUCTION renderer,
+      # unminified. The development build never threw (6/6, a warning only), because
+      # #185 is the production commit counter; unminified, its stack names the setState.
       - if: matrix.suite == 'panels:flowchart'
         # electron-vite has no --minify flag, so the runner's copy of the config
         # (never committed) turns the renderer's minifier off.
         run: |
           perl -0pi -e 's/(renderer: \{.*?build: \{)/$1 minify: false,/s' electron.vite.config.ts
-          # NODE_ENV alone left React's production build in (electron-vite builds for
-          # production): define it, so react-dom's development build is what bundles.
-          perl -0pi -e 's/(renderer: \{)/$1 define: { "process.env.NODE_ENV": JSON.stringify("development") },/s' electron.vite.config.ts
-          grep -nE 'minify: false|NODE_ENV' electron.vite.config.ts
+          grep -nE 'minify: false' electron.vite.config.ts
           npx electron-vite build
-          grep -c 'Maximum update depth exceeded' out/renderer/assets/index-*.js || true
       - name: Run suite three times
         env:
           TC_WATCHDOG_SCALE: '2'

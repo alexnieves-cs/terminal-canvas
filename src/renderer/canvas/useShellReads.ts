@@ -208,6 +208,12 @@ export function useShellReads(deps: UseShellReadsDeps) {
   }, [hostRef])
   const markHint = useCallback((id: string) => {
     if (!hintsLoadedRef.current) return
+    // Read before writing: the hint effect marks 'pan'/'zoom' on EVERY camera move,
+    // and a setState whose updater returns prev still schedules a render while the
+    // canvas fiber has work pending. Every wheel frame's passive flush then scheduled
+    // one, so React's nested-update counter never reset (the dev "Maximum update
+    // depth" warning in verify:panels:flowchart perf.2, pinned to the wheel handler).
+    if (hintsSeenRef.current.has(id)) return
     setHintsSeen((prev) => {
       if (prev.has(id)) return prev
       const next = new Set(prev); next.add(id)
