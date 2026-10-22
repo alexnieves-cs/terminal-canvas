@@ -133,6 +133,8 @@ export function createControlWiring(state: MainState, stores: Stores, places: Pl
         record: (row) => recordDecision(stores.runLedger, stores.decisionAudit, row)
       }
     }),
+    // M489. The phone's test push, past the idle rule: a person asked for it.
+    phoneTest: () => stores.phoneAlerts.test(),
     // M369. The decision audit, read from main's own file.
     audit: (limit) => stores.decisionAudit.list(limit),
     // M366. The toolbox door `toolbox:read` uses, over main's ONE cache, so a
