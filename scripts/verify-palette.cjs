@@ -3389,12 +3389,12 @@ const FRESH = () => ctx({
   const table = src('src/renderer/sessions/SessionsTable.tsx')
   const bar = src('src/renderer/shell/TopBar.tsx')
   const panes = src('src/renderer/settings/panes.ts')
-  ok('labs.5 the palette, the World lens, ⌘⇧W, Show in World and the account menu each read their lab; a room already up keeps its lens and its chord',
+  ok('labs.5 the palette, the World lens, ⌘⇧W, Show in World and the account menu each read their lab; a room already up keeps its lens and its chord, and a signed-in session keeps its menu',
     /withoutHiddenLabs\(commands, labsOff\)/.test(palette) && /filterCommands\(shown, query, scope\)/.test(palette) &&
       /useLab\('world'\)/.test(lens) && /if \(!shown && !on\) return null/.test(lens) &&
       /if \(!labOn\('world'\) && !isWorldOn\(\)\) return/.test(tail) &&
       /useLab\('world'\)/.test(table) && /\{worldShown && <button/.test(table) &&
-      /useLab\('accounts'\)/.test(bar) && /accountsShown \? accountsProp : undefined/.test(bar) &&
+      /useLab\('accounts'\)/.test(bar) && /accountsShown \|\| signedIn \? accountsProp : undefined/.test(bar) &&
       /categories: \[SHELL_CATEGORY, LABS_CATEGORY, UPDATES_CATEGORY\]/.test(panes))
 }
 

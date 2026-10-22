@@ -88,9 +88,12 @@ export function TopBar({
 }: TopBarProps): JSX.Element {
   // M496. Accounts, sharing and People are one of the cut list's hidden
   // surfaces (`labs.accounts`): off, the bar behaves as if accounts were never
-  // configured, which is what a DMG without TC_SUPABASE_URL already is.
+  // configured, which is what a DMG without TC_SUPABASE_URL already is. A
+  // session someone already signed in is what EXISTS, though, and the lab
+  // never hides what acts on that: signed in, the menu (and its Sign out) stays.
   const accountsShown = useLab('accounts')
-  const accounts = accountsShown ? accountsProp : undefined
+  const signedIn = (accountsProp?.sessions.length ?? 0) > 0
+  const accounts = accountsShown || signedIn ? accountsProp : undefined
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
   // unavailable preset spawns a panel that dies instantly with "command not

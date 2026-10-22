@@ -12,7 +12,7 @@ records what was decided and what "hide" means in the code.
 | Surface | Setting | Doors that hide |
 |---|---|---|
 | World 3D view (**on** by default) | `labs.world` | the 2D \| World lens, ⌘⇧W, Sessions' Show in World, the `world.view` row |
-| Accounts, sharing, presence, People | `labs.accounts` | the account menu and avatars, the People segment, `account.sign-in`, `canvas.people`, `share.*` |
+| Accounts, sharing, presence, People | `labs.accounts` | the account menu and avatars (until someone is signed in), the People segment, `account.sign-in`, `canvas.people`, `share.*` |
 | Relay terminals | `labs.relay` | `object.create.relay` |
 | Decks | `labs.decks` | `object.create.deck` |
 | Sheets | `labs.sheets` | `object.create.sheet` |
