@@ -13126,6 +13126,11 @@ tr[data-session-row]:focus-within .sessions-world,
    session count was absent (a capture mid-switch showed it). The count, when
    present, keeps the one auto margin. */
 .shell__top .shell__sessions ~ .shell__search { margin-left: 0; }
+/* The live count (`.live-status`) carried its own margin-left: auto, so with an
+   agent running the free space split in two and the field slid back under the
+   switch: rd-empty and rd-sessions at 1600 in the first Mac gallery. The
+   field already sits flush right, so the count just follows it. */
+.shell__top .shell__search ~ .live-status { margin-left: var(--sp-3); }
 /* The empty canvas's "Nothing placed yet" stands where the minimap will be,
    which is ALSO where the zoom bar sits: it covered Fit all. Stacked above
    the bar instead, as the minimap itself is (--nav-hud-h). */
@@ -13210,5 +13215,214 @@ tr[data-session-row]:focus-within .sessions-world,
 @media (prefers-reduced-motion: reduce) {
   .seg[data-thumb="live"]::before,
   .tabs[data-thumb="live"]::after { transition: none; }
+}
+
+/* M514. THE SESSIONS PAGE. The attention cards were a flat 16% wash of the
+   tone with the sentence in body ink, so three needs-you cards read as three
+   brown boxes and the word that mattered was the least lit thing on them.
+   Now: a hairline and an edge in the tone (the frame's own grammar, M67), a
+   quieter fill, the sentence in the tone, and an arrival on first-arrive.
+   Colour still comes only from [data-tone]. */
+.sessions-card {
+  position: relative;
+  border-color: color-mix(in srgb, var(--tone) 38%, var(--line));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--tone) 7%, var(--s-1));
+  box-shadow: inset 3px 0 0 var(--tone), var(--rim-top);
+  padding: var(--sp-4) var(--sp-5);
+  animation: first-arrive var(--dur-2) var(--ease) both;
+  transition: border-color var(--dur-state) var(--ease), background-color var(--dur-state) var(--ease);
+}
+.sessions-card:hover { border-color: color-mix(in srgb, var(--tone) 60%, var(--line)); }
+.sessions-card__sentence { color: var(--tone); font-weight: 600; font-size: var(--t-md); }
+.sessions-card__name { font-size: var(--t-sm); }
+.sessions-card button { border-radius: var(--r-md); padding: var(--sp-1) var(--sp-4); transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.sessions-card button:hover { background: var(--s-3); border-color: var(--line-strong); }
+.sessions-card__verbs > button:first-child { border-color: color-mix(in srgb, var(--tone) 50%, var(--line)); color: var(--fg); }
+/* The table: a header that stays while the rows scroll, a row that answers
+   the pointer, the run time in tabular figures, and the state word wearing
+   the status dot every other surface gives it (live tones breathe, as
+   .status-dot does). */
+.sessions-table th { position: sticky; top: 0; z-index: 1; background: var(--s-0); }
+.sessions-table tbody tr[data-session-row] { cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
+.sessions-table tbody tr[data-session-row]:hover { background: var(--s-2); }
+.sessions-table tbody tr[data-session-row][data-selected]:hover { background: color-mix(in srgb, var(--state-select) 20%, transparent); }
+.sessions-run { font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.sessions-group td { padding-top: var(--sp-4); background: transparent; color: var(--fg-2); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
+.sessions-state { gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); }
+.sessions-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.sessions-state[data-tone="working"]::before,
+.sessions-state[data-tone="starting"]::before { animation: state-breath var(--dur-breath) var(--ease) infinite; }
+/* The detail's tail before anything printed: words in a quiet well, not a
+   black box (empty-states.ts `session-tail`). */
+.sessions-tail[data-empty] { display: none; }
+.sessions-tail-empty {
+  flex: 1;
+  min-height: 120px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--fg-3);
+  font-size: var(--t-sm);
+  text-align: center;
+}
+/* M513. STATE AT A GLANCE. Finishing is the one change with no moment of its
+   own: working breathes and needs-you glows, but done arrived as a colour
+   swap you had to be looking at. The dot and the word now give one spring
+   breath when they turn done (integration-verified-pop, the same "it worked"
+   breath a verified connection gets), once, never a loop. Failed and idle
+   stay still on purpose: stillness is their signal. */
+.status-dot[data-tone="done"],
+.pf__word[data-tone="done"] { animation: integration-verified-pop var(--dur-spring) var(--ease-spring) 1 both; }
+/* A dormant card's "click to start" was a bare caption, the only way into a
+   restored panel and the quietest thing on it. It is a pill with a play
+   mark now, and lights when the card is under the pointer. The mark is a
+   pseudo-element, so the text the panels checks read stays exactly
+   `click to start`. */
+.panel__card-dormant .panel__card-idle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--s-2);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.panel__card-dormant .panel__card-idle::before {
+  content: "";
+  width: 7px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.panel__card-dormant:hover .panel__card-idle { border-color: var(--iris); background: var(--iris-dim); color: var(--iris); }
+/* M515. THE INSPECTOR'S HIERARCHY. A section heading (SESSION) and a field
+   label (STATE) were the same caps micro-label, so the column read as one
+   flat list of shouted words. A heading is now a title in the body ink, the
+   way a node's heading already is (--node), and the labels keep the caps.
+   The Session block gets the hairline every other section has. Text is
+   untouched; only its look. */
+.inspector__section-heading {
+  color: var(--fg);
+  font-size: var(--t-sm);
+  letter-spacing: var(--track-tight);
+  text-transform: none;
+}
+.inspector__session {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.inspector__field { margin-bottom: var(--sp-5); }
+.inspector__label { display: block; margin-bottom: var(--sp-1); }
+
+/* M517. ONBOARDING'S CONTROLS. Its buttons took `font: inherit` and so the
+   card's body size, a size larger than every word around them ("Copy install
+   command" was the biggest text on the step). They are control-sized now.
+   An agent's On/Off is a SWITCH: a track and a knob drawn from the button's
+   pseudo-elements, the knob sliding on --dur-1, the word kept beside it so
+   the button's text (and aria-pressed) are what they were. */
+.rd-onboard__rows button, .rd-onboard__custom { font-size: var(--t-sm); transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.rd-onboard__rows button:hover, .rd-onboard__custom:hover { background: var(--s-2); border-color: var(--line-strong); }
+.rd-onboard__rows button[aria-pressed] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 72px;
+  border: 0;
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--fg-3);
+}
+.rd-onboard__rows button[aria-pressed]:hover { background: transparent; }
+.rd-onboard__rows button[aria-pressed]::before {
+  content: "";
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--s-4);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition: background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.rd-onboard__rows button[aria-pressed]::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--sp-2) + 3px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--fg-2);
+  transition: transform var(--dur-1) var(--ease-spring), background-color var(--dur-1) var(--ease);
+}
+.rd-onboard__rows button[aria-pressed="true"] { color: var(--fg); }
+.rd-onboard__rows button[aria-pressed="true"]::before { background: var(--iris); box-shadow: none; }
+.rd-onboard__rows button[aria-pressed="true"]::after { transform: translateX(12px); background: var(--on-iris); }
+.rd-onboard__rows button[aria-pressed]:focus-visible { outline: 2px solid var(--state-select); outline-offset: 2px; border-radius: var(--r-md); }
+/* M517. SETTINGS' WAY OUT. Close sat at the foot of the page list, below
+   the fold on a short window, so the page read as a place with no door
+   (Escape works, but nothing said so). It stands at the page's top-right
+   corner now, where every sheet's close is, with its key beside it. The
+   page fades in rather than replacing the canvas in one frame, and the
+   current page in the list carries the iris mark the rail's current row
+   does. */
+.rd-settings { animation: tier-in var(--dur-2) var(--ease) both; }
+.rd-settings__close {
+  position: absolute;
+  top: var(--sp-5);
+  right: var(--sp-6);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.rd-settings__close::after {
+  content: "esc";
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.rd-settings__nav button { transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.rd-settings__nav button:not([aria-current="page"]):hover { background: var(--s-3); }
+.rd-settings__nav button[aria-current="page"] { box-shadow: inset 2px 0 0 var(--iris); }
+@media (prefers-reduced-motion: reduce) {
+  .rd-settings { animation: none; }
+  .rd-onboard__rows button[aria-pressed]::before,
+  .rd-onboard__rows button[aria-pressed]::after { transition: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-dot[data-tone="done"],
+  .pf__word[data-tone="done"] { animation: none; }
+  .sessions-card { animation: none; }
+  .sessions-state[data-tone="working"]::before,
+  .sessions-state[data-tone="starting"]::before { animation: none; }
+}
+/* M516. PRESS FEEDBACK. A click used to answer only when its result arrived,
+   so a control that takes a beat (a spawn, a save) read as a missed click.
+   Every control now gives way the instant it is pressed, before any work
+   runs: a 3% scale-down applied with no transition, so it lands on the very
+   frame of the press, and released on --dur-1. It is transform-only, so it
+   runs on the compositor, never re-lays out a row, and never stops
+   pointer events. The whole rule sits at ZERO specificity
+   (:where), so a control that already positions itself with a transform
+   (a centred switch, a dragged handle) keeps its own transform and simply
+   does not take part, rather than jumping. */
+:where(button, [role="button"], [role="tab"], [role="menuitem"], summary) { transition: transform var(--dur-1) var(--ease); }
+:where(button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active, [role="tab"]:active, [role="menuitem"]:active, summary:active) {
+  transform: scale(.97);
+  transition-duration: 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active, [role="tab"]:active, [role="menuitem"]:active, summary:active) { transform: none; filter: brightness(.88); }
 }
 /* ── /st:F ── */

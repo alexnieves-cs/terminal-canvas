@@ -44,6 +44,8 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'attention', sentence: 'nothing waiting' },
   /** M279. The inspector's Activity tab, per object and canvas-wide. */
   { id: 'activity', sentence: 'no activity yet — state changes and finished turns are listed here as they happen' },
+  /** M514. The Sessions detail's tail before a session has printed anything this visit — it was a blank black well. */
+  { id: 'session-tail', sentence: 'no output yet — the newest lines this session prints appear here' },
   { id: 'orch-roster', sentence: 'no agents match this filter — start a chat or terminal on the canvas', verb: 'Show Canvas' },
   { id: 'orch-pipeline', sentence: 'no tasks in this stage — start work from the board or palette', verb: 'Show Canvas' },
   { id: 'orch-task', sentence: 'no task is in progress or in review — start work from the board', verb: 'Show Canvas' },
