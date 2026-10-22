@@ -97,6 +97,33 @@ function makeRelay(extra = {}) {
 
 // ── a raw test client ───────────────────────────────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// How many bytes this OS's loopback absorbs (sender's send buffer plus the paused
+// reader's receive buffer) before a writer sees backpressure at all. The relay
+// only learns a viewer lags once the kernel stops taking its bytes, so a
+// backpressure test sized in fixed megabytes passes on one kernel and not on
+// another: Linux's autotuned buffers took the whole of a 5 MB stream.
+const loopbackAbsorbs = async () => {
+  const net = require('node:net')
+  const srv = net.createServer()
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r))
+  const accepted = new Promise((r) => srv.once('connection', r))
+  const reader = net.connect(srv.address().port, '127.0.0.1')
+  await new Promise((r) => reader.once('connect', r))
+  reader.pause()
+  const w = await accepted
+  const block = Buffer.alloc(64 * 1024)
+  let total = 0, absorbed = -1
+  // Write until the kernel stops taking more: two looks 50 ms apart that agree.
+  for (;;) {
+    while (w.writableLength < 1024 * 1024) { w.write(block); total += block.length }
+    await sleep(50)
+    const now = total - w.writableLength
+    if (now === absorbed) break
+    absorbed = now
+  }
+  reader.destroy(); w.destroy(); await new Promise((r) => srv.close(r))
+  return absorbed
+}
 async function until(pred, ms = 2000) {
   const end = Date.now() + ms
   while (Date.now() < end) { if (pred()) return true; await sleep(5) }
@@ -470,7 +497,12 @@ function connect(port, tok, opts = {}) {
     await until(() => slow.json('attached').length > 0)
     await sleep(30)
     const count = (c) => c.log.reduce((n, e) => n + (e.b ? e.b.length : 0), 0)
-    const chunk = 16 * 1024, n = 320
+    // The stalled viewer must fall more than the ring behind AFTER the kernel's
+    // buffers fill and its queue passes HIGH, or there is nothing to resync from:
+    // twice what this loopback absorbs, plus HIGH, plus twice the ring, and never
+    // less than the 5 MB this test was written with.
+    const chunk = 16 * 1024
+    const n = Math.max(320, Math.ceil((2 * await loopbackAbsorbs() + 256 * 1024 + 2 * 1024 * 1024) / chunk))
     const stream = Buffer.alloc(chunk * n)
     for (let i = 0; i < stream.length; i++) stream[i] = 97 + ((i * 7 + (i >> 10)) % 26)
     // Like a real pty: one read per loop turn, and a paused pty produces nothing until resumed.
@@ -483,14 +515,14 @@ function connect(port, tok, opts = {}) {
     }
     slow.ws._socket.pause()
     await pump()
-    await until(() => count(fast) === stream.length, 5000)
+    await until(() => count(fast) === stream.length, 5000 * Math.ceil(n / 320))
     // Whether the reader ALSO lagged for a moment (it shares this event loop
     // with the server) is not the property; getting every byte, in order,
     // while the other viewer is stalled, is.
     ok('relay.bp.1 a stalled viewer does not hold up the others: the reading client got every byte, in order, with no resync',
       fast.bytes().equals(stream) && fast.json('resync').length === 0 && count(slow) === 0)
     slow.ws._socket.resume()
-    await until(() => slow.json('resync').length > 0 && count(slow) > 0, 5000)
+    await until(() => slow.json('resync').length > 0 && count(slow) > 0, 5000 * Math.ceil(n / 320))
     await sleep(300)
     const lastResync = slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')
     const after = Buffer.concat(slow.log.slice(lastResync + 1).filter((e) => e.b).map((e) => e.b))
