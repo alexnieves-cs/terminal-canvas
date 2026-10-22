@@ -685,6 +685,19 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M532 (G2). Inbound, so its own switch and off by default: a phone
+    // button answers a waiting agent. Allow ONCE only, never for a plan or a
+    // credential ask, one code per request that expires (main/phone-answers.ts).
+    // Not planWritable: an agent never turns on a door that answers agents.
+    id: 'remote.phoneAnswers',
+    label: 'Phone alerts: answer from the phone',
+    description: 'add Allow once and Deny buttons to a phone alert for an agent asking permission — the alert names the tool, not its command; each button works once and expires after 10 minutes; anyone who knows the topic, and the ntfy server itself, could press them, so the topic must be at least 20 random characters',
+    keywords: ['phone', 'ntfy', 'approve', 'allow', 'deny', 'answer', 'remote', 'button'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     id: 'remote.alertIdleMinutes',
     label: 'Phone alerts: after this many idle minutes',
     description: 'push only when this Mac has had no keyboard or mouse input for this long; 0 pushes whenever the window is not in front',
@@ -708,17 +721,19 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
-    // M123. OFF by default and never planWritable: a launch-time network
-    // call a plan could switch on has the shape of exfiltration, the same
-    // reason telemetry's keys carry no flag (`verify:meta update.1`). It is
-    // a NOTICE — nothing is downloaded or installed; auto-swap is declined
-    // by name for an unsigned build.
+    // M123, turned ON by default at 6.0 (M474): an unsigned build cannot
+    // swap itself, so without the notice nobody hears a fix exists. Still
+    // never planWritable: a plan that could flip a launch-time network call
+    // has the shape of exfiltration, the same reason telemetry's keys carry
+    // no flag (`verify:meta update.1`). The call is one anonymous GET of the
+    // public releases list and sends nothing; it is a NOTICE — nothing is
+    // downloaded or installed.
     id: 'update.checkOnLaunch',
     label: 'Check for updates at launch',
     description: 'ask GitHub once at launch whether a newer release exists — nothing is downloaded or installed; the notice says where',
     keywords: ['update', 'release', 'version', 'github', 'launch', 'newer', 'check'],
     type: 'boolean',
-    default: false,
+    default: true,
     category: UPDATES_CATEGORY
   },
   // M496. The cut list's hidden surfaces, off by default, and World, kept on

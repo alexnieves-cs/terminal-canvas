@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'Comma-separated scene names (empty = every scene)'
+        description: 'Comma-separated scene names (empty = every scene). A subset gallery is a preview, since scenes inherit the state earlier scenes leave; for goldens every scene is painted and only these are kept'
         required: false
         default: ''
       goldens:
@@ -168,16 +168,30 @@ jobs:
         run: npm run build
       # The same scale and watchdog env as verify.yml's verify:visual job, so
       # the goldens are the pictures that job will compare against.
+      # Every scene is painted, never a SHOT_ONLY subset: scenes run in one
+      # app and inherit the state the earlier ones leave (the account, the
+      # People tab, the workspace a scene sits over), so a narrowed run paints
+      # a different picture from the one verify:visual compares. Run 39710508833
+      # wrote rd-empty over a second, legacy empty state that way.
       - name: Write goldens
         env:
           UPDATE_GOLDENS: '1'
-          # `only` narrows the update to the scenes a person just looked at, so
-          # a scene that drifted for another reason is never re-baselined blind.
-          SHOT_ONLY: ${{ inputs.only }}
           TC_VISUAL_SCALE: '2'
           TC_SHOT_SCALE: '2'
           TC_WATCHDOG_SCALE: '2'
         run: npm run verify:visual 2>&1 | tee "$RUNNER_TEMP/goldens.log"
+      # `only` narrows what is KEPT to the scenes a person just looked at, so
+      # a scene that drifted for another reason is never re-baselined blind.
+      - name: Keep only the approved scenes
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          keep=",$(echo "$ONLY" | tr -d ' '),"
+          git ls-files --modified --others --exclude-standard verify/visual/goldens | while read -r f; do
+            n=$(basename "$f" .png)
+            case "$keep" in *",$n,"*) echo "keep $n";; *) echo "drop $n"; git checkout -q -- "$f" 2>/dev/null || rm -f "$f";; esac
+          done
       - name: Take written scenes off the pending list
         run: |
           node -e '

@@ -29,7 +29,19 @@ Format:
 - From: E · To: B
 - File: scripts/shot-scenes/** (and scripts/shot.cjs if a seed is simpler)
 - Smallest change: M496 hides six surfaces behind `labs.*` settings, off by default; World stays shown (docs/streams/cut-list.md). A scene that shows a hidden one (`relay`, `share-*`, `team-ask`, `memory`, or an account menu with nobody signed in) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The World scenes need nothing.
-- Status: open
+- Status: done in #53 (B): the six account, share and relay scenes switch the two labs on, and off again after `shared-offline`
+
+### Q-005 · Exact Claude states from claude's own hooks (ownership exception)
+- From: G · To: D, E (both finished and resolved)
+- File: src/main/pty-manager.ts, src/main/control-protocol.ts, src/main/control-handler.ts, src/cli/** (and the unowned agent-args.ts, agent-state.ts, control-wiring.ts, session-backend.ts, tmux-args.ts)
+- Smallest change: a claude panel spawned with the control socket gets a per-spawn secret in `TC_HOOK_SECRET` and `--settings` carrying Notification (questions only), Stop and UserPromptSubmit hooks that run `tc hook waiting|done|busy`. A socket-only `hook` verb applies the matching detector event when panel and secret match (constant-time); `done` is a new event that ends a busy turn at once and leaves wants-you sticky. Under tmux the two values ride `new-session -e` (tmux 3.2+; older tmux gets no hooks), because a tmux pane inherits the server's env, not its client's; the secret is kept per panel so a Cmd+R reattach still matches. Taken by G because D and E are finished, the way lane A took Q-004.
+- Status: done (M534, lane G): `verify:borrow hooks.*`.
+
+### Q-006 · `tc view <file|url>` (ownership exception)
+- From: G · To: D (finished and resolved)
+- File: src/cli/** (and the unowned verb-table.ts, plan.ts, palette-actions/objects.ts and executor.ts, palette/commands.ts)
+- Smallest change: `tc view` writes a plan line from verbs that already have four doors: a page is `create-browser`, a picture `image-add`, anything else a new `file-open <absolute path>` verb whose doors are the drop on the canvas, the Open file… row, the agent line and a workflow node. `file-open` joins the teammate's refused verbs (it reads a path the caller names, like `import-docx`).
+- Status: done (M535, lane G): `verify:borrow view.*`.
 
 ### Q-004 · `relay.bp.2` sizes its stall in fixed megabytes, which Linux's socket buffers swallow
 - From: A · To: D
@@ -37,7 +49,7 @@ Format:
 - Smallest change: the backpressure block pumps a fixed 5 MB (`n = 320` chunks of 16 KB) past a paused viewer. The relay only marks a viewer lagging once the kernel stops taking its bytes and its queue passes HIGH, then the viewer must fall a ring (1 MB) further for a resync. A Linux loopback absorbed about 3.7 MB, so the viewer never lagged far enough: bp.2 fails 5 of 5 there and flaked once on the Mac gate (PR #54). Measure what the loopback absorbs first and size the stream at twice that plus HIGH plus twice the ring (never under 5 MB), with the two waits scaled to the stream. The check's condition is unchanged. A ready patch, 5 of 5 green on Linux: /mnt/project-files/notes/stream-a/relay-bp2-fix.patch.
 - Status: open
 
-### Q-005 · The lit orchestration connector's reduced-motion stand-down loses on source order
+### Q-007 · The lit orchestration connector's reduced-motion stand-down loses on source order
 - From: A · To: F (or whichever lane owns orchestration CSS)
 - File: src/renderer/styles.css
 - Smallest change: the reduced-motion block near `.canvas--behind-orch` sets `.orch__connector--lit { animation: none; }`, but the base rule `.orch__connector--lit { … animation: edge-current … }` comes later at the same specificity, so it wins and the lit connector still animates under reduced motion (only the global block's `.01ms` keeps it invisible). Re-state `@media (prefers-reduced-motion: reduce) { .orch__connector--lit { animation: none; } }` from inside your `st:` block. Found by `verify:panels:orchestrate` orch-parity.app.3, which now counts only animations with a visible duration (M458).

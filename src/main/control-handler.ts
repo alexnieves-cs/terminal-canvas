@@ -96,6 +96,8 @@ export interface ControlHandlerDeps {
   }
   /** M489. The phone's test push. Absent: refused by name. */
   phoneTest?: () => Promise<{ ok: true } | { ok: false; reason: string }>
+  /** M534 (G4). A claude panel's hook; false when the panel or its secret does not match. */
+  hook?: (panel: string, secret: string, state: 'waiting' | 'done' | 'busy') => boolean
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -221,6 +223,12 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
           : req.verb === 'share' ? sh.share(req.orgId)
           : req.verb === 'open-share' ? sh.openShare(req.shareId)
           : sh.shareRole({ shareId: req.shareId, who: req.who, role: req.role })
+      }
+      case 'hook': {
+        // One answer for every refusal: a wrong secret and an unknown panel
+        // look the same, so the verb cannot be used to probe panel ids.
+        if (deps.hook === undefined || !deps.hook(req.panel, req.secret, req.state)) return { ok: false, error: 'no such panel hook' }
+        return { ok: true }
       }
       case 'phone-test': {
         if (deps.phoneTest === undefined) return { ok: false, error: 'phone alerts are not available here' }

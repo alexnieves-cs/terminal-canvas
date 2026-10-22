@@ -96,6 +96,13 @@ export type ControlRequest =
   | { verb: 'approvals' }
   /** M489. One test push to the ntfy topic Settings names. Socket only; sends a fixed sentence and nothing of the canvas. */
   | { verb: 'phone-test' }
+  /**
+   * M534 (G4). A claude panel's own hook saying it is waiting, done or busy
+   * (agent-args.ts CLAUDE_STATE_HOOKS). Socket only, like every verb but
+   * open/task. The secret is the one pty-manager minted for that panel's
+   * spawn; without it the request changes nothing.
+   */
+  | { verb: 'hook'; panel: string; secret: string; state: 'waiting' | 'done' | 'busy' }
   | { verb: 'answer'; panelId: string; requestId: string; allow: boolean; token?: string }
   | { verb: 'accept'; lane: string; title?: string; expectHead?: string; token?: string }
 
@@ -247,6 +254,15 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       return { kind: 'ok', req: { verb: 'approvals' } }
     case 'phone-test':
       return { kind: 'ok', req: { verb: 'phone-test' } }
+    case 'hook': {
+      const panel = optionalString(fields['panel'])
+      const secret = fields['secret']
+      const state = fields['state']
+      if (panel === null || panel === undefined || panel.length > 128) return { kind: 'bad', error: 'hook needs the panel id from TC_PANEL_ID' }
+      if (typeof secret !== 'string' || !/^[0-9a-f]{32}$/.test(secret)) return { kind: 'bad', error: 'hook needs the secret from TC_HOOK_SECRET' }
+      if (state !== 'waiting' && state !== 'done' && state !== 'busy') return { kind: 'bad', error: 'hook state is waiting, done or busy' }
+      return { kind: 'ok', req: { verb: 'hook', panel, secret, state } }
+    }
     case 'answer': {
       const panelId = optionalString(fields['panelId'])
       const requestId = optionalString(fields['requestId'])

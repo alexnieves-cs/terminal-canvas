@@ -737,14 +737,14 @@ console.log('\n' + '='.repeat(60))
 
 // version.1 (4.1.0 at M179; M60; 1.1.0 at M70; 2.0.0 at M95; 2.2.0 at M108; 2.3.0 at M111; 3.0.0 at M125; 3.1.0 at M134 — the M126–M133 act shipped its rows unversioned and the v7 run's Act 0 paid that debt). package.json says 4.1.0 and the README's status line v4.1.0 at M179
 // 4.0.0 at M160, the v7 run's reconcile; 5.0.0 at M192, the v9 run's;
-// 6.0.0 at M456, the redesign.
+// 6.0.0 at M456, the redesign; 6.0.1 at M474, the streams run's first tagged release.
 // agrees — the one number that must not drift between the two files that
 // name it.
 {
   const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
   const statusLine = (readme.match(/^> \*\*Status:[^\n]*/m) || [''])[0]
-  ok('version.1 package.json is 6.0.0 and the README status line names the same version',
-    pkg.version === '6.0.0' && statusLine.includes('v6.0.0') && !/beta/i.test(statusLine),
+  ok('version.1 package.json is 6.0.1 and the README status line names the same version',
+    pkg.version === '6.0.1' && statusLine.includes('v6.0.1') && !/beta/i.test(statusLine),
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 
@@ -882,9 +882,11 @@ console.log('\n' + '='.repeat(60))
 // M123 — update.1. THE UPDATE CHECK NEVER REACHES THE NETWORK FROM A SUITE,
 // AND NO PLAN MAY SWITCH IT ON. Three facts pinned as text, each with a
 // silent failure behind it. (a) The setting `update.checkOnLaunch` exists,
-// is a boolean, defaults to false and is NOT `planWritable`: a plan that
-// could turn on a launch-time network call has the shape of exfiltration,
-// the same reason telemetry's keys carry no flag. (b) `main/update-check.ts`
+// is a boolean and is NOT `planWritable`: a plan that could flip a
+// launch-time network call has the shape of exfiltration, the same reason
+// telemetry's keys carry no flag. Its default is ON since 6.0 (M474, the B6
+// step: an unsigned build never hears of a fix otherwise), so the default is
+// pinned as TRUE — a quiet flip back would silence every install. (b) `main/update-check.ts`
 // imports no `https` — the fetcher is injected and the real one lives in
 // `main/bootstrap/workspace-handlers.ts`, which no suite bundles — so it runs under plain
 // node in verify:file. (c) No suite script holds a real fetcher: `https.get(`,
@@ -899,12 +901,12 @@ console.log('\n' + '='.repeat(60))
   const schema = stripComments(read('src/shared/settings-schema.ts') ?? '')
   const start = schema.indexOf("id: 'update.checkOnLaunch'")
   const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
-  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: false/.test(entry) && !/planWritable/.test(entry)
+  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: true/.test(entry) && !/planWritable/.test(entry)
   const moduleSrc = stripComments(read('src/main/update-check.ts') ?? '')
   const moduleOk = moduleSrc !== '' && !/['"](node:)?https['"]/.test(moduleSrc) && /export (async )?function checkForUpdate/.test(moduleSrc)
   const offenders = readdirSync(join(ROOT, 'scripts')).filter((n) => /\.cjs$/.test(n))
     .filter((f) => /https\.get\(|['"](node:)?https['"]|api\.github\.com\/repos\/\$\{/.test(stripComments(read(join('scripts', f)) ?? '')))
-  ok('update.1 update.checkOnLaunch is a boolean, default false, not planWritable; main/update-check.ts imports no https (the fetcher is injected); no script under scripts/ holds https.get, an https import or a templated api.github.com url',
+  ok('update.1 update.checkOnLaunch is a boolean, default true, not planWritable; main/update-check.ts imports no https (the fetcher is injected); no script under scripts/ holds https.get, an https import or a templated api.github.com url',
     settingOk && moduleOk && offenders.length === 0,
     JSON.stringify({ settingOk, moduleOk, offenders }))
 }
@@ -1332,7 +1334,7 @@ console.log('\n' + '='.repeat(60))
     }
   }
   const css = read('src/renderer/styles.css') || ''
-  const fenced = ['B', 'C', 'D', 'E', 'F']
+  const fenced = ['B', 'C', 'D', 'E', 'F', 'G']
   const badFences = fenced.filter((id) => {
     const a = css.indexOf(`/* ── st:${id} ── */`)
     const b = css.indexOf(`/* ── /st:${id} ── */`)
@@ -1340,8 +1342,8 @@ console.log('\n' + '='.repeat(60))
   })
   const hook = read('.claude/hooks/guard-paths.sh') || ''
   const hookReads = /docs\/streams\/ownership\.json/.test(hook) && /'tc-lane'/.test(hook)
-  ok('streams.own.1 lanes A–F own disjoint files, none claims a shared file, B–F have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
-    ['A', 'B', 'C', 'D', 'E', 'F'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
+  ok('streams.own.1 lanes A–G own disjoint files, none claims a shared file, B–G have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
       collisions.length === 0 && badFences.length === 0 && hookReads,
     JSON.stringify({ lanes: ids, collisions, badFences, hookReads }))
 }

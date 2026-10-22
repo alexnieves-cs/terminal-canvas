@@ -7,7 +7,8 @@
     "C": "M475-M486",
     "D": "M487-M494",
     "E": "M495-M509",
-    "F": "M510-M519"
+    "F": "M510-M519",
+    "G": "M530-M539"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -92,6 +93,10 @@
     "F": [
       "docs/streams/polish.md",
       "scripts/verify-polish.cjs"
+    ],
+    "G": [
+      "docs/streams/borrow.md",
+      "scripts/verify-borrow.cjs"
     ]
   }
 }

@@ -618,10 +618,20 @@ body {
   isolation: isolate;
   /* M436. The canvas element stays transparent (ground.1) so a click on the
      ground still clears selection. The dot grid lives on the shell, which is
-     what shows through. 24px is --grid-canvas; the dot is --canvas-grid. */
+     what shows through. 24px is --grid-canvas; the dot is --canvas-grid.
+     M518 (lane F, at Alex's ask for a texture that fits better): drafting
+     paper rather than an even dot field. The 24px dots drop to half
+     strength, and every fourth one is a full-strength major dot, so a
+     stretch of empty canvas has a rhythm to read distance by instead of a
+     uniform haze. The major layer is shifted half a pitch so its dots land
+     ON minor dots: a radial gradient centres in its own cell, and a 96px cell
+     centres at 48px, which sits between the 24px cells' 12/36/60 centres. */
   background-color: var(--s-0);
-  background-image: radial-gradient(circle, var(--canvas-grid) 1px, transparent 1px);
-  background-size: var(--grid-canvas) var(--grid-canvas);
+  background-image:
+    radial-gradient(circle, var(--canvas-grid) 1.25px, transparent 1.5px),
+    radial-gradient(circle, color-mix(in srgb, var(--canvas-grid) 55%, transparent) 1px, transparent 1px);
+  background-size: calc(var(--grid-canvas) * 4) calc(var(--grid-canvas) * 4), var(--grid-canvas) var(--grid-canvas);
+  background-position: calc(var(--grid-canvas) / 2) calc(var(--grid-canvas) / 2), 0 0;
   display: grid;
   height: 100%;
   grid-template-columns: var(--shell-dock-w) var(--shell-nav-w) 1fr var(--shell-ctx-w);
@@ -13220,15 +13230,17 @@ tr[data-session-row]:focus-within .sessions-world,
 /* M514. THE SESSIONS PAGE. The attention cards were a flat 16% wash of the
    tone with the sentence in body ink, so three needs-you cards read as three
    brown boxes and the word that mattered was the least lit thing on them.
-   Now: a hairline and an edge in the tone (the frame's own grammar, M67), a
-   quieter fill, the sentence in the tone, and an arrival on first-arrive.
+   Now: a hairline in the tone, a quieter fill, the sentence in the tone, and
+   an arrival on first-arrive. No coloured left edge: Alex read the inset
+   stripe as generic AI styling (2026-10-22), and the tone already lives in
+   the hairline and the sentence.
    Colour still comes only from [data-tone]. */
 .sessions-card {
   position: relative;
   border-color: color-mix(in srgb, var(--tone) 38%, var(--line));
   border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--tone) 7%, var(--s-1));
-  box-shadow: inset 3px 0 0 var(--tone), var(--rim-top);
+  box-shadow: var(--rim-top);
   padding: var(--sp-4) var(--sp-5);
   animation: first-arrive var(--dur-2) var(--ease) both;
   transition: border-color var(--dur-state) var(--ease), background-color var(--dur-state) var(--ease);
@@ -13394,7 +13406,8 @@ tr[data-session-row]:focus-within .sessions-world,
 }
 .rd-settings__nav button { transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
 .rd-settings__nav button:not([aria-current="page"]):hover { background: var(--s-3); }
-.rd-settings__nav button[aria-current="page"] { box-shadow: inset 2px 0 0 var(--iris); }
+/* The current page is a filled row, never a coloured stripe (the same call as the Sessions cards). */
+.rd-settings__nav button[aria-current="page"] { background: var(--s-3); color: var(--fg); }
 @media (prefers-reduced-motion: reduce) {
   .rd-settings { animation: none; }
   .rd-onboard__rows button[aria-pressed]::before,
@@ -13426,3 +13439,6 @@ tr[data-session-row]:focus-within .sessions-world,
   :where(button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active, [role="tab"]:active, [role="menuitem"]:active, summary:active) { transform: none; filter: brightness(.88); }
 }
 /* ── /st:F ── */
+
+/* ── st:G ── */
+/* ── /st:G ── */

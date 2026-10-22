@@ -427,7 +427,7 @@ console.log('\n' + '='.repeat(60))
     report !== null && report.probedAt === 1234 &&
       JSON.stringify(report.pathEntries) === JSON.stringify(['/opt/homebrew/bin', '/usr/bin']) &&
       report.shell.ok === false && report.shell.reason === 'login shell produced no PATH' && report.shell.path === '/bin/zsh' &&
-      JSON.stringify(report.clis) === JSON.stringify([{ name: 'claude', path: null }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }]) &&
+      JSON.stringify(report.clis) === JSON.stringify([{ name: 'claude', path: null }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }, ...['gemini', 'opencode', 'cursor-agent', 'amp', 'kimi'].map((name) => ({ name, path: null }))]) &&
       report.tmux.kind === 'direct' && report.tmux.reason === 'tmux not on PATH' && report.tmux.path === null &&
       report.layout.path.endsWith('layout.json') && report.layout.backupWritten === true &&
       JSON.stringify(report.envKeys) === JSON.stringify(['ANTHROPIC_API_KEY', 'HOME', 'PATH']) &&

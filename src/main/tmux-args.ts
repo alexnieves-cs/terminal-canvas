@@ -94,6 +94,12 @@ export interface TmuxListEntry {
  * unreadable version must send us to the direct backend, and an optimistic
  * default would instead send us to a tmux we know nothing about.
  */
+/** M534. `new-session -e` arrived in tmux 3.2; MIN_TMUX_MAJOR's 3.0 does not have it. */
+export function tmuxHasSessionEnv(raw: string): boolean {
+  const v = parseTmuxVersion(raw)
+  return v !== null && (v.major > 3 || (v.major === 3 && v.minor >= 2))
+}
+
 export function parseTmuxVersion(raw: string): TmuxVersion | null {
   const match = /(\d+)\.(\d+)/.exec(raw)
   if (!match) return null
@@ -202,6 +208,14 @@ export function buildTmuxArgs(o: {
   command: string
   args: string[]
   socket?: TmuxSocket
+  /**
+   * M534 (G4). Variables THIS session must see. tmux gives a new pane the
+   * server's environment — whichever panel's spawn started the server — not
+   * the client's, so a per-panel value passed only to the client reaches the
+   * wrong pane (the critic measured both panes printing the first panel's).
+   * `new-session -e` needs tmux 3.2; the caller passes none on an older one.
+   */
+  sessionEnv?: Readonly<Record<string, string>>
 }): string[] {
   return [
     '-L', o.socket ?? TMUX_SOCKET,
@@ -209,6 +223,7 @@ export function buildTmuxArgs(o: {
     'new-session',
     '-A',
     '-s', o.panelId,
+    ...Object.entries(o.sessionEnv ?? {}).flatMap(([k, v]) => ['-e', `${k}=${v}`]),
     // Preserves "fit before spawn": the renderer has already fitted, and
     // spawning at 80x24 then resizing makes agent TUIs draw their frame twice.
     // Only meaningful at creation; on reattach the client negotiates its own.

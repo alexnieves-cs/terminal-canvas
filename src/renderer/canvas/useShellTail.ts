@@ -5,6 +5,7 @@ import { type Panel, isTerminalPanel, isChatPanel, addLink, workCardItemId } fro
 import { type PersistedWorkItem, WORK_ITEM_STATES, carryWorkItem } from '@shared/work-items'
 import type { PresetTemplate, WorkspaceRow } from '@shared/ipc-contract'
 import { allowPendingTarget } from '@renderer/palette/commands/approval-row'
+import { pendingReadBatch } from '@renderer/chat/read-batch'
 import { criteriaChecklist } from '@renderer/panels/session-facts'
 import { applyMakeTask } from '@renderer/panels/make-task'
 import { setConnectedOpener, spawnCursor, type ConnectedRequest } from '@renderer/panels/spawn-cursor'
@@ -123,6 +124,17 @@ export function useShellTail(deps: UseShellTailDeps) {
           queueHeadId: laneChordRef.current.waiting[0] ?? null
         })
         if (target !== null) paletteActionsRef.current?.answerApproval(target.panelId, target.requestId, true)
+        return
+      }
+      // M533 (G3). ⌘⌥Y: every pending read inside its chat's folder, each
+      // allowed once. Passes a focus lock like ⌘Y; a write or a command is
+      // never in the batch (shared/read-batch.ts).
+      if (hit?.id === 'allow-reads' && !shouldIgnoreKeysButLock()) {
+        event.preventDefault()
+        if (event.repeat) return
+        for (const r of pendingReadBatch(laneChordRef.current.approvals.map((a) => a.id))) {
+          paletteActionsRef.current?.answerApproval(r.panelId, r.requestId, true)
+        }
         return
       }
       if (shouldIgnoreKeys()) return
