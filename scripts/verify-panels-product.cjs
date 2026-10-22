@@ -6893,6 +6893,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // team.segment.1 (signed-out half). No People segment at rest; the
     // palette row still opens the page, whose empty state is the sign-in
     // button — disabled here WITH the harness's reason, never hidden.
+    // M496 put People behind the accounts lab (off by default, shared/labs.ts),
+    // so its row exists only once the lab is on; this is the person who turned
+    // it on and has not signed in yet. Left on: only the account block, which
+    // wants it, runs after this.
+    await wc.executeJavaScript(`window.canvas.settings.set('labs.accounts', true)`)
+    await settle()
     const segBefore = await wc.executeJavaScript(`document.querySelector('[data-seg="team"]') !== null`)
     await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
     await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
