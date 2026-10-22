@@ -2304,8 +2304,10 @@ app.whenReady().then(async () => {
   // name the pair; a filter matching nothing is an error, not an empty success.
   const only = (process.env.TC_SHOT_ONLY || process.env.SHOT_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean)
   if (only.length > 0 && !scenes.some((s) => only.includes(s.name))) throw new Error(`SHOT_ONLY matched no scene: ${only.join(', ')}`)
+  const SCENE_TIMEOUT_MS = Number(process.env.TC_SHOT_SCENE_TIMEOUT_MS) || 180000
   for (const scene of scenes) {
     if (only.length > 0 && !only.includes(scene.name)) continue
+    console.log(`scene ${scene.name}`)
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
     // M465. The redesign scenes are pictures of the steward cast and the
     // older scenes of the default fixture, and one run has to paint both: a
@@ -2318,7 +2320,15 @@ app.whenReady().then(async () => {
     if (fixture === undefined) delete process.env.TC_FIXTURE
     else process.env.TC_FIXTURE = fixture
     try {
-      await scene.run(kit)
+      // A scene that never settles used to hold the whole run until the job's
+      // 45-minute timeout, with no line saying which scene it was (#53 hung
+      // twice after rd-world-night). The bound makes it one failed scene with
+      // its name, and the run goes on to write the rest and the manifest.
+      let timer
+      await Promise.race([
+        scene.run(kit),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`did not finish in ${SCENE_TIMEOUT_MS / 1000}s`)), SCENE_TIMEOUT_MS) })
+      ]).finally(() => clearTimeout(timer))
       manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}) })
     } catch (error) {
       console.log(`scene ${scene.name} failed: ${error && error.message || error}`)
