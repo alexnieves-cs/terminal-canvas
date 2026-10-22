@@ -4558,8 +4558,15 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       }, 8000)
       if (typeof pbId === 'string') {
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .xterm') !== null`), 8000)
-        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(pbId)}] .panel__slot`)
-        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId, 5000)
+        // One click can land while the new panel is still settling and leave
+        // focus where it was (a run read n6 focused at the palette), so the
+        // click is sent again on each look until the panel holds focus, as
+        // check 57 does.
+        await waitUntil(async () => {
+          if ((await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId) return true
+          try { await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(pbId)}] .panel__slot`) } catch { /* not placed yet */ }
+          return false
+        }, 6000, 300)
         await sleep(400)
       }
       // Evidence: the insert targets the panel the palette CAPTURES (the focused
