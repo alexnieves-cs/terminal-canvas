@@ -3447,8 +3447,22 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           await selectPanel(subject)
         }
         const beforeIds = await panelIds()
-        await waitUntil(async () => wc.executeJavaScript(
-          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        // The Changes section renders only once the inspector's review read
+        // resolves; on the runner it once had not appeared after 5 s with the
+        // subject selected and its baseline present (button=false). Select
+        // again while it is absent past 4 s — a re-select re-asks — rather
+        // than click a button that is not there and undo something else.
+        const buttonWaitStart = Date.now()
+        let reselectedAt = buttonWaitStart
+        await waitUntil(async () => {
+          const there = await wc.executeJavaScript(
+            `document.querySelector('[data-inspector-action="review"]') !== null`)
+          if (!there && subject && Date.now() - reselectedAt > 4000) {
+            reselectedAt = Date.now()
+            await selectPanel(subject, { settle: false })
+          }
+          return there
+        }, 14000)
         // Evidence for a node that never arrives: whose inspector the button
         // sits in, and whether the baseline the review needs was there.
         const atClick = await wc.executeJavaScript(`(async () => ({
