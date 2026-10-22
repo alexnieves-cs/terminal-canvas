@@ -3222,8 +3222,29 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const savedFull = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'pv1')
         // (b) Capture, through the pane's own control.
         const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
-        await press('[data-preview-capture]')
-        const image = await waitUntil(() => wc.executeJavaScript(`(() => { const n = [...document.querySelectorAll('.panel[data-panel-kind="image"]')].pop(); return n ? { title: n.querySelector('.pf__title')?.textContent ?? '', id: n.getAttribute('data-panel-id') } : false })()`), 15000)
+        // A capture of a guest that has not painted since the width change is
+        // EMPTY, and main refuses an empty capture by name rather than write
+        // it (preview-capture.ts) — the runner read image=false with nothing
+        // else said. So the press is retried, but only after the pane has
+        // SAID a refusal: a refusal places no panel, so `after === before + 1`
+        // still holds, and what each attempt said is the evidence.
+        const imageNow = () => wc.executeJavaScript(`(() => { const n = [...document.querySelectorAll('.panel[data-panel-kind="image"]')].pop(); return n ? { title: n.querySelector('.pf__title')?.textContent ?? '', id: n.getAttribute('data-panel-id') } : false })()`)
+        const saidNow = () => wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id="pv1"] [data-preview-said]') || {}).textContent || null`)
+        const captureTries = []
+        let image = false
+        const captureUntil = Date.now() + 15000
+        while (image === false && Date.now() < captureUntil) {
+          const pressed = await press('[data-preview-capture]')
+          const answer = await waitUntil(async () => (await imageNow()) || (await saidNow()) || false, 4000)
+          // A success also SAYS something, a beat before its panel lands, so
+          // a said line is given a moment to turn into an image before it is
+          // read as a refusal and pressed past.
+          const landed = typeof answer === 'object' ? answer : await waitUntil(imageNow, 2000)
+          captureTries.push({ pressed, answer })
+          if (landed !== false) { image = landed; break }
+          // The said line stands for 4s; the next attempt starts clear of it.
+          await waitUntil(async () => (await saidNow()) === null, 5000)
+        }
         await settle(); flushLayoutStore()
         const imageRecord = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === (image && image.id))
         const png = imageRecord && ex(imageRecord.image.path) ? rf(imageRecord.image.path) : null
@@ -3240,7 +3261,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             png !== null && png.length > 0 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 &&
             found && found.kind === 'not-asked' && found.project === 'the shop' && found.scripts.map((x) => x.name).join(',') === 'dev' && /nothing to ask/.test(found.note) &&
             after === before + 1,
-          JSON.stringify({ attached, chips, atPhone, savedPhone, savedFull, image, imagePath: imageRecord && imageRecord.image.path, pngBytes: png && png.length, found, before, after }))
+          JSON.stringify({ attached, chips, atPhone, savedPhone, savedFull, image, imagePath: imageRecord && imageRecord.image.path, pngBytes: png && png.length, captureTries, found, before, after }))
       } catch (pErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(pErr && pErr.message || pErr))
       } finally {

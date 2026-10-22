@@ -3799,7 +3799,14 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           ? await waitUntil(async () => { try { return readFileSync(modified, 'utf8') === 'seed\n' } catch { return false } }, 8000)
           : false
         const outcome1 = await text('[data-review-node-commit-outcome]')
-        const row2 = restored === true ? await rowReady('brand-new.txt') : false
+        // The second row is pressed only once the node has RE-READ after the
+        // first discard, which is when seed.txt's row leaves it. The old read's
+        // brand-new.txt row is enabled too, and a confirm through it is
+        // refused as stale ("the changes moved since this was read"), which
+        // is the product right and this check early: the runner did exactly that.
+        const reread = restored === true ? await waitUntil(async () => wc.executeJavaScript(
+          `${q('[data-review-node-discard="seed.txt"]')} === null`), 8000) : false
+        const row2 = reread === true ? await rowReady('brand-new.txt') : false
         const armed2 = row2 === true ? await press('[data-review-node-discard="brand-new.txt"]') : false
         await settle()
         const sentence2 = armed2 === true ? await text('[data-review-node-discard-armed="brand-new.txt"]') : ''
@@ -3817,7 +3824,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           restored === true && /^Restore seed\.txt .*cannot be undone/.test(sentence1) &&
             gone === true && /did not exist at spawn/.test(sentence2) &&
             typeof clean === 'string' && status === '',
-          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, armed2, confirmed2, sentence2, outcome2, gone, clean, status }))
+          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, reread, row2, armed2, confirmed2, sentence2, outcome2, gone, clean, status }))
       }
 
       // 114. Escape cancels, and NOTHING is committed — read back out of
