@@ -1367,7 +1367,14 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-node]').length >= 5`), 8000)
       wc.send('agent:state', { panelId: 'qB', state: 'wants-you' })
       await settle()
-      const reduced = await wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); const animated = document.getAnimations().filter((a) => a.effect && a.effect.target && s.contains(a.effect.target) && a.playState === 'running').map((a) => (a.animationName || a.constructor.name) + ':' + (a.effect.target.className.baseVal || a.effect.target.className)); return { matches: matchMedia('(prefers-reduced-motion: reduce)').matches, animated, webgl: s.getAttribute('data-orch-webgl'), beacon: s.querySelector('[data-node="qB"] .orch__cube-beacon') !== null, fit: !!document.querySelector('[data-orch-fit="all"]'), list: !!document.querySelector('[data-orch-lens="list"]') } })()`)
+      // "Animates" is an animation with a duration a person could see. styles.css's
+      // global reduced-motion block shortens every transition and animation to
+      // .01ms rather than removing it, so a tone change in the frame before this
+      // read leaves a .01ms CSSTransition 'running' until the next frame: one
+      // Mac run in three read exactly those (plate-bg, cube-state, a lit
+      // connector). A real regression (a rule that outlives the block, or a
+      // script-driven animation) has its full duration and still counts.
+      const reduced = await wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); const animated = document.getAnimations().filter((a) => a.effect && a.effect.target && s.contains(a.effect.target) && a.playState === 'running' && a.effect.getComputedTiming().activeDuration > 1).map((a) => (a.animationName || a.constructor.name) + ':' + (a.effect.target.className.baseVal || a.effect.target.className)); return { matches: matchMedia('(prefers-reduced-motion: reduce)').matches, animated, webgl: s.getAttribute('data-orch-webgl'), beacon: s.querySelector('[data-node="qB"] .orch__cube-beacon') !== null, fit: !!document.querySelector('[data-orch-fit="all"]'), list: !!document.querySelector('[data-orch-lens="list"]') } })()`)
       await click('.orch__graph-scene [data-node="qB"]')
       const reducedInspector = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-inspector="qB"] [data-orch-open]')?.textContent ?? false`), 4000)
       await demo('m293-4-reduced-motion')
