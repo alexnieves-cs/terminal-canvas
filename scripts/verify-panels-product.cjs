@@ -6091,6 +6091,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const wfDir = mkdtempSync(join(tmpdir(), 'tc panels workflow-'))
         // M138. The pool's work list: three items and a comment line.
         writeFileSync(join(wfDir, 'list.txt'), '# the sweep\nalpha\nbeta\ngamma\n')
+        // The renderer mints worker ids `c<n>` from a counter that restarts with
+        // the emptied layout, while main's sessions outlive a reload, and
+        // agentSession.create is idempotent at an id: a worker minted as c4
+        // INHERITED an earlier block's c4 (a codex session, which never spawns
+        // the fake claude), so one item stayed `started` in one run of three.
+        // Dispose the orphans this reset leaves, as closing their panels would.
+        const staleChats = agentSessions.list().filter((x) => /^c\d+$/.test(x.id)).map((x) => `${x.id}:${x.backend}`)
+        for (const x of agentSessions.list()) if (/^c\d+$/.test(x.id)) agentSessions.dispose(x.id)
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
         const reW0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -6219,7 +6227,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
             typeof stoppedRow === 'string' && /every item finished/.test(stoppedRow) &&
             stopAfter !== null && stopAfter.disabled === true && /nothing of this workflow is running/.test(String(stopAfter.title)),
-          JSON.stringify({ workers, spawnedForWorkers, poolRows, allFinished, rowsEnd, workerTurns, spawnEv, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
+          JSON.stringify({ workers, spawnedForWorkers, poolRows, allFinished, rowsEnd, workerTurns, spawnEv, staleChats, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
 
         // workflow.panel.1g — the same door on a template with NO blocks:
         // one press, one instantiateTemplate call, the shape minted. This is
