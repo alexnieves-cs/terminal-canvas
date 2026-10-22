@@ -34,3 +34,9 @@ export const CAMERA_MIN_MS = 160
 export const CAMERA_MAX_MS = 320
 /** `--ease`, as Motion's cubic-bezier tuple. */
 export const MOTION_EASE: [number, number, number, number] = [0.2, 0.8, 0.2, 1]
+/**
+ * M512. The STATE tier (`--dur-state`): a tone change on a frame, a chip or a
+ * dot. Script that fades a state (a world card, a toast's tone) reads this,
+ * never a number of its own. `verify:polish polish.tokens.1` pins it.
+ */
+export const MOTION_STATE_MS = 240

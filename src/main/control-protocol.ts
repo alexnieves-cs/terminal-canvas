@@ -94,6 +94,8 @@ export type ControlRequest =
    * agent answering from inside a panel.
    */
   | { verb: 'approvals' }
+  /** M489. One test push to the ntfy topic Settings names. Socket only; sends a fixed sentence and nothing of the canvas. */
+  | { verb: 'phone-test' }
   | { verb: 'answer'; panelId: string; requestId: string; allow: boolean; token?: string }
   | { verb: 'accept'; lane: string; title?: string; expectHead?: string; token?: string }
 
@@ -243,6 +245,8 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       return { kind: 'ok', req: { verb } }
     case 'approvals':
       return { kind: 'ok', req: { verb: 'approvals' } }
+    case 'phone-test':
+      return { kind: 'ok', req: { verb: 'phone-test' } }
     case 'answer': {
       const panelId = optionalString(fields['panelId'])
       const requestId = optionalString(fields['requestId'])

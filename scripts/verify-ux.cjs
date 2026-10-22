@@ -43,7 +43,15 @@ buildSync({
   }
 })
 const M = require(OUT)
-const canvas = read('src/renderer/canvas/Canvas.tsx')
+// M507 (the Canvas.tsx split). Code these checks read moved, verbatim, into
+// files Canvas calls at the same position: the hooks M442 appended
+// (useShellTail.ts), the preset menu's events (useHistoryVerbs.ts) and what
+// the host draws over the world (HostOverlays.tsx). The canvas's source is
+// Canvas.tsx followed by each, and only while Canvas still calls it.
+const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
+const canvas = canvasOwn + [['useShellTail', 'useShellTail.ts'], ['useHistoryVerbs', 'useHistoryVerbs.ts'], ['renderHostOverlays', 'HostOverlays.tsx'], ['renderWorldLayers', 'WorldLayers.tsx']]
+  .filter(([call]) => new RegExp(`\\b${call}\\(\\{`).test(canvasOwn))
+  .map(([, file]) => '\n' + read(`src/renderer/canvas/${file}`)).join('')
 
 // ── First run ────────────────────────────────────────────────────────────
 
@@ -146,7 +154,9 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
 }
 
 {
-  const jump = canvas.slice(canvas.indexOf('jumpAttentionImplRef.current = '), canvas.indexOf('const pillJump'))
+  // M507. The jump moved with the panel gestures; Canvas still calls them.
+  const gestures = /= usePanelGestures\(\{/.test(canvas) ? read('src/renderer/canvas/usePanelGestures.ts') : ''
+  const jump = gestures.slice(gestures.indexOf('jumpAttentionImplRef.current = '), gestures.indexOf('const pillJump'))
   // M506. The notice moved with the attention models; Canvas still calls them.
   const attention = /= useAttentionModels\(\{/.test(canvas) ? read('src/renderer/canvas/useAttentionModels.tsx') : ''
   const notice = attention.slice(attention.indexOf('const readyToReview = '), attention.indexOf('}, [readyToReview, notifySetting])'))

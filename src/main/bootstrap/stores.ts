@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { mkdirSync, rmSync, unlinkSync, statSync } from 'node:fs'
-import { Notification, app, shell } from 'electron'
+import { Notification, app, net, powerMonitor, shell } from 'electron'
 import { PtyManager, type AttentionSink } from '../pty-manager'
 import { createLayoutSnapshots } from '../layout-snapshots'
 import { createLayoutStore, type LayoutStore } from '../layout-store'
@@ -22,6 +22,7 @@ import { createDecisionAudit, type DecisionAudit } from '../decision-audit'
 import { createLastExitStore, type LastExitStore } from '../last-exit'
 import { createJobStore, type JobStore } from '../job-store'
 import { createAttentionUnion } from '../approvals'
+import { createPhoneAlerts, type PhoneAlerts } from '../phone-alerts'
 import { FileWatchers } from '../file-watch'
 import { ToolboxCache } from '../toolbox-cache'
 import { forgetTrail } from '../skill-trail-read'
@@ -73,6 +74,8 @@ export interface Stores {
   /** M369. Every person-sourced ledger row, scrubbed, outliving the ledger's trim. */
   decisionAudit: DecisionAudit
   attention: ReturnType<typeof createAttentionUnion>
+  /** M489. The ntfy sender; `tc phone-test` reaches its test push. */
+  phoneAlerts: PhoneAlerts
   /** M54. Declared ABOVE the manager, which carries them into every spawn's env. */
   controlSocketPath: string
   launcherDir: string
@@ -225,8 +228,32 @@ export function createStores(state: MainState): Stores {
   // decision path — when to notify, when to beep — lives in PtyManager, tested
   // under plain node; this object only DOES what it is told. Confirmed by hand
   // against a real dock, a real notification and a real beep (manual-only list).
+  // M489. The phone: a push through ntfy when an item enters needs-you and
+  // nobody is at the Mac. It rides the OS notification's own call — the one
+  // moment both trackers say "entered, and the window is not in front" — and
+  // decides the rest itself (phone-alerts.ts). Settings read at each call.
+  const phoneAlerts = createPhoneAlerts({
+    settings: () => ({
+      topic: String(layoutStore.getSetting('remote.ntfyTopic' as never) ?? ''),
+      server: String(layoutStore.getSetting('remote.ntfyServer' as never) ?? ''),
+      idleMinutes: Number(layoutStore.getSetting('remote.alertIdleMinutes' as never))
+    }),
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    // Electron's net.fetch: Chromium's stack, so a system proxy is honoured.
+    post: (url, init) => net.fetch(url, init),
+    log: (line) => console.warn(line)
+  })
+  // The walked-away case: the entry push above fires only while the window is
+  // not in front, so a person who leaves with it in front (or leaves after an
+  // agent asked) gets one summary push per waiting spell once the Mac is idle.
+  setInterval(() => { if (phoneOn()) void phoneAlerts.tick() }, 30_000).unref()
+  const phoneOn = (): boolean => String(layoutStore.getSetting('remote.ntfyTopic' as never) ?? '').trim() !== ''
   const osAttention: AttentionSink = {
     notify: (panelId, label, count, body) => {
+      if (phoneOn()) void phoneAlerts.entered(panelId, label, body)
+      // The trackers ask when EITHER surface is on (notifyEnabled below); the
+      // Mac's own banner still needs its own setting.
+      if (layoutStore.getSetting('attention.notify') !== true) return
       if (!Notification.isSupported()) return
       const n = new Notification({
         title: label,
@@ -248,13 +275,16 @@ export function createStores(state: MainState): Stores {
     badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : ''); menuBarCount(count) },
     beep: () => { shell.beep() },
     windowFocused: () => state.window?.isFocused() ?? false,
-    notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,
+    notifyEnabled: () => layoutStore.getSetting('attention.notify') === true || phoneOn(),
     soundEnabled: () => layoutStore.getSetting('attention.sound') === true
   }
   // M76. One badge, two authors, one writer: PtyManager's waiting set and
   // the approval tracker's each report their count to a child sink and the
   // dock badge reads the sum. See main/approvals.ts.
-  const attention = createAttentionUnion(osAttention)
+  // M489. The phone hears the same sum, so a push waits for the count it
+  // reports. Wrapped here rather than in the badge line above: that line is
+  // the dock and menu bar's one writer, and verify:ux reach.2 reads it as text.
+  const attention = createAttentionUnion({ ...osAttention, badge: (count) => { osAttention.badge(count); phoneAlerts.waiting(count) } })
 
   const ptyManager = new PtyManager(
     () => state.window?.webContents ?? null,
@@ -362,6 +392,6 @@ export function createStores(state: MainState): Stores {
     reviewDiscard, reviewCommit, baselineCapture, captureBaseline, dropBaseline,
     runLedger, checkOutputs, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
     fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit, decisionAudit,
-    attention, controlSocketPath, launcherDir, lastExit, jobs
+    attention, phoneAlerts, controlSocketPath, launcherDir, lastExit, jobs
   }
 }

@@ -223,8 +223,11 @@ ok('rd-keys.yield.1 shouldIgnoreKeys and the palette stand down while focus is l
 // M498. The pages moved out of Canvas's JSX into CenterPages.tsx, which Canvas
 // renders; the mount is read across both, and Canvas must still mount it.
 const pagesSrc = read('src/renderer/canvas/CenterPages.tsx')
+// M507. The top bar (which takes the session count) moved to ShellChrome.tsx,
+// which Canvas calls; the count is read there, only while Canvas calls it.
+const chromeSrc = /\brenderShellChrome\(\{/.test(canvasSrc) ? read('src/renderer/canvas/ShellChrome.tsx') : ''
 ok('rd-host.mount.1 Canvas mounts Sessions and Review (through CenterPages) and passes the session count; TopBar does not portal them',
-  /<CenterPages\b/.test(canvasSrc) && /SessionsHost/.test(pagesSrc) && /ReviewHost/.test(pagesSrc) && /sessionCount=/.test(canvasSrc) &&
+  /<CenterPages\b/.test(canvasSrc) && /SessionsHost/.test(pagesSrc) && /ReviewHost/.test(pagesSrc) && /sessionCount=/.test(chromeSrc) &&
   /shell__page/.test(pagesSrc) && !/createPortal/.test(top),
   'mount sites')
 

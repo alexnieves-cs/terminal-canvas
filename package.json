@@ -70,6 +70,7 @@
     "verify:control": "node scripts/verify-control.cjs",
     "verify:mcp": "node scripts/verify-mcp.cjs",
     "verify:styles": "node scripts/verify-styles.cjs",
+    "verify:polish": "node scripts/verify-polish.cjs",
     "verify:swarm": "node scripts/verify-swarm.cjs",
     "verify:credentials": "node scripts/verify-credentials.cjs",
     "verify:jira": "node scripts/verify-jira.cjs",

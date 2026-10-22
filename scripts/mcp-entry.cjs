@@ -11,5 +11,8 @@ module.exports = {
   ...require('../src/shared/settings-schema'),
   ...require('../src/main/control-handler'),
   ...require('../src/shared/plan'),
-  ...require('../src/renderer/panels/panel-state')
+  ...require('../src/renderer/panels/panel-state'),
+  /* M489. The phone alerts: pure decision and an injected sender. */
+  ...require('../src/main/phone-alerts'),
+  ...require('../src/shared/redact')
 }

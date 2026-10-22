@@ -2953,7 +2953,9 @@ const WS = [
   ok('advanced.3 each door says what it GIVES, and runs a verb the palette already holds (no new action)',
     Object.values(P.ADVANCED_DOORS).every((d) => d.benefit.length > 30 && !/^(a|an|the) /i.test(d.benefit)) &&
       (() => {
-        const canvas = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+        const read = (f) => require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', f), 'utf8')
+        // M507. The advanced doors moved with the task lens; Canvas still calls it.
+        const canvas = /= useTaskLens\(\{/.test(read('Canvas.tsx')) ? read('useTaskLens.ts') : ''
         return /a\.openTeammates\(\)/.test(canvas) && /a\.openToolbox\(id\)/.test(canvas) && /a\.createObject\('workflow'\)/.test(canvas) && /a\.beginWatcher\(\)/.test(canvas) && /a\.beginSaveTemplate\(/.test(canvas)
       })())
   ok('advanced.4 the workflow editor has an obvious expanded view — a labelled toolbar verb over the frame\'s own maximise, and the diagram refits to it',
