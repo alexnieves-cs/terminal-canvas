@@ -60,6 +60,7 @@ import { withReason, hiddenAtRestIf } from './commands/with-reason'
 import { creationCommands } from './commands/creation-rows'
 import { buildCredentialRows } from './commands/credential-rows'
 import { buildEnvironmentRows } from './commands/environment-rows'
+import { pendingReadBatch } from '@renderer/chat/read-batch'
 
 // --- The commands/ directory ------------------------------------------------
 // M278 split commands.ts by moving out everything that is DECLARATION rather
@@ -776,6 +777,18 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         searchText: `deny refuse permission needs you ${a.toolName} ${a.label}`, group: 'panel',
         run: () => actions.answerApproval(a.id, a.requestId, false)
       })
+    }
+    // M533 (G3). One row for the whole batch of reads, beside the per-request
+    // rows, with the count in its title so the press says what it will do.
+    if (approvals.length > 0) {
+      const reads = pendingReadBatch(approvals.map((a) => a.id))
+      out.push(withReason({
+        id: 'approval.allow-reads', title: `Allow every pending read (${reads.length})`, group: 'panel',
+        subtitle: 'reads and searches inside each chat\'s folder, once each — writes and commands still wait for you',
+        searchText: 'allow all every read reads search batch approve permission needs you',
+        // Recomputed at the press: a list from when the palette was built can name a request id a restarted agent reused.
+        run: () => { for (const r of pendingReadBatch(approvals.map((a) => a.id))) actions.answerApproval(r.panelId, r.requestId, true) }
+      }, reads.length === 0 ? 'no pending request is a read inside its chat\'s folder' : undefined))
     }
     // M379. A teammate's agent asking (M376): two rows per ask, the Needs-you
     // section's two answers, so an ask can be answered from wherever the

@@ -208,6 +208,69 @@ const phone5 = (async () => {
   return { away, here, minted, posts }
 })()
 
+// G3 — reads.*. Allow every pending read (src/shared/read-batch.ts).
+const batch = load('src/shared/read-batch.ts', 'read-batch')
+check('borrow.reads.1 only Claude\'s read-only tools with known keys, inside a chat folder deeper than home, are in the batch; a write, a command, a web fetch, an ACP kind, an unknown key, a ~ path, a home or ~ folder, a read outside the folder or a ../ escape never is', batch, (B) => {
+  const cwd = '/Users/me/api'
+  const yes = [
+    { toolName: 'Read', input: { file_path: '/Users/me/api/src/a.ts' } },
+    { toolName: 'Read', input: { file_path: 'src/b.ts' } },
+    { toolName: 'Grep', input: { pattern: 'TODO' } },
+    { toolName: 'Grep', input: { pattern: 'x', path: 'src' } },
+    { toolName: 'Glob', input: { pattern: '**/*.ts' } },
+    { toolName: 'LS', input: { path: '/Users/me/api' } },
+    { toolName: 'Read', input: { file_path: 'README.md', offset: 10, limit: 50 } }
+  ]
+  const no = [
+    { toolName: 'Write', input: { file_path: 'src/a.ts' } },
+    { toolName: 'Edit', input: { file_path: 'src/a.ts' } },
+    { toolName: 'Bash', input: { command: 'cat src/a.ts' } },
+    { toolName: 'WebFetch', input: { url: 'https://x.example/?q=secret' } },
+    { toolName: 'Read', input: { file_path: '/Users/me/.ssh/id_ed25519' } },
+    { toolName: 'Read', input: { file_path: '../other/secret.env' } },
+    { toolName: 'Read', input: { file_path: '/Users/me/api-keys/x' } },
+    { toolName: 'Glob', input: { pattern: '/etc/**' } },
+    { toolName: 'Glob', input: { pattern: '../**/*.env' } },
+    { toolName: 'Grep', input: { pattern: 'x', path: '/' } },
+    { toolName: 'Read', input: { file_path: 42 } },
+    { toolName: 'Read', input: { file_path: '' } },
+    { toolName: 'read', input: { file_path: 'README.md' } },
+    { toolName: 'Read', input: { file_path: 'README.md', absolute_path: '/Users/me/.ssh/id_rsa' } },
+    { toolName: 'Read', input: { file_path: '~/.aws/credentials' } },
+    { toolName: 'Glob', input: { pattern: '{/etc,x}/*' } },
+    { toolName: 'Glob', input: { pattern: 'src/**/../../x' } }
+  ]
+  const yesOk = yes.map((a) => B.batchAllowable(a, cwd))
+  const noOk = no.map((a) => B.batchAllowable(a, cwd))
+  const rootCwd = B.batchAllowable({ toolName: 'Read', input: { file_path: '/etc/hosts' } }, '/')
+  const noCwd = B.batchAllowable({ toolName: 'Grep', input: { pattern: 'x' } }, undefined)
+  const tildeCwd = B.batchAllowable({ toolName: 'Read', input: { file_path: '.ssh/id_rsa' } }, '~')
+  const homeCwd = B.batchAllowable({ toolName: 'Read', input: { file_path: '.ssh/id_rsa' } }, '/Users/me')
+  const acp = B.batchAllowable({ toolName: 'Read', input: { file_path: 'a.ts' } }, cwd, 'acp')
+  return { pass: yesOk.every(Boolean) && noOk.every((v) => !v) && !rootCwd && !noCwd && !tildeCwd && !homeCwd && !acp, detail: { yesOk, noOk, rootCwd, noCwd, tildeCwd, homeCwd, acp } }
+})
+check('borrow.reads.2 readsToAllow lists every allowable request across chats, in order, and nothing else', batch, (B) => {
+  const out = B.readsToAllow([
+    { id: 'a', cwd: '/w/x/a', backend: 'claude', pending: [{ requestId: '1', toolName: 'Read', input: { file_path: 'x' } }, { requestId: '2', toolName: 'Bash', input: { command: 'ls' } }] },
+    { id: 'b', cwd: '/w/x/b', backend: 'claude', pending: [{ requestId: '3', toolName: 'Glob', input: { pattern: '*.md' } }] },
+    { id: 'c', cwd: undefined, backend: 'claude', pending: [{ requestId: '4', toolName: 'Read', input: { file_path: 'x' } }] },
+    { id: 'd', cwd: '/w/x/d', backend: 'acp', pending: [{ requestId: '5', toolName: 'Read', input: { file_path: 'x' } }] }
+  ])
+  return { pass: JSON.stringify(out) === JSON.stringify([{ panelId: 'a', requestId: '1' }, { panelId: 'b', requestId: '3' }]), detail: out }
+})
+const shortcuts = load('src/shared/shortcuts.ts', 'shortcuts')
+check('borrow.reads.3 ⌘⌥Y is the registry\'s allow-reads chord with a handler, no other row claims it, and the key handler and palette row call the batch', shortcuts, (S) => {
+  const { readFileSync } = require('node:fs')
+  const row = S.SHORTCUTS.find((r) => r.id === 'allow-reads')
+  const clash = S.SHORTCUTS.filter((r) => r.chord === '⌘⌥Y')
+  const tail = readFileSync(join(ROOT, 'src/renderer/canvas/useShellTail.ts'), 'utf8')
+  const palette = readFileSync(join(ROOT, 'src/renderer/palette/commands.ts'), 'utf8')
+  const pass = row !== undefined && row.chord === '⌘⌥Y' && clash.length === 1 && S.SHORTCUT_HANDLERS['allow-reads'] === 'allowPendingReads' &&
+    /hit\?\.id === 'allow-reads'[\s\S]{0,400}pendingReadBatch\(/.test(tail) && /'approval\.allow-reads'[\s\S]{0,600}run: \(\) => \{ for \(const r of pendingReadBatch\(/.test(palette) &&
+    !/scope: 'session'/.test(tail.slice(tail.indexOf("'allow-reads'"), tail.indexOf("'allow-reads'") + 600))
+  return { pass, detail: { row, clash: clash.length } }
+})
+
 ;(async () => {
   const p3 = await phone3.catch((e) => ({ error: e.message }))
   if (p3) {

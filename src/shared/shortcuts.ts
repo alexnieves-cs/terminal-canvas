@@ -34,6 +34,8 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'jump', chord: '⌘J', scope: 'canvas', group: 'sessions', label: 'Next that needs you' },
   { id: 'jump-prev', chord: '⌘⇧J', scope: 'canvas', group: 'sessions', label: 'Previous that needs you' },
   { id: 'allow', chord: '⌘Y', scope: 'canvas', group: 'sessions', label: 'Allow pending request' },
+  // M533 (G3). Every pending READ inside its chat's folder, allowed once each (shared/read-batch.ts).
+  { id: 'allow-reads', chord: '⌘⌥Y', scope: 'canvas', group: 'sessions', label: 'Allow every pending read' },
   { id: 'pause', chord: '⌘.', scope: 'canvas', group: 'sessions', label: 'Pause or resume' },
   { id: 'focus-lock', chord: '⌘⇧L', scope: 'canvas', group: 'sessions', label: 'Focus lock' },
   { id: 'ask', chord: '⌘L', scope: 'canvas', group: 'sessions', label: 'Ask an agent' },
@@ -102,6 +104,7 @@ export const SHORTCUT_HANDLERS: Readonly<Record<string, string>> = {
   'jump': 'jumpAttention',
   'jump-prev': 'jumpAttentionBack',
   'allow': 'allowPending',
+  'allow-reads': 'allowPendingReads',
   'pause': 'pauseOrResume',
   'focus-lock': 'toggleFocusLock',
   'ask': 'askAgent',
