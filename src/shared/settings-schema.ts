@@ -55,6 +55,12 @@ export const UPDATES_CATEGORY = 'Updates'
  * settings surface beside the Keyboard page.
  */
 export const KEYBOARD_CATEGORY = 'Keyboard'
+/**
+ * M496. Named once, for the same anti-typo reason RESTORE_CATEGORY is. The
+ * surfaces the cut list hid: each `labs.*` id is a LabDef's `setting` in
+ * shared/labs.ts, which `verify:palette labs.1` pins both ways.
+ */
+export const LABS_CATEGORY = 'Labs'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -714,6 +720,74 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: false,
     category: UPDATES_CATEGORY
+  },
+  // M496. The cut list's hidden surfaces, off by default, and World, kept on
+  // with a switch to hide it (shared/labs.ts says why). Never planWritable: a
+  // plan should not grow or shrink the product a person chose.
+  // Off hides the doors that MINT one; an object already on a canvas still
+  // opens, edits and exports (shared/labs.ts says which rows each one hides).
+  {
+    id: 'labs.world',
+    label: 'Show the 3D World view',
+    description: 'put the 2D | World lens on the canvas, ⌘⇧W, and Show in World in Sessions',
+    keywords: ['world', '3d', 'room', 'robots', 'lens', 'labs', 'three'],
+    type: 'boolean',
+    default: true,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.accounts',
+    label: 'Show accounts and sharing',
+    description: 'show the account menu, the People page and the sign-in and share rows — they need a configured accounts server',
+    keywords: ['account', 'sign in', 'login', 'share', 'team', 'people', 'presence', 'supabase', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.relay',
+    label: 'Show relay terminals',
+    description: 'offer New Relay terminal — it needs a relay server you run',
+    keywords: ['relay', 'remote', 'vm', 'server', 'terminal', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.decks',
+    label: 'Show decks',
+    description: 'offer New Deck; a deck already on a canvas still opens and exports',
+    keywords: ['deck', 'slides', 'presentation', 'pptx', 'powerpoint', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.sheets',
+    label: 'Show sheets',
+    description: 'offer New Sheet; a sheet already on a canvas still opens and exports',
+    keywords: ['sheet', 'spreadsheet', 'xlsx', 'csv', 'cells', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.jira',
+    label: 'Show the Jira panel',
+    description: 'offer Open Jira tickets; a Jira panel already on a canvas still works',
+    keywords: ['jira', 'tickets', 'atlassian', 'issues', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.toolbox',
+    label: 'Show the toolbox and memory panels',
+    description: 'offer Open toolbox and Open memory…; one already on a canvas still works',
+    keywords: ['toolbox', 'tools', 'permissions', 'memory', 'decided', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
   },
   {
     // M446. A list of `id<TAB>chord`, not a record: SettingValue has no object,

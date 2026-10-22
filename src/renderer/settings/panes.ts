@@ -17,6 +17,7 @@ import {
   AGENT_CATEGORY,
   APPEARANCE_CATEGORY,
   FILES_CATEGORY,
+  LABS_CATEGORY,
   RESTORE_CATEGORY,
   SESSION_CATEGORY,
   SETTINGS,
@@ -40,8 +41,10 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
   {
     id: 'general',
     label: 'General',
-    purpose: 'How the window is arranged, and whether a launch looks for a newer release.',
-    categories: [SHELL_CATEGORY, UPDATES_CATEGORY]
+    // M496. Labs share General rather than a ninth page: seven switches for
+    // surfaces the cut list hid are an arrangement of the window, not a subject.
+    purpose: 'How the window is arranged, which hidden surfaces are switched back on, and whether a launch looks for a newer release.',
+    categories: [SHELL_CATEGORY, LABS_CATEGORY, UPDATES_CATEGORY]
   },
   {
     id: 'appearance',

@@ -8,6 +8,7 @@ import { LiveStatus } from './LiveStatus'
 import { AccountMenu } from '../account/AccountMenu'
 import { initialsOf } from '../account/account-model'
 import type { Accounts } from '../account/useAccounts'
+import { useLab } from '@renderer/labs/useLabs'
 import { sessionCountLabel, sessionsBadgeLabel, useAttentionCensus } from '@renderer/canvas/command-pill'
 import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
 
@@ -83,8 +84,16 @@ export interface TopBarProps {
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext, navigatorOpen, onToggleNavigator,
   workspaceName, taskName, onShowWorkspaces, onShowTask, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
-  centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts, sharedWorkspace = false, sessionCount
+  centerView, onSetCenterView, running, waiting, onJumpWaiting, accounts: accountsProp, sharedWorkspace = false, sessionCount
 }: TopBarProps): JSX.Element {
+  // M496. Accounts, sharing and People are one of the cut list's hidden
+  // surfaces (`labs.accounts`): off, the bar behaves as if accounts were never
+  // configured, which is what a DMG without TC_SUPABASE_URL already is. A
+  // session someone already signed in is what EXISTS, though, and the lab
+  // never hides what acts on that: signed in, the menu (and its Sign out) stays.
+  const accountsShown = useLab('accounts')
+  const signedIn = (accountsProp?.sessions.length ?? 0) > 0
+  const accounts = accountsShown || signedIn ? accountsProp : undefined
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
   // unavailable preset spawns a panel that dies instantly with "command not
