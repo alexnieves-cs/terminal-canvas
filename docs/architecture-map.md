@@ -825,7 +825,7 @@ check does not, and should not, cover it.
   over an injected fetcher (the real `https.get` lives in `index.ts` and is called by no
   suite — `verify:meta update.1`), one GET of the releases LIST so a prerelease is skipped
   by name, a small semver compare, three states; auto-swap is declined by name because the
-  build is unsigned, and `update.checkOnLaunch` is off by default and never `planWritable`.
+  build is unsigned, and `update.checkOnLaunch` is on by default since 6.0 (M474) and never `planWritable`.
 
 The session/view split is the milestone's whole point: in M1, "this component is unmounting"
 and "this panel is going away" were the same statement. Culling makes them different

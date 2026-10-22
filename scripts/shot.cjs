@@ -1085,6 +1085,12 @@ const SCENES = [
   { name: 'account-menu', intent: 'M336. The account menu open from the top bar\'s last control — the active account\'s initials (`AL`) in a circle. Under `Active account`, the two GitHub accounts signed in on this Mac as a radio set, `ada-lovelace` checked; `Add another account…`; under `Sharing`, `Share this workspace…` and `Open a shared workspace…`; below a rule, `Sign out ada-lovelace`. The menu is the View menu\'s own surface.',
     run: async (k) => {
       await k.emptyCanvas()
+      // M496 hid accounts, sharing and relay behind labs (Q-003). These scenes
+      // ARE those surfaces, so they switch the doors on first, and
+      // shared-offline, the last of them, switches them off again: a scene
+      // after it that frames the palette must see the default rows.
+      await k.js(`window.canvas.settings.set('labs.accounts', true)`)
+      await k.js(`window.canvas.settings.set('labs.relay', true)`)
       k.accountOn()
       for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.shell__account-avatar')`)); i++) await sleep(100)
       const point = await k.js(`(() => { const b = document.querySelector('.shell__account-trigger'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
@@ -1185,6 +1191,8 @@ const SCENES = [
       if (!(await k.js(`(document.querySelector('[data-sync-chip]') || {}).textContent === 'Offline — 3 changes waiting to sync'`))) throw new Error('shared-offline scene: the sync chip did not say the three changes are waiting')
       await sleep(300)
       await k.shot('shared-offline')
+      await k.js(`window.canvas.settings.set('labs.accounts', false)`)
+      await k.js(`window.canvas.settings.set('labs.relay', false)`)
     } },
   { name: 'inspector-caps', intent: 'M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent\'s cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record\'s 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb\'s own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent\'s process is still alive (a hold keeps the agent; closing would end it); the auto run\'s resolved chip stays in the header beside the pill and reads `auto stuck` with its dismiss (M356: what the run came to never clips; its reason, `— cap reached`, gives first, and the whole sentence with its mode is the chip\'s title), the Auto… door is hidden while the chip shows, and every control in the header is painted inside the chat\'s frame (the scene hit-tests each). DISCLOSED: the cap was written through the fields and Set (the verb\'s canvas door); the hold is the pushes main\'s agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes. M380: under Context, a `Window` line says what is left of the window the CLI reported (`82k of 200k left — 59% used`), and under the cost a muted sentence says what caching returned at list price (`caching saved $0.06 — …`).',
     run: async (k) => {
@@ -1700,7 +1708,9 @@ app.whenReady().then(async () => {
     // always. A shelf seeded with nothing would paint only derived columns,
     // and the ordering rule the scene exists to judge would be invisible.
     shelf: { columns: [{ id: 'col-milestone', title: 'starting a milestone', keys: [skillKey('project', 'brainstorming'), skillKey('project', 'writing-plans'), skillKey('project', 'test-driven-development')] }] },
-    preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes') },
+    // M474. The launch-time update check is on by default since 6.0; a scene
+    // that painted its answer would change the day a release is cut.
+    preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes'), 'update.checkOnLaunch': false },
     // M77. The chat's baseline too: the fixture's edit to server.ts predates
     // boot, so it is seeded rather than captured (as the terminal's is).
     baselines: { live: { root: REPO, sha: baselineSha }, chat: { root: REPO, sha: baselineSha } }
@@ -2144,6 +2154,12 @@ app.whenReady().then(async () => {
       // stays the shot scenes' layout. The steward cast has no live/twin
       // cards, so those clicks would miss and are skipped.
       if (process.env.TC_FIXTURE === 'rd-steward') {
+        // M467. The steward cast is asleep by design, and the harness keeps
+        // main's PTYs across a reload. rd-arrange's real drag woke
+        // claude-ledger, so every later steward scene re-created a panel
+        // main still held: "already has a live PTY" in rd-map's inspector, a
+        // red dot in rd-world-focus. A fresh fixture starts from no sessions.
+        ptyManager.killAll()
         const { writeStewardLayout } = require('./fixtures/rd-steward/load.cjs')
         writeStewardLayout(layoutPath, REPO, join(__dirname, '..'))
       } else {
@@ -2288,8 +2304,10 @@ app.whenReady().then(async () => {
   // name the pair; a filter matching nothing is an error, not an empty success.
   const only = (process.env.TC_SHOT_ONLY || process.env.SHOT_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean)
   if (only.length > 0 && !scenes.some((s) => only.includes(s.name))) throw new Error(`SHOT_ONLY matched no scene: ${only.join(', ')}`)
+  const SCENE_TIMEOUT_MS = Number(process.env.TC_SHOT_SCENE_TIMEOUT_MS) || 180000
   for (const scene of scenes) {
     if (only.length > 0 && !only.includes(scene.name)) continue
+    console.log(`scene ${scene.name}`)
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
     // M465. The redesign scenes are pictures of the steward cast and the
     // older scenes of the default fixture, and one run has to paint both: a
@@ -2302,7 +2320,15 @@ app.whenReady().then(async () => {
     if (fixture === undefined) delete process.env.TC_FIXTURE
     else process.env.TC_FIXTURE = fixture
     try {
-      await scene.run(kit)
+      // A scene that never settles used to hold the whole run until the job's
+      // 45-minute timeout, with no line saying which scene it was (#53 hung
+      // twice after rd-world-night). The bound makes it one failed scene with
+      // its name, and the run goes on to write the rest and the manifest.
+      let timer
+      await Promise.race([
+        scene.run(kit),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`did not finish in ${SCENE_TIMEOUT_MS / 1000}s`)), SCENE_TIMEOUT_MS) })
+      ]).finally(() => clearTimeout(timer))
       manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}) })
     } catch (error) {
       console.log(`scene ${scene.name} failed: ${error && error.message || error}`)
