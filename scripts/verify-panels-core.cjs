@@ -2859,7 +2859,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const tmuxBin = findTmux()
         if (tmuxBin && gid) {
           const q = (args) => { try { return execFileSync(tmuxBin, ['-L', PANELS_SOCKET, ...args], { encoding: 'utf8', timeout: 3000 }).trim() } catch (e) { return 'ERR ' + String(e.message).slice(0, 80) } }
-          ctxTmux = { mouse: q(['show-options', '-gv', 'mouse']), pane: q(['display-message', '-p', '-t', '=' + gid, '#{pane_current_command} pid=#{pane_pid} any=#{mouse_any_flag} std=#{mouse_standard_flag} btn=#{mouse_button_flag} sgr=#{mouse_sgr_flag} created=#{session_created} att=#{session_attached}']), sessions: q(['list-sessions', '-F', '#{session_name}']).split('\n').length }
+          ctxTmux = { mouse: q(['show-options', '-gv', 'mouse']), pane: q(['display-message', '-p', '-t', '=' + gid, '#{pane_current_command} pid=#{pane_pid} any=#{mouse_any_flag} std=#{mouse_standard_flag} btn=#{mouse_button_flag} sgr=#{mouse_sgr_flag} created=#{session_created} att=#{session_attached}']), sessions: q(['list-sessions', '-F', '#{session_name}']).split('\n').join(' ') }
         }
       } catch (e) { ctxTmux = 'threw ' + String(e && e.message).slice(0, 80) }
       if (body !== null) await click(body.x, body.y, 'right')

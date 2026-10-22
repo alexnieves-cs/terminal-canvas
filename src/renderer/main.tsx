@@ -154,6 +154,12 @@ async function boot(): Promise<void> {
     // rather than swallowed.
     console.warn('[boot] could not list workspaces; ids seed from this canvas only', error)
   }
+  // And every LIVE session's id, panel or not. A session can outlive the
+  // panel that named it (a reload that lands before the layout save, a kill
+  // that lost its race), and a counter seeded from the layout alone mints
+  // that id again: the new panel attaches to the old process, banner,
+  // modes and all, with nothing visibly wrong (verify:panels ctx.panel.1).
+  allPanelIds = [...allPanelIds, ...liveSessionIds]
 
   // The startup splash's inputs, resolved here for the same reason as the
   // layout: useState is synchronous, and a splash decided in an effect would
