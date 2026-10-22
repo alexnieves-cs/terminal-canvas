@@ -13115,6 +13115,11 @@ tr[data-session-row]:focus-within .sessions-world,
    session count was absent (a capture mid-switch showed it). The count, when
    present, keeps the one auto margin. */
 .shell__top .shell__sessions ~ .shell__search { margin-left: 0; }
+/* The live count (`.live-status`) carried its own margin-left: auto, so with an
+   agent running the free space split in two and the field slid back under the
+   switch: rd-empty and rd-sessions at 1600 in the first Mac gallery. The
+   field already sits flush right, so the count just follows it. */
+.shell__top .shell__search ~ .live-status { margin-left: var(--sp-3); }
 /* The empty canvas's "Nothing placed yet" stands where the minimap will be,
    which is ALSO where the zoom bar sits: it covered Fit all. Stacked above
    the bar instead, as the minimap itself is (--nav-hud-h). */

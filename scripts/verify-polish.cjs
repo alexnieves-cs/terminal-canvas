@@ -61,9 +61,10 @@ ok('polish.fence.1 styles.css has exactly one st:F fence, in order',
 
 // polish.topbar.1 — the search field may not reach under the absolutely
 // centred page switch (M511, measured on rd-empty/rd-onboarding/rd-sessions).
-ok('polish.topbar.1 the top bar search is capped at the page switch\'s right edge, and the empty canvas note stacks above the zoom bar',
+ok('polish.topbar.1 the top bar search is capped at the page switch\'s right edge with no second auto margin after it, and the empty canvas note stacks above the zoom bar',
   /\.shell__top \.shell__search\s*\{\s*max-width:\s*clamp\(120px,\s*calc\(50% - \d+px\),\s*560px\);\s*margin-inline:\s*auto 0;/.test(rules) &&
-    /\.rd-empty__minimap\s*\{\s*bottom:\s*calc\([^;]*--nav-hud-h/.test(rules),
+    /\.rd-empty__minimap\s*\{\s*bottom:\s*calc\([^;]*--nav-hud-h/.test(rules) &&
+    /\.shell__top \.shell__search ~ \.live-status\s*\{\s*margin-left:\s*var\(--sp-\d\);/.test(rules),
   'st:F rules')
 
 // polish.react.1 — press feedback (M516). It must stay at zero specificity
