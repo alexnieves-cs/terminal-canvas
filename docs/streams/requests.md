@@ -28,5 +28,5 @@ Format:
 ### Q-003 · Shot scenes of a hidden surface switch its lab on first
 - From: E · To: B
 - File: scripts/shot-scenes/** (and scripts/shot.cjs if a seed is simpler)
-- Smallest change: M496 hides seven surfaces behind `labs.*` settings, all off by default (docs/streams/cut-list.md). A scene that shows one (the World scenes clicking `.shell__world-toggle`, `account-menu`, `relay`, `share-*`, `team-ask`, `memory`) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The scenes of the canvas at rest lose the 2D | World lens on purpose; that is a golden that changes on purpose, after the owner looks.
+- Smallest change: M496 hides six surfaces behind `labs.*` settings, off by default; World stays shown (docs/streams/cut-list.md). A scene that shows a hidden one (`relay`, `share-*`, `team-ask`, `memory`, or an account menu with nobody signed in) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The World scenes need nothing.
 - Status: open
